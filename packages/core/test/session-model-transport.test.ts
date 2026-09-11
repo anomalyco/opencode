@@ -822,6 +822,36 @@ describe("SessionModelTransport", () => {
     )
   })
 
+  test("runs interceptors on the handshake and both frame directions", async () => {
+    const fixture = automatic()
+    const seen: Array<string> = []
+    let authorization = "one"
+
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session, {
+          handshake: (connect) =>
+            Effect.succeed({ url: `${connect.url}?hooked`, headers: { ...connect.headers, authorization } }),
+          send: (frame, mode) => Effect.succeed(`${frame}:${mode}`),
+          receive: (frame) =>
+            Effect.sync(() => {
+              seen.push(frame)
+              return frame.toUpperCase()
+            }),
+        })
+        expect(yield* collect(executor, exchange("first"))).toEqual(["COMPLETED:FIRST:FULL"])
+        authorization = "two"
+        expect(yield* collect(executor, exchange("second"))).toEqual(["COMPLETED:SECOND:FULL"])
+        expect(seen).toEqual(["completed:first:full", "completed:second:full"])
+        expect(fixture.connections).toHaveLength(2)
+        expect(fixture.connections.map((item) => item.headers.authorization)).toEqual(["one", "two"])
+        expect(fixture.connections.map((item) => item.sent)).toEqual([["first:full"], ["second:full"]])
+      }),
+    )
+  })
+
   test("rotates when the connection exceeds its requested age limit", async () => {
     const fixture = automatic()
 

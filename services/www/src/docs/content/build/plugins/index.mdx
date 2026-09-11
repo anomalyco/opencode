@@ -1304,6 +1304,32 @@ await ctx.session.hook("http.response", (event) => {
 })
 ```
 
+#### WebSocket (experimental)
+
+Providers that stream over a WebSocket do not issue one HTTP request per model call, so `http.request` and
+`http.response` never see that traffic. Three experimental hooks cover it instead. `experimental.ws.handshake` runs
+once per model call with the URL and headers the connection needs; changing either reopens the session's socket.
+`experimental.ws.send` runs on the outbound frame, and `experimental.ws.receive` on every inbound frame. All three carry
+the same `sessionID`, `agent`, `model`, and `kind` as the HTTP hooks.
+
+```ts
+await ctx.session.hook("experimental.ws.handshake", (event) => {
+  event.headers.authorization = `Bearer ${token}`
+})
+
+await ctx.session.hook("experimental.ws.send", (event) => {
+  if (event.mode === "full") event.frame = redact(event.frame)
+})
+
+await ctx.session.hook("experimental.ws.receive", (event) => {
+  log(event.frame)
+})
+```
+
+`send` frames in `"incremental"` mode carry only what changed since the provider's last checkpoint. Rewriting them
+changes what the provider sees without changing what OpenCode believes it sent, so treat them as read-only unless you
+also handle the resulting drift.
+
 #### Retry policy
 
 Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
@@ -1349,6 +1375,9 @@ interface SessionHooks {
   "model.request": SessionModelRequestHook
   "http.request": SessionHttpRequestHook
   "http.response": SessionHttpResponseHook
+  "experimental.ws.handshake": SessionWebSocketHandshakeHook
+  "experimental.ws.send": SessionWebSocketSendHook
+  "experimental.ws.receive": SessionWebSocketReceiveHook
   retry: SessionRetryHook
 }
 

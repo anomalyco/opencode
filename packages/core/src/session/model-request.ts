@@ -316,17 +316,28 @@ export const layer = Layer.effect(
               return HttpClientResponse.fromWeb(sent, after.response)
             }).pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))))
         : undefined
-      // HTTP hooks must observe every request, so they keep the provider on HTTP.
       const webSocket =
-        input.webSocket === "session" &&
-        !hasHttpHooks &&
-        model.capabilities.responsesWebsockets === true &&
-        model.websocket
+        input.webSocket === "session" && model.capabilities.responsesWebsockets === true && model.websocket
+      const interceptor: SessionModelTransport.Interceptor = {
+        handshake: (connect) =>
+          hooks.trigger("session", "experimental.ws.handshake", {
+            ...scope,
+            url: connect.url,
+            headers: connect.headers,
+          }),
+        send: (frame, mode) =>
+          hooks.trigger("session", "experimental.ws.send", { ...scope, mode, frame }).pipe(Effect.map((e) => e.frame)),
+        receive: (frame) =>
+          hooks.trigger("session", "experimental.ws.receive", { ...scope, frame }).pipe(Effect.map((e) => e.frame)),
+      }
 
       return {
         event: shaped,
         request,
-        options: { ...(http ? { http } : {}), ...(webSocket ? { webSocket: transport.bind(session.id) } : {}) },
+        options: {
+          ...(http ? { http } : {}),
+          ...(webSocket ? { webSocket: transport.bind(session.id, interceptor) } : {}),
+        },
         retry: (event: Parameters<Prepared["retry"]>[0]) =>
           hooks.trigger("session", "retry", event).pipe(Effect.asVoid),
         // Permission.assert and the question tool throw declines as defects so tools cannot

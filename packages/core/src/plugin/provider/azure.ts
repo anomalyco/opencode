@@ -178,26 +178,47 @@ export const AzurePlugin = define({
       Effect.forkScoped({ startImmediately: true }),
     )
 
+    // Entra bearer tokens are minted per request from the target URL's scope, so they are injected at the
+    // transport hooks rather than stored as a credential.
+    const bearer = Effect.fn(function* (url: string) {
+      const connection = yield* ctx.integration.connection.active(Provider.ID.azure)
+      const credential = connection
+        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
+        : undefined
+      if (credential?.type !== "oauth" || credential.methodID !== methodID) return
+      const target = new URL(url)
+      const scope =
+        target.hostname.endsWith(".services.ai.azure.com") && !target.pathname.startsWith("/models")
+          ? foundryScope
+          : cognitiveScope
+      const current = yield* token(scope).pipe(Effect.orDie)
+      return `Bearer ${current.access}`
+    })
     yield* ctx.session.hook(
       "http.request",
       (evt) =>
         Effect.gen(function* () {
           if (evt.model.providerID !== Provider.ID.azure) return
-          const connection = yield* ctx.integration.connection.active(Provider.ID.azure)
-          const credential = connection
-            ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-            : undefined
-          if (credential?.type !== "oauth" || credential.methodID !== methodID) return
-          const url = new URL(evt.request.url)
-          const scope =
-            url.hostname.endsWith(".services.ai.azure.com") && !url.pathname.startsWith("/models")
-              ? foundryScope
-              : cognitiveScope
-          const current = yield* token(scope).pipe(Effect.orDie)
+          const authorization = yield* bearer(evt.request.url)
+          if (!authorization) return
           evt.request.headers.delete("api-key")
           evt.request.headers.delete("x-api-key")
-          evt.request.headers.set("authorization", `Bearer ${current.access}`)
+          evt.request.headers.set("authorization", authorization)
           evt.request.headers.set("user-agent", App.useragent(ctx.app))
+        }),
+      { providerID: Provider.ID.azure },
+    )
+    yield* ctx.session.hook(
+      "experimental.ws.handshake",
+      (evt) =>
+        Effect.gen(function* () {
+          if (evt.model.providerID !== Provider.ID.azure) return
+          const authorization = yield* bearer(evt.url)
+          if (!authorization) return
+          delete evt.headers["api-key"]
+          delete evt.headers["x-api-key"]
+          evt.headers.authorization = authorization
+          evt.headers["user-agent"] = App.useragent(ctx.app)
         }),
       { providerID: Provider.ID.azure },
     )

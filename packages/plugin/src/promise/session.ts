@@ -86,6 +86,34 @@ export interface SessionHttpResponse {
   response: Response
 }
 
+/** Connection a WebSocket request needs. Changing `url` or `headers` reopens the Session's socket. */
+export interface SessionWebSocketHandshake {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly kind: SessionRequestKind
+  url: string
+  headers: Record<string, string>
+}
+
+export interface SessionWebSocketSend {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly kind: SessionRequestKind
+  /** Incremental frames carry only what changed since the provider's last checkpoint. */
+  readonly mode: "full" | "incremental"
+  frame: string
+}
+
+export interface SessionWebSocketReceive {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly kind: SessionRequestKind
+  frame: string
+}
+
 export type SessionRetryDecision = { retry: false } | { retry: true; delay: number }
 
 export interface SessionRetry {
@@ -106,6 +134,9 @@ export interface SessionHooks {
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
 }
 

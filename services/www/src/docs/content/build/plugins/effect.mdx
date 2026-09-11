@@ -1151,6 +1151,24 @@ effect: (ctx) =>
   }),
 ```
 
+WebSocket providers do not issue one HTTP request per model call, so the HTTP hooks never see that traffic. Three
+experimental hooks cover it: `experimental.ws.handshake` runs once per model call with the URL and headers the connection
+needs (changing either reopens the session's socket), `experimental.ws.send` runs on the outbound frame, and
+`experimental.ws.receive` on every inbound frame. Incremental `send` frames carry only what changed since the provider's
+last checkpoint; rewriting them changes what the provider sees without changing what OpenCode believes it sent.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("experimental.ws.handshake", (event) =>
+      Effect.sync(() => {
+        event.headers.authorization = `Bearer ${token}`
+      }),
+    )
+    yield* ctx.session.hook("experimental.ws.receive", (event) => Effect.log(event.frame))
+  }),
+```
+
 Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
 classifies the failure and proposes its policy, but before any retry is scheduled. It does not expose how OpenCode
 internally performs the next attempt.
@@ -1191,6 +1209,9 @@ interface SessionHooks {
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
 }
 

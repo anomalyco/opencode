@@ -79,4 +79,68 @@ describe("SessionModelRequest HTTP hooks", () => {
       )
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
+
+  it.effect("runs experimental.ws hooks through the transport interceptor alongside http hooks", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const seen: Array<string> = []
+      yield* hooks.register("session", "http.request", () => Effect.void)
+      yield* hooks.register("session", "experimental.ws.handshake", (event) =>
+        Effect.sync(() => {
+          seen.push(`handshake:${event.kind}:${event.agent}`)
+          event.url = `${event.url}?hooked`
+          event.headers.authorization = "Bearer hooked"
+        }),
+      )
+      yield* hooks.register("session", "experimental.ws.send", (event) =>
+        Effect.sync(() => {
+          seen.push(`send:${event.kind}:${event.mode}`)
+          event.frame = `${event.frame}:sent`
+        }),
+      )
+      yield* hooks.register("session", "experimental.ws.receive", (event) =>
+        Effect.sync(() => {
+          seen.push(`receive:${event.kind}`)
+          event.frame = `${event.frame}:received`
+        }),
+      )
+      let interceptor: SessionModelTransport.Interceptor | undefined
+      const capturing = SessionModelTransport.Service.of({
+        bind: (_sessionID, bound) => {
+          interceptor = bound
+          return { execute: () => Effect.die("unused WebSocket execution") }
+        },
+        close: () => Effect.void,
+        closeAll: Effect.void,
+      })
+      const requests = yield* SessionModelRequest.Service.pipe(
+        Effect.provide(SessionModelRequest.layer),
+        Effect.provideService(SessionModelTransport.Service, capturing),
+      )
+      const prepared = yield* requests.compaction({
+        session,
+        agent: Agent.ID.make("build"),
+        model: SessionRunnerModel.resolved(OpenAIChat.route.model({ id: "gpt-5.5", provider: "test" }), {
+          capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
+          cost: [],
+          limit: { context: 200_000, output: 32_000 },
+          websocket: true,
+        }),
+        system: [],
+        messages: [],
+        webSocket: "session",
+      })
+      expect(prepared.options.http).toBeDefined()
+      expect(prepared.options.webSocket).toBeDefined()
+      if (!interceptor) throw new Error("Expected the transport to receive an interceptor")
+
+      expect(yield* interceptor.handshake({ url: "wss://example.test/v1/responses", headers: {} })).toMatchObject({
+        url: "wss://example.test/v1/responses?hooked",
+        headers: { authorization: "Bearer hooked" },
+      })
+      expect(yield* interceptor.send("frame", "incremental")).toBe("frame:sent")
+      expect(yield* interceptor.receive("frame")).toBe("frame:received")
+      expect(seen).toEqual(["handshake:compaction:build", "send:compaction:incremental", "receive:compaction"])
+    }),
+  )
 })
