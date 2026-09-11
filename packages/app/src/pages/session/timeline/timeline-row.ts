@@ -35,6 +35,8 @@ export namespace TimelineRow {
   export class Error extends Data.TaggedClass("Error")<{
     userMessageID: string
     text: string
+    details: string
+    model: { modelID: string; providerID: string }
   }> {}
   export class Retry extends Data.TaggedClass("Retry")<{
     userMessageID: string

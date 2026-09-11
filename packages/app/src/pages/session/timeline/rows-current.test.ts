@@ -204,4 +204,44 @@ describe("current session timeline rows", () => {
 
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
   })
+
+  test("keeps the failed model on a terminal error row", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "recover", time: { created: 1 } },
+      {
+        id: "msg_failed",
+        type: "assistant",
+        agent: "build",
+        model: { id: "failed-model", providerID: "failed-provider" },
+        content: [],
+        error: { type: "ProviderError", message: "temporary failure" },
+        time: { created: 2, completed: 3 },
+      },
+    ] satisfies SessionMessageInfo[]
+    const normalized = normalizeSessionMessages("ses_1", source)
+    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
+
+    const result = Timeline.constructSessionMessageRows(
+      source,
+      (messageID) => messages.get(messageID),
+      (messageID) => normalized.parts.get(messageID) ?? [],
+      true,
+      "idle",
+      true,
+      normalized.messages.filter((message) => message.role === "user"),
+    )
+
+    expect(result.rows.find((row) => row._tag === "Error")).toMatchObject({
+      text: "temporary failure",
+      model: { modelID: "failed-model", providerID: "failed-provider" },
+    })
+    const error = result.rows.find((row) => row._tag === "Error")
+    if (error?._tag !== "Error") throw new Error("Expected terminal error row")
+    expect(JSON.parse(error.details)).toMatchObject({
+      providerID: "failed-provider",
+      modelID: "failed-model",
+      messageID: "msg_failed",
+      error: { data: { message: "temporary failure" } },
+    })
+  })
 })
