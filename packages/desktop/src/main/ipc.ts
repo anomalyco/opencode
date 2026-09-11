@@ -24,6 +24,7 @@ import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
+import { registerPluginManager } from "./plugin-manager"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -148,6 +149,8 @@ export function registerIpcHandlers(deps: Deps) {
     const data = drafts.getBlob(id)
     return data ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : null
   })
+
+  registerPluginManager(ipcMain, { userDataDir: app.getPath("userData") })
 
   ipcMain.handle(
     "open-directory-picker",

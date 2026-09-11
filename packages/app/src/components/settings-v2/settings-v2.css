@@ -488,6 +488,24 @@
   color: var(--v2-text-text-base);
 }
 
+.settings-v2-plugins {
+  gap: 16px;
+}
+
+.settings-v2-plugins-note {
+  padding-block: 24px;
+  font-size: 13px;
+  font-weight: 440;
+  line-height: 20px;
+  color: var(--v2-text-text-muted);
+  text-align: center;
+}
+
+.settings-v2-plugins [data-slot="settings-v2-row-description"] {
+  display: flex;
+  align-items: center;
+}
+
 .settings-v2-shortcuts .settings-v2-section {
   gap: 16px;
 }
@@ -726,4 +744,16 @@
   font-weight: 440;
   line-height: 1;
   color: var(--v2-state-fg-danger);
+}
+
+.settings-v2-plugins-header .settings-v2-tab-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-v2-plugins-header.settings-v2-tab-header--stacked {
+  gap: 24px;
+  padding-bottom: 24px;
 }

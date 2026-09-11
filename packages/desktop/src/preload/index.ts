@@ -78,6 +78,14 @@ const api: ElectronAPI = {
   draftDelete: (key) => ipcRenderer.invoke("draft-delete", key),
   draftBlobPut: (data) => ipcRenderer.invoke("draft-blob-put", data),
   draftBlobGet: (id) => ipcRenderer.invoke("draft-blob-get", id),
+  plugins: {
+    fetchCatalog: () => ipcRenderer.invoke("plugins:fetch-catalog"),
+    readConfigs: (projectDir?: string) => ipcRenderer.invoke("plugins:read-configs", projectDir),
+    install: (name: string, entry?: unknown, scope?: "global" | "project", projectDir?: string) =>
+      ipcRenderer.invoke("plugins:install", name, entry, scope, projectDir),
+    remove: (name: string, scope: "global" | "project", remember: boolean, projectDir?: string) =>
+      ipcRenderer.invoke("plugins:remove", name, scope, remember, projectDir),
+  },
 
   getWindowID: () => ipcRenderer.invoke("get-window-id"),
   onMenuCommand: (cb) => {
