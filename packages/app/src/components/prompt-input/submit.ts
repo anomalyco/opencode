@@ -168,6 +168,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
     await input.api.prompt({
       sessionID: input.draft.sessionID,
+      sessionDirectory: input.draft.sessionDirectory,
       id: messageID,
       agent: input.draft.agent,
       model: input.draft.model,
@@ -630,7 +631,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return true
     }
 
-    void sendFollowupDraft({
+    await sendFollowupDraft({
       api: sdk().api.session,
       sync: sync(),
       serverSync: serverSync(),
