@@ -1135,7 +1135,10 @@ export function toPublicInfo(provider: Info): Info {
 }
 
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
-  return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
+  return mapValues(
+    pickBy(providers, (item) => Object.keys(item.models).length > 0),
+    (item) => sort(Object.values(item.models))[0].id,
+  )
 }
 
 export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundError>()("ProviderModelNotFoundError", {
@@ -1203,6 +1206,7 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
+  readonly refreshDiscovery: () => Effect.Effect<void>
 }
 
 interface State {
@@ -1396,6 +1400,54 @@ const layer = Layer.effect(
     const plugin = yield* Plugin.Service
     const modelsDevSvc = yield* ModelsDev.Service
     const runtimeFlags = yield* RuntimeFlags.Service
+
+    const runDiscovery = Effect.fn("Provider.runDiscovery")(function* (providers: Record<ProviderV2.ID, Info>) {
+      const cfg = yield* config.get()
+      const modelsDev = yield* modelsDevSvc.get()
+      const disabled = new Set(cfg.disabled_providers ?? [])
+      const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
+      const eligible: Array<{ providerID: ProviderV2.ID; info: Info; npm: string; baseURL: string }> = []
+      for (const [id, info] of Object.entries(providers)) {
+        const providerID = ProviderV2.ID.make(id)
+        if (enabled && !enabled.has(providerID)) continue
+        if (disabled.has(providerID)) continue
+        const configProvider = cfg.provider?.[providerID]
+        if (!configProvider) continue
+        if (Object.keys(configProvider.models ?? {}).length > 0) continue
+        const npm = configProvider.npm ?? modelsDev[providerID]?.npm ?? "@ai-sdk/openai-compatible"
+        if (npm !== "@ai-sdk/openai-compatible") continue
+        const baseURL = info.options.baseURL
+        if (typeof baseURL !== "string" || baseURL === "") continue
+        eligible.push({ providerID, info, npm, baseURL })
+      }
+      if (eligible.length === 0) return
+      yield* Effect.promise(async () => {
+        const results = await Promise.all(
+          eligible.map(async (entry) => ({
+            entry,
+            models: await discoverOpenAICompatibleModels({
+              baseURL: entry.baseURL,
+              apiKey: resolveApiKey(entry.info),
+              providerID: entry.providerID,
+              npm: entry.npm,
+            }),
+          })),
+        )
+        for (const { entry, models } of results) {
+          // Keep existing models when discovery finds nothing, so catalog providers pointed
+          // at an unreachable endpoint are not wiped; custom providers with no models are
+          // still removed by the 0-model filter below.
+          if (Object.keys(models).length === 0 && Object.keys(entry.info.models).length > 0) continue
+          const manual = cfg.provider?.[entry.providerID]?.models ?? {}
+          for (const modelID of Object.keys(entry.info.models)) {
+            if (!manual[modelID]) delete entry.info.models[modelID]
+          }
+          for (const [modelID, model] of Object.entries(models)) {
+            entry.info.models[modelID] = model
+          }
+        }
+      })
+    })
 
     const state = yield* InstanceState.make<State>(() =>
       Effect.gen(function* () {
@@ -1667,6 +1719,8 @@ const layer = Layer.effect(
             } catch (e) {}
           })
         }
+
+        yield* runDiscovery(providers)
 
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderV2.ID.make(id)
@@ -2040,7 +2094,12 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    const refreshDiscovery = Effect.fn("Provider.refreshDiscovery")(function* () {
+      const s = yield* InstanceState.get(state)
+      yield* runDiscovery(s.providers)
+    })
+
+    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel, refreshDiscovery })
   }),
 )
 
@@ -2061,6 +2120,79 @@ export function parseModel(model: string) {
     providerID: ProviderV2.ID.make(providerID),
     modelID: ModelV2.ID.make(rest.join("/")),
   }
+}
+
+export function discoverOpenAICompatibleModels(input: {
+  baseURL: string
+  apiKey?: string
+  providerID: ProviderV2.ID
+  npm: string
+  fetchFn?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+}): Promise<Record<string, Model>> {
+  const baseURL = input.baseURL.replace(/\/+$/, "")
+  const url = baseURL + "/models"
+  const headers: Record<string, string> = {}
+  if (typeof input.apiKey === "string" && input.apiKey !== "") headers.authorization = `Bearer ${input.apiKey}`
+  const modalities = (value: unknown): Model["capabilities"]["input"] => {
+    const list = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+    if (list.length === 0) return { text: true, audio: false, image: false, video: false, pdf: false }
+    return {
+      text: list.includes("text"),
+      audio: list.includes("audio"),
+      image: list.includes("image"),
+      video: list.includes("video"),
+      pdf: list.includes("pdf"),
+    }
+  }
+  const build = (item: { id: string } & Record<string, unknown>): Model => {
+    const id = item.id
+    const architecture = isRecord(item.architecture) ? item.architecture : {}
+    return {
+      id: ModelV2.ID.make(id),
+      providerID: input.providerID,
+      api: { id, npm: input.npm, url: baseURL },
+      name: id,
+      status: "active",
+      headers: {},
+      options: {},
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 0, output: 0 },
+      capabilities: {
+        temperature: false,
+        reasoning: false,
+        attachment: false,
+        toolcall: true,
+        input: modalities(architecture.input_modalities),
+        output: modalities(architecture.output_modalities),
+        interleaved: false,
+      },
+      release_date: "",
+      variants: {},
+    }
+  }
+  return Promise.resolve()
+    .then(() => (input.fetchFn ?? fetch)(url, { headers, signal: AbortSignal.timeout(5_000) }))
+    .then((res) => (res.ok ? res.json() : undefined))
+    .then((json) => {
+      if (!isRecord(json) || !Array.isArray(json.data)) return {}
+      const items = json.data.filter(
+        (item): item is { id: string } & Record<string, unknown> =>
+          isRecord(item) && typeof item.id === "string" && item.id !== "",
+      )
+      const models: Record<string, Model> = {}
+      for (const item of items) {
+        models[item.id] = build(item)
+      }
+      return models
+    })
+    .catch(() => ({}))
+}
+
+function resolveApiKey(provider: Info): string | undefined {
+  const fromOptions = provider.options?.apiKey
+  if (typeof fromOptions === "string" && fromOptions !== "") return fromOptions
+  if (typeof provider.key === "string" && provider.key !== "") return provider.key
+  return undefined
 }
 
 export const node = LayerNode.make({

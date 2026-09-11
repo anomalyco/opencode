@@ -25,12 +25,13 @@ export const ModelsCommand = effectCmd({
       }),
   handler: Effect.fn("Cli.models")(function* (args) {
     const { Provider } = yield* Effect.promise(() => import("@/provider/provider"))
+    const provider = yield* Provider.Service
     if (args.refresh) {
       yield* ModelsDev.Service.use((s) => s.refresh(true))
+      yield* provider.refreshDiscovery()
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
     }
 
-    const provider = yield* Provider.Service
     const providers = yield* provider.list()
 
     const print = (providerID: ProviderV2.ID, verbose?: boolean) => {

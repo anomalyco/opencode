@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, afterAll, expect, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -2115,4 +2115,265 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
     expect(none).toBe(0)
     expect(keyedCount).toBeGreaterThan(0)
   }).pipe(provideMultiInstance),
+)
+
+const discoveryServer = Bun.serve({
+  port: 0,
+  fetch: (request) => {
+    if (!request.url.endsWith("/v1/models")) return new Response("not found", { status: 404 })
+    return Response.json({
+      data: [
+        {
+          id: "qwen36-35b-moe-128k",
+          architecture: { input_modalities: ["text"], output_modalities: ["text"] },
+        },
+        { id: "qwen38-27b-128k" },
+      ],
+    })
+  },
+})
+
+const discoveryBaseURL = `http://127.0.0.1:${discoveryServer.port}/v1`
+
+afterAll(() => {
+  discoveryServer.stop(true)
+})
+
+test("discoverOpenAICompatibleModels maps /models entries to models", async () => {
+  let captured: { url: string; headers: Record<string, string> | undefined } | undefined
+  const models = await Provider.discoverOpenAICompatibleModels({
+    baseURL: "http://127.0.0.1:8080/v1/",
+    apiKey: "test-key",
+    providerID: ProviderV2.ID.make("llama.cpp"),
+    npm: "@ai-sdk/openai-compatible",
+    fetchFn: (input, init) => {
+      captured = { url: String(input), headers: init?.headers as Record<string, string> | undefined }
+      return Promise.resolve(
+        Response.json({
+          data: [
+            {
+              id: "qwen36-35b-moe-128k",
+              architecture: { input_modalities: ["text", "image"], output_modalities: ["text"] },
+            },
+            { id: "qwen38-27b-128k" },
+          ],
+        }),
+      )
+    },
+  })
+
+  expect(captured?.url).toBe("http://127.0.0.1:8080/v1/models")
+  expect(captured?.headers).toEqual({ authorization: "Bearer test-key" })
+  expect(Object.keys(models).sort()).toEqual(["qwen36-35b-moe-128k", "qwen38-27b-128k"])
+
+  const model = models["qwen36-35b-moe-128k"]
+  expect(model.id).toBe(ModelV2.ID.make("qwen36-35b-moe-128k"))
+  expect(model.providerID).toBe(ProviderV2.ID.make("llama.cpp"))
+  expect(model.api).toEqual({ id: "qwen36-35b-moe-128k", npm: "@ai-sdk/openai-compatible", url: "http://127.0.0.1:8080/v1" })
+  expect(model.name).toBe("qwen36-35b-moe-128k")
+  expect(model.status).toBe("active")
+  expect(model.cost).toEqual({ input: 0, output: 0, cache: { read: 0, write: 0 } })
+  expect(model.limit).toEqual({ context: 0, output: 0 })
+  expect(model.capabilities).toEqual({
+    temperature: false,
+    reasoning: false,
+    attachment: false,
+    toolcall: true,
+    input: { text: true, audio: false, image: true, video: false, pdf: false },
+    output: { text: true, audio: false, image: false, video: false, pdf: false },
+    interleaved: false,
+  })
+  expect(models["qwen38-27b-128k"].capabilities.input).toEqual({ text: true, audio: false, image: false, video: false, pdf: false })
+})
+
+test("discoverOpenAICompatibleModels omits authorization header without apiKey", async () => {
+  let headers: unknown
+  const models = await Provider.discoverOpenAICompatibleModels({
+    baseURL: "http://127.0.0.1:8080/v1",
+    providerID: ProviderV2.ID.make("llama.cpp"),
+    npm: "@ai-sdk/openai-compatible",
+    fetchFn: (_input, init) => {
+      headers = init?.headers
+      return Promise.resolve(Response.json({ data: [{ id: "solo" }] }))
+    },
+  })
+  expect(headers ?? {}).toEqual({})
+  expect(Object.keys(models)).toEqual(["solo"])
+})
+
+test("discoverOpenAICompatibleModels returns {} when fetch rejects", async () => {
+  expect(
+    await Provider.discoverOpenAICompatibleModels({
+      baseURL: "http://127.0.0.1:8080/v1",
+      providerID: ProviderV2.ID.make("llama.cpp"),
+      npm: "@ai-sdk/openai-compatible",
+      fetchFn: () => Promise.reject(new Error("unreachable")),
+    }),
+  ).toEqual({})
+})
+
+test("discoverOpenAICompatibleModels returns {} for non-2xx responses", async () => {
+  expect(
+    await Provider.discoverOpenAICompatibleModels({
+      baseURL: "http://127.0.0.1:8080/v1",
+      providerID: ProviderV2.ID.make("llama.cpp"),
+      npm: "@ai-sdk/openai-compatible",
+      fetchFn: () => Promise.resolve(new Response("unavailable", { status: 503 })),
+    }),
+  ).toEqual({})
+})
+
+test("discoverOpenAICompatibleModels returns {} when response is not JSON", async () => {
+  expect(
+    await Provider.discoverOpenAICompatibleModels({
+      baseURL: "http://127.0.0.1:8080/v1",
+      providerID: ProviderV2.ID.make("llama.cpp"),
+      npm: "@ai-sdk/openai-compatible",
+      fetchFn: () => Promise.resolve(new Response("not json")),
+    }),
+  ).toEqual({})
+})
+
+test("discoverOpenAICompatibleModels returns {} when data is not an array", async () => {
+  expect(
+    await Provider.discoverOpenAICompatibleModels({
+      baseURL: "http://127.0.0.1:8080/v1",
+      providerID: ProviderV2.ID.make("llama.cpp"),
+      npm: "@ai-sdk/openai-compatible",
+      fetchFn: () => Promise.resolve(Response.json({ data: "nope" })),
+    }),
+  ).toEqual({})
+})
+
+test("discoverOpenAICompatibleModels skips entries without a usable id", async () => {
+  const models = await Provider.discoverOpenAICompatibleModels({
+    baseURL: "http://127.0.0.1:8080/v1",
+    providerID: ProviderV2.ID.make("llama.cpp"),
+    npm: "@ai-sdk/openai-compatible",
+    fetchFn: () => Promise.resolve(Response.json({ data: [{ id: 42 }, { id: "" }, { id: "solo" }, "junk"] })),
+  })
+  expect(Object.keys(models)).toEqual(["solo"])
+})
+
+test("defaultModelIDs ignores providers without models", () => {
+  expect(
+    Provider.defaultModelIDs({
+      empty: { models: {} },
+      full: { models: { solo: { id: "solo" } } },
+    }),
+  ).toEqual({ full: "solo" })
+})
+
+it.instance(
+  "discovers models for custom openai-compatible providers",
+  () =>
+    Effect.gen(function* () {
+      const providers = yield* list
+      const provider = providers[ProviderV2.ID.make("llama.cpp")]
+      expect(provider).toBeDefined()
+      expect(Object.keys(provider.models).sort()).toEqual(["qwen36-35b-moe-128k", "qwen38-27b-128k"])
+      const model = provider.models["qwen36-35b-moe-128k"]
+      expect(model.api.url).toBe(discoveryBaseURL)
+      expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
+      expect(model.capabilities.input).toEqual({ text: true, audio: false, image: false, video: false, pdf: false })
+      expect(model.limit).toEqual({ context: 0, output: 0 })
+    }),
+  {
+    config: {
+      provider: {
+        "llama.cpp": {
+          name: "llama.cpp",
+          options: { baseURL: discoveryBaseURL, apiKey: "test-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "drops custom providers whose discovery endpoint is unreachable",
+  () =>
+    Effect.gen(function* () {
+      const providers = yield* list
+      expect(providers[ProviderV2.ID.make("llama.cpp")]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        "llama.cpp": {
+          name: "llama.cpp",
+          options: { baseURL: "http://127.0.0.1:9/v1" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "keeps manual models config instead of discovered models",
+  () =>
+    Effect.gen(function* () {
+      const providers = yield* list
+      const provider = providers[ProviderV2.ID.make("llama.cpp")]
+      expect(provider).toBeDefined()
+      expect(Object.keys(provider.models)).toEqual(["my-manual-model"])
+      expect(provider.models["my-manual-model"].name).toBe("My Manual Model")
+    }),
+  {
+    config: {
+      provider: {
+        "llama.cpp": {
+          name: "llama.cpp",
+          options: { baseURL: discoveryBaseURL },
+          models: {
+            "my-manual-model": {
+              name: "My Manual Model",
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "skips discovery for custom providers that are not openai-compatible",
+  () =>
+    Effect.gen(function* () {
+      const providers = yield* list
+      expect(providers[ProviderV2.ID.make("llama.cpp")]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        "llama.cpp": {
+          name: "llama.cpp",
+          npm: "@ai-sdk/openai",
+          options: { baseURL: discoveryBaseURL },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "does not discover models for catalog providers with a custom baseURL",
+  () =>
+    Effect.gen(function* () {
+      yield* setProcessEnv("OPENAI_API_KEY", "test-openai-key")
+      const providers = yield* list
+      const provider = providers[ProviderV2.ID.openai]
+      expect(provider).toBeDefined()
+      expect(provider.models["gpt-4"]).toBeDefined()
+      expect(provider.models["qwen36-35b-moe-128k"]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        openai: {
+          options: { baseURL: discoveryBaseURL },
+        },
+      },
+    },
+  },
 )
