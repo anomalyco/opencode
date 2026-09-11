@@ -1280,6 +1280,91 @@ flowchart TD
     ])
   })
 
+  test("expands & node groups into fan-in and fan-out edges", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  N[Native] & M[Mapped] & O --> LM["LanguageModel"]
+  LM -->|prepare| REQ & LOG`)
+
+    expect(diagram.nodes).toEqual([
+      { id: "N", label: "Native", shape: "box" },
+      { id: "M", label: "Mapped", shape: "box" },
+      { id: "O", label: "O", shape: "box" },
+      { id: "LM", label: "LanguageModel", shape: "box" },
+      { id: "REQ", label: "REQ", shape: "box" },
+      { id: "LOG", label: "LOG", shape: "box" },
+    ])
+    expect(diagram.edges).toEqual([
+      { from: "N", to: "LM", label: "" },
+      { from: "M", to: "LM", label: "" },
+      { from: "O", to: "LM", label: "" },
+      { from: "LM", to: "REQ", label: "prepare" },
+      { from: "LM", to: "LOG", label: "prepare" },
+    ])
+  })
+
+  test("expands & groups on both sides of an edge and through a chain", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  A & B --> C & D --> E`)
+
+    expect(diagram.edges).toEqual([
+      { from: "A", to: "C", label: "" },
+      { from: "A", to: "D", label: "" },
+      { from: "B", to: "C", label: "" },
+      { from: "B", to: "D", label: "" },
+      { from: "C", to: "E", label: "" },
+      { from: "D", to: "E", label: "" },
+    ])
+  })
+
+  test("declares every node of a bare & group inside the current subgraph", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart TD
+  subgraph Runtime
+    A[Alpha] & B[Beta]:::focus
+  end
+  A --> B`)
+
+    expect(diagram.nodes).toEqual([
+      { id: "A", label: "Alpha", shape: "box" },
+      { id: "B", label: "Beta", shape: "box" },
+    ])
+    expect(diagram.subgraphs?.[0]?.nodeIds).toEqual(["A", "B"])
+  })
+
+  test("keeps & inside quoted or bracketed labels as label text", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  A["Fetch & parse"] & B[R&D] --> C[Done &amp; dusted]`)
+
+    expect(diagram.nodes).toEqual([
+      { id: "A", label: "Fetch & parse", shape: "box" },
+      { id: "B", label: "R&D", shape: "box" },
+      { id: "C", label: "Done & dusted", shape: "box" },
+    ])
+    expect(diagram.edges).toEqual([
+      { from: "A", to: "C", label: "" },
+      { from: "B", to: "C", label: "" },
+    ])
+  })
+
+  test("rejects an empty & group member", () => {
+    expect(() =>
+      parseMermaidFlowchartDiagram(`flowchart LR
+  A & --> B`),
+    ).toThrow('Unsupported syntax in flowchart diagram at line 2: "A & --> B"')
+  })
+
+  test("renders a fan-in expressed with & the same as separate edge statements", () => {
+    const grouped = renderFlowchartDiagram(`flowchart LR
+  N & M & O --> LM[LanguageModel] --> REQ[LLMRequest]`)
+    const separate = renderFlowchartDiagram(`flowchart LR
+  N --> LM[LanguageModel]
+  M --> LM
+  O --> LM
+  LM --> REQ[LLMRequest]`)
+
+    expect(grouped).toBe(separate)
+    expect(grouped).toContain("LanguageModel")
+  })
+
   test("parses chained undirected solid edges", () => {
     const diagram = parseMermaidFlowchartDiagram(`flowchart LR
   A --- B --- C`)
