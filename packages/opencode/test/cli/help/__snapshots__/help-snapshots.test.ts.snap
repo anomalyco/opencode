@@ -103,6 +103,8 @@ Options:
                                                                                             [string]
       --thinking     show thinking blocks                                                  [boolean]
   -i, --interactive  run in direct interactive split-footer mode          [boolean] [default: false]
+      --stdin        read piped stdin and append it to the prompt (disable with --no-stdin)
+                                                                           [boolean] [default: true]
       --auto         auto-approve permissions that are not explicitly denied (dangerous!)
                                                                           [boolean] [default: false]"
 `;
