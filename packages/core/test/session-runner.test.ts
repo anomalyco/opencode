@@ -2009,7 +2009,6 @@ describe("SessionRunnerLLM", () => {
       sessionID,
       model: { ...model, variant: Model.VariantID.make("low") },
     })
-    // The selected variant reaches the request as the provider effort option.
     s.currentModel = LanguageModel.update(s.currentModel, { defaults: { providerOptions: { effort: "low" } } })
     yield* s.llm.push(TestLLM.text("Later answer", "text-effort-low"))
     yield* s.runPrompt("Second")

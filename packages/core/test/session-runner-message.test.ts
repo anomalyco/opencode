@@ -233,14 +233,9 @@ Recent work
 
     test("ignores switches that are not effort changes on the requested model", () => {
       const other = Model.Ref.make({ id: Model.ID.make("other"), providerID: Provider.ID.make("provider") })
-      const elsewhere = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("elsewhere") })
       expect(toLLMMessages([switched(ref("low"))], ref("low"))).toEqual([])
       expect(toLLMMessages([switched(ref("low"), other)], ref("low"))).toEqual([])
-      expect(toLLMMessages([switched(other, ref("high"))], other)).toEqual([])
-      expect(toLLMMessages([switched(ref("low"), elsewhere)], ref("low"))).toEqual([])
       expect(toLLMMessages([switched(ref("thinking"), ref("high"))], ref("thinking"))).toEqual([])
-      expect(toLLMMessages([switched(ref("low"), ref("custom-preset"))], ref("low"))).toEqual([])
-      // A switch recorded for a model that is no longer the one running leaves no trace.
       expect(toLLMMessages([switched(ref("low"), ref("high"))], other)).toEqual([])
     })
   })

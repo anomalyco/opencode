@@ -643,7 +643,6 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
   return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter))
 })
 
-// API default effort; an omitted top-level `reasoning.effort` is cache-equivalent to it.
 const DEFAULT_EFFORT = "medium"
 
 const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (

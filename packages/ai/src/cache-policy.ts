@@ -122,7 +122,6 @@ const markMessages = (
     return markMessageAt(messages, lastIndexOfRole(messages, "user"), hint, budget)
   if (strategy === "latest-assistant")
     return markMessageAt(messages, lastIndexOfRole(messages, "assistant"), hint, budget)
-  // Effort markers carry no cacheable content, so the tail walks back past them.
   let start = messages.length
   let remaining = strategy.tail
   while (remaining > 0 && start > 0) {
