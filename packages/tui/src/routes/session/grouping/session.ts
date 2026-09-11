@@ -18,8 +18,9 @@ export type SessionEntry =
   | { type: "assistant-footer"; messageID: string }
   | { type: "turn-usage"; messageIDs: string[]; previousCache?: CacheUsage }
 
-type GroupKind = "reasoning" | "exploration"
-type SessionGroup = {
+export type GroupKind = "reasoning" | "exploration"
+export type SessionNode = GroupNode<SessionEntry, GroupKind>
+export type SessionGroup = {
   type: "group"
   children: readonly GroupNode<SessionEntry, GroupKind>[]
   size: number

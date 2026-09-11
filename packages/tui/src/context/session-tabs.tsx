@@ -43,6 +43,8 @@ type PersistedState = {
 type ScrollAnchor = {
   messageID: string
   screenY: number
+  /** Restore an entry inside its ancestors, rather than the collapsed summary. */
+  reveal?: boolean
 }
 
 const empty = (): TabsState => ({ tabs: [], unread: {} })
@@ -393,7 +395,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           return
         }
         const current = scrollAnchors.get(sessionID)
-        if (current?.messageID === anchor.messageID && current.screenY === anchor.screenY) return
+        if (
+          current?.messageID === anchor.messageID &&
+          current.screenY === anchor.screenY &&
+          current.reveal === anchor.reveal
+        )
+          return
         scrollAnchors.set(sessionID, anchor)
       },
       select(sessionID: string) {

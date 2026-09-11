@@ -3,6 +3,7 @@ import type { ModelInfo } from "@opencode/client"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { useConfig } from "../../config"
 import type { ThinkingMode } from "../../context/thinking"
+import type { createMessageAnchors } from "./message-anchors"
 
 export type PendingAction = "steer" | "queue" | "cancel"
 
@@ -16,6 +17,7 @@ export const context = createContext<{
    */
   terminal: { width: number; height: number }
   sessionID: string
+  anchors: ReturnType<typeof createMessageAnchors>
   thinkingMode: () => ThinkingMode
   markdownMode: () => "source" | "rendered"
   groupExploration: () => boolean
