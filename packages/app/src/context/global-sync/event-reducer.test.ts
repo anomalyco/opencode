@@ -418,6 +418,56 @@ describe("applyDirectoryEvent", () => {
     expect(store.part.msg_a).toBeUndefined()
   })
 
+  test("hydrates cached user patches from message.diff.updated", () => {
+    const sessionID = "ses_1"
+    const messageID = "msg_1"
+    const [store, setStore] = createStore(
+      baseState({
+        message: { [sessionID]: [userMessage(messageID, sessionID)] },
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.diff.updated",
+        properties: {
+          sessionID,
+          messageID,
+          diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PATCH-CONTENT" }],
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    const first = store.message[sessionID]?.[0]
+    expect(first?.role === "user" && typeof first.summary === "object" ? first.summary?.diffs[0]?.patch : undefined).toBe(
+      "PATCH-CONTENT",
+    )
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.updated.v2",
+        properties: {
+          info: { ...userMessage(messageID, sessionID), summary: { title: "updated" } } as Message,
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    const second = store.message[sessionID]?.[0]
+    expect(second?.role === "user" && typeof second.summary === "object" ? second.summary?.diffs[0]?.patch : undefined).toBe(
+      "PATCH-CONTENT",
+    )
+  })
+
   test("upserts and prunes message parts", () => {
     const sessionID = "ses_1"
     const messageID = "msg_1"

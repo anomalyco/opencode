@@ -20,6 +20,8 @@ import { messageKey } from "@/utils/session-message"
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const SESSION_CONTENT_EVENTS = new Set([
   "session.diff",
+  "message.diff.updated",
+  "message.updated.v2",
   "todo.updated",
   "session.status",
   "message.updated",
@@ -287,6 +289,53 @@ export function applyDirectoryEvent(input: {
         produce((draft) => {
           draft.splice(result.index, 0, info)
         }),
+      )
+      break
+    }
+    case "message.updated.v2": {
+      const raw = (event.properties as { info: Message }).info
+      const info = clean(raw)
+      const messages = input.store.message[info.sessionID]
+      if (!messages) {
+        input.setStore("message", info.sessionID, [info])
+        break
+      }
+      const result = Binary.search(messages, messageKey(info), messageKey)
+      if (result.found) {
+        const current = messages[result.index]
+        const summary = typeof info.summary === "object" && info.summary ? info.summary : {}
+        const user = info as Extract<Message, { role: "user" }>
+        const next =
+          raw.role === "user" &&
+          typeof raw.summary === "object" &&
+          raw.summary &&
+          raw.summary.diffs === undefined &&
+          current?.role === "user"
+            ? { ...user, summary: { ...summary, diffs: current.summary?.diffs ?? [] } }
+            : info
+        input.setStore("message", info.sessionID, result.index, reconcile(next))
+        break
+      }
+      input.setStore(
+        "message",
+        info.sessionID,
+        produce((draft) => {
+          draft.splice(result.index, 0, info)
+        }),
+      )
+      break
+    }
+    case "message.diff.updated": {
+      const props = event.properties as { sessionID: string; messageID: string; diffs: FileDiffInfo[] }
+      const messages = input.store.message[props.sessionID]
+      const index = messages?.findIndex((message) => message.id === props.messageID) ?? -1
+      const current = index >= 0 ? messages?.[index] : undefined
+      if (!current || current.role !== "user") break
+      input.setStore(
+        "message",
+        props.sessionID,
+        index,
+        reconcile({ ...current, summary: { ...current.summary, diffs: list(props.diffs) } }),
       )
       break
     }
