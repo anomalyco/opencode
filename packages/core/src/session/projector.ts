@@ -12,7 +12,7 @@ import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
-import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
+import { MessageDiffTable, MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -75,7 +75,9 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
 }
 
 function messageData(
-  info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"],
+  info:
+    | (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"]
+    | (typeof SessionV1.Event.MessageUpdatedV2.Type)["data"]["info"],
 ): typeof MessageTable.$inferInsert.data {
   const { id: _, sessionID: __, ...rest } = info
   return rest as DeepMutable<typeof rest>
@@ -257,7 +259,13 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionV1.Event.Deleted, (event) =>
       db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
     )
-    yield* events.project(SessionV1.Event.MessageUpdated, (event) =>
+    const projectMessage = (event: {
+      data: {
+        info:
+          | (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"]
+          | (typeof SessionV1.Event.MessageUpdatedV2.Type)["data"]["info"]
+      }
+    }) =>
       Effect.gen(function* () {
         const time_created = event.data.info.time.created
         const id = event.data.info.id
@@ -269,7 +277,23 @@ const layer = Layer.effectDiscard(
           .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
           .run()
           .pipe(Effect.orDie)
-      }),
+      })
+    yield* events.project(SessionV1.Event.MessageUpdated, projectMessage)
+    yield* events.project(SessionV1.Event.MessageUpdatedV2, projectMessage)
+    yield* events.project(SessionV1.Event.MessageDiffUpdated, (event) =>
+      db
+        .insert(MessageDiffTable)
+        .values({
+          message_id: event.data.messageID,
+          session_id: event.data.sessionID,
+          diffs: event.data.diffs.map((item) => ({ ...item })),
+        })
+        .onConflictDoUpdate({
+          target: MessageDiffTable.message_id,
+          set: { diffs: event.data.diffs.map((item) => ({ ...item })) },
+        })
+        .run()
+        .pipe(Effect.orDie),
     )
     yield* events.project(SessionV1.Event.MessageRemoved, (event) =>
       Effect.gen(function* () {
@@ -283,6 +307,11 @@ const layer = Layer.effectDiscard(
           const previous = usage(row.data)
           if (previous) yield* applyUsage(db, event.data.sessionID, previous, -1)
         }
+        yield* db
+          .delete(MessageDiffTable)
+          .where(and(eq(MessageDiffTable.message_id, event.data.messageID), eq(MessageDiffTable.session_id, event.data.sessionID)))
+          .run()
+          .pipe(Effect.orDie)
         yield* db
           .delete(MessageTable)
           .where(and(eq(MessageTable.id, event.data.messageID), eq(MessageTable.session_id, event.data.sessionID)))
