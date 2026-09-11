@@ -120,9 +120,7 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
         .where(inArray(MessageDiffTable.message_id, ids))
         .all()
         .pipe(Effect.orDie)
-      for (const row of diffRows) {
-        diffByMessage.set(row.message_id, row.diffs)
-      }
+      diffRows.forEach((row) => diffByMessage.set(row.message_id, row.diffs))
     }
 
     return rows.map((row) => {

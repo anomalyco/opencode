@@ -2,6 +2,9 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { isDeepStrictEqual } from "node:util"
 import { Effect, Layer, Context, Schema } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Database } from "@opencode-ai/core/database/database"
+import { MessageDiffTable } from "@opencode-ai/core/session/sql"
+import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
@@ -79,6 +82,7 @@ const layer = Layer.effect(
     const snapshot = yield* Snapshot.Service
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
+    const database = yield* Database.Service
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
@@ -123,7 +127,19 @@ const layer = Layer.effect(
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
       const msgDiffs = yield* computeDiff({ messages })
-      if (isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
+      const dedicated = yield* database.db
+        .select({ message_id: MessageDiffTable.message_id })
+        .from(MessageDiffTable)
+        .where(eq(MessageDiffTable.message_id, input.messageID))
+        .get()
+        .pipe(Effect.orDie)
+      if (dedicated && isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
+      if (!dedicated && target.info.summary?.diffs !== undefined) {
+        // Historic/imported projections have no durable message event, so a diff-only publish would
+        // replay without its parent. Re-establish the full message baseline once before dedup takes over.
+        yield* sessions.updateMessage(target.info)
+        return
+      }
       // Turn patches are their own durable stream: ordinary message updates must never duplicate them.
       yield* events.publish(Session.Event.MessageDiffUpdated, {
         sessionID: input.sessionID,
@@ -160,7 +176,7 @@ export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node],
+  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Database.node],
 })
 
 export * as SessionSummary from "./summary"
