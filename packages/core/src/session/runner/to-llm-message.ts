@@ -70,7 +70,12 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
 const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
-  const reuseProviderMetadata = sameModel && message.error === undefined
+  // Reasoning continuation metadata survives failed turns (#38620): replaying a
+  // tool_use part without its preceding signed/redacted thinking block makes
+  // Anthropic reject the request with a 400 once thinking is enabled, so the
+  // reasoning provider state must be reused whenever the turn stays on the same
+  // model. Tool execution metadata from a failed turn is still not trusted.
+  const reuseToolMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
     if (item.type === "reasoning")
@@ -79,17 +84,17 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
             {
               type: "reasoning",
               text: item.text,
-              providerMetadata: reuseProviderMetadata ? item.providerMetadata : undefined,
+              providerMetadata: item.providerMetadata,
             },
           ]
         : item.text.length > 0
           ? [{ type: "text", text: item.text }]
           : []
-    const call = toolCall(item, reuseProviderMetadata ? item.provider?.metadata : undefined)
+    const call = toolCall(item, reuseToolMetadata ? item.provider?.metadata : undefined)
     if (item.provider?.executed !== true) return [call]
     const result = toolResult(
       item,
-      reuseProviderMetadata ? (item.provider.resultMetadata ?? item.provider.metadata) : undefined,
+      reuseToolMetadata ? (item.provider.resultMetadata ?? item.provider.metadata) : undefined,
     )
     return result ? [call, result] : [call]
   })
@@ -101,7 +106,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const results = message.content
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
     .map((item) =>
-      toolResult(item, reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined),
+      toolResult(item, reuseToolMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined),
     )
     .filter((message) => message !== undefined)
     .map(Message.tool)

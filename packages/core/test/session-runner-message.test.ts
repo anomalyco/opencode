@@ -327,7 +327,7 @@ Recent work
     ])
   })
 
-  test("drops provider-native continuation metadata from failed assistant turns", () => {
+  test("preserves reasoning continuation metadata on failed same-model assistant turns", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -370,7 +370,11 @@ Recent work
     )
 
     expect(messages[0]?.content).toEqual([
-      { type: "reasoning", text: "Partial thought", providerMetadata: undefined },
+      {
+        type: "reasoning",
+        text: "Partial thought",
+        providerMetadata: { openai: { itemId: "rs_failed", reasoningEncryptedContent: null } },
+      },
       {
         type: "tool-call",
         id: "hosted-failed",
@@ -397,6 +401,131 @@ Recent work
         providerMetadata: undefined,
       },
     ])
+  })
+
+  test("preserves Anthropic thinking signature on failed assistant turns (#38620)", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-failed-anthropic"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              id: "reasoning-failed-anthropic",
+              text: "Signed thought",
+              providerMetadata: { anthropic: { signature: "sig_failed" } },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "hosted-failed-anthropic",
+              name: "web_search",
+              provider: {
+                executed: true,
+                metadata: { anthropic: { signature: "call_sig_failed" } },
+              },
+              state: SessionMessage.ToolStateError.make({
+                status: "error",
+                input: { query: "Effect" },
+                error: { type: "unknown", message: "Provider turn interrupted" },
+                content: [],
+                structured: {},
+              }),
+              time: { created, completed: created },
+            }),
+          ],
+          finish: "error",
+          error: { type: "unknown", message: "Provider turn interrupted" },
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    // The replayed tool_use must be preceded by its signed thinking block or
+    // Anthropic rejects the request with a 400 once thinking is enabled.
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "reasoning",
+        text: "Signed thought",
+        providerMetadata: { anthropic: { signature: "sig_failed" } },
+      },
+      {
+        type: "tool-call",
+        id: "hosted-failed-anthropic",
+        name: "web_search",
+        input: { query: "Effect" },
+        providerExecuted: true,
+        providerMetadata: undefined,
+      },
+      {
+        type: "tool-result",
+        id: "hosted-failed-anthropic",
+        name: "web_search",
+        result: {
+          type: "error",
+          value: {
+            error: { type: "unknown", message: "Provider turn interrupted" },
+            content: [],
+            structured: {},
+          },
+        },
+        providerExecuted: true,
+        cache: undefined,
+        metadata: undefined,
+        providerMetadata: undefined,
+      },
+    ])
+  })
+
+  test("preserves redacted thinking data on failed assistant turns (#38620)", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-failed-redacted"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              id: "reasoning-failed-redacted",
+              text: "",
+              providerMetadata: { anthropic: { redactedData: "redacted-blob-failed" } },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "hosted-failed-redacted",
+              name: "web_search",
+              provider: {
+                executed: true,
+                metadata: {},
+              },
+              state: SessionMessage.ToolStateError.make({
+                status: "error",
+                input: { query: "Effect" },
+                error: { type: "unknown", message: "Provider turn interrupted" },
+                content: [],
+                structured: {},
+              }),
+              time: { created, completed: created },
+            }),
+          ],
+          finish: "error",
+          error: { type: "unknown", message: "Provider turn interrupted" },
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content[0]).toEqual({
+      type: "reasoning",
+      text: "",
+      providerMetadata: { anthropic: { redactedData: "redacted-blob-failed" } },
+    })
   })
 
   test("drops provider-native continuation metadata after a model switch", () => {
