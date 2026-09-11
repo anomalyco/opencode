@@ -82,6 +82,13 @@ const layer = Layer.effect(
             `  Platform: ${process.platform}`,
             `  Today's date: ${new Date().toDateString()}`,
             `</env>`,
+            "",
+            "Long-term persistence memory is active (backed by SQLite .db file storage).",
+            "Use the `memory` tool to:",
+            "- 'teach': persist project instructions, conventions, and user preferences for future sessions.",
+            "- 'recall': retrieve relevant knowledge from memory for the current task.",
+            "- 'learn': save important lessons, patterns, or bug fixes discovered during the session.",
+            "- 'list': explore saved memories.",
           ].join("\n"),
           references.length === 0
             ? undefined
