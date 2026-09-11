@@ -26,6 +26,7 @@ import orng from "./assets/orng.json" with { type: "json" }
 import osakaJade from "./assets/osaka-jade.json" with { type: "json" }
 import palenight from "./assets/palenight.json" with { type: "json" }
 import rosepine from "./assets/rosepine.json" with { type: "json" }
+import shadesOfPurple from "./assets/shades-of-purple.json" with { type: "json" }
 import solarized from "./assets/solarized.json" with { type: "json" }
 import synthwave84 from "./assets/synthwave84.json" with { type: "json" }
 import tokyonight from "./assets/tokyonight.json" with { type: "json" }
@@ -154,6 +155,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   ["lucent-orng"]: lucentOrng,
   palenight,
   rosepine,
+  ["shades-of-purple"]: shadesOfPurple,
   solarized,
   synthwave84,
   tokyonight,
