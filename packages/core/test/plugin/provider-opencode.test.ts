@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM } from "@opencode/ai"
+import { LLM, Message } from "@opencode/ai"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Money } from "@opencode/schema/money"
 import { Effect, Layer, Stream } from "effect"
@@ -538,6 +538,213 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("refreshes organization routes and replaces the previous organization's catalog", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { advertised: false, disabled: false, alias: "coding", name: "Coding", requests: 0 }
+        const inference: Array<{ body: unknown; authorization: string | null; orgID: string | null }> = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: async (request) => {
+            if (new URL(request.url).pathname === "/route/openai/v1/responses") {
+              inference.push({
+                body: await request.json(),
+                authorization: request.headers.get("authorization"),
+                orgID: request.headers.get("x-opencode-org-id"),
+              })
+              const events = [
+                {
+                  type: "response.output_item.done",
+                  item: {
+                    type: "message",
+                    id: "msg_route",
+                    role: "assistant",
+                    content: [{ type: "output_text", text: "Hello" }],
+                    provider_metadata: { protocol: "anthropic-messages", connection_id: "conn_first" },
+                  },
+                },
+                { type: "response.completed", response: { id: "resp_route" } },
+              ]
+              return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+                headers: { "content-type": "text/event-stream" },
+              })
+            }
+            state.requests++
+            const orgID = request.headers.get("x-org-id")
+            return Response.json({
+              providers: state.advertised
+                ? {
+                    [`opencode-routes-${orgID}`]: {
+                      name: `${orgID} / Routes`,
+                      package: "@opencode/ai/providers/organization-routes",
+                      settings: {
+                        baseURL: `${new URL(request.url).origin}/route/openai/v1`,
+                        provider: `opencode-routes-${orgID}`,
+                      },
+                      headers: { "x-opencode-org-id": orgID },
+                      models: {
+                        route_1: {
+                          name: state.name,
+                          modelID: state.alias,
+                          capabilities: { tools: true, input: ["text"], output: ["text"] },
+                          cost: [],
+                          limit: { context: 0, output: 0 },
+                          disabled: state.disabled,
+                        },
+                      },
+                    },
+                  }
+                : {},
+            })
+          },
+        })
+        return { server, state, inference }
+      }),
+      ({ server, state, inference }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const catalog = yield* Catalog.Service
+          const firstID = Provider.ID.make("opencode-routes-org_first")
+          const secondID = Provider.ID.make("opencode-routes-org_second")
+          const routeID = Model.ID.make("route_1")
+          yield* catalog.transform((editor) => {
+            editor.model.update(Provider.ID.openai, Model.ID.make("coding"), (model) => {
+              model.name = "Upstream coding model"
+              model.cost = cost(10)
+            })
+          })
+          const first = yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "first-key",
+              metadata: { server: server.url.origin, orgID: "org_first" },
+            }),
+          })
+          yield* addPlugin()
+          yield* drain
+          expect(yield* catalog.provider.get(firstID)).toBeUndefined()
+
+          state.advertised = true
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(yield* catalog.provider.get(firstID)).toMatchObject({
+            id: firstID,
+            name: "org_first / Routes",
+            integrationID: "opencode",
+          })
+          const route = required(yield* catalog.model.get(firstID, routeID))
+          expect(route).toMatchObject({
+            id: "route_1",
+            modelID: "coding",
+            name: "Coding",
+            providerID: firstID,
+            package: "@opencode/ai/providers/organization-routes",
+            cost: [],
+            limit: { context: 0, output: 0 },
+            headers: { "x-opencode-org-id": "org_first" },
+          })
+          expect(route.canonical).toBeUndefined()
+          expect((yield* catalog.model.available()).some((model) => model.providerID === firstID)).toBe(true)
+          const firstModel = yield* ModelResolver.resolveModel(route, undefined, first.value)
+          expect(String(firstModel.provider)).toBe(String(firstID))
+          expect(firstModel.route.providerMetadataKey).toBe(firstID)
+          const reply = yield* LLMClient.generate(LLM.request({ model: firstModel, prompt: "Hello" })).pipe(
+            Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))),
+          )
+          expect(inference[0]).toMatchObject({
+            authorization: "Bearer first-key",
+            orgID: "org_first",
+            body: { model: "coding", stream: true, store: false },
+          })
+          expect(reply.message.content).toMatchObject([
+            {
+              type: "text",
+              providerMetadata: { [firstID]: { providerMetadata: { protocol: "anthropic-messages" } } },
+            },
+          ])
+
+          state.alias = "coding-renamed"
+          state.name = "Renamed route"
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(yield* catalog.model.get(firstID, routeID)).toMatchObject({
+            id: "route_1",
+            modelID: "coding-renamed",
+            name: "Renamed route",
+          })
+          expect(yield* catalog.model.get(firstID, Model.ID.make("coding"))).toBeUndefined()
+
+          state.disabled = true
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect((yield* catalog.model.available()).some((model) => model.providerID === firstID)).toBe(false)
+
+          state.advertised = false
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(yield* catalog.model.get(firstID, routeID)).toBeUndefined()
+          expect(yield* catalog.provider.get(firstID)).toBeUndefined()
+
+          state.advertised = true
+          state.disabled = false
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(yield* catalog.model.get(firstID, routeID)).toBeDefined()
+          const requests = state.requests
+          const second = yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "second-key",
+              metadata: { server: server.url.origin, orgID: "org_second" },
+            }),
+          })
+          yield* eventually(catalog.model.get(secondID, routeID), (model) => model !== undefined)
+          expect(state.requests).toBe(requests + 1)
+          expect(yield* catalog.provider.get(firstID)).toBeUndefined()
+          expect(yield* catalog.model.get(firstID, routeID)).toBeUndefined()
+          expect(yield* catalog.model.get(secondID, routeID)).toMatchObject({
+            providerID: secondID,
+            headers: { "x-opencode-org-id": "org_second" },
+          })
+
+          const secondModel = yield* ModelResolver.resolveModel(
+            required(yield* catalog.model.get(secondID, routeID)),
+            undefined,
+            second.value,
+          )
+          expect(String(secondModel.provider)).toBe(String(secondID))
+          expect(secondModel.route.providerMetadataKey).toBe(secondID)
+          yield* LLMClient.generate(
+            LLM.request({ model: secondModel, messages: [reply.message, Message.user("Continue")] }),
+          ).pipe(Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))))
+          expect(inference[1]).toMatchObject({
+            authorization: "Bearer second-key",
+            orgID: "org_second",
+            body: {
+              model: "coding-renamed",
+              input: [
+                { role: "assistant", content: [{ type: "output_text", text: "Hello" }] },
+                { role: "user", content: [{ type: "input_text", text: "Continue" }] },
+              ],
+            },
+          })
+          expect(JSON.stringify(inference[1].body)).not.toContain("conn_first")
+
+          yield* credentials.remove(first.id)
+          yield* credentials.remove(second.id)
+          yield* eventually(catalog.provider.get(secondID), (provider) => provider === undefined)
+          expect(yield* catalog.model.get(secondID, routeID)).toBeUndefined()
+          expect(yield* catalog.model.get(Provider.ID.openai, Model.ID.make("coding"))).toMatchObject({
+            name: "Upstream coding model",
+            cost: cost(10),
+          })
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
   it.effect("refreshes hosted search with Console config and skips unchanged snapshots", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -577,26 +784,26 @@ describe("OpencodePlugin", () => {
           expect(yield* websearch.default()).toBeUndefined()
 
           state.advertised = true
-          yield* TestClock.adjust("9 minutes")
+          yield* TestClock.adjust("50 seconds")
           yield* drain
           expect(state.requests).toBe(1)
           expect(rebuilds).toEqual(initial)
           expect(yield* websearch.default()).toBeUndefined()
 
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("10 seconds")
           yield* drain
           expect(state.requests).toBe(2)
           expect(rebuilds).toEqual({ catalog: initial.catalog + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
 
-          yield* TestClock.adjust("10 minutes")
+          yield* TestClock.adjust("1 minute")
           yield* drain
           expect(state.requests).toBe(3)
           expect(rebuilds).toEqual({ catalog: initial.catalog + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
 
           state.advertised = false
-          yield* TestClock.adjust("10 minutes")
+          yield* TestClock.adjust("1 minute")
           yield* drain
           expect(state.requests).toBe(4)
           expect(rebuilds).toEqual({ catalog: initial.catalog + 2, websearch: initial.websearch + 2 })
