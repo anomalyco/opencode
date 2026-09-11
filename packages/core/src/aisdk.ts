@@ -547,6 +547,14 @@ function assistantPart(part: ContentPart): AssistantContent {
       ]
     case "tool-result":
       return toolResultPart(part)
+    case "effort":
+      throw ProviderShared.unsupportedContent("AI SDK", "assistant", [
+        "text",
+        "media",
+        "reasoning",
+        "tool-call",
+        "tool-result",
+      ])
   }
 }
 

@@ -6,7 +6,9 @@ import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { LLMRequest, mergeJsonRecords, type JsonSchema, type ToolDefinition, type ToolEntry } from "../schema/index.js"
+import { resolveEffortUpdates } from "../effort-updates.js"
 import { OpenResponses } from "./open-responses.js"
+import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIImage } from "./utils/openai-image.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
@@ -94,9 +96,15 @@ const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.tag("image_generation") }),
 ])
 
+const OpenAIResponsesInputItem = Schema.Union([
+  OpenResponses.InputItem,
+  OpenAIResponsesHostedToolItem,
+  OpenResponses.ConfigurationUpdate,
+])
+
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
-  input: Schema.Array(Schema.Union([OpenResponses.InputItem, OpenAIResponsesHostedToolItem])),
+  input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   context_management: Schema.optional(
@@ -119,7 +127,7 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 export const CompactionTrigger = Schema.Struct({ type: Schema.Literal("compaction_trigger") })
 const CheckpointBody = Schema.Struct({
   ...OpenAIResponsesBody.fields,
-  input: Schema.Array(Schema.Union([OpenResponses.InputItem, OpenAIResponsesHostedToolItem, CompactionTrigger])),
+  input: Schema.Array(Schema.Union([OpenAIResponsesInputItem, CompactionTrigger])),
   store: Schema.Literal(false),
   prompt_cache_retention: optionalNull(Schema.String),
   prompt_cache_options: optionalNull(
@@ -132,6 +140,16 @@ const adapter = {
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
+
+// OpenAI documents `configuration_update` for GPT-6 Astra alone and its model IDs carry no lineage, so the ID is
+// pinned exactly (Anthropic generalises by family version instead). The API also rejects updates alongside
+// automatic `context_management` compaction.
+const supportsEffortUpdates = (request: LLMRequest) => {
+  if (request.providerOptions?.contextManagement !== undefined) return false
+  const override = request.model.compatibility?.supportsEffortUpdates
+  if (override !== undefined) return override
+  return /(?:^|\/)gpt-6-astra$/i.test(request.model.id)
+}
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
   const native = tool.native?.openai
@@ -189,10 +207,12 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   const management = yield* ProviderShared.validateWith(
     Schema.decodeUnknownEffect(Schema.UndefinedOr(ContextManagement)),
   )(request.providerOptions?.contextManagement)
+  const options = OpenResponsesOptions.resolve(request)
+  const updates = resolveEffortUpdates(request, options.reasoningEffort)
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return yield* decodeBody({
-    ...(yield* OpenResponses.lowerConversation(request, adapter)),
-    ...OpenResponses.lowerGeneration(request),
+    ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
+    ...OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),
     context_management: management?.map((edit) => ({ type: edit.type, compact_threshold: edit.compactThreshold })),
     tools:
       request.tools.length === 0
@@ -295,6 +315,7 @@ export const protocol = Protocol.make({
     step,
     terminal: OpenResponses.terminal,
   },
+  supportsEffortUpdates,
 })
 
 const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BASE_URL })

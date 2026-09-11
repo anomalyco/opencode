@@ -27,6 +27,7 @@ import {
 } from "../schema/index.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
+import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import * as Cache from "./utils/cache.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
@@ -36,6 +37,8 @@ const ADAPTER = "anthropic-messages"
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 export const DEFAULT_MAX_TOKENS = 32_000
+// API default effort; an omitted top-level `output_config.effort` is cache-equivalent to it.
+const DEFAULT_EFFORT = "high"
 
 const SSE_EVENTS = new Set([
   "message",
@@ -283,10 +286,15 @@ const AnthropicAssistantBlock = Schema.Union([
 type AnthropicAssistantBlock = Schema.Schema.Type<typeof AnthropicAssistantBlock>
 type AnthropicToolResultBlock = Schema.Schema.Type<typeof AnthropicToolResultBlock>
 
+// A system message with empty content and `output_config` is a per-turn effort change.
 const AnthropicMessage = Schema.Union([
   Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(AnthropicUserBlock) }),
   Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(AnthropicAssistantBlock) }),
-  Schema.Struct({ role: Schema.Literal("system"), content: Schema.Array(AnthropicTextBlock) }),
+  Schema.Struct({
+    role: Schema.Literal("system"),
+    content: Schema.Array(AnthropicTextBlock),
+    output_config: Schema.optional(Schema.Struct({ effort: Schema.String })),
+  }),
 ]).pipe(Schema.toTaggedUnion("role"))
 type AnthropicMessage = Schema.Schema.Type<typeof AnthropicMessage>
 
@@ -877,6 +885,13 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 
   for (const [index, message] of request.messages.entries()) {
     if (message.role === "system") {
+      const update = effortUpdate(message)
+      if (update) {
+        // Accepted anywhere, including mid tool loop, and applied from the next user
+        // turn, so text-update placement rules do not apply.
+        messages.push({ role: "system", content: [], output_config: { effort: update.effort ?? DEFAULT_EFFORT } })
+        continue
+      }
       if (splitsLocalToolResults(request.messages, index))
         return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
       if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request, index)) {
@@ -1034,18 +1049,11 @@ const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (
     ProviderShared.isRecord(rawOutputConfig) && ProviderShared.isRecord(rawOutputConfig.format)
       ? (rawOutputConfig.format as { type: "json_schema"; schema: Record<string, unknown> })
       : undefined
-  const output_config =
-    outputConfigEffort === undefined && outputConfigFormat === undefined
-      ? undefined
-      : {
-          ...(outputConfigEffort === undefined ? {} : { effort: outputConfigEffort }),
-          ...(outputConfigFormat === undefined ? {} : { format: outputConfigFormat }),
-        }
   const thinking = yield* resolveThinking(input?.thinking)
   return {
     thinking: applyThinkingBindingDefault(request.model, thinking),
     effort: outputConfigEffort,
-    output_config,
+    format: outputConfigFormat,
     service_tier,
     metadata,
     container,
@@ -1054,15 +1062,31 @@ const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (
   }
 })
 
+// Accept gateway namespaces and Vertex suffixes without treating a snapshot date as a minor version.
+const claudeVersion = (id: string) => {
+  const match = /(?:^|[./])claude-(?<family>[a-z]+)-(?<major>\d+)(?:[.-](?<minor>\d{1,2}))?(?:$|[-:@])/.exec(
+    id.toLowerCase(),
+  )?.groups
+  if (!match) return undefined
+  return { family: match.family, major: Number(match.major), minor: Number(match.minor ?? 0) }
+}
+
 const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
   const override = model.compatibility?.supportsThinkingBlockBinding
   if (override !== undefined) return override
-  // Accept gateway namespaces and Vertex suffixes without treating a snapshot date as a minor version.
-  const version = /(?:^|[./])claude-[a-z]+-(?<major>\d+)(?:[.-](?<minor>\d{1,2}))?(?:$|[-:@])/i.exec(model.id)?.groups
-  if (!version) return false
-  const major = Number(version.major)
-  const minor = Number(version.minor ?? 0)
-  return major > 5 || (major === 5 && minor >= 1)
+  const version = claudeVersion(model.id)
+  return version !== undefined && (version.major > 5 || (version.major === 5 && version.minor >= 1))
+}
+
+// Anthropic documents per-message effort as a family capability from Opus 5 and Fable/Mythos 5.1 onward.
+const supportsEffortUpdates = (model: LLMRequest["model"]) => {
+  const override = model.compatibility?.supportsEffortUpdates
+  if (override !== undefined) return override
+  const version = claudeVersion(model.id)
+  if (version === undefined) return false
+  if (version.family === "opus") return version.major >= 5
+  if (version.family !== "fable" && version.family !== "mythos") return false
+  return version.major > 5 || (version.major === 5 && version.minor >= 1)
 }
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
@@ -1104,13 +1128,15 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const management = yield* ProviderShared.validateWith(
     Schema.decodeUnknownEffect(Schema.UndefinedOr(ContextManagement)),
   )(request.providerOptions?.contextManagement)
+  const options = yield* resolveOptions(request)
+  const updates = resolveEffortUpdates(request, options.effort)
   const generation = request.generation
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
-  const flattened = ProviderShared.flattenToolRequest(request)
+  const flattened = ProviderShared.flattenToolRequest(updates.request)
   const tools =
     flattened.tools.length === 0
       ? undefined
@@ -1138,7 +1164,13 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
       `Anthropic Messages: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${ANTHROPIC_BREAKPOINT_CAP} per request.`,
     )
   }
-  const options = yield* resolveOptions(request)
+  const output_config =
+    updates.effort === undefined && options.format === undefined
+      ? undefined
+      : {
+          ...(updates.effort === undefined ? {} : { effort: updates.effort }),
+          ...(options.format === undefined ? {} : { format: options.format }),
+        }
   const body = {
     model: request.model.id,
     system,
@@ -1152,7 +1184,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     top_k: generation?.topK,
     stop_sequences: generation?.stop,
     thinking: options.thinking,
-    output_config: options.output_config,
+    output_config,
     // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670
     cache_control: options.cache_control,
     container: options.container,
@@ -1677,6 +1709,7 @@ export const protocol = Protocol.make({
     }),
     step,
   },
+  supportsEffortUpdates: (request) => supportsEffortUpdates(request.model),
 })
 
 export const transport = <
@@ -1714,6 +1747,9 @@ function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "con
     message.content.some((block) => block.type === "compaction"),
   )
   if (requestsCompaction || replaysCompaction) betas.push("compact-2026-01-12")
+
+  if (body.messages.some((message) => message.role === "system" && message.output_config !== undefined))
+    betas.push("mid-conversation-output-config-2026-07-01")
 
   const thinking = body.thinking
   if (thinking && thinking.type !== "disabled" && thinking.block_binding)

@@ -1,4 +1,11 @@
-import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode/ai"
+import {
+  Message,
+  ReasoningEfforts,
+  ToolCallPart,
+  ToolResultPart,
+  type ContentPart,
+  type ProviderMetadata,
+} from "@opencode/ai"
 import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
@@ -222,11 +229,34 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   ]
 }
 
+const EFFORT_VARIANTS = new Set<string>(ReasoningEfforts)
+
+// Variant IDs in the effort vocabulary are treated as effort levels even when a catalog reuses the names for
+// budget or toggle variants; the protocol's drift check against the resolved provider option is what guarantees
+// a marker matches a real effort option, falling back to a plain top-level change otherwise.
+const variantEffort = (variant: Model.VariantID | undefined) => {
+  if (variant === undefined || variant === "default") return { effort: undefined }
+  return EFFORT_VARIANTS.has(variant) ? { effort: variant } : undefined
+}
+
+// Only an effort switch on the model that keeps running is recorded; model switches leave no trace.
+const modelSwitched = (message: SessionMessage.ModelSelected, model: Model.Ref): Message[] => {
+  const previous = message.previous
+  if (previous === undefined) return []
+  const same = (ref: Model.Ref) => ref.providerID === model.providerID && ref.id === model.id
+  if (!same(message.model) || !same(previous)) return []
+  const to = variantEffort(message.model.variant)
+  const from = variantEffort(previous.variant)
+  if (to === undefined || from === undefined) return []
+  return [Message.effort({ effort: to.effort, previous: from.effort })]
+}
+
 function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
   switch (message.type) {
     case "agent-switched":
-    case "model-switched":
       return []
+    case "model-switched":
+      return modelSwitched(message, model)
     case "location-switched":
       return [
         Message.make({

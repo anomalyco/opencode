@@ -140,6 +140,14 @@ export namespace LanguageModelDefaults {
   }
 }
 
+/** Known reasoning-effort values, ordered lowest to highest. Providers accept subsets and may add more. */
+export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
+export type ReasoningEffort = (typeof ReasoningEfforts)[number] | (string & {})
+export const ReasoningEffort = Schema.declare<ReasoningEffort>(
+  (value): value is ReasoningEffort => typeof value === "string",
+  { title: "ReasoningEffort" },
+)
+
 export const LanguageModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot"])
 export type LanguageModelToolSchemaCompatibility = Schema.Schema.Type<typeof LanguageModelToolSchemaCompatibility>
 
@@ -165,6 +173,8 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   requireSignature: Schema.optional(Schema.Boolean),
   /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
   supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
+  /** Supports per-message effort updates that keep the prompt cache warm. Overrides model-ID detection. */
+  supportsEffortUpdates: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace LanguageModelCompatibility {

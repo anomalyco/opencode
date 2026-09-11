@@ -12,6 +12,7 @@
 // count against the four-breakpoint budget; auto only fills remaining slots.
 import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options.js"
 import { LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
+import { effortUpdate } from "./effort-updates.js"
 
 const AUTO: CachePolicyObject = {
   tools: true,
@@ -121,9 +122,16 @@ const markMessages = (
     return markMessageAt(messages, lastIndexOfRole(messages, "user"), hint, budget)
   if (strategy === "latest-assistant")
     return markMessageAt(messages, lastIndexOfRole(messages, "assistant"), hint, budget)
-  const start = Math.max(0, messages.length - strategy.tail)
+  // Effort markers carry no cacheable content, so the tail walks back past them.
+  let start = messages.length
+  let remaining = strategy.tail
+  while (remaining > 0 && start > 0) {
+    start -= 1
+    if (effortUpdate(messages[start]!) === undefined) remaining -= 1
+  }
   let next = messages
-  for (let i = start; i < messages.length; i++) next = markMessageAt(next, i, hint, budget)
+  for (let i = start; i < messages.length; i++)
+    if (effortUpdate(messages[i]!) === undefined) next = markMessageAt(next, i, hint, budget)
   return next
 }
 
