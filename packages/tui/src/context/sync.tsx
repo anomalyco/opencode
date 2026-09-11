@@ -174,6 +174,42 @@ export const {
     }
 
     event.subscribe((event, { directory, workspace }) => {
+      if (event.type === ("message.diff.updated" as string)) {
+        const diff = event as unknown as {
+          type: "message.diff.updated"
+          properties: { sessionID: string; messageID: string; diffs: SnapshotFileDiff[] }
+        }
+        const messages = store.message[diff.properties.sessionID]
+        const index = messages?.findIndex((message) => message.id === diff.properties.messageID) ?? -1
+        const current = index >= 0 ? messages?.[index] : undefined
+        if (!current || current.role !== "user") return
+        setStore(
+          "message",
+          diff.properties.sessionID,
+          index,
+          reconcile({ ...current, summary: { ...current.summary, diffs: diff.properties.diffs } }),
+        )
+        return
+      }
+      if (event.type === ("message.updated.v2" as string)) {
+        const update = event as unknown as { type: "message.updated.v2"; properties: { info: Message } }
+        const messages = store.message[update.properties.info.sessionID]
+        const result = messages && search(messages, messageKey(update.properties.info), messageKey)
+        if (!result?.found) return
+        const current = messages[result.index]
+        const next =
+          update.properties.info.role === "user" &&
+          update.properties.info.summary &&
+          update.properties.info.summary.diffs === undefined &&
+          current?.role === "user"
+            ? {
+                ...update.properties.info,
+                summary: { ...update.properties.info.summary, diffs: current.summary?.diffs ?? [] },
+              }
+            : update.properties.info
+        setStore("message", update.properties.info.sessionID, result.index, reconcile(next))
+        return
+      }
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
@@ -358,6 +394,7 @@ export const {
           }
           break
         }
+
         case "message.removed": {
           touchMessage(event.properties.sessionID, event.properties.messageID)
           const messages = store.message[event.properties.sessionID]
