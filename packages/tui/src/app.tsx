@@ -714,7 +714,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         title: "Switch model variant",
         category: "Agent",
         hidden: local.model.variant.list().length === 0,
-        slashName: "variants",
+        slashName: "reasoning",
+        slashAliases: ["variants"],
         run: () => {
           if (local.model.variant.list().length === 0) {
             return toast.show({
