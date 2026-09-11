@@ -13,6 +13,7 @@ import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { usePermission } from "./permission"
+import { cycleMode, modeLabel } from "../mode-cycle"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -96,25 +97,36 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         current() {
           return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
         },
-        set(name: string) {
+        set(name: string, options?: { preservePermission?: boolean }) {
           if (!agents().some((x) => x.name === name))
             return toast.show({
               variant: "warning",
               message: `Agent not found: ${name}`,
               duration: 3000,
             })
-          setAgentStore("current", name)
+          batch(() => {
+            if (permission.mode === "review" && !options?.preservePermission) permission.set("normal")
+            setAgentStore("current", name)
+          })
         },
         move(direction: 1 | -1) {
           batch(() => {
             const current = this.current()
             if (!current) return
-            let next = agents().findIndex((x) => x.name === current.name) + direction
-            if (next < 0) next = agents().length - 1
-            if (next >= agents().length) next = 0
-            const value = agents()[next]
-            setAgentStore("current", value.name)
+            const next = cycleMode({
+              direction,
+              current: { agent: current.name, permission: permission.mode },
+              available: agents().map((agent) => agent.name),
+              autoApprove: sync.data.config.experimental?.auto_approve === true,
+            })
+            permission.set(next.permission)
+            setAgentStore("current", next.agent)
           })
+        },
+        label() {
+          const current = this.current()
+          if (!current) return ""
+          return modeLabel({ agent: current.name, permission: permission.mode })
         },
         color(name: string) {
           const index = visibleAgents().findIndex((x) => x.name === name)
@@ -133,6 +145,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = createAgent()
+
+    createEffect(() => {
+      if (permission.mode !== "review" || sync.status !== "complete") return
+      if (sync.data.config.experimental?.auto_approve !== true) return permission.set("normal")
+      if (agent.current()?.name === "build" && agent.list().some((item) => item.name === "build")) return
+      permission.set("normal")
+    })
 
     function createModel() {
       const [modelStore, setModelStore] = createStore<{

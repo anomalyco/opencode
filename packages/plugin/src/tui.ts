@@ -393,6 +393,14 @@ export type TuiState = {
     permission: (sessionID: string) => ReadonlyArray<PermissionRequest>
     question: (sessionID: string) => ReadonlyArray<QuestionRequest>
   }
+  permission: {
+    /**
+     * Fires once for each permission request at the moment it becomes visible to the
+     * user. Not the same as the `permission.asked` event: auto-approve mode withholds
+     * requests while a model reviews them and never shows the ones it approves.
+     */
+    onVisible: (handler: (request: PermissionRequest) => void) => () => void
+  }
   part: (messageID: string) => ReadonlyArray<Part>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>

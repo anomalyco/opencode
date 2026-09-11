@@ -4968,6 +4968,173 @@
         ]
       }
     },
+    "/permission/{requestID}/classify": {
+      "post": {
+        "tags": ["permission"],
+        "operationId": "permission.classify",
+        "parameters": [
+          {
+            "name": "requestID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^per"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Permission classification result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionClassificationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PermissionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Use the configured fast model to decide whether a pending permission can be auto-approved.",
+        "summary": "Classify a permission request",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.classify({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/permission/session/{sessionID}/overlay": {
+      "post": {
+        "tags": ["permission"],
+        "operationId": "permission.overlay",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether the review overlay is now active for the session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Whether the review overlay is now active for the session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Enable or disable the in-memory review overlay for a session. While active, consequential permissions that would otherwise be allowed are turned into prompts instead. Denials are never affected, reads are never affected, and the overlay is never persisted.",
+        "summary": "Set the review permission overlay",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["enabled"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.overlay({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/provider": {
       "get": {
         "tags": ["provider"],
@@ -21283,6 +21450,18 @@
           "small_model": {
             "type": "string"
           },
+          "auto_approve": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "show_details": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          },
           "default_agent": {
             "type": "string"
           },
@@ -21535,6 +21714,9 @@
                 "type": "boolean"
               },
               "batch_tool": {
+                "type": "boolean"
+              },
+              "auto_approve": {
                 "type": "boolean"
               },
               "openTelemetry": {
@@ -22908,6 +23090,32 @@
           }
         },
         "required": ["_tag", "requestID", "message"],
+        "additionalProperties": false
+      },
+      "PermissionClassificationDetails": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          }
+        },
+        "required": ["input", "output"],
+        "additionalProperties": false
+      },
+      "PermissionClassificationResult": {
+        "type": "object",
+        "properties": {
+          "approved": {
+            "type": "boolean"
+          },
+          "details": {
+            "$ref": "#/components/schemas/PermissionClassificationDetails"
+          }
+        },
+        "required": ["approved"],
         "additionalProperties": false
       },
       "ProviderAuthMethod": {

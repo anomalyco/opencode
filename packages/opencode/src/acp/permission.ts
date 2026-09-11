@@ -64,7 +64,7 @@ export class Handler {
         toolCall: await permissionToolCall({
           toolCallId: permission.tool?.callID ?? permission.id,
           toolName: permission.permission,
-          input: permission.metadata,
+          input: external(permission.metadata),
         }),
         options: permissionOptions,
       })
@@ -113,6 +113,15 @@ export class Handler {
       content: next,
     })
   }
+}
+
+// `task` carries the subagent's full prompt so the auto-approve classifier can judge it, and
+// that text can quote files or anything else from the conversation. The classifier reads it
+// in-process; an external client is only shown the request, so it does not cross this boundary.
+function external(metadata: ToolInput): ToolInput {
+  if (!("prompt" in metadata)) return metadata
+  const { prompt: _prompt, ...rest } = metadata
+  return rest
 }
 
 async function permissionToolCall(input: {

@@ -121,8 +121,12 @@ import type {
   PartUpdateResponses,
   PathGetErrors,
   PathGetResponses,
+  PermissionClassifyErrors,
+  PermissionClassifyResponses,
   PermissionListErrors,
   PermissionListResponses,
+  PermissionOverlayErrors,
+  PermissionOverlayResponses,
   PermissionReplyErrors,
   PermissionReplyResponses,
   PermissionRespondErrors,
@@ -3144,6 +3148,77 @@ export class Permission extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<PermissionReplyResponses, PermissionReplyErrors, ThrowOnError>({
       url: "/permission/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Classify a permission request
+   *
+   * Use the configured fast model to decide whether a pending permission can be auto-approved.
+   */
+  public classify<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PermissionClassifyResponses, PermissionClassifyErrors, ThrowOnError>({
+      url: "/permission/{requestID}/classify",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set the review permission overlay
+   *
+   * Enable or disable the in-memory review overlay for a session. While active, consequential permissions that would otherwise be allowed are turned into prompts instead. Denials are never affected, reads are never affected, and the overlay is never persisted.
+   */
+  public overlay<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      enabled?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "enabled" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PermissionOverlayResponses, PermissionOverlayErrors, ThrowOnError>({
+      url: "/permission/session/{sessionID}/overlay",
       ...options,
       ...params,
       headers: {

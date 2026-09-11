@@ -9,10 +9,33 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 
 export const Event = PermissionV1.Event
 
+type SessionID = PermissionV1.Request["sessionID"]
+
+/**
+ * Permission types the review overlay upgrades from `allow` to `ask`.
+ *
+ * Deliberately limited to actions with consequences outside the session. Pure
+ * reads (`read`, `glob`, `grep`, `list`, `lsp`) are excluded: review mode routes
+ * every prompt through a model round trip, and paying seconds per file read
+ * would make the session unusable.
+ */
+export const OVERLAY_PERMISSIONS: ReadonlySet<string> = new Set([
+  "bash",
+  "edit",
+  "task",
+  "webfetch",
+  "websearch",
+  "external_directory",
+  "skill",
+])
+
 export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
+  /** Turn the ephemeral review overlay on or off for one session; returns the resulting state. */
+  readonly overlay: (input: { sessionID: SessionID; enabled: boolean }) => Effect.Effect<boolean>
+  readonly overlays: () => Effect.Effect<ReadonlyArray<SessionID>>
 }
 
 interface PendingEntry {
@@ -23,6 +46,11 @@ interface PendingEntry {
 interface State {
   pending: Map<PermissionV1.ID, PendingEntry>
   approved: PermissionV1.Rule[]
+  /**
+   * Sessions with the review overlay active. In-memory only and never persisted
+   * to the session record, so it disappears with the instance.
+   */
+  overlay: Set<SessionID>
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
@@ -49,6 +77,7 @@ const layer = Layer.effect(
         const state = {
           pending: new Map<PermissionV1.ID, PendingEntry>(),
           approved: [],
+          overlay: new Set<SessionID>(),
         }
 
         yield* Effect.addFinalizer(() =>
@@ -57,6 +86,7 @@ const layer = Layer.effect(
               yield* Deferred.fail(item.deferred, new PermissionV1.RejectedError())
             }
             state.pending.clear()
+            state.overlay.clear()
           }),
         )
 
@@ -65,8 +95,11 @@ const layer = Layer.effect(
     )
 
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
-      const { approved, pending } = yield* InstanceState.get(state)
+      const { approved, pending, overlay } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
+      // The overlay only ever turns `allow` into `ask`. `deny` is handled before
+      // it is consulted, so an overlaid session can never soften a denial.
+      const overlaid = overlay.has(request.sessionID) && OVERLAY_PERMISSIONS.has(request.permission)
       let needsAsk = false
 
       for (const pattern of request.patterns) {
@@ -77,7 +110,12 @@ const layer = Layer.effect(
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
           })
         }
-        if (rule.action === "allow") continue
+        if (rule.action === "allow") {
+          if (!overlaid) continue
+          // An "always" grant is an explicit user decision for this exact pattern, so the
+          // overlay leaves it alone rather than re-classifying every later occurrence.
+          if (evaluate(request.permission, pattern, approved).action === "allow") continue
+        }
         needsAsk = true
       }
 
@@ -171,7 +209,19 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.info)
     })
 
-    return Service.of({ ask, reply, list })
+    const overlay = Effect.fn("Permission.overlay")(function* (input: { sessionID: SessionID; enabled: boolean }) {
+      const sessions = (yield* InstanceState.get(state)).overlay
+      if (input.enabled) sessions.add(input.sessionID)
+      else sessions.delete(input.sessionID)
+      yield* Effect.logInfo("overlay", { sessionID: input.sessionID, enabled: input.enabled })
+      return sessions.has(input.sessionID)
+    })
+
+    const overlays = Effect.fn("Permission.overlays")(function* () {
+      return Array.from((yield* InstanceState.get(state)).overlay)
+    })
+
+    return Service.of({ ask, reply, list, overlay, overlays })
   }),
 )
 
