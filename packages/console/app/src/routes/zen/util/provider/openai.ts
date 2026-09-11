@@ -539,7 +539,8 @@ export function fromOpenaiChunk(chunk: string): CommonChunk | string {
       if (sr === "tool_call" || sr === "tool_calls") return "tool_calls"
       if (sr === "length" || sr === "max_output_tokens") return "length"
       if (sr === "content_filter") return "content_filter"
-      return null
+      const output = Array.isArray(respObj.output) ? respObj.output : []
+      return output.some((item: any) => item?.type === "function_call") ? "tool_calls" : "stop"
     })()
     out.choices.push({ index: 0, delta: {}, finish_reason: fr })
 
