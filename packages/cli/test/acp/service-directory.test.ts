@@ -222,7 +222,7 @@ describe("acp service directory behavior", () => {
     await fixture.service.setSessionMode({ sessionId: session.sessionId, modeId: "build" })
 
     expect(currentValue(selectedModel, "model")).toBe("test/second-model")
-    expect(currentValue(selectedModel, "effort")).toBe("low")
+    expect(currentValue(selectedModel, "effort")).toBe("default")
     expect(currentValue(selectedEffort, "effort")).toBe("medium")
     expect(currentValue(selectedMode, "mode")).toBe("plan")
     expect(
@@ -264,6 +264,56 @@ describe("acp service directory behavior", () => {
     expect(invalidEffort).toMatchObject({ _tag: "ACPInvalidEffortError" })
     expect(invalidMode).toMatchObject({ _tag: "ACPInvalidModeError" })
     expect(invalidConfig).toMatchObject({ _tag: "ACPInvalidConfigOptionError" })
+  })
+
+  test.each(["medium", "default", undefined])("same-model sync preserves %s effort", async (variant) => {
+    await using fixture = makeACPFixture({
+      fetch(request) {
+        if (request.method === "GET" && request.path === "/api/session/ses_restored") {
+          return Response.json({
+            data: makeSession("ses_restored", { model: { providerID: "test", id: secondModel.id, variant } }),
+          })
+        }
+        if (request.method === "POST" && request.path === "/api/session/ses_restored/model") {
+          return new Response(null, { status: 204 })
+        }
+        return undefined
+      },
+    })
+    const restored = await fixture.service.resumeSession({ cwd: "/workspace", sessionId: "ses_restored" })
+    const synchronized = await fixture.service.setSessionConfigOption({
+      sessionId: "ses_restored",
+      configId: "model",
+      value: "test/second-model",
+    })
+
+    expect(currentValue(restored, "effort")).toBe(variant ?? "default")
+    expect(currentValue(synchronized, "effort")).toBe(variant ?? "default")
+    expect(fixture.requests.filter((request) => request.path.endsWith("/model") && request.method === "POST")).toEqual([
+      {
+        method: "POST",
+        path: "/api/session/ses_restored/model",
+        query: {},
+        body: { model: { providerID: "test", id: secondModel.id, ...(variant ? { variant } : {}) } },
+      },
+    ])
+
+    const explicit = await fixture.service.setSessionConfigOption({
+      sessionId: "ses_restored",
+      configId: "model",
+      value: "test/second-model/low",
+    })
+    expect(currentValue(explicit, "effort")).toBe("low")
+
+    const reset = await fixture.service.setSessionConfigOption({
+      sessionId: "ses_restored",
+      configId: "effort",
+      value: "default",
+    })
+    expect(currentValue(reset, "effort")).toBe("default")
+    expect(fixture.requests.at(-1)?.body).toEqual({
+      model: { providerID: "test", id: secondModel.id, variant: "default" },
+    })
   })
 
   test("converts MCP configs and deduplicates registrations per session and config", async () => {

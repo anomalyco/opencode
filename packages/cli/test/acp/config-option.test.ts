@@ -64,6 +64,17 @@ describe("acp config options", () => {
     )
   })
 
+  test.each([undefined, "default"])("represents %s effort as default without a provider variant", (variant) => {
+    expect(buildEffortSelectOption({ variants: ["low", "medium"], currentVariant: variant })).toMatchObject({
+      currentValue: "default",
+      options: [
+        { value: "low", name: "Low" },
+        { value: "medium", name: "Medium" },
+        { value: "default", name: "Default" },
+      ],
+    })
+  })
+
   test("builds the mode select option with descriptions when present", () => {
     expect(
       buildModeSelectOption({
