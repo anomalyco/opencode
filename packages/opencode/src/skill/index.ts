@@ -184,7 +184,9 @@ const scan = Effect.fnUntraced(function* (
   )
 
   for (const match of matches) {
-    state.matches.set(match, scope)
+    const prevScope = state.matches.get(match)
+    const effectiveScope = prevScope === "global" ? "global" : scope
+    state.matches.set(match, effectiveScope)
     state.dirs.add(path.dirname(match))
   }
 })
@@ -212,9 +214,12 @@ const discoverSkills = Effect.fnUntraced(function* (
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
     }
 
-    const upDirs = yield* fsys
-      .up({ targets: externalDirs, start: directory, stop: worktree })
-      .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+    const globalRoots = new Set(externalDirs.map((dir) => path.resolve(global.home, dir)))
+    const upStop = worktree === "/" ? directory : worktree
+    const upDirs = (yield* fsys
+      .up({ targets: externalDirs, start: directory, stop: upStop })
+      .pipe(Effect.catch(() => Effect.succeed([] as string[]))))
+      .filter((dir) => !globalRoots.has(path.resolve(dir)))
 
     for (const root of upDirs) {
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })

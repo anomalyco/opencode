@@ -687,4 +687,20 @@ description: A skill in the .opencode/skills directory.
     expect(formatted).toContain("Use &lt;script&gt; &amp; tools")
     expect(formatted).not.toContain("<script>")
   })
+
+  test("enforces prompt budget ceiling when inline project skills exceed budget", () => {
+    const hugeProjectSkills: Skill.Info[] = Array.from({ length: 10 }, (_, i) => ({
+      name: `huge-project-skill-${i}`,
+      description: "D".repeat(40_000),
+      location: `/project/.opencode/skill/huge-project-skill-${i}/SKILL.md`,
+      content: "# Huge",
+      scope: "project",
+    }))
+
+    const formatted = Skill.fmt(hugeProjectSkills, { verbose: true })
+    expect(formatted.length).toBeLessThanOrEqual(300_000)
+    expect(formatted).toContain("huge-project-skill-0")
+  })
 })
+
+
