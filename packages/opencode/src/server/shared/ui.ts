@@ -2,6 +2,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
+import path from "node:path"
 import { ProxyUtil } from "../proxy-util"
 
 let embeddedUIPromise: Promise<Record<string, string> | null> | undefined
@@ -39,6 +40,19 @@ function proxyResponseHeaders(headers: Record<string, string>) {
 
 export function upstreamURL(path: string) {
   return new URL(path, UI_UPSTREAM).toString()
+}
+
+export function localWebRoot(env = process.env.OPENCODE_WEB_DIST) {
+  if (env && env.length > 0) return env
+  return undefined
+}
+
+export function resolveLocalUIFile(root: string, requestPath: string) {
+  const rel = requestPath === "/" || requestPath === "" ? "index.html" : requestPath.replace(/^\/+/, "")
+  const rootResolved = path.resolve(root)
+  const file = path.resolve(rootResolved, rel)
+  if (file !== rootResolved && !file.startsWith(rootResolved + path.sep)) return undefined
+  return file
 }
 
 export function embeddedUI(disableEmbeddedWebUi: boolean) {
@@ -81,12 +95,26 @@ export function serveUIEffect(
 ) {
   return Effect.gen(function* () {
     const embeddedWebUI = yield* Effect.promise(() => embeddedUI(services.disableEmbeddedWebUi))
-    const path = new URL(request.url, "http://localhost").pathname
+    const reqPath = new URL(request.url, "http://localhost").pathname
 
-    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)
+    const localRoot = localWebRoot()
+    if (localRoot) {
+      const localFile = resolveLocalUIFile(localRoot, reqPath)
+      if (localFile) {
+        const exists = yield* services.fs.existsSafe(localFile).pipe(Effect.orElseSucceed(() => false))
+        const spa = exists === false && path.extname(reqPath) === ""
+        const target = exists ? localFile : spa ? resolveLocalUIFile(localRoot, "/") : undefined
+        if (target) {
+          const body = yield* services.fs.readFile(target).pipe(Effect.option)
+          if (body._tag === "Some") return embeddedUIResponse(target, body.value)
+        }
+      }
+    }
+
+    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(reqPath, services.fs, embeddedWebUI)
 
     const response = yield* services.client.execute(
-      HttpClientRequest.make(request.method)(upstreamURL(path), {
+      HttpClientRequest.make(request.method)(upstreamURL(reqPath), {
         headers: ProxyUtil.headers(request.headers, { host: UI_UPSTREAM.host }),
         body: requestBody(request),
       }),
