@@ -46,6 +46,10 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  TEACH: "teach",
+  RECALL: "recall",
+  LEARN: "learn",
+  MEMORY: "memory",
 } as const
 
 export interface Interface {
@@ -85,6 +89,67 @@ const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+      commands[Default.TEACH] = {
+        name: Default.TEACH,
+        description: "add new teachings into long term persistence memory",
+        source: "command",
+        get template() {
+          return [
+            "Please save the following instruction or knowledge into long-term persistence memory:",
+            "",
+            "$ARGUMENTS",
+            "",
+            'Use the memory tool with action "teach" to persist this teaching with an appropriate title, category (e.g. convention, architecture, preference, testing, rule), and tags. Confirm to the user what was saved.',
+          ].join("\n")
+        },
+        hints: ["<context>"],
+      }
+      commands[Default.RECALL] = {
+        name: Default.RECALL,
+        description: "retrieve teaching knowledge from memory",
+        source: "command",
+        get template() {
+          return [
+            "Search and retrieve knowledge from long-term memory for:",
+            "",
+            "$ARGUMENTS",
+            "",
+            'Use the memory tool with action "recall" to find relevant teachings, and explain how the retrieved knowledge applies to the current context or task.',
+          ].join("\n")
+        },
+        hints: ["<query>"],
+      }
+      commands[Default.LEARN] = {
+        name: Default.LEARN,
+        description: "learn something from session conversations worthy of remembering long-term",
+        source: "command",
+        get template() {
+          return [
+            "Review our conversation history and past sessions to extract key lessons, user corrections, solutions to tricky bugs, or architectural decisions worthy of remembering for the long term.",
+            "",
+            "Filter out transient noise and focus only on high-value, durable knowledge.",
+            'Use the memory tool with action "learn" to save each worthy insight into persistent memory with an informative title, category, and tags, then summarize what was learned.',
+            "",
+            "$ARGUMENTS",
+          ].join("\n")
+        },
+        hints: [],
+      }
+      commands[Default.MEMORY] = {
+        name: Default.MEMORY,
+        description: "explore saved memories in long term persistence",
+        source: "command",
+        get template() {
+          return [
+            "Explore and display the saved long-term memories from persistent storage.",
+            "",
+            'Use the memory tool with action "list" or "recall" to search or inspect stored memories. Present them in a clean overview showing ID, category, title, created date, and content preview.',
+            "",
+            "$ARGUMENTS",
+          ].join("\n")
+        },
+        hints: ["[query]"],
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
