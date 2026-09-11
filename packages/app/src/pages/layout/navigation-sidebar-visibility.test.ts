@@ -65,9 +65,9 @@ describe("navigation sidebar visibility", () => {
     const staleWorking = session({ id: "working", directory: "/src/a", time: { created: NOW - 10 * DAY, updated: NOW - 10 * DAY, archived: undefined } })
     const result = partitionSidebarRecords({
       records: [
-        { session: fresh, project: project("/src/a"), name: "a" },
-        { session: stale, project: project("/src/a"), name: "a" },
-        { session: staleWorking, project: project("/src/a"), name: "a" },
+        { key: fresh.id, session: fresh, project: project("/src/a"), name: "a" },
+        { key: stale.id, session: stale, project: project("/src/a"), name: "a" },
+        { key: staleWorking.id, session: staleWorking, project: project("/src/a"), name: "a" },
       ],
       pinned: (record) => record.session.id === "working",
       days: 3,

@@ -6,6 +6,7 @@ import { pathKey } from "@/utils/path-key"
 export const SIDEBAR_SESSION_DAY = 86_400_000
 
 export type SidebarSessionRecord = {
+  key: string
   session: Session
   project: LocalProject
   name: string
@@ -44,7 +45,7 @@ export function buildSidebarRecords(input: { sessions: Session[]; projects: Loca
         (item) => pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
       ) ?? projectForSession(session, input.projects, projectByID)
     if (!project) return []
-    return [{ session, project, name: displayName(project) }]
+    return [{ key: session.id, session, project, name: displayName(project) }]
   })
 }
 

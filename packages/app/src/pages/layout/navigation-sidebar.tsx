@@ -85,10 +85,6 @@ const ROW_ACTIONS =
 const COUNT = "absolute end-2 top-1/2 -translate-y-1/2 text-xs text-v2-text-text-faint"
 const NAME = "flex min-w-0 flex-1 items-center gap-1.5"
 
-function sectionKey(item: SettledGroup | SidebarProjectSection | SidebarSessionRecord) {
-  return "key" in item ? item.key : item.session.id
-}
-
 function titleOf(session: { title?: string; parentID?: string; time: { created: number } }) {
   return sessionTitle(session.title) ?? withTimestampedFallback(session)
 }
@@ -291,7 +287,7 @@ export function NavigationSidebar() {
   const [sections, setSections] = createStore<SidebarProjectSection[]>([])
   createEffect(() => {
     setSections(
-      reconcile(computedSections(), { key: sectionKey }),
+      reconcile(computedSections(), { key: "key" }),
     )
   })
 
@@ -332,7 +328,7 @@ export function NavigationSidebar() {
   })
   const [settledGroups, setSettledGroups] = createStore<SettledGroup[]>([])
   createEffect(() => {
-    setSettledGroups(reconcile(computedSettledGroups(), { key: sectionKey }))
+    setSettledGroups(reconcile(computedSettledGroups(), { key: "key" }))
   })
   const settledCount = createMemo(() => settled().length + (archived.data ?? []).length)
 
@@ -344,7 +340,7 @@ export function NavigationSidebar() {
         worktree: session.directory,
         expanded: false,
       }
-    return { session, project, name: displayName(project) }
+    return { key: session.id, session, project, name: displayName(project) }
   }
 
   function isPinned(sessionID: string) {
