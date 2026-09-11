@@ -21,6 +21,7 @@ import { Effect } from "effect"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
+import { defer } from "@/util/defer"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
@@ -803,6 +804,9 @@ export const RunCommand = effectCmd({
               if (!sessions.has(permission.sessionID)) continue
 
               if (auto) {
+                // A server holding our lease resolved this without asking, so
+                // reaching here means it predates the lease endpoint.
+                if (lease) continue
                 await client.permission.reply({
                   requestID: permission.id,
                   reply: "once",
@@ -824,6 +828,32 @@ export const RunCommand = effectCmd({
         }
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
         const client = args.attach ? attachSDK(cwd) : sdk
+
+        // Auto mode belongs to the server so `permission.asked` keeps meaning "a
+        // human must answer". The lease covers this session and the subagent
+        // sessions it spawns, so an attached long-running server keeps asking for
+        // everything else. It also lapses on its own, so killing this process
+        // cannot leave that server in auto mode. Servers predating the endpoint
+        // return no lease and `loop` keeps replying client-side.
+        const lease = auto
+          ? await client.permission
+              .autoAcquire({ scope: { type: "session", sessionID } })
+              .then((result) => result.data)
+              .catch(() => undefined)
+          : undefined
+        const renewal = lease
+          ? setInterval(
+              () => void client.permission.autoRenew({ leaseID: lease.id }).catch(() => {}),
+              Math.max(1000, Math.floor(lease.ttl / 3)),
+            )
+          : undefined
+        renewal?.unref?.()
+        // Released on scope exit rather than left to lapse, so an attached server
+        // stops auto-approving as soon as this run finishes.
+        await using _auto = defer(async () => {
+          if (renewal) clearInterval(renewal)
+          if (lease) await client.permission.autoRelease({ leaseID: lease.id }).catch(() => {})
+        })
 
         // Validate agent if specified
         const agent = await pickAgent(client)
