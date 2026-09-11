@@ -106,6 +106,7 @@ export function initDatabase(dbPath: string): Database {
   db.run("PRAGMA journal_mode = WAL")
   db.run("PRAGMA synchronous = NORMAL")
   db.run("PRAGMA foreign_keys = ON")
+  db.run("PRAGMA user_version = 1")
 
   db.run(`
     CREATE TABLE IF NOT EXISTS memory (
@@ -126,6 +127,9 @@ export function initDatabase(dbPath: string): Database {
   db.run(`CREATE INDEX IF NOT EXISTS idx_memory_time_created ON memory(time_created);`)
 
   // Full text search
+  // SQLite maintains an implicit 64-bit rowid for standard tables without WITHOUT ROWID.
+  // We map the external content table memory_fts to this rowid for full-text indexing
+  // while keeping the public identifier (mem_...) as a descending text primary key.
   try {
     db.run(`
       CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
@@ -152,8 +156,8 @@ export function initDatabase(dbPath: string): Database {
         INSERT INTO memory_fts(rowid, title, content, tags) VALUES (new.rowid, new.title, new.content, new.tags);
       END;
     `)
-  } catch {
-    // Ignore FTS5 setup errors if environment lacks virtual table permissions
+  } catch (error) {
+    console.warn("Memory: FTS5 full-text search initialization failed; falling back to LIKE search.", error)
   }
 
   return db
@@ -164,6 +168,19 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const dbPath = path.join(Global.Path.data, "memory.db")
     const db = initDatabase(dbPath)
+
+    const hasFtsTable = Boolean(
+      db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts'").get(),
+    )
+    let hasBm25 = false
+    if (hasFtsTable) {
+      try {
+        db.prepare("SELECT bm25(memory_fts) FROM memory_fts WHERE memory_fts MATCH ?").all("test")
+        hasBm25 = true
+      } catch {
+        hasBm25 = false
+      }
+    }
 
     const teach = Effect.fn("Memory.teach")(function* (input: TeachInput) {
       const now = Date.now()
@@ -213,37 +230,41 @@ export const layer = Layer.effect(
         return yield* list({ category: input.category, projectID: input.projectID, limit })
       }
 
-      // Try FTS5 first
-      try {
-        const sanitized = query.replace(/["'*]/g, "").trim()
-        if (sanitized) {
-          const ftsQuery = `"${sanitized.replace(/"/g, '""')}"*`
-          let sql = `
-            SELECT m.* FROM memory m
-            JOIN memory_fts f ON m.rowid = f.rowid
-            WHERE memory_fts MATCH $match
-          `
-          const params: Record<string, any> = { $match: ftsQuery }
+      // Try FTS5 first if available
+      if (hasFtsTable) {
+        try {
+          const sanitized = query.replace(/["'*]/g, "").trim()
+          if (sanitized) {
+            const ftsQuery = `"${sanitized.replace(/"/g, '""')}"*`
+            let sql = `
+              SELECT m.* FROM memory m
+              JOIN memory_fts f ON m.rowid = f.rowid
+              WHERE memory_fts MATCH $match
+            `
+            const params: Record<string, any> = { $match: ftsQuery }
 
-          if (input.category) {
-            sql += ` AND m.category = $category`
-            params.$category = input.category
-          }
-          if (input.projectID) {
-            sql += ` AND (m.project_id = $project_id OR m.project_id IS NULL)`
-            params.$project_id = input.projectID
-          }
+            if (input.category) {
+              sql += ` AND m.category = $category`
+              params.$category = input.category
+            }
+            if (input.projectID) {
+              sql += ` AND (m.project_id = $project_id OR m.project_id IS NULL)`
+              params.$project_id = input.projectID
+            }
 
-          sql += ` ORDER BY bm25(memory_fts), m.time_created DESC LIMIT $limit`
-          params.$limit = limit
+            sql += hasBm25
+              ? ` ORDER BY bm25(memory_fts), m.time_created DESC LIMIT $limit`
+              : ` ORDER BY m.time_created DESC LIMIT $limit`
+            params.$limit = limit
 
-          const rows = db.prepare(sql).all(params) as any[]
-          if (rows.length > 0) {
-            return rows.map(rowToItem)
+            const rows = db.prepare(sql).all(params) as any[]
+            if (rows.length > 0) {
+              return rows.map(rowToItem)
+            }
           }
+        } catch {
+          // Fall back to LIKE search if FTS query syntax error
         }
-      } catch {
-        // Fall back to LIKE search if FTS syntax error
       }
 
       // Fallback: LIKE search across title, content, tags

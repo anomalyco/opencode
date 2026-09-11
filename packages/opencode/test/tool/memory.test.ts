@@ -68,7 +68,39 @@ describe("tool.memory", () => {
       )
       expect(listResult.output).toContain("Architecture Rule")
 
-      // 4. Delete
+      // 4. Learn without content (session extraction)
+      const mockCtxWithMessages: Tool.Context<any> = {
+        ...mockCtx,
+        messages: [
+          {
+            info: { role: "user" } as any,
+            parts: [{ type: "text", text: "Please ensure we never use npm, always use bun." }] as any,
+          },
+        ],
+      }
+      const learnExtractResult = yield* memoryTool!.execute(
+        {
+          action: "learn",
+        },
+        mockCtxWithMessages,
+      )
+      expect(learnExtractResult.title).toContain("Session context for learning")
+      expect(learnExtractResult.output).toContain("always use bun")
+
+      // 5. Learn with content
+      const learnResult = yield* memoryTool!.execute(
+        {
+          action: "learn",
+          title: "Package manager preference",
+          content: "Always use bun instead of npm.",
+          category: "preference",
+        },
+        mockCtx,
+      )
+      expect(learnResult.title).toContain("Learned")
+      expect(learnResult.output).toContain("Always use bun instead of npm.")
+
+      // 6. Delete
       if (memoryId) {
         const deleteResult = yield* memoryTool!.execute(
           {
@@ -78,6 +110,15 @@ describe("tool.memory", () => {
           mockCtx,
         )
         expect(deleteResult.title).toContain("Deleted memory")
+      }
+      if (learnResult.metadata.id) {
+        yield* memoryTool!.execute(
+          {
+            action: "delete",
+            id: learnResult.metadata.id,
+          },
+          mockCtx,
+        )
       }
     }),
     30000,

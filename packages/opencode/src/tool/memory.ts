@@ -10,7 +10,8 @@ export const Parameters = Schema.Struct({
       "Action to perform: 'teach' (save new instruction/knowledge), 'recall' (retrieve matching memories), 'learn' (persist learned insights from session), 'list' (browse saved memories), or 'delete' (remove an obsolete memory).",
   }),
   content: Schema.optional(Schema.String).annotate({
-    description: "Knowledge or teaching content to persist (required for 'teach' and 'learn' if custom content).",
+    description:
+      "Knowledge or teaching content to persist (required for 'teach'; for 'learn', omitting content returns recent session messages to extract lessons from).",
   }),
   title: Schema.optional(Schema.String).annotate({
     description: "Brief descriptive title or headline for the memory.",
@@ -145,19 +146,37 @@ export const MemoryTool = Tool.define<typeof Parameters, Metadata, Memory.Servic
               }
             }
 
-            // If no content given, extract from messages
+            // If no content given, extract from session messages for the agent to learn from
             const userMessages = ctx.messages
               .filter((m) => m.info.role === "user")
               .flatMap((m) => m.parts)
               .filter((p) => p.type === "text")
-              .map((p) => (p as any).text)
+              .map((p) => ((p as any).text || "").trim())
               .filter(Boolean)
 
+            if (userMessages.length === 0) {
+              return {
+                title: "Learn from session",
+                output:
+                  "No user messages found in the current session to extract lessons from. Please provide specific content to save using the 'learn' or 'teach' action.",
+                metadata: { action: "learn", count: 0 },
+              }
+            }
+
+            const formattedMessages = userMessages
+              .slice(-10)
+              .map((msg, i) => `${i + 1}. "${msg.length > 200 ? msg.slice(0, 197) + "..." : msg}"`)
+              .join("\n")
+
             return {
-              title: "Learn from session",
-              output:
-                "Please analyze the session messages and provide the specific lessons/teachings to store using the 'learn' action with 'content' and 'title'.",
-              metadata: { action: "learn", count: 0 },
+              title: `Session context for learning (${userMessages.length} user message${userMessages.length === 1 ? "" : "s"})`,
+              output: [
+                `Found ${userMessages.length} user message(s) in the current session.`,
+                `Please analyze these messages to identify key preferences, conventions, or architectural lessons, then call 'memory' with action: 'learn', including 'title', 'content', 'category', and 'tags':`,
+                "",
+                formattedMessages,
+              ].join("\n"),
+              metadata: { action: "learn", count: userMessages.length },
             }
           }
 

@@ -26,15 +26,14 @@ function loadMemories(): MemoryOption[] {
   const dbPath = path.join(Global.Path.data, "memory.db")
   if (!fs.existsSync(dbPath)) return []
 
+  const db = new Database(dbPath, { readonly: true })
   try {
-    const db = new Database(dbPath, { readonly: true })
     const rows = db.prepare(`
       SELECT id, title, content, category, tags, time_created
       FROM memory
       ORDER BY time_created DESC
       LIMIT 100
     `).all() as any[]
-    db.close()
 
     return rows.map((r) => {
       let tags: string[] = []
@@ -54,8 +53,8 @@ function loadMemories(): MemoryOption[] {
         time_created: Number(r.time_created),
       }
     })
-  } catch {
-    return []
+  } finally {
+    db.close()
   }
 }
 
