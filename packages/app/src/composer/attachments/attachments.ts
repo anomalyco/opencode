@@ -1,5 +1,7 @@
-import { onMount } from "solid-js"
+import { onCleanup, onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { createBlobReference } from "@/runtime/persistence/drafts"
+import { uuid } from "@/runtime/persistence/uuid"
 import type { ComposerAttachment, ComposerPrompt } from "../types"
 
 const accepted = [
@@ -78,6 +80,7 @@ export type ComposerAttachmentConfig = {
   onError: (error: unknown) => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
+  onDragCancel?: (callback: () => void) => () => void
   store?: (file: File) => Promise<{ id: string; url: string }>
 }
 
@@ -90,6 +93,9 @@ export function createComposerAttachments(
     setDraggingType: (type: "image" | "@mention" | null) => void
   },
 ) {
+  const clearDrag = () => {
+    input.setDraggingType(null)
+  }
   const capture = () => {
     const prompt = input.capture()
     const editor = input.editor()
@@ -103,7 +109,7 @@ export function createComposerAttachments(
       if (toast) input.warn()
       return false
     }
-    const blob = input.store ? await input.store(file) : await blobReference(file)
+    const blob = input.store ? await input.store(file) : await createBlobReference(file)
     const sourcePath = input.getPathForFile?.(file) || undefined
     // Native clipboard images arrive with a fresh timestamped filename on every paste, so identical
     // clipboard content is matched on bytes alone.
@@ -123,7 +129,7 @@ export function createComposerAttachments(
     }
     const attachment: ComposerAttachment = {
       type: "image",
-      id: crypto.randomUUID(),
+      id: uuid(),
       filename: file.name,
       sourcePath,
       mime,
@@ -178,7 +184,7 @@ export function createComposerAttachments(
   const handleDrop = async (event: DragEvent) => {
     if (input.isDialogActive()) return
     event.preventDefault()
-    input.setDraggingType(null)
+    clearDrag()
     const plainText = event.dataTransfer?.getData("text/plain")
     if (plainText?.startsWith("file:")) {
       const path = plainText.slice("file:".length)
@@ -191,6 +197,8 @@ export function createComposerAttachments(
   }
 
   onMount(() => {
+    const cancel = input.onDragCancel?.(clearDrag)
+    if (cancel) onCleanup(cancel)
     makeEventListener(document, "dragover", (event) => {
       if (input.isDialogActive()) return
       event.preventDefault()
@@ -198,7 +206,10 @@ export function createComposerAttachments(
       else if (event.dataTransfer?.types.includes("text/plain")) input.setDraggingType("@mention")
     })
     makeEventListener(document, "dragleave", (event) => {
-      if (!input.isDialogActive() && !event.relatedTarget) input.setDraggingType(null)
+      if (!input.isDialogActive() && !event.relatedTarget) clearDrag()
+    })
+    makeEventListener(document, "keydown", (event) => {
+      if (event.key === "Escape") clearDrag()
     })
     makeEventListener(document, "drop", handleDrop)
   })
@@ -221,12 +232,6 @@ export function createComposerAttachments(
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
-async function blobReference(file: File) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
-  return { id, url: URL.createObjectURL(file) }
-}
 const imageExtensions = new Map([
   ["gif", "image/gif"],
   ["jpeg", "image/jpeg"],

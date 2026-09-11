@@ -1,12 +1,5 @@
 import { expect, test } from "bun:test"
-import { parseModel, recentModels } from "../../src/context/local"
-
-test("parses model IDs containing slashes", () => {
-  expect(parseModel("provider/family/model")).toEqual({
-    providerID: "provider",
-    modelID: "family/model",
-  })
-})
+import { recentModels } from "../../src/context/local"
 
 test("moves a model to the front, deduplicates, and limits recents", () => {
   const recent = Array.from({ length: 12 }, (_, index) => ({

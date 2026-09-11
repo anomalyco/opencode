@@ -1,0 +1,197 @@
+---
+title: "Config"
+---
+
+Most settings can also be changed from the OpenCode TUI. Press `Ctrl+P`, then select **Open settings**.
+
+<img src={`${import.meta.env.BASE_URL}assets/docs/cli/settings.png`} alt="OpenCode TUI settings dialog" />
+
+The default CLI config location is:
+
+```text
+~/.config/opencode/cli.json
+```
+
+Set `$XDG_CONFIG_HOME` to use a different config directory:
+
+```text
+$XDG_CONFIG_HOME/opencode/cli.json
+```
+
+Add the published JSON Schema for editor validation and autocomplete:
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json"
+}
+```
+
+OpenCode includes this automatically when it creates or migrates your CLI config.
+
+## Theme
+
+Set the theme and color mode:
+
+```json title="cli.json"
+{
+  "theme": {
+    "name": "tokyonight",
+    "mode": "system"
+  }
+}
+```
+
+| Field  | Values                       | Description                                                       |
+| ------ | ---------------------------- | ----------------------------------------------------------------- |
+| `name` | string                       | Selects the theme.                                                |
+| `mode` | `system`, `dark`, or `light` | Selects the color mode. `system` follows the terminal appearance. |
+
+See [Theme](/cli/theme) for theme configuration.
+
+## Keybinds
+
+Override bindings with the top-level `keybinds` object:
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+x",
+    "app.exit": "ctrl+c,ctrl+d,<leader>q",
+    "app.debug": "none",
+    "help.show": false
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+See [Keybinds](/cli/keybinds) for every available binding.
+
+## Plugins
+
+Load terminal plugins in order:
+
+```json title="cli.json"
+{
+  "plugins": [
+    "-opencode.notifications",
+    {
+      "package": "./plugins/status",
+      "options": {
+        "compact": true
+      }
+    }
+  ]
+}
+```
+
+See [Plugins](/cli/plugins) for packages, local plugins, options, and enablement directives.
+
+## Scroll
+
+Set scroll speed and acceleration:
+
+```json title="cli.json"
+{
+  "scroll": {
+    "speed": 2,
+    "acceleration": true
+  }
+}
+```
+
+| Field          | Values                   | Description                       |
+| -------------- | ------------------------ | --------------------------------- |
+| `speed`        | number, at least `0.001` | Sets the distance per input tick. |
+| `acceleration` | boolean                  | Speeds up repeated scrolling.     |
+
+## Attention
+
+Configure notifications and sounds:
+
+```json title="cli.json"
+{
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "permission": "/home/me/sounds/permission.wav"
+    }
+  }
+}
+```
+
+| Field           | Values                 | Description                                                                                          |
+| --------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| `enabled`       | boolean                | Enables attention alerts.                                                                            |
+| `notifications` | boolean                | Shows system notifications.                                                                          |
+| `sound`         | boolean                | Plays attention sounds.                                                                              |
+| `volume`        | number from `0` to `1` | Sets sound volume.                                                                                   |
+| `sound_pack`    | string                 | Selects the active sound pack.                                                                       |
+| `sounds`        | object                 | Overrides files for `default`, `question`, `permission`, `error`, `done`, or `subagent_done` events. |
+
+## Diffs
+
+Configure diff presentation:
+
+```json title="cli.json"
+{
+  "diffs": {
+    "source": "branch",
+    "wrap": "word",
+    "tree": true,
+    "single": false,
+    "view": "auto"
+  }
+}
+```
+
+| Field    | Values                              | Description                                                   |
+| -------- | ----------------------------------- | ------------------------------------------------------------- |
+| `source` | `branch`, `committed`, or `working` | Sets the initial review scope. Defaults to `branch`.          |
+| `wrap`   | `word` or `none`                    | Sets line wrapping.                                           |
+| `tree`   | boolean                             | Shows the diff file tree.                                     |
+| `single` | boolean                             | Shows only the selected file patch.                           |
+| `view`   | `auto`, `split`, or `unified`       | Sets the layout. `auto` chooses based on the available width. |
+
+`branch` shows **All** (branch and local changes), `committed` shows **Committed** (branch commits only), and `working` shows **Uncommitted** (staged, unstaged, and untracked changes).
+
+In `/diff`, press `d` to change the scope or choose a comparison branch from **Base**. OpenCode infers the base from local Git history when possible; otherwise it asks you to choose before loading a branch diff.
+
+Your base choice for each branch and last selected scope survive closing and reopening the viewer, but reset when the TUI exits. These selections do not change `cli.json`.
+
+## Tabs
+
+Choose **Tabs > Indicators** in settings, or set `tabs.indicators` in `cli.json`:
+
+```json title="cli.json"
+{
+  "tabs": {
+    "indicators": "numbers"
+  }
+}
+```
+
+`status` (the default) shows status icons. `numbers` always shows tab numbers, retaining their status colors and background animations. Both modes work with horizontal and vertical tabs. Ctrl+number shortcuts switch tabs in either mode.
+
+## Terminal
+
+Configure terminal integration:
+
+```json title="cli.json"
+{
+  "terminal": {
+    "title": true,
+    "copy": "select"
+  }
+}
+```
+
+| Field   | Values               | Description                                                                                              |
+| ------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
+| `title` | boolean              | Updates the terminal window title.                                                                       |
+| `copy`  | `manual` or `select` | Sets manual copy or copy on selection. Defaults to `select` on macOS and Linux, and `manual` on Windows. |

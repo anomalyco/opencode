@@ -80,7 +80,9 @@ describe("Z.ai Images", () => {
 
   it.effect("sanitizes unpaired surrogates in outbound image requests", () =>
     Image.generate({
-      model: ZAI.configure({ apiKey: "test", http: { body: { metadata: { source: "default\uDC00" } } } }).image("model"),
+      model: ZAI.configure({ apiKey: "test", http: { body: { metadata: { source: "default\uDC00" } } } }).image(
+        "model",
+      ),
       prompt: "A red circle \uD800 on a white background \u{1F600}",
     }).pipe(
       Effect.provide(

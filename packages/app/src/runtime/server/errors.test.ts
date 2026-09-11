@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionNotFoundError } from "@opencode-ai/client/promise"
+import type { FileNotFoundError, SessionNotFoundError } from "@opencode/client/promise"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./errors"
 import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./errors"
 
@@ -87,6 +87,16 @@ describe("formatServerError", () => {
     )
   })
 
+  test("returns typed server error messages", () => {
+    const error = {
+      _tag: "FileNotFoundError",
+      path: "deleted.txt",
+      message: "File not found: deleted.txt",
+    } satisfies FileNotFoundError
+
+    expect(formatServerError(error, language.t)).toBe("File not found: deleted.txt")
+  })
+
   test("returns provided string errors", () => {
     expect(formatServerError("Failed to connect to server", language.t)).toBe("Failed to connect to server")
   })
@@ -153,6 +163,16 @@ describe("isSessionNotFoundError", () => {
     } satisfies SessionNotFoundError
 
     expect(isSessionNotFoundError(new Error(body.message, { cause: { body, status: 404 } }), body.sessionID)).toBe(true)
+  })
+
+  test("matches a structured error stored directly as the cause", () => {
+    const body = {
+      _tag: "SessionNotFoundError",
+      sessionID: "ses_missing",
+      message: "Session not found",
+    } satisfies SessionNotFoundError
+
+    expect(isSessionNotFoundError(new Error("Unknown error", { cause: body }), body.sessionID)).toBe(true)
   })
 
   test("rejects errors for other sessions and other 404 responses", () => {

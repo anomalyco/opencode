@@ -1,26 +1,20 @@
-import { Cause, Effect, Exit, Schema } from "effect"
-import { ToolError, toolError } from "./tool-error.js"
+import { Cause, Effect, Exit, Formatter, Schema } from "effect"
+import { fromData, toData, ToolRuntimeError } from "./data.js"
+import { toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,
   identifierSegment,
   inputProperties,
   inputTypeScript,
+  isEmptyInput,
   outputTypeScript,
 } from "./tool-schema.js"
+import { isNamespace, type Namespace } from "./namespace.js"
 import { isTool, type Tool } from "./tool.js"
 import type { Tools } from "./tools.js"
-import {
-  CodeModeDate,
-  CodeModeMap,
-  CodeModePromise,
-  CodeModeRegExp,
-  CodeModeSet,
-  CodeModeURL,
-  CodeModeURLSearchParams,
-} from "./values.js"
 
-const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
+export const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)
 
 export type Services<T> = ServicesOf<T, []>
 
@@ -57,7 +51,9 @@ export type ToolCallEnded = {
 }
 
 export type ToolCallHooks<R = never> = {
+  /** Observes decoded tool input immediately before tool execution. */
   readonly onToolCallStart?: ((call: ToolCallStarted) => Effect.Effect<void, never, R>) | undefined
+  /** Observes each admitted tool call as it succeeds, fails, or is interrupted. */
   readonly onToolCallEnd?: ((call: ToolCallEnded) => Effect.Effect<void, never, R>) | undefined
 }
 
@@ -66,8 +62,6 @@ export type ToolDescription = {
   readonly description: string
   readonly signature: string
 }
-
-export type SafeObject = Record<string, unknown>
 
 const defaultSearchLimit = 10
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
@@ -99,193 +93,10 @@ export class ToolReference {
   constructor(readonly path: ReadonlyArray<string>) {}
 }
 
-const MAX_VALUE_DEPTH = 32
-
-export class ToolRuntimeError extends Error {
-  constructor(
-    readonly kind:
-      | "UnknownTool"
-      | "InvalidToolInput"
-      | "InvalidToolOutput"
-      | "InvalidDataValue"
-      | "ToolCallLimitExceeded",
-    message: string,
-    readonly suggestions: ReadonlyArray<string> = [],
-  ) {
-    super(message)
-    this.name = "ToolRuntimeError"
-  }
-}
-
-const runHost = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, ToolError, R> =>
-  effect.pipe(
-    Effect.catchCause((cause) => {
-      if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
-      const error = Cause.squash(cause)
-      return Effect.fail(error instanceof ToolError ? error : toolError("Tool execution failed", error))
-    }),
-  )
-
-const blockedMemberNames = new Set(["__proto__", "constructor", "prototype"])
-
-export const isBlockedMember = (name: string): boolean => blockedMemberNames.has(name)
-
-// Checkpoint mode preserves CodeMode values; boundary mode JSON-normalizes them.
-export const copyIn = (value: unknown, label: string, preserveCodeModeValues = false): unknown =>
-  copyBounded(value, label, 0, new Set(), preserveCodeModeValues)
-
-const copyBounded = (
-  value: unknown,
-  label: string,
-  depth: number,
-  seen: Set<object>,
-  preserveCodeModeValues: boolean,
-): unknown => {
-  if (depth > MAX_VALUE_DEPTH) {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
-  }
-  if (
-    value === null ||
-    value === undefined ||
-    typeof value === "string" ||
-    typeof value === "boolean" ||
-    typeof value === "number"
-  ) {
-    return value
-  }
-
-  if (typeof value !== "object") {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
-  }
-
-  if (value instanceof CodeModePromise) {
-    throw new ToolRuntimeError(
-      "InvalidDataValue",
-      `${label} contains an un-awaited Promise; await tool calls (e.g. \`const result = await tools.ns.tool(...)\`) before using their results.`,
-    )
-  }
-
-  if (preserveCodeModeValues) {
-    if (
-      value instanceof CodeModeDate ||
-      value instanceof CodeModeRegExp ||
-      value instanceof CodeModeMap ||
-      value instanceof CodeModeSet ||
-      value instanceof CodeModeURL ||
-      value instanceof CodeModeURLSearchParams
-    ) {
-      return value
-    }
-    if (value instanceof Date) return new CodeModeDate(value.getTime())
-    if (value instanceof RegExp) return new CodeModeRegExp(value.source, value.flags)
-    if (value instanceof Map) {
-      const wrapped = new CodeModeMap()
-      for (const [key, item] of value.entries()) {
-        wrapped.map.set(copyBounded(key, label, depth + 1, seen, true), copyBounded(item, label, depth + 1, seen, true))
-      }
-      return wrapped
-    }
-    if (value instanceof Set) {
-      const wrapped = new CodeModeSet()
-      for (const item of value.values()) wrapped.set.add(copyBounded(item, label, depth + 1, seen, true))
-      return wrapped
-    }
-    if (value instanceof URL) return new CodeModeURL(new URL(value.href))
-    if (value instanceof URLSearchParams) return new CodeModeURLSearchParams(new URLSearchParams(value))
-  }
-
-  if (value instanceof CodeModeDate) {
-    return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
-  }
-  if (value instanceof Date) {
-    return Number.isFinite(value.getTime()) ? value.toISOString() : null
-  }
-  if (value instanceof CodeModeURL) return value.url.href
-  if (value instanceof URL) return value.href
-  if (
-    value instanceof CodeModeRegExp ||
-    value instanceof CodeModeMap ||
-    value instanceof CodeModeSet ||
-    value instanceof CodeModeURLSearchParams ||
-    value instanceof RegExp ||
-    value instanceof Map ||
-    value instanceof Set ||
-    value instanceof URLSearchParams
-  ) {
-    return Object.create(null) as SafeObject
-  }
-
-  if (seen.has(value)) {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} contains a circular value.`)
-  }
-
-  seen.add(value)
-
-  if (Array.isArray(value)) {
-    const copied = value.map((item) => copyBounded(item, label, depth + 1, seen, preserveCodeModeValues))
-    if (preserveCodeModeValues) {
-      // Checkpoint copies retain array metadata that boundary copies omit.
-      for (const [key, item] of Object.entries(value)) {
-        if (Object.hasOwn(copied, key)) continue
-        if (isBlockedMember(key)) {
-          throw new ToolRuntimeError("InvalidDataValue", `${label} contains blocked property '${key}'.`)
-        }
-        Reflect.set(copied, key, copyBounded(item, label, depth + 1, seen, true))
-      }
-    }
-    seen.delete(value)
-    return copied
-  }
-
-  const prototype = Object.getPrototypeOf(value)
-  if (prototype !== Object.prototype && prototype !== null) {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} must contain plain objects only.`)
-  }
-
-  const copied: SafeObject = Object.create(null) as SafeObject
-  for (const [key, item] of Object.entries(value)) {
-    if (isBlockedMember(key)) {
-      throw new ToolRuntimeError("InvalidDataValue", `${label} contains blocked property '${key}'.`)
-    }
-    copied[key] = copyBounded(item, label, depth + 1, seen, preserveCodeModeValues)
-  }
-  seen.delete(value)
-  return copied
-}
-
-// "json" mirrors JSON.stringify (undefined object values drop, undefined array elements become
-// null, a bare undefined passes through): use it wherever data leaves as JSON, like tool
-// arguments and stringify-style formatting. "nullify" turns every undefined, including a bare
-// one, into null: use it for program results, where the consumer must never see undefined.
-export type CopyOutMode = "json" | "nullify"
-
-export const copyOut = (value: unknown, mode: CopyOutMode): unknown => {
-  if (value === undefined && mode === "nullify") return null
-  if (typeof value === "number" && !Number.isFinite(value)) {
-    return null
-  }
-  if (Array.isArray(value)) {
-    // Array.from densifies holes so sparse arrays normalize at the boundary like JSON does.
-    return Array.from(value, (item) => {
-      const copied = copyOut(item, mode)
-      return copied === undefined && mode === "json" ? null : copied
-    })
-  }
-
-  if (value !== null && typeof value === "object" && !(value instanceof ToolReference)) {
-    return Object.fromEntries(
-      Object.entries(value)
-        .map(([key, item]) => [key, copyOut(item, mode)] as const)
-        .filter(([, item]) => !(item === undefined && mode === "json")),
-    )
-  }
-
-  return value
-}
-
 // Dots in tool names are namespace separators; the last tool for a canonical path wins.
 type ToolNode<R> = {
   tool?: Tool<R>
+  namespace?: Namespace<R>
   readonly children: Map<string, ToolNode<R>>
 }
 
@@ -301,7 +112,10 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
         current = child
       }
       if (isTool<R>(value)) current.tool = value
-      else insert(current, value)
+      else if (isNamespace<R>(value)) {
+        current.namespace = value
+        insert(current, value.tools)
+      } else insert(current, value)
     }
   }
   insert(root, tools)
@@ -311,31 +125,35 @@ const toolTrie = <R>(tools: Tools<R>): ToolNode<R> => {
 const canonicalSegments = (path: ReadonlyArray<string>): ReadonlyArray<string> =>
   path.flatMap((segment) => segment.split("."))
 
+type VisibleTool<R> = {
+  readonly path: string
+  readonly tool: Tool<R>
+  readonly namespaces: ReadonlyArray<Namespace<R>>
+}
+
 const flattenTools = <R>(
   node: ToolNode<R>,
   path: ReadonlyArray<string> = [],
-): Array<{ path: string; tool: Tool<R> }> => [
-  ...(node.tool === undefined ? [] : [{ path: path.join("."), tool: node.tool }]),
-  ...Array.from(node.children, ([name, child]) => flattenTools(child, [...path, name])).flat(),
-]
+  namespaces: ReadonlyArray<Namespace<R>> = [],
+): Array<VisibleTool<R>> => {
+  const next = node.namespace === undefined ? namespaces : [...namespaces, node.namespace]
+  return [
+    ...(node.tool === undefined ? [] : [{ path: path.join("."), tool: node.tool, namespaces: next }]),
+    ...Array.from(node.children).flatMap(([name, child]) => flattenTools(child, [...path, name], next)),
+  ]
+}
 
-const describeTool = <R>(path: string, tool: Tool<R>): ToolDescription => ({
-  path,
-  description: tool.description,
-  signature: `${toolExpression(path)}(input: ${inputTypeScript(tool, true)}): Promise<${outputTypeScript(tool, true)}>`,
+const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => ({
+  path: visible.path,
+  description: visible.tool.description,
+  signature: isEmptyInput(visible.tool)
+    ? `${toolExpression(visible.path)}(): Promise<${outputTypeScript(visible.tool, true)}>`
+    : `${toolExpression(visible.path)}(input: ${inputTypeScript(visible.tool, true)}): Promise<${outputTypeScript(visible.tool, true)}>`,
 })
 
-// Discovery bytes are durable instructions, so order only after canonical-path collisions settle.
-const visibleTools = <R>(tools: Tools<R>) =>
-  flattenTools(toolTrie(tools))
-    .sort((left, right) => compareText(left.path, right.path))
-    .map(({ path, tool }) => ({
-      path,
-      tool,
-      description: describeTool(path, tool),
-    }))
-
-export type DiscoveryPlan = {
+/** Tools indexed once per runtime: the lookup trie plus the model-facing catalog and search index. */
+export type Prepared<R = never> = {
+  readonly root: ToolNode<R>
   readonly catalog: ReadonlyArray<ToolDescription>
   readonly searchIndex: ReadonlyArray<SearchEntry>
 }
@@ -429,12 +247,13 @@ export const searchSignature = (() => {
   return `search(input: ${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
 })()
 
-const toSearchEntry = <R>(path: string, tool: Tool<R>, description: ToolDescription): SearchEntry => ({
-  description,
+const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => ({
+  description: describeTool(visible),
   searchText: [
-    path,
-    tool.description,
-    ...inputProperties(tool).flatMap(({ name, description: property }) =>
+    visible.path,
+    visible.tool.description,
+    ...visible.namespaces.flatMap((namespace) => (namespace.description === undefined ? [] : [namespace.description])),
+    ...inputProperties(visible.tool).flatMap(({ name, description: property }) =>
       property === undefined ? [name] : [name, property],
     ),
   ]
@@ -442,14 +261,14 @@ const toSearchEntry = <R>(path: string, tool: Tool<R>, description: ToolDescript
     .toLowerCase(),
 })
 
-export const searchIndex = <R>(tools: Tools<R>): ReadonlyArray<SearchEntry> =>
-  visibleTools(tools).map(({ path, tool, description }) => toSearchEntry(path, tool, description))
-
-export const prepare = <R>(tools: Tools<R>): DiscoveryPlan => {
-  const visible = visibleTools(tools)
+export const prepare = <R>(tools: Tools<R>): Prepared<R> => {
+  const root = toolTrie(tools)
+  // Discovery bytes are durable instructions, so order only after canonical-path collisions settle.
+  const visible = flattenTools(root).sort((left, right) => compareText(left.path, right.path))
   return {
-    catalog: visible.map(({ description }) => description),
-    searchIndex: visible.map(({ path, tool, description }) => toSearchEntry(path, tool, description)),
+    root,
+    catalog: visible.map(describeTool),
+    searchIndex: visible.map(toSearchEntry),
   }
 }
 
@@ -480,22 +299,21 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Tool<R> => 
 }
 
 export type ToolRuntime<R = never> = {
-  readonly root: ToolReference
   readonly calls: Array<ToolCall>
   readonly execute: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   readonly search: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
 }
 
+/** Per-execution call state over tools prepared once for the runtime. */
 export const make = <R>(
-  tools: Tools<R>,
+  prepared: Prepared<R>,
   maxToolCalls: number | undefined,
-  searchIndex: ReadonlyArray<SearchEntry>,
   hooks?: ToolCallHooks<R>,
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
-  const root = toolTrie(tools)
-  const searchTool = makeSearchTool(searchIndex)
+  const root = prepared.root
+  const searchTool = makeSearchTool(prepared.searchIndex)
 
   const observeEnd = <A, E>(effect: Effect.Effect<A, E, R>, call: ToolCallStarted): Effect.Effect<A, E, R> => {
     const onEnd = hooks?.onToolCallEnd
@@ -507,18 +325,11 @@ export const make = <R>(
         if (Exit.isSuccess(exit)) return onEnd({ ...call, durationMs, outcome: "success" })
         if (Cause.hasInterruptsOnly(exit.cause)) return onEnd({ ...call, durationMs, outcome: "interrupted" })
         const error = Cause.squash(exit.cause)
-        const message =
-          error instanceof ToolError || error instanceof ToolRuntimeError ? error.message : "Tool execution failed"
+        const message = error instanceof Error ? error.message : Cause.pretty(exit.cause)
         return onEnd({ ...call, durationMs, outcome: "failure", message })
       }),
     )
   }
-
-  const decodeOutput = (value: unknown, name: string) =>
-    Effect.try({
-      try: () => copyIn(value, `Result from tool '${name}'`),
-      catch: () => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}'.`),
-    })
 
   const recordCall = (call: ToolCall): void => {
     if (maxToolCalls !== undefined && calls.length >= maxToolCalls) {
@@ -529,10 +340,11 @@ export const make = <R>(
 
   const executeTool = (name: string, tool: Tool<R>, externalArgs: Array<unknown>) =>
     Effect.gen(function* () {
-      if (externalArgs.length !== 1)
-        throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects exactly one input object.`)
+      const normalized = externalArgs.length === 0 ? [{}] : externalArgs
+      if (normalized.length !== 1)
+        throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
       const input = yield* Effect.try({
-        try: () => decodeToolInput(tool, externalArgs[0]),
+        try: () => decodeToolInput(tool, normalized[0]),
         catch: (cause) =>
           new ToolRuntimeError(
             "InvalidToolInput",
@@ -548,33 +360,38 @@ export const make = <R>(
       return yield* observeEnd(
         Effect.gen(function* () {
           if (hooks?.onToolCallStart !== undefined) yield* hooks.onToolCallStart(call)
-          const raw = yield* runHost(Effect.suspend(() => tool.execute(input)))
-          const result = yield* Effect.try({
-            try: () => decodeToolOutput(tool, raw),
-            catch: () => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}'.`),
+          const raw = yield* Effect.suspend(() => tool.execute(input)).pipe(
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+              return Effect.fail(
+                toolError(
+                  Cause.prettyErrors(cause)
+                    .map((error) => (error.cause ? Formatter.format(error) : error.message || error.name))
+                    .join("\n"),
+                ),
+              )
+            }),
+          )
+          return yield* Effect.try({
+            try: () => fromData(decodeToolOutput(tool, raw), `Result from tool '${name}'`),
+            catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
           })
-          return yield* decodeOutput(result, name)
         }),
         call,
       )
     })
 
   return {
-    root: new ToolReference([]),
     calls,
     keys: (path) => namespaceKeys(root, path),
     search: (args) =>
       Effect.suspend(() =>
-        executeTool(
-          "search",
-          searchTool,
-          args.map((arg) => copyOut(copyIn(arg, "Arguments for tool 'search'"), "json")),
-        ),
+        executeTool("search", searchTool, args.map((arg) => toData(arg, "Arguments for tool 'search'"))),
       ),
     execute: (path, args) =>
       Effect.gen(function* () {
         const name = canonicalSegments(path).join(".")
-        const externalArgs = args.map((arg) => copyOut(copyIn(arg, `Arguments for tool '${name}'`), "json"))
+        const externalArgs = args.map((arg) => toData(arg, `Arguments for tool '${name}'`))
         const tool = resolve(root, path)
         return yield* executeTool(name, tool, externalArgs)
       }),

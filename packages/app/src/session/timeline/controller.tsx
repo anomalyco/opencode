@@ -1,11 +1,11 @@
-import type { SessionMessageInfo } from "@opencode-ai/client/promise"
-import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode-ai/ui/dialog"
-import { Button } from "@opencode-ai/ui/button"
+import type { SessionMessageInfo } from "@opencode/client/promise"
+import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
+import { Button } from "@opencode/ui/button"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -15,12 +15,14 @@ import { removedSessionIDs } from "@/session/session-domain"
 import { useServerSDK } from "@/runtime/server/client"
 import { sessionHref } from "@/shell/routes/session"
 import { sessionTitle } from "@/session/title"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { showToast } from "@/shell/notifications/toast"
+import { usePlatform } from "@/runtime/platform/platform"
 import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
 import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
 import { getSessionMessageHandoff } from "@/session/handoff"
+import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
 const emptyMessages: SessionMessageInfo[] = []
 const taskDescription = (message: SessionMessageInfo, sessionID: string): string | undefined => {
@@ -54,6 +56,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const tabs = useTabs()
   const dialog = useDialog()
   const language = useLanguage()
+  const platform = usePlatform()
   const handedOffMessages = createMemo(() =>
     applyTimelineMessageHandoff(
       input.session.history.messages(),
@@ -101,10 +104,32 @@ export function createTimelineController(input: { session: TimelineSessionSource
     })
   })
   const showHeader = createMemo(() => !!input.session.identity.sessionID())
+  const timelineDetail = createMemo(() => {
+    const detail = settings.general.timelineDetail()
+    return {
+      shell: { ...detail.shell },
+      edit: { ...detail.edit },
+      thinking: { ...detail.thinking },
+      subagents: { ...detail.subagents },
+      notices: { ...detail.notices },
+      tools: { ...detail.tools },
+    }
+  })
+  const reasoningMode = (): ReasoningMode =>
+    timelineDetail().thinking.placement === "hidden"
+      ? "hidden"
+      : timelineDetail().thinking.details === "expanded"
+        ? "full"
+        : "compact"
+  const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
+  const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
   const projection = createTimelineProjection({
     sessionMessages: projectedMessages,
     status: input.session.data.status,
-    showReasoningSummaries: settings.general.showReasoningSummaries,
+    reasoningMode,
+    shellToolDefaultOpen: shellToolPartsExpanded,
+    editToolDefaultOpen: editToolPartsExpanded,
+    timelineDetail,
     pendingUserMessageIDs,
   })
   const [pending, setPending] = createStore({ rename: false })
@@ -147,7 +172,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
     try {
       const data = await fetchSessionExport({ sessionID: id, api: serverSDK.api })
       const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      if (!(await saveSessionExport(filename, data, platform))) return
       showToast({
         variant: "success",
         icon: "circle-check",
@@ -233,9 +258,10 @@ export function createTimelineController(input: { session: TimelineSessionSource
       childTitle,
       showHeader,
       projection,
-      showReasoningSummaries: settings.general.showReasoningSummaries,
-      shellToolPartsExpanded: settings.general.shellToolPartsExpanded,
-      editToolPartsExpanded: settings.general.editToolPartsExpanded,
+      timelineDetail,
+      reasoningMode,
+      shellToolPartsExpanded,
+      editToolPartsExpanded,
     },
     pending: {
       rename: () => pending.rename,

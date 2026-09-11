@@ -3,7 +3,7 @@ import { Endpoint } from "../endpoint.js"
 import { Auth } from "../auth.js"
 import type { HttpMiddleware, Interface as RequestExecutorInterface } from "../executor.js"
 import type { WebSocketChannelExecutor } from "./websocket-channel.js"
-import type { AIError, LLMRequest } from "../../schema/index.js"
+import type { AIError, HttpContext, LLMRequest } from "../../schema/index.js"
 
 export interface TransportRuntime {
   readonly http: RequestExecutorInterface
@@ -11,6 +11,8 @@ export interface TransportRuntime {
 
 export interface TransportExecution<Frame> {
   readonly frames: Stream.Stream<Frame, AIError>
+  readonly http?: HttpContext
+  body?(frame: Frame): string | undefined
   /** Optional successful-consumption acknowledgement. HTTP leaves this absent. */
   readonly complete?: Effect.Effect<void>
 }

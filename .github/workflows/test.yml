@@ -49,7 +49,7 @@ jobs:
             echo "app=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          bun x turbo@2.10.2 ls --affected --filter=@opencode-ai/app --output=json > affected.json
+          bun x turbo@2.10.2 ls --affected --filter=@opencode/app --output=json > affected.json
           bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
 
   unit:
@@ -132,10 +132,10 @@ jobs:
         timeout-minutes: 15
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            bun turbo verify:package --filter=@opencode-ai/sdk
+            bun turbo verify:package --filter=@opencode/sdk
             exit 0
           fi
-          bun turbo verify:package --affected --filter=@opencode-ai/sdk
+          bun turbo verify:package --affected --filter=@opencode/sdk
         env:
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
@@ -173,7 +173,7 @@ jobs:
 
       - name: Check generated documentation
         if: runner.os == 'Linux'
-        working-directory: packages/www
+        working-directory: services/www
         run: bun run check:generated
 
   e2e:
@@ -237,12 +237,18 @@ jobs:
         working-directory: packages/app
         run: bunx playwright install chromium
 
-      - name: Run app e2e tests
+      - name: Run app e2e tests against production build
         if: env.E2E_ENABLED == 'true'
-        run: bun --cwd packages/app test:e2e:local
+        run: bun --cwd packages/app test:e2e:built
         env:
           CI: true
         timeout-minutes: 30
+
+      - name: Verify service worker precaching and upgrades
+        if: env.E2E_ENABLED == 'true'
+        working-directory: packages/app
+        run: bunx playwright test --config e2e/service-worker/playwright.config.ts
+        timeout-minutes: 5
 
       - name: Upload Playwright artifacts
         if: always() && env.E2E_ENABLED == 'true'

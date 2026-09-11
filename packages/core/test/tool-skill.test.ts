@@ -2,21 +2,21 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Permission } from "@opencode-ai/core/permission"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { Skill } from "@opencode-ai/core/skill"
-import { SkillTool } from "@opencode-ai/core/tool/plugin/skill"
-import { Tool } from "@opencode-ai/core/tool"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Permission } from "@opencode/core/permission"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { Skill } from "@opencode/core/skill"
+import { SkillTool } from "@opencode/core/tool/plugin/skill"
+import { Tool } from "@opencode/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
-import { Image } from "@opencode-ai/core/image"
+import { Image } from "@opencode/core/image"
 import { it } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const skillToolNode = makeLocationNode({
@@ -69,19 +69,14 @@ describe("SkillTool", () => {
                 ),
               ),
           })
-          const skills = Layer.succeed(
-            Skill.Service,
-            Skill.Service.of({
-              transform: (_transform) => Effect.die("unused"),
-              reload: () => Effect.die("unused"),
-              get: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
-              list: () => Effect.succeed(current),
-            }),
-          )
+          const skills = Layer.mock(Skill.Service, {
+            get: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
+            list: () => Effect.succeed(current),
+          })
           const skillToolLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode]), [
-            [Permission.node, permission],
-            [Skill.node, skills],
-            [Image.node, imagePassthrough],
+            Permission.node.replace(permission),
+            Skill.node.replace(skills),
+            Image.node.replace(imagePassthrough),
           ])
 
           return yield* Effect.gen(function* () {

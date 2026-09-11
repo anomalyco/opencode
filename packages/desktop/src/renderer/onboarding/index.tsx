@@ -1,4 +1,4 @@
-import { ServerConnection, useServers, useTabs } from "@opencode-ai/app/desktop"
+import { ServerConnection, useServers, useTabs } from "@opencode/app/desktop"
 import { onMount } from "solid-js"
 import type { ElectronAPI } from "../api-types"
 

@@ -1,9 +1,10 @@
 export * as WarmingPlugin from "./warming.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
+import type { Session } from "@opencode/schema/session"
 import { Clock, Duration, Effect, Scope } from "effect"
 import { Config } from "../config.js"
-import { SessionSchema } from "../session/schema.js"
 
 const defaults = {
   prompt: "This is a keep-alive request. Do not perform any work or use tools. Reply with exactly: OK",
@@ -26,8 +27,8 @@ export const Plugin = define({
     })
 
     const scope = yield* Scope.Scope
-    const sessions = new Map<SessionSchema.ID, { last: number; expires: number; settings: typeof defaults }>()
-    const loop: (sessionID: SessionSchema.ID) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(
+    const sessions = new Map<Session.ID, { last: number; expires: number; settings: typeof defaults }>()
+    const loop: (sessionID: Session.ID) => Effect.Effect<void> = Effect.fn("WarmingPlugin.loop")(
       function* (sessionID) {
         const current = sessions.get(sessionID)
         if (!current) return
@@ -54,7 +55,7 @@ export const Plugin = define({
       },
     )
 
-    yield* ctx.session.hook("context", (event) =>
+    const hook = (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
         const active = sessions.get(event.sessionID)
         const settings = yield* loadSettings()
@@ -95,7 +96,9 @@ export const Plugin = define({
           ),
           Effect.forkIn(scope),
         )
-      }),
-    )
+      })
+    yield* ctx.session.hook("context", hook)
+    yield* ctx.session.hook("compaction", hook)
+    yield* ctx.session.hook("generate", hook)
   }),
 })

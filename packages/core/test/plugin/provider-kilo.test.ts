@@ -1,11 +1,11 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { KiloPlugin } from "@opencode-ai/core/plugin/provider/kilo"
-import { Provider } from "@opencode-ai/core/provider"
+import { Catalog } from "@opencode/core/catalog"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { ProviderPlugins } from "@opencode/core/plugin/provider"
+import { KiloPlugin } from "@opencode/core/plugin/provider/kilo"
+import { Provider } from "@opencode/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -18,9 +18,9 @@ const addPlugin = Effect.fn(function* () {
 })
 
 describe("KiloPlugin", () => {
-  it.effect("is registered so legacy referer headers can be applied", () =>
-    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.kilo")),
-  )
+  test("is registered so legacy referer headers can be applied", () => {
+    expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.kilo")
+  })
 
   it.effect("applies legacy referer headers only to Kilo endpoints", () =>
     Effect.gen(function* () {

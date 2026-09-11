@@ -2,21 +2,23 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Schema, Stream } from "effect"
-import { Agent } from "@opencode-ai/core/agent"
-import { Bus } from "@opencode-ai/core/bus"
-import { Config } from "@opencode-ai/core/config"
-import { Directory, Document, Info } from "@opencode-ai/schema/config"
-import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
-import { Permission } from "@opencode-ai/core/permission"
-import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
+import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
+import { Directory, Document, Event, Info } from "@opencode/schema/config"
+import { Model } from "@opencode/schema/model"
+import { ConfigAgentPlugin } from "@opencode/core/config/plugin/agent"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Permission } from "@opencode/core/permission"
+import { AgentPlugin } from "@opencode/core/plugin/agent"
+import { AbsolutePath } from "@opencode/core/schema"
+import { ConfigMigrateV1 } from "@opencode/core/v1/config/migrate"
+import { ConfigAgentV1 } from "@opencode/core/v1/config/agent"
 import { advance, drain } from "../lib/clock"
-import { tmpdir } from "../fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { agentHost, host } from "../plugin/host"
 
@@ -34,7 +36,101 @@ test("rejects named agent color tokens", () => {
   expect(() => decode({ agents: { reviewer: { color: "warning" } } })).toThrow()
 })
 
+test("keeps schema fields and name out of legacy agent options", () => {
+  const agent = Schema.decodeUnknownSync(ConfigAgentV1.Info)({
+    name: "reviewer",
+    model: "test/model",
+    variant: "high",
+    temperature: 0.5,
+    top_p: 0.9,
+    prompt: "Review carefully.",
+    tools: { edit: false },
+    disable: false,
+    description: "Reviews changes",
+    mode: "subagent",
+    hidden: true,
+    options: { existing: true },
+    color: "#112233",
+    steps: 10,
+    maxSteps: 20,
+    permission: { read: "allow" },
+    custom: "preserved",
+  })
+
+  expect(agent.options).toEqual({ existing: true, custom: "preserved" })
+})
+
 describe("ConfigAgentPlugin.Plugin", () => {
+  for (const item of [
+    { name: "separate legacy variant", frontmatter: "model: example/chat\nvariant: high", model: "example/chat#high" },
+    { name: "unqualified model", frontmatter: "model: example/chat", model: "example/chat" },
+    { name: "embedded native variant", frontmatter: "model: example/chat#high", model: "example/chat#high" },
+    {
+      name: "structured native variant",
+      frontmatter: "model:\n  providerID: example\n  model: chat\n  variant: high",
+      model: "example/chat#high",
+    },
+    {
+      name: "structured unqualified model",
+      frontmatter: "model:\n  providerID: example\n  model: chat",
+      model: "example/chat",
+    },
+    { name: "standalone variant", frontmatter: "variant: high", model: undefined },
+    {
+      name: "embedded native variant with an ignored separate variant",
+      frontmatter: "model: example/chat#high\nvariant: low",
+      model: "example/chat#high",
+    },
+    {
+      name: "structured native variant with an ignored separate variant",
+      frontmatter: "model:\n  providerID: example\n  model: chat\n  variant: high\nvariant: low",
+      model: "example/chat#high",
+    },
+  ]) {
+    for (const native of [false, true]) {
+      it.live(`loads Markdown ${item.name}${native ? " with native request and permissions" : ""}`, () =>
+        Effect.gen(function* () {
+          const agent = yield* loadMarkdownAgent(
+            native
+              ? `${item.frontmatter}
+request:
+  headers:
+    x-agent: native
+  body:
+    effort: high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny`
+              : item.frontmatter,
+          )
+          expect(agent.model).toEqual(item.model === undefined ? undefined : Model.Ref.parse(item.model))
+          expect(agent.request).toEqual({
+            settings: {},
+            headers: native ? { "x-agent": "native" } : {},
+            body: native ? { effort: "high" } : {},
+          })
+          if (native) {
+            expect(agent.permissions).toContainEqual({ action: "edit", resource: "*", effect: "deny" })
+            expect(Permission.evaluate("edit", "example.txt", agent.permissions).effect).toBe("deny")
+          }
+        }),
+      )
+    }
+  }
+
+  for (const variant of [undefined, "high"]) {
+    it.live(`loads Markdown legacy temperature ${variant ? "with" : "without"} a separate variant`, () =>
+      Effect.gen(function* () {
+        const agent = yield* loadMarkdownAgent(
+          `model: example/chat\ntemperature: 0.5${variant ? `\nvariant: ${variant}` : ""}`,
+        )
+        expect(agent.model).toEqual(Model.Ref.parse(variant ? "example/chat#high" : "example/chat"))
+        expect(agent.request).toEqual({ settings: {}, headers: {}, body: { temperature: 0.5 } })
+      }),
+    )
+  }
+
   it.effect("matches POSIX paths against home-relative permissions", () =>
     Effect.gen(function* () {
       const permissions = yield* loadHomePermissions("/home/test")
@@ -330,10 +426,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
   )
 
   it.live("loads legacy file-based agents from config directories", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           yield* Effect.promise(async () => {
@@ -354,6 +447,7 @@ Review carefully.`,
             await fs.writeFile(
               path.join(tmp.path, "agents", "native.md"),
               `---
+variant: high
 request:
   headers:
     x-agent: native
@@ -407,10 +501,7 @@ Use native v2 fields.`,
 
   for (const testCase of sourceCases()) {
     it.effect(`rebuilds agents when a source file is ${testCase.name}`, () =>
-      Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-      ).pipe(
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
         Effect.flatMap((tmp) =>
           Effect.gen(function* () {
             const directory = path.join(tmp.path, testCase.source)
@@ -445,10 +536,7 @@ Use native v2 fields.`,
   }
 
   it.effect("coalesces updates inside the debounce window into one rebuild", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const directory = path.join(tmp.path, "agents")
@@ -484,11 +572,32 @@ Use native v2 fields.`,
     ),
   )
 
+  it.effect("rebuilds on a config update published immediately after startup", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const bus = yield* Bus.Service
+      let reloads = 0
+      // No directory entries, so startup has no filesystem hop that could hide a late subscription.
+      yield* ConfigAgentPlugin.Plugin.effect(
+        host({
+          agent: {
+            ...agentHost(agents),
+            reload: () => agents.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+          },
+          event: { subscribe: () => bus.subscribe(Event.Updated) },
+        }),
+      )
+
+      // Published in the same fiber step as startup: the subscription must
+      // already be open when the plugin effect returns.
+      yield* bus.publish(Event.Updated, {})
+      yield* advance(() => reloads >= 1)
+      expect(reloads).toBe(1)
+    }).pipe(Effect.provide(Config.testLayer([]))),
+  )
+
   it.effect("ignores updates outside agent source directories", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const directory = path.join(tmp.path, "agents")
@@ -521,6 +630,26 @@ Use native v2 fields.`,
     ),
   )
 })
+
+function loadMarkdownAgent(frontmatter: string) {
+  return Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const fs = yield* FSUtil.Service
+    yield* fs.makeDirectory(path.join(tmp.path, "agents"))
+    yield* fs.writeFileString(
+      path.join(tmp.path, "agents", "reviewer.md"),
+      `---\n${frontmatter}\n---\nReview carefully.`,
+    )
+    const agents = yield* Agent.Service
+    yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+      Effect.provide(Config.testLayer([directoryEntry(tmp.path)])),
+    )
+    const agent = yield* agents.get(Agent.ID.make("reviewer"))
+    if (!agent) throw new Error("expected configured Markdown agent")
+    expect(agent.system).toBe("Review carefully.")
+    return agent
+  })
+}
 
 function directoryEntry(directory: string) {
   return new Directory({ type: "directory", path: AbsolutePath.make(directory) })

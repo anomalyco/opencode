@@ -1,9 +1,10 @@
-import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode-ai/ai"
+import { Message, ToolCallPart, ToolResultPart, type ContentPart, type ProviderMetadata } from "@opencode/ai"
+import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
-import type { Model } from "../../model.js"
 import { SessionMessage } from "../message.js"
-import type { FileAttachment } from "@opencode-ai/schema/prompt"
+import { SessionProviderContext } from "../provider-context.js"
+import type { FileAttachment } from "@opencode/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
@@ -157,6 +158,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
           providerMetadata: reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.state) : undefined,
         },
       ]
+    // Let the destination adapter handle readable reasoning after a model/provider switch.
     if (item.type === "reasoning")
       return reuseProviderMetadata
         ? [
@@ -167,7 +169,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
             },
           ]
         : item.text.length > 0
-          ? [{ type: "text", text: item.text }]
+          ? [{ type: message.error === undefined ? "reasoning" : "text", text: item.text }]
           : []
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
@@ -259,6 +261,8 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
     case "system":
       return [Message.system(message.text)]
     case "shell":
+      // Background shell results enter context once, through their completion inbox item.
+      if (message.metadata?.background === true) return []
       return [
         Message.make({
           id: message.id,
@@ -271,6 +275,9 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       return assistant(message, model, providerMetadataKey)
     case "compaction":
       if (message.status !== "completed") return []
+      // History selection only keeps native windows the target model can replay.
+      if (SessionProviderContext.isCheckpoint(message))
+        return [...SessionProviderContext.decode(message.providerContext)]
       return [
         Message.make({
           id: message.id,
@@ -292,7 +299,7 @@ ${message.recent}
   }
 }
 
-/** Translate projected Session history into canonical @opencode-ai/ai context. */
+/** Translate projected Session history into canonical @opencode/ai context. */
 export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,

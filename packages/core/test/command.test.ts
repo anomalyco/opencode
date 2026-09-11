@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Command } from "@opencode-ai/core/command"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Session } from "@opencode-ai/schema/session"
+import { Command } from "@opencode/core/command"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Session } from "@opencode/schema/session"
 import { Effect } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -12,8 +12,8 @@ describe("Command", () => {
     Effect.gen(function* () {
       const command = yield* Command.Service
       const calls: Command.Invocation[] = []
-      yield* command.transform((draft) => {
-        draft.add({
+      yield* command.transform((editor) => {
+        editor.add({
           name: "goal",
           description: "Manage the session goal",
           execute: (input) => Effect.sync(() => calls.push(input)),
@@ -36,9 +36,9 @@ describe("Command", () => {
   it.effect("replaces commands with later definitions", () =>
     Effect.gen(function* () {
       const command = yield* Command.Service
-      yield* command.transform((draft) => {
-        draft.add({ name: "goal", description: "First", execute: () => Effect.void })
-        draft.add({ name: "goal", description: "Second", execute: () => Effect.void })
+      yield* command.transform((editor) => {
+        editor.add({ name: "goal", description: "First", execute: () => Effect.void })
+        editor.add({ name: "goal", description: "Second", execute: () => Effect.void })
       })
 
       expect(yield* command.list()).toEqual([Command.Info.make({ name: "goal", description: "Second" })])
@@ -48,8 +48,8 @@ describe("Command", () => {
   it.effect("returns callback error messages without stack traces", () =>
     Effect.gen(function* () {
       const command = yield* Command.Service
-      yield* command.transform((draft) => {
-        draft.add({
+      yield* command.transform((editor) => {
+        editor.add({
           name: "fail",
           execute: () => Effect.fail(new Error("command failed")),
         })

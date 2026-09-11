@@ -1,6 +1,6 @@
-import type { CatalogApi } from "@opencode-ai/client/promise/api"
-import type { Model } from "@opencode-ai/schema/model"
-import type { Provider } from "@opencode-ai/schema/provider"
+import type { CatalogApi } from "@opencode/client/promise/api"
+import type { Model } from "@opencode/schema/model"
+import type { Provider } from "@opencode/schema/provider"
 import type { Transform } from "./registration.js"
 import type { DeepMutable } from "./types.js"
 
@@ -9,7 +9,7 @@ export interface CatalogProviderRecord {
   readonly models: ReadonlyMap<string, DeepMutable<Model.Info>>
 }
 
-export interface CatalogDraft {
+export interface CatalogEditor {
   readonly provider: {
     list(): readonly CatalogProviderRecord[]
     get(providerID: string): CatalogProviderRecord | undefined
@@ -28,6 +28,6 @@ export interface CatalogDraft {
 }
 
 export interface CatalogDomain extends CatalogApi {
-  readonly transform: Transform<CatalogDraft>
+  readonly transform: Transform<CatalogEditor>
   readonly reload: () => Promise<void>
 }

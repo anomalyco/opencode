@@ -1,11 +1,11 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { Agent } from "@opencode-ai/core/agent"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Skill } from "@opencode-ai/core/skill"
-import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
+import { Agent } from "@opencode/core/agent"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Skill } from "@opencode/core/skill"
+import { SkillInstructions } from "@opencode/core/skill/instructions"
 import { it } from "../lib/effect"
 import { readInitial, readUpdate } from "../lib/instructions"
 
@@ -41,7 +41,7 @@ const manual = Skill.Info.make({
 
 const layer = (list: () => Skill.Info[]) =>
   AppNodeBuilder.build(SkillInstructions.node, [
-    [Skill.node, Layer.mock(Skill.Service, { list: () => Effect.succeed(list()) })],
+    Skill.node.replace(Layer.mock(Skill.Service, { list: () => Effect.succeed(list()) })),
   ])
 
 describe("SkillInstructions", () => {

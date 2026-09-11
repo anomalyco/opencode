@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { onMount } from "solid-js"
 import * as mod from "./image-preview"
-import { Button } from "@opencode-ai/ui/button"
+import { Button } from "@opencode/ui/button"
 import { useDialog } from "../context/dialog"
 
 const docs = `### Overview

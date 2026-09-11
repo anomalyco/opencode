@@ -54,12 +54,21 @@ const projectTransport = createWorkerTransport<Extract<MarkdownWorkerRequest, { 
   },
 })
 
-export function parseMarkdown(text: string) {
+export function parseMarkdown(text: string, signal: AbortSignal) {
+  if (signal.aborted) return Promise.reject(new MarkdownWorkerDisposedError())
   const instance = getWorker()
   const id = ++nextID
+  const abort = () => {
+    parses.get(id)?.reject(new MarkdownWorkerDisposedError())
+    parses.delete(id)
+  }
   return new Promise<string>((resolve, reject) => {
     parses.set(id, { resolve, reject })
+    signal.addEventListener("abort", abort, { once: true })
     instance.postMessage({ type: "parse", id, text } satisfies MarkdownWorkerRequest)
+  }).finally(() => {
+    signal.removeEventListener("abort", abort)
+    parses.delete(id)
   })
 }
 

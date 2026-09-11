@@ -1,13 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:pdf",
-      "pdf",
-      "provider:openai",
-      "protocol:openai-responses",
-      "user-input"
-    ],
+    "tags": ["prefix:pdf", "pdf", "provider:openai", "protocol:openai-responses", "user-input"],
     "name": "pdf/openai-user-input",
     "recordedAt": "2026-08-25T03:29:05.645Z"
   },

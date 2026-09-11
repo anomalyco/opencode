@@ -7,10 +7,10 @@ import { MetaProvider } from "@solidjs/meta"
 import { addons } from "storybook/preview-api"
 import { GLOBALS_UPDATED } from "storybook/internal/core-events"
 import { createJSXDecorator, definePreview } from "storybook-solidjs-vite"
-import { DialogProvider } from "@opencode-ai/ui/context/dialog"
-import { MarkedProvider } from "@opencode-ai/ui/context/marked"
-import { ThemeProvider, useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
-import { Font } from "@opencode-ai/ui/font"
+import { DialogProvider } from "@opencode/ui/context/dialog"
+import { MarkedProvider } from "@opencode/ui/context/marked"
+import { ThemeProvider, useTheme, type ColorScheme } from "@opencode/ui/theme"
+import { Font } from "@opencode/ui/font"
 import { LanguageProvider, UiI18nBridge, useLanguage } from "@/runtime/i18n/language"
 
 function resolveScheme(value: unknown): ColorScheme {
@@ -69,7 +69,7 @@ const frame = createJSXDecorator((Story, context) => {
     <MetaProvider>
       <Font />
       <ThemeProvider>
-        <LanguageProvider locale="en">
+        <LanguageProvider locale={typeof context.globals?.locale === "string" ? context.globals.locale : "en"}>
           <UiI18nBridge>
             <Scheme value={scheme} />
             <Direction value={context.globals?.direction} />
@@ -108,6 +108,11 @@ export default definePreview({
       name: "Direction",
       description: "Interface direction",
       defaultValue: "ltr",
+    },
+    locale: {
+      name: "Locale",
+      description: "Interface language",
+      defaultValue: "en",
     },
   },
   parameters: {

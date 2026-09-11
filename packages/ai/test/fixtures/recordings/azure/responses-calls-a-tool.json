@@ -1,10 +1,7 @@
 {
   "version": 1,
   "metadata": {
-    "tags": [
-      "prefix:azure",
-      "provider:azure"
-    ],
+    "tags": ["prefix:azure", "provider:azure"],
     "name": "azure/responses-calls-a-tool",
     "recordedAt": "2026-08-23T17:21:55.170Z"
   },

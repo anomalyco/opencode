@@ -1,10 +1,11 @@
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { locationKey, useData } from "./data"
-import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
 import { useConfig } from "../config"
@@ -12,6 +13,7 @@ import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
 import { newSessionLocation } from "../config/new-session-location"
+import { createSessionRetention } from "./session-retention"
 import {
   closeSessionTab,
   cycleSessionTab,
@@ -63,7 +65,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const renderer = useRenderer()
     const storage = useStorage()
     const enabled = () => config.tabs.enabled
-    const previews = () => config.experimental?.["session-preview-tabs"] === true
     const [focused, setFocused] = createSignal<boolean>()
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
     // mutating in place, which per-row animations and drag state depend on.
@@ -74,9 +75,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       key: "sessionID",
     })
-    const [preview, updatePreview] = storage.memory<{ global?: string; cwd?: string }>("session-tab-preview", {
-      initial: {},
-    })
+    const [preview, updatePreview] = createStore<{ global?: string; cwd?: string }>({})
     const fallback = empty()
     const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
     let history: SessionTabHistory = { entries: [], index: -1 }
@@ -108,16 +107,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }
 
     const previewID = () => preview[config.tabs.scope]
-    const setPreview = (sessionID: string | undefined) => {
-      const scope = config.tabs.scope
-      updatePreview((draft) => {
-        if (sessionID === undefined) {
-          delete draft[scope]
-          return
-        }
-        draft[scope] = sessionID
-      })
-    }
+    const setPreview = (sessionID: string | undefined) => updatePreview(config.tabs.scope, sessionID)
 
     function update(mutation: (draft: TabsState) => void) {
       const scope = config.tabs.scope
@@ -149,6 +139,13 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       unread: {},
     })
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
+    createSessionRetention({
+      session: data.session,
+      current: () =>
+        route.data.type === "session" && route.data.sessionID !== "dummy" ? route.data.sessionID : undefined,
+      keep: () => (enabled() ? state().tabs.map((tab) => tab.sessionID) : []),
+      limit: 3,
+    })
     const newTab = createMemo((open = false) => {
       if (route.data.type === "home") return true
       if (!open) return false
@@ -167,21 +164,25 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
             ? ("error" as const)
             : ("activity" as const),
         promptPulse: promptPulses()[session] ?? 0,
-        attention: members.some(
-          (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
+        attention: members.some((id) => (data.session.permission.list(id)?.length ?? 0) > 0)
+          ? ("permission" as const)
+          : members.some((id) => (data.session.form.list(id)?.length ?? 0) > 0)
+            ? ("question" as const)
+            : (false as const),
+        // Parked synthetic context (user shells, plan reminders) stays pending without execution; only work counts as busy.
+        busy: members.some(
+          (id) =>
+            data.session.status(id) === "running" ||
+            data.session.pending.list(id).some((item) => item.type !== "synthetic"),
         ),
-        busy: members.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
+        renaming: data.session.title.pending(session),
       }
     }
 
     createEffect(() => {
-      if (enabled() && previews()) return
+      if (enabled()) return
       promotedSession = undefined
-      if (!preview.global && !preview.cwd) return
-      updatePreview((draft) => {
-        delete draft.global
-        delete draft.cwd
-      })
+      updatePreview({ global: undefined, cwd: undefined })
     })
 
     // Shared storage updates must not re-admit a tab unless this client changes route or scope.
@@ -200,10 +201,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           history = recordSessionTabHistory(history, sessionID)
           if (state().tabs.some((tab) => tab.sessionID === sessionID)) return
           const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
-          const temporary = previews() && !permanent
-          const replaced = temporary ? previewID() : undefined
-          if (replaced) scrollAnchors.delete(replaced)
-          if (temporary) setPreview(sessionID)
+          const replaced = permanent ? undefined : previewID()
+          if (replaced) family(replaced).forEach((id) => scrollAnchors.delete(id))
+          if (!permanent) setPreview(sessionID)
           update((draft) => {
             if (cancelledTabs.has(sessionID)) return
             const tab = {
@@ -346,7 +346,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
       cancelledTabs.add(target)
-      scrollAnchors.delete(target)
+      family(target).forEach((id) => scrollAnchors.delete(id))
       if (previewID() === target) setPreview(undefined)
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
@@ -374,7 +374,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         return state().tabs
       },
       isPreview(sessionID: string) {
-        return enabled() && previews() && previewID() === root(sessionID)
+        return enabled() && previewID() === root(sessionID)
       },
       newTab() {
         return newTab()
@@ -384,24 +384,33 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       scrollAnchor(sessionID: string) {
         const target = root(sessionID)
         if (!state().tabs.some((tab) => tab.sessionID === target)) return
-        return scrollAnchors.get(target)
+        return scrollAnchors.get(sessionID)
       },
       setScrollAnchor(sessionID: string, anchor: ScrollAnchor | undefined) {
         const target = root(sessionID)
         if (anchor === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
-          scrollAnchors.delete(target)
+          scrollAnchors.delete(sessionID)
           return
         }
-        const current = scrollAnchors.get(target)
+        const current = scrollAnchors.get(sessionID)
         if (current?.messageID === anchor.messageID && current.screenY === anchor.screenY) return
-        scrollAnchors.set(target, anchor)
+        scrollAnchors.set(sessionID, anchor)
       },
       select(sessionID: string) {
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })
       },
+      open(sessionID: string) {
+        if (!enabled()) return
+        const session = root(sessionID)
+        if (state().tabs.some((tab) => tab.sessionID === session)) return
+        cancelledTabs.delete(session)
+        update((draft) => {
+          draft.tabs = openSessionTab(draft.tabs, { sessionID: session, title: title(session) })
+        })
+      },
       promote(sessionID: string) {
-        if (!enabled() || !previews()) return
+        if (!enabled()) return
         const session = root(sessionID)
         if (previewID() === session) {
           setPreview(undefined)
@@ -417,7 +426,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           type: "home",
           location: newSessionLocation(
             config.session.new_location,
-            paths.cwd,
+            data.location.default().directory,
             currentLocation,
             location.error?.location,
           ),
@@ -445,7 +454,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         const tabs = result.tabs
         if (!tabs || !result.sessionID) return
         cancelledTabs.delete(result.sessionID)
-        if (previews()) promotedSession = result.sessionID
+        promotedSession = result.sessionID
         update((draft) => {
           draft.tabs = tabs
         })

@@ -52,6 +52,15 @@ export const settings: Setting[] = [
     keywords: ["side panel"],
   },
   {
+    title: "Terminal",
+    category: "Session",
+    path: ["session", "terminal"],
+    default: process.platform !== "win32",
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["pty", "shell", "terminal pane"],
+  },
+  {
     title: "Scrollbar",
     category: "Session",
     path: ["session", "scrollbar"],
@@ -77,12 +86,12 @@ export const settings: Setting[] = [
     keywords: ["syntax", "concealment", "rendering"],
   },
   {
-    title: "Grouping",
+    title: "Tool grouping",
     category: "Session",
     path: ["session", "grouping"],
     default: "auto",
     values: ["none", "auto"],
-    keywords: ["transcript", "messages"],
+    keywords: ["transcript", "messages", "reads", "searches"],
   },
   {
     title: "Transcript images",
@@ -92,6 +101,15 @@ export const settings: Setting[] = [
     values: [false, true],
     labels: ["off", "on"],
     keywords: ["attachments", "images", "tool output"],
+  },
+  {
+    title: "TPS",
+    category: "Session",
+    path: ["session", "tps"],
+    default: true,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["tokens per second", "throughput"],
   },
   {
     title: "New session location",
@@ -125,6 +143,15 @@ export const settings: Setting[] = [
     default: "horizontal",
     values: ["horizontal", "vertical"],
     keywords: ["sidebar", "orientation", "left"],
+  },
+  {
+    title: "Indicators",
+    category: "Tabs",
+    path: ["tabs", "indicators"],
+    default: "status",
+    values: ["status", "numbers"],
+    labels: ["status icons", "always show numbers"],
+    keywords: ["tab numbers", "number mode", "status icons"],
   },
   {
     title: "Layout",

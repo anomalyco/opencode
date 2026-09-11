@@ -1,32 +1,33 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { Agent } from "@opencode-ai/core/agent"
-import { Session } from "@opencode-ai/core/session"
-import { Location } from "@opencode-ai/schema/location"
-import { Model } from "@opencode-ai/schema/model"
-import { Provider } from "@opencode-ai/schema/provider"
-import { Project } from "@opencode-ai/schema/project"
-import { Worktree } from "@opencode-ai/schema/worktree"
-import { PermissionV1 } from "@opencode-ai/schema/permission-v1"
-import { Prompt } from "@opencode-ai/schema/prompt"
-import { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { Workspace } from "@opencode-ai/schema/workspace"
-import { Command } from "@opencode-ai/schema/command"
-import { Connection } from "@opencode-ai/schema/connection"
-import { Credential } from "@opencode-ai/schema/credential"
-import { FileSystem } from "@opencode-ai/schema/filesystem"
-import { Integration } from "@opencode-ai/schema/integration"
-import { LLM } from "@opencode-ai/schema/llm"
-import { Permission } from "@opencode-ai/schema/permission"
-import { Pty } from "@opencode-ai/schema/pty"
-import { Reference } from "@opencode-ai/schema/reference"
-import { Skill } from "@opencode-ai/schema/skill"
-import { AbsolutePath, DateTimeUtcFromMillis, optional, statics } from "@opencode-ai/schema/schema"
+import { Agent } from "@opencode/core/agent"
+import { Session } from "@opencode/core/session"
+import { SessionStore } from "@opencode/core/session/store"
+import { Location } from "@opencode/schema/location"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Project } from "@opencode/schema/project"
+import { Worktree } from "@opencode/schema/worktree"
+import { PermissionV1 } from "@opencode/schema/permission-v1"
+import { Prompt } from "@opencode/schema/prompt"
+import { SessionInbox } from "@opencode/schema/session-inbox"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Workspace } from "@opencode/schema/workspace"
+import { Command } from "@opencode/schema/command"
+import { Connection } from "@opencode/schema/connection"
+import { Credential } from "@opencode/schema/credential"
+import { FileSystem } from "@opencode/schema/filesystem"
+import { Integration } from "@opencode/schema/integration"
+import { LLM } from "@opencode/schema/llm"
+import { Permission } from "@opencode/schema/permission"
+import { Pty } from "@opencode/schema/pty"
+import { Reference } from "@opencode/schema/reference"
+import { Skill } from "@opencode/schema/skill"
+import { AbsolutePath, optional, statics } from "@opencode/schema/schema"
 
 test("Core reuses the canonical shared schemas", async () => {
-  const schemaAgent = await import("@opencode-ai/schema/agent")
-  const schemaSession = await import("@opencode-ai/schema/session")
+  const schemaAgent = await import("@opencode/schema/agent")
+  const schemaSession = await import("@opencode/schema/session")
   const [
     coreCommand,
     coreConnection,
@@ -49,26 +50,26 @@ test("Core reuses the canonical shared schemas", async () => {
     coreSchema,
     coreWorkspace,
   ] = await Promise.all([
-    import("@opencode-ai/core/command"),
-    import("@opencode-ai/core/integration/connection"),
-    import("@opencode-ai/core/credential"),
-    import("@opencode-ai/core/filesystem"),
-    import("@opencode-ai/core/integration"),
-    import("@opencode-ai/core/location"),
-    import("@opencode-ai/ai"),
-    import("@opencode-ai/core/model"),
-    import("@opencode-ai/core/permission"),
-    import("@opencode-ai/core/v1/permission"),
-    import("@opencode-ai/core/worktree"),
-    import("@opencode-ai/core/pty"),
-    import("@opencode-ai/core/project/schema"),
-    import("@opencode-ai/core/provider"),
-    import("@opencode-ai/core/reference"),
-    import("@opencode-ai/core/session/inbox"),
-    import("@opencode-ai/core/session/message"),
-    import("@opencode-ai/core/skill"),
-    import("@opencode-ai/core/schema"),
-    import("@opencode-ai/core/workspace"),
+    import("@opencode/core/command"),
+    import("@opencode/core/integration/connection"),
+    import("@opencode/core/credential"),
+    import("@opencode/core/filesystem"),
+    import("@opencode/core/integration"),
+    import("@opencode/core/location"),
+    import("@opencode/ai"),
+    import("@opencode/core/model"),
+    import("@opencode/core/permission"),
+    import("@opencode/core/v1/permission"),
+    import("@opencode/core/worktree"),
+    import("@opencode/core/pty"),
+    import("@opencode/core/project/schema"),
+    import("@opencode/core/provider"),
+    import("@opencode/core/reference"),
+    import("@opencode/core/session/inbox"),
+    import("@opencode/core/session/message"),
+    import("@opencode/core/skill"),
+    import("@opencode/core/schema"),
+    import("@opencode/core/workspace"),
   ])
 
   const schemas = [
@@ -113,7 +114,6 @@ test("Core reuses the canonical shared schemas", async () => {
     [coreWorktree.CreateInput, Worktree.CreateInput],
     [coreWorktree.RemoveInput, Worktree.RemoveInput],
     [coreWorktree.Info, Worktree.Info],
-    [coreWorktree.ListInput, Worktree.ListInput],
     [coreWorktree.List, Worktree.List],
     [coreWorktree.Event, Worktree.Event],
     [corePty.Info, Pty.Info],
@@ -126,6 +126,7 @@ test("Core reuses the canonical shared schemas", async () => {
     [Session.ID, schemaSession.Session.ID],
     [Session.Info, schemaSession.Session.Info],
     [Session.ListAnchor, schemaSession.Session.ListAnchor],
+    [Session.ListInput, SessionStore.ListInput],
     [coreSessionInbox.Delivery, SessionInbox.Delivery],
     [coreSessionInbox.Item, SessionInbox.Item],
     [coreSessionInbox.User, SessionInbox.User],
@@ -162,7 +163,6 @@ test("Core reuses the canonical shared schemas", async () => {
   ]
   for (const [core, shared] of schemas) expect(core).toBe(shared)
 
-  expect(Agent.Info.default(Agent.ID.make("test"))).toEqual(Agent.Info.default(Agent.ID.make("test")))
   expect(coreModel.Info.default(coreProvider.ID.make("test"), coreModel.ID.make("model"))).toEqual(
     Model.Info.default(Provider.ID.make("test"), Model.ID.make("model")),
   )

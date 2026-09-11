@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Location } from "@opencode-ai/core/location"
-import { Project } from "@opencode-ai/core/project"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Workspace } from "@opencode-ai/core/workspace"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Location } from "@opencode/core/location"
+import { Project } from "@opencode/core/project"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Workspace } from "@opencode/core/workspace"
 import { testEffect } from "./lib/effect"
 
 const workspaceID = Workspace.ID.make("wrk_test")
@@ -23,7 +23,7 @@ const projectLayer = Layer.succeed(
       }),
   }),
 )
-const it = testEffect(AppNodeBuilder.build(Location.boundNode(ref), [[Project.node, projectLayer]]))
+const it = testEffect(AppNodeBuilder.build(Location.boundNode(ref), [Project.node.replace(projectLayer)]))
 
 describe("Location", () => {
   it.effect("resolves the current project and vcs information", () =>

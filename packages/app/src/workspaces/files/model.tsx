@@ -1,10 +1,10 @@
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
 import { useParams } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { getFilename } from "@opencode-ai/util/path"
+import { base64Encode } from "@opencode/util/encode"
+import { getFilename } from "@opencode/util/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
@@ -22,6 +22,7 @@ import {
 } from "./content-cache"
 import { createFileViewCache } from "./view-cache"
 import { useServerSDK } from "@/runtime/server/client"
+import { formatServerError } from "@/runtime/server/errors"
 import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 import { createFileTreeStore } from "./tree-store"
 import { invalidateFromWatcher } from "./watcher"
@@ -43,12 +44,6 @@ export {
   resetFileContentLru,
   setFileContentBytes,
   touchFileContent,
-}
-
-function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === "string" && error) return error
-  return fallback
 }
 
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
@@ -196,7 +191,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         })
         .catch((e) => {
           if (scope() !== directory) return
-          setLoadError(file, errorMessage(e, language.t("error.chain.unknown")))
+          setLoadError(file, formatServerError(e, language.t, language.t("error.chain.unknown")))
         })
         .finally(() => {
           inflight.delete(key)
@@ -212,7 +207,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           {
             location: { directory: sdk().directory },
             query,
-            type: dirs === "true" ? "directory" : "file",
+            type: dirs === "true" ? undefined : "file",
             limit: options?.limit,
           },
           { signal: options?.signal },

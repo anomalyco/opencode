@@ -1,7 +1,7 @@
-import { PersistentPty } from "@opencode-ai/schema/persistent-pty"
-import { Pty } from "@opencode-ai/schema/pty"
-import { PtyTicket } from "@opencode-ai/schema/pty-ticket"
-import { Session } from "@opencode-ai/schema/session"
+import { PersistentPty } from "@opencode/schema/persistent-pty"
+import { Pty } from "@opencode/schema/pty"
+import { PtyTicket } from "@opencode/schema/pty-ticket"
+import { Session } from "@opencode/schema/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { ForbiddenError, InvalidRequestError, PtyNotFoundError, ServiceUnavailableError } from "../errors.js"
@@ -20,6 +20,22 @@ const terminalErrors = [PtyNotFoundError, ServiceUnavailableError] as const
 
 export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
   .add(
+    HttpApiEndpoint.get("persistentPty.read", "/api/experimental/session/:sessionID/terminal/read", {
+      params: { sessionID: Session.ID },
+      query: {
+        lines: Schema.NumberFromString.pipe(Schema.decodeTo(PersistentPty.ReadLines), Schema.optional),
+      },
+      success: Schema.Struct({ data: Schema.NullOr(PersistentPty.ReadResult) }),
+      error: [ServiceUnavailableError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        summary: "Read the session's most recently controlled terminal",
+        description:
+          "Read the last physical rows without changing selection or taking control. Omitted lines uses the live terminal height; larger counts include retained history. Blank rows are preserved. Screen dimensions and cursor remain relative to the live screen. Returns null when no current terminal exists. Selection is server-local and resets on restart. Experimental: may change without compatibility guarantees.",
+      }),
+    ),
+  )
+  .add(
     HttpApiEndpoint.get("persistentPty.list", "/api/experimental/session/:sessionID/terminal", {
       params: { sessionID: Session.ID },
       success: Schema.Struct({ data: Schema.Array(PersistentPty.Info) }),
@@ -37,6 +53,12 @@ export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
   .add(
     HttpApiEndpoint.post("persistentPty.shutdown", "/api/experimental/persistent-pty/shutdown", {
       success: HttpApiSchema.NoContent,
+      error: [ServiceUnavailableError],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("persistentPty.handoff", "/api/experimental/persistent-pty/handoff", {
+      success: Schema.Struct({ handoff: Schema.NullOr(PersistentPty.Handoff) }),
       error: [ServiceUnavailableError],
     }),
   )

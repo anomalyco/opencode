@@ -40,6 +40,9 @@ export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess
       data.location.mcp.server.invalidate(ref)
       data.location.mcp.resource.invalidate(ref)
       await Promise.all([data.location.mcp.server.sync(ref), data.location.mcp.resource.sync(ref), onSuccess?.()])
+      // A successful HTTP response can still leave the MCP connection in a failed state.
+      const status = data.location.mcp.server.list(ref)?.find((item) => item.name === name)?.status
+      if (status?.status === "failed") throw new Error(`${name}: ${status.error}`)
     },
     onError: (error) =>
       showToast({

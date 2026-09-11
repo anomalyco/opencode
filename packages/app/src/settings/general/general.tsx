@@ -1,9 +1,10 @@
 import { Component, Show, createMemo, createResource } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
-import { Button } from "@opencode-ai/ui/button"
-import { Select } from "@opencode-ai/ui/select"
-import { Switch } from "@opencode-ai/ui/switch"
-import { TextInput } from "@opencode-ai/ui/text-input"
+import { Button } from "@opencode/ui/button"
+import { Select } from "@opencode/ui/select"
+import { Switch } from "@opencode/ui/switch"
+import { TextInput } from "@opencode/ui/text-input"
+import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useUpdaterAction } from "@/shell/updates/action"
@@ -332,54 +333,20 @@ export const SettingsGeneral: Component<{
         <FollowUpBehaviorSetting />
 
         <SettingsRow
-          title={language.t("settings.general.row.reasoningSummaries.title")}
-          description={language.t("settings.general.row.reasoningSummaries.description")}
+          title={language.t("session.review.wrapLines")}
+          description={language.t("settings.general.row.mobileDiffWrap.description")}
         >
-          <div data-action="settings-feed-reasoning-summaries">
+          <div data-action="settings-mobile-diff-wrap">
             <Switch
-              checked={settings.general.showReasoningSummaries()}
-              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
-            />
+              aria-label={language.t("session.review.wrapLines")}
+              checked={settings.general.mobileDiffWrap()}
+              onChange={settings.general.setMobileDiffWrap}
+              hideLabel
+            >
+              {language.t("session.review.wrapLines")}
+            </Switch>
           </div>
         </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.shellToolPartsExpanded.title")}
-          description={language.t("settings.general.row.shellToolPartsExpanded.description")}
-        >
-          <div data-action="settings-feed-shell-tool-parts-expanded">
-            <Switch
-              checked={settings.general.shellToolPartsExpanded()}
-              onChange={(checked) => settings.general.setShellToolPartsExpanded(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.editToolPartsExpanded.title")}
-          description={language.t("settings.general.row.editToolPartsExpanded.description")}
-        >
-          <div data-action="settings-feed-edit-tool-parts-expanded">
-            <Switch
-              checked={settings.general.editToolPartsExpanded()}
-              onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <Show when={import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
-          <SettingsRow
-            title={language.t("settings.general.row.showProjectIcon.title")}
-            description={language.t("settings.general.row.showProjectIcon.description")}
-          >
-            <div data-action="settings-show-project-icon">
-              <Switch
-                checked={settings.general.showProjectIcon()}
-                onChange={(checked) => settings.general.setShowProjectIcon(checked)}
-              />
-            </div>
-          </SettingsRow>
-        </Show>
 
         <Show when={mobile() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
           <SettingsRow
@@ -549,6 +516,18 @@ export const SettingsGeneral: Component<{
       </div>
       <div class="settings-tab-body">
         <GeneralSection />
+
+        <section class="settings-section" aria-label={language.t("settings.timeline.title")}>
+          <h3 class="settings-section-title">{language.t("settings.timeline.title")}</h3>
+          <SettingsList>
+            <div class="py-5">
+              <TimelineDetailControl
+                value={settings.general.timelineDetail()}
+                onChange={settings.general.setTimelineDetail}
+              />
+            </div>
+          </SettingsList>
+        </section>
 
         <Show when={desktop()}>
           <UpdatesSection />

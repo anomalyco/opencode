@@ -46,7 +46,7 @@ export function resolveThemeDocument(document: ThemeDocument, mode?: "light" | "
   const selected = selectThemeMode(document, mode)
   const definition = selected.expanded ? selected.theme : expandTheme(selected.theme)
   const defaults = expandTheme(selectTheme(DEFAULT_THEME, selected.mode))
-  const core = expandTokens(fallback())
+  const core = expandTokens(fallback(selected.mode))
   const merged = document.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
   if (!merged["hue"]) throw new Error("Standalone themes must provide hues")
   return resolveExpandedTheme({

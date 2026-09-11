@@ -4,9 +4,9 @@ import path from "path"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
 import { Context, Effect, Layer, Schema } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { State } from "../state.js"
 import { which } from "../util/which.js"
 
@@ -37,7 +37,7 @@ type Data = {
   shell?: string
 }
 
-export type Draft = {
+export type Editor = {
   configure: (shell: string) => void
 }
 
@@ -45,7 +45,7 @@ export type ResolveInput = {
   priority: "config" | "compat"
 }
 
-export interface Interface extends State.Transformable<Draft> {
+export interface Interface extends State.Transformable<Editor> {
   readonly resolve: (input: ResolveInput) => Effect.Effect<string>
 }
 
@@ -167,6 +167,11 @@ export function args(file: string, command: string) {
   return ["-c", command]
 }
 
+// Resolve afresh so removing a shell does not leave terminals using a stale cached path.
+export function environment(bin?: string, filter?: { compatible?: boolean }) {
+  return select(process.env.SHELL, undefined, filter, bin) ?? fallback(bin)
+}
+
 let defaultConfigured: { bin?: string; value: string } | undefined
 let defaultCompatible: { bin?: string; value: string } | undefined
 
@@ -176,7 +181,7 @@ export function resolve(input: ResolveInput, configShell?: string, options?: Opt
   if (options?.gitbash) return select(process.env.SHELL, options, filter, bin)
   const cached = input.priority === "compat" ? defaultCompatible : defaultConfigured
   if (cached && cached.bin === bin) return cached.value
-  const value = select(process.env.SHELL, undefined, filter, bin) ?? fallback(bin)
+  const value = environment(bin, filter)
   if (input.priority === "compat") defaultCompatible = { bin, value }
   if (input.priority === "config") defaultConfigured = { bin, value }
   return value
@@ -196,12 +201,12 @@ const layer = (options?: Options) =>
     Service,
     Effect.gen(function* () {
       const global = yield* Global.Service
-      const state = State.create<Data, Draft>({
+      const state = State.create<Data, Editor>({
         name: "shell-select",
         initial: () => ({}),
-        draft: (draft) => ({
+        editor: (editor) => ({
           configure: (shell) => {
-            draft.shell = shell
+            editor.shell = shell
           },
         }),
       })

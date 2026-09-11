@@ -8,6 +8,7 @@
   z-index: 50;
   box-sizing: border-box;
   width: 256px;
+  max-width: calc(100dvw - 24px);
   display: flex;
   flex-direction: column;
   gap: 6px;

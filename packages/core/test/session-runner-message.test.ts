@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import { Message } from "@opencode-ai/ai"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { AgentAttachment, Base64, FileAttachment, SkillAttachment } from "@opencode-ai/schema/prompt"
-import { Skill } from "@opencode-ai/schema/skill"
-import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
-import { Agent } from "@opencode-ai/core/agent"
-import { Shell } from "@opencode-ai/schema/shell"
-import { Location } from "@opencode-ai/schema/location"
-import { AbsolutePath } from "@opencode-ai/schema/schema"
+import { Message } from "@opencode/ai"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
+import { SessionMessage } from "@opencode/core/session/message"
+import { AgentAttachment, Base64, FileAttachment, SkillAttachment } from "@opencode/schema/prompt"
+import { Skill } from "@opencode/schema/skill"
+import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
+import { Agent } from "@opencode/core/agent"
+import { Shell } from "@opencode/schema/shell"
+import { Location } from "@opencode/schema/location"
+import { AbsolutePath } from "@opencode/schema/schema"
 import { DateTime } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -20,6 +20,38 @@ const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.
 const build = Agent.defaultID
 
 describe("toLLMMessages", () => {
+  test("background user shells enter model context only through their completion notification", () => {
+    const shell = SessionMessage.Shell.make({
+      id: id("background-shell"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_background"),
+      status: "running",
+      command: "pwd",
+      metadata: { background: true },
+      time: { created },
+    })
+    const notification = SessionMessage.Synthetic.make({
+      id: id("shell-completion"),
+      type: "synthetic",
+      text: "User shell pwd completed: /project",
+      metadata: { source: "shell", shellID: shell.shellID, state: "completed" },
+      time: { created },
+    })
+
+    expect(toLLMMessages([shell], model)).toEqual([])
+    const completed = SessionMessage.Shell.make({
+      ...shell,
+      status: "exited",
+      exit: 0,
+      output: { output: "/project", cursor: 8, size: 8, truncated: false },
+      time: { created, completed: created },
+    })
+    expect(toLLMMessages([completed], model)).toEqual([])
+    expect(toLLMMessages([completed, notification], model)).toEqual([
+      Message.make({ id: notification.id, role: "user", content: notification.text }),
+    ])
+  })
+
   test("omits empty assistant turns", () => {
     const assistant = (value: string, content: SessionMessage.Assistant["content"]) =>
       SessionMessage.Assistant.make({
@@ -984,7 +1016,7 @@ Recent work
     )
 
     expect(messages[0]?.content).toEqual([
-      { type: "text", text: "Visible thought" },
+      { type: "reasoning", text: "Visible thought" },
       {
         type: "tool-call",
         id: "hosted-old-model",

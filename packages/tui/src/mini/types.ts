@@ -20,10 +20,10 @@ import type {
   PermissionRequest,
   ReferenceListOutput,
   SessionMessageAssistantTool,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import type { Config } from "../config"
 import type { CliRenderer } from "@opentui/core"
-import type { SessionInbox } from "@opencode-ai/schema/session-inbox"
+import type { SessionInbox } from "@opencode/schema/session-inbox"
 
 export type RunFilePart = {
   type: "file"
@@ -40,6 +40,7 @@ export type RunPromptPart =
       url: string
       filename?: string
       mime?: string
+      description?: string
       source?: {
         type: string
         text: { start: number; end: number; value: string }
@@ -96,7 +97,7 @@ export type FooterQueuedPrompt = {
   skills?: ReadonlyArray<{ id: string; name: string }>
 }
 
-export type QueuedPromptAction = "steer" | "cancel"
+export type QueuedPromptAction = "steer" | "queue" | "cancel"
 
 export type RunAgent = {
   id: string
@@ -119,6 +120,7 @@ export type RunInput = {
 }
 
 export type MiniHost = {
+  version: string
   terminal: {
     stdin: NodeJS.ReadStream
   }
@@ -176,7 +178,7 @@ export type FooterState = {
   status: string
   notice: string
   model: string
-  usage: string
+  usage: { tokens: number; percent?: number; cost?: number } | undefined
   first: boolean
   interrupt: number
   exit: number
@@ -393,20 +395,29 @@ export type FormCancel = {
   location?: LocationRef
 }
 
-export type RunTuiConfig = Pick<Config.Resolved, "keybinds" | "leader" | "theme" | "mini" | "session" | "cursor">
+export type RunTuiConfig = Pick<
+  Config.Resolved,
+  "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor" | "animations"
+>
 
 export type MiniSettings = {
   thinking: "show" | "hide"
+  tools: "show" | "hide"
   shell_output: "show" | "hide"
   turn_summary: "show" | "hide"
   footer: "show" | "hide"
   splash: "show" | "hide"
+  work_spinner: Config.MiniWorkSpinner
   mono: boolean
 }
 
-export type MiniSettingChange = {
-  [Key in keyof MiniSettings]: { key: Key; value: MiniSettings[Key] }
-}[keyof MiniSettings]
+export type MiniVerbosity = "quiet" | "default" | "everything"
+
+export type MiniSettingChange =
+  | {
+      [Key in keyof MiniSettings]: { key: Key; value: MiniSettings[Key] }
+    }[keyof MiniSettings]
+  | { key: "verbosity"; value: MiniVerbosity }
 
 // Lifecycle phase of a scrollback entry. "start" opens the entry, "progress"
 // appends content (coalesced in the footer queue), "final" closes it.
@@ -423,6 +434,7 @@ type StreamToolState = "running" | "completed" | "error"
 export type StreamCommit = {
   kind: EntryKind
   text: string
+  image?: string
   phase: StreamPhase
   source: StreamSource
   compaction?: true

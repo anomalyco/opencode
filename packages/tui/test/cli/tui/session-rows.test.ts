@@ -1,6 +1,15 @@
 import { expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client"
-import { cacheReuseDrop, messageBoundaryIDs, reduceSessionRows, turnDuration } from "../../../src/routes/session/rows"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
+import { createMemo, createRoot } from "solid-js"
+import { createStore } from "solid-js/store"
+import {
+  cacheReuseDrop,
+  messageBoundaryIDs,
+  reduceSessionRows,
+  sessionRowID,
+  turnDuration,
+  turnTokensPerSecond,
+} from "../../../src/routes/session/rows"
 
 test("measures turn duration from the user prompt across assistant steps", () => {
   const first = assistant("assistant-1", [])
@@ -14,6 +23,121 @@ test("measures turn duration from the user prompt across assistant steps", () =>
   ]
 
   expect(turnDuration(final, messages)).toBe(29_000)
+})
+
+test("measures turn output throughput across model steps without tool time", () => {
+  const first = assistant("assistant-1", [])
+  first.time = { created: 8_000, streamed: 10_000, completed: 20_000 }
+  first.tokens = { input: 10, output: 20, reasoning: 5, cache: { read: 0, write: 0 } }
+  const final = assistant("assistant-2", [])
+  final.time = { created: 27_000, streamed: 30_000, completed: 31_000 }
+  final.tokens = { input: 20, output: 30, reasoning: 10, cache: { read: 0, write: 0 } }
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "user-1", text: "Question", time: { created: 1_000 } },
+    first,
+    final,
+  ]
+
+  expect(turnTokensPerSecond(final, messages)).toBe(10)
+})
+
+test("omits turn throughput when a stream boundary is unavailable", () => {
+  const final = assistant("assistant-1", [])
+  final.tokens = { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+  expect(turnTokensPerSecond(final, [final])).toBeUndefined()
+})
+
+test.each([false, true])(
+  "measures historical footers without later inputs or incomplete steps (indexed: %s)",
+  (indexed) => {
+    const step = (id: string, created: number, streamed: number, completed: number, output: number) => ({
+      ...assistant(id, []),
+      time: { created, streamed, completed },
+      tokens: { input: 1, output, reasoning: 2, cache: { read: 0, write: 0 } },
+    })
+    const messages: SessionMessageInfo[] = [
+      step("before-input", 0, 1_000, 2_000, 5),
+      { type: "user", id: "input", text: "Question", time: { created: 3_000 } },
+      step("first-step", 4_000, 5_000, 6_000, 10),
+      { type: "system", id: "system", text: "Instructions", time: { created: 6_500 } },
+      step("second-step", 7_000, 8_000, 9_000, 20),
+      { type: "synthetic", id: "synthetic", text: "Update", time: { created: 10_000 } },
+      step("after-synthetic", 11_000, 13_000, 14_000, 12),
+      { type: "user", id: "later-input", text: "Next question", time: { created: 15_000 } },
+      assistant("incomplete", []),
+    ]
+
+    expect(
+      messages.flatMap((message, index) =>
+        message.type === "assistant"
+          ? [
+              [
+                turnDuration(message, messages, indexed ? index : undefined),
+                turnTokensPerSecond(message, messages, indexed ? index : undefined),
+              ],
+            ]
+          : [],
+      ),
+    ).toEqual([
+      [2_000, 5],
+      [3_000, 10],
+      [6_000, 15],
+      [4_000, 6],
+      [0, undefined],
+    ])
+  },
+)
+
+test("preserves missing-anchor footer fallbacks without including the absent assistant's tokens", () => {
+  const absent = assistant("absent", [])
+  absent.time = { created: 8_000, streamed: 9_000, completed: 10_000 }
+  absent.tokens = { input: 1, output: 900, reasoning: 0, cache: { read: 0, write: 0 } }
+  const stored = assistant("stored", [])
+  stored.time = { created: 6_000, streamed: 8_000, completed: 9_000 }
+  stored.tokens = { input: 1, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+  const input: SessionMessageInfo = { type: "user", id: "input", text: "Question", time: { created: 5_000 } }
+
+  expect(turnDuration(absent, [input, stored])).toBe(5_000)
+  expect(turnTokensPerSecond(absent, [input, stored])).toBe(10)
+  expect(turnDuration(absent, [stored])).toBe(2_000)
+  expect(turnTokensPerSecond(absent, [stored])).toBe(10)
+  expect(turnDuration(absent, [])).toBe(2_000)
+  expect(turnTokensPerSecond(absent, [])).toBeUndefined()
+})
+
+test("indexed tail footer calculations do not subscribe to an unrelated history prefix", () => {
+  createRoot((dispose) => {
+    try {
+      const final = assistant("final", [])
+      final.time = { created: 2_000, streamed: 3_000, completed: 5_000 }
+      final.tokens = { input: 1, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+      const [messages, setMessages] = createStore<SessionMessageInfo[]>([
+        { type: "user", id: "old-input", text: "Old question", time: { created: 0 } },
+        assistant("old-step", []),
+        { type: "user", id: "input", text: "Current question", time: { created: 1_000 } },
+        final,
+      ])
+      let runs = 0
+      const footer = createMemo(() => {
+        runs++
+        const current = messages[3]
+        if (current.type !== "assistant") throw new Error("Expected an assistant")
+        return [turnDuration(current, messages, 3), turnTokensPerSecond(current, messages, 3)]
+      })
+      expect(footer()).toEqual([4_000, 20])
+      setMessages(0, { type: "user", id: "replaced-prefix", text: "Older question", time: { created: 50 } })
+      expect(footer()).toEqual([4_000, 20])
+      expect(runs).toBe(1)
+
+      setMessages(2, "time", "created", 1_500)
+      expect(footer()).toEqual([3_500, 20])
+      setMessages(3, { ...final, time: { ...final.time, streamed: 4_000 }, tokens: { ...final.tokens, output: 60 } })
+      expect(footer()).toEqual([3_500, 30])
+      expect(runs).toBe(3)
+    } finally {
+      dispose()
+    }
+  })
 })
 
 test("filters OpenAI cache quantization from cache reuse drops", () => {
@@ -116,6 +240,24 @@ test("assigns assistant boundaries to the first rendered row instead of the firs
   expect(messageBoundaryIDs(rows, messages)).toEqual(["user-1", "assistant-1", undefined, undefined])
 })
 
+test("assigns stable IDs to tool rows for direct navigation", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("assistant-1", [
+      { type: "text", text: "Starting a shell" },
+      { type: "tool", id: "shell-1", name: "shell", state: pending(), time: { created: 2 } },
+    ]),
+    assistant("assistant-2", [{ type: "tool", id: "shell-2", name: "shell", state: pending(), time: { created: 3 } }]),
+  ]
+  const rows = reduceSessionRows(messages)
+  const boundaries = messageBoundaryIDs(rows, messages)
+
+  expect(rows.map((row, index) => sessionRowID(row, boundaries[index]))).toEqual([
+    "assistant-1",
+    "session-part:assistant-1:shell-1",
+    "assistant-2",
+  ])
+})
+
 test("groups exploration parts across assistant messages until a delimiter", () => {
   const messages: SessionMessageInfo[] = [
     { type: "user", id: "user-1", text: "Explore", time: { created: 0 } },
@@ -138,10 +280,11 @@ test("groups exploration parts across assistant messages until a delimiter", () 
       kind: "exploration",
       pending: [],
       completed: true,
-      refs: [
-        { messageID: "assistant-1", partID: "read-1" },
-        { messageID: "assistant-1", partID: "glob-1" },
-        { messageID: "assistant-2", partID: "grep-1" },
+      size: 3,
+      children: [
+        partChild("assistant-1", "read-1"),
+        partChild("assistant-1", "glob-1"),
+        partChild("assistant-2", "grep-1"),
       ],
     },
     { type: "part", ref: { messageID: "assistant-2", partID: "text:0" } },
@@ -163,7 +306,8 @@ test("keeps non-exploration tools as individual part rows", () => {
       kind: "exploration",
       pending: [],
       completed: true,
-      refs: [{ messageID: "assistant-1", partID: "read-1" }],
+      size: 1,
+      children: [partChild("assistant-1", "read-1")],
     },
     { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:0" } },
     {
@@ -171,7 +315,8 @@ test("keeps non-exploration tools as individual part rows", () => {
       kind: "exploration",
       pending: [],
       completed: false,
-      refs: [{ messageID: "assistant-1", partID: "grep-1" }],
+      size: 1,
+      children: [partChild("assistant-1", "grep-1")],
     },
   ])
 })
@@ -192,14 +337,16 @@ test("assigns stable kind ordinals within an assistant message", () => {
       type: "group",
       kind: "reasoning",
       completed: true,
-      refs: [{ messageID: "assistant-1", partID: "reasoning:0" }],
+      size: 1,
+      children: [partChild("assistant-1", "reasoning:0")],
     },
     { type: "part", ref: { messageID: "assistant-1", partID: "text:1" } },
     {
       type: "group",
       kind: "reasoning",
       completed: false,
-      refs: [{ messageID: "assistant-1", partID: "reasoning:1" }],
+      size: 1,
+      children: [partChild("assistant-1", "reasoning:1")],
     },
   ])
 })
@@ -219,17 +366,16 @@ test("groups adjacent reasoning parts until a visible boundary", () => {
       type: "group",
       kind: "reasoning",
       completed: true,
-      refs: [
-        { messageID: "assistant-1", partID: "reasoning:0" },
-        { messageID: "assistant-1", partID: "reasoning:1" },
-      ],
+      size: 2,
+      children: [partChild("assistant-1", "reasoning:0"), partChild("assistant-1", "reasoning:1")],
     },
     { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
     {
       type: "group",
       kind: "reasoning",
       completed: false,
-      refs: [{ messageID: "assistant-1", partID: "reasoning:2" }],
+      size: 1,
+      children: [partChild("assistant-1", "reasoning:2")],
     },
   ])
 })
@@ -251,17 +397,16 @@ test("groups across empty assistant reasoning parts", () => {
       type: "group",
       kind: "reasoning",
       completed: true,
-      refs: [{ messageID: "assistant-1", partID: "reasoning:0" }],
+      size: 1,
+      children: [partChild("assistant-1", "reasoning:0")],
     },
     {
       type: "group",
       kind: "exploration",
       pending: [],
       completed: false,
-      refs: [
-        { messageID: "assistant-1", partID: "read-1" },
-        { messageID: "assistant-2", partID: "grep-1" },
-      ],
+      size: 2,
+      children: [partChild("assistant-1", "read-1"), partChild("assistant-2", "grep-1")],
     },
   ])
 })
@@ -283,7 +428,8 @@ test("completes exploration groups when another row follows", () => {
       kind: "exploration",
       pending: [],
       completed: true,
-      refs: [{ messageID: "assistant-1", partID: "read-1" }],
+      size: 1,
+      children: [partChild("assistant-1", "read-1")],
     },
     { type: "message", messageID: "user-1" },
     {
@@ -291,7 +437,8 @@ test("completes exploration groups when another row follows", () => {
       kind: "exploration",
       pending: [],
       completed: true,
-      refs: [{ messageID: "assistant-2", partID: "grep-1" }],
+      size: 1,
+      children: [partChild("assistant-2", "grep-1")],
     },
     { type: "assistant-footer", messageID: "assistant-2" },
   ])
@@ -299,28 +446,38 @@ test("completes exploration groups when another row follows", () => {
 
 test("hides synthetic messages without descriptions", () => {
   const messages: SessionMessageInfo[] = [
+    {
+      id: "shell-message",
+      type: "shell",
+      shellID: "sh_user",
+      command: "pwd",
+      status: "exited",
+      time: { created: 0 },
+    },
     assistant("assistant-1", [{ type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } }]),
     {
       type: "synthetic",
       id: "synthetic-1",
       text: "internal context",
+      metadata: { source: "shell", shellID: "sh_user", state: "completed" },
       time: { created: 2 },
     },
     assistant("assistant-2", [{ type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 3 } }]),
   ]
 
-  expect(reduceSessionRows(messages)).toEqual([
+  const rows = reduceSessionRows(messages)
+  expect(rows).toEqual([
+    { type: "message", messageID: "shell-message" },
     {
       type: "group",
       kind: "exploration",
       pending: [],
       completed: false,
-      refs: [
-        { messageID: "assistant-1", partID: "read-1" },
-        { messageID: "assistant-2", partID: "grep-1" },
-      ],
+      size: 2,
+      children: [partChild("assistant-1", "read-1"), partChild("assistant-2", "grep-1")],
     },
   ])
+  expect(reduceSessionRows(messages, new Set(["synthetic-1"]))).toEqual(rows)
 })
 
 test("renders synthetic messages with descriptions", () => {
@@ -342,7 +499,8 @@ test("renders synthetic messages with descriptions", () => {
       kind: "exploration",
       pending: [],
       completed: true,
-      refs: [{ messageID: "assistant-1", partID: "read-1" }],
+      size: 1,
+      children: [partChild("assistant-1", "read-1")],
     },
     { type: "message", messageID: "synthetic-1" },
     {
@@ -350,10 +508,15 @@ test("renders synthetic messages with descriptions", () => {
       kind: "exploration",
       pending: [],
       completed: false,
-      refs: [{ messageID: "assistant-2", partID: "grep-1" }],
+      size: 1,
+      children: [partChild("assistant-2", "grep-1")],
     },
   ])
 })
+
+function partChild(messageID: string, partID: string) {
+  return { type: "entry" as const, entry: { type: "part" as const, ref: { messageID, partID } }, size: 1 as const }
+}
 
 test("renders a footer for a pre-output retry assistant after replay", () => {
   const message = assistant("assistant-retry", [])

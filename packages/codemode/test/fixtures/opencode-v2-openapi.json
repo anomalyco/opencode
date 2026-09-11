@@ -20378,44 +20378,6 @@
         "required": ["id", "created", "type", "data"],
         "additionalProperties": false
       },
-      "plugin.added": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "allOf": [
-              {
-                "pattern": "^evt_"
-              }
-            ]
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["plugin.added"]
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              }
-            },
-            "required": ["id"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "created", "type", "data"],
-        "additionalProperties": false
-      },
       "plugin.updated": {
         "type": "object",
         "properties": {
@@ -23122,9 +23084,6 @@
           },
           {
             "$ref": "#/components/schemas/permission.v2.replied"
-          },
-          {
-            "$ref": "#/components/schemas/plugin.added"
           },
           {
             "$ref": "#/components/schemas/plugin.updated"

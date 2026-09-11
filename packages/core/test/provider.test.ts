@@ -1,17 +1,25 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Provider } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode/core/provider"
 
 describe("Provider", () => {
   test("loads bundled native provider entrypoints", async () => {
     const packages = [
-      "@opencode-ai/ai/providers/cerebras",
-      "@opencode-ai/ai/providers/google-vertex",
-      "@opencode-ai/ai/providers/google-vertex/gemini",
-      "@opencode-ai/ai/providers/google-vertex/chat",
-      "@opencode-ai/ai/providers/google-vertex/responses",
-      "@opencode-ai/ai/providers/google-vertex/messages",
-      "@opencode-ai/ai/providers/togetherai",
+      "@opencode/ai/providers/baseten",
+      "@opencode/ai/providers/cerebras",
+      "@opencode/ai/providers/cloudflare-ai-gateway",
+      "@opencode/ai/providers/cloudflare-workers-ai",
+      "@opencode/ai/providers/deepinfra",
+      "@opencode/ai/providers/deepseek",
+      "@opencode/ai/providers/fireworks",
+      "@opencode/ai/providers/google-vertex",
+      "@opencode/ai/providers/google-vertex/gemini",
+      "@opencode/ai/providers/google-vertex/chat",
+      "@opencode/ai/providers/google-vertex/responses",
+      "@opencode/ai/providers/google-vertex/messages",
+      "@opencode/ai/providers/groq",
+      "@opencode/ai/providers/mistral",
+      "@opencode/ai/providers/togetherai",
     ]
 
     for (const specifier of packages) {

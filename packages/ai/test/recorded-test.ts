@@ -1,4 +1,4 @@
-import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorder } from "@opencode/http-recorder"
 import { NodeSocket } from "@effect/platform-node"
 import { Layer } from "effect"
 import { Socket } from "effect/unstable/socket"

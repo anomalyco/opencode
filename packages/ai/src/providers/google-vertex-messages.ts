@@ -5,7 +5,7 @@ import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
@@ -57,7 +57,9 @@ const route = Route.make({
   }),
   endpoint: Endpoint.path(({ request }) => `/${request.model.id}:streamRawPredict`),
   auth: Auth.none,
-  framing: AnthropicMessages.framing,
+  transport: AnthropicMessages.transport<
+    Omit<AnthropicMessages.AnthropicMessagesBody, "model"> & { readonly anthropic_version: typeof VERSION }
+  >(),
   headers: () => ({ "anthropic-version": HEADER_VERSION }),
 })
 
@@ -65,7 +67,7 @@ export const routes = [route]
 
 const configuredRoute = (input: Config) => {
   if ("apiKey" in input && input.apiKey !== undefined)
-    throw new Error("Google Vertex Messages does not support API keys")
+    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Messages does not support API keys" })
   const {
     accessToken: _accessToken,
     auth: _auth,
@@ -105,7 +107,8 @@ export const model: ProviderPackage.Definition<Settings, AnthropicMessages.Provi
   modelID,
   settings,
 ) => {
-  if (settings.apiKey !== undefined) throw new Error("Google Vertex Messages does not support API keys")
+  if (settings.apiKey !== undefined)
+    throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Messages does not support API keys" })
   return configure({
     accessToken: settings.accessToken,
     baseURL: settings.baseURL,

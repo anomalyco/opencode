@@ -13,7 +13,7 @@ import {
   STORY_TIME,
   subagentDocument,
   terminalPassedDocument,
-} from "@opencode-ai/session-ui/storybook"
+} from "@opencode/session-ui/storybook"
 import { SessionPreview } from "./story-model"
 
 const description = "opencode · modular-session-ui"
@@ -134,6 +134,26 @@ export const QuestionRequest = {
       description={description}
       document={questionPendingDocument}
       request={{ type: "question", value: activeQuestionRequest }}
+    />
+  ),
+}
+
+export const WebSearchRequest = {
+  render: () => (
+    <SessionPreview
+      title="Search for current documentation"
+      description={description}
+      document={questionPendingDocument}
+      request={{
+        type: "websearch",
+        value: {
+          id: "frm_websearch_preview",
+          sessionID: "ses_websearch_preview",
+          title: "Web Search",
+          metadata: { kind: "websearch.provider" },
+          fields: [{ key: "choice", type: "string", required: true, custom: false }],
+        },
+      }}
     />
   ),
 }
