@@ -220,3 +220,7 @@ If a skill does not show up:
 2. Check that frontmatter includes `name` and `description`
 3. Ensure skill names are unique across all locations
 4. Check permissions—skills with `deny` are hidden from agents
+
+Skills are discovered at startup. Restart opencode after adding or editing a skill, or set `OPENCODE_EXPERIMENTAL_HOT_RELOAD=true` to reload skills, agents, commands and config automatically when their files change.
+
+Hot reload watches config directories that already exist when opencode starts, so creating a project's first `.opencode` directory still needs a restart. A reload rebuilds the instance, which interrupts a turn that is in flight.

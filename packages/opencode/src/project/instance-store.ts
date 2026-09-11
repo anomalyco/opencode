@@ -2,6 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { makeGlobalNode, Node } from "@opencode-ai/core/effect/app-node"
 import { GlobalBus } from "@/bus/global"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
+import { HotReload } from "@/config/hot-reload"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
@@ -34,11 +35,14 @@ interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
 }
 
-const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service> = Layer.effect(
+type LayerDeps = Project.Service | InstanceBootstrap.Service | HotReload.Service
+
+const layer: Layer.Layer<Service, never, LayerDeps> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const project = yield* Project.Service
     const bootstrap = yield* InstanceBootstrap.Service
+    const hotReload = yield* HotReload.Service
     const scope = yield* Scope.Scope
     const cache = new Map<string, Entry>()
 
@@ -59,6 +63,19 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
                 })),
               )
         yield* bootstrap.run.pipe(Effect.provideService(InstanceRef, ctx))
+        // Withhold worktree so reload re-derives it, but carry the project through:
+        // reload stamps the server.instance.disposed event with input.project?.id, and
+        // dropping it makes hot-reload disposals look different from every other one.
+        // Skip when the instance was disposed while the reload waited.
+        const hotReloadRun = Effect.suspend(() =>
+          cache.has(ctx.directory)
+            ? reload({ directory: ctx.directory, project: ctx.project }).pipe(Effect.asVoid)
+            : Effect.void,
+        )
+        yield* hotReload.init(hotReloadRun).pipe(
+          Effect.provideService(InstanceRef, ctx),
+          Effect.catchCause((cause) => Effect.logWarning("hot reload init failed", { cause })),
+        )
         return ctx
       }).pipe(Effect.withSpan("InstanceStore.boot"))
 
@@ -207,7 +224,7 @@ export const bootstrapNode = LayerNode.unbound(InstanceBootstrap.Service, Node.t
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Project.node, bootstrapNode],
+  deps: [Project.node, bootstrapNode, HotReload.node],
 })
 
 export * as InstanceStore from "./instance-store"
