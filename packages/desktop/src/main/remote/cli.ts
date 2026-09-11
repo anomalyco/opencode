@@ -68,7 +68,7 @@ printf 'OPENCODE_REMOTE_TARGET=%s\\n' "$target"
 export function archiveUrl(target: string, version: string) {
   if (!/^(linux|darwin)-(x64-baseline|arm64)(-musl)?$/.test(target))
     throw new Failure({ code: "platform", detail: target })
-  return `https://registry.npmjs.org/@opencode-ai/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
+  return `https://registry.npmjs.org/@opencode/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
 }
 
 type Source = { type: "download"; url: string } | { type: "archive" } | { type: "installer"; binary?: string }
@@ -114,12 +114,12 @@ const Beta = Schema.Struct({ version: Schema.String.check(Schema.isPattern(/^0\.
 
 export const latestBeta = Effect.fn("RemoteCli.latestBeta")(function* () {
   const http = yield* HttpClient.HttpClient
-  const metadata = yield* http.get("https://registry.npmjs.org/@opencode-ai%2fcli/beta").pipe(
+  const metadata = yield* http.get("https://registry.npmjs.org/@opencode%2fcli/beta").pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.flatMap(HttpClientResponse.schemaBodyJson(Beta)),
     Effect.timeout("30 seconds"),
     Effect.mapError(
-      () => new Failure({ code: "install", detail: "https://registry.npmjs.org/@opencode-ai%2fcli/beta" }),
+      () => new Failure({ code: "install", detail: "https://registry.npmjs.org/@opencode%2fcli/beta" }),
     ),
   )
   return metadata.version
