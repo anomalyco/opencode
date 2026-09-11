@@ -194,6 +194,19 @@ describe("tool.shell", () => {
     ),
   )
 
+  it.live("reports the working directory in output", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const result = yield* run({ command: "true" })
+          expect(result.output).toContain(`Working directory: ${tmp}`)
+        }),
+      )
+    }),
+  )
+
   it.live("falls back from terminal-only configured shell", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ config: { shell: "fish" } })
