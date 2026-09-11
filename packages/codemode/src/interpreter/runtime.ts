@@ -66,7 +66,7 @@ import {
   unsupportedSyntax,
 } from "./model.js"
 import { caughtErrorValue } from "./errors.js"
-import { globals } from "./globals.js"
+import { globals, type Host } from "./globals.js"
 import { HostFunction, HostNamespace } from "./host.js"
 import { invokeIntrinsic } from "./methods.js"
 import { preserveConsumerError, type Runner } from "./runner.js"
@@ -285,6 +285,7 @@ export class Runtime<R> {
     readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>,
     readonly promises: PromiseRuntime<R>,
     readonly logs: Array<string> = [],
+    extraGlobals: (host: Host<R>) => ReadonlyArray<readonly [string, unknown]> = () => [],
   ) {
     const globalScope = new Map<string, Binding>()
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
@@ -295,7 +296,7 @@ export class Runtime<R> {
       settlePromise: (promise) => this.root.settlePromise(promise),
       syncIterator: (value, node) => this.root.syncIterator(value, node),
     }
-    this.builtins = new Map(globals(this))
+    this.builtins = new Map([...globals(this), ...extraGlobals(this)])
     for (const [name, value] of this.builtins) globalScope.set(name, { mutable: false, value })
   }
 
