@@ -85,6 +85,7 @@ export const EditTool = Tool.define(
           let diff = ""
           let contentOld = ""
           let contentNew = ""
+          let matchStrategy = "exact"
           yield* lock(filePath).withPermits(1)(
             Effect.gen(function* () {
               if (params.oldString === "") {
@@ -130,7 +131,9 @@ export const EditTool = Tool.define(
               const old = convertToLineEnding(normalizeLineEndings(params.oldString), ending)
               const replacement = convertToLineEnding(normalizeLineEndings(params.newString), ending)
 
-              const next = Bom.split(replace(contentOld, old, replacement, params.replaceAll))
+              const replaced = replace(contentOld, old, replacement, params.replaceAll)
+              matchStrategy = replaced.strategy
+              const next = Bom.split(replaced.content)
               const desiredBom = source.bom || next.bom
               contentNew = next.text
 
@@ -190,10 +193,13 @@ export const EditTool = Tool.define(
               diff,
               filediff,
               diagnostics: {},
+              matchStrategy,
             },
           })
 
           let output = "Edit applied successfully."
+          if (matchStrategy !== "exact")
+            output += `\n\nNote: oldString did not match the file exactly; the edit was applied via fuzzy matching (${matchStrategy}). Review the diff below to verify the result is what you intended:\n${diff}`
           yield* lsp.touchFile(filePath, "document")
           const diagnostics = yield* lsp.diagnostics()
           const normalizedFilePath = FSUtil.normalizePath(filePath)
@@ -205,6 +211,7 @@ export const EditTool = Tool.define(
               diagnostics,
               diff,
               filediff,
+              matchStrategy,
             },
             title: `${path.relative(instance.worktree, filePath)}`,
             output,
@@ -679,7 +686,12 @@ export function trimDiff(diff: string): string {
   return trimmedLines.join("\n")
 }
 
-export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
+export function replace(
+  content: string,
+  oldString: string,
+  newString: string,
+  replaceAll = false,
+): { content: string; strategy: string } {
   if (oldString === newString) {
     throw new Error("No changes to apply: oldString and newString are identical.")
   }
@@ -691,17 +703,17 @@ export function replace(content: string, oldString: string, newString: string, r
 
   let notFound = true
 
-  for (const replacer of [
-    SimpleReplacer,
-    LineTrimmedReplacer,
-    BlockAnchorReplacer,
-    WhitespaceNormalizedReplacer,
-    IndentationFlexibleReplacer,
-    EscapeNormalizedReplacer,
-    TrimmedBoundaryReplacer,
-    ContextAwareReplacer,
-    MultiOccurrenceReplacer,
-  ]) {
+  for (const [strategy, replacer] of [
+    ["exact", SimpleReplacer],
+    ["line-trimmed", LineTrimmedReplacer],
+    ["block-anchor", BlockAnchorReplacer],
+    ["whitespace-normalized", WhitespaceNormalizedReplacer],
+    ["indentation-flexible", IndentationFlexibleReplacer],
+    ["escape-normalized", EscapeNormalizedReplacer],
+    ["trimmed-boundary", TrimmedBoundaryReplacer],
+    ["context-aware", ContextAwareReplacer],
+    ["multi-occurrence", MultiOccurrenceReplacer],
+  ] as const) {
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)
       if (index === -1) continue
@@ -712,11 +724,11 @@ export function replace(content: string, oldString: string, newString: string, r
         )
       }
       if (replaceAll) {
-        return content.replaceAll(search, newString)
+        return { content: content.replaceAll(search, newString), strategy }
       }
       const lastIndex = content.lastIndexOf(search)
       if (index !== lastIndex) continue
-      return content.substring(0, index) + newString + content.substring(index + search.length)
+      return { content: content.substring(0, index) + newString + content.substring(index + search.length), strategy }
     }
   }
 
