@@ -19,6 +19,7 @@ import {
   fromOaCompatibleChunk,
   fromOaCompatibleRequest,
   fromOaCompatibleResponse,
+  normalizeOaCompatibleChunk,
   toOaCompatibleChunk,
   toOaCompatibleRequest,
   toOaCompatibleResponse,
@@ -196,7 +197,7 @@ export function createBodyConverter(from: ZenData.Format, to: ZenData.Format) {
 
 export function createStreamPartConverter(from: ZenData.Format, to: ZenData.Format) {
   return (part: any): any => {
-    if (from === to) return part
+    if (from === to) return from === "oa-compat" ? normalizeOaCompatibleChunk(part) : part
 
     let raw: CommonChunk | string
     if (from === "anthropic") raw = fromAnthropicChunk(part)
