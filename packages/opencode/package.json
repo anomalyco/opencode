@@ -133,6 +133,7 @@
     "npm-package-arg": "13.0.2",
     "open": "10.1.2",
     "opencode-gitlab-auth": "2.1.0",
+    "opencode-kiro": "0.4.0",
     "opencode-poe-auth": "0.0.1",
     "opentui-spinner": "catalog:",
     "partial-json": "0.1.7",
