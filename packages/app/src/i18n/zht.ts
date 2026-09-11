@@ -879,6 +879,7 @@ export const dict = {
   "sidebar.thread.unpin": "取消釘選",
   "sidebar.status.working": "工作中",
   "sidebar.status.done": "已完成",
+  "sidebar.status.attention": "需要輸入",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "桌面",

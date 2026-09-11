@@ -868,6 +868,7 @@ export const dict = {
   "sidebar.thread.unpin": "ኪውን አውልቅ",
   "sidebar.status.working": "በስራ ላይ",
   "sidebar.status.done": "ተጠናቀቀ",
+  "sidebar.status.attention": "ግቤት ያስልጋል",
   "debugBar.ariaLabel": "የልማት አፈጻጸም ምርመራዎች",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

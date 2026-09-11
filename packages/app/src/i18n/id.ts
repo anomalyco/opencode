@@ -961,6 +961,7 @@ export const dict = {
   "sidebar.thread.unpin": "Lepaskan sematan",
   "sidebar.status.working": "Sedang bekerja",
   "sidebar.status.done": "Selesai",
+  "sidebar.status.attention": "Perlu masukan",
 
   "debugBar.ariaLabel": "Diagnostik kinerja pengembangan",
   "debugBar.na": "n/a",

@@ -974,6 +974,7 @@ export const dict = {
   "sidebar.thread.unpin": "Відкріпити тред",
   "sidebar.status.working": "У роботі",
   "sidebar.status.done": "Готово",
+  "sidebar.status.attention": "Потрібне введення",
 
   "debugBar.ariaLabel": "Діагностика продуктивності розробки",
   "debugBar.na": "н/д",

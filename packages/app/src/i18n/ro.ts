@@ -889,6 +889,7 @@ export const dict = {
   "sidebar.thread.unpin": "Anulează fixarea",
   "sidebar.status.working": "Lucrează",
   "sidebar.status.done": "Gata",
+  "sidebar.status.attention": "Necesită introducere",
   "debugBar.ariaLabel": "Diagnosticare performanță dezvoltare",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

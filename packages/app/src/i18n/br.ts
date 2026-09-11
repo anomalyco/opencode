@@ -838,6 +838,7 @@ export const dict = {
   "sidebar.thread.unpin": "Dibilhennañ an neudenn",
   "sidebar.status.working": "O labourat",
   "sidebar.status.done": "Echu",
+  "sidebar.status.attention": "Ezhomm moned",
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Servidor",

@@ -784,6 +784,7 @@ export const dict = {
   "sidebar.thread.unpin": "Irrota ketju",
   "sidebar.status.working": "Käynnissä",
   "sidebar.status.done": "Valmis",
+  "sidebar.status.attention": "Tarvitsee syötteen",
   "debugBar.ariaLabel": "Kehityksen suorituskyvyn diagnostiikka",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

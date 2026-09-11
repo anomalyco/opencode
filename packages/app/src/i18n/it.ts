@@ -804,6 +804,7 @@ export const dict = {
   "sidebar.thread.unpin": "Rimuovi fissaggio",
   "sidebar.status.working": "In lavorazione",
   "sidebar.status.done": "Fatto",
+  "sidebar.status.attention": "Richiede input",
   "debugBar.ariaLabel": "Diagnostica delle prestazioni di sviluppo",
   "debugBar.na": "n/d",
   "debugBar.nav.label": "NAV",

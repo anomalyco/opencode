@@ -883,6 +883,7 @@ export const dict = {
   "sidebar.thread.unpin": "برداشتن سنجاق",
   "sidebar.status.working": "در حال کار",
   "sidebar.status.done": "انجام شد",
+  "sidebar.status.attention": "ورودی لازم است",
   "debugBar.ariaLabel": "تشخیص عملکرد توسعه",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

@@ -839,6 +839,7 @@ export const dict = {
   "sidebar.thread.unpin": "Odepnij wątek",
   "sidebar.status.working": "W trakcie",
   "sidebar.status.done": "Gotowe",
+  "sidebar.status.attention": "Wymaga danych",
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Aplikacja komputerowa",
   "settings.section.server": "Serwer",

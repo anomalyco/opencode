@@ -895,6 +895,7 @@ export const dict = {
   "sidebar.thread.unpin": "پن ہٹائیں",
   "sidebar.status.working": "کام جاری",
   "sidebar.status.done": "مکمل",
+  "sidebar.status.attention": "ان پٹ درکار",
   "debugBar.ariaLabel": "ترقیاتی کارکردگی کی تشخیص",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

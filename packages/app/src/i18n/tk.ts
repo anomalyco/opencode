@@ -885,6 +885,7 @@ export const dict = {
   "sidebar.thread.unpin": "Berkitmeni aýyr",
   "sidebar.status.working": "Işleýär",
   "sidebar.status.done": "Taýýar",
+  "sidebar.status.attention": "Giriş gerek",
   "debugBar.ariaLabel": "Ösüş öndürijiligini anyklaýyş",
   "debugBar.na": "n / a",
   "debugBar.nav.label": "NAV",

@@ -899,6 +899,7 @@ export const dict = {
   "sidebar.thread.unpin": "Otkvači nit",
   "sidebar.status.working": "U toku",
   "sidebar.status.done": "Gotovo",
+  "sidebar.status.attention": "Potreban unos",
 
   "app.name.desktop": "OpenCode Desktop",
 

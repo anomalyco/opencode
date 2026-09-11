@@ -729,6 +729,7 @@ export const dict = {
   "sidebar.thread.unpin": "Thread loslösen",
   "sidebar.status.working": "In Arbeit",
   "sidebar.status.done": "Fertig",
+  "sidebar.status.attention": "Eingabe erforderlich",
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",

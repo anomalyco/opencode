@@ -890,6 +890,7 @@ export const dict = {
   "sidebar.thread.unpin": "Atspraust pavedienu",
   "sidebar.status.working": "Strādā",
   "sidebar.status.done": "Gatavs",
+  "sidebar.status.attention": "Nepieciešama ievade",
   "debugBar.ariaLabel": "Izstrādes veiktspējas diagnostika",
   "debugBar.na": "nav",
   "debugBar.nav.label": "NAV",

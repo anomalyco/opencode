@@ -894,6 +894,7 @@ export const dict = {
   "sidebar.thread.unpin": "Bərkitməni ləğv et",
   "sidebar.status.working": "İşləyir",
   "sidebar.status.done": "Hazır",
+  "sidebar.status.attention": "Giriş lazımdır",
   "debugBar.ariaLabel": "Tərtibatçı performans diaqnostikası",
   "debugBar.na": "yox",
   "debugBar.nav.label": "NAV",

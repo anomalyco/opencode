@@ -896,6 +896,7 @@ export const dict = {
   "sidebar.thread.unpin": "Bỏ ghim chuỗi",
   "sidebar.status.working": "Đang làm",
   "sidebar.status.done": "Xong",
+  "sidebar.status.attention": "Cần nhập",
   "debugBar.ariaLabel": "Chẩn đoán hiệu suất phát triển",
   "debugBar.na": "không có",
   "debugBar.nav.label": "NAV",

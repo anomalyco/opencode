@@ -885,6 +885,7 @@ export const dict: Record<string, string> = {
   "sidebar.thread.unpin": "पिन हटाउनुहोस्",
   "sidebar.status.working": "काम हुँदै",
   "sidebar.status.done": "सम्पन्न",
+  "sidebar.status.attention": "इनपुट आवश्यक",
   "debugBar.ariaLabel": "विकास प्रदर्शन निदान",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

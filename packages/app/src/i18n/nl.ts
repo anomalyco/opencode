@@ -894,6 +894,7 @@ export const dict = {
   "sidebar.thread.unpin": "Thread losmaken",
   "sidebar.status.working": "Bezig",
   "sidebar.status.done": "Klaar",
+  "sidebar.status.attention": "Invoer nodig",
   "debugBar.ariaLabel": "Diagnostiek voor ontwikkelprestaties",
   "debugBar.na": "n.v.t.",
   "debugBar.nav.label": "NAV",

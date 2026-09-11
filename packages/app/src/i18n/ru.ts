@@ -902,6 +902,7 @@ export const dict = {
   "sidebar.thread.unpin": "Открепить тред",
   "sidebar.status.working": "В работе",
   "sidebar.status.done": "Готово",
+  "sidebar.status.attention": "Нужен ввод",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Приложение",

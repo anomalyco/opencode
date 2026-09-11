@@ -881,6 +881,7 @@ export const dict = {
   "sidebar.thread.unpin": "ដកខ្ទាស់សន្ទនា",
   "sidebar.status.working": "កំពុងធ្វើការ",
   "sidebar.status.done": "រួចរាល់",
+  "sidebar.status.attention": "ត្រូវការការបញ្ចូល",
   "debugBar.ariaLabel": "ការវិនិច្ឆ័យដំណើរការអភិវឌ្ឍន៍",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

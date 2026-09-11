@@ -823,6 +823,7 @@ export const dict = {
   "sidebar.thread.unpin": "ピン留めを解除",
   "sidebar.status.working": "作業中",
   "sidebar.status.done": "完了",
+  "sidebar.status.attention": "入力が必要",
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "デスクトップ",
   "settings.section.server": "サーバー",

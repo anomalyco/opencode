@@ -894,6 +894,7 @@ export const dict = {
   "sidebar.thread.unpin": "Desfixa el fil",
   "sidebar.status.working": "Treballant",
   "sidebar.status.done": "Fet",
+  "sidebar.status.attention": "Cal entrada",
   "debugBar.ariaLabel": "Diagnòstic de rendiment del desenvolupament",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

@@ -885,6 +885,7 @@ export const dict = {
   "sidebar.thread.unpin": "Losa tráð",
   "sidebar.status.working": "Arbeiðir",
   "sidebar.status.done": "Liðugt",
+  "sidebar.status.attention": "Krevur inndata",
   "debugBar.ariaLabel": "Menningar avriksdiagnostikk",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

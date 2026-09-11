@@ -890,6 +890,7 @@ export const dict = {
   "sidebar.thread.unpin": "Odepnout vlákno",
   "sidebar.status.working": "Pracuje",
   "sidebar.status.done": "Hotovo",
+  "sidebar.status.attention": "Vyžaduje vstup",
   "debugBar.ariaLabel": "Diagnostika vývoje výkonnosti",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

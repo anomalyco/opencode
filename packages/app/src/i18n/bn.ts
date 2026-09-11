@@ -884,6 +884,7 @@ export const dict: Record<string, string> = {
   "sidebar.thread.unpin": "পিন সরান",
   "sidebar.status.working": "কাজ চলছে",
   "sidebar.status.done": "সম্পন্ন",
+  "sidebar.status.attention": "ইনপুট প্রয়োজন",
   "debugBar.ariaLabel": "উন্নয়ন কর্মক্ষমতা ডায়গনিস্টিক",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "এনএভি",

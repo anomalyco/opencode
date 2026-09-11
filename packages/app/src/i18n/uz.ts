@@ -892,6 +892,7 @@ export const dict = {
   "sidebar.thread.unpin": "Mahkamlashni bekor qilish",
   "sidebar.status.working": "Ishlamoqda",
   "sidebar.status.done": "Tayyor",
+  "sidebar.status.attention": "Kiritish kerak",
   "debugBar.ariaLabel": "Rivojlanish samaradorligi diagnostikasi",
   "debugBar.na": "yo'q",
   "debugBar.nav.label": "NAV",

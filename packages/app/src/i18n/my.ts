@@ -894,6 +894,7 @@ export const dict = {
   "sidebar.thread.unpin": "ပင်ထိုးခြင်းကို ဖယ်ရှား",
   "sidebar.status.working": "လုပ်ဆောင်နေသည်",
   "sidebar.status.done": "ပြီးစီး",
+  "sidebar.status.attention": "အဝင်လိုအပ်သည်",
   "debugBar.ariaLabel": "ဖွံ့ဖြိုးတိုးတက်မှု စွမ်းဆောင်ရည် အဖြေရှာခြင်း",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

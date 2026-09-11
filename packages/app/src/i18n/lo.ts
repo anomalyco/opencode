@@ -879,6 +879,7 @@ export const dict = {
   "sidebar.thread.unpin": "ຍົກເລີກການປັກໝຸດ",
   "sidebar.status.working": "ກຳລັງເຮັດວຽກ",
   "sidebar.status.done": "ສຳເລັດ",
+  "sidebar.status.attention": "ຕ້ອງການຂໍ້ມູນປ້ອນ",
   "debugBar.ariaLabel": "ການວິນິດໄສປະສິດທິພາບການພັດທະນາ",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

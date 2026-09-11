@@ -892,6 +892,7 @@ export const dict = {
   "sidebar.thread.unpin": "Rögzítés feloldása",
   "sidebar.status.working": "Dolgozik",
   "sidebar.status.done": "Kész",
+  "sidebar.status.attention": "Bemenet szükséges",
   "debugBar.ariaLabel": "Fejlesztési teljesítmény diagnosztika",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

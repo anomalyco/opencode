@@ -888,6 +888,7 @@ export const dict = {
   "sidebar.thread.unpin": "Откачи нит",
   "sidebar.status.working": "У току",
   "sidebar.status.done": "Готово",
+  "sidebar.status.attention": "Потребан унос",
   "debugBar.ariaLabel": "Дијагностика перформанси развоја",
   "debugBar.na": "н/а",
   "debugBar.nav.label": "NAV",

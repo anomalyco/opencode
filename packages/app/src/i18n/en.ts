@@ -862,6 +862,7 @@ export const dict = {
   "sidebar.thread.unpin": "Unpin thread",
   "sidebar.status.working": "Working",
   "sidebar.status.done": "Done",
+  "sidebar.status.attention": "Needs input",
 
   "debugBar.ariaLabel": "Development performance diagnostics",
   "debugBar.na": "n/a",

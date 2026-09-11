@@ -1243,6 +1243,7 @@ export const dict = {
   "sidebar.thread.unpin": "Løsne tråd",
   "sidebar.status.working": "Arbeider",
   "sidebar.status.done": "Ferdig",
+  "sidebar.status.attention": "Trenger inndata",
 
   "settings.general.section.advanced": "Avansert",
   "settings.general.row.shell.title": "Terminalskall",

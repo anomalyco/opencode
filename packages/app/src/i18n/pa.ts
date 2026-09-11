@@ -892,6 +892,7 @@ export const dict = {
   "sidebar.thread.unpin": "ਪਿੰਨ ਹਟਾਓ",
   "sidebar.status.working": "ਕੰਮ ਚੱਲ ਰਿਹਾ",
   "sidebar.status.done": "ਮੁਕੰਮਲ",
+  "sidebar.status.attention": "ਇਨਪੁਟ ਚਾਹੀਦਾ",
   "debugBar.ariaLabel": "ترقی دی کارکردگی دی تشخیص",
   "debugBar.na": "لاگو نئیں",
   "debugBar.nav.label": "NAV",

@@ -886,6 +886,7 @@ export const dict = {
   "sidebar.thread.unpin": "ยกเลิกการปักหมุด",
   "sidebar.status.working": "กำลังทำงาน",
   "sidebar.status.done": "เสร็จ",
+  "sidebar.status.attention": "ต้องการข้อมูลป้อน",
 
   "app.name.desktop": "OpenCode Desktop",
 

@@ -898,6 +898,7 @@ export const dict = {
   "sidebar.thread.unpin": "ޕިން ނަގާ",
   "sidebar.status.working": "މަސައްކަތް ކުރަމުން",
   "sidebar.status.done": "ނިމިއްޖެ",
+  "sidebar.status.attention": "އިންޕުޓް ބޭނުން",
   "debugBar.ariaLabel": "ޑިވެލޮޕްމަންޓް ޕާފޯމަންސް ޑައިގްނޯސްޓިކްސް",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV އެވެ",

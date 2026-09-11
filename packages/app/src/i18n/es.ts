@@ -904,6 +904,7 @@ export const dict = {
   "sidebar.thread.unpin": "Desfijar hilo",
   "sidebar.status.working": "Trabajando",
   "sidebar.status.done": "Listo",
+  "sidebar.status.attention": "Requiere entrada",
 
   "app.name.desktop": "OpenCode Desktop",
 

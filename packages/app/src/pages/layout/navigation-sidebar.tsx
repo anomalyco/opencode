@@ -3,15 +3,14 @@ import { createStore, produce } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
 import type { GlobalSession } from "@opencode-ai/sdk/v2/client"
 import { Binary } from "@opencode-ai/core/util/binary"
-import { SessionProgressIndicatorV2 } from "@opencode-ai/session-ui/v2/session-progress-indicator-v2"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import {
   loadHomeSessionIndex,
   retainHomeSessions,
@@ -66,10 +65,13 @@ const STATUS_TICK = 1_000
 const SECTION_LABEL = "px-3 pb-1 pt-3 text-v2-text-text-muted [font-weight:440]"
 const ROW =
   "group/row relative flex h-7 min-w-0 w-full shrink-0 cursor-default items-center gap-2 rounded-[6px] bg-transparent px-1.5 text-start text-v2-text-text-muted [font-weight:440] transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base data-[selected=true]:bg-v2-background-bg-layer-03 data-[selected=true]:text-v2-text-text-base data-[selected=true]:hover:bg-v2-background-bg-layer-03 focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]"
+// Trailing padding reserves the hover action zone so titles never sit under the buttons and
+// rows keep identical geometry with or without hover.
+const ROW_SESSION = `${ROW} pe-20`
+const ROW_PROJECT = `${ROW} pe-14`
 const ROW_ACTIONS =
-  "hover-reveal absolute end-1 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
-// Reserve room for the hover-revealed row actions so long titles never sit under them.
-const TITLE = "min-w-0 flex-1 truncate transition-[padding-inline-end] duration-[120ms] ease-in-out"
+  "hover-reveal absolute end-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-[6px] bg-v2-background-bg-layer-02 p-0.5 opacity-0 shadow-[var(--v2-elevation-raised)] group-hover/row:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100"
+const NAME = "flex min-w-0 flex-1 items-center gap-1.5"
 
 function titleOf(session: { title?: string; parentID?: string; time: { created: number } }) {
   return sessionTitle(session.title) ?? withTimestampedFallback(session)
@@ -102,7 +104,7 @@ export function NavigationSidebar() {
     Persist.global("sidebar.navigation", ["sidebar.navigation.v1"]),
     createStore({
       collapsed: {} as Record<string, boolean>,
-      settledOpen: false,
+      settledOpen: {} as Record<string, boolean>,
       pins: {} as Record<string, boolean>,
     }),
   )
@@ -193,7 +195,9 @@ export function NavigationSidebar() {
   createEffect(() => {
     const known = new Set(sessions().map((session) => session.id))
     const missing = tabs.store
-      .flatMap((tab) => (tab.type === "session" && tab.server === serverKey() && !known.has(tab.sessionId) ? [tab.sessionId] : []))
+      .flatMap((tab) =>
+        tab.type === "session" && tab.server === serverKey() && !known.has(tab.sessionId) ? [tab.sessionId] : [],
+      )
       .sort()
       .join(",")
     if (!missing || missing === missingKey()) return
@@ -220,10 +224,9 @@ export function NavigationSidebar() {
   const visibleGroups = createMemo(() => groups().filter((group) => group.visible.length > 0))
   const empty = createMemo(() => visibleGroups().length === 0 && settled().length === 0)
 
-  const archivedOpen = () => state.settledOpen
   const archived = useQuery(() => ({
     queryKey: ["sidebar", "settled", serverKey()],
-    enabled: archivedOpen() && !!home.server.focusedContext(),
+    enabled: !!home.server.focusedContext(),
     queryFn: async ({ signal }): Promise<GlobalSession[]> => {
       const ctx = home.server.focusedContext()
       if (!ctx) return []
@@ -234,7 +237,7 @@ export function NavigationSidebar() {
       return response.data ?? []
     },
     retry: false,
-    staleTime: 30_000,
+    staleTime: 300_000,
   }))
 
   const settledGroups = createMemo((): SettledGroup[] => {
@@ -426,6 +429,7 @@ export function NavigationSidebar() {
           </TooltipV2>
         </div>
         <TextInputV2
+          class="w-full min-w-0"
           value={filter()}
           autocomplete="off"
           spellcheck={false}
@@ -516,82 +520,27 @@ export function NavigationSidebar() {
           </For>
 
           <Show when={settledCount() > 0}>
-            <div class={SECTION_LABEL}>{language.t("sidebar.settled")}</div>
-
-            <button
-              type="button"
-              data-action="sidebar-settled-toggle"
-              aria-expanded={archivedOpen()}
-              onClick={() => setState("settledOpen", (value) => !value)}
-              class={ROW}
-            >
-              <IconV2
-                name="chevron-down"
-                class={`size-3 shrink-0 text-v2-icon-icon-muted transition-transform duration-[120ms] ${archivedOpen() ? "" : "-rotate-90"}`}
-              />
-              <IconV2 name="archive" class="size-3.5 shrink-0 text-v2-icon-icon-muted" />
-              <span class={`${TITLE} group-hover/row:pe-8`}>{language.t("sidebar.settled")}</span>
-              <span class="shrink-0 text-xs text-v2-text-text-faint transition-opacity duration-[120ms] group-hover/row:opacity-0">
-                {settledCount()}
-              </span>
-            </button>
-
-            <Show when={archivedOpen()}>
-              <Show when={archived.isLoading}>
-                <div class="flex items-center justify-center py-3 text-v2-text-text-faint">
-                  <Spinner class="size-3.5 shrink-0" />
-                </div>
-              </Show>
-              <Show when={!archived.isLoading && settledGroups().length === 0}>
-                <div class="px-3 py-2 text-xs text-v2-text-text-faint">{language.t("sidebar.empty.description")}</div>
-              </Show>
-              <For each={settledGroups()}>
-                {(group) => (
-                  <div class="flex min-w-0 flex-col">
-                    <div class="flex h-6 min-w-0 items-center gap-1.5 px-1.5">
-                      <SessionTabAvatarView
-                        project={group.project}
-                        directory={group.project.worktree}
-                        unread={false}
-                        loading={false}
-                      />
-                      <span class="min-w-0 flex-1 truncate text-xs text-v2-text-text-faint">{group.name}</span>
-                    </div>
-                    <div class="flex flex-col gap-0.5 pb-1 ps-6">
-                      <For each={group.local}>
-                        {(record) => (
-                          <SidebarSessionRow
-                            record={record}
-                            server={serverKey()}
-                            current={currentSession() === record.session.id}
-                            settled
-                            pinned={isPinned(record.session.id)}
-                            tick={() => tick()}
-                            branch={branchOf}
-                            onOpen={open}
-                            onUnsettle={() => togglePin(record.session.id)}
-                          />
-                        )}
-                      </For>
-                      <For each={group.archived}>
-                        {(record) => (
-                          <SidebarSessionRow
-                            record={record}
-                            server={serverKey()}
-                            current={currentSession() === record.session.id}
-                            settled
-                            tick={() => tick()}
-                            branch={branchOf}
-                            onOpen={open}
-                            onUnsettle={() => unsettle(record.session)}
-                          />
-                        )}
-                      </For>
-                    </div>
-                  </div>
-                )}
-              </For>
-            </Show>
+            <div class={`${SECTION_LABEL} flex items-center gap-1.5`}>
+              <span>{language.t("sidebar.settled")}</span>
+              <span class="text-xs text-v2-text-text-faint">{settledCount()}</span>
+            </div>
+            <For each={settledGroups()}>
+              {(group) => (
+                <SidebarSettledGroup
+                  group={group}
+                  server={serverKey()}
+                  open={state.settledOpen[group.key] === true}
+                  loading={archived.isLoading}
+                  current={currentSession()}
+                  tick={() => tick()}
+                  branch={branchOf}
+                  onToggle={() => setState("settledOpen", group.key, (value) => value !== true)}
+                  onOpen={open}
+                  onUnsettlePin={togglePin}
+                  onUnsettleArchive={unsettle}
+                />
+              )}
+            </For>
           </Show>
         </div>
       </ScrollView>
@@ -654,20 +603,20 @@ function SidebarProject(props: {
           data-action="sidebar-project"
           aria-expanded={!props.collapsed}
           onClick={props.onToggleCollapsed}
-          class={`${ROW} min-w-0 flex-1`}
+          class={`${ROW_PROJECT} min-w-0 flex-1`}
         >
-          <IconV2
-            name="chevron-down"
-            class={`size-3 shrink-0 text-v2-icon-icon-muted transition-transform duration-[120ms] ${props.collapsed ? "-rotate-90" : ""}`}
-          />
           <SessionTabAvatarView
             project={props.group.project}
             directory={props.group.project.worktree}
             unread={props.unseen() > 0}
             loading={false}
           />
-          <span class={`${TITLE} [font-weight:530] text-v2-text-text-base group-hover/row:pe-14`}>
-            {props.group.name}
+          <span class={NAME}>
+            <span class="min-w-0 truncate [font-weight:530] text-v2-text-text-base">{props.group.name}</span>
+            <IconV2
+              name="chevron-down"
+              class={`size-3 shrink-0 text-v2-icon-icon-muted transition-transform duration-[120ms] ${props.collapsed ? "-rotate-90" : ""}`}
+            />
           </span>
           <Show when={props.group.visible.length > 0}>
             <span class="shrink-0 text-xs text-v2-text-text-faint transition-opacity duration-[120ms] group-hover/row:opacity-0">
@@ -751,6 +700,81 @@ function SidebarProject(props: {
   )
 }
 
+function SidebarSettledGroup(props: {
+  group: SettledGroup
+  server: ServerConnection.Key
+  open: boolean
+  loading: boolean
+  current: string | undefined
+  tick: () => number
+  branch: (directory: string) => string | undefined
+  onToggle: () => void
+  onOpen: (session: { id: string; directory: string }, project: LocalProject | undefined, event?: MouseEvent) => void
+  onUnsettlePin: (sessionID: string) => void
+  onUnsettleArchive: (session: { id: string; directory: string }) => void
+}) {
+  const count = () => props.group.local.length + props.group.archived.length
+  return (
+    <div class="flex min-w-0 flex-col">
+      <button
+        type="button"
+        data-action="sidebar-settled-group"
+        aria-expanded={props.open}
+        onClick={props.onToggle}
+        class={`${ROW} min-w-0 flex-1`}
+      >
+        <SessionTabAvatarView
+          project={props.group.project}
+          directory={props.group.project.worktree}
+          unread={false}
+          loading={false}
+        />
+        <span class={NAME}>
+          <span class="min-w-0 truncate">{props.group.name}</span>
+          <IconV2
+            name="chevron-down"
+            class={`size-3 shrink-0 text-v2-icon-icon-muted transition-transform duration-[120ms] ${props.open ? "" : "-rotate-90"}`}
+          />
+        </span>
+        <span class="shrink-0 text-xs text-v2-text-text-faint">{count()}</span>
+      </button>
+      <Show when={props.open}>
+        <div class="flex flex-col gap-0.5 pb-1 ps-6">
+          <For each={props.group.local}>
+            {(record) => (
+              <SidebarSessionRow
+                record={record}
+                server={props.server}
+                current={record.session.id === props.current}
+                settled
+                pinned
+                tick={props.tick}
+                branch={props.branch}
+                onOpen={props.onOpen}
+                onUnsettle={() => props.onUnsettlePin(record.session.id)}
+              />
+            )}
+          </For>
+          <For each={props.group.archived}>
+            {(record) => (
+              <SidebarSessionRow
+                record={record}
+                server={props.server}
+                current={record.session.id === props.current}
+                settled
+                tick={props.tick}
+                branch={props.branch}
+                onOpen={props.onOpen}
+                onUnsettle={() => props.onUnsettleArchive(record.session)}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
 function SidebarSessionRow(props: {
   record: SidebarSessionRecord
   server: ServerConnection.Key
@@ -779,9 +803,11 @@ function SidebarSessionRow(props: {
   const live = createMemo(() => {
     if (props.settled) return undefined
     const started = props.started?.()
-    if (started !== undefined && props.working?.()) return { done: false, since: started }
+    if (started !== undefined && props.working?.())
+      return { kind: "working" as const, label: language.t("sidebar.status.working"), time: elapsed(started) }
+    if (status.attention()) return { kind: "attention" as const, label: language.t("sidebar.status.attention") }
     const done = props.done?.()
-    if (done !== undefined) return { done: true, since: done }
+    if (done !== undefined) return { kind: "done" as const, label: language.t("sidebar.status.done") }
     return undefined
   })
 
@@ -795,14 +821,19 @@ function SidebarSessionRow(props: {
 
   return (
     <div class="group/row relative flex min-w-0 items-center">
-      <TooltipV2 value={<SessionInfo record={props.record} branch={() => props.branch(props.record.session.directory)} />} placement="right-start" gutter={10}>
+      <TooltipV2
+        class="min-w-0 flex-1"
+        value={<SessionInfo record={props.record} branch={() => props.branch(props.record.session.directory)} />}
+        placement="right-start"
+        gutter={10}
+      >
         <button
           type="button"
           data-action="sidebar-session"
           data-selected={props.current ? true : undefined}
           aria-current={props.current ? "true" : undefined}
           onClick={(event) => props.onOpen(props.record.session, props.record.project, event)}
-          class={`${ROW} min-w-0 flex-1`}
+          class={`${props.settled ? ROW : ROW_SESSION} min-w-0 flex-1`}
         >
           <Show when={open()}>
             <span class="absolute start-0 top-1/2 h-3.5 w-[2px] -translate-y-1/2 rounded-full bg-v2-text-text-muted" />
@@ -814,29 +845,41 @@ function SidebarSessionRow(props: {
             unread={status.unread()}
             loading={status.loading()}
           />
-          <span class={`${TITLE} ${props.settled ? "group-hover/row:pe-8" : "group-hover/row:pe-20"}`}>{title()}</span>
-          <Show when={props.pinned}>
-            <IconV2 name="pin" class="size-3 shrink-0 text-v2-icon-icon-muted" />
-          </Show>
-          <Show when={live()}>
-            {(value) => (
-              <span class="flex shrink-0 items-center gap-1 transition-opacity duration-[120ms] group-hover/row:opacity-0">
+          <span class={NAME}>
+            <span class="min-w-0 truncate">{title()}</span>
+            <Show when={props.pinned}>
+              <IconV2 name="pin" class="size-3 shrink-0 text-v2-icon-icon-muted" />
+            </Show>
+            <Show when={live()}>
+              {(value) => (
                 <Show
-                  when={value().done}
+                  when={value().kind === "working"}
                   fallback={
-                    <>
-                      <SessionProgressIndicatorV2 class="size-3.5 shrink-0 text-v2-state-fg-info" />
-                      <span class="text-xs text-v2-state-fg-info">{language.t("sidebar.status.working")}</span>
-                      <span class="text-xs text-v2-state-fg-info">{elapsed(value().since)}</span>
-                    </>
+                    <Show
+                      when={value().kind === "attention"}
+                      fallback={
+                        <span class="flex shrink-0 items-center gap-1 text-v2-state-fg-success">
+                          <IconV2 name="check" class="size-3 shrink-0" />
+                          <span class="text-xs">{value().label}</span>
+                        </span>
+                      }
+                    >
+                      <span class="flex shrink-0 items-center gap-1 text-v2-state-fg-warning">
+                        <IconV2 name="status-active" class="size-3 shrink-0" />
+                        <span class="text-xs">{value().label}</span>
+                      </span>
+                    </Show>
                   }
                 >
-                  <IconV2 name="check" class="size-3 shrink-0 text-v2-state-fg-success" />
-                  <span class="text-xs text-v2-state-fg-success">{language.t("sidebar.status.done")}</span>
+                  <span class="flex shrink-0 items-center gap-1 text-v2-state-fg-info">
+                    <Spinner class="size-3 shrink-0" />
+                    <span class="text-xs">{value().label}</span>
+                    <span class="text-xs">{value().time}</span>
+                  </span>
                 </Show>
-              </span>
-            )}
-          </Show>
+              )}
+            </Show>
+          </span>
         </button>
       </TooltipV2>
       <div class={ROW_ACTIONS}>

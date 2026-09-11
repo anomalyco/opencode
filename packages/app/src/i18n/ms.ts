@@ -884,6 +884,7 @@ export const dict = {
   "sidebar.thread.unpin": "Nyahsematkan bebenang",
   "sidebar.status.working": "Sedang bekerja",
   "sidebar.status.done": "Siap",
+  "sidebar.status.attention": "Perlu input",
   "debugBar.ariaLabel": "Diagnostik prestasi pembangunan",
   "debugBar.na": "tiada",
   "debugBar.nav.label": "NAV",

@@ -888,6 +888,7 @@ export const dict = {
   "sidebar.thread.unpin": "Маҳкамро бекор кардан",
   "sidebar.status.working": "Дар ҳоли кор",
   "sidebar.status.done": "Тайёр",
+  "sidebar.status.attention": "Ворид лозим",
   "debugBar.ariaLabel": "Ташхиси самаранокии рушд",
   "debugBar.na": "не",
   "debugBar.nav.label": "NAV",

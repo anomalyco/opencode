@@ -884,6 +884,7 @@ export const dict = {
   "sidebar.thread.unpin": "მიმაგრების მოხსნა",
   "sidebar.status.working": "მუშაობს",
   "sidebar.status.done": "შესრულდა",
+  "sidebar.status.attention": "საჭიროებს შეყვანას",
   "debugBar.ariaLabel": "განვითარების შესრულების დიაგნოსტიკა",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

@@ -880,6 +880,7 @@ export const dict = {
   "sidebar.thread.unpin": "Eemalda kinnitus",
   "sidebar.status.working": "Töötab",
   "sidebar.status.done": "Valmis",
+  "sidebar.status.attention": "Vajab sisendit",
   "debugBar.ariaLabel": "Arendustegevuse diagnostika",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

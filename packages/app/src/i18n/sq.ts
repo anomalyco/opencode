@@ -887,6 +887,7 @@ export const dict = {
   "sidebar.thread.unpin": "Hiq kapësen",
   "sidebar.status.working": "Po punon",
   "sidebar.status.done": "Përfundoi",
+  "sidebar.status.attention": "Kërkon input",
   "debugBar.ariaLabel": "Diagnostifikimi i performancës së zhvillimit",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

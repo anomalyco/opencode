@@ -891,6 +891,7 @@ export const dict = {
   "sidebar.thread.unpin": "Գամը հանել",
   "sidebar.status.working": "Աշխատում է",
   "sidebar.status.done": "Պատրաստ է",
+  "sidebar.status.attention": "Պահանջում է ներածում",
   "debugBar.ariaLabel": "Զարգացման կատարողականի ախտորոշում",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

@@ -890,6 +890,7 @@ export const dict = {
   "sidebar.thread.unpin": "Откачи нишка",
   "sidebar.status.working": "В процес",
   "sidebar.status.done": "Готово",
+  "sidebar.status.attention": "Нужен е вход",
   "debugBar.ariaLabel": "Диагностика на ефективността на разработката",
   "debugBar.na": "няма",
   "debugBar.nav.label": "NAV",

@@ -1030,6 +1030,7 @@ export const dict = {
   "sidebar.thread.unpin": "스레드 고정 해제",
   "sidebar.status.working": "작업 중",
   "sidebar.status.done": "완료",
+  "sidebar.status.attention": "입력 필요",
 
   "settings.general.section.advanced": "고급",
   "settings.general.row.shell.title": "터미널 셸",

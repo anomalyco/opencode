@@ -893,6 +893,7 @@ export const dict = {
   "sidebar.thread.unpin": "Ξεκαρφίτσωμα νήματος",
   "sidebar.status.working": "Σε εργασία",
   "sidebar.status.done": "Ολοκληρώθηκε",
+  "sidebar.status.attention": "Απαιτεί είσοδο",
   "debugBar.ariaLabel": "Διαγνωστικά απόδοσης ανάπτυξης",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

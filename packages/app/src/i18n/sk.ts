@@ -888,6 +888,7 @@ export const dict = {
   "sidebar.thread.unpin": "Odopnúť vlákno",
   "sidebar.status.working": "Pracuje",
   "sidebar.status.done": "Hotovo",
+  "sidebar.status.attention": "Vyžaduje vstup",
   "debugBar.ariaLabel": "Diagnostika výkonu vývoja",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

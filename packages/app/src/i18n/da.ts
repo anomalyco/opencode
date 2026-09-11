@@ -776,6 +776,7 @@ export const dict = {
   "sidebar.thread.unpin": "Frigør tråd",
   "sidebar.status.working": "Arbejder",
   "sidebar.status.done": "Færdig",
+  "sidebar.status.attention": "Kræver input",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Desktop",

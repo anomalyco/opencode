@@ -898,6 +898,7 @@ export const dict = {
   "sidebar.thread.unpin": "Atsegti giją",
   "sidebar.status.working": "Veikia",
   "sidebar.status.done": "Atlikta",
+  "sidebar.status.attention": "Reikia įvesties",
   "debugBar.ariaLabel": "Vystymosi veiklos diagnostika",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

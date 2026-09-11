@@ -904,6 +904,7 @@ export const dict = {
   "sidebar.thread.unpin": "Sabitlemeyi kaldır",
   "sidebar.status.working": "Çalışıyor",
   "sidebar.status.done": "Bitti",
+  "sidebar.status.attention": "Girdi gerekiyor",
 
   "app.name.desktop": "OpenCode Masaüstü",
 

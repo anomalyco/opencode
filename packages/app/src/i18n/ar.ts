@@ -835,6 +835,7 @@ export const dict = {
   "sidebar.thread.unpin": "إلغاء تثبيت المحادثة",
   "sidebar.status.working": "يعمل",
   "sidebar.status.done": "تم",
+  "sidebar.status.attention": "يحتاج إدخال",
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "سطح المكتب",
   "settings.section.server": "الخادم",
