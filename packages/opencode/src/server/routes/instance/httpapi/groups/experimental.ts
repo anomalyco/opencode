@@ -60,6 +60,29 @@ export const ToolListQuery = Schema.Struct({
   model: ModelV2.ID,
 })
 
+// M4 endpoint re-added (was lost in squash merge of sprint 2 -> sprint 4).
+// Allows the lab to invoke any registered tool directly via HTTP, without
+// going through the LLM. Used by H1 (latency) probes in the lab.
+export const ToolInvokePayload = Schema.Struct({
+  tool: Schema.String,
+  args: Schema.Unknown,
+  sessionId: Schema.optionalKey(SessionID),
+}).annotate({ identifier: "ToolInvokePayload" })
+const ToolInvokeResult = Schema.Struct({
+  output: Schema.String,
+  title: Schema.String,
+  metadata: Schema.Unknown,
+}).annotate({ identifier: "ToolInvokeResult" })
+
+// M4 failures must carry a reason: the tool defect alone stringifies to "[]",
+// which tells the lab nothing about why the invocation failed.
+export class ToolInvokeApiError extends Schema.ErrorClass<ToolInvokeApiError>("ToolInvokeError")(
+  {
+    data: Schema.Struct({ message: Schema.String }),
+  },
+  { httpApiStatus: 400 },
+) {}
+
 const WorktreeList = Schema.Array(Schema.String)
 const WorktreeErrorName = Schema.Union([
   Schema.Literal("WorktreeNotGitError"),
@@ -94,6 +117,7 @@ export const ExperimentalPaths = {
   consoleSwitch: "/experimental/console/switch",
   tool: "/experimental/tool",
   toolIDs: "/experimental/tool/ids",
+  toolInvoke: "/experimental/tool/invoke",
   worktree: "/experimental/worktree",
   worktreeReset: "/experimental/worktree/reset",
   session: "/experimental/session",
@@ -171,6 +195,19 @@ export const ExperimentalApi = HttpApi.make("experimental")
             summary: "List tool IDs",
             description:
               "Get a list of all available tool IDs, including both built-in tools and dynamically registered tools.",
+          }),
+        ),
+        HttpApiEndpoint.post("toolInvoke", ExperimentalPaths.toolInvoke, {
+          query: WorkspaceRoutingQuery,
+          payload: ToolInvokePayload,
+          success: described(ToolInvokeResult, "Tool invocation result"),
+          error: ToolInvokeApiError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "tool.invoke",
+            summary: "Invoke a tool",
+            description:
+              "Directly invoke a registered tool with the given arguments, bypassing the LLM. Used by the lab for isolated H1 (latency) probes.",
           }),
         ),
         HttpApiEndpoint.get("worktree", ExperimentalPaths.worktree, {
