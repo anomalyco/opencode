@@ -36,6 +36,16 @@ function pathFor(template: string, params: Record<string, string>) {
   return Object.entries(params).reduce((result, [key, value]) => result.replace(`:${key}`, value), template)
 }
 
+const userMessage = (sessionID: SessionV1.User["sessionID"], messageID: MessageID) =>
+  ({
+    id: messageID,
+    sessionID,
+    role: "user" as const,
+    time: { created: Date.now() },
+    agent: "build",
+    model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+  }) satisfies SessionV1.User
+
 const withSession = (input?: Parameters<Session.Interface["create"]>[0]) =>
   Effect.acquireRelease(Session.use.create(input), (created) => Session.use.remove(created.id).pipe(Effect.ignore))
 
@@ -154,6 +164,17 @@ describe("session message diff events", () => {
         expect(JSON.stringify(diffEvents[0]?.data).length).toBeGreaterThan(250_000)
         expect(JSON.stringify(diffEvents[1]?.data).length).toBeGreaterThan(250_000)
 
+        const fullPatchEvents = events.filter((event) => JSON.stringify(event.data).includes("turn patch"))
+        expect(fullPatchEvents.map((event) => event.type)).toEqual([
+          "message.diff.updated.1",
+          "message.diff.updated.1",
+        ])
+        expect(
+          events
+            .filter((event) => event.type === "message.updated.1")
+            .every((event) => JSON.stringify(event.data).length < 250_000),
+        ).toBe(true)
+
         const response = yield* requestInDirectory(
           `${pathFor(SessionPaths.diff, { sessionID: session.id })}?messageID=${messageID}`,
           test.directory,
@@ -193,6 +214,171 @@ describe("session message diff events", () => {
         )?.info
         expect(replayed?.role === "user" ? replayed.summary?.diffs : undefined).toEqual(expectedChangedDiffs)
       }),
-    { git: true, config: { formatter: false, lsp: false }, timeout: 30_000 },
+    { git: true, config: { formatter: false, lsp: false } },
+    { timeout: 30_000 },
+  )
+
+  it.instance(
+    "a later full V1 replacement replaces the dedicated turn patch",
+    () =>
+      Effect.gen(function* () {
+        const session = yield* withSession({ title: "replacement" })
+        const messageID = MessageID.ascending()
+        const user = userMessage(session.id, messageID)
+        yield* Session.use.updateMessage(user)
+        const events = yield* EventV2.Service
+        const first: Snapshot.FileDiff[] = [
+          { file: "a.txt", additions: 1, deletions: 0, status: "modified", patch: "FIRST-PATCH" },
+        ]
+        yield* events.publish(Session.Event.MessageDiffUpdated, { sessionID: session.id, messageID, diffs: first })
+        const read = Effect.fnUntraced(function* () {
+          const info = (yield* Session.use.messages({ sessionID: session.id })).find(
+            (item) => item.info.id === messageID,
+          )?.info
+          return info?.role === "user" ? info.summary?.diffs : undefined
+        })
+        expect(yield* read()).toEqual(first)
+
+        const replacement: Snapshot.FileDiff[] = [
+          { file: "b.txt", additions: 2, deletions: 1, status: "modified", patch: "REPLACEMENT-B" },
+        ]
+        yield* Session.use.updateMessage({ ...user, summary: { diffs: replacement } })
+        expect(yield* read()).toEqual(replacement)
+
+        yield* Session.use.updateMessage({ ...user, summary: { diffs: [] } })
+        expect(yield* read()).toEqual([])
+
+        const patchless: Snapshot.FileDiff[] = [{ file: "c.txt", additions: 0, deletions: 1, status: "deleted" }]
+        yield* Session.use.updateMessage({ ...user, summary: { diffs: patchless } })
+        expect(yield* read()).toEqual(patchless)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "first summarize over an imported projection publishes a replayable baseline",
+    () =>
+      Effect.gen(function* () {
+        const session = yield* withSession({ title: "imported" })
+        const messageID = MessageID.ascending()
+        const { db } = yield* Database.Service
+        const created = Date.now()
+        yield* db
+          .insert(MessageTable)
+          .values({
+            id: messageID,
+            session_id: session.id,
+            time_created: created,
+            data: {
+              role: "user",
+              time: { created },
+              agent: "build",
+              model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+              summary: { diffs: [] },
+            } as never,
+          })
+          .run()
+          .pipe(Effect.orDie)
+        const summary = yield* SessionSummary.Service
+        yield* summary.summarize({ sessionID: session.id, messageID })
+        const events = yield* db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, session.id))
+          .orderBy(EventTable.seq)
+          .all()
+          .pipe(Effect.orDie)
+        expect(
+          events.some((item) => item.type === "message.updated.1" && JSON.stringify(item.data).includes(messageID)),
+        ).toBe(true)
+
+        yield* db.delete(MessageDiffTable).where(eq(MessageDiffTable.session_id, session.id)).run().pipe(Effect.orDie)
+        yield* db.delete(MessageTable).where(eq(MessageTable.session_id, session.id)).run().pipe(Effect.orDie)
+        yield* db.delete(EventTable).where(eq(EventTable.aggregate_id, session.id)).run().pipe(Effect.orDie)
+        yield* db.delete(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, session.id)).run().pipe(Effect.orDie)
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, session.id)).run().pipe(Effect.orDie)
+
+        const event = yield* EventV2.Service
+        yield* event.replayAll(
+          events.map((item) => ({
+            id: item.id,
+            type: item.type,
+            data: item.data,
+            seq: item.seq,
+            aggregateID: item.aggregate_id,
+          })),
+        )
+        const replayed = yield* Session.use.messages({ sessionID: session.id })
+        expect(replayed.some((item) => item.info.id === messageID)).toBe(true)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "a diff for a removed message is ignored rather than aborting projection",
+    () =>
+      Effect.gen(function* () {
+        const session = yield* withSession({ title: "removed" })
+        const messageID = MessageID.ascending()
+        yield* Session.use.updateMessage(userMessage(session.id, messageID))
+        const events = yield* EventV2.Service
+        yield* events.publish(SessionV1.Event.MessageRemoved, { sessionID: session.id, messageID })
+        const { db } = yield* Database.Service
+        const removed = yield* db
+          .select()
+          .from(MessageTable)
+          .where(eq(MessageTable.id, messageID))
+          .get()
+          .pipe(Effect.orDie)
+        expect(removed).toBeUndefined()
+
+        yield* events.publish(Session.Event.MessageDiffUpdated, {
+          sessionID: session.id,
+          messageID,
+          diffs: [{ file: "late.txt", additions: 1, deletions: 0, status: "modified", patch: "LATE-PATCH" }],
+        })
+        const orphan = yield* db
+          .select()
+          .from(MessageDiffTable)
+          .where(eq(MessageDiffTable.message_id, messageID))
+          .get()
+          .pipe(Effect.orDie)
+        expect(orphan).toBeUndefined()
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "deleting a message cascades its dedicated diff row",
+    () =>
+      Effect.gen(function* () {
+        const session = yield* withSession({ title: "cascade" })
+        const messageID = MessageID.ascending()
+        yield* Session.use.updateMessage(userMessage(session.id, messageID))
+        const events = yield* EventV2.Service
+        yield* events.publish(Session.Event.MessageDiffUpdated, {
+          sessionID: session.id,
+          messageID,
+          diffs: [{ file: "cascade.txt", additions: 1, deletions: 0, status: "modified", patch: "CASCADE-PATCH" }],
+        })
+        const { db } = yield* Database.Service
+        const projected = yield* db
+          .select()
+          .from(MessageDiffTable)
+          .where(eq(MessageDiffTable.message_id, messageID))
+          .get()
+          .pipe(Effect.orDie)
+        expect(projected).toBeDefined()
+
+        yield* db.delete(MessageTable).where(eq(MessageTable.id, messageID)).run().pipe(Effect.orDie)
+        const cascaded = yield* db
+          .select()
+          .from(MessageDiffTable)
+          .where(eq(MessageDiffTable.message_id, messageID))
+          .get()
+          .pipe(Effect.orDie)
+        expect(cascaded).toBeUndefined()
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
   )
 })

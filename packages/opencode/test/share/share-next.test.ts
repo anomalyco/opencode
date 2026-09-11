@@ -10,7 +10,11 @@ import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/s
 import { AccountRepo } from "../../src/account/repo"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Session } from "@/session/session"
+import { MessageID } from "../../src/session/schema"
 import type { SessionID } from "../../src/session/schema"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { ShareNext } from "@/share/share-next"
 import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { Database } from "@opencode-ai/core/database/database"
@@ -316,6 +320,65 @@ describe("ShareNext", () => {
               status: "modified",
             },
           ])
+        }).pipe(Effect.provide(integrationLayer(client)))
+      },
+      { config: { enterprise: { url: "https://legacy-share.example.com" } } },
+    ),
+  )
+
+  it.live("ShareNext forwards a dedicated turn diff event as a hydrated message", () =>
+    provideTmpdirInstance(
+      () => {
+        const seen: string[] = []
+        const client = HttpClient.make((req) => {
+          if (req.url.endsWith("/sync") && req.body._tag === "Uint8Array") {
+            seen.push(new TextDecoder().decode(req.body.body))
+          }
+          return Effect.succeed(json(req, { ok: true }))
+        })
+
+        return Effect.gen(function* () {
+          const events = yield* EventV2Bridge.Service
+          const share = yield* ShareNext.Service
+          const session = yield* Session.Service
+          const info = yield* session.create({ title: "shared-diff" })
+          yield* share.init()
+          yield* Effect.sleep(50)
+          const { db } = yield* Database.Service
+          yield* db
+            .insert(SessionShareTable)
+            .values({
+              session_id: info.id,
+              id: "shr_diff",
+              url: "https://legacy-share.example.com/share/diff",
+              secret: "sec_diff",
+            })
+            .run()
+            .pipe(Effect.orDie)
+
+          const messageID = MessageID.ascending()
+          yield* session.updateMessage({
+            id: messageID,
+            sessionID: info.id,
+            role: "user",
+            time: { created: Date.now() },
+            agent: "build",
+            model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+          } satisfies SessionV1.User)
+          yield* events.publish(Session.Event.MessageDiffUpdated, {
+            sessionID: info.id,
+            messageID,
+            diffs: [
+              { file: "shared.ts", additions: 1, deletions: 0, status: "modified", patch: "SHARED-DIFF-PATCH" },
+            ],
+          })
+          yield* pollWithTimeout(
+            Effect.sync(() => (seen.length >= 1 ? true : undefined)),
+            "timed out waiting for share sync",
+            "5 seconds",
+          )
+
+          expect(seen.join(" ")).toContain("SHARED-DIFF-PATCH")
         }).pipe(Effect.provide(integrationLayer(client)))
       },
       { config: { enterprise: { url: "https://legacy-share.example.com" } } },

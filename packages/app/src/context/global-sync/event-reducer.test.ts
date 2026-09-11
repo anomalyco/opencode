@@ -418,7 +418,7 @@ describe("applyDirectoryEvent", () => {
     expect(store.part.msg_a).toBeUndefined()
   })
 
-  test("hydrates cached user patches from message.diff.updated", () => {
+  test("production directory routing leaves message diff content to the session owner", () => {
     const sessionID = "ses_1"
     const messageID = "msg_1"
     const [store, setStore] = createStore(
@@ -441,13 +441,11 @@ describe("applyDirectoryEvent", () => {
       push() {},
       directory: "/tmp",
       loadLsp() {},
+      sessionContent: false,
     })
 
     const first = store.message[sessionID]?.[0]
-    expect(first?.role === "user" && typeof first.summary === "object" ? first.summary?.diffs[0]?.patch : undefined).toBe(
-      "PATCH-CONTENT",
-    )
-
+    expect(first?.role === "user" ? first.summary?.diffs : undefined).toBeUndefined()
   })
 
   test("upserts and prunes message parts", () => {
