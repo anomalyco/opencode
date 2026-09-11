@@ -1,4 +1,5 @@
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
@@ -14,6 +15,17 @@ export const DEFAULT_CSP = csp()
 
 export function themePreloadHash(body: string) {
   return body.match(/<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i)
+}
+
+// Replacement uses a function so `$` sequences in the configured title are
+// never treated as replacement patterns.
+export function htmlWithTitle(body: string) {
+  const title = Flag.OPENCODE_WEB_UI_TITLE?.trim()
+  if (!title) return body
+  return body.replace(/<title>[\s\S]*?<\/title>/i, () => {
+    const escaped = title.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    return `<title>${escaped}</title>`
+  })
 }
 
 export function cspForHtml(body: string) {
@@ -56,7 +68,9 @@ function embeddedUIResponse(file: string, body: Uint8Array) {
   const mime = FSUtil.mimeType(file)
   const headers = new Headers({ "content-type": mime })
   if (mime.startsWith("text/html")) {
-    headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
+    const html = htmlWithTitle(new TextDecoder().decode(body))
+    headers.set("content-security-policy", cspForHtml(html))
+    return HttpServerResponse.raw(new TextEncoder().encode(html), { headers })
   }
   return HttpServerResponse.raw(body, { headers })
 }
@@ -94,7 +108,7 @@ export function serveUIEffect(
     const headers = proxyResponseHeaders(response.headers)
 
     if (response.headers["content-type"]?.includes("text/html")) {
-      const body = yield* response.text
+      const body = htmlWithTitle(yield* response.text)
       headers.set("Content-Security-Policy", cspForHtml(body))
       return HttpServerResponse.text(body, { status: response.status, headers })
     }
