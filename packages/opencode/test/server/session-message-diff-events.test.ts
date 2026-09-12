@@ -263,6 +263,7 @@ describe("session message diff events", () => {
     "first summarize over an imported projection publishes a replayable baseline",
     () =>
       Effect.gen(function* () {
+        const test = yield* TestInstance
         const session = yield* withSession({ title: "imported" })
         const messageID = MessageID.ascending()
         const { db } = yield* Database.Service
@@ -286,9 +287,52 @@ describe("session message diff events", () => {
           })
           .run()
           .pipe(Effect.orDie)
+        const assistant = yield* Session.use.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: session.id,
+          role: "assistant",
+          time: { created: Date.now() },
+          parentID: messageID,
+          agent: "build",
+          modelID: ModelV2.ID.make("model"),
+          providerID: ProviderV2.ID.make("test"),
+          mode: "build",
+          path: { cwd: test.directory, root: test.directory },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        } satisfies SessionV1.Assistant)
+        const snapshot = yield* Snapshot.Service
+        const start = yield* snapshot.track()
+        if (!start) return yield* Effect.die("expected initial snapshot")
+        yield* Effect.promise(() => Bun.write(path.join(test.directory, "imported.ts"), "imported patch".repeat(30_000)))
+        const finish = yield* snapshot.track()
+        if (!finish) return yield* Effect.die("expected finished snapshot")
+        yield* Session.use.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "step-start",
+          snapshot: start,
+        })
+        yield* Session.use.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: session.id,
+          type: "step-finish",
+          reason: "stop",
+          snapshot: finish,
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        })
         const summary = yield* SessionSummary.Service
+        const expected = yield* summary.computeDiff({
+          messages: (yield* Session.use.messages({ sessionID: session.id })).filter(
+            (item) => item.info.id === messageID || (item.info.role === "assistant" && item.info.parentID === messageID),
+          ),
+        })
+        expect(expected.length).toBeGreaterThan(0)
+        expect(JSON.stringify(expected)).toContain("imported patch")
         yield* summary.summarize({ sessionID: session.id, messageID })
-        const expected: Snapshot.FileDiff[] = []
         const live = (yield* Session.use.messages({ sessionID: session.id })).find(
           (item) => item.info.id === messageID,
         )?.info
@@ -305,9 +349,19 @@ describe("session message diff events", () => {
           .orderBy(EventTable.seq)
           .all()
           .pipe(Effect.orDie)
-        const baselineEvent = events.find((item) => item.type === "message.updated.1")
+        const baselineEvent = events.find(
+          (item) => item.type === "message.updated.1" && JSON.stringify(item.data).includes("IMPORTED-TITLE"),
+        )
         expect(baselineEvent).toBeDefined()
+        expect(JSON.parse(JSON.stringify(baselineEvent?.data))).toMatchObject({
+          info: {
+            id: messageID,
+            role: "user",
+            summary: { title: "IMPORTED-TITLE", body: "IMPORTED-BODY", diffs: [] },
+          },
+        })
         expect(JSON.stringify(baselineEvent?.data)).not.toContain("STALE-IMPORTED-A")
+        expect(JSON.stringify(baselineEvent?.data)).not.toContain("imported patch")
         const diffEvents = events.filter((item) => item.type === "message.diff.updated.1")
         expect(diffEvents).toHaveLength(1)
         expect(diffEvents[0]?.data).toMatchObject({ messageID, diffs: expected })
@@ -338,6 +392,7 @@ describe("session message diff events", () => {
         })
       }),
     { git: true, config: { formatter: false, lsp: false } },
+    { timeout: 30_000 },
   )
 
   it.instance(
