@@ -10,7 +10,7 @@ export type HeaderLink = { href: string; label: string }
 export const githubLink = {
   href: "https://github.com/anomalyco/opencode",
   apiHref: "https://api.github.com/repos/anomalyco/opencode",
-  fallbackStars: "205K",
+  fallbackStars: "207K",
 }
 export const themePreferences = ["dark", "light", "system"] as const
 export const themeStorageKey = "opencode:stats-theme"
