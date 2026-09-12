@@ -149,9 +149,8 @@ export const {
 
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
-    type HydrationTracker = { messages: Set<string>; parts: Set<string> }
-    const hydratingSessions = new Map<string, HydrationTracker>()
-    const pendingDiffs = new Map<string, { tracker: HydrationTracker; diffs: Map<string, SnapshotFileDiff[]> }>()
+    const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const pendingDiffs = new Map<string, Map<string, SnapshotFileDiff[]>>()
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -161,8 +160,8 @@ export const {
     const retirePendingDiff = (sessionID: string, messageID: string) => {
       const pending = pendingDiffs.get(sessionID)
       if (!pending) return
-      pending.diffs.delete(messageID)
-      if (pending.diffs.size === 0) pendingDiffs.delete(sessionID)
+      pending.delete(messageID)
+      if (pending.size === 0) pendingDiffs.delete(sessionID)
     }
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
@@ -188,17 +187,10 @@ export const {
         const current = index >= 0 ? messages?.[index] : undefined
         if (!current || current.role !== "user") {
           // Buffer only across an in-flight first page; a later fetch reads the durable diff itself.
-          const tracker = hydratingSessions.get(event.properties.sessionID)
-          if (!tracker) return
-          const pending = pendingDiffs.get(event.properties.sessionID)
-          if (pending && pending.tracker === tracker) {
-            pending.diffs.set(event.properties.messageID, event.properties.diffs)
-            return
-          }
-          pendingDiffs.set(event.properties.sessionID, {
-            tracker,
-            diffs: new Map([[event.properties.messageID, event.properties.diffs]]),
-          })
+          if (!hydratingSessions.has(event.properties.sessionID)) return
+          const pending = pendingDiffs.get(event.properties.sessionID) ?? new Map<string, SnapshotFileDiff[]>()
+          pending.set(event.properties.messageID, event.properties.diffs)
+          pendingDiffs.set(event.properties.sessionID, pending)
           return
         }
         touchMessage(event.properties.sessionID, event.properties.messageID)
@@ -693,15 +685,15 @@ export const {
                 }
                 for (const message of removed) delete draft.part[message.id]
                 const pending = pendingDiffs.get(sessionID)
-                if (pending?.tracker === tracker) {
+                if (pending) {
                   visible.forEach((message, index) => {
                     if (message.role !== "user") return
-                    const diffs = pending.diffs.get(message.id)
+                    const diffs = pending.get(message.id)
                     if (!diffs) return
                     visible[index] = { ...message, summary: { ...message.summary, diffs } }
                   })
+                  pendingDiffs.delete(sessionID)
                 }
-                pendingDiffs.delete(sessionID)
                 draft.message[sessionID] = visible
                 draft.session_diff[sessionID] = diff.data ?? []
               }),
