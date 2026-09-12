@@ -111,6 +111,8 @@ import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, reasoningContent, TextPart } from "./message-parts"
 import { groupRefs } from "./grouping/session"
+import { withBidiMarkdown } from "../../component/bidi-markdown"
+import "../../component/bidi-elements"
 export { InlineToolRow } from "./message-parts"
 
 addDefaultParsers(parsers.parsers)
@@ -2111,7 +2113,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
         <box paddingTop={1} paddingLeft={3}>
           <markdown
             syntaxStyle={syntax()}
-            renderNode={plugins.markdown()}
+            renderNode={withBidiMarkdown(plugins.markdown())}
             streaming={true}
             internalBlockMode="top-level"
             content={content()}
@@ -2319,7 +2321,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           backgroundColor={hover() ? theme.raise(theme.background.default) : theme.background.default}
           flexShrink={0}
         >
-          <text fg={theme.text.default}>{props.message.text}</text>
+          <bidi_text fg={theme.text.default}>{props.message.text}</bidi_text>
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={skills()}>
