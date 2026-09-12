@@ -6,10 +6,11 @@ import {
   RECOMMENDED_ARABIC_FONTS,
   appendFontFamily,
   applyArabicFont,
+  buildFontFaceChain,
   detectTerminalHost,
   isFontInstalled,
-  mergeFallbacks,
   sanitizeJsonc,
+  splitFontFaces,
 } from "../../src/util/terminal-font"
 
 const roots: string[] = []
@@ -90,22 +91,38 @@ describe("detectTerminalHost", () => {
   })
 })
 
-describe("mergeFallbacks", () => {
-  test("keeps the incoming fonts first and preserves existing ones", () => {
-    expect(mergeFallbacks(["Cascadia Mono"], ["Cairo", "Segoe UI"])).toEqual([
-      "Cairo",
-      "Segoe UI",
-      "Cascadia Mono",
-    ])
+describe("splitFontFaces", () => {
+  test("splits a comma chain and drops quotes and blanks", () => {
+    expect(splitFontFaces(`'Cascadia Mono', Cairo ,, "Segoe UI"`)).toEqual(["Cascadia Mono", "Cairo", "Segoe UI"])
   })
 
-  test("deduplicates case-insensitively", () => {
-    expect(mergeFallbacks(["cairo"], ["Cairo"])).toEqual(["Cairo"])
+  test("returns an empty list when unset", () => {
+    expect(splitFontFaces(undefined)).toEqual([])
+  })
+})
+
+describe("buildFontFaceChain", () => {
+  test("keeps the current faces first, then the chosen Arabic font", () => {
+    expect(buildFontFaceChain("Cascadia Mono", "Cairo")).toBe(
+      ["Cascadia Mono", "Cairo", ...RECOMMENDED_ARABIC_FONTS.filter((f) => f !== "Cairo")].join(", "),
+    )
+  })
+
+  test("defaults to Cascadia Mono when no face is set", () => {
+    expect(buildFontFaceChain(undefined, "Amiri").startsWith("Cascadia Mono, Amiri")).toBe(true)
+  })
+
+  test("never reorders or duplicates the user's faces", () => {
+    expect(buildFontFaceChain("Cascadia Mono, Segoe UI", "Cairo")).toBe(
+      ["Cascadia Mono", "Segoe UI", "Cairo", ...RECOMMENDED_ARABIC_FONTS.filter((f) => f !== "Cairo" && f !== "Segoe UI")].join(
+        ", ",
+      ),
+    )
   })
 })
 
 describe("applyArabicFont", () => {
-  test("writes Windows Terminal fallbacks and keeps a backup", () => {
+  test("writes a Windows Terminal face chain and keeps a backup", () => {
     const root = tempDir()
     const settings = path.join(root, "Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json")
     mkdirSync(path.dirname(settings), { recursive: true })
@@ -119,13 +136,35 @@ describe("applyArabicFont", () => {
     expect(result.target).toBe("Windows Terminal")
 
     const written = JSON.parse(readFileSync(settings, "utf8"))
-    expect(written.profiles.defaults.font.face).toBe("Cascadia Mono")
-    expect(written.profiles.defaults.font.fallbacks[0]).toBe("Amiri")
+    const faces = String(written.profiles.defaults.font.face)
+      .split(",")
+      .map((part: string) => part.trim())
+    expect(faces[0]).toBe("Cascadia Mono")
+    expect(faces[1]).toBe("Amiri")
     for (const font of RECOMMENDED_ARABIC_FONTS) {
       if (font === "Amiri") continue
-      expect(written.profiles.defaults.font.fallbacks).toContain(font)
+      expect(faces).toContain(font)
     }
+    expect(written.profiles.defaults.font.fallbacks).toBeUndefined()
     expect(readFileSync(result.backup, "utf8")).toContain("Cascadia Mono")
+  })
+
+  test("removes a stale unsupported fallbacks array", () => {
+    const root = tempDir()
+    const settings = path.join(root, "Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json")
+    mkdirSync(path.dirname(settings), { recursive: true })
+    writeFileSync(
+      settings,
+      JSON.stringify({ profiles: { defaults: { font: { fallbacks: ["Bauhaus 93", "Cairo"] } } } }),
+    )
+    process.env.LOCALAPPDATA = root
+    process.env.APPDATA = path.join(root, "no-vscode")
+
+    const result = applyArabicFont("Cairo")
+    expect(result.ok).toBe(true)
+    const written = JSON.parse(readFileSync(settings, "utf8"))
+    expect(String(written.profiles.defaults.font.face).startsWith("Cascadia Mono, Cairo")).toBe(true)
+    expect(written.profiles.defaults.font.fallbacks).toBeUndefined()
   })
 
   test("targets VS Code when hosted by VS Code even if Windows Terminal is installed", () => {
