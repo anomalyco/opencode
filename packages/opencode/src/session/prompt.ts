@@ -1252,14 +1252,16 @@ const layer = Layer.effect(
             if (step === 1)
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
 
+            const beforeTransform = msgs.map((message) => message.info.id)
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+            const requestOnlyTailCount = MessageV2.appendedTailCount(beforeTransform, msgs)
 
             const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
-              MessageV2.toModelMessagesEffect(msgs, model),
+              MessageV2.toModelMessagesSplitEffect(msgs, model, { requestOnlyTailCount }),
             ])
             const system = [
               ...env,
@@ -1276,9 +1278,17 @@ const layer = Layer.effect(
               sessionID,
               parentSessionID: session.parentID,
               system,
-              messages: [
-                ...modelMsgs,
-                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
+              messages: modelMsgs.messages,
+              messageSuffix: [
+                ...modelMsgs.tail,
+                ...(isLastStep
+                  ? [
+                      {
+                        role: "assistant" as const,
+                        content: [{ type: "text" as const, text: MAX_STEPS_PROMPT }],
+                      },
+                    ]
+                  : []),
               ],
               tools,
               model,

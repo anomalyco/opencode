@@ -6,7 +6,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -57,6 +57,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { LLMEvent, Usage } from "@opencode-ai/llm"
+import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -238,6 +240,70 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
 function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
   return makePrompt(input)
 }
+
+const requestOnlyInputs: LLM.StreamInput[] = []
+const requestOnlyPlugin = Layer.mock(Plugin.Service)({
+  trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
+    if (name !== "experimental.chat.messages.transform") return Effect.succeed(output)
+    return Effect.sync(() => {
+      const messages = (output as { messages: SessionV1.WithParts[] }).messages
+      const sessionID = messages.at(-1)!.info.sessionID
+      for (const text of ["request-only status", "request-only policy"]) {
+        const messageID = MessageID.ascending()
+        messages.push({
+          info: {
+            id: messageID,
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: "build",
+            model: ref,
+            tools: {},
+            mode: "",
+          } as unknown as SessionV1.User,
+          parts: [
+            {
+              id: PartID.ascending(),
+              sessionID,
+              messageID,
+              type: "text",
+              text,
+            },
+          ],
+        })
+      }
+      return output
+    })
+  },
+  list: () => Effect.succeed([]),
+  init: () => Effect.void,
+})
+const requestOnlyLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: (input) => {
+      requestOnlyInputs.push(input)
+      const usage = new Usage({ inputTokens: 1, outputTokens: 1, totalTokens: 2 })
+      return Stream.make(
+        LLMEvent.textStart({ id: "txt-request-only" }),
+        LLMEvent.textDelta({ id: "txt-request-only", text: "done" }),
+        LLMEvent.textEnd({ id: "txt-request-only" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop", usage }),
+        LLMEvent.finish({ reason: "stop", usage }),
+      )
+    },
+  }),
+)
+const requestOnlyPrompt = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [Plugin.node, requestOnlyPlugin],
+    [LLM.node, requestOnlyLLM],
+  ]),
+)
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
@@ -552,6 +618,54 @@ it.instance("loop calls LLM and returns assistant message", () =>
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
   }),
+)
+
+requestOnlyPrompt.instance(
+  "loop separates plugin and max-step request-only messages",
+  () =>
+    Effect.gen(function* () {
+      requestOnlyInputs.length = 0
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Appended messages",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "durable prompt" }],
+      })
+
+      yield* prompt.loop({ sessionID: chat.id })
+
+      expect(requestOnlyInputs).toHaveLength(1)
+      const input = requestOnlyInputs[0]!
+      const messages = JSON.stringify(input.messages)
+      const suffix = JSON.stringify(input.messageSuffix)
+      const suffixText = input.messageSuffix?.map((message) =>
+        typeof message.content === "string"
+          ? message.content
+          : message.content.find((part) => part.type === "text")?.text,
+      )
+      expect(messages).toContain("durable prompt")
+      expect(messages).not.toContain("request-only status")
+      expect(messages).not.toContain("request-only policy")
+      expect(suffix).toContain("request-only status")
+      expect(suffix).toContain("request-only policy")
+      expect(suffixText).toEqual(["request-only status", "request-only policy", MAX_STEPS_PROMPT])
+      expect(input.messageSuffix?.at(-1)).toEqual({
+        role: "assistant",
+        content: [{ type: "text", text: MAX_STEPS_PROMPT }],
+      })
+      expect(input.messages).not.toContainEqual({
+        role: "assistant",
+        content: [{ type: "text", text: MAX_STEPS_PROMPT }],
+      })
+      expect(suffix.indexOf("request-only status")).toBeLessThan(suffix.indexOf("request-only policy"))
+    }),
+  { config: { agent: { build: { steps: 1 } } } },
 )
 
 withMcpInstructions.instance(
