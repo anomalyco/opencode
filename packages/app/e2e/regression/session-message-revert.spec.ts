@@ -95,3 +95,44 @@ test("hides revert actions in a child session", async ({ page }) => {
   await message.hover()
   await expect(message.getByRole("button", { name: "Revert message" })).toHaveCount(0)
 })
+
+test("keeps pending input when staging and replacing a revert", async ({ page }) => {
+  const changes: { inboxID: string; action: "cancel" | "steer" }[] = []
+  const prompts: Record<string, unknown>[] = []
+  await mockOpenCodeServer(page, {
+    ...fixture,
+    sessions: [session],
+    inbox: [
+      {
+        id: "msg_pending_before_boundary",
+        sessionID,
+        timeCreated: 2,
+        type: "user",
+        delivery: "queue",
+        payload: { text: "Keep this queued input" },
+      },
+    ],
+    onInboxChange: (input) => changes.push({ inboxID: input.inboxID, action: input.action }),
+    onPrompt: (input) => prompts.push(input.body),
+  })
+  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await expectSessionTitle(page, "Session message revert")
+  const pending = page.locator('[data-component="session-queue-row"]').filter({ hasText: "Keep this queued input" })
+  await expect(pending).toBeVisible()
+  const message = page.locator('[data-message-id="msg_second"]')
+  await message.hover()
+  await message.getByRole("button", { name: "Revert message" }).click()
+  const prompt = page.getByRole("textbox", { name: "Prompt" })
+  await expect(prompt).toHaveText("Second prompt")
+  await prompt.fill("Replacement prompt")
+  const admitted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && new URL(response.url()).pathname === `/api/session/${sessionID}/prompt`,
+  )
+  await prompt.press("Enter")
+  expect((await admitted).ok()).toBe(true)
+  await expect(prompt).toHaveText("")
+  await expect(pending).toBeVisible()
+  expect(prompts).toMatchObject([{ text: "Replacement prompt" }])
+  expect(changes).toEqual([])
+})

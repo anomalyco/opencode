@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
+import { createRoot } from "solid-js"
+import { OpenCode } from "@opencode/client/promise"
+import { createData } from "@opencode/client/solid"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { Skill } from "@opencode/schema/skill"
@@ -6,6 +9,9 @@ import { AbsolutePath } from "@opencode/schema/schema"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
 import { createMemoryComposerState } from "./state"
 import { createComposerSubmit } from "./submit"
+
+const disposers: Array<() => void> = []
+afterEach(() => disposers.splice(0).forEach((dispose) => dispose()))
 
 const selectedModel = {
   id: "model-1",
@@ -94,6 +100,33 @@ function session(input: {
   switchAgent?: ComposerSession["api"]["switchAgent"]
   switchModel?: ComposerSession["api"]["switchModel"]
 }): ComposerSession {
+  const api = OpenCode.make({ baseUrl: "http://opencode.test" })
+  const data = createRoot((dispose) => {
+    disposers.push(dispose)
+    return createData({
+      directory: "C:/repo",
+      event: { on: () => () => {}, listen: () => () => {} },
+      api: () => ({
+        ...api,
+        session: {
+          ...api.session,
+          prompt: async (value) => {
+            if (!value.id) throw new Error("Client admission must supply a message ID")
+            input.calls.push("prompt")
+            await input.prompt(value)
+            return {
+              id: value.id,
+              sessionID: value.sessionID,
+              timeCreated: Date.now(),
+              type: "user",
+              delivery: value.delivery ?? "steer",
+              payload: { text: value.text },
+            }
+          },
+        },
+      }),
+    })
+  })
   return {
     id: "session-1",
     directory: "C:/repo",
@@ -118,10 +151,8 @@ function session(input: {
       location: { command: { list: () => [] } },
       session: {
         setStatus: (_sessionID, status) => input.statuses?.push(status),
-        prompt: async (value) => {
-          input.calls.push("prompt")
-          await input.prompt(value)
-        },
+        mutate: data.session.mutate,
+        prompt: data.session.prompt,
       },
     },
   }
@@ -403,6 +434,35 @@ describe("Composer submission", () => {
       model: { providerID: "provider-1", modelID: "model-1", variant: "balanced" },
     })
     expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+  })
+
+  test("reserves prompt admission before later session mutations", async () => {
+    const state = createMemoryComposerState({ prompt: "replace history" }).capture()
+    const calls: string[] = []
+    const target = session({
+      calls,
+      current: () => ({ agent: "build", model: { id: "model-1", providerID: "provider-1", variant: "balanced" } }),
+      prompt: async () => undefined,
+    })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+
+    const submitted = submitInput(adapter).submit(new Event("submit"))
+    const redo = target.data.session.mutate(target.id, async () => {
+      calls.push("redo")
+    })
+    await Promise.all([submitted, redo])
+
+    expect(calls).toEqual(["switch-model", "prompt", "redo"])
   })
 
   test("starts and promotes a New Session once before admitting its first prompt", async () => {

@@ -93,8 +93,11 @@ export const layer = Layer.effect(
       continuation?: SessionRunner.Continuation,
       promotable: SessionInbox.Promotable = "input",
     ): Effect.fn.Return<void, SessionRunner.RunError> {
-      const session = yield* store.get(sessionID)
+      // Staging checks process-local ownership under this same lock. A drain is
+      // already owned here, so staging either finishes before this read or fails busy.
+      const session = yield* SessionInbox.serialized(sessionID, store.get(sessionID))
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+      if (session.revert) return
       const result = yield* SessionRunner.Service.use((runner) =>
         runner.drain({ sessionID, force, continuation, promotable }),
       ).pipe(

@@ -40,7 +40,7 @@ test.each([
   const messages = Array.from({ length: 400 }, (_, index) =>
     mode === "mixed" && index % 2
       ? {
-          id: `message-${index}`,
+          id: `msg_${index}`,
           type: "assistant",
           agent: "build",
           model: { providerID: "demo", id: "demo-model" },
@@ -49,7 +49,7 @@ test.each([
           time: { created: index, completed: index + 1 },
         }
       : {
-          id: `message-${index}`,
+          id: `msg_${index}`,
           type: "user",
           text: `History message ${String(index).padStart(4, "0")}`,
           time: { created: index },
@@ -112,12 +112,12 @@ test.each([
   try {
     await setup.waitForFrame((frame) => frame.includes("History message 0399"))
     const findScrollBox = (root: Renderable): ScrollBoxRenderable | undefined =>
-      root instanceof ScrollBoxRenderable && root.getRenderable("message-399")
+      root instanceof ScrollBoxRenderable && root.getRenderable("msg_399")
         ? root
         : root.getChildren().map(findScrollBox).find(Boolean)
     const scroll = findScrollBox(setup.renderer.root)
     if (!scroll) throw new Error("session transcript scrollbox was not found")
-    const mounted = () => scroll.getChildren().filter((child) => child.id?.startsWith("message-"))
+    const mounted = () => scroll.getChildren().filter((child) => child.id?.startsWith("msg_"))
     const maximum = () => Math.max(0, scroll.scrollHeight - scroll.viewport.height)
     if (mode === "scrolled" || mode === "cancel" || mode === "settling-scrolled") {
       setup.mockInput.pressKey("F6")
@@ -146,7 +146,7 @@ test.each([
     let navigated = false
     const capture = () => {
       if (visible() !== frames.at(-1)) frames.push(visible())
-      if (mode !== "settling-reveal" || scroll.getRenderable("message-0")) mountCounts.push(mounted().length)
+      if (mode !== "settling-reveal" || scroll.getRenderable("msg_0")) mountCounts.push(mounted().length)
       if (
         mode.startsWith("settling") &&
         !navigated &&
@@ -260,7 +260,7 @@ test.each([
       await setup.waitForFrame((frame) => !frame.includes("Loading session history"))
       release.resolve()
       finish.resolve()
-      await setup.waitFor(() => Boolean(scroll.getRenderable("message-360")))
+      await setup.waitFor(() => Boolean(scroll.getRenderable("msg_360")))
       await setup.waitForVisualIdle()
       expect(setup.captureCharFrame()).toContain("History message 0379")
       expect(mounted()).toHaveLength(40)
@@ -282,7 +282,7 @@ test.each([
         durable: { aggregateID: "ses_test", seq: 1, version: 1 },
         data: {
           sessionID: "ses_test",
-          inboxID: "message-live",
+          inboxID: "msg_live",
           item: { type: "user", payload: { text: "Live message after failure" }, delivery: "steer" },
         },
       })

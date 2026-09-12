@@ -340,6 +340,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         payload: Schema.Struct({
           id: SessionMessage.ID.pipe(Schema.optional),
           ...PromptInput.Prompt.fields,
+          context: PromptInput.Context.pipe(Schema.optional),
           metadata: SessionInbox.UserPayload.fields.metadata,
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
@@ -352,7 +353,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           OpenApi.annotations({
             identifier: "v2.session.prompt",
             summary: "Send message",
-            description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+            description:
+              "Durably admit optional synthetic context followed by one user input and schedule agent-loop execution unless resume is false. Context requires steer delivery.",
           }),
         ),
     )

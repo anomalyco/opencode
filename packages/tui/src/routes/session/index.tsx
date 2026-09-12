@@ -86,7 +86,9 @@ import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
   createSessionRows,
+  loadRevertMessages,
   messageBoundaryIDs,
+  partitionRevertMessages,
   resolvePart,
   sessionRowID,
   turnDuration,
@@ -153,18 +155,9 @@ export function Session(props: {
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
   const messageIndexes = createMemo(() => new Map(messages().map((message, index) => [message.id, index])))
-  const messagesBeforeRevert = () => {
-    const messageID = session()?.revert?.messageID
-    if (!messageID) return messages()
-    const index = messages().findIndex((message) => message.id === messageID)
-    return index === -1 ? messages() : messages().slice(0, index)
-  }
-  const messagesFromRevert = () => {
-    const messageID = session()?.revert?.messageID
-    if (!messageID) return []
-    const index = messages().findIndex((message) => message.id === messageID)
-    return index === -1 ? [] : messages().slice(index)
-  }
+  const revertMessages = createMemo(() => partitionRevertMessages(messages(), session()?.revert?.messageID))
+  const messagesBeforeRevert = () => revertMessages().before
+  const messagesFromRevert = () => revertMessages().from
   const currentLocation = useLocation()
   const location = createMemo(() => session()?.location ?? currentLocation.ref)
 
@@ -894,30 +887,56 @@ export function Session(props: {
       group: "Session",
       slash: { name: "undo" },
       run: () => {
-        const message = messagesBeforeRevert().findLast(
-          (message): message is SessionMessageUser => message.type === "user" && !!message.text.trim(),
-        )
-        if (!message) {
-          toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
-          dialog.clear()
-          return
-        }
         const sessionID = route.sessionID
         const target = prompt()
         void (async () => {
-          if (pendingDeliveries().has(message.id)) {
-            if (!(await mutatePending("cancel", message.id))) return
-          } else {
-            await client.api.session.interrupt({ sessionID })
-            await client.api.session.wait({ sessionID })
-            await client.api.session.revert.stage({ sessionID, messageID: message.id })
+          const result = await data.session
+            .mutate(sessionID, async () => {
+              const boundary = session()?.revert?.messageID
+              const loaded = boundary
+                ? await loadRevertMessages({
+                    boundary,
+                    messages,
+                    more: () => data.session.message.more(sessionID),
+                    loadMore: () => data.session.message.loadMore(sessionID),
+                  })
+                : messages()
+              const message = partitionRevertMessages(loaded ?? [], boundary).before.findLast(
+                (message): message is SessionMessageUser => message.type === "user" && !!message.text.trim(),
+              )
+              if (!message) return { _tag: "empty" } as const
+              if (pendingDeliveries().has(message.id)) {
+                if (!(await mutatePending("cancel", message.id))) return { _tag: "cancelled" } as const
+                return { _tag: "done", message } as const
+              }
+              await client.api.session.interrupt({ sessionID })
+              await client.api.session.wait({ sessionID })
+              await client.api.session.revert.stage({ sessionID, messageID: message.id })
+              return { _tag: "done", message } as const
+            })
+            .then(
+              (value) => ({ type: "done" as const, value }),
+              (error) => ({ type: "error" as const, error }),
+            )
+          if (result.type === "error") {
+            toast.show({ message: errorMessage(result.error), variant: "error", duration: 5000 })
+            return
+          }
+          if (result.value._tag === "cancelled") {
+            dialog.clear()
+            return
+          }
+          if (result.value._tag === "empty") {
+            toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
+            dialog.clear()
+            return
           }
           target?.set({
-            ...projectedPromptInput(message),
+            ...projectedPromptInput(result.value.message),
             pasted: [],
           })
-        })().catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
-        dialog.clear()
+          dialog.clear()
+        })()
       },
     },
     {
@@ -928,7 +947,7 @@ export function Session(props: {
       slash: { name: "redo" },
       run: () => {
         void (async () => {
-          const error = await client.api.session.revert.clear({ sessionID: route.sessionID }).then(
+          const error = await data.session.revert.clear({ sessionID: route.sessionID }).then(
             () => undefined,
             (error) => error,
           )
@@ -2158,7 +2177,7 @@ function RevertMessage(props: {
   const ctx = use()
   const theme = useTheme("elevated")
   const route = useRouteData("session")
-  const client = useClient()
+  const data = useData()
   const toast = useToast()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
@@ -2170,7 +2189,7 @@ function RevertMessage(props: {
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         void (async () => {
-          const error = await client.api.session.revert.clear({ sessionID: route.sessionID }).then(
+          const error = await data.session.revert.clear({ sessionID: route.sessionID }).then(
             () => undefined,
             (error) => error,
           )

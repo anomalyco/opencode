@@ -22,6 +22,7 @@ export type Input = {
   files?: PromptInput.Prompt["files"]
   agents?: PromptInput.Prompt["agents"]
   skills?: PromptInput.Prompt["skills"]
+  context?: PromptInput.Context
   metadata?: Record<string, unknown>
   delivery?: SessionInbox.Delivery
 }

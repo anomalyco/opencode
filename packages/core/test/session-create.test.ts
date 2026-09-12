@@ -1106,6 +1106,7 @@ describe("Session.create", () => {
       const created = yield* session.create({ location, agent: Agent.ID.make("build") })
 
       yield* session.switchAgent({ sessionID: created.id, agent: Agent.ID.make("plan") })
+      yield* session.switchAgent({ sessionID: created.id, agent: Agent.ID.make("plan") })
 
       expect(yield* session.get(created.id)).toMatchObject({ agent: "plan" })
       expect(
