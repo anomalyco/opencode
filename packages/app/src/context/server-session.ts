@@ -86,6 +86,7 @@ function legacyMessageSource(items: { info: Message; parts: Part[] }[]): Session
 
 // Most markers describe the current HTTP attempt; deltaParts persists non-durable stream state across retries.
 type MessageLoadState = {
+  attempt: number
   touchedMessages: Set<string>
   removedMessages: Set<string>
   retainedMessages: Set<string>
@@ -431,8 +432,9 @@ export function createServerSession(
   }
 
   const resetMessageLoad = (sessionID: string, load: MessageLoadState, baseline?: MessageLoadBaseline) => {
-    // A new HTTP attempt supersedes any buffer written from the previous attempt's view.
-    pendingDiffs.delete(sessionID)
+    load.attempt += 1
+    // A retry supersedes any buffer written from the previous attempt's view.
+    if (load.attempt > 1) pendingDiffs.delete(sessionID)
     load.touchedMessages.clear()
     load.retainedMessages.clear()
     load.touchedParts.clear()
@@ -756,6 +758,7 @@ export function createServerSession(
     if (meta.loading[sessionID]) return
     const active = generation(sessionID)
     const load: MessageLoadState = {
+      attempt: 0,
       touchedMessages: new Set(),
       removedMessages: new Set(),
       retainedMessages: new Set(),
