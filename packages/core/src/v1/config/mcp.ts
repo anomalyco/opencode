@@ -41,6 +41,22 @@ export const OAuth = Schema.Struct({
 }).annotate({ identifier: "McpOAuthConfig" })
 export type OAuth = Schema.Schema.Type<typeof OAuth>
 
+export const Tls = Schema.Struct({
+  caFile: Schema.optional(Schema.String).annotate({
+    description:
+      "Path to a custom CA certificate file (PEM format) to trust when connecting to this MCP server. Only applies to this server; does not affect global TLS.",
+  }),
+  caPem: Schema.optional(Schema.String).annotate({
+    description:
+      "Custom CA certificate content (PEM format) to trust when connecting to this MCP server. Useful for self-contained configurations where a separate file is impractical.",
+  }),
+  fingerprint: Schema.optional(Schema.String).annotate({
+    description:
+      "SHA256 fingerprint of the server certificate to trust. Format: 'SHA256:XX:XX:...' or 'XX:XX:...'. The client verifies that the server certificate matches before trusting. Similar to SSH host key verification.",
+  }),
+}).annotate({ identifier: "McpTlsConfig" })
+export type Tls = Schema.Schema.Type<typeof Tls>
+
 export const Remote = Schema.Struct({
   type: Schema.Literal("remote").annotate({ description: "Type of MCP server connection" }),
   url: Schema.String.annotate({ description: "URL of the remote MCP server" }),
@@ -55,6 +71,9 @@ export const Remote = Schema.Struct({
   }),
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
+  }),
+  tls: Schema.optional(Tls).annotate({
+    description: "TLS trust configuration for this MCP server. Use to trust self-signed certificates, private CAs, or pin specific certificates.",
   }),
 }).annotate({ identifier: "McpRemoteConfig" })
 export type Remote = Schema.Schema.Type<typeof Remote>
