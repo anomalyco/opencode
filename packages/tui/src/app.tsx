@@ -63,6 +63,7 @@ import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
+import { DialogFonts } from "./component/dialog-fonts"
 import { DialogPair, type DialogPairCredentials } from "./component/dialog-pair"
 import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
@@ -751,6 +752,16 @@ function App(props: { pair?: DialogPairCredentials }) {
             key: DialogOpenKey,
             size: "large",
           })
+        },
+      },
+      {
+        name: "font.pick",
+        title: "Terminal font for Arabic",
+        desc: "Choose the font the terminal uses for RTL text",
+        category: "System",
+        slash: { name: "fonts", aliases: ["font"] },
+        run: () => {
+          dialog.replace(() => <DialogFonts />)
         },
       },
       ...Array.from({ length: 9 }, (_, i) => ({
