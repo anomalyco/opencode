@@ -38,7 +38,9 @@ export function DialogFonts() {
           duration: 10000,
         })
       }}
-      footer={`Saved with a backup next to the settings file. The TUI itself cannot choose fonts — the terminal does.`}
+      footer={
+        <text>Saved with a backup next to the settings file. The TUI itself cannot choose fonts — the terminal does.</text>
+      }
     />
   )
 }
