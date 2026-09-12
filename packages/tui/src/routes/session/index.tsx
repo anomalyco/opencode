@@ -5,6 +5,7 @@ import {
   createMemo,
   createSignal,
   For,
+  Index,
   Match,
   on,
   onCleanup,
@@ -38,6 +39,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
+import { splitMathSegments, type MathSegmentMath, type MathSegmentText } from "../../util/latex"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { Dynamic, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "../../context/sdk"
@@ -46,6 +48,7 @@ import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
+import { MathBlock } from "../../component/math"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
@@ -1686,19 +1689,45 @@ function ReasoningHeader(props: {
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const segments = createMemo(() => splitMathSegments(props.part.text.trim()))
+  const math = createMemo(() => segments().some((seg) => seg.kind === "math"))
+  const markdown = (content: () => string) => (
+    <markdown
+      syntaxStyle={syntax()}
+      streaming={true}
+      internalBlockMode="top-level"
+      content={content()}
+      tableOptions={{ style: "grid" }}
+      conceal={ctx.conceal()}
+      fg={theme.markdownText}
+      bg={theme.background}
+    />
+  )
   return (
     <Show when={props.part.text.trim()}>
-      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <markdown
-          syntaxStyle={syntax()}
-          streaming={true}
-          internalBlockMode="top-level"
-          content={props.part.text.trim()}
-          tableOptions={{ style: "grid" }}
-          conceal={ctx.conceal()}
-          fg={theme.markdownText}
-          bg={theme.background}
-        />
+      <box
+        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+        paddingLeft={3}
+        marginTop={1}
+        flexShrink={0}
+        flexDirection="column"
+      >
+        <Show when={math()} fallback={markdown(() => props.part.text.trim())}>
+          <Index each={segments()}>
+            {(seg) => (
+              <Switch>
+                <Match when={seg().kind === "math" ? (seg() as MathSegmentMath) : false}>
+                  {(m) => (
+                    <MathBlock tex={m().tex} width={ctx.width} fallback={markdown(() => m().raw)} />
+                  )}
+                </Match>
+                <Match when={seg().kind === "text" ? (seg() as MathSegmentText) : false}>
+                  {(t) => markdown(() => t().text)}
+                </Match>
+              </Switch>
+            )}
+          </Index>
+        </Show>
       </box>
     </Show>
   )

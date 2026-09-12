@@ -55,15 +55,17 @@
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
+    "@resvg/resvg-wasm": "2.6.2",
     "clipboardy": "4.0.0",
     "diff": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
+    "mathjax-full": "3.2.2",
     "open": "10.1.2",
     "opentui-spinner": "catalog:",
     "remeda": "catalog:",
-    "strip-ansi": "7.1.2",
-    "solid-js": "catalog:"
+    "solid-js": "catalog:",
+    "strip-ansi": "7.1.2"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
