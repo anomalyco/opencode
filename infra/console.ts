@@ -150,8 +150,9 @@ const zenLitePrice = new stripe.Price("ZenLitePrice", {
 })
 const ZEN_LITE_PRICE = new sst.Linkable("ZEN_LITE_PRICE", {
   properties: {
-    product: zenLiteProduct.id,
-    price: zenLitePrice.id,
+    // Use existing Go resources in dev's checkout Stripe account.
+    product: $app.stage === "dev" ? "prod_U1tUscpmwtV2bG" : zenLiteProduct.id,
+    price: $app.stage === "dev" ? "price_1T3phhE7fOCwHSD4zS6w2NPy" : zenLitePrice.id,
     priceInr: 92900,
     firstMonth50Coupon: zenLiteCouponFirstMonth50.id,
     firstMonth100Coupon: zenLiteCouponFirstMonth100.id,
