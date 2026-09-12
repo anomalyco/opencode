@@ -269,7 +269,16 @@ const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         if (event.data.info.role !== "user") return
         const diffs = event.data.info.summary?.diffs
-        if (!diffs) return
+        if (!diffs) {
+          // A complete V1 user replacement with no diff array retires the obsolete dedicated row so
+          // hydration cannot resurrect a diff the replacement removed.
+          yield* db
+            .delete(MessageDiffTable)
+            .where(eq(MessageDiffTable.message_id, id))
+            .run()
+            .pipe(Effect.orDie)
+          return
+        }
         yield* db
           .insert(MessageDiffTable)
           .values({ message_id: id, session_id: sessionID, diffs: diffs.map((item) => ({ ...item })) })
@@ -319,11 +328,7 @@ const layer = Layer.effectDiscard(
           const previous = usage(row.data)
           if (previous) yield* applyUsage(db, event.data.sessionID, previous, -1)
         }
-        yield* db
-          .delete(MessageDiffTable)
-          .where(and(eq(MessageDiffTable.message_id, event.data.messageID), eq(MessageDiffTable.session_id, event.data.sessionID)))
-          .run()
-          .pipe(Effect.orDie)
+        // message_diff is removed by the message FK cascade below.
         yield* db
           .delete(MessageTable)
           .where(and(eq(MessageTable.id, event.data.messageID), eq(MessageTable.session_id, event.data.sessionID)))
