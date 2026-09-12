@@ -145,6 +145,7 @@ export function NewSessionView(props: {
           </div>
         </div>
         <NewSessionTips
+          composer={props.composer}
           workspaceEligible={
             !!props.project.selected() &&
             props.workspace.bar.visible() &&
@@ -158,7 +159,7 @@ export function NewSessionView(props: {
   )
 }
 
-function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => void }) {
+function NewSessionTips(props: { composer: ComposerModel; workspaceEligible: boolean; onWorkspace: () => void }) {
   const language = useLanguage()
   const dialog = useDialog()
   const sdk = useWorkspaceLocation()
@@ -200,7 +201,7 @@ function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => 
     show: () => tip() !== undefined,
     element: () => ref() ?? null,
   })
-  const open = () => {
+  const open = async () => {
     const current = tip()
     if (!current) return
     if (current === "workspace") {
@@ -208,9 +209,14 @@ function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => 
       props.onWorkspace()
       return
     }
-    void import("@/providers/connect/dialog").then(({ DialogConnectProvider }) => {
-      void dialog.show(() => <DialogConnectProvider directory={sdk().directory} />)
-    })
+    const { DialogConnectProvider } = await import("@/providers/connect/dialog")
+    void dialog.show(() => (
+      <DialogConnectProvider
+        directory={sdk().directory}
+        selection={props.composer.model.selection}
+        onDone={props.composer.restoreFocus}
+      />
+    ))
   }
   const dismiss = () => {
     const current = tip()

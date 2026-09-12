@@ -54,7 +54,7 @@ async function fixture(
   page: Page,
   remote = false,
   options: {
-    draft?: boolean
+    draft?: boolean | "tip" | "model picker" | "model command" | "manage models"
     browserFailed?: boolean
     slowStart?: Promise<void>
     existingConnection?: boolean
@@ -183,6 +183,22 @@ async function fixture(
     await composer.fill("Keep this draft throughout sign-in")
     await expect(page.locator('[data-component="provider-setup"]')).toBeVisible()
     await expect(page.locator('[data-component="new-session-tip"]')).toContainText("Connect to 75+ providers")
+    if (options.draft === "tip") {
+      await page
+        .locator('[data-component="new-session-tip"]')
+        .getByRole("button", { name: "Connect to 75+ providers" })
+        .click()
+    }
+    if (options.draft === "model picker") await page.locator('[data-action="composer-model"]').click()
+    if (options.draft === "model command" || options.draft === "manage models") {
+      await page.keyboard.press("Control+'")
+      if (options.draft === "manage models") {
+        await dialog.getByRole("button", { name: "Manage models", exact: true }).click()
+        await expect(dialog.getByRole("heading", { name: "Manage models", exact: true })).toBeVisible()
+      }
+      await dialog.getByRole("button", { name: "Connect provider", exact: true }).click()
+    }
+    if (options.draft !== true) await dialog.getByRole("button", { name: /^OpenCode / }).click()
     await page.getByRole("button", { name: "Continue with OpenCode Console" }).click()
     await expect(dialog.getByRole("group", { name: "Device code: TFXS-STXG" })).toBeVisible()
     return { state, dialog }
@@ -416,6 +432,25 @@ test("setup preserves the draft and Continue restores composer focus", async ({ 
   await expect(page.locator('[data-action="composer-model"]')).toContainText("Console Sonnet")
   await expect(page.locator('[data-component="provider-setup"]')).toBeHidden()
 })
+
+for (const entry of ["tip", "model picker", "model command", "manage models"] as const) {
+  test(`connecting from the ${entry} preserves the existing draft and selected model`, async ({ page }) => {
+    const { state, dialog } = await fixture(page, false, { draft: entry })
+    await expect(page.locator("[data-titlebar-tab]")).toHaveCount(1)
+    state.status = "complete"
+    await expect(dialog.getByRole("heading", { name: "Connected to OpenCode" })).toBeVisible()
+    const selected = dialog.getByRole("radio", { name: "Console Model 2", exact: true })
+    await selected.click()
+    await expect(selected).toBeChecked()
+    await dialog.getByRole("button", { name: "Continue", exact: true }).click()
+    await expect(dialog).toBeHidden()
+    const composer = page.locator('[data-component="composer-editor"]')
+    await expect(composer).toHaveText("Keep this draft throughout sign-in")
+    await expect(composer).toBeFocused()
+    await expect(page.locator("[data-titlebar-tab]")).toHaveCount(1)
+    await expect(page.locator('[data-action="composer-model"]')).toContainText("Console Model 2")
+  })
+}
 
 test("catalog refresh failure retries without asking for authorization again", async ({ page }) => {
   const { state, dialog } = await fixture(page)
