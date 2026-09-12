@@ -5,7 +5,7 @@ import { testRender } from "@opentui/solid"
 import { mkdirSync, watch } from "fs"
 import path from "path"
 import { ConfigProvider, useConfig } from "../../src/config"
-import { ClientProvider, useClient } from "../../src/context/client"
+import { ClientProvider, serverIdentity, useClient } from "../../src/context/client"
 import { DataProvider, useData } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
 import { RouteProvider, useRoute } from "../../src/context/route"
@@ -43,6 +43,9 @@ async function renderSessionTabs(
     tabsEnabled?: boolean
     viewFailures?: number
     experimental?: Record<string, boolean>
+    server?: string
+    managed?: boolean
+    scope?: "global" | "cwd"
   },
 ) {
   const temporary = options?.state ? undefined : await tmpdir()
@@ -53,11 +56,15 @@ async function renderSessionTabs(
     await Bun.write(
       file,
       JSON.stringify({
-        global: { tabs: [], unread: { ses_legacy: "error" } },
-        cwd: {
-          [directory]: {
-            tabs: options.persisted.map((sessionID) => ({ sessionID })),
-            unread: { ses_legacy: "activity" },
+        servers: {
+          [serverIdentity(options.server ?? "http://localhost")]: {
+            global: { tabs: [], unread: { ses_legacy: "error" } },
+            cwd: {
+              [directory]: {
+                tabs: options.persisted.map((sessionID) => ({ sessionID })),
+                unread: { ses_legacy: "activity" },
+              },
+            },
           },
         },
       }),
@@ -135,7 +142,7 @@ async function renderSessionTabs(
   let storage!: ReturnType<typeof useStorage>
   let config!: ReturnType<typeof useConfig>
   let configuration = {
-    tabs: { enabled: options?.tabsEnabled ?? true },
+    tabs: { enabled: options?.tabsEnabled ?? true, scope: options?.scope ?? "cwd" },
     experimental: options?.experimental,
     session: { new_location: options?.newLocation ?? "launch" },
   }
@@ -168,7 +175,18 @@ async function renderSessionTabs(
             <RouteProvider
               initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
             >
-              <ClientProvider api={createApi(calls.fetch)}>
+              <ClientProvider
+                api={createApi(calls.fetch)}
+                url={options?.server}
+                service={
+                  options?.managed
+                    ? {
+                        reconnect: async () => ({ api: createApi(calls.fetch) }),
+                        restart: async () => {},
+                      }
+                    : undefined
+                }
+              >
                 <DataProvider directory={options?.launchDirectory ?? directory}>
                   <LocationProvider>
                     <SessionTabsProvider>
@@ -287,6 +305,7 @@ test("loads location metadata when an open session moves", async () => {
   const setup = await renderSessionTabs("first")
 
   try {
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "first"))
     await wait(() => setup.locations.includes(directory) && setup.vcsLocations.includes(directory))
     setup.emit({
       id: "evt_moved",
@@ -443,12 +462,176 @@ test("stores preview tab membership without persisting preview identity", async 
     await setup.flush()
     const stored = await Bun.file(path.join(setup.state, "test", "tui", "tabs.json")).json()
 
-    expect(stored.cwd[directory].tabs).toHaveLength(1)
-    expect(stored.cwd[directory].tabs[0].sessionID).toBe("preview")
-    expect(stored.cwd[directory].tabs[0]).not.toHaveProperty("preview")
+    const state = stored.servers[serverIdentity("http://localhost")]
+    expect(state.cwd[directory].tabs).toHaveLength(1)
+    expect(state.cwd[directory].tabs[0].sessionID).toBe("preview")
+    expect(state.cwd[directory].tabs[0]).not.toHaveProperty("preview")
     expect(await Bun.file(path.join(setup.state, "test", "tui", "session-tab-preview.json")).exists()).toBe(false)
   } finally {
     await setup.destroy()
+  }
+})
+
+test("normalizes credential-free endpoint identities without conflating ports or paths", () => {
+  expect(serverIdentity("HTTPS://user:password@EXAMPLE.com:443/base///?token=secret#fragment")).toBe(
+    "https://example.com/base",
+  )
+  expect(serverIdentity("http://example.com:80/")).toBe(serverIdentity("http://example.com"))
+  expect(serverIdentity("http://example.com:8080")).not.toBe(serverIdentity("http://example.com:8081"))
+  expect(serverIdentity("https://example.com/one")).not.toBe(serverIdentity("https://example.com/two"))
+})
+
+test("keeps explicit loopback endpoints from adopting or changing legacy local tabs", async () => {
+  await using temporary = await tmpdir()
+  const file = path.join(temporary.path, "test", "tui", "tabs.json")
+  const legacy = { global: { tabs: [{ sessionID: "shared" }], unread: {} }, cwd: {} }
+  mkdirSync(path.dirname(file), { recursive: true })
+  await Bun.write(file, JSON.stringify(legacy))
+  const setup = await renderSessionTabs("shared", {
+    state: temporary.path,
+    home: true,
+    server: "http://127.0.0.1:4096",
+  })
+  try {
+    expect(setup.tabs.tabs()).toEqual([])
+    await setup.flush()
+    expect(await Bun.file(file).json()).toEqual(legacy)
+    setup.route.navigate({ type: "session", sessionID: "shared" })
+    await wait(() => setup.tabs.tabs().length === 1)
+    await setup.flush()
+    expect(await Bun.file(file).json()).toMatchObject(legacy)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test.each(["global", "cwd"] as const)(
+  "keeps legacy %s tabs readable and writable by managed local only",
+  async (scope) => {
+    await using temporary = await tmpdir()
+    const file = path.join(temporary.path, "test", "tui", "tabs.json")
+    const tabs = { tabs: [{ sessionID: "shared" }], unread: {} }
+    mkdirSync(path.dirname(file), { recursive: true })
+    await Bun.write(file, JSON.stringify({ global: tabs, cwd: { [directory]: tabs } }))
+    const setup = await renderSessionTabs("shared", {
+      state: temporary.path,
+      home: true,
+      managed: true,
+      server: "http://127.0.0.1:54321",
+      scope,
+    })
+    try {
+      await wait(() => setup.tabs.tabs().length === 1)
+      expect(setup.tabs.tabs()[0].sessionID).toBe("shared")
+      setup.tabs.close("shared")
+      await setup.flush()
+      const stored = await Bun.file(file).json()
+      expect((scope === "global" ? stored.global : stored.cwd[directory]).tabs).toEqual([])
+      expect(stored.servers ?? {}).toEqual({})
+    } finally {
+      await setup.destroy()
+    }
+    const restored = await renderSessionTabs("shared", {
+      state: temporary.path,
+      home: true,
+      managed: true,
+      server: "http://127.0.0.1:54322",
+      scope,
+    })
+    try {
+      expect(restored.tabs.tabs()).toEqual([])
+    } finally {
+      await restored.destroy()
+    }
+  },
+)
+
+test("uses stable managed local identity without treating explicit loopback as local", () => {
+  expect(serverIdentity("http://127.0.0.1:54321", true)).toBe("local")
+  expect(serverIdentity("http://localhost:54322", true)).toBe("local")
+  expect(serverIdentity("http://127.0.0.1:54321")).not.toBe("local")
+})
+
+test.each(["global", "cwd"] as const)(
+  "isolates concurrent server writes and restores %s tabs on remount",
+  async (scope) => {
+    await using temporary = await tmpdir()
+    const first = await renderSessionTabs("shared", {
+      state: temporary.path,
+      server: "https://first.example",
+      scope,
+      home: true,
+    })
+    const second = await renderSessionTabs("shared", {
+      state: temporary.path,
+      server: "https://second.example",
+      scope,
+      home: true,
+    })
+    try {
+      first.route.navigate({ type: "session", sessionID: "shared" })
+      second.route.navigate({ type: "session", sessionID: "shared" })
+      await wait(() => first.tabs.tabs().length === 1 && second.tabs.tabs().length === 1)
+      first.tabs.promote("first-only")
+      second.tabs.promote("second-only")
+      first.route.navigate({ type: "session", sessionID: "first-only" })
+      second.route.navigate({ type: "session", sessionID: "second-only" })
+      await wait(() => first.tabs.tabs().length === 2 && second.tabs.tabs().length === 2)
+      await Promise.all([first.flush(), second.flush()])
+    } finally {
+      await first.destroy()
+      await second.destroy()
+    }
+    for (const name of ["first", "second"]) {
+      const restored = await renderSessionTabs("shared", {
+        state: temporary.path,
+        server: `https://${name}.example`,
+        scope,
+        home: true,
+      })
+      try {
+        expect(restored.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["shared", `${name}-only`])
+        expect(restored.tabs.current()).toBeUndefined()
+        restored.tabs.reopen()
+        expect(restored.tabs.current()).toBeUndefined()
+      } finally {
+        await restored.destroy()
+      }
+    }
+  },
+)
+
+test("keeps identical session IDs distinct across servers", async () => {
+  await using temporary = await tmpdir()
+  const first = await renderSessionTabs("shared", {
+    state: temporary.path,
+    server: "HTTPS://FIRST.example:443/",
+    persisted: ["shared"],
+  })
+  try {
+    await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "shared"))
+    first.tabs.promote("only-first")
+    first.route.navigate({ type: "session", sessionID: "only-first" })
+    await wait(() => first.tabs.tabs().some((tab) => tab.sessionID === "only-first"))
+    await first.flush()
+  } finally {
+    await first.destroy()
+  }
+
+  const second = await renderSessionTabs("shared", { state: temporary.path, server: "https://second.example" })
+  try {
+    await wait(() => second.tabs.tabs().some((tab) => tab.sessionID === "shared"))
+    expect(second.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["shared"])
+    await second.flush()
+    const stored = await Bun.file(path.join(temporary.path, "test", "tui", "tabs.json")).json()
+    expect(
+      stored.servers["https://first.example/"].cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID),
+    ).toEqual(["shared", "only-first"])
+    expect(
+      stored.servers["https://second.example/"].cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID),
+    ).toEqual(["shared"])
+  } finally {
+    await second.destroy()
   }
 })
 
@@ -574,13 +757,16 @@ test("stores session tabs for the current working directory by default", async (
     await wait(async () => {
       if (!(await Bun.file(file).exists())) return false
       const stored = await Bun.file(file).json()
-      return stored.cwd[directory]?.tabs.some((tab: { sessionID: string }) => tab.sessionID === "first")
+      return stored.servers[serverIdentity("http://localhost")].cwd[directory]?.tabs.some(
+        (tab: { sessionID: string }) => tab.sessionID === "first",
+      )
     })
     const stored = await Bun.file(file).json()
-    expect(stored.global).toEqual({ tabs: [], unread: {} })
-    expect(Object.keys(stored.cwd)).toEqual([directory])
-    expect(stored.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first"])
-    expect(stored.cwd[directory].unread).toEqual({})
+    const state = stored.servers[serverIdentity("http://localhost")]
+    expect(state.global).toEqual({ tabs: [], unread: {} })
+    expect(Object.keys(state.cwd)).toEqual([directory])
+    expect(state.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first"])
+    expect(state.cwd[directory].unread).toEqual({})
   } finally {
     await setup.destroy()
   }
@@ -690,7 +876,7 @@ test("empties legacy persisted unread records for rollback compatibility", async
     // Normalize rewrites the active scope; legacy values must not survive, but older clients require the field.
     await wait(async () => {
       const stored = await Bun.file(file).json()
-      return Object.keys(stored.cwd[directory].unread).length === 0
+      return Object.keys(stored.servers[serverIdentity("http://localhost")].cwd[directory].unread).length === 0
     })
   } finally {
     await setup.destroy()
@@ -879,7 +1065,10 @@ test("concurrent TUIs do not alternate shared tab titles from divergent session 
     await titled.data.session.sync("shared")
     await wait(async () => {
       if (!(await Bun.file(file).exists())) return false
-      return (await Bun.file(file).json()).cwd[directory]?.tabs[0]?.title === "Generated title"
+      return (
+        (await Bun.file(file).json()).servers[serverIdentity("http://localhost")].cwd[directory]?.tabs[0]?.title ===
+        "Generated title"
+      )
     })
     const observed = ["Generated title"]
     const pending = new Set<Promise<void>>()
@@ -888,7 +1077,7 @@ test("concurrent TUIs do not alternate shared tab titles from divergent session 
       const read = Bun.file(file)
         .json()
         .then((value) => {
-          const title = value.cwd[directory]?.tabs[0]?.title
+          const title = value.servers[serverIdentity("http://localhost")].cwd[directory]?.tabs[0]?.title
           if (title && observed.at(-1) !== title) observed.push(title)
         })
         .catch(() => undefined)
@@ -933,7 +1122,7 @@ test("closing a tab is not undone by another TUI viewing the same session", asyn
     await second.flush()
 
     const stored = await Bun.file(path.join(temporary.path, "test", "tui", "tabs.json")).json()
-    expect(stored.cwd[directory].tabs).toEqual([])
+    expect(stored.servers[serverIdentity("http://localhost")].cwd[directory].tabs).toEqual([])
 
     second.route.navigate({ type: "home" })
     await wait(() => second.route.data.type === "home", 2_000, "second client to navigate home")
