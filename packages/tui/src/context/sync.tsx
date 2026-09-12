@@ -157,6 +157,12 @@ export const {
     const touchPart = (sessionID: string, partID: string) => {
       hydratingSessions.get(sessionID)?.parts.add(partID)
     }
+    const retirePendingDiff = (sessionID: string, messageID: string) => {
+      const pending = pendingDiffs.get(sessionID)
+      if (!pending) return
+      pending.delete(messageID)
+      if (pending.size === 0) pendingDiffs.delete(sessionID)
+    }
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
       if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
@@ -180,6 +186,8 @@ export const {
         const index = messages?.findIndex((message) => message.id === event.properties.messageID) ?? -1
         const current = index >= 0 ? messages?.[index] : undefined
         if (!current || current.role !== "user") {
+          // Buffer only across an in-flight first page; a later fetch reads the durable diff itself.
+          if (!hydratingSessions.has(event.properties.sessionID)) return
           const pending = pendingDiffs.get(event.properties.sessionID) ?? new Map<string, SnapshotFileDiff[]>()
           pending.set(event.properties.messageID, event.properties.diffs)
           pendingDiffs.set(event.properties.sessionID, pending)
@@ -291,6 +299,7 @@ export const {
           break
 
         case "session.deleted": {
+          pendingDiffs.delete(event.properties.info.id)
           const result = search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore(
@@ -339,6 +348,7 @@ export const {
         }
 
         case "message.updated": {
+          retirePendingDiff(event.properties.info.sessionID, event.properties.info.id)
           touchMessage(event.properties.info.sessionID, event.properties.info.id)
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
@@ -381,9 +391,8 @@ export const {
 
         case "message.removed": {
           touchMessage(event.properties.sessionID, event.properties.messageID)
-          pendingDiffs.get(event.properties.sessionID)?.delete(event.properties.messageID)
           const messages = store.message[event.properties.sessionID]
-          const index = messages.findIndex((message) => message.id === event.properties.messageID)
+          const index = messages?.findIndex((message) => message.id === event.properties.messageID) ?? -1
           if (index !== -1) {
             setStore(
               "message",
