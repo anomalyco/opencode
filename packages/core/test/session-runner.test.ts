@@ -4401,7 +4401,13 @@ describe("SessionRunnerLLM", () => {
       Expected.assistant({}, [
         Expected.failedTool(
           { id: "call-missing" },
-          { error: { type: "tool.execution", message: "Unknown tool: missing" } },
+          {
+            error: {
+              type: "tool.execution",
+              message:
+                'No tool named "missing" is currently available. Please use a tool from the available tool list.',
+            },
+          },
         ),
       ]),
       Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
