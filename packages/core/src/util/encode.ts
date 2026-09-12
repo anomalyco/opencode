@@ -7,7 +7,7 @@ export function base64Encode(value: string) {
 export function base64Decode(value: string) {
   const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/"))
   const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
-  return new TextDecoder().decode(bytes)
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes)
 }
 
 export async function hash(content: string, algorithm = "SHA-256"): Promise<string> {
