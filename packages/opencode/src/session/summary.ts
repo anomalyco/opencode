@@ -84,6 +84,9 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const database = yield* Database.Service
+    // A message that has ever had a durable baseline keeps it; once observed, skip the
+    // historical-event scan (the new hot-path read) on every subsequent summarize.
+    const durableParents = new Set<string>()
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
@@ -137,24 +140,29 @@ const layer = Layer.effect(
       if (dedicated && isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
       // Imported/historic rows have no durable message event, so a diff-only publish would replay
       // without its parent. Normal turns already have one, so this never adds a duplicate stream.
-      const durableParent = yield* database.db
-        .select({ id: EventTable.id })
-        .from(EventTable)
-        .where(
-          and(
-            eq(EventTable.aggregate_id, input.sessionID),
-            eq(EventTable.type, "message.updated.1"),
-            sql`json_extract(${EventTable.data}, '$.info.id') = ${input.messageID}`,
-          ),
-        )
-        .get()
-        .pipe(Effect.orDie)
+      const parentKey = `${input.sessionID}:${input.messageID}`
+      const durableParent =
+        durableParents.has(parentKey) ||
+        (yield* database.db
+          .select({ id: EventTable.id })
+          .from(EventTable)
+          .where(
+            and(
+              eq(EventTable.aggregate_id, input.sessionID),
+              eq(EventTable.type, "message.updated.1"),
+              sql`json_extract(${EventTable.data}, '$.info.id') = ${input.messageID}`,
+            ),
+          )
+          .limit(1)
+          .get()
+          .pipe(Effect.orDie))
       if (!durableParent) {
         const baseline = target.info.summary
           ? { ...target.info, summary: { ...target.info.summary, diffs: [] } }
           : target.info
         yield* sessions.updateMessage(baseline)
       }
+      durableParents.add(parentKey)
       // Turn patches are their own durable stream: ordinary message updates must never duplicate them.
       yield* events.publish(Session.Event.MessageDiffUpdated, {
         sessionID: input.sessionID,
