@@ -54,6 +54,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
+import { Todo } from "./todo"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
 
@@ -140,6 +141,7 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const todo = yield* Todo.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -1181,6 +1183,7 @@ const layer = Layer.effect(
             Effect.provideService(RuntimeFlags.Service, flags),
             Effect.provideService(FSUtil.Service, fsys),
             Effect.provideService(Session.Service, sessions),
+            Effect.provideService(Todo.Service, todo),
           )
 
           const msg: SessionV1.Assistant = {
@@ -1621,6 +1624,7 @@ export const node = LayerNode.make({
     SessionRevert.node,
     SessionSummary.node,
     SystemPrompt.node,
+    Todo.node,
     LLM.node,
     EventV2Bridge.node,
     RuntimeFlags.node,

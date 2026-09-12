@@ -33,9 +33,14 @@ export const TodoWriteTool = Tool.define<typeof Parameters, Metadata, Todo.Servi
             todos: params.todos,
           })
 
+          const open = params.todos.filter((x) => x.status === "pending" || x.status === "in_progress")
+          const note = open.length
+            ? `Todo list updated. ${open.length} item(s) still open. Keep using todowrite as you work: mark each item completed as soon as it is actually done, and do not batch completions.`
+            : "Todo list updated. All items are completed or cancelled."
+
           return {
             title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
-            output: JSON.stringify(params.todos, null, 2),
+            output: [note, JSON.stringify(params.todos, null, 2)].join("\n\n"),
             metadata: {
               todos: params.todos,
             },
