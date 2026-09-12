@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
 import { EOL } from "os"
+import path from "path"
 
 export const LSPCommand = cmd({
   command: "lsp",
@@ -28,12 +29,15 @@ const DiagnosticsCommand = effectCmd({
 })
 
 export const SymbolsCommand = effectCmd({
-  command: "symbols <query>",
+  command: "symbols <query> <file>",
   describe: "search workspace symbols",
-  builder: (yargs) => yargs.positional("query", { type: "string", demandOption: true }),
+  builder: (yargs) =>
+    yargs
+      .positional("query", { type: "string", demandOption: true })
+      .positional("file", { type: "string", demandOption: true, describe: "file used to select the LSP client" }),
   handler: Effect.fn("Cli.debug.lsp.symbols")(function* (args) {
     yield* Effect.logInfo("symbols")
-    const results = yield* LSP.Service.use((lsp) => lsp.workspaceSymbol(args.query))
+    const results = yield* LSP.Service.use((lsp) => lsp.workspaceSymbol(args.query, path.resolve(args.file)))
     process.stdout.write(JSON.stringify(results, null, 2) + EOL)
   }),
 })
