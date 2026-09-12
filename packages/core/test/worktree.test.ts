@@ -912,7 +912,7 @@ describe("Worktree", () => {
       const git = yield* WorktreeGit.make
       yield* worktrees.transform((editor) => editor.add({ ...git, id: Worktree.StrategyID.make("custom") }))
       yield* ConfigWorktreePlugin.Plugin.effect(
-        host({ event: { subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)) } }),
+        host({ event: { subscribe: () => bus.subscribe().pipe(Stream.filter(EventManifest.isServer)), subscribeGlobal: () => Stream.empty } }),
       ).pipe(
         Effect.provideService(Worktree.Service, {
           ...worktrees,

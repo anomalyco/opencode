@@ -19,6 +19,7 @@ describe("ConfigEntryObserver", () => {
       const event = {
         subscribe: () =>
           Stream.unwrap(Ref.set(current, [document("raced")]).pipe(Effect.as(Stream.fromPubSub(updates)))),
+        subscribeGlobal: () => Stream.empty,
       }
 
       const loaded = yield* ConfigEntryObserver.observe(
