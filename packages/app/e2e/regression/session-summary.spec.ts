@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 import { fixture } from "../performance/timeline/session-timeline-stress.fixture"
 import { mockStressTimeline, stressSessionHref } from "../performance/timeline/timeline-test-helpers"
+import { openWithDirection } from "../utils/direction"
 
 for (const layout of ["horizontal", "vertical"] as const) {
   test(`summary persists both disclosures across sessions with ${layout} tabs`, async ({ page }, testInfo) => {
@@ -68,14 +69,10 @@ for (const layout of ["horizontal", "vertical"] as const) {
 for (const direction of ["ltr", "rtl"] as const) {
   test(`service submenus open on click and stay aligned with the view in ${direction}`, async ({ page }, testInfo) => {
     await mockStressTimeline(page)
-    await page.goto(stressSessionHref(fixture.targetID))
+    await openWithDirection(page, stressSessionHref(fixture.targetID), direction)
     await expect(page.getByRole("button", { name: "Session details", exact: true })).toBeEnabled()
-    if (direction === "rtl") {
-      await page.getByRole("button", { name: "Toggle debug tools", exact: true }).click()
-      await page.getByRole("button", { name: "DIR: LTR", exact: true }).click()
-      await expect(page.locator("html")).toHaveAttribute("dir", "rtl")
-      await page.getByRole("button", { name: "Toggle debug tools", exact: true }).click()
-    }
+    await expect(page.locator("html")).toHaveAttribute("dir", direction)
+    await expect(page.locator("html")).toHaveAttribute("lang", "en")
     const warnings: string[] = []
     page.on("console", (event) => {
       if (event.text().includes("computations created outside")) warnings.push(event.text())

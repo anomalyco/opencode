@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer, currentSession } from "../utils/mock-server"
+import { openWithDirection } from "../utils/direction"
 
 const directory = "/workspace/summary-project"
 const workspace = "/workspace/existing-worktree"
@@ -13,12 +14,9 @@ for (const rtl of [false, true]) {
   test(`new session summary shows project extensions and follows workspace selection in ${rtl ? "rtl" : "ltr"}`, async ({
     page,
   }, testInfo) => {
-    const mock = await openDraft(page)
-    if (rtl) {
-      await page.getByRole("button", { name: "Toggle debug tools", exact: true }).click()
-      await page.getByRole("button", { name: "DIR: LTR", exact: true }).click()
-      await page.getByRole("button", { name: "Toggle debug tools", exact: true }).click()
-    }
+    const mock = await openDraft(page, "main", { direction: rtl ? "rtl" : "ltr" })
+    await expect(page.locator("html")).toHaveAttribute("dir", rtl ? "rtl" : "ltr")
+    await expect(page.locator("html")).toHaveAttribute("lang", "en")
     const trigger = page.getByRole("button", { name: "Session details", exact: true })
     await expect
       .poll(async () => {
@@ -93,6 +91,19 @@ for (const rtl of [false, true]) {
     ).toBeVisible()
   })
 }
+
+test("non-Git folders show their status without offering worktree actions", async ({ page }) => {
+  await openDraft(page, "main", { git: false })
+  await page.getByRole("button", { name: "Session details", exact: true }).click()
+  const summary = page.getByRole("dialog", { name: "Session details", exact: true })
+  await expect(summary.getByText("No Git", { exact: true })).toBeVisible()
+  await expect(summary.getByRole("button", { name: "Local repository", exact: true })).toHaveCount(0)
+  await expect(summary.getByRole("button", { name: "New worktree", exact: true })).toHaveCount(0)
+  await summary.getByRole("button", { name: "MCP", exact: true }).click()
+  await expect(
+    page.getByRole("dialog", { name: "MCP", exact: true }).getByRole("switch", { name: "summary-mcp", exact: true }),
+  ).toBeEnabled()
+})
 
 test("new worktree MCP choices persist per draft and apply before the first prompt", async ({ page }, testInfo) => {
   const mock = await openDraft(page, "create")
@@ -282,12 +293,12 @@ test("new worktree sign-in completes before the draft can send", async ({ page, 
   expect(attempts).toHaveLength(1)
 })
 
-async function openDraft(page: Page, worktree = "main") {
+async function openDraft(page: Page, worktree = "main", options: { git?: boolean; direction?: "ltr" | "rtl" } = {}) {
   const project = {
     id: "proj_new_summary",
     worktree: directory,
     name: "summary-project",
-    vcs: "git",
+    vcs: options.git === false ? undefined : "git",
     time: { created: 1, updated: 1 },
     sandboxes: [workspace],
   }
@@ -323,6 +334,12 @@ async function openDraft(page: Page, worktree = "main") {
       prompts.push(input)
     },
   })
+  if (options.git === false) {
+    await page.route(
+      (url) => url.pathname === "/api/vcs",
+      (route) => route.fulfill({ json: { location: { directory }, data: { branch: {} } } }),
+    )
+  }
   await page.route("**/api/mcp**", async (route) => {
     if (route.request().method() === "OPTIONS") return route.fallback()
     const url = new URL(route.request().url())
@@ -442,11 +459,15 @@ async function openDraft(page: Page, worktree = "main") {
     },
     { directory, server, draftID, secondDraftID, worktree },
   )
-  await page.goto(draftPath)
+  if (options.direction) await openWithDirection(page, draftPath, options.direction)
+  if (!options.direction) await page.goto(draftPath)
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   await expect(page.locator('[data-action="composer-model"]')).toContainText("Summary Model")
-  await expect(
-    page.getByRole("button", { name: worktree === "create" ? "New worktree" : "Local", exact: true }),
-  ).toBeVisible()
+  if (options.git === false) await expect(page.getByText("No Git", { exact: true })).toBeVisible()
+  if (options.git !== false) {
+    await expect(
+      page.getByRole("button", { name: worktree === "create" ? "New worktree" : "Local", exact: true }),
+    ).toBeVisible()
+  }
   return { calls, prompts, status, state }
 }

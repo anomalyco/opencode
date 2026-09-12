@@ -32,18 +32,28 @@ export function NewSessionSummary(props: {
         {(project) => (
           <>
             <ProjectSummaryCard project={project()}>
-              <PromptWorkspaceSelector
-                variant="summary"
-                value={props.workspace.selection.value()}
-                projectRoot={props.workspace.project.root()}
-                workspaces={props.workspace.project.workspaces()}
-                branches={props.workspace.project.branches()}
-                branch={props.workspace.bar.branch()}
-                onChange={props.workspace.selection.set}
-                onCreate={props.workspace.selection.create}
-                onSearch={props.workspace.project.searchBranches}
-                onViewAll={props.workspace.project.openAll}
-              />
+              <Show
+                when={props.workspace.bar.visible()}
+                fallback={
+                  <div class="session-summary-row">
+                    <Icon name="monitor" class="shrink-0 text-v2-icon-icon-muted" />
+                    <span class="session-summary-label">{language.t("session.new.git.none")}</span>
+                  </div>
+                }
+              >
+                <PromptWorkspaceSelector
+                  variant="summary"
+                  value={props.workspace.selection.value()}
+                  projectRoot={props.workspace.project.root()}
+                  workspaces={props.workspace.project.workspaces()}
+                  branches={props.workspace.project.branches()}
+                  branch={props.workspace.bar.branch()}
+                  onChange={props.workspace.selection.set}
+                  onCreate={props.workspace.selection.create}
+                  onSearch={props.workspace.project.searchBranches}
+                  onViewAll={props.workspace.project.openAll}
+                />
+              </Show>
             </ProjectSummaryCard>
             <SessionServerPanel directory={props.mcp.directory()} shown={props.shown} mcp={props.mcp.controls} />
           </>
