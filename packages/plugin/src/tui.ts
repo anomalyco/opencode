@@ -1,5 +1,7 @@
 import type {
+  Agent,
   AgentPart,
+  AssistantMessage,
   OpencodeClient,
   Event,
   FilePart,
@@ -383,6 +385,7 @@ export type TuiState = {
     directory: string
   }
   readonly vcs: { branch?: string; default_branch?: string } | undefined
+  readonly agent: ReadonlyArray<Agent>
   session: {
     count: () => number
     get: (sessionID: string) => Session | undefined
@@ -455,6 +458,14 @@ export type TuiSidebarFileItem = {
 export type TuiHostSlotMap = {
   app: {}
   app_bottom: {}
+  assistant_message_footer: {
+    session_id: string
+    message_id: string
+    message: AssistantMessage
+    parts: readonly Part[]
+    terminal: boolean
+    last: boolean
+  }
   home_logo: {}
   home_prompt: {
     ref?: (ref: TuiPromptRef | undefined) => void

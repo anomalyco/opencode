@@ -262,3 +262,62 @@ test("loads disabled-by-default internal plugin inactive and activates on demand
     wait.mockRestore()
   }
 })
+
+test("assistant-message-footer builtin is active by default and unregisters on deactivate", async () => {
+  await using tmp = await tmpdir()
+  const config = createTuiResolvedConfig()
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const api = createTuiPluginApi()
+
+  try {
+    await TuiPluginRuntime.init({ api, config })
+
+    expect(TuiPluginRuntime.list().find((item) => item.id === "internal:assistant-message-footer")).toMatchObject({
+      enabled: true,
+      active: true,
+    })
+
+    await expect(TuiPluginRuntime.deactivatePlugin("internal:assistant-message-footer")).resolves.toBe(true)
+    expect(TuiPluginRuntime.list().find((item) => item.id === "internal:assistant-message-footer")?.active).toBe(false)
+    expect(api.kv.get("plugin_enabled", {})).toEqual({
+      "internal:assistant-message-footer": false,
+    })
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})
+
+test("plugin_enabled config can disable the assistant-message-footer builtin at startup", async () => {
+  await using tmp = await tmpdir()
+  const config = createTuiResolvedConfig({
+    plugin_enabled: {
+      "internal:assistant-message-footer": false,
+    },
+  })
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const api = createTuiPluginApi()
+
+  try {
+    await TuiPluginRuntime.init({ api, config })
+
+    expect(TuiPluginRuntime.list().find((item) => item.id === "internal:assistant-message-footer")).toEqual({
+      id: "internal:assistant-message-footer",
+      source: "internal",
+      spec: "internal:assistant-message-footer",
+      target: "internal:assistant-message-footer",
+      enabled: false,
+      active: false,
+    })
+
+    await expect(TuiPluginRuntime.activatePlugin("internal:assistant-message-footer")).resolves.toBe(true)
+    expect(TuiPluginRuntime.list().find((item) => item.id === "internal:assistant-message-footer")?.active).toBe(true)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})

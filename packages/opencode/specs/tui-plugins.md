@@ -423,6 +423,7 @@ Current host slot names:
 
 - `app`
 - `app_bottom`
+- `assistant_message_footer` with props `{ session_id, message_id, message, parts, terminal, last }`
 - `home_logo`
 - `home_prompt` with props `{ workspace_id?, ref? }`
 - `home_prompt_right` with props `{ workspace_id? }`
@@ -441,8 +442,10 @@ Slot notes:
 - `api.slots.register(plugin)` does not return an unregister function.
 - Returned ids are `pluginId`, `pluginId:1`, `pluginId:2`, and so on.
 - Plugin-provided `id` is not allowed.
-- The current host renders `home_logo`, `home_prompt`, and `session_prompt` with `replace`, `home_footer`, `sidebar_title`, and `sidebar_footer` with `single_winner`, and `app`, `app_bottom`, `home_prompt_right`, `session_prompt_right`, `home_bottom`, and `sidebar_content` with the slot library default mode.
+- The current host renders `home_logo`, `home_prompt`, and `session_prompt` with `replace`, `home_footer`, `sidebar_title`, and `sidebar_footer` with `single_winner`, and `app`, `app_bottom`, `assistant_message_footer`, `home_prompt_right`, `session_prompt_right`, `home_bottom`, and `sidebar_content` with the slot library default mode.
 - `app_bottom` is rendered in normal layout flow below the active route, while `app` is rendered afterward for global app-level UI.
+- The host ships a default footer for `assistant_message_footer` as the builtin plugin `internal:assistant-message-footer`, rendering today's `▣` mode/model/duration line whenever `last || terminal` is true. It registers at slot `order: 0`, so plugins registered without an order render below it; use a negative `order` to stack a footer above the default. To take over the default entirely, register your own footer and disable the builtin via `plugin_enabled: { "internal:assistant-message-footer": false }` or `api.plugins.deactivate("internal:assistant-message-footer")`.
+- `message` and `parts` refer to the assistant message and its parts; `terminal` is `true` once no more content will be produced (a finished message whose `finish` is not `tool-calls`/`unknown`, or an interrupted message); `last` is `true` when this is the newest assistant message in the session, including while it is still streaming. Intermediate messages that end in tool calls report `terminal: false`.
 - Plugins can define custom slot names in `api.slots.register(...)` and render them from plugin UI with `ui.Slot`.
 
 ### Plugin control and lifecycle
