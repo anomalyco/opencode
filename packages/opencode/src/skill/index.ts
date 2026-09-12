@@ -34,6 +34,11 @@ const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
   "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
 const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
 
+const SCHEDULING_SKILL_NAME = "scheduling"
+const SCHEDULING_SKILL_DESCRIPTION =
+  "Schedule recurring prompts with cron_add, cron_list, cron_delete. Use when the user asks for periodic reminders, scheduled checks, or automated recurring actions."
+const SCHEDULING_SKILL_BODY = SkillPlugin.SchedulingContent
+
 export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
@@ -280,6 +285,12 @@ const layer = Layer.effect(
           description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+        }
+        s.skills[SCHEDULING_SKILL_NAME] = {
+          name: SCHEDULING_SKILL_NAME,
+          description: SCHEDULING_SKILL_DESCRIPTION,
+          location: "<built-in>",
+          content: SCHEDULING_SKILL_BODY,
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), events)
         return s

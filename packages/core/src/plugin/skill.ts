@@ -7,8 +7,10 @@ import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
 import { SkillV2 } from "../skill"
 import customizeOpencodeContent from "./skill/customize-opencode.md" with { type: "text" }
+import schedulingContent from "./skill/scheduling.md" with { type: "text" }
 
 export const CustomizeOpencodeContent = customizeOpencodeContent
+export const SchedulingContent = schedulingContent
 
 export const Plugin = define({
   id: "skill",

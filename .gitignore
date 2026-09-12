@@ -32,3 +32,7 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Local docs (agents + superpowers plans/specs)
+docs/agents/
+docs/superpowers/
