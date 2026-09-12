@@ -6,6 +6,7 @@ export type UpdaterState =
   | { status: "checking" }
   | { status: "downloading"; version: string }
   | { status: "ready"; version: string }
+  | { status: "download-required"; version: string }
   | { status: "up-to-date" }
   | { status: "installing"; version: string }
   | { status: "error"; message: string }

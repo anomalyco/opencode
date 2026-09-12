@@ -65,6 +65,20 @@ const show = Effect.fn("Updater.show")(function* (
     )
     return
   }
+  if (state.status === "download-required") {
+    const response = yield* promise(() =>
+      dialog.showMessageBox({
+        type: "info",
+        message: nativeT("desktop.updater.dialog.downloadRequired.message", { version: state.version }),
+        title: nativeT("desktop.updater.dialog.downloadRequired.title"),
+        buttons: [nativeT("desktop.updater.dialog.download"), nativeT("desktop.updater.dialog.later")],
+        defaultId: 0,
+        cancelId: 1,
+      }),
+    )
+    if (response.response === 0) yield* install
+    return
+  }
   if (state.status !== "ready") return
 
   const response = yield* promise(() =>

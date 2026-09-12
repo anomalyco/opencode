@@ -17,6 +17,8 @@ function setup(input?: {
   latest?: () => string
   stage?: () => Promise<void>
   install?: () => Promise<never>
+  external?: boolean
+  open?: () => Promise<void>
 }) {
   const calls: string[] = []
   let ready = input?.ready
@@ -26,7 +28,10 @@ function setup(input?: {
       checkForUpdate: Effect.try({
         try: () => {
           calls.push("check")
-          return input?.latest?.() ?? "2.0.0"
+          const version = input?.latest?.() ?? "2.0.0"
+          return input?.external
+            ? { mode: "external" as const, version, url: `https://files.test/${version}.dmg` }
+            : { mode: "restart" as const, version }
         },
         catch: (error) => error,
       }),
@@ -42,6 +47,13 @@ function setup(input?: {
           catch: (error) => error,
         })
       }),
+      externalInstall: input?.external
+        ? (url) =>
+            Effect.tryPromise(async () => {
+              calls.push(`external:${url}`)
+              await input.open?.()
+            })
+        : undefined,
       dispose: () => {},
     },
     prepareToRestart: Effect.sync(() => {
@@ -81,6 +93,62 @@ describe("updater", () => {
     expect(app.calls).toEqual(["check", "download"])
     expect(await app.updater.getState()).toEqual({ status: "ready", version: "2.0.0" })
     expect(app.getReady()).toEqual({ version: "2.0.0" })
+  })
+
+  test("offers an external installer without staging or preparing to restart", async () => {
+    const app = setup({ external: true })
+
+    await app.updater.start()
+    expect(app.calls).toEqual(["check"])
+    expect(await app.updater.getState()).toEqual({ status: "download-required", version: "2.0.0" })
+    expect(app.getReady()).toBeUndefined()
+
+    await app.updater.install()
+    expect(app.calls).toEqual(["check", "check", "external:https://files.test/2.0.0.dmg"])
+    expect(await app.updater.getState()).toEqual({ status: "download-required", version: "2.0.0" })
+  })
+
+  test("offers an external installer when its version equals the running beta", async () => {
+    const app = setup({ currentVersion: "2.0.0", external: true })
+
+    await app.updater.start()
+
+    expect(await app.updater.getState()).toEqual({ status: "download-required", version: "2.0.0" })
+  })
+
+  test("keeps an external installer available when a refresh fails", async () => {
+    let offline = false
+    const app = setup({
+      external: true,
+      latest: () => {
+        if (offline) throw new Error("offline")
+        return "2.0.0"
+      },
+    })
+    await app.updater.start()
+
+    offline = true
+    await app.updater.check()
+
+    expect(await app.updater.getState()).toEqual({ status: "download-required", version: "2.0.0" })
+  })
+
+  test("opens an external installer once for concurrent clicks", async () => {
+    let release = () => {}
+    const app = setup({
+      external: true,
+      open: () => new Promise<void>((resolve) => (release = resolve)),
+    })
+    await app.updater.start()
+
+    const first = app.updater.install()
+    const second = app.updater.install()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(app.calls).toEqual(["check", "check", "external:https://files.test/2.0.0.dmg"])
+    release()
+    await Promise.all([first, second])
+    expect(await app.updater.getState()).toEqual({ status: "download-required", version: "2.0.0" })
   })
 
   test("reports up to date and clears the record once the update is installed", async () => {

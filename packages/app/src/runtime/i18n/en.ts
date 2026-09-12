@@ -1226,6 +1226,7 @@ export const dict = {
   "settings.updates.action.checkNow": "Check now",
   "settings.updates.action.checking": "Checking…",
   "settings.updates.action.downloading": "Downloading…",
+  "settings.updates.action.download": "Download OpenCode",
   "settings.updates.action.installing": "Installing…",
   "settings.updates.toast.latest.title": "You're up to date",
   "settings.updates.toast.latest.description": "You're running the latest version of OpenCode.",

@@ -283,6 +283,10 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.updater.dialog.ready.title": "Update Ready",
   "desktop.updater.dialog.restart": "Restart",
   "desktop.updater.dialog.later": "Later",
+  "desktop.updater.dialog.downloadRequired.message":
+    "OpenCode Beta has moved to OpenCode. Download version {{version}} to continue receiving updates.",
+  "desktop.updater.dialog.downloadRequired.title": "Download OpenCode",
+  "desktop.updater.dialog.download": "Download",
 
   "desktop.cli.installed.title": "CLI Installed",
   "desktop.cli.installed.message": "CLI installed to {{path}}\n\nRestart your terminal to use the 'opencode' command.",
