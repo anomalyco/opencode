@@ -318,6 +318,34 @@ export const {
           break
         }
 
+        case "session.error": {
+          const sessionID = event.properties.sessionID
+          if (!sessionID) break
+          setStore("session_status", sessionID, { type: "idle" })
+          const messages = store.message[sessionID]
+          if (messages && messages.length > 0) {
+            const lastIndex = messages.length - 1
+            const lastMsg = messages[lastIndex]
+            if (lastMsg && lastMsg.role === "assistant") {
+              setStore(
+                "message",
+                sessionID,
+                lastIndex,
+                produce((draft) => {
+                  if (draft.role === "assistant") {
+                    draft.error = event.properties.error ?? {
+                      name: "UnknownError",
+                      data: { message: "" },
+                    }
+                    draft.finish = "error"
+                  }
+                }),
+              )
+            }
+          }
+          break
+        }
+
         case "message.updated": {
           touchMessage(event.properties.info.sessionID, event.properties.info.id)
           const messages = store.message[event.properties.info.sessionID]
