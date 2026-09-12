@@ -557,6 +557,8 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
           index > compactionIndex &&
           msg.info.role === "assistant" &&
           msg.info.summary &&
+          msg.info.finish &&
+          !msg.info.error &&
           msg.info.parentID === compaction.info.id,
       )
     : -1
