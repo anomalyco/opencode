@@ -27,13 +27,19 @@ export type Source = typeof Source.Type
 export const Info = Skill.Info
 export type Info = Skill.Info
 
+// Skills with `disable-model-invocation` stay in `list()` so they remain
+// reachable as slash commands, but never reach the model.
 export const available = (skills: ReadonlyArray<Info>, agent: AgentV2.Info) =>
-  skills.filter((skill) => PermissionV2.evaluate("skill", skill.name, agent.permissions).effect !== "deny")
+  skills.filter(
+    (skill) =>
+      !skill.disableModelInvocation && PermissionV2.evaluate("skill", skill.name, agent.permissions).effect !== "deny",
+  )
 
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
   slash: Schema.Boolean.pipe(Schema.optional),
+  "disable-model-invocation": Schema.Boolean.pipe(Schema.optional),
 })
 const decodeFrontmatter = Schema.decodeUnknownOption(Frontmatter)
 
@@ -96,6 +102,7 @@ const layer = Layer.effect(
             name,
             description: frontmatter.description,
             slash: frontmatter.slash,
+            disableModelInvocation: frontmatter["disable-model-invocation"],
             location: AbsolutePath.make(filepath),
             content: markdown.content,
           })

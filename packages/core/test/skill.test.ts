@@ -122,4 +122,39 @@ describe("SkillV2", () => {
       ),
     ),
   )
+
+  it.live("hides skills with disable-model-invocation from agents", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "internal"), { recursive: true })
+            await fs.writeFile(
+              path.join(tmp.path, "internal", "SKILL.md"),
+              `---
+name: internal
+description: Only run this when invoked manually
+disable-model-invocation: true
+---
+# internal`,
+            )
+          })
+
+          const agents = yield* AgentV2.Service
+          yield* agents.transform((editor) => editor.update(AgentV2.ID.make("build"), () => {}))
+
+          const skill = yield* SkillV2.Service
+          yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(tmp.path) }))
+
+          const list = yield* skill.list()
+          expect(list.map((item) => item.name)).toEqual(["internal"])
+          expect(list[0].disableModelInvocation).toBe(true)
+          expect(SkillV2.available(list, (yield* agents.get(AgentV2.ID.make("build")))!)).toEqual([])
+        }),
+      ),
+    ),
+  )
 })

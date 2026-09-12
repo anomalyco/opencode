@@ -242,6 +242,34 @@ Instructions here.
     ),
   )
 
+  it.live("hides skills with disable-model-invocation from agents", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "internal-skill", "SKILL.md"),
+              `---
+name: internal-skill
+description: Only run this when invoked manually.
+disable-model-invocation: true
+---
+
+# Internal Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const all = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(all.map((s) => s.name)).toEqual(["internal-skill"])
+          expect(all[0].disableModelInvocation).toBe(true)
+          expect((yield* skill.available()).map((s) => s.name)).not.toContain("internal-skill")
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("discovers skills from .claude/skills/ directory", () =>
     provideTmpdirInstance(
       (dir) =>
