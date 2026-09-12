@@ -10,8 +10,10 @@ import { createLineCommentControllerV2 } from "@opencode-ai/session-ui/v2/line-c
 import { sampledChecksum } from "@opencode-ai/core/util/encode"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { RadioGroup } from "@opencode-ai/ui/radio-group"
 import { LineCommentV2OverflowIcon } from "@opencode-ai/ui/v2/line-comment-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@/utils/toast"
@@ -26,6 +28,24 @@ import { createSessionTabs } from "@/pages/session/helpers"
 
 type SessionFileViewProps = {
   tab: string
+}
+
+type FileViewMode = "preview" | "source"
+
+const isMarkdownPath = (filePath: string | undefined) => !!filePath && /\.(md|markdown)$/.test(filePath)
+
+function FilePreviewToggle(props: { mode: FileViewMode; onSelect: (mode: FileViewMode) => void }) {
+  return (
+    <div class="absolute right-4 top-2 z-10">
+      <RadioGroup
+        options={["preview", "source"] as const}
+        current={props.mode}
+        size="small"
+        onSelect={(mode) => mode && props.onSelect(mode)}
+        label={(mode) => (mode === "preview" ? "Preview" : "Source")}
+      />
+    </div>
+  )
 }
 
 const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
@@ -252,6 +272,8 @@ function SessionFileViewV1(props: { tab: string }) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
+  const [mode, setMode] = createSignal<FileViewMode>("preview")
+  const markdown = createMemo(() => isMarkdownPath(path()))
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -493,9 +515,18 @@ function SessionFileViewV1(props: { tab: string }) {
 
   const content = () => (
     <div class="mt-3 relative h-full min-h-0">
+      <Show when={markdown() && state()?.loaded}>
+        <FilePreviewToggle mode={mode()} onSelect={setMode} />
+      </Show>
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Switch>
-          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
+          <Match when={state()?.loaded}>
+            <Show when={markdown() && mode() === "preview"} fallback={renderFile(contents())}>
+              <div class="px-6 py-4 pb-40">
+                <Markdown text={contents()} cacheKey={cacheKey()} />
+              </div>
+            </Show>
+          </Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
           </Match>
@@ -537,6 +568,8 @@ function SessionFileViewV2(props: { tab: string }) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
+  const [mode, setMode] = createSignal<FileViewMode>("preview")
+  const markdown = createMemo(() => isMarkdownPath(path()))
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -784,9 +817,18 @@ function SessionFileViewV2(props: { tab: string }) {
 
   const content = () => (
     <div class="mt-3 relative h-full min-h-0">
+      <Show when={markdown() && state()?.loaded}>
+        <FilePreviewToggle mode={mode()} onSelect={setMode} />
+      </Show>
       <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
         <Switch>
-          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
+          <Match when={state()?.loaded}>
+            <Show when={markdown() && mode() === "preview"} fallback={renderFile(contents())}>
+              <div class="px-6 py-4 pb-40">
+                <Markdown text={contents()} cacheKey={cacheKey()} />
+              </div>
+            </Show>
+          </Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
           </Match>
