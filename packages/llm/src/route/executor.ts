@@ -88,7 +88,8 @@ const requestId = (headers: Record<string, string>) => {
   )
 }
 
-const retryableStatus = (status: number) => status === 429 || status === 503 || status === 504 || status === 529
+const retryableStatus = (status: number) =>
+  status === 408 || status === 409 || status === 429 || status === 503 || status === 504 || status === 529
 
 const retryAfterMs = (headers: Record<string, string>) => {
   const millis = Number(headers["retry-after-ms"])
@@ -250,13 +251,7 @@ const statusReason = (input: {
       http: input.http,
     })
   }
-  if (
-    input.status === 400 ||
-    input.status === 404 ||
-    input.status === 409 ||
-    input.status === 413 ||
-    input.status === 422
-  ) {
+  if (input.status === 400 || input.status === 404 || input.status === 413 || input.status === 422) {
     return new InvalidRequestReason({
       message: input.message,
       classification: isContextOverflow(body) ? "context-overflow" : undefined,
