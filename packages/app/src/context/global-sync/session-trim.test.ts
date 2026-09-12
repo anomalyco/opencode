@@ -56,4 +56,19 @@ describe("trimSessions", () => {
       "root-2",
     ])
   })
+
+  test("keeps the returned list sorted by id for Binary.search consumers", () => {
+    // store.session must stay id-ordered: event-reducer / directory-sync /
+    // layout / home-sessions-controller binary search it with `(s) => s.id`.
+    const now = 1_000_000
+    const list = [
+      session({ id: "ses_000b546a1ffeVEfro39BIgUSKd", created: now - 100_000 }),
+      session({ id: "ses_ffffb5fe2ffe3fyEdnrtQqBz28", created: now - 90_000 }),
+      session({ id: "ses_0065dfc6cffe0oXoDMduY66CKc", created: now - 80_000 }),
+    ]
+    const result = trimSessions(list, { limit: 10, permission: {}, now })
+    const ids = result.map((x) => x.id)
+    const sorted = ids.toSorted()
+    expect(ids).toEqual(sorted)
+  })
 })
