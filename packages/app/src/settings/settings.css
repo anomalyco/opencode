@@ -56,8 +56,6 @@
   min-width: 0;
   min-height: 0;
   max-width: 720px;
-  /* Leave room for raised card shadows inside the scrollport. */
-  padding-inline: 4px;
 }
 
 .settings-screen .settings-tab-header {
@@ -117,6 +115,8 @@
 .settings-content > .settings-panel {
   min-height: 0;
   flex: 1;
+  /* Leave room for raised card shadows inside the scrollport. */
+  padding-inline: 4px;
 }
 
 .settings-nav-group {

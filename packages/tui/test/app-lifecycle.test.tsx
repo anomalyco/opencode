@@ -335,7 +335,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     await task
 
     expect(stdout).toContain("Renamed session")
-    expect(stdout).toContain("opencode2 -s dummy")
+    expect(stdout).toContain("opencode -s dummy")
     expect(promptRequests).toBe(0)
   } finally {
     process.stdout.write = originalWrite
@@ -1219,9 +1219,9 @@ test("keeps the prompt display stable while a new location catalog loads", async
   }
 })
 
-test("configured app bindings execute settings and permission commands", async () => {
+test("configured app binding opens settings", async () => {
   await using setup = await createAppFixture({
-    config: { animations: false, keybinds: { "opencode.settings": "f6", "permission.mode": "f7" } },
+    config: { animations: false, keybinds: { "opencode.settings": "f6" } },
   })
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("commands"))
@@ -1230,23 +1230,6 @@ test("configured app bindings execute settings and permission commands", async (
   const settings = await setup.waitForFrame((frame) => frame.includes("Settings"))
   expect(settings).toContain("Color mode")
   expect(settings).toContain("Animations")
-
-  setup.mockInput.pressEscape()
-  await setup.waitForFrame((frame) => !frame.includes("Settings"))
-  setup.mockInput.pressKey("F7")
-  await setup.renderOnce()
-  setup.mockInput.pressKey("p", { ctrl: true })
-  await setup.waitForFrame((frame) => frame.includes("Commands"))
-  setup.mockInput.pressKey("END")
-  const commands = await setup.waitForFrame(
-    (frame) => {
-      if (frame.includes("Disable auto-approve permissions")) return true
-      setup.mockInput.pressArrow("up")
-      return false
-    },
-    { maxPasses: 100 },
-  )
-  expect(commands).not.toContain("Enable auto-approve permissions")
 })
 
 test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => {

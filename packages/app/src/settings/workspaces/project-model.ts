@@ -58,7 +58,8 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
 
   const saveName = () => {
     const value = store.name.trim() === folderName() ? "" : store.name.trim()
-    if (value === saved.name) return
+    // A pending write can change the saved value, so reverting to it must still be queued.
+    if (!store.saving && value === saved.name) return
     persist({ name: value }, () => {
       saved.name = value
     })
@@ -66,14 +67,14 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
 
   const saveStartup = () => {
     const value = store.startup.trim()
-    if (value === saved.startup) return
+    if (!store.saving && value === saved.startup) return
     persist({ commands: { start: value } }, () => {
       saved.startup = value
     })
   }
 
   const saveIcon = (color = store.color, override = store.iconOverride) => {
-    if (color === saved.color && override === saved.iconOverride) return
+    if (!store.saving && color === saved.color && override === saved.iconOverride) return
     persist({ icon: { color: color ?? "", override: override ?? "" } }, () => {
       saved.color = color
       saved.iconOverride = override

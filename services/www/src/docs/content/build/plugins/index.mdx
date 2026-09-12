@@ -656,6 +656,16 @@ const request = await ctx.permission.get({ sessionID, requestID })
 await ctx.permission.reply({ sessionID, requestID, reply: "once" })
 ```
 
+Replace the session-scoped permission rules. They are evaluated after the agent's rules, and the
+last matching rule wins. Child sessions inherit the rules in effect when they are created.
+
+```ts
+await ctx.permission.rules({
+  sessionID,
+  permissions: [{ action: "edit", resource: "/path/to/original/checkout/**", effect: "deny" }],
+})
+```
+
 ### Sessions
 
 Create or read a session.
@@ -1212,7 +1222,7 @@ differently:
 
 ```ts
 await ctx.session.hook("context", (event) => {
-  event.system.push({ text: "Keep the review focused on correctness." })
+  event.system.push({ type: "text", text: "Keep the review focused on correctness." })
   delete event.tools.write
   event.options.temperature = 0.2
   event.options.maxTokens = 8_000
@@ -1511,7 +1521,7 @@ manifest is:
     "./rpc": "./src/rpc.ts"
   },
   "dependencies": {
-    "@opencode/plugin": "beta"
+    "@opencode/plugin": "latest"
   }
 }
 ```
@@ -1521,9 +1531,8 @@ The `./rpc` export is optional; include it when publishing a shared
 without loading your implementation.
 
 Use versions compatible with the OpenCode release you target and test the
-installed package, not only a workspace-linked copy. Because the plugin API is
-beta, publish compatible plugin updates when V2 entrypoints or contracts
-change.
+installed package, not only a workspace-linked copy. Publish a compatible
+plugin update when you adopt a newer API contract.
 
 ## Support V1
 

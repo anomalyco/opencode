@@ -6,8 +6,7 @@
  *
  * Copyright © web-platform-tests contributors. Governed by the 3-Clause BSD license in LICENSE.wpt.
  *
- * `assert_throws_dom("InvalidCharacterError", …)` becomes a check on `error.name`: CodeMode has no
- * DOMException, so the name is carried on a plain Error.
+ * `assert_throws_dom("InvalidCharacterError", …)` becomes a check for a TypeError: CodeMode has no DOMException.
  */
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
@@ -58,7 +57,7 @@ const referenceEncoder = `
   function testBtoa(input) {
     var expected = mybtoa(input)
     if (expected === "INVALID_CHARACTER_ERR") {
-      try { btoa(input) } catch (error) { return error.name === "InvalidCharacterError" ? "ok" : error.name }
+      try { btoa(input) } catch (error) { return error instanceof TypeError ? "ok" : error.name }
       return "did not throw"
     }
     if (btoa(input) !== expected) return "btoa mismatch"
@@ -102,7 +101,7 @@ describe("atob WPT parity (fetch/data-urls/resources/base64.json)", () => {
     [-0, null],
   ]
 
-  test(`${base64Cases.length} forgiving-base64 inputs decode to the expected bytes or throw InvalidCharacterError`, async () => {
+  test(`${base64Cases.length} forgiving-base64 inputs decode to the expected bytes or throw a TypeError`, async () => {
     expect(
       await value(`
         const cases = ${JSON.stringify(base64Cases)}
@@ -113,7 +112,7 @@ describe("atob WPT parity (fetch/data-urls/resources/base64.json)", () => {
             const bytes = Array.from({ length: result.length }, (_, i) => result.charCodeAt(i))
             return JSON.stringify(bytes) === JSON.stringify(output) ? [] : [[input, bytes]]
           } catch (error) {
-            return output === null && error.name === "InvalidCharacterError" ? [] : [[input, error.name]]
+            return output === null && error instanceof TypeError ? [] : [[input, error.name]]
           }
         })
       `),
@@ -138,7 +137,7 @@ describe("atob WPT parity (fetch/data-urls/resources/base64.json)", () => {
             const bytes = output.map((_, i) => result.charCodeAt(i))
             return JSON.stringify(bytes) === JSON.stringify(output) ? [] : [[String(input), bytes]]
           } catch (error) {
-            return output === null && error.name === "InvalidCharacterError" ? [] : [[String(input), error.name]]
+            return output === null && error instanceof TypeError ? [] : [[String(input), error.name]]
           }
         })
       `),

@@ -9,6 +9,7 @@ import { createData } from "@opencode/client/solid"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createPermissionAutoApprover } from "@/session/requests/auto-approve"
 import { createServerNotificationState } from "@/shell/notifications/notification"
+import { createNotificationCoordinator } from "@/shell/notifications/coordinator"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
 import { ModelState } from "./persistence"
@@ -27,6 +28,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       () => true,
     )
     const models = createGlobalModels()
+    const notificationCoordinator = createNotificationCoordinator()
 
     const serverCtxs = new Map<ServerConnection.Key, ReturnType<typeof createServerController>>()
     const serverCtxDisposers = new Map<ServerConnection.Key, () => void>()
@@ -40,7 +42,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       if (existing) return existing
       const serverCtx = createRoot((dispose) => {
         serverCtxDisposers.set(key, dispose)
-        return createServerController(conn, server.scope(key), server.projects.forServer(key))
+        return createServerController(conn, server.scope(key), server.projects.forServer(key), notificationCoordinator)
       }, owner)
       serverCtxs.set(key, serverCtx)
       return serverCtx
@@ -103,6 +105,7 @@ function createServerController(
   conn: ServerConnection.Any,
   scope: ServerScope,
   projects: ReturnType<typeof createServerProjects>,
+  notificationCoordinator: ReturnType<typeof createNotificationCoordinator>,
 ) {
   const language = useLanguage()
   const settings = useSettings()
@@ -131,7 +134,7 @@ function createServerController(
   })
   const sync = createServerSyncContext(sdk, data)
   createPermissionAutoApprover({ sdk, data })
-  const notification = createServerNotificationState({ sdk, data, key: connKey })
+  const notification = createServerNotificationState({ sdk, data, key: connKey, coordinator: notificationCoordinator })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })

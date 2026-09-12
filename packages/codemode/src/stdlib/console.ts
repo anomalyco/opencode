@@ -1,5 +1,6 @@
 import { toData, toProgram } from "../data.js"
 import { HostNamespace, sync } from "../interpreter/host.js"
+import { get, ownEntries, ProgramArray, ProgramObject } from "../interpreter/objects.js"
 import { containsOpaqueReference, containsRuntimeReference, isRuntimeReference } from "../interpreter/references.js"
 import { Values } from "../values.js"
 import { coerceToString } from "./value.js"
@@ -51,8 +52,8 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
   if (value instanceof Values.Map) {
     seen.add(value)
     try {
-      const entries = Array.from(value.map.entries(), ([key, item]): Array<unknown> => [key, item])
-      return `Map(${value.map.size}) ${formatConsoleValue(entries, seen, depth + 1)}`
+      const entries = Array.from(value.map.entries(), ([key, item]) => new ProgramArray([key, item]))
+      return `Map(${value.map.size}) ${formatConsoleValue(new ProgramArray(entries), seen, depth + 1)}`
     } finally {
       seen.delete(value)
     }
@@ -60,7 +61,7 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
   if (value instanceof Values.Set) {
     seen.add(value)
     try {
-      return `Set(${value.set.size}) ${formatConsoleValue(Array.from(value.set.values()), seen, depth + 1)}`
+      return `Set(${value.set.size}) ${formatConsoleValue(new ProgramArray([...value.set.values()]), seen, depth + 1)}`
     } finally {
       seen.delete(value)
     }
@@ -68,10 +69,11 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
   if (isRuntimeReference(value)) return "[opaque reference]"
   seen.add(value)
   try {
-    if (Array.isArray(value)) {
-      return `[${value.map((item) => formatConsoleValue(item, seen, depth + 1)).join(",")}]`
+    if (value instanceof ProgramArray) {
+      return `[${value.items.map((item) => formatConsoleValue(item, seen, depth + 1)).join(",")}]`
     }
-    return `{${Object.entries(value)
+    if (!(value instanceof ProgramObject)) return "[object Object]"
+    return `{${ownEntries(value)
       .map(([key, item]) => `${JSON.stringify(key)}:${formatConsoleValue(item, seen, depth + 1)}`)
       .join(",")}}`
   } finally {
@@ -104,20 +106,19 @@ const consoleTableRows = (
   data: unknown,
   columns: ReadonlyArray<string> | undefined,
 ): Array<{ readonly index: string; readonly values: Record<string, unknown> }> => {
-  if (Array.isArray(data)) {
-    return data.map((item, index) => ({ index: String(index), values: consoleTableValues(item, columns) }))
+  if (data instanceof ProgramArray) {
+    return data.items.map((item, index) => ({ index: String(index), values: consoleTableValues(item, columns) }))
   }
-  if (data !== null && typeof data === "object" && !Values.isValue(data)) {
-    return Object.entries(data).map(([index, item]) => ({ index, values: consoleTableValues(item, columns) }))
+  if (data instanceof ProgramObject) {
+    return ownEntries(data).map(([index, item]) => ({ index, values: consoleTableValues(item, columns) }))
   }
   return [{ index: "0", values: { Value: data } }]
 }
 
 const consoleTableValues = (value: unknown, columns: ReadonlyArray<string> | undefined): Record<string, unknown> => {
-  if (value !== null && typeof value === "object" && !Array.isArray(value) && !Values.isValue(value)) {
-    const source = value as Record<string, unknown>
-    if (columns !== undefined) return Object.fromEntries(columns.map((column) => [column, source[column]]))
-    return Object.fromEntries(Object.entries(source))
+  if (value instanceof ProgramObject && !(value instanceof ProgramArray)) {
+    if (columns !== undefined) return Object.fromEntries(columns.map((column) => [column, get(value, column)]))
+    return Object.fromEntries(ownEntries(value))
   }
   return { Value: value }
 }

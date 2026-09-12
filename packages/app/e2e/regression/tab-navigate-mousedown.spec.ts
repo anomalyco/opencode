@@ -501,7 +501,7 @@ test("dedicated experimental settings control vertical tab details", async ({ pa
   await settings.locator('[data-action="settings-show-project-name"] [data-slot="switch-control"]').click()
   await expect(projectNameSwitch).toBeChecked()
   await expect(projectNames).toHaveText(["tab-project"])
-  await expect(settings.getByRole("tablist")).toHaveCSS("width", "240px")
+  await expect(settings.getByRole("complementary")).toHaveCSS("width", "240px")
 
   await page.setViewportSize({ width: 920, height: 720 })
   await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toHaveCSS("width", "260px")

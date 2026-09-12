@@ -1,6 +1,6 @@
 import { toProgram } from "../data.js"
 import { sync } from "../interpreter/host.js"
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { type AstNode, InterpreterRuntimeError, rangeError } from "../interpreter/model.js"
 import { coercion, coerceToString } from "./value.js"
 
 export const numberMethods = new Set(["toFixed", "toPrecision", "toExponential", "toString", "valueOf"])
@@ -28,7 +28,7 @@ export const invokeNumberMethod = (value: number, name: string, args: Array<unkn
     case "toString": {
       const radix = optNum(0)
       if (radix !== undefined && (radix < 2 || radix > 36)) {
-        throw new InterpreterRuntimeError("Number.toString radix must be between 2 and 36.", node)
+        throw rangeError("Number.toString radix must be between 2 and 36.", node)
       }
       result = value.toString(radix)
       break

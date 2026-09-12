@@ -31,7 +31,7 @@
     },
     "packages/ai": {
       "name": "@opencode/ai",
-      "version": "1.17.20",
+      "version": "2.0.0",
       "dependencies": {
         "@aws-sdk/credential-providers": "3.1057.0",
         "@opencode/schema": "workspace:*",
@@ -53,7 +53,7 @@
     },
     "packages/app": {
       "name": "@opencode/app",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@corvu/drawer": "catalog:",
         "@dnd-kit/abstract": "0.5.0",
@@ -111,7 +111,7 @@
     },
     "packages/cli": {
       "name": "@opencode/cli",
-      "version": "1.18.4",
+      "version": "2.0.0",
       "bin": {
         "opencode2": "./bin/opencode2.cjs",
       },
@@ -175,7 +175,7 @@
     },
     "packages/client": {
       "name": "@opencode/client",
-      "version": "1.17.13",
+      "version": "2.0.0",
       "dependencies": {
         "@opencode/protocol": "workspace:*",
         "@opencode/schema": "workspace:*",
@@ -201,7 +201,7 @@
     },
     "packages/codemode": {
       "name": "@opencode/codemode",
-      "version": "1.18.4",
+      "version": "2.0.0",
       "dependencies": {
         "acorn": "8.15.0",
         "effect": "catalog:",
@@ -215,7 +215,7 @@
     },
     "packages/console/app": {
       "name": "@opencode/console-app",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@ibm/plex": "6.4.1",
@@ -251,7 +251,7 @@
     },
     "packages/console/core": {
       "name": "@opencode/console-core",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "@jsx-email/render": "1.1.1",
@@ -278,7 +278,7 @@
     },
     "packages/console/function": {
       "name": "@opencode/console-function",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@openauthjs/openauth": "0.0.0-20250322224806",
         "@opencode/console-core": "workspace:*",
@@ -295,7 +295,7 @@
     },
     "packages/console/mail": {
       "name": "@opencode/console-mail",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@jsx-email/all": "2.2.3",
         "@jsx-email/cli": "1.4.3",
@@ -319,7 +319,7 @@
     },
     "packages/console/support": {
       "name": "@opencode/console-support",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@opencode/console-core": "workspace:*",
@@ -339,7 +339,7 @@
     },
     "packages/core": {
       "name": "@opencode/core",
-      "version": "1.18.4",
+      "version": "2.0.0",
       "dependencies": {
         "@ai-sdk/alibaba": "1.0.17",
         "@ai-sdk/anthropic": "3.0.82",
@@ -411,7 +411,7 @@
     },
     "packages/desktop": {
       "name": "@opencode/desktop",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@zip.js/zip.js": "2.7.62",
         "electron-context-menu": "4.1.2",
@@ -463,7 +463,7 @@
     },
     "packages/enterprise": {
       "name": "@opencode/enterprise",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@hono/standard-validator": "catalog:",
         "@opencode-ai/sdk": "1.18.21",
@@ -500,7 +500,7 @@
     },
     "packages/function": {
       "name": "@opencode/function",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "catalog:",
@@ -516,7 +516,7 @@
     },
     "packages/http-recorder": {
       "name": "@opencode/http-recorder",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@effect/platform-node-shared": "4.0.0-rc.112",
       },
@@ -535,7 +535,7 @@
     },
     "packages/httpapi-codegen": {
       "name": "@opencode/httpapi-codegen",
-      "version": "0.0.0",
+      "version": "2.0.0",
       "dependencies": {
         "effect": "catalog:",
         "prettier": "3.6.2",
@@ -548,7 +548,7 @@
     },
     "packages/latex": {
       "name": "@opencode/latex",
-      "version": "0.0.0",
+      "version": "2.0.0",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opentui/core": "catalog:",
@@ -562,7 +562,7 @@
     },
     "packages/merman": {
       "name": "@opencode/merman",
-      "version": "0.0.0",
+      "version": "2.0.0",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opentui/core": "catalog:",
@@ -577,7 +577,7 @@
     },
     "packages/plugin": {
       "name": "@opencode/plugin",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@ai-sdk/provider": "3.0.8",
         "@opencode/ai": "workspace:*",
@@ -616,7 +616,7 @@
     },
     "packages/plugin-browser": {
       "name": "@opencode/plugin-browser",
-      "version": "0.0.0",
+      "version": "2.0.0",
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
@@ -646,7 +646,7 @@
     },
     "packages/protocol": {
       "name": "@opencode/protocol",
-      "version": "1.17.11",
+      "version": "2.0.0",
       "dependencies": {
         "@opencode/schema": "workspace:*",
         "effect": "catalog:",
@@ -661,7 +661,7 @@
     },
     "packages/schema": {
       "name": "@opencode/schema",
-      "version": "1.17.11",
+      "version": "2.0.0",
       "dependencies": {
         "@standard-schema/spec": "catalog:",
         "effect": "catalog:",
@@ -685,7 +685,7 @@
     },
     "packages/sdk": {
       "name": "@opencode/sdk",
-      "version": "1.18.4",
+      "version": "2.0.0",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -706,7 +706,7 @@
     },
     "packages/server": {
       "name": "@opencode/server",
-      "version": "1.18.4",
+      "version": "2.0.0",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "@effect/platform-node-shared": "catalog:",
@@ -728,7 +728,7 @@
     },
     "packages/session-ui": {
       "name": "@opencode/session-ui",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode/client": "workspace:*",
@@ -763,7 +763,7 @@
     },
     "packages/simulation": {
       "name": "@opencode/simulation",
-      "version": "1.17.13",
+      "version": "2.0.0",
       "dependencies": {
         "@opencode/ai": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -783,7 +783,7 @@
     },
     "packages/stats/app": {
       "name": "@opencode/stats-app",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@ibm/plex": "6.4.1",
         "@kobalte/core": "catalog:",
@@ -817,7 +817,7 @@
     },
     "packages/stats/core": {
       "name": "@opencode/stats-core",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@aws-sdk/client-athena": "3.933.0",
         "@planetscale/database": "1.19.0",
@@ -836,7 +836,7 @@
     },
     "packages/stats/server": {
       "name": "@opencode/stats-server",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@aws-sdk/client-firehose": "3.933.0",
         "@effect/platform-node": "catalog:",
@@ -882,7 +882,7 @@
     },
     "packages/theme": {
       "name": "@opencode/theme",
-      "version": "0.0.0",
+      "version": "2.0.0",
       "dependencies": {
         "@opentui/core": "catalog:",
         "effect": "catalog:",
@@ -896,7 +896,7 @@
     },
     "packages/tui": {
       "name": "@opencode/tui",
-      "version": "1.18.4",
+      "version": "2.0.0",
       "dependencies": {
         "@opencode/client": "workspace:*",
         "@opencode/core": "workspace:*",
@@ -931,7 +931,7 @@
     },
     "packages/ui": {
       "name": "@opencode/ui",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@pierre/diffs": "catalog:",
@@ -966,7 +966,7 @@
     },
     "packages/util": {
       "name": "@opencode/util",
-      "version": "1.18.3",
+      "version": "2.0.0",
       "dependencies": {
         "@effect/opentelemetry": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -999,7 +999,7 @@
     },
     "packages/web": {
       "name": "@opencode/web",
-      "version": "1.18.15",
+      "version": "2.0.0",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
@@ -1040,7 +1040,7 @@
     },
     "services/update": {
       "name": "@opencode/update",
-      "version": "1.18.4",
+      "version": "2.0.0",
       "dependencies": {
         "jose": "6.0.11",
         "semver": "catalog:",

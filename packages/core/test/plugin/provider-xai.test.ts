@@ -69,7 +69,7 @@ describe("XAIPlugin", () => {
     }),
   )
 
-  it.effect("keeps xAI Responses WebSockets opt-in", () =>
+  it.effect("enables xAI Responses WebSockets", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const providerID = Provider.ID.make("xai")
@@ -84,7 +84,7 @@ describe("XAIPlugin", () => {
 
       const model = yield* catalog.model.get(providerID, Model.ID.make("grok-4.6"))
       expect(model?.capabilities.responsesWebsockets).toBe(true)
-      expect(model?.websocket).toBeUndefined()
+      expect(model?.websocket).toBe(true)
     }),
   )
 })

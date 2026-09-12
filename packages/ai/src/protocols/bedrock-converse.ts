@@ -106,7 +106,7 @@ type BedrockSystemBlock = Schema.Schema.Type<typeof BedrockSystemBlock>
 const BedrockToolSpec = Schema.Struct({
   toolSpec: Schema.Struct({
     name: Schema.String,
-    description: Schema.String,
+    description: Schema.optional(Schema.String),
     inputSchema: Schema.Struct({
       json: JsonObject,
     }),
@@ -222,7 +222,7 @@ type BedrockEvent = Schema.Schema.Type<typeof BedrockEvent>
 const lowerToolSpec = (tool: ToolDefinition, inputSchema: JsonSchema): BedrockToolSpec => ({
   toolSpec: {
     name: tool.name,
-    description: tool.description,
+    ...(tool.description.trim().length > 0 ? { description: tool.description } : {}),
     inputSchema: { json: inputSchema },
   },
 })

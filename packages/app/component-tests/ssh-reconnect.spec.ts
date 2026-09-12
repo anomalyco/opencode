@@ -19,11 +19,13 @@ story("cancelling a version mismatch permits reconnecting again", async ({ mount
   const component = await mount("app-dialog-ssh--incompatible-session")
   await component.getByRole("button", { name: "Reconnect", exact: true }).click()
   const dialog = page.getByRole("dialog")
-  await expect(dialog.getByRole("alert")).toBeVisible()
+  await expect(dialog.getByRole("status")).toContainText("Server update required")
+  await expect(dialog.getByRole("textbox")).toHaveCount(0)
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
   await expect(dialog).toHaveCount(0)
   await component.getByRole("button", { name: "Reconnect", exact: true }).click()
-  await expect(dialog.getByRole("alert")).toBeVisible()
+  await expect(dialog.getByRole("status")).toContainText("Server update required")
+  await expect(dialog.getByRole("textbox")).toHaveCount(0)
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
   await expect(dialog).toHaveCount(0)
 })
@@ -41,6 +43,17 @@ story("adding a server keeps all SSH challenges in the original connection dialo
   await dialog.getByRole("textbox", { name: "Verification code:" }).fill("123456")
   await dialog.getByRole("button", { name: "Continue", exact: true }).click()
   await expect(dialog).toHaveCount(0)
+})
+
+story("adding an incompatible server advances to a dedicated update step", async ({ mount, page }) => {
+  await mount("app-dialog-ssh--incompatible-host")
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("textbox", { name: "Host or SSH command" }).fill("ssh devbox")
+  await dialog.getByRole("button", { name: "Add server", exact: true }).click()
+  await expect(dialog.getByRole("status")).toContainText("Server update required")
+  await expect(dialog.getByRole("textbox")).toHaveCount(0)
+  await expect(dialog.getByRole("alert")).toHaveCount(0)
+  await expect(dialog.getByRole("button", { name: "Update and reconnect", exact: true })).toBeVisible()
 })
 
 story("updating an incompatible connection continues authentication in the same dialog", async ({ mount, page }) => {
