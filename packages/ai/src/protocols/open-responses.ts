@@ -20,6 +20,7 @@ import {
 } from "../schema/index.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
+import { effortUpdate } from "../effort-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
@@ -164,6 +165,13 @@ export const CompactionItem = Schema.Struct({
   encrypted_content: Schema.String,
 })
 
+// Kept out of the baseline `InputItem` union: only the OpenAI extension accepts it.
+export const ConfigurationUpdate = Schema.Struct({
+  type: Schema.Literal("configuration_update"),
+  reasoning: Schema.Struct({ effort: OpenResponsesOptions.ReasoningEffort }),
+})
+type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
+
 export const InputItem = Schema.Union([
   CompactionItem,
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
@@ -208,6 +216,7 @@ export type HostedToolReplayItem = {
 type LoweredInputItem =
   | OpenResponsesInputItem
   | HostedToolReplayItem
+  | ConfigurationUpdate
   | {
       readonly type: "message"
       readonly id?: string
@@ -634,6 +643,8 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
   return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter))
 })
 
+const DEFAULT_EFFORT = "medium"
+
 const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
@@ -646,6 +657,14 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
       Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
     )(message.providerMetadata?.[providerMetadataKey])
     if (message.role === "system") {
+      const update = effortUpdate(message)
+      if (update) {
+        // Consecutive updates are rejected, so a newer one replaces its predecessor.
+        const last = input.at(-1)
+        if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
+        input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
+        continue
+      }
       input.push({
         role: "developer",
         content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(adapter.name, message)),
@@ -789,8 +808,7 @@ export const lowerConversation = Effect.fn("OpenResponses.lowerConversation")(fu
   }
 })
 
-export const lowerGeneration = (request: LLMRequest) => {
-  const options = OpenResponsesOptions.resolve(request)
+export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
   const generation = request.generation
   const cacheKey = ProviderShared.promptCacheKey(request)
   const parallelToolCalls = resolveParallelToolCalls(request)

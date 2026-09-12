@@ -9,6 +9,7 @@ import {
   LanguageModelSchema,
   type LanguageModel,
   ProviderOptions,
+  ReasoningEffort,
 } from "./options.js"
 import { ProviderID } from "./ids.js"
 
@@ -217,6 +218,14 @@ export const CompactionPart = Object.assign(compactionPartSchema, {
     Schema.decodeUnknownSync(compactionPartSchema)({ type: "compaction", ...input }),
 })
 
+/** Reasoning effort changed here, from `previous` to `effort`; `undefined` is the model default. */
+export const EffortPart = Schema.Struct({
+  type: Schema.Literal("effort"),
+  effort: Schema.optional(ReasoningEffort),
+  previous: Schema.optional(ReasoningEffort),
+}).annotate({ identifier: "LLM.Content.Effort" })
+export type EffortPart = Schema.Schema.Type<typeof EffortPart>
+
 export const ContentPart = Schema.Union([
   TextPart,
   MediaPart,
@@ -224,6 +233,7 @@ export const ContentPart = Schema.Union([
   ToolResultPart,
   ReasoningPart,
   CompactionPart,
+  EffortPart,
 ]).pipe(Schema.toTaggedUnion("type"))
 export type ContentPart = Schema.Schema.Type<typeof ContentPart>
 
@@ -264,6 +274,9 @@ export namespace Message {
    * updates; pass that untrusted content through ordinary user/tool channels.
    */
   export const system = (content: SystemContentInput) => make({ role: "system", content })
+
+  export const effort = (input: { readonly effort?: ReasoningEffort; readonly previous?: ReasoningEffort }) =>
+    make({ role: "system", content: [{ type: "effort", effort: input.effort, previous: input.previous }] })
 
   export const tool = (result: ToolResultPart | Parameters<typeof ToolResultPart.make>[0]) =>
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
