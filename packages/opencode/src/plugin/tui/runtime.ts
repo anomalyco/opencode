@@ -39,6 +39,7 @@ import { internalTuiPlugins, type InternalTuiPlugin } from "./internal"
 import type { HostPluginApi, HostSlots } from "@opencode-ai/tui/plugin/slots"
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
+import { parsePluginSpecifier } from "../shared"
 import { createCommandShim } from "@opencode-ai/tui/plugin/command-shim"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Effect } from "effect"
@@ -1086,9 +1087,12 @@ async function load(input: {
       }).pipe(Effect.provide(AppNodeBuilder.build(RuntimeFlags.node))),
     )
     const pluginOrigins = config.plugin_origins ?? (await TuiConfig.pluginOrigins())
-    const records = Flag.OPENCODE_PURE ? [] : pluginOrigins
-    if (Flag.OPENCODE_PURE && pluginOrigins.length) {
-    }
+    const disabledPlugins = new Set((config.disabled_plugins ?? []).map((spec) => parsePluginSpecifier(spec).pkg))
+    const records = Flag.OPENCODE_PURE
+      ? []
+      : pluginOrigins.filter(
+          (origin) => !disabledPlugins.has(parsePluginSpecifier(ConfigPlugin.pluginSpecifier(origin.spec)).pkg),
+        )
 
     for (const item of internalTuiPlugins(flags)) {
       const entry = loadInternalPlugin(item)

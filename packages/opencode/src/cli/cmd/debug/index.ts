@@ -52,6 +52,7 @@ const InfoCommand = effectCmd({
   handler: Effect.fn("Cli.debug.info")(function* () {
     const { Config } = yield* Effect.promise(() => import("@/config/config"))
     const { ConfigPlugin } = yield* Effect.promise(() => import("@/config/plugin"))
+    const { parsePluginSpecifier } = yield* Effect.promise(() => import("@/plugin/shared"))
     const config = yield* Config.Service.use((cfg) => cfg.get())
     const termProgram = process.env.TERM_PROGRAM
       ? `${process.env.TERM_PROGRAM}${process.env.TERM_PROGRAM_VERSION ? ` ${process.env.TERM_PROGRAM_VERSION}` : ""}`
@@ -70,8 +71,11 @@ const InfoCommand = effectCmd({
       console.log("none")
       return
     }
+    const disabledPlugins = new Set((config.disabled_plugins ?? []).map((spec) => parsePluginSpecifier(spec).pkg))
     for (const plugin of config.plugin_origins) {
-      console.log(`- ${ConfigPlugin.pluginSpecifier(plugin.spec)}`)
+      const name = parsePluginSpecifier(ConfigPlugin.pluginSpecifier(plugin.spec)).pkg
+      const suffix = disabledPlugins.has(name) ? " (disabled)" : ""
+      console.log(`- ${name}${suffix}`)
     }
   }),
 })

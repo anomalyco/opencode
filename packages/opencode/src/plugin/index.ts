@@ -28,6 +28,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { errorMessage } from "@/util/error"
 import { PluginLoader } from "./loader"
 import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
+import * as ConfigPlugin from "@/config/plugin"
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -178,9 +179,12 @@ const layer = Layer.effect(
           if (init._tag === "Some") hooks.push(init.value)
         }
 
-        const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
-        if (flags.pure && cfg.plugin_origins?.length) {
-        }
+        const disabledPlugins = new Set((cfg.disabled_plugins ?? []).map((spec) => parsePluginSpecifier(spec).pkg))
+        const plugins = flags.pure
+          ? []
+          : (cfg.plugin_origins ?? []).filter(
+              (origin) => !disabledPlugins.has(parsePluginSpecifier(ConfigPlugin.pluginSpecifier(origin.spec)).pkg),
+            )
         if (plugins.length) yield* config.waitForDependencies()
 
         const loaded = yield* Effect.promise(() =>
