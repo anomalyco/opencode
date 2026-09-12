@@ -203,6 +203,12 @@ test("e2e: Arabic prompt input and assistant output in a real session view", asy
     const frame = await app.waitForFrame((f) => f.includes("ملاعلاب ابحرم"), "arabic assistant text")
     expect(frame.includes("ملاعلاب ابحرم")).toBe(true)
 
+    // RTL paragraphs are right-aligned within the message width, not left.
+    const arabicRow = frame.split("\n").find((line) => line.includes("ملاعلاب ابحرم"))!
+    const column = arabicRow.indexOf("ملاعلاب ابحرم")
+    expect(column).toBeGreaterThan(20)
+    expect(arabicRow.trimEnd().endsWith("ملاعلاب ابحرم")).toBe(true)
+
     app.emit({
       id: "evt_delta_2",
       type: "message.part.delta",

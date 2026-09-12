@@ -153,8 +153,13 @@ test("e2e: Arabic renders RTL inside a DialogSelect list", async () => {
   const app = await bootApp({ sessionID: "ses_test" })
   try {
     app.dispatch("session.list")
-    const frame = await app.waitForFrame((f) => f.includes(reverseArabic(ARABIC_TITLE)), "arabic session title")
-    expect(frame.includes(reverseArabic(ARABIC_TITLE))).toBe(true)
+    const frame = await app.waitForFrame(
+      (f) => f.includes("Sessions") && f.includes(reverseArabic(ARABIC_TITLE)),
+      "arabic session title",
+    )
+    const row = frame.split("\n").find((line) => line.includes(reverseArabic(ARABIC_TITLE)))!
+    // RTL title is right-aligned within the dialog row, not at the left padding.
+    expect(row.indexOf(reverseArabic(ARABIC_TITLE))).toBeGreaterThan(20)
   } finally {
     await app.exit()
   }

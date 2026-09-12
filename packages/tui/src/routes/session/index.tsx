@@ -24,7 +24,7 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import { BoxRenderable, CodeRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -81,7 +81,7 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
-import { bidiMarkdownRenderNode } from "../../component/bidi-markdown"
+import { applyBidiCodePaint, bidiMarkdownRenderNode } from "../../component/bidi-markdown"
 import "../../component/bidi-elements"
 
 addDefaultParsers(parsers.parsers)
@@ -1635,6 +1635,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         <Show when={!opaque() && (!inMinimal() || expanded()) && summary().body}>
           <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
             <code
+              ref={(el: CodeRenderable) => applyBidiCodePaint(el)}
               filetype="markdown"
               drawUnstyledText={false}
               streaming={true}
