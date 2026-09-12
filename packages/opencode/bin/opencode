@@ -8,7 +8,12 @@ const os = require("os")
 const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
 
 function run(target) {
-  const child = childProcess.spawn(target, process.argv.slice(2), {
+  // On Android/Termux, glibc-linked binaries need grun (glibc-runner)
+  const isAndroid = os.platform() === "android"
+  const command = isAndroid ? "grun" : target
+  const args = isAndroid ? [target, ...process.argv.slice(2)] : process.argv.slice(2)
+
+  const child = childProcess.spawn(command, args, {
     stdio: "inherit",
   })
 
@@ -54,6 +59,7 @@ const cached = path.join(scriptDir, ".opencode")
 const platformMap = {
   darwin: "darwin",
   linux: "linux",
+  android: "linux", // Termux/Android uses linux binary via grun
   win32: "windows",
 }
 const archMap = {
