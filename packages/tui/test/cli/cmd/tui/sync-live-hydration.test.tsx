@@ -95,7 +95,7 @@ test("hydrates turn patches from message.diff.updated", async () => {
   }
 })
 
-test("pending hydration retains a live turn patch", async () => {
+test("a live diff is applied directly when the message is already cached", async () => {
   await using tmp = await tmpdir()
   await Bun.write(`${tmp.path}/kv.json`, "{}")
   let resolveMessages!: (response: Response) => void
