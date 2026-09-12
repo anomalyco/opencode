@@ -14,6 +14,8 @@ export function updaterAction(state: UpdaterState | undefined) {
       return { label: "settings.updates.action.downloading" as const }
     case "ready":
       return { label: "toast.update.action.installRestart" as const, run: "install" as const }
+    case "download-required":
+      return { label: "settings.updates.action.download" as const, run: "install" as const }
     case "installing":
       return { label: "settings.updates.action.installing" as const }
     case "disabled":

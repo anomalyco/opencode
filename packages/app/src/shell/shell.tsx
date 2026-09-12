@@ -26,13 +26,8 @@ export default function Layout(props: ParentProps) {
   const bottomTitlebar = () => mobile() && preferences.general.mobileTitlebarPosition() === "bottom"
 
   const update: TitlebarUpdate = {
-    get version() {
-      const state = platform.updater?.state()
-      if (state?.status !== "ready") return undefined
-      return state.version
-    },
-    get installing() {
-      return platform.updater?.state().status === "installing"
+    get state() {
+      return platform.updater?.state()
     },
     install: () => void platform.updater?.install(),
   }
