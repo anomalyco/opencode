@@ -884,7 +884,9 @@ export function createServerSession(
   // issue a fresh page (a queued forced refresh) await competing work instead of being skipped by the
   // loading guard, so a skipped load can never fulfill that contract.
   const loadMessages = (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
+    const occupied = meta.loading[sessionID] === true
     const run = performMessageLoad(sessionID, limit, before, mode)
+    if (occupied) return run
     messageWork.set(sessionID, run)
     const cleanup = () => {
       if (messageWork.get(sessionID) === run) messageWork.delete(sessionID)

@@ -866,6 +866,34 @@ describe("server session", () => {
     expect(store.data.message.child?.map((message) => message.id)).toContain("message-3")
   })
 
+  test("a skipped prefetch cannot displace an active history load registration", async () => {
+    const latest = userMessage("message-2", { time: { created: 2 } })
+    const older = userMessage("message-1", { time: { created: 1 } })
+    const fresh = userMessage("message-3", { time: { created: 3 } })
+    const historyPage = deferredResponse()
+    const freshPage = deferredResponse()
+    const client = messageClient(response([{ info: latest, parts: [] }], "older"), historyPage.promise, freshPage.promise)
+    const store = createServerSession(client)
+    await store.sync("child")
+
+    const history = store.history.loadMore("child")
+    await store.prefetch("child", 100)
+    const forced = store.sync("child", { force: true })
+    let premature = false
+    forced.then(() => {
+      premature = true
+    })
+    await Bun.sleep(0)
+    expect(premature).toBe(false)
+
+    historyPage.resolve(response([{ info: older, parts: [] }]))
+    await client.requested(3)
+    freshPage.resolve(response([{ info: latest, parts: [] }, { info: fresh, parts: [] }], "older"))
+    await Promise.all([forced, history])
+
+    expect(store.data.message.child?.map((message) => message.id)).toContain("message-3")
+  })
+
   test("does not start queued work after session teardown", async () => {
     const user = userMessage("message-1", { sessionID: "root" })
     const info = Promise.withResolvers<{ data: Session }>()
