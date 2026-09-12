@@ -150,8 +150,8 @@ function getConfig() {
         productName: "OpenCode",
         protocols: { name: "OpenCode", schemes: ["opencode"] },
         publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
-        deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
+        deb: { packageName: "opencode-desktop", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
+        rpm: { packageName: "opencode-desktop", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
       }
     }
   }
