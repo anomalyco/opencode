@@ -30,7 +30,7 @@ function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets:
     return Effect.succeed(HttpServerResponse.empty({ status: 404, headers: { "cache-control": "no-store" } }))
   const name = assets[key] !== undefined ? key : "index.html"
   const file = assets[name]
-  if (!file) return Effect.succeed(HttpServerResponse.empty({ status: 404 }))
+  if (file === undefined) return Effect.succeed(HttpServerResponse.empty({ status: 404 }))
   if (request.method !== "GET" && request.method !== "HEAD")
     return Effect.succeed(HttpServerResponse.empty({ status: 405 }))
   const html = name === "index.html"

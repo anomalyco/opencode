@@ -20,6 +20,7 @@ describe("web UI", () => {
     const assets = {
       "index.html": await Bun.file(index).text(),
       "_assets/app.js": await Bun.file(asset).text(),
+      "_assets/empty.js": "",
       "sw.js": "service worker",
       "registerSW.js": "registration",
       "font.woff2": new Uint8Array([0, 1, 2, 255]),
@@ -66,6 +67,16 @@ describe("web UI", () => {
           expect(yield* Effect.promise(() => script.text())).toBe("console.log('embedded')")
           expect(script.headers.get("content-type")).toContain("javascript")
           expect(script.headers.get("cache-control")).toBe("public, max-age=31536000, immutable")
+
+          yield* Effect.forEach(["GET", "HEAD"], (method) =>
+            Effect.gen(function* () {
+              const empty = yield* Effect.promise(() => fetch(`${origin}/_assets/empty.js`, { method }))
+              expect(empty.status).toBe(200)
+              expect(empty.headers.get("content-type")).toContain("javascript")
+              expect(empty.headers.get("cache-control")).toBe("public, max-age=31536000, immutable")
+              expect(yield* Effect.promise(() => empty.text())).toBe("")
+            }),
+          )
 
           const worker = yield* Effect.promise(() => fetch(`${origin}/sw.js`))
           expect(worker.headers.get("cache-control")).toBe("no-cache")
