@@ -185,6 +185,7 @@ export type TuiInput = {
     }
   }
   args: Args
+  directory?: string
   config: Config.Interface
   updater?: UpdateSource
   packages: PackageSource
@@ -208,9 +209,13 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
   const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
   const api = OpenCode.make(options)
-  const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
+  const location = yield* Effect.tryPromise(() =>
+    api.file.list({ location: { directory: input.directory ?? process.cwd() } }),
+  ).pipe(
     Effect.map((response) => response.location),
-    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
+    Effect.catch((error) =>
+      input.directory === undefined ? Effect.tryPromise(() => api.location.get()) : Effect.fail(error),
+    ),
   )
   const directory = location.directory
   const pluginDirectories = yield* Effect.promise(() => localPluginDirectories(process.cwd(), global.config))
