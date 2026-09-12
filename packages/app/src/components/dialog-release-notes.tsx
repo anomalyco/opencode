@@ -103,7 +103,7 @@ export function DialogReleaseNotes(props: { highlights: Highlight[] }) {
                 {props.highlights.map((_, i) => (
                   <button
                     type="button"
-                    class="h-6 flex items-center cursor-pointer bg-transparent border-none p-0 transition-all duration-200"
+                    class="h-6 flex items-center cursor-pointer bg-transparent border-none p-0 transition-[width] duration-200"
                     classList={{
                       "w-8": i === index(),
                       "w-3": i !== index(),
