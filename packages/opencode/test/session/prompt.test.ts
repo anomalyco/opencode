@@ -580,6 +580,93 @@ withMcpInstructions.instance(
   15_000,
 )
 
+it.instance("side question reuses parent context without changing history", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      parts: [{ type: "text", text: "The deployment region is ap-south-1." }],
+    })
+    yield* llm.text("Understood.")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const before = yield* sessions.messages({ sessionID: chat.id })
+    yield* llm.text("<think>hidden</think>The region is ap-south-1.")
+    const answer = yield* prompt.sideQuestion({
+      sessionID: chat.id,
+      question: "Which deployment region are we using?",
+    })
+    const after = yield* sessions.messages({ sessionID: chat.id })
+    const inputs = yield* llm.inputs
+    const systems = inputs.map((input) => (Array.isArray(input.messages) ? input.messages[0] : undefined))
+
+    expect(answer).toBe("The region is ap-south-1.")
+    expect(after).toEqual(before)
+    expect(inputs).toHaveLength(2)
+    expect(inputs[1]?.tools).toBeUndefined()
+    expect(JSON.stringify(inputs[1]?.messages)).toContain("The deployment region is ap-south-1.")
+    expect(JSON.stringify(inputs[1]?.messages)).toContain("Which deployment region are we using?")
+    expect(systems[1]).toEqual(systems[0])
+  }),
+)
+
+it.instance("side question runs while the parent session is busy", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const status = yield* SessionStatus.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      parts: [{ type: "text", text: "Keep working on the deployment." }],
+    })
+    const gate = yield* Deferred.make<void>()
+    yield* llm.hold("Parent complete.", deferredAsPromise(gate))
+    const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+    yield* awaitWithTimeout(llm.wait(1), "parent request did not start")
+    expect((yield* status.get(chat.id)).type).toBe("busy")
+
+    const before = yield* sessions.messages({ sessionID: chat.id })
+    yield* llm.text("The parent is still working.")
+    const answer = yield* prompt.sideQuestion({
+      sessionID: chat.id,
+      question: "Is the parent still working?",
+    })
+    const after = yield* sessions.messages({ sessionID: chat.id })
+
+    expect(answer).toBe("The parent is still working.")
+    expect(after.map((message) => message.info.id)).toEqual(before.map((message) => message.info.id))
+    expect(JSON.stringify(after)).not.toContain("Is the parent still working?")
+    expect(JSON.stringify(after)).not.toContain("The parent is still working.")
+    expect((yield* status.get(chat.id)).type).toBe("busy")
+
+    yield* llm.error(400, { error: "side request failed" })
+    const failed = yield* prompt.sideQuestion({ sessionID: chat.id, question: "Will this fail?" }).pipe(Effect.exit)
+    expect(Exit.isFailure(failed)).toBe(true)
+    expect((yield* status.get(chat.id)).type).toBe("busy")
+    expect((yield* sessions.messages({ sessionID: chat.id })).map((message) => message.info.id)).toEqual(
+      before.map((message) => message.info.id),
+    )
+
+    succeedVoid(gate)
+    const result = yield* Fiber.join(fiber)
+    expect(result.parts.some((part) => part.type === "text" && part.text === "Parent complete.")).toBe(true)
+  }),
+)
+
 it.instance("legacy prompt emits message events without session.next events", () =>
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
