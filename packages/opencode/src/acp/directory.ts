@@ -121,6 +121,11 @@ export const loaderLayer = Layer.effect(
             [agent.list(), agent.defaultInfo(), command.list(), provider.defaultModel().pipe(Effect.option)],
             { concurrency: "unbounded" },
           )
+          const agentModel = defaultAgent.model
+            ? providers[defaultAgent.model.providerID]?.models[defaultAgent.model.modelID]
+              ? { providerID: defaultAgent.model.providerID, modelID: defaultAgent.model.modelID }
+              : undefined
+            : undefined
           return build({
             directory,
             providers,
@@ -133,7 +138,11 @@ export const loaderLayer = Layer.effect(
               })),
             defaultModeID: defaultAgent.name,
             commands: commands.toSorted((a, b) => a.name.localeCompare(b.name)),
-            ...(defaultModel._tag === "Some" ? { defaultModel: defaultModel.value } : {}),
+            ...(agentModel
+              ? { defaultModel: agentModel }
+              : defaultModel._tag === "Some"
+                ? { defaultModel: defaultModel.value }
+                : {}),
           })
         }).pipe(Effect.provideService(InstanceRef, ctx))
       }),
