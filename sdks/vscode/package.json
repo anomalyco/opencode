@@ -20,7 +20,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -93,10 +95,14 @@
     "lint": "eslint src",
     "test": "vscode-test"
   },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
   "devDependencies": {
     "@types/vscode": "^1.94.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
+    "@types/ws": "^8.5.13",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
     "eslint": "^9.25.1",
