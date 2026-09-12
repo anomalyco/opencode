@@ -321,20 +321,41 @@ export function applyDirectoryEvent(input: {
       const parts = input.store.part[part.messageID]
       if (!parts) {
         input.setStore("part", part.messageID, [part])
-        break
+      } else {
+        const result = Binary.search(parts, part.id, (item) => item.id)
+        if (result.found) {
+          input.setStore("part", part.messageID, result.index, reconcile(part))
+        } else {
+          input.setStore(
+            "part",
+            part.messageID,
+            produce((draft) => {
+              draft.splice(result.index, 0, part)
+            }),
+          )
+        }
       }
-      const result = Binary.search(parts, part.id, (item) => item.id)
-      if (result.found) {
-        input.setStore("part", part.messageID, result.index, reconcile(part))
-        break
+      if (
+        part.type === "tool" &&
+        (part.state.status === "error" || part.state.status === "completed") &&
+        input.store.question[part.sessionID]
+      ) {
+        const questions = input.store.question[part.sessionID]!
+        const indices = questions
+          .map((q, i) => (q.tool?.callID === part.callID || q.tool?.messageID === part.messageID ? i : -1))
+          .filter((i) => i !== -1)
+        if (indices.length > 0) {
+          input.setStore(
+            "question",
+            part.sessionID,
+            produce((draft) => {
+              for (let i = indices.length - 1; i >= 0; i--) {
+                draft.splice(indices[i], 1)
+              }
+            }),
+          )
+        }
       }
-      input.setStore(
-        "part",
-        part.messageID,
-        produce((draft) => {
-          draft.splice(result.index, 0, part)
-        }),
-      )
       break
     }
     case "message.part.removed": {

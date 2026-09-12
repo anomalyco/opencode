@@ -57,6 +57,7 @@ export interface Interface {
   readonly ask: (input: AskInput) => Effect.Effect<ReadonlyArray<Answer>, RejectedError>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
   readonly reject: (requestID: ID) => Effect.Effect<void, NotFoundError>
+  readonly cancel: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
@@ -79,9 +80,19 @@ const layer = Layer.effect(
     const pending = new Map<ID, Pending>()
 
     yield* Effect.addFinalizer(() =>
-      Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new RejectedError()), {
-        discard: true,
-      }).pipe(
+      Effect.forEach(
+        pending.values(),
+        (item) =>
+          events
+            .publish(Event.Rejected, {
+              sessionID: item.request.sessionID,
+              requestID: item.request.id,
+            })
+            .pipe(Effect.andThen(Deferred.fail(item.deferred, new RejectedError()).pipe(Effect.ignore))),
+        {
+          discard: true,
+        },
+      ).pipe(
         Effect.ensuring(
           Effect.sync(() => {
             pending.clear()
@@ -98,7 +109,21 @@ const layer = Layer.effect(
           const request: Request = { id, ...input }
           pending.set(id, { request, deferred })
           return yield* events.publish(Event.Asked, request).pipe(
-            Effect.andThen(restore(Deferred.await(deferred))),
+            Effect.andThen(
+              restore(Deferred.await(deferred)).pipe(
+                Effect.onInterrupt(() =>
+                  Effect.gen(function* () {
+                    if (!pending.has(id)) return
+                    pending.delete(id)
+                    yield* events.publish(Event.Rejected, {
+                      sessionID: input.sessionID,
+                      requestID: id,
+                    })
+                    yield* Deferred.fail(deferred, new RejectedError()).pipe(Effect.ignore)
+                  }),
+                ),
+              ),
+            ),
             Effect.ensuring(
               Effect.sync(() => {
                 pending.delete(id)
@@ -140,11 +165,27 @@ const layer = Layer.effect(
       ),
     )
 
+    const cancel = Effect.fn("QuestionV2.cancel")((sessionID: SessionSchema.ID) =>
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          for (const [id, item] of pending.entries()) {
+            if (item.request.sessionID !== sessionID) continue
+            pending.delete(id)
+            yield* events.publish(Event.Rejected, {
+              sessionID: item.request.sessionID,
+              requestID: item.request.id,
+            })
+            yield* Deferred.fail(item.deferred, new RejectedError()).pipe(Effect.ignore)
+          }
+        }),
+      ),
+    )
+
     const list = Effect.fn("QuestionV2.list")(function* () {
       return Array.from(pending.values(), (item) => item.request)
     })
 
-    return Service.of({ ask, reply, reject, list })
+    return Service.of({ ask, reply, reject, cancel, list })
   }),
 )
 
