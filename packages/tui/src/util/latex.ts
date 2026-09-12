@@ -1,3 +1,5 @@
+import type TexError from "mathjax-full/js/input/tex/TexError.js"
+
 export interface MathSegmentText {
   kind: "text"
   text: string
@@ -84,7 +86,12 @@ export function renderMath(tex: string, options: { color: string; fontPx: number
   const key = `${options.color}|${options.fontPx}|${tex}`
   const cached = cache.get(key)
   if (cached) return cached
-  const rendered = render(tex, options).catch(() => null)
+  // evict failures so a transient error (e.g. wasm init) does not pin the
+  // expression to fallback for the rest of the process
+  const rendered = render(tex, options).catch(() => {
+    cache.delete(key)
+    return null
+  })
   if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value!)
   cache.set(key, rendered)
   return rendered
@@ -126,13 +133,23 @@ function texToSvg(tex: string) {
     const adaptor = liteAdaptor()
     RegisterHTMLHandler(adaptor)
     const doc = mathjax.document("", {
-      InputJax: new TeX({ packages: AllPackages }),
+      // mathjax renders tex errors as an <merror> node by default; throw so
+      // invalid input falls back to the raw source instead of an error image
+      InputJax: new TeX({
+        packages: AllPackages,
+        formatError: (_jax: unknown, err: TexError) => {
+          throw err
+        },
+      }),
       OutputJax: new SVG({ fontCache: "none" }),
     })
     return {
       convert: (input: string) => adaptor.innerHTML(doc.convert(input, { display: true })),
     }
-  })()
+  })().catch((err) => {
+    mathjaxReady = undefined
+    throw err
+  })
   return mathjaxReady.then((instance) => instance.convert(tex))
 }
 
@@ -142,10 +159,13 @@ function resvg() {
   resvgReady ??= (async () => {
     const [mod, wasm] = await Promise.all([
       import("@resvg/resvg-wasm"),
-      import("@resvg/resvg-wasm/index_bg.wasm", { with: { type: "file" } }),
+      import("@resvg/resvg-wasm/index_bg.wasm" as string, { with: { type: "file" } }),
     ])
     await mod.initWasm(await Bun.file(wasm.default).arrayBuffer())
     return mod
-  })()
+  })().catch((err) => {
+    resvgReady = undefined
+    throw err
+  })
   return resvgReady
 }

@@ -52,5 +52,14 @@ describe("util.latex", () => {
       expect(result!.height).toBeGreaterThan(0)
       expect([...result!.png.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47])
     })
+
+    test("returns the same promise for repeated input and does not cache failures", async () => {
+      const options = { color: "#ffffff", fontPx: 16 }
+      expect(renderMath("x^2", options)).toBe(renderMath("x^2", options))
+      // \frac with no arguments is a hard tex error; mathjax throws instead of producing svg
+      const failed = renderMath("\\frac", options)
+      expect(await failed).toBeNull()
+      expect(renderMath("\\frac", options)).not.toBe(failed)
+    })
   })
 })
