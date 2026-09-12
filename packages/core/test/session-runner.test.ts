@@ -1238,6 +1238,64 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("recovers a context-limited length stop before durable output", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({
+            index: 0,
+            reason: "length",
+            usage: { inputTokens: 19_900, outputTokens: 40, totalTokens: 19_940 },
+          }),
+          LLMEvent.finish({
+            reason: "length",
+            usage: { inputTokens: 19_900, outputTokens: 40, totalTokens: 19_940 },
+          }),
+        ],
+        fragmentFixture("text", "text-summary", ["## Objective\n- Recover length stop"]).completeEvents,
+        fragmentFixture("text", "text-final", ["Recovered"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[1])[0]).toContain("## Objective")
+      expect(userTexts(requests[2])[0]).toContain("<summary>\n## Objective\n- Recover length stop\n</summary>")
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "compaction", summary: "## Objective\n- Recover length stop" },
+        { type: "assistant", finish: "stop" },
+      ])
+    }),
+  )
+
+  it.effect("does not recover a length stop when output limit was reached", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.stepFinish({
+            index: 0,
+            reason: "length",
+            usage: { inputTokens: 19_900, outputTokens: 1_000, totalTokens: 20_900 },
+          }),
+          LLMEvent.finish({
+            reason: "length",
+            usage: { inputTokens: 19_900, outputTokens: 1_000, totalTokens: 20_900 },
+          }),
+        ],
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      const context = yield* session.context(sessionID)
+      expect(context.at(-1)).toMatchObject({ type: "assistant", finish: "length" })
+    }),
+  )
+
   it.effect("persists a second context overflow after one recovery", () =>
     Effect.gen(function* () {
       const session = yield* setupOverflowRecovery
