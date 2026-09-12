@@ -52,7 +52,6 @@ export interface FindInput {
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
-  readonly hidden?: boolean
   readonly follow?: boolean
   readonly signal?: AbortSignal
   readonly onEntry?: (entry: Entry) => Effect.Effect<void>
@@ -62,7 +61,6 @@ export interface GlobInput {
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
-  readonly hidden?: boolean
   readonly follow?: boolean
   readonly signal?: AbortSignal
 }
@@ -160,10 +158,14 @@ const layer = Layer.effect(
           args: [
             "--no-config",
             "--files",
-            ...(input.hidden ? ["--hidden"] : []),
+            // rg prunes hidden directories during traversal unless a glob
+            // matches the directory entry itself, so precise globs can only
+            // reach paths inside hidden directories with --hidden
+            "--hidden",
             ...(input.follow ? ["--follow"] : []),
             `--glob=${input.pattern}`,
             "--glob=!**/.git/**",
+            "--glob=!**/.jj/**",
             ".",
           ],
           parse: (line) =>
@@ -192,10 +194,11 @@ const layer = Layer.effect(
           args: [
             "--no-config",
             "--files",
-            ...(input.hidden ? ["--hidden"] : []),
+            "--hidden",
             ...(input.follow ? ["--follow"] : []),
             ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),
             "--glob=!**/.git/**",
+            "--glob=!**/.jj/**",
             ".",
           ],
           parse: (line) => {
@@ -225,6 +228,7 @@ const layer = Layer.effect(
             "--no-messages",
             ...(input.include ? [`--glob=${input.include}`] : []),
             "--glob=!**/.git/**",
+            "--glob=!**/.jj/**",
             "--",
             input.pattern,
             input.file ?? ".",
