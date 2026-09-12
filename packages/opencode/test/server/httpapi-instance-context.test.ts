@@ -7,6 +7,7 @@ import * as Socket from "effect/unstable/socket/Socket"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { registerAdapter } from "../../src/control-plane/adapters"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
@@ -185,6 +186,19 @@ describe("HttpApi instance context middleware", () => {
       expect(response.status).toBe(200)
       expect(yield* response.json).toMatchObject({
         directory: path.join(process.cwd(), "%E0%A4%A"),
+      })
+    }),
+  )
+
+  it.live("falls back to the server directory when the routed directory decoded to replacement characters", () =>
+    Effect.gen(function* () {
+      yield* serveProbe()
+
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent("j\uFFFD")}`)
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toMatchObject({
+        directory: FSUtil.resolve(process.cwd()),
       })
     }),
   )
