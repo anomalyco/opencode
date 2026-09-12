@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { dirname } from "node:path"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, on, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "../../context/theme"
@@ -116,6 +116,19 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
     stage: "permission" as PermissionStage,
   })
   const pathFormatter = usePathFormatter()
+
+  // Only one PermissionPrompt instance is ever mounted (it always renders
+  // permissions()[0]); when the user resolves a request via the "always" or
+  // "reject" sub-screen, store.stage is left on that sub-screen. As soon as
+  // the next queued request becomes permissions()[0], the same instance is
+  // reused with a new request prop, so store.stage must be reset or the new
+  // request wrongly shows the "Always allow" / reject screen.
+  createEffect(
+    on(
+      () => props.request.id,
+      () => setStore("stage", "permission"),
+    ),
+  )
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
 
