@@ -41,6 +41,18 @@ joining. Installing one of the fonts above improves shaping.
 %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
 ```
 
+### Pick it from inside OpenCode
+
+Type `/fonts` in the prompt to open the font picker. It lists the fonts installed
+on your machine (recommended Arabic fonts first), and writes your choice into
+the terminal's settings for you — keeping a timestamped backup. Then restart the
+terminal. It never installs fonts.
+
+Under the hood it sets `profiles.defaults.font.fallbacks`, so Arabic uses the
+chosen font while Latin and code stay monospaced.
+
+### Manually
+
 Add Arabic fallbacks to `profiles.defaults.font`:
 
 ```json

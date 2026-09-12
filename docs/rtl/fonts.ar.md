@@ -41,6 +41,18 @@
 %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
 ```
 
+### اختيار الخط من جوه OpenCode
+
+اكتب `/fonts` في البرومبت وهتفتحلك قايمة الخطوط. بتعرض الخطوط المركّبة على
+جهازك (الخطوط العربية المقترحة في الأول)، وبتحفظ اختيارك في إعدادات الـ terminal
+لوحدها مع نسخة احتياطية. بعد كده اقفل التيرمنال وافتحه تاني. **ومش بتركّب أي خط
+على الجهاز.**
+
+الأمر ده بيعدّل `profiles.defaults.font.fallbacks`، يعني العربي هيستخدم الخط
+اللي اخترته والإنجليزي والكود هيفضلوا بالخط الـ monospaced.
+
+### يدويًا
+
 أضف الخطوط العربية كـ fallbacks داخل `profiles.defaults.font`:
 
 ```json
