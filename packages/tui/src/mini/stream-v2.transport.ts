@@ -1734,19 +1734,26 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const messageID = next.prompt.messageID
     if (!messageID) throw new Error("Prompt message ID is required")
     const command = next.prompt.command
-    const attachments = await prepareAttachments(next, command ? "command" : "prompt", input.readTextFile)
+    const skill = command?.source === "skill" && command.arguments.trim() ? command : undefined
+    const attachments = await prepareAttachments(next, command && !skill ? "command" : "prompt", input.readTextFile)
     const agents = promptAgents(next)
     const skills = promptSkills(next)
-    if (!command) {
+    if (!command || skill) {
       input.trace?.write("send.prompt", { sessionID: input.sessionID, messageID, delivery })
       return client.session.prompt(
         {
           sessionID: input.sessionID,
           id: messageID,
-          text: [next.prompt.text, ...attachments.text].join("\n\n"),
+          text: [skill?.arguments ?? next.prompt.text, ...attachments.text].join("\n\n"),
           files: attachments.files.length ? attachments.files : undefined,
           agents: agents.length ? agents : undefined,
-          skills: skills.length ? skills : undefined,
+          skills: skill
+            ? skills.some((item) => item.id === skill.name)
+              ? skills
+              : [...skills, { id: skill.name }]
+            : skills.length
+              ? skills
+              : undefined,
           delivery,
         },
         { signal: next.signal },
@@ -1828,7 +1835,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (!messageID) throw new Error("Prompt message ID is required")
 
       const command = next.prompt.command
-      if (command?.source === "skill") {
+      if (command?.source === "skill" && !command.arguments.trim()) {
         if (next.agent)
           await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
         input.trace?.write("send.skill", { sessionID: input.sessionID, messageID, skill: command.name })
@@ -1845,7 +1852,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         )
         return
       }
-      if (command) {
+      if (command && command.source !== "skill") {
         await admitPrompt(next, client, next.prompt.delivery ?? "steer")
         admitted?.()
         return
