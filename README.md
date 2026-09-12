@@ -64,6 +64,10 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 
+> [!NOTE]
+> On npm v11+ / v12+, if lifecycle scripts are blocked, run:  
+> `npm i -g opencode-ai@latest --allow-scripts=opencode-ai`
+
 ### Desktop App (BETA)
 
 OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
