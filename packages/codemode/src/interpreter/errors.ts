@@ -4,9 +4,18 @@ import { ToolError } from "../tool-error.js"
 import { toData, ToolRuntimeError } from "../data.js"
 import { type AstNode, formatLocation, InterpreterRuntimeError, ProgramThrow, sourceLocation } from "./model.js"
 import { containsRuntimeReference } from "./references.js"
-import { type HostCall, HostFunction } from "./host.js"
 import { createErrorValue, type ErrorType, isErrorType } from "./intrinsics.js"
-import { get, hasPrototype, ProgramArray, ProgramError, ProgramObject, set } from "./objects.js"
+import { constructor, methods, prototypeFrom, receiver } from "./native.js"
+import {
+  type Callable,
+  define,
+  get,
+  hidden,
+  type NativeFunction,
+  ProgramArray,
+  ProgramError,
+  ProgramObject,
+} from "./objects.js"
 import { type Runner } from "./runner.js"
 import { coerceToString } from "../stdlib/value.js"
 
@@ -74,21 +83,27 @@ export const normalizeError = (error: unknown): Diagnostic => {
 
 export const caughtErrorValue = <R>(runner: Runner<R>, thrown: unknown): unknown => {
   if (thrown instanceof ProgramThrow) return thrown.value
-  const prototypes = runner.intrinsics.errors
+  const prototypes = runner.prototypes
   if (thrown instanceof InterpreterRuntimeError) return createErrorValue(prototypes[thrown.type], thrown.message)
   const type = thrown instanceof Error && isErrorType(thrown.name) ? thrown.name : "Error"
   return createErrorValue(prototypes[type], normalizeError(thrown).message)
 }
 
-export const createAggregateErrorValue = <R>(runner: Runner<R>, errors: Array<unknown>, message: string) => {
-  const value = createErrorValue(runner.intrinsics.errors.AggregateError, message)
-  set(value, "errors", new ProgramArray(errors))
+export const createAggregateErrorValue = <R>(
+  runner: Runner<R>,
+  errors: Array<unknown>,
+  message: string,
+  proto: ProgramObject = runner.prototypes.AggregateError,
+) => {
+  const value = createErrorValue(proto, message)
+  define(value, "errors", new ProgramArray(runner.prototypes.Array, errors), { ...hidden })
   return value
 }
 
 const constructAggregateErrorValue = <R>(
   runner: Runner<R>,
   args: Array<unknown>,
+  proto: ProgramObject,
   node: AstNode,
 ): Effect.Effect<ProgramError, unknown, R> =>
   Effect.gen(function* () {
@@ -100,7 +115,7 @@ const constructAggregateErrorValue = <R>(
     while (true) {
       const step = yield* cursor.next
       if (step.done) {
-        return createAggregateErrorValue(runner, errors, args[1] === undefined ? "" : coerceToString(args[1]))
+        return createAggregateErrorValue(runner, errors, args[1] === undefined ? "" : coerceToString(args[1]), proto)
       }
       errors.push(step.value)
     }
@@ -108,17 +123,37 @@ const constructAggregateErrorValue = <R>(
 
 /** An error constructor such as `Error` or `TypeError`; callable with or without `new`, like JS. */
 export const errorGlobal = <R>(type: ErrorType, runner: Runner<R>) => {
-  const prototype = runner.intrinsics.errors[type]
-  const construct: HostCall<R> = (args, node) =>
-    type === "AggregateError"
-      ? constructAggregateErrorValue(runner, args, node)
-      : Effect.sync(() => createErrorValue(prototype, args[0] === undefined ? undefined : coerceToString(args[0])))
-  const fn = new HostFunction<R>({
+  const protos = runner.prototypes
+  const prototype = protos[type]
+  const construct = (args: Array<unknown>, newTarget: Callable, node: AstNode) => {
+    const proto = prototypeFrom(newTarget, prototype)
+    return type === "AggregateError"
+      ? constructAggregateErrorValue(runner, args, proto, node)
+      : Effect.sync(() => createErrorValue(proto, args[0] === undefined ? undefined : coerceToString(args[0])))
+  }
+  const ctor: NativeFunction<R> = constructor<R>(protos, prototype, {
     name: type,
-    call: construct,
+    length: type === "AggregateError" ? 2 : 1,
+    call: (_, args, node) => construct(args, ctor, node),
     construct,
-    instanceOf: (value) => hasPrototype(value, prototype),
   })
-  set(prototype, "constructor", fn)
-  return fn
+  if (type === "Error") {
+    methods(protos, prototype, [
+      [
+        "toString",
+        0,
+        (thisValue, _, node) => {
+          const self = receiver(ProgramObject, thisValue, "Error.prototype.toString", node)
+          const name = get(self, "name")
+          const message = get(self, "message")
+          const shownName = name === undefined ? "Error" : coerceToString(name)
+          const shownMessage = message === undefined ? "" : coerceToString(message)
+          if (shownMessage === "") return shownName
+          if (shownName === "") return shownMessage
+          return `${shownName}: ${shownMessage}`
+        },
+      ],
+    ])
+  }
+  return ctor
 }

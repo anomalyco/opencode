@@ -1,21 +1,34 @@
-import { type HostFunction, sync, type SyncOptions } from "../interpreter/host.js"
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
 import { toProgram } from "../data.js"
-import { get, ProgramArray, ProgramError } from "../interpreter/objects.js"
-import { Values } from "../values.js"
+import { fn } from "../interpreter/native.js"
+import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import {
+  get,
+  isWrapper,
+  type NativeFunction,
+  ProgramArray,
+  ProgramDate,
+  ProgramError,
+  ProgramMap,
+  ProgramRegExp,
+  ProgramSet,
+  ProgramURL,
+  ProgramURLSearchParams,
+} from "../interpreter/objects.js"
+import type { Runner } from "../interpreter/runner.js"
 
 export const compoundOperators = new Set(["+=", "-=", "*=", "/=", "%=", "**=", "&=", "|=", "^=", "<<=", ">>=", ">>>="])
 
+/** The built-in string form of a value, without consulting program-defined `toString` methods. */
 export const coerceToString = (value: unknown): string => {
   if (value === null) return "null"
   if (value === undefined) return "undefined"
-  if (value instanceof Values.Date)
+  if (value instanceof ProgramDate)
     return Number.isFinite(value.time) ? new Date(value.time).toISOString() : "Invalid Date"
-  if (value instanceof Values.RegExp) return `/${value.regex.source}/${value.regex.flags}`
-  if (value instanceof Values.Map) return "[object Map]"
-  if (value instanceof Values.Set) return "[object Set]"
-  if (value instanceof Values.URL) return value.url.href
-  if (value instanceof Values.URLSearchParams) return value.params.toString()
+  if (value instanceof ProgramRegExp) return `/${value.regex.source}/${value.regex.flags}`
+  if (value instanceof ProgramMap) return "[object Map]"
+  if (value instanceof ProgramSet) return "[object Set]"
+  if (value instanceof ProgramURL) return value.url.href
+  if (value instanceof ProgramURLSearchParams) return value.params.toString()
   if (value instanceof ProgramError) {
     // Match Error.prototype.toString: "name: message", or just one when the other is empty.
     const name = get(value, "name")
@@ -34,15 +47,15 @@ export const coerceToString = (value: unknown): string => {
 }
 
 export const coerceToNumber = (value: unknown): number => {
-  if (value instanceof Values.Date) return value.time
-  if (Values.isValue(value)) return Number.NaN
+  if (value instanceof ProgramDate) return value.time
+  if (isWrapper(value)) return Number.NaN
   if (value instanceof ProgramArray) return Number(coerceToString(value))
   return value !== null && typeof value === "object" ? Number.NaN : Number(value)
 }
 
-type Coercion = "Number" | "String" | "Boolean" | "parseInt" | "parseFloat" | "isFinite" | "isNaN"
+export type Coercion = "Number" | "String" | "Boolean" | "parseInt" | "parseFloat" | "isFinite" | "isNaN"
 
-const coerce = (name: Coercion, args: Array<unknown>, node: AstNode): unknown => {
+const coerce = <R>(runner: Runner<R>, name: Coercion, args: Array<unknown>, node: AstNode): unknown => {
   // Native: Number() is 0 and String() is "", unlike their undefined-argument forms; the
   // other coercers match native through the undefined-argument path below.
   if (args.length === 0) {
@@ -50,7 +63,7 @@ const coerce = (name: Coercion, args: Array<unknown>, node: AstNode): unknown =>
     if (name === "String") return ""
   }
   const raw = args[0]
-  if (Values.isValue(raw)) {
+  if (isWrapper(raw)) {
     if (name === "Boolean") return true
     if (name === "Number") return coerceToNumber(raw)
     if (name === "String") return coerceToString(raw)
@@ -59,7 +72,7 @@ const coerce = (name: Coercion, args: Array<unknown>, node: AstNode): unknown =>
     if (name === "parseInt") return parseInt(coerceToString(raw))
     return parseFloat(coerceToString(raw))
   }
-  const value = toProgram(raw, `${name} input`)
+  const value = toProgram(runner.prototypes, raw, `${name} input`)
   if (name === "Number") return coerceToNumber(value)
   if (name === "Boolean") return Boolean(value)
   if (name === "isFinite") return Number.isFinite(coerceToNumber(value))
@@ -76,5 +89,7 @@ const coerce = (name: Coercion, args: Array<unknown>, node: AstNode): unknown =>
 }
 
 /** A global coercion function such as `Number` or `parseInt`. */
-export const coercion = (name: Coercion, options: SyncOptions = {}): HostFunction =>
-  sync(name, (args, node) => toProgram(coerce(name, args, node), `${name} result`), options)
+export const coercion = <R>(runner: Runner<R>, name: Coercion, length = 1): NativeFunction<R> =>
+  fn(runner.prototypes, name, length, (_, args, node) =>
+    toProgram(runner.prototypes, coerce(runner, name, args, node), `${name} result`),
+  )

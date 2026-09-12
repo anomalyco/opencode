@@ -1,27 +1,29 @@
 import { ToolReference } from "../tool-runtime.js"
-import { Values } from "../values.js"
-import { HostFunction, HostNamespace } from "./host.js"
+import { type AstNode, InterpreterRuntimeError } from "./model.js"
 import {
-  type AstNode,
-  CodeModeGenerator,
-  GeneratorMethodReference,
-  InterpreterRuntimeError,
-  IntrinsicReference,
-  PromiseInstanceMethodReference,
-} from "./model.js"
-import { getOwn, ownKeys, ProgramArray, ProgramFunction, ProgramObject } from "./objects.js"
+  Callable,
+  getOwn,
+  isWrapper,
+  ownKeys,
+  ProgramArray,
+  ProgramDate,
+  ProgramGenerator,
+  ProgramMap,
+  ProgramObject,
+  ProgramPromise,
+  ProgramRegExp,
+  ProgramSet,
+  ProgramURL,
+  ProgramURLSearchParams,
+} from "./objects.js"
 
+/** Values that cannot cross the data boundary. */
 export const isRuntimeReference = (value: unknown): boolean =>
-  value instanceof HostFunction ||
-  value instanceof HostNamespace ||
-  value instanceof ProgramFunction ||
-  value instanceof CodeModeGenerator ||
-  value instanceof GeneratorMethodReference ||
+  value instanceof Callable ||
+  value instanceof ProgramGenerator ||
   value instanceof ToolReference ||
-  value instanceof IntrinsicReference ||
-  value instanceof PromiseInstanceMethodReference ||
-  value instanceof Values.Promise ||
-  Values.isValue(value)
+  value instanceof ProgramPromise ||
+  isWrapper(value)
 
 function* childValues(value: object): Generator {
   if (!(value instanceof ProgramObject)) return
@@ -55,9 +57,9 @@ const never = () => false
 
 export const containsRuntimeReference = (value: unknown): boolean => find(value, isRuntimeReference, never, new Set())
 
-// CodeMode values are data here, not opaque interpreter references.
+// Wrapper values are data here, not opaque interpreter references.
 export const containsOpaqueReference = (value: unknown): boolean =>
-  find(value, (current) => !Values.isValue(current) && isRuntimeReference(current), Values.isValue, new Set())
+  find(value, (current) => !isWrapper(current) && isRuntimeReference(current), isWrapper, new Set())
 
 // Reject cycles before mutation so later boundary walks remain safe.
 export const rejectCircularInsertion = (
@@ -73,33 +75,24 @@ export const rejectCircularInsertion = (
 }
 
 export const describeValue = (value: unknown): string => {
-  if (value === null) return "null"
+  if (value === null || value === undefined) return String(value)
   if (value instanceof ProgramArray) return "an array"
-  if (value instanceof Values.Promise) return "an un-awaited Promise"
+  if (value instanceof ProgramPromise) return "an un-awaited Promise"
   if (value instanceof ToolReference) return "a tool reference"
-  if (value instanceof Values.Date) return "a Date"
-  if (value instanceof Values.RegExp) return "a RegExp"
-  if (value instanceof Values.Map) return "a Map"
-  if (value instanceof Values.Set) return "a Set"
-  if (value instanceof Values.URL) return "a URL"
-  if (value instanceof Values.URLSearchParams) return "a URLSearchParams"
-  if (value instanceof CodeModeGenerator) return "a generator"
+  if (value instanceof ProgramDate) return "a Date"
+  if (value instanceof ProgramRegExp) return "a RegExp"
+  if (value instanceof ProgramMap) return "a Map"
+  if (value instanceof ProgramSet) return "a Set"
+  if (value instanceof ProgramURL) return "a URL"
+  if (value instanceof ProgramURLSearchParams) return "a URLSearchParams"
+  if (value instanceof ProgramGenerator) return "a generator"
   if (isRuntimeReference(value)) return "a function"
   if (typeof value === "object") return "a data object"
   return `a ${typeof value}`
 }
 
 export const typeofValue = (value: unknown): string => {
-  if (
-    value instanceof HostFunction ||
-    value instanceof ProgramFunction ||
-    value instanceof GeneratorMethodReference ||
-    value instanceof IntrinsicReference ||
-    value instanceof PromiseInstanceMethodReference
-  ) {
-    return "function"
-  }
-  if (value instanceof HostNamespace) return "object"
+  if (value instanceof Callable) return "function"
   if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
   return typeof value
 }

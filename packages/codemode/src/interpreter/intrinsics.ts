@@ -1,4 +1,5 @@
-import { ProgramError, ProgramObject, set } from "./objects.js"
+import { Effect } from "effect"
+import { define, hidden, NativeFunction, ProgramArray, ProgramError, ProgramObject } from "./objects.js"
 
 export const errorTypes = [
   "Error",
@@ -15,37 +16,79 @@ export type ErrorType = (typeof errorTypes)[number]
 
 export const isErrorType = (name: string): name is ErrorType => (errorTypes as ReadonlyArray<string>).includes(name)
 
-/** The built-in prototype objects of one runtime. Constructors attach themselves as `constructor` when created. */
-export type Intrinsics = {
-  readonly errors: Readonly<Record<ErrorType, ProgramObject>>
-}
+const builtins = [
+  "Object",
+  "Function",
+  "Array",
+  "String",
+  "Number",
+  "Boolean",
+  "Date",
+  "RegExp",
+  "Map",
+  "Set",
+  "URL",
+  "URLSearchParams",
+  "Promise",
+  "Iterator",
+  "AsyncIterator",
+  "Generator",
+  "AsyncGenerator",
+] as const
+
+/**
+ * The built-in prototype objects of one runtime, allocated empty in dependency order. The globals populate them
+ * and attach their constructors when the runtime is built.
+ */
+export type Prototypes = Readonly<Record<(typeof builtins)[number] | ErrorType, ProgramObject>>
 
 export const createErrorValue = (prototype: ProgramObject, message: string | undefined): ProgramError => {
   const value = new ProgramError(prototype)
-  if (message !== undefined) set(value, "message", message)
+  if (message !== undefined) define(value, "message", message, hidden)
   return value
 }
 
-export const createIntrinsics = (): Intrinsics => {
-  const error = new ProgramObject()
-  set(error, "name", "Error")
-  set(error, "message", "")
+export const createPrototypes = (): Prototypes => {
+  const object = new ProgramObject(null)
+  // Function.prototype is itself callable and returns undefined.
+  const fn = new NativeFunction(object, { name: "", call: () => Effect.undefined })
+  const plain = () => new ProgramObject(object)
+  const error = plain()
+  define(error, "name", "Error", hidden)
+  define(error, "message", "", hidden)
   const derived = (type: ErrorType) => {
     const proto = new ProgramObject(error)
-    set(proto, "name", type)
-    set(proto, "message", "")
+    define(proto, "name", type, hidden)
+    define(proto, "message", "", hidden)
     return proto
   }
+  const iterator = plain()
+  const asyncIterator = plain()
   return {
-    errors: {
-      Error: error,
-      TypeError: derived("TypeError"),
-      RangeError: derived("RangeError"),
-      SyntaxError: derived("SyntaxError"),
-      ReferenceError: derived("ReferenceError"),
-      EvalError: derived("EvalError"),
-      URIError: derived("URIError"),
-      AggregateError: derived("AggregateError"),
-    },
+    Object: object,
+    Function: fn,
+    Array: new ProgramArray(object),
+    String: plain(),
+    Number: plain(),
+    Boolean: plain(),
+    Date: plain(),
+    RegExp: plain(),
+    Map: plain(),
+    Set: plain(),
+    URL: plain(),
+    URLSearchParams: plain(),
+    Promise: plain(),
+    Iterator: iterator,
+    AsyncIterator: asyncIterator,
+    Generator: new ProgramObject(iterator),
+    AsyncGenerator: new ProgramObject(asyncIterator),
+    Error: error,
+    TypeError: derived("TypeError"),
+    RangeError: derived("RangeError"),
+    SyntaxError: derived("SyntaxError"),
+    ReferenceError: derived("ReferenceError"),
+    EvalError: derived("EvalError"),
+    URIError: derived("URIError"),
+    AggregateError: derived("AggregateError"),
   }
 }

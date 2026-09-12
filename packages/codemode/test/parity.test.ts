@@ -242,7 +242,9 @@ describe("property deletion", () => {
   })
 
   test("array length is not configurable", async () => {
-    expect(await value(`const values = [1, 2]; return [delete values.length, values.length]`)).toEqual([false, 2])
+    expect((await error(`const values = [1, 2]; delete values.length`)).message).toContain(
+      "Cannot delete property 'length'",
+    )
   })
 
   test("arrays accept named properties like JS, and they stay out of the JSON form", async () => {
@@ -420,7 +422,7 @@ describe("Error values and instanceof", () => {
           Object.keys(new RangeError("r")),
         ]
       `),
-    ).toEqual([true, true, false, true, true, true, ["message"]])
+    ).toEqual([true, true, false, true, true, true, []])
   })
 
   test("Promise.allSettled rejection reasons are Error values", async () => {
@@ -445,19 +447,18 @@ describe("Error values and instanceof", () => {
     ])
   })
 
-  test("errors serialize as { name, message } by brand; name is inherited and message is own", async () => {
+  test("errors serialize as { name, message } by brand; neither is enumerable", async () => {
     expect(await value(`return new Error("m")`)).toEqual({ name: "Error", message: "m" })
     expect(await value(`return JSON.stringify(new Error("m"))`)).toBe('{"name":"Error","message":"m"}')
-    expect(await value(`try { throw new Error("m") } catch (e) { return [Object.keys(e), e.name] }`)).toEqual([
-      ["message"],
-      "Error",
-    ])
-    expect(await value(`return Object.keys(new Error())`)).toEqual([])
+    expect(
+      await value(`try { throw new Error("m") } catch (e) { return [Object.keys(e), e.name, e.hasOwnProperty("message")] }`),
+    ).toEqual([[], "Error", true])
+    expect(await value(`return new Error().hasOwnProperty("message")`)).toBe(false)
   })
 
   test("spreading an error loses the brand, like losing the prototype in JS", async () => {
     expect(await value(`const e = new Error("m"); return ({ ...e }) instanceof Error`)).toBe(false)
-    expect(await value(`const e = new Error("m"); return { ...e }`)).toEqual({ message: "m" })
+    expect(await value(`const e = new Error("m"); return { ...e }`)).toEqual({})
   })
 
   test("typeof Error is function; an unknown instanceof right-hand side is a catchable error", async () => {
@@ -692,13 +693,14 @@ describe("destructuring assignment", () => {
     ).toEqual({ calls: 1, name: "Ada", rest: { role: "engineer" } })
   })
 
-  test("supports object patterns over arrays", async () => {
+  test("supports object patterns over arrays; detached methods lose their receiver like JS", async () => {
     expect(
       await value(`
         const { 0: first, length, slice, ...rest } = ["a", "b", "c"]
-        return { first, length, sliced: slice(1), rest }
+        return { first, length, sliced: slice === Array.prototype.slice, rest }
       `),
-    ).toEqual({ first: "a", length: 3, sliced: ["b", "c"], rest: { 1: "b", 2: "c" } })
+    ).toEqual({ first: "a", length: 3, sliced: true, rest: { 1: "b", 2: "c" } })
+    expect((await error(`const { slice } = [1]; slice(0)`)).message).toContain("Array.prototype.slice called on")
   })
 
   test("preserves exact computed property names on arrays", async () => {
@@ -932,13 +934,22 @@ describe("coercion parity: unknown static members read as undefined", () => {
     )
   })
 
-  test("prototype-named members on globals read as undefined like other unknown statics", async () => {
-    expect(await value(`return [Math.constructor, Number.constructor, Object.prototype, Array.__proto__]`)).toEqual([
-      null,
-      null,
-      null,
-      null,
-    ])
+  test("built-ins are objects on a real prototype chain", async () => {
+    expect(
+      await value(`
+        return [
+          Math.constructor === Object,
+          Number.constructor === Function,
+          Object.prototype.hasOwnProperty === ({}).hasOwnProperty,
+          Array.prototype.push.name,
+          Array.prototype.push.length,
+          Math.max.length,
+          Object.keys(Math),
+          typeof Array.prototype.map,
+          Array.isArray(Array.prototype),
+        ]
+      `),
+    ).toEqual([true, true, true, "push", 1, 2, [], "function", true])
   })
 })
 

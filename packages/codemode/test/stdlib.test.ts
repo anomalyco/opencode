@@ -245,9 +245,10 @@ describe("RegExp", () => {
         const stored = [pattern.lastIndex, typeof pattern.lastIndex]
         const match = pattern.exec("aacd2233ab12nm444ab42")
         pattern.lastIndex = 0
-        return [stored, match[0], match.index, pattern.lastIndex, delete pattern.lastIndex]
+        return [stored, match[0], match.index, pattern.lastIndex]
       `),
-    ).toEqual([["12", "string"], "ab4", 17, 0, false])
+    ).toEqual([["12", "string"], "ab4", 17, 0])
+    expect((await error(`delete /a/.lastIndex`)).message).toContain("Cannot delete property 'lastIndex'")
   })
 
   test("exec coerces CodeMode data objects assigned to lastIndex", async () => {
@@ -728,7 +729,7 @@ describe("stdlib integration", () => {
     expect(await value(`const o = {}; o.constructor = 7; return o.constructor`)).toBe(7)
     expect(await value(`return new ([].constructor)(3).length`)).toBe(3)
     expect(await value(`return typeof ({}).constructor`)).toBe("function")
-    expect(await value(`return ({}).constructor.constructor`)).toBeNull()
+    expect(await value(`return ({}).constructor.constructor === Function`)).toBe(true)
   })
 
   test("new dispatches on the constructor value, not its name", async () => {

@@ -71,8 +71,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       or binding/default failure.
 - [ ] Object destructuring from primitives follows ToObject (`const { length } = "abc"`, `const {} = 1`); non-object
       sources are rejected.
-- [ ] Destructuring a key that member access resolves through the owning built-in, such as
-      `const { constructor } = error`, reads `undefined`.
+- [x] Destructuring reads through the prototype chain like member access: `const { constructor } = error` and
+      `const { slice } = values` find the inherited built-in.
 - [ ] Member expressions as `for...in` targets (`for (x.y in obj)`).
 - [ ] `IteratorClose` during destructuring should throw a `TypeError` when `return()` yields a non-object.
 
@@ -107,8 +107,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Built-in method references as callbacks, such as `values.map(Math.abs)`, `records.map(JSON.stringify)`,
       `items.forEach(console.log)`, and `Promise.resolve(-1).then(Math.abs)`. Extra callback arguments a built-in
       does not consume are ignored, like JS; consumed arguments stay strictly validated (`Math.floor` still rejects a
-      string). Intrinsic references keep their receiver (`"abc".includes` works as a predicate), unlike detached JS
-      methods, which lose `this`.
+      string). A detached method loses its receiver, as in JS: `values.filter("abc".includes)` is a `TypeError`
+      because `includes` is called without a string `this`.
 - [x] Constructors work as callbacks with JS call semantics: `Error` types construct (`messages.map(Error)`),
       and new-requiring constructors (`Map`, `Set`, `URL`, `URLSearchParams`, `Promise`) throw a `TypeError`,
       like JS.
@@ -125,7 +125,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Functions are objects: they hold own properties (`fn.count = 1`), enumerate them, and expose read-only `name`
       and `length`. Names follow JavaScript's NamedEvaluation: declarations, named expressions, bindings,
       assignments, object literal keys, and destructuring or parameter defaults.
-- [ ] `name` and `length` of built-in functions such as `Math.max` or `"a".includes`.
+- [x] Built-in functions are objects too, with `name` and `length` (`Math.max.length === 2`,
+      `Array.prototype.push.name === "push"`).
 - [ ] A named function expression's name is not bound inside its own body.
 - [ ] Redeclaring a function in the same scope is rejected; in JavaScript the last declaration wins.
 - [ ] A line terminator between `async function` and the function name.
@@ -169,11 +170,13 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Equality and ordering: `==`, `!=`, `===`, `!==`, `<`, `<=`, `>`, and `>=`.
 - [x] Bitwise operators: `&`, `|`, `^`, `~`, `<<`, `>>`, and `>>>`.
 - [x] Logical operators: `&&`, `||`, `??`, and `!`, with short-circuiting.
-- [x] Unary `+`, unary `-`, `void`, `typeof`, `instanceof`, and own-property-only `in`.
+- [x] Unary `+`, unary `-`, `void`, `typeof`, `instanceof` (through the constructor's `prototype`, so
+      `[] instanceof Object` holds), and `in` across the prototype chain.
 - [x] Prefix and postfix `++` and `--`.
 - [x] Plain, arithmetic, bitwise, and logical assignment operators.
 - [x] Property deletion on plain data objects and arrays, including computed and optional forms; deleting an array index
-      creates a hole without changing its length.
+      creates a hole without changing its length. Deleting a non-configurable property (`length`, `lastIndex`) or
+      assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode.
 - [ ] Operators, `switch` discriminants, template interpolation, and coercion helpers such as `String` and `isNaN`
       applied to functions and namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
 - [ ] ToPrimitive on object operands: operators, `Error(message)`, `Date` arguments, and `parseInt` radix should call
@@ -244,17 +247,18 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       targets for index keys only; a primitive target is a `TypeError` rather than a boxed object.
 - [x] `Object.keys` over arrays and tool references.
 - [x] Object identity is preserved by in-CodeMode Object helpers.
-- [x] `__proto__`, `constructor`, and `prototype` are ordinary own data keys. Errors inherit `constructor` from a real
-      `Error.prototype` → `TypeError.prototype` chain, so `new TypeError().constructor === TypeError` holds through
-      member access and destructuring alike; `x.constructor` on other values without an own key resolves to the owning
-      built-in (`[].constructor === Array`). Prototype objects are not observable, so `[].__proto__` and
-      `Object.prototype` read as `undefined` and `o.__proto__ = x` sets an own field.
+- [x] Every value has a real prototype chain built fresh for each run: `Object.prototype`, `Array.prototype`,
+      `String.prototype`, `Error.prototype` → `TypeError.prototype`, and so on hold the built-in methods as
+      non-enumerable properties, and each constructor's `prototype` points at it (`[].constructor === Array`,
+      `Object.getPrototypeOf` is not exposed). Programs may read and even overwrite these prototypes; the change is
+      confined to that run. `__proto__` is an ordinary own data key, so `o.__proto__ = x` never changes the chain, and
+      `Object.groupBy` results have no prototype at all, as in JS.
 - [x] Circular references are rejected when created (`o.self = o`, `array.push(array)`), not at serialization as in JS.
 - [x] `Object.is` for supported data values.
 - [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
       and plain-object results.
-- [ ] `Object.prototype` methods on values: `toString`, `toLocaleString`, `valueOf`, `hasOwnProperty`, and
-      `propertyIsEnumerable`.
+- [x] `Object.prototype` methods on values: `toString` (`"[object Array]"`), `toLocaleString`, `valueOf`,
+      `hasOwnProperty`, `isPrototypeOf`, and `propertyIsEnumerable`.
 
 ## Arrays
 
@@ -419,9 +423,10 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       or without `new`.
 - [x] `AggregateError` with the `(errors, message?)` signature and an own `errors` array, constructed directly or by
       an all-rejected `Promise.any`; direct construction accepts custom synchronous iterators and generators.
-- [x] Error `name`/`message`, error inheritance through `instanceof`, and plain-data serialization. Errors have no
-      `stack`; the diagnostic carries the source location instead.
-- [x] `instanceof` for Date, RegExp, Map, Set, URL, URLSearchParams, Array, Object, Promise, and Error types.
+- [x] Error `name`/`message`, error inheritance through `instanceof`, and plain-data serialization. `message` is an own
+      non-enumerable property and `name` is inherited, as in JS, so `Object.keys(err)` is `[]` while the host still
+      receives `{ name, message }`. Errors have no `stack`; the diagnostic carries the source location instead.
+- [x] `instanceof` against any constructor with a `prototype`, including every built-in and `Function`.
 - [x] Catchable user throws, runtime failures raised during interpreted evaluation, awaited tool failures, and awaited
       tool-call-limit failures; parse/compile failures, cooperative timeout, and output bounding remain outside program
       `catch`.

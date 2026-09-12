@@ -1,9 +1,6 @@
 import type { Node } from "acorn"
 import type { ErrorType } from "./intrinsics.js"
-import type { Effect } from "effect"
 import type { DiagnosticKind } from "../codemode.js"
-import type { ProgramObject } from "./objects.js"
-import type { Values } from "../values.js"
 
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
 export type AstNode = Node
@@ -20,54 +17,11 @@ export type StatementResult =
   | { kind: "break"; label?: string }
   | { kind: "continue"; label?: string }
 
-export type MemberReference = {
-  target: ProgramObject | Values.RegExp | Values.URL
-  key: PropertyKey
-}
-
 export type GeneratorRequestKind = "next" | "return" | "throw"
-
-export class CodeModeGenerator {
-  constructor(
-    readonly asynchronous: boolean,
-    readonly request: (
-      kind: GeneratorRequestKind,
-      value: unknown,
-      node: AstNode,
-    ) => Effect.Effect<unknown, unknown, unknown>,
-  ) {}
-}
-
-export class GeneratorMethodReference {
-  constructor(
-    readonly generator: CodeModeGenerator,
-    readonly kind: GeneratorRequestKind | "iterator",
-  ) {}
-}
-
-export class IntrinsicReference {
-  constructor(
-    readonly receiver: unknown,
-    readonly name: string,
-  ) {}
-}
-
-export class ComputedValue {
-  constructor(readonly value: unknown) {}
-}
 
 export const AsyncIteratorSymbol: unique symbol = Symbol("codemode.async-iterator")
 export const IteratorSymbol: unique symbol = Symbol("codemode.iterator")
 export const IteratorSymbols = [AsyncIteratorSymbol, IteratorSymbol] as const
-
-export type PromiseInstanceMethodName = "then" | "catch" | "finally"
-
-export class PromiseInstanceMethodReference {
-  constructor(
-    readonly promise: Values.Promise,
-    readonly name: PromiseInstanceMethodName,
-  ) {}
-}
 
 export class ProgramThrow {
   constructor(readonly value: unknown) {}
@@ -95,6 +49,12 @@ export class InterpreterRuntimeError extends Error {
     if (node) this.node = node
   }
 }
+
+/** Attaches a source location to a failure raised where none was known, such as inside a property accessor. */
+export const locate = (error: unknown, node: AstNode): unknown =>
+  error instanceof InterpreterRuntimeError && error.node === undefined
+    ? new InterpreterRuntimeError(error.message, node, error.kind, error.suggestions, error.type)
+    : error
 
 const failure = (type: ErrorType) => (message: string, node?: AstNode) =>
   new InterpreterRuntimeError(message, node, "ExecutionFailure", undefined, type)

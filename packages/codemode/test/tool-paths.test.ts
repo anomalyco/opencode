@@ -176,7 +176,7 @@ describe("blocked member names on tool paths", () => {
     expect(await value(poisoned, `return await tools.ns.real({})`)).toBe("real")
   })
 
-  test("prototype machinery is unreachable through data values", async () => {
+  test("prototypes are program objects; __proto__ is an ordinary key and the host is unreachable", async () => {
     expect(
       await value(
         runtime,
@@ -185,21 +185,21 @@ describe("blocked member names on tool paths", () => {
         const array = []
         object.__proto__ = { polluted: true }
         return [
-          object.constructor === Object, array.constructor === Array, "".constructor === String, Math.constructor,
-          object.__proto__.polluted, ({}).polluted, array.__proto__, Object().__proto__, new Object().constructor === Object,
-          ({}).constructor.constructor, [].constructor.__proto__, typeof [].__proto__,
+          object.constructor === Object, array.constructor === Array, "".constructor === String,
+          Math.constructor === Object, object.__proto__.polluted, ({}).polluted, array.__proto__,
+          Object().__proto__, new Object().constructor === Object, ({}).constructor.constructor === Function,
+          [].constructor.__proto__, typeof [].__proto__, (() => 1).constructor === Function,
         ]
       `,
       ),
-    ).toEqual([true, true, true, null, true, null, null, null, true, null, null, "undefined"])
-    expect(await value(runtime, `return [(() => 1).constructor, typeof (() => 1).__proto__]`)).toEqual([
-      null,
-      "undefined",
-    ])
-    const escape = await failure(runtime, `return ({}).constructor.constructor.constructor("return 1")()`)
-    expect(escape.message).toContain("Cannot access a property on a non-object value")
+    ).toEqual([true, true, true, true, true, null, null, null, true, true, null, "undefined", true])
+    const escape = await failure(runtime, `return ({}).constructor.constructor("return 1")()`)
+    expect(escape.message).toContain("The Function constructor is not supported")
     const poisoned = await failure(runtime, `const o = {}; o.__proto__.constructor("return 1")`)
-    expect(poisoned.message).toContain("Cannot access a property on a non-object value")
+    expect(poisoned.message).toContain("Cannot read properties of undefined")
+    // Prototype mutation is confined to one run: the next program starts from fresh intrinsics.
+    expect(await value(runtime, `Object.prototype.polluted = 1; Array.prototype.push = 2; return ({}).polluted`)).toBe(1)
+    expect(await value(runtime, `return [({}).polluted, typeof [].push]`)).toEqual([null, "function"])
     expect(Object.keys(Object.prototype)).toEqual([])
     expect(Object.keys(Array.prototype)).toEqual([])
   })

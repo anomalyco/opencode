@@ -1,17 +1,26 @@
 export * as Data from "./data.js"
 
 import type { DiagnosticKind } from "./codemode.js"
+import type { Prototypes } from "./interpreter/intrinsics.js"
 import {
+  Callable,
+  define,
+  entries,
   get,
-  ownEntries,
+  isWrapper,
   parseArrayIndex,
   ProgramArray,
+  ProgramDate,
   ProgramError,
-  ProgramFunction,
+  ProgramGenerator,
+  ProgramMap,
   ProgramObject,
-  set,
+  ProgramPromise,
+  ProgramRegExp,
+  ProgramSet,
+  ProgramURL,
+  ProgramURLSearchParams,
 } from "./interpreter/objects.js"
-import { Values } from "./values.js"
 
 const MAX_VALUE_DEPTH = 32
 
@@ -30,17 +39,19 @@ export class ToolRuntimeError extends Error {
 }
 
 /**
- * Brings a host-produced value into the program: program and runtime values pass through, their
- * host counterparts (Date, RegExp, Map, Set, URL, URLSearchParams) are wrapped, and host objects
- * and arrays are copied.
+ * Brings a host-produced value into the program: program values pass through, host Date, RegExp,
+ * Map, Set, URL, and URLSearchParams become their built-in wrappers, and host objects and arrays
+ * are copied.
  */
-export const toProgram = (value: unknown, label: string): unknown => copy(value, label, "program", 0, new Set())
+export const toProgram = (protos: Prototypes, value: unknown, label: string): unknown =>
+  copy(value, label, "program", 0, new Set(), protos)
 
 /**
  * Brings host data into the program: Date and URL become strings, other host collections become
  * empty objects, and objects become program copies. Used for tool results and parsed JSON.
  */
-export const fromData = (value: unknown, label: string): unknown => copy(value, label, "data", 0, new Set())
+export const fromData = (protos: Prototypes, value: unknown, label: string): unknown =>
+  copy(value, label, "data", 0, new Set(), protos)
 
 /**
  * Takes a program value out as plain JSON: runtime values serialize like `JSON.stringify` would,
@@ -54,7 +65,15 @@ export const toData = (value: unknown, label: string, undefinedAs: "json" | "res
 // "program" and "data" build program objects; "json" and "result" build ordinary objects for the host.
 type Mode = "program" | "data" | "json" | "result"
 
-const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Set<object>): unknown => {
+const copy = (
+  value: unknown,
+  label: string,
+  mode: Mode,
+  depth: number,
+  seen: Set<object>,
+  protos?: Prototypes,
+): unknown => {
+  const next = (item: unknown) => copy(item, label, mode, depth + 1, seen, protos)
   if (depth > MAX_VALUE_DEPTH) {
     throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
   }
@@ -64,50 +83,48 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
   if (typeof value !== "object") {
     throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
   }
-  if (value instanceof Values.Promise) {
+  if (value instanceof ProgramPromise) {
     throw new ToolRuntimeError(
       "InvalidDataValue",
       `${label} contains an un-awaited Promise; await tool calls (e.g. \`const result = await tools.ns.tool(...)\`) before using their results.`,
     )
   }
-  if (value instanceof ProgramFunction && mode !== "program") {
+  if ((value instanceof Callable || value instanceof ProgramGenerator) && mode !== "program") {
     throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
   }
 
-  const plain = mode === "program" || mode === "data"
-  if (mode === "program") {
-    if (value instanceof ProgramObject || Values.isValue(value)) return value
-    if (value instanceof Date) return new Values.Date(value.getTime())
-    if (value instanceof RegExp) return new Values.RegExp(value.source, value.flags)
+  if (protos !== undefined && mode === "program") {
+    if (value instanceof ProgramObject) return value
+    if (value instanceof Date) return new ProgramDate(protos.Date, value.getTime())
+    if (value instanceof RegExp) return new ProgramRegExp(protos.RegExp, value.source, value.flags)
     if (value instanceof Map) {
-      const wrapped = new Values.Map()
-      for (const [key, item] of value.entries()) {
-        wrapped.map.set(copy(key, label, mode, depth + 1, seen), copy(item, label, mode, depth + 1, seen))
-      }
+      const wrapped = new ProgramMap(protos.Map)
+      for (const [key, item] of value.entries()) wrapped.map.set(next(key), next(item))
       return wrapped
     }
     if (value instanceof Set) {
-      const wrapped = new Values.Set()
-      for (const item of value.values()) wrapped.set.add(copy(item, label, mode, depth + 1, seen))
+      const wrapped = new ProgramSet(protos.Set)
+      for (const item of value.values()) wrapped.set.add(next(item))
       return wrapped
     }
-    if (value instanceof URL) return new Values.URL(new URL(value.href))
-    if (value instanceof URLSearchParams) return new Values.URLSearchParams(new URLSearchParams(value))
+    if (value instanceof URL) return new ProgramURL(protos.URL, protos.URLSearchParams, new URL(value.href))
+    if (value instanceof URLSearchParams)
+      return new ProgramURLSearchParams(protos.URLSearchParams, new URLSearchParams(value))
   }
 
-  if (value instanceof Values.Date) return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
+  if (value instanceof ProgramDate) return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
   if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : null
-  if (value instanceof Values.URL) return value.url.href
+  if (value instanceof ProgramURL) return value.url.href
   if (value instanceof URL) return value.href
-  // Remaining runtime values and their host counterparts serialize as empty objects, like JSON.stringify.
+  // Remaining wrappers and their host counterparts serialize as empty objects, like JSON.stringify.
   if (
-    Values.isValue(value) ||
+    isWrapper(value) ||
     value instanceof RegExp ||
     value instanceof Map ||
     value instanceof Set ||
     value instanceof URLSearchParams
   ) {
-    return plain ? new ProgramObject() : {}
+    return protos !== undefined ? new ProgramObject(protos.Object) : {}
   }
 
   if (seen.has(value)) {
@@ -116,7 +133,7 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
   seen.add(value)
 
   if (value instanceof ProgramArray) {
-    const copied = Array.from(value.items, (item) => copy(item, label, mode, depth + 1, seen) ?? null)
+    const copied = Array.from(value.items, (item) => next(item) ?? null)
     seen.delete(value)
     return copied
   }
@@ -124,28 +141,28 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
     const copied: Record<string, unknown> = {}
     // Errors serialize as { name, message, ...own }: both may be inherited, and neither is enumerable in JS.
     if (value instanceof ProgramError) {
-      define(copied, "name", copy(get(value, "name"), label, mode, depth + 1, seen))
-      define(copied, "message", copy(get(value, "message"), label, mode, depth + 1, seen))
+      defineHost(copied, "name", next(get(value, "name")))
+      defineHost(copied, "message", next(get(value, "message")))
     }
-    for (const [key, item] of ownEntries(value)) {
-      const next = copy(item, label, mode, depth + 1, seen)
-      if (next === undefined && mode === "json") continue
-      define(copied, key, next)
+    for (const [key, item] of entries(value)) {
+      const copiedItem = next(item)
+      if (copiedItem === undefined && mode === "json") continue
+      defineHost(copied, key, copiedItem)
     }
     seen.delete(value)
     return copied
   }
 
   if (Array.isArray(value)) {
-    if (plain) {
-      const copied = new ProgramArray(value.map((item) => copy(item, label, mode, depth + 1, seen)))
+    if (protos !== undefined) {
+      const copied = new ProgramArray(protos.Array, value.map(next))
       for (const [key, item] of Object.entries(value)) {
-        if (parseArrayIndex(key) === undefined) set(copied, key, copy(item, label, mode, depth + 1, seen))
+        if (parseArrayIndex(key) === undefined) define(copied, key, next(item))
       }
       seen.delete(value)
       return copied
     }
-    const copied = Array.from(value, (item) => copy(item, label, mode, depth + 1, seen) ?? null)
+    const copied = Array.from(value, (item) => next(item) ?? null)
     seen.delete(value)
     return copied
   }
@@ -155,17 +172,17 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
     throw new ToolRuntimeError("InvalidDataValue", `${label} must contain plain objects only.`)
   }
 
-  if (plain) {
-    const copied = new ProgramObject()
-    for (const [key, item] of Object.entries(value)) set(copied, key, copy(item, label, mode, depth + 1, seen))
+  if (protos !== undefined) {
+    const copied = new ProgramObject(protos.Object)
+    for (const [key, item] of Object.entries(value)) define(copied, key, next(item))
     seen.delete(value)
     return copied
   }
   const copied: Record<string, unknown> = {}
   for (const [key, item] of Object.entries(value)) {
-    const next = copy(item, label, mode, depth + 1, seen)
-    if (next === undefined && mode === "json") continue
-    define(copied, key, next)
+    const copiedItem = next(item)
+    if (copiedItem === undefined && mode === "json") continue
+    defineHost(copied, key, copiedItem)
   }
   seen.delete(value)
   return copied
@@ -173,6 +190,6 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
 
 // Own data property regardless of the target's prototype, so a "__proto__" key on a host object
 // never reaches the Object.prototype setter.
-const define = (target: object, key: string, value: unknown): void => {
+const defineHost = (target: object, key: string, value: unknown): void => {
   Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
 }
