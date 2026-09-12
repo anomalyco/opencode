@@ -256,6 +256,95 @@ test("stale session hydration does not overwrite live message parts", async () =
   }
 })
 
+test("does not buffer a live diff when no hydration is in flight", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  const user = {
+    id: "msg_gate_user",
+    sessionID,
+    role: "user" as const,
+    agent: "build",
+    model: { providerID: "test", modelID: "model" },
+    time: { created: 0 },
+  }
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) return json([{ info: user, parts: [] }])
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    return undefined
+  }, tmp.path)
+
+  try {
+    emit(
+      global({
+        id: "evt_diff_gate",
+        type: "message.diff.updated",
+        properties: {
+          sessionID,
+          messageID: user.id,
+          diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PATCH-A" }],
+        },
+      }),
+    )
+    await sync.session.sync(sessionID)
+
+    const message = sync.data.message[sessionID]?.find((item) => item.id === user.id)
+    expect(message?.role === "user" ? message.summary?.diffs : undefined).toBeUndefined()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("stale non-empty hydration does not overwrite a live non-empty part", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  let resolveMessages!: (response: Response) => void
+  const messages = new Promise<Response>((resolve) => {
+    resolveMessages = resolve
+  })
+  let requested = false
+  const { app, emit, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) {
+      requested = true
+      return messages
+    }
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    return undefined
+  }, tmp.path)
+
+  try {
+    const hydrate = sync.session.sync(sessionID)
+    await wait(() => requested)
+    emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: assistant } }))
+    emit(
+      global({
+        id: "evt_part",
+        type: "message.part.updated",
+        properties: {
+          sessionID,
+          time: 2,
+          part: { id: partID, sessionID, messageID, type: "text", text: "visible live content" },
+        },
+      }),
+    )
+    await wait(() => sync.data.part[messageID]?.[0]?.type === "text")
+    resolveMessages(
+      json([
+        {
+          info: assistant,
+          parts: [{ id: partID, sessionID, messageID, type: "text", text: "stale hydrated content" }],
+        },
+      ]),
+    )
+    await hydrate
+
+    expect(sync.data.part[messageID][0]).toMatchObject({ text: "visible live content" })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("orphan live deltas do not suppress hydrated parts", async () => {
   await using tmp = await tmpdir()
   await Bun.write(`${tmp.path}/kv.json`, "{}")
