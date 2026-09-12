@@ -189,7 +189,13 @@ const layer = Layer.effect(
             kind: "server",
             report: {
               start(candidate) {},
-              missing(candidate, _retry, message) {},
+              missing(candidate, _retry, message) {
+                // A configured plugin that resolves to nothing is a config error,
+                // not a no-op. Without this the entry is dropped with no output at
+                // any level, and the first symptom is a missing provider/tool at
+                // request time, potentially long after startup.
+                publishPluginError(`Failed to load plugin ${candidate.plan.spec}: ${message}`)
+              },
               error(candidate, _retry, stage, error, resolved) {
                 const spec = candidate.plan.spec
                 const cause = error instanceof Error ? (error.cause ?? error) : error
