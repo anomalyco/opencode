@@ -1435,6 +1435,49 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  for (const cancel of ["tool", "interrupt"] as const) {
+    it.live(`cancels a background shell through ${cancel} with interruption cleanup`, () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              const jobs = yield* Job.Service
+              const bus = yield* Bus.Service
+              const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+                Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+                Stream.runHead,
+                Effect.forkScoped({ startImmediately: true }),
+              )
+              const started = yield* executeTool(registry, call({ command: idleCommand, background: true }))
+              const id = ID.make(String(started.metadata?.shellID))
+              const info = yield* shell.get(id)
+              if (cancel === "interrupt") yield* jobs.cancel(id)
+              if (cancel === "tool") {
+                const stopped = yield* executeTool(registry, {
+                  sessionID,
+                  ...toolIdentity,
+                  call: { type: "tool-call", id: "call-stop", name: "shell_stop", input: { shellID: id } },
+                })
+                expect(stopped.output).toEqual({ status: "cancelled" })
+              }
+              expect((yield* jobs.get(id))?.status).toBe("cancelled")
+              expect(yield* shell.get(id).pipe(Effect.flip)).toBeInstanceOf(Shell.NotFoundError)
+              expect((yield* shell.result(info)).capture).toBeUndefined()
+              expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
+                text: expect.stringContaining("Command cancelled"),
+                metadata: { state: "cancelled" },
+              })
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    )
+  }
+
   it.live("returns the shell id for a background command", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

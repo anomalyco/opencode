@@ -17,6 +17,7 @@ import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
+import { ID } from "@opencode/schema/shell"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -41,6 +42,7 @@ const description = (shell?: string) =>
     "Rely on automatic truncation unless filtering the output is more useful.",
     "Commands accept an optional timeout, background commands have no timeout by default.",
     "Background commands return immediately, and you will be notified when they complete.",
+    "Use shell_stop with the returned shell ID to stop a background command.",
   ].join(" ")
 
 export const Input = Schema.Struct({
@@ -267,6 +269,39 @@ export const Plugin = {
                 (error) => new ToolFailure({ message: `Unable to execute command: ${input.command}`, error }),
               ),
             ),
+        }),
+      )
+      .pipe(Effect.orDie)
+
+    yield* ctx.tool
+      .transform((editor) =>
+        editor.add({
+          name: "shell_stop",
+          options: { codemode: false, permission: name },
+          description:
+            "Cancel a shell command using its returned shell ID. Uses the same cleanup as interruption, removing the running command and its captured output.",
+          input: Schema.Struct({ shellID: ID }),
+          output: Schema.Struct({ status: Schema.Literals(["running", "completed", "error", "cancelled"]) }),
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const info = yield* shell.get(input.shellID)
+              yield* permission.assert({
+                action: name,
+                resources: [info.command],
+                save: [info.command],
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
+              })
+              const job = yield* jobs.cancel(input.shellID)
+              if (!job) yield* shell.remove(input.shellID)
+              const status = job?.status ?? "cancelled"
+              return {
+                output: { status },
+                content: [{ type: "text" as const, text: `Shell ${input.shellID}: ${status}` }],
+                metadata: { shellID: input.shellID },
+              }
+            }).pipe(Effect.mapError((error) => new ToolFailure({ message: "Unable to stop shell command", error }))),
         }),
       )
       .pipe(Effect.orDie)
