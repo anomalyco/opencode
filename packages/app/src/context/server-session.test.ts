@@ -1019,6 +1019,48 @@ describe("server session", () => {
     expect(store.data.message.child).toEqual([user, live])
   })
 
+  test("retires a failed parent attempt's buffered diff while keeping the page's buffered diff", async () => {
+    const target = userMessage("message-1")
+    const outside = userMessage("message-0", {
+      time: { created: 0 },
+      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PARENT-C" }] },
+    })
+    const assistant = assistantMessage("message-2", outside.id)
+    const failed = Promise.withResolvers<SingleMessageResponse>()
+    const client = rootMessageClient(
+      [response([{ info: target, parts: [] }, { info: assistant, parts: [] }], "older")],
+      [failed.promise, singleResponse(outside)],
+    )
+    const store = createServerSession(client, { retry: retryImmediately })
+    const loading = store.sync("child")
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: target.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PAGE-B" }],
+      },
+    })
+    await client.rootRequested(1)
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: outside.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PARENT-B" }],
+      },
+    })
+    failed.reject(new Error("retry"))
+    await loading
+
+    const page = store.data.message.child?.find((item) => item.id === target.id)
+    const parent = store.data.message.child?.find((item) => item.id === outside.id)
+    expect(page?.role === "user" ? page.summary?.diffs[0]?.patch : undefined).toBe("PAGE-B")
+    expect(parent?.role === "user" ? parent.summary?.diffs[0]?.patch : undefined).toBe("PARENT-C")
+    expect(client.rootRequests).toHaveLength(2)
+  })
+
   test("preserves unrelated message events across a failed parent retry", async () => {
     const failed = deferredResponse()
     const user = userMessage("message-1")

@@ -87,6 +87,7 @@ function legacyMessageSource(items: { info: Message; parts: Part[] }[]): Session
 // Most markers describe the current HTTP attempt; deltaParts persists non-durable stream state across retries.
 type MessageLoadState = {
   attempt: number
+  parentAttempts: Set<string>
   touchedMessages: Set<string>
   removedMessages: Set<string>
   retainedMessages: Set<string>
@@ -439,6 +440,14 @@ export function createServerSession(
     if (load.attempt > 1 && messageLoads.get(sessionID) === load) pendingDiffs.delete(sessionID)
   }
 
+  // A parent retry re-reads the durable diff, so its response supersedes a buffer captured by the
+  // earlier attempt. Only that parent's buffer is retired; page and sibling-parent buffers survive.
+  const beginParentAttempt = (sessionID: string, load: MessageLoadState, messageID: string) => {
+    const superseded = load.parentAttempts.has(messageID)
+    load.parentAttempts.add(messageID)
+    if (superseded && messageLoads.get(sessionID) === load) retirePendingDiff(sessionID, messageID)
+  }
+
   const resetMessageLoad = (sessionID: string, load: MessageLoadState, baseline?: MessageLoadBaseline) => {
     load.touchedMessages.clear()
     load.retainedMessages.clear()
@@ -764,6 +773,7 @@ export function createServerSession(
     const active = generation(sessionID)
     const load: MessageLoadState = {
       attempt: 0,
+      parentAttempts: new Set(),
       touchedMessages: new Set(),
       removedMessages: new Set(),
       retainedMessages: new Set(),
@@ -811,9 +821,10 @@ export function createServerSession(
         ]
         for (const parentID of parentIDs) {
           if (generations.get(sessionID) !== active) break
-          const parent = await fetchMessage(sessionID, parentID, () =>
-            resetMessageLoad(sessionID, load, messageLoadBaseline(load, parentID)),
-          ).catch((error) => {
+          const parent = await fetchMessage(sessionID, parentID, () => {
+            beginParentAttempt(sessionID, load, parentID)
+            resetMessageLoad(sessionID, load, messageLoadBaseline(load, parentID))
+          }).catch((error) => {
             const cause = error instanceof Error && typeof error.cause === "object" ? error.cause : undefined
             if (cause && "status" in cause && cause.status === 404) {
               load.removedMessages.add(parentID)
