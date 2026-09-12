@@ -6,7 +6,7 @@ export default {
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
-        CREATE TABLE \`message_diff\` (
+        CREATE TABLE IF NOT EXISTS \`message_diff\` (
           \`message_id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,
           \`diffs\` text NOT NULL,
@@ -14,7 +14,7 @@ export default {
           CONSTRAINT \`fk_message_diff_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
-      yield* tx.run(`CREATE INDEX \`message_diff_session_idx\` ON \`message_diff\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`message_diff_session_idx\` ON \`message_diff\` (\`session_id\`);`)
     })
   },
 } satisfies DatabaseMigration.Migration
