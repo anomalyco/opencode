@@ -189,11 +189,13 @@ test("double-clicking a preview tab keeps it open without promoting permanent ta
 
     setSystemTime(new Date(2_000))
     await app.mockMouse.click(40, 0)
+    await app.waitFor(() => active() === "second")
     expect(active()).toBe("second")
     expect(promoted).toEqual([])
 
     setSystemTime(new Date(2_100))
     await app.mockMouse.click(40, 0)
+    await app.waitFor(() => promoted.length === 1)
     expect(promoted).toEqual(["second"])
   } finally {
     setSystemTime()
@@ -285,6 +287,7 @@ test("keeps consecutive close controls fixed across overflow window changes", as
     await app.mockMouse.click(11, 0)
     await app.waitForFrame((frame) => items().length === 4 && Array.from(frame.split("\n")[0] ?? "")[11] === "✕")
     await app.mockMouse.click(11, 0)
+    await app.waitFor(() => closed.length === 2)
 
     expect(closed).toEqual(["third", "fourth"])
   } finally {
