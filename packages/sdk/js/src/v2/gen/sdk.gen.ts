@@ -5826,7 +5826,7 @@ export class Session3 extends HeyApiClient {
   /**
    * Get session messages
    *
-   * Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.
+   * Retrieve projected messages for a session. Use order for an edge page, cursor for sequential walks, index for dense-rank seek, or around to center on a message ID. Responses include total and optional startIndex.
    */
   public messages<ThrowOnError extends boolean = false>(
     parameters: {
@@ -5834,6 +5834,8 @@ export class Session3 extends HeyApiClient {
       limit?: number
       order?: "asc" | "desc"
       cursor?: string
+      index?: string
+      around?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5846,6 +5848,8 @@ export class Session3 extends HeyApiClient {
             { in: "query", key: "limit" },
             { in: "query", key: "order" },
             { in: "query", key: "cursor" },
+            { in: "query", key: "index" },
+            { in: "query", key: "around" },
           ],
         },
       ],

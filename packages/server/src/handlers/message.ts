@@ -3,7 +3,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { InvalidCursorError, SessionNotFoundError, UnknownError } from "@opencode-ai/protocol/errors"
+import { InvalidCursorError, InvalidRequestError, SessionNotFoundError, UnknownError } from "@opencode-ai/protocol/errors"
 
 const DefaultMessagesLimit = 50
 
@@ -33,17 +33,25 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
       Effect.fn(function* (ctx) {
         if (ctx.query.cursor && ctx.query.order !== undefined)
           return yield* new InvalidCursorError({ message: "Cursor cannot be combined with order" })
+        if (ctx.query.cursor && (ctx.query.index !== undefined || ctx.query.around !== undefined))
+          return yield* new InvalidRequestError({
+            message: "Cursor cannot be combined with index or around",
+          })
+        if (ctx.query.index !== undefined && ctx.query.around !== undefined)
+          return yield* new InvalidRequestError({ message: "Index cannot be combined with around" })
         const decoded = yield* Effect.try({
           try: () => (ctx.query.cursor ? cursor.decode(ctx.query.cursor) : undefined),
           catch: () => new InvalidCursorError({ message: "Invalid cursor" }),
         })
         const order = decoded?.order ?? ctx.query.order ?? "desc"
-        const messages = yield* session
-          .messages({
+        const page = yield* session
+          .messagesPage({
             sessionID: ctx.params.sessionID,
             limit: ctx.query.limit ?? DefaultMessagesLimit,
             order,
             cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
+            index: ctx.query.index,
+            around: ctx.query.around,
           })
           .pipe(
             Effect.catchTag("Session.NotFoundError", (error) =>
@@ -66,14 +74,16 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
               )
             }),
           )
-        const first = messages[0]
-        const last = messages.at(-1)
+        const first = page.messages[0]
+        const last = page.messages.at(-1)
         return {
-          data: messages,
+          data: page.messages,
           cursor: {
             previous: first ? cursor.encode(first, order, "previous") : undefined,
             next: last ? cursor.encode(last, order, "next") : undefined,
           },
+          total: page.total,
+          startIndex: page.startIndex,
         }
       }),
     )
