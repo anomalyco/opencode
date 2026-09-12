@@ -111,9 +111,9 @@ export function createLatexCodeBlockRenderer(
 
 function layoutLatex(source: string) {
   try {
-    return renderLatex(source, { strict: true, displayMode: true })
+    return renderLatex(source, { strict: true, unknownCommands: "preserve", displayMode: true })
   } catch (error) {
-    // Preserve the exact source for incomplete math, unsupported commands, and oversized input.
+    // Preserve the exact source for incomplete math, unsupported structures, and oversized input.
     if (error instanceof LatexParseError || error instanceof RangeError) return undefined
     throw error
   }

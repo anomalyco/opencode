@@ -208,6 +208,45 @@ describe("parseLatex", () => {
     expect(() => parseLatex(String.raw`\definitelyUnknown{x}`, { strict: true })).toThrow(LatexParseError)
   })
 
+  test("parses boxed math structurally", () => {
+    expect(parseLatex(String.raw`\boxed{\frac{1}{\boxed{x}}}`, { strict: true })).toMatchObject({
+      type: "boxed",
+      body: { type: "fraction", denominator: { type: "boxed", body: { value: "x" } } },
+    })
+  })
+
+  test.each([
+    String.raw`\unknown{x}`,
+    String.raw`\constructor{x}`,
+    String.raw`\toString{x}`,
+    String.raw`\unknown*[a{[b]}]{x}{\frac{1}{2}}`,
+    String.raw`\unknown{left \{ only}`,
+    String.raw`\unknown{right \} only}`,
+  ])("keeps unknown commands and grouped arguments opaque: %s", (source) => {
+    expect(parseLatex(source, { strict: true, unknownCommands: "preserve" })).toEqual({ type: "raw", value: source })
+    expect(() => parseLatex(source, { unknownCommands: "error" })).toThrow(LatexParseError)
+  })
+
+  test.each([
+    String.raw`\unknown{x`,
+    String.raw`\unknown[option`,
+    String.raw`\left\unknown x\right)`,
+    String.raw`\begin{unknown}x\end{unknown}`,
+    String.raw`\boxed}`,
+    "x + \\",
+  ])("still rejects malformed or unsupported structures with local fallback: %s", (source) => {
+    expect(() => parseLatex(source, { strict: true, unknownCommands: "preserve" })).toThrow(LatexParseError)
+  })
+
+  test("bounds locally preserved input", () => {
+    expect(() =>
+      parseLatex(String.raw`\unknown{` + "x".repeat(100_000) + "}", { unknownCommands: "preserve" }),
+    ).toThrow(/character limit/)
+    expect(() => parseLatex(String.raw`\unknown{` + "{".repeat(300), { unknownCommands: "preserve" })).toThrow(
+      /level limit/,
+    )
+  })
+
   test("keeps escaped braces inside raw text groups", () => {
     expect(parseLatex(String.raw`\text{left \{ only}`)).toMatchObject({
       type: "text",

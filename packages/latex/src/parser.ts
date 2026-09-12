@@ -63,7 +63,7 @@ const variants: Readonly<Record<string, MathVariant>> = {
 export function parseLatex(source: string, options: ParseOptions = {}): MathNode {
   const expanded = expandLatexMacros(source, options)
   const maxDepth = resolvePositiveInteger(options.maxDepth, DEFAULT_MAX_NESTING_DEPTH, "maxDepth")
-  return new Parser(expanded, options.strict ?? false, maxDepth).parse()
+  return new Parser(expanded, options.strict ?? false, maxDepth, options.unknownCommands).parse()
 }
 
 export function expandLatexMacros(source: string, options: ParseOptions = {}): string {
@@ -135,6 +135,7 @@ class Parser {
     private readonly source: string,
     private readonly strict: boolean,
     private readonly maxDepth: number,
+    private readonly unknownCommands: ParseOptions["unknownCommands"],
   ) {}
 
   public parse(): MathNode {
@@ -233,16 +234,17 @@ class Parser {
       if (index) result.index = index
       return result
     }
+    if (command === "boxed") return { type: "boxed", body: this.parseArgument() }
     if (command === "left") return this.parseLeftRight()
     if (command === "middle") return { type: "symbol", value: this.readDelimiter() }
     if (command === "right") {
       this.position = start
       this.fail("Unexpected \\right")
     }
-    if (command in accents) {
+    if (Object.hasOwn(accents, command)) {
       return { type: "accent", accent: accents[command], body: this.parseArgument() }
     }
-    if (command in variants) {
+    if (Object.hasOwn(variants, command)) {
       return {
         type: "variant",
         variant: variants[command],
@@ -311,12 +313,12 @@ class Parser {
     if (/^(?:big|Big|bigg|Bigg)[lrm]?$/.test(command)) {
       return { type: "symbol", value: this.readDelimiter() }
     }
-    if (command in spacingCommands) return { type: "space", width: spacingCommands[command] }
-    if (command in symbolTable) {
+    if (Object.hasOwn(spacingCommands, command)) return { type: "space", width: spacingCommands[command] }
+    if (Object.hasOwn(symbolTable, command)) {
       const symbol = symbolTable[command]
       return { type: "symbol", value: symbol.value, ...(symbol.role ? { role: symbol.role } : {}) }
     }
-    if (command in largeOperators) {
+    if (Object.hasOwn(largeOperators, command)) {
       return { type: "operator", value: largeOperators[command], limits: !command.includes("int") }
     }
     if (namedOperators.has(command)) {
@@ -327,15 +329,30 @@ class Parser {
       }
     }
     if (command === "backslash") return { type: "symbol", value: "\\" }
-    const delimiter = delimiterTable[`\\${command}`] ?? delimiterTable[command]
+    const delimiter =
+      delimiterTable[`\\${command}`] ?? (Object.hasOwn(delimiterTable, command) ? delimiterTable[command] : undefined)
     if (delimiter !== undefined) return { type: "symbol", value: delimiter }
     if (command === "{" || command === "}") return { type: "symbol", value: command }
     if (command === "%" || command === "#" || command === "$" || command === "&" || command === "_") {
       return { type: "symbol", value: command }
     }
 
-    if (this.strict) this.fail(`Unsupported command \\${command}`, start)
-    return { type: "text", value: `\\${command}` }
+    if (this.unknownCommands === "error" || (this.strict && this.unknownCommands !== "preserve")) {
+      this.fail(`Unsupported command \\${command}`, start)
+    }
+    // Keep the command and its grouped arguments opaque; interpreting an unknown
+    // macro's contents could erase grouping or change its mathematical meaning.
+    if (this.peek() === "*") this.position++
+    let end = this.position
+    while (!this.done()) {
+      this.skipMathWhitespace()
+      if (this.peek() === "{") this.readRawGroup()
+      else if (this.peek() === "[") this.parseOptionalArgument()
+      else break
+      end = this.position
+    }
+    this.position = end
+    return { type: "raw", value: this.source.slice(start, end) }
   }
 
   private parseEnvironment(): MathNode {
@@ -410,7 +427,7 @@ class Parser {
   private parseArgument(): MathNode {
     this.skipMathWhitespace()
     if (this.peek() === "{") return this.parseGroup()
-    if (this.done()) this.fail("Expected an argument")
+    if (this.done() || this.peek() === "}") this.fail("Expected an argument")
     return this.parseAtom()
   }
 
@@ -447,7 +464,8 @@ class Parser {
     const start = this.position
     if (this.peek() === "\\") {
       const command = this.readCommand()
-      const delimiter = delimiterTable[`\\${command}`] ?? delimiterTable[command]
+      const delimiter =
+        delimiterTable[`\\${command}`] ?? (Object.hasOwn(delimiterTable, command) ? delimiterTable[command] : undefined)
       if (delimiter !== undefined) return delimiter
       if (this.strict) this.fail(`Unsupported delimiter \\${command}`, start)
       return `\\${command}`
@@ -458,7 +476,7 @@ class Parser {
 
   private readCommand(): string {
     this.expect("\\")
-    if (this.done()) return "\\"
+    if (this.done()) this.fail("Incomplete command")
     const next = this.peek()
     if (!/[A-Za-z@]/.test(next)) {
       this.position++
@@ -514,7 +532,7 @@ class Parser {
         if ("{}%#$&_ ".includes(command)) return command
         if (command === "textbackslash") return "\\"
         if (command === "!") return ""
-        if (command in spacingCommands) return " ".repeat(Math.max(1, spacingCommands[command]))
+        if (Object.hasOwn(spacingCommands, command)) return " ".repeat(Math.max(1, spacingCommands[command]))
         return match
       })
       .replace(/~/g, " ")
