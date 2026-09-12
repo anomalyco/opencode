@@ -942,6 +942,83 @@ describe("server session", () => {
     expect(client.rootRequests).toHaveLength(1)
   })
 
+  test("preserves a diff delivered during a parent request over its older response", async () => {
+    const parent = userMessage("message-0", {
+      time: { created: 0 },
+      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PARENT-A" }] },
+    })
+    const assistant = assistantMessage("message-2", parent.id)
+    const page = deferredResponse()
+    const parentResponse = Promise.withResolvers<SingleMessageResponse>()
+    const client = rootMessageClient([page.promise], [parentResponse.promise])
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+    page.resolve(response([{ info: assistant, parts: [] }], "older"))
+    await client.rootRequested(1)
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: parent.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "DURING-B" }],
+      },
+    })
+    parentResponse.resolve(singleResponse(parent))
+    await loading
+
+    const result = store.data.message.child?.find((item) => item.id === parent.id)
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("DURING-B")
+  })
+
+  test("retires only the fetched parent's pre-request buffer and preserves siblings", async () => {
+    const target = userMessage("message-1")
+    const p1 = userMessage("message-p1", { time: { created: 0 } })
+    const p2 = userMessage("message-p2", { time: { created: 0 } })
+    const a1 = assistantMessage("message-2", p1.id)
+    const a2 = assistantMessage("message-3", p2.id)
+    const page = deferredResponse()
+    const client = rootMessageClient(
+      [page.promise],
+      [
+        singleResponse({
+          ...p1,
+          summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "P1-C" }] },
+        }),
+        singleResponse({
+          ...p2,
+          summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "P2-C" }] },
+        }),
+      ],
+    )
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+    for (const [id, patch] of [
+      [target.id, "PAGE-B"],
+      [p1.id, "P1-B"],
+      [p2.id, "P2-B"],
+    ] as const) {
+      store.apply({
+        type: "message.diff.updated",
+        properties: {
+          sessionID: "child",
+          messageID: id,
+          diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch }],
+        },
+      })
+    }
+    page.resolve(response([{ info: target, parts: [] }, { info: a1, parts: [] }, { info: a2, parts: [] }], "older"))
+    await loading
+
+    const patchOf = (id: string) => {
+      const message = store.data.message.child?.find((item) => item.id === id)
+      return message?.role === "user" ? message.summary?.diffs[0]?.patch : undefined
+    }
+    expect(patchOf(p1.id)).toBe("P1-C")
+    expect(patchOf(p2.id)).toBe("P2-C")
+    expect(patchOf(target.id)).toBe("PAGE-B")
+  })
+
   test("an obsolete parent retry cannot clear a replacement load's buffered diff", async () => {
     const user = userMessage("message-1")
     const assistant = assistantMessage("message-2", user.id)
