@@ -1399,6 +1399,132 @@ describe("run stream transport", () => {
     }
   })
 
+  test("bootstraps grandchild tabs and permissions from a nested subagent chain", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        messages: async ({ sessionID }) => {
+          if (sessionID === "session-1") {
+            return ok([
+              assistantMessage({
+                sessionID: "session-1",
+                id: "msg-1",
+                parts: [
+                  runningTool({
+                    sessionID: "session-1",
+                    messageID: "msg-1",
+                    id: "task-1",
+                    callID: "call-1",
+                    tool: "task",
+                    body: {
+                      description: "Explore run folder",
+                      subagent_type: "explore",
+                    },
+                    metadata: {
+                      sessionId: "child-1",
+                    },
+                  }),
+                ],
+              }),
+            ])
+          }
+
+          if (sessionID === "child-1") {
+            return ok([
+              assistantMessage({
+                sessionID: "child-1",
+                id: "msg-child-1",
+                parts: [
+                  runningTool({
+                    sessionID: "child-1",
+                    messageID: "msg-child-1",
+                    id: "task-2",
+                    callID: "call-2",
+                    tool: "task",
+                    body: {
+                      description: "Grep for callers",
+                      subagent_type: "explore",
+                    },
+                    metadata: {
+                      sessionId: "grandchild-1",
+                    },
+                  }),
+                ],
+              }),
+            ])
+          }
+
+          return ok([
+            assistantMessage({
+              sessionID: "grandchild-1",
+              id: "msg-grandchild-1",
+              parts: [
+                runningTool({
+                  sessionID: "grandchild-1",
+                  messageID: "msg-grandchild-1",
+                  id: "grep-1",
+                  callID: "call-grep-1",
+                  tool: "grep",
+                  body: {
+                    pattern: "callers",
+                  },
+                }),
+              ],
+            }),
+          ])
+        },
+        children: async ({ sessionID }) => {
+          if (sessionID === "session-1") return ok([child("child-1")])
+          if (sessionID === "child-1") return ok([child("grandchild-1")])
+          return ok([])
+        },
+        permissions: async () =>
+          ok([
+            {
+              id: "perm-grandchild-1",
+              sessionID: "grandchild-1",
+              permission: "grep",
+              patterns: ["callers"],
+              metadata: {},
+              always: [],
+              tool: {
+                messageID: "msg-grandchild-1",
+                callID: "call-grep-1",
+              },
+            },
+          ]),
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      const boot = await waitFor(() => {
+        const item = ui.events.findLast((event) => event.type === "stream.subagent")
+        const state = item?.type === "stream.subagent" ? item.state : undefined
+        return state?.tabs.some((tab) => tab.sessionID === "grandchild-1") &&
+          state.permissions.some((req) => req.id === "perm-grandchild-1")
+          ? state
+          : undefined
+      })
+
+      expect(boot.tabs.map((tab) => tab.sessionID).sort()).toEqual(["child-1", "grandchild-1"])
+      expect(boot.permissions).toEqual([
+        expect.objectContaining({
+          id: "perm-grandchild-1",
+          sessionID: "grandchild-1",
+        }),
+      ])
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
   test("bootstraps child session output before selection", async () => {
     const ui = footer()
     const transport = await createSessionTransport({
