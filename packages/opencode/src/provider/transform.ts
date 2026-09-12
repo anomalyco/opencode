@@ -979,13 +979,28 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "venice-ai-sdk-provider":
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
+      // North Mini Code models only support "none" and "high" reasoning effort levels.
       if (model.api.id.toLowerCase().includes("north-mini-code")) {
         return Object.fromEntries(["none", "high"].map((effort) => [effort, { reasoningEffort: effort }]))
       }
-      const efforts = [...WIDELY_SUPPORTED_EFFORTS]
+
+      // Add none and max variants to deepseek-v4 models. None is only added to the official
+      // Deepseek provider because others may not support it. 
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
-        efforts.push("max")
+        const efforts = [...WIDELY_SUPPORTED_EFFORTS, "max"]
+        if (model.providerID === "deepseek") efforts.unshift("none")
+        return Object.fromEntries(
+          efforts.map((effort) => [
+            effort,
+            effort === "none"
+              ? { thinking: { type: "disabled" } }
+              : { reasoningEffort: effort },
+          ])
+        )
       }
+
+      // Use the widely supported levels for all other models using this API.
+      const efforts = [...WIDELY_SUPPORTED_EFFORTS]
       return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
 
     case "@ai-sdk/azure":
