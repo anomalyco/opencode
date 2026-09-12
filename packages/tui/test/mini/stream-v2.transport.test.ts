@@ -712,9 +712,9 @@ describe("V2 mini transport", () => {
     })
 
     while (!ui.commits.some((commit) => commit.text === "Done.")) await Bun.sleep(0)
-    expect(ui.commits.filter((commit) => commit.kind === "assistant" || commit.kind === "tool").map((commit) => commit.text)).toEqual([
-      "Done.",
-    ])
+    expect(
+      ui.commits.filter((commit) => commit.kind === "assistant" || commit.kind === "tool").map((commit) => commit.text),
+    ).toEqual(["Done."])
     await transport.close()
   })
 
@@ -742,7 +742,11 @@ describe("V2 mini transport", () => {
               model: { providerID: "test", id: "model" },
               content: [
                 { type: "text", text: "I'll check." },
-                canonicalToolPart("read", { status: "completed", input: {}, content: [{ type: "text", text: "file" }] }),
+                canonicalToolPart("read", {
+                  status: "completed",
+                  input: {},
+                  content: [{ type: "text", text: "file" }],
+                }),
               ],
               time: { created: 2, completed: 3 },
             },
@@ -759,7 +763,9 @@ describe("V2 mini transport", () => {
 
     while (!ui.commits.some((commit) => commit.text === "Done.")) await Bun.sleep(0)
     expect(
-      ui.commits.filter((commit) => commit.kind === "user" || commit.kind === "assistant" || commit.kind === "tool").map((commit) => commit.text),
+      ui.commits
+        .filter((commit) => commit.kind === "user" || commit.kind === "assistant" || commit.kind === "tool")
+        .map((commit) => commit.text),
     ).toEqual(["what happened", "Done."])
     await transport.close()
   })
@@ -3474,6 +3480,66 @@ describe("V2 mini transport", () => {
     expect(ui.commits).toContainEqual(
       expect.objectContaining({ kind: "system", text: '→ Skill "tigerstyle"', messageID: "msg_skill" }),
     )
+    await transport.close()
+  })
+
+  test("preserves trailing skill arguments as a user prompt", async () => {
+    const events = feed()
+    events.push(connected())
+    const client = sdk({ streams: [events] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      footer: ui.api,
+    })
+    let request: Parameters<OpenCodeClient["session"]["prompt"]>[0] | undefined
+    const command = spyOn(client.session, "command")
+    const skill = spyOn(client.session, "skill")
+    spyOn(client.session, "prompt").mockImplementation((input) => {
+      request = input
+      queueMicrotask(() => {
+        events.push({
+          id: "evt_prompted",
+          created: 0,
+          type: "session.inbox.delivered",
+          durable: durable("ses_1"),
+          data: { sessionID: "ses_1", inboxID: "msg_skill" },
+        })
+        events.push({
+          id: "evt_settled",
+          created: 0,
+          type: "session.execution.succeeded",
+          durable: durable("ses_1"),
+          data: { sessionID: "ses_1" },
+        })
+      })
+      return ok({ data: { id: "msg_skill", sessionID: "ses_1", delivery: "steer", created: 0 } }) as never
+    })
+
+    await transport.runPromptTurn({
+      agent: "review",
+      model: undefined,
+      variant: undefined,
+      prompt: {
+        messageID: "msg_skill",
+        text: "/tigerstyle review this change",
+        parts: [],
+        command: { name: "tigerstyle", arguments: "review this change", source: "skill" },
+      },
+      files: [],
+      includeFiles: true,
+    })
+
+    expect(request).toMatchObject({
+      sessionID: "ses_1",
+      id: "msg_skill",
+      text: "review this change",
+      skills: [{ id: "tigerstyle" }],
+    })
+    expect(command).not.toHaveBeenCalled()
+    expect(skill).not.toHaveBeenCalled()
     await transport.close()
   })
 

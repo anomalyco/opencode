@@ -1150,6 +1150,7 @@ export function Prompt(props: PromptProps) {
       (data.location.skill.list(currentLocation.ref) ?? []).some(
         (skill) => skill.slash === true && skill.id === slashHead.name,
       )
+    const isSkillPrompt = isSkill && slashHead.arguments.trim().length > 0
     const isCommand =
       slashHead !== undefined &&
       (data.location.command.list(currentLocation.ref) ?? []).some((command) => command.name === slashHead.name)
@@ -1170,7 +1171,7 @@ export function Prompt(props: PromptProps) {
       void promptModelWarning()
       return false
     }
-    const usesModel = !props.sessionID || (store.mode !== "shell" && !isSkill)
+    const usesModel = !props.sessionID || (store.mode !== "shell" && (!isSkill || isSkillPrompt))
     if (usesModel && !local.model.available(selection)) {
       toast.show({
         title: "Model unavailable",
@@ -1311,7 +1312,7 @@ export function Prompt(props: PromptProps) {
         toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
         restoreEntry()
       })
-    } else if (isSkill) {
+    } else if (isSkill && !isSkillPrompt) {
       move.startSubmit()
       dispatch(() => client.api.session.skill({ sessionID: target, skill: slashHead.name }))
     } else {
@@ -1365,10 +1366,14 @@ export function Prompt(props: PromptProps) {
       data.session
         .prompt({
           sessionID: target,
-          text: inputText,
+          text: isSkillPrompt ? slashHead.arguments : inputText,
           files: entry.files,
           agents: entry.agents,
-          skills: entry.skills?.length ? entry.skills : undefined,
+          skills: isSkillPrompt
+            ? [...(entry.skills ?? []), { id: slashHead.name }]
+            : entry.skills?.length
+              ? entry.skills
+              : undefined,
           delivery,
           gate: newSession?.gate,
           // Commit the captured selection after earlier admissions, including
