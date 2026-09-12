@@ -1,6 +1,7 @@
 export * as EventManifest from "./event-manifest"
 
 import { Catalog } from "./catalog"
+import { CommandEvent } from "./command-event"
 import { Durable } from "./durable-event-manifest"
 import { Event } from "./event"
 import { FileSystem } from "./filesystem"
@@ -67,6 +68,7 @@ export const Definitions = Event.inventory(
   ...featureDefinitions,
   ...SessionTodo.Event.Definitions,
   ...LspEvent.Definitions,
+  ...CommandEvent.Definitions,
   ...PermissionV1.Event.Definitions,
   ...TuiEvent.Definitions,
   ...McpEvent.Definitions,
