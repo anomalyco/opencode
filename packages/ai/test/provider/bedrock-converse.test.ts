@@ -279,6 +279,52 @@ describe("Bedrock Converse route", () => {
       })
     }),
   )
+  ;["", " \t\r\n"].forEach((description) => {
+    it.effect(`omits blank tool description ${JSON.stringify(description)}`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(
+          LLMRequest.update(baseRequest, {
+            tools: [
+              ToolDefinition.make({
+                name: "lookup",
+                description,
+                inputSchema: { type: "object", properties: { query: { type: "string" } } },
+              }),
+            ],
+          }),
+        )
+
+        expect(prepared.body.toolConfig.tools).toEqual([
+          {
+            toolSpec: {
+              name: "lookup",
+              inputSchema: { json: { type: "object", properties: { query: { type: "string" } } } },
+            },
+          },
+        ])
+        expect(prepared.body.toolConfig.tools[0].toolSpec).not.toHaveProperty("description")
+      }),
+    )
+  })
+
+  it.effect("preserves meaningful tool descriptions including surrounding whitespace", () =>
+    Effect.gen(function* () {
+      const description = " \tLookup data.\n"
+      const prepared = yield* compileRequest(
+        LLMRequest.update(baseRequest, {
+          tools: [
+            ToolDefinition.make({
+              name: "lookup",
+              description,
+              inputSchema: { type: "object" },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.toolConfig.tools[0].toolSpec.description).toBe(description)
+    }),
+  )
 
   it.effect("keeps tools and omits the unsupported choice when tool choice is none", () =>
     Effect.gen(function* () {
