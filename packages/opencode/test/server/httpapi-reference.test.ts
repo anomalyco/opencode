@@ -60,4 +60,16 @@ describe("reference HttpApi", () => {
       },
     ])
   })
+
+  test("falls back to the server directory when the requested directory decoded to replacement characters", async () => {
+    // Same shape the web UI sends after a malformed directory segment: both the plain and location-scoped query.
+    const directory = encodeURIComponent("j\uFFFD")
+    const response = await Server.Default().app.request(
+      `/api/reference?directory=${directory}&location[directory]=${directory}`,
+    )
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.location.directory).not.toContain("\uFFFD")
+  })
 })
