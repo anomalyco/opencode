@@ -114,21 +114,46 @@ function writeJson(file: string, value: unknown) {
   writeFileSync(file, JSON.stringify(value, null, 4), { encoding: "utf8" })
 }
 
-export function readWindowsTerminalFont(): { face?: string; fallbacks: string[] } | undefined {
+// Windows Terminal resolves `font.face` as a CSS-like fallback chain
+// ("Cascadia Mono, Cairo, ..."). There is no `font.fallbacks` setting;
+// writing one is silently ignored, so the writer below always uses `face`.
+export const DEFAULT_WINDOWS_TERMINAL_FACE = "Cascadia Mono"
+
+export function splitFontFaces(face: string | undefined): string[] {
+  return (face ?? "")
+    .split(",")
+    .map((part) => part.trim().replace(/^['"]|['"]$/g, ""))
+    .filter(Boolean)
+}
+
+// Builds the fallback chain: the user's current faces first (never reordered),
+// then the chosen Arabic font plus the other recommended Arabic fonts.
+export function buildFontFaceChain(existingFace: string | undefined, family: string) {
+  const base = splitFontFaces(existingFace)
+  if (base.length === 0) base.push(DEFAULT_WINDOWS_TERMINAL_FACE)
+  const seen = new Set(base.map((name) => name.toLowerCase()))
+  const out = [...base]
+  for (const name of [family, ...RECOMMENDED_ARABIC_FONTS.filter((item) => item !== family)]) {
+    if (seen.has(name.toLowerCase())) continue
+    seen.add(name.toLowerCase())
+    out.push(name)
+  }
+  return out.join(", ")
+}
+
+export function readWindowsTerminalFont(): { face?: string; faces: string[] } | undefined {
   const file = windowsTerminalSettingsPath()
   if (!file) return undefined
   const json = readJsonc(file)
   const defaults = (json.profiles as Record<string, unknown> | undefined)?.defaults as
     | Record<string, unknown>
     | undefined
-  const font = defaults?.font as { face?: unknown; fallbacks?: unknown } | undefined
-  return {
-    face: typeof font?.face === "string" ? font.face : undefined,
-    fallbacks: Array.isArray(font?.fallbacks) ? font.fallbacks.filter((item): item is string => typeof item === "string") : [],
-  }
+  const font = defaults?.font as { face?: unknown } | undefined
+  const face = typeof font?.face === "string" ? font.face : undefined
+  return { face, faces: splitFontFaces(face) }
 }
 
-export function writeWindowsTerminalFont(input: { face?: string; fallbacks: string[] }): {
+export function writeWindowsTerminalFont(input: { face: string }): {
   path: string
   backup: string
 } {
@@ -139,27 +164,12 @@ export function writeWindowsTerminalFont(input: { face?: string; fallbacks: stri
   const profiles = (json.profiles ??= {}) as Record<string, unknown>
   const defaults = (profiles.defaults ??= {}) as Record<string, unknown>
   const font = (defaults.font ??= {}) as Record<string, unknown>
-  const existing = Array.isArray(font.fallbacks)
-    ? font.fallbacks.filter((item): item is string => typeof item === "string")
-    : []
-  font.fallbacks = mergeFallbacks(existing, input.fallbacks)
-  if (input.face !== undefined) font.face = input.face
+  font.face = input.face
+  // A previous version of this tool wrote an unsupported `fallbacks` array;
+  // remove it so the file only carries settings the terminal honors.
+  delete font.fallbacks
   writeJson(file, json)
   return { path: file, backup: created }
-}
-
-// Keeps the user's existing fallbacks after the Arabic ones so choosing a font
-// never drops a fallback the terminal already relied on.
-export function mergeFallbacks(existing: string[], incoming: string[]) {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const family of [...incoming, ...existing]) {
-    const key = family.trim().toLowerCase()
-    if (!key || seen.has(key)) continue
-    seen.add(key)
-    out.push(family)
-  }
-  return out
 }
 
 export function appendFontFamily(existing: string | undefined, family: string) {
@@ -248,8 +258,8 @@ export function applyArabicFont(family: string): ApplyOutcome {
 }
 
 function applyWindowsTerminalFont(family: string): ApplyOutcome {
-  const fallbacks = [family, ...RECOMMENDED_ARABIC_FONTS.filter((item) => item !== family)]
-  const written = writeWindowsTerminalFont({ fallbacks })
+  const face = buildFontFaceChain(readWindowsTerminalFont()?.face, family)
+  const written = writeWindowsTerminalFont({ face })
   return {
     ok: true,
     target: "Windows Terminal",

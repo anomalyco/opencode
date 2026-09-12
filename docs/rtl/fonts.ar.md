@@ -48,19 +48,20 @@
 لوحدها مع نسخة احتياطية. بعد كده اقفل التيرمنال وافتحه تاني. **ومش بتركّب أي خط
 على الجهاز.**
 
-الأمر ده بيعدّل `profiles.defaults.font.fallbacks`، يعني العربي هيستخدم الخط
-اللي اخترته والإنجليزي والكود هيفضلوا بالخط الـ monospaced.
+الأمر ده بيعدّل `profiles.defaults.font.face` لسلسلة خطوط مفصولة بفواصل (دي
+الطريقة الوحيدة اللي Windows Terminal بيفهم بيها الـ fallback)، يعني العربي
+هيستخدم الخط اللي اخترته والإنجليزي والكود هيفضلوا بالخط الـ monospaced.
 
 ### يدويًا
 
-أضف الخطوط العربية كـ fallbacks داخل `profiles.defaults.font`:
+أضف الخطوط العربية لسلسلة `face` داخل `profiles.defaults.font`:
 
 ```json
 {
   "profiles": {
     "defaults": {
       "font": {
-        "fallbacks": ["Cairo", "Noto Naskh Arabic", "Segoe UI", "Tahoma"]
+        "face": "Cascadia Mono, Cairo, Noto Naskh Arabic, Segoe UI, Tahoma"
       }
     }
   }

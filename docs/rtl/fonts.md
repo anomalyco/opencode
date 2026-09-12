@@ -48,19 +48,20 @@ on your machine (recommended Arabic fonts first), and writes your choice into
 the terminal's settings for you — keeping a timestamped backup. Then restart the
 terminal. It never installs fonts.
 
-Under the hood it sets `profiles.defaults.font.fallbacks`, so Arabic uses the
-chosen font while Latin and code stay monospaced.
+Under the hood it sets `profiles.defaults.font.face` to a comma-separated
+fallback chain (the only fallback mechanism Windows Terminal honors), so
+Arabic uses the chosen font while Latin and code stay monospaced.
 
 ### Manually
 
-Add Arabic fallbacks to `profiles.defaults.font`:
+Add the Arabic fonts to the `face` chain in `profiles.defaults.font`:
 
 ```json
 {
   "profiles": {
     "defaults": {
       "font": {
-        "fallbacks": ["Cairo", "Noto Naskh Arabic", "Segoe UI", "Tahoma"]
+        "face": "Cascadia Mono, Cairo, Noto Naskh Arabic, Segoe UI, Tahoma"
       }
     }
   }

@@ -1,5 +1,8 @@
-# Adds Arabic-capable font fallbacks to Windows Terminal so Arabic text renders
-# with proper joining, while keeping your monospaced font for Latin/code.
+# Adds an Arabic-capable font fallback chain to Windows Terminal so Arabic text
+# renders with proper joining, while keeping your monospaced font for Latin/code.
+#
+# Windows Terminal honors a comma-separated `face` chain ("Cascadia Mono, Cairo");
+# a `fallbacks` array is not a real setting and is ignored.
 #
 # The OpenCode bidi change handles ordering/alignment; this script only handles
 # font selection, which is owned by the terminal, not by the application.
@@ -72,10 +75,20 @@ if (-not $json.profiles.defaults.font) {
   $json.profiles.defaults | Add-Member -NotePropertyName font -NotePropertyValue ([pscustomobject]@{}) -Force
 }
 
-$json.profiles.defaults.font | Add-Member -NotePropertyName fallbacks -NotePropertyValue $Fallbacks -Force
-if ($Face) {
-  $json.profiles.defaults.font | Add-Member -NotePropertyName face -NotePropertyValue $Face -Force
+# Build the comma-separated face chain: requested main face first, then the
+# faces already configured (never reordered), then the Arabic fallbacks.
+$chain = @()
+if ($Face) { $chain += $Face }
+$existingFace = $json.profiles.defaults.font.face
+if ($existingFace) {
+  $chain += ("$existingFace" -split "," | ForEach-Object { $_.Trim().Trim("'").Trim('"') } | Where-Object { $_ })
 }
+if ($chain.Count -eq 0) { $chain += "Cascadia Mono" }
+foreach ($name in @($Fallbacks) | Where-Object { $_ }) {
+  if ($chain -notcontains $name) { $chain += $name }
+}
+$json.profiles.defaults.font | Add-Member -NotePropertyName face -NotePropertyValue ($chain -join ", ") -Force
+$json.profiles.defaults.font.PSObject.Properties.Remove("fallbacks")
 
 $output = $json | ConvertTo-Json -Depth 64
 $utf8 = New-Object System.Text.UTF8Encoding($false)
@@ -83,7 +96,6 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 Write-Host ""
 Write-Host "Updated profiles.defaults.font:"
-Write-Host ("  fallbacks = " + ($Fallbacks -join ", "))
-if ($Face) { Write-Host ("  face      = " + $Face) }
+Write-Host ("  face = " + ($chain -join ", "))
 Write-Host ""
 Write-Host "Restart Windows Terminal to apply. To undo, copy the backup over settings.json."
