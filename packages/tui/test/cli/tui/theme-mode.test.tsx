@@ -222,3 +222,46 @@ test.each(["dark", "light"] as const)(
     }
   },
 )
+
+test("keeps the terminal background until the configured theme resolves", async () => {
+  const discovery = Promise.withResolvers<Record<string, unknown>>()
+  const custom = {
+    version: 2,
+    dark: {
+      background: { default: "#123456" },
+      text: { default: "#eeeeee" },
+    },
+  } as const
+  let themes: ReturnType<typeof useThemes> | undefined
+
+  function Probe() {
+    const value = useThemes()
+    themes = value
+    return <text>{value.selected}</text>
+  }
+
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "custom", mode: "dark" } })}>
+        <ThemeProvider mode="dark" source={{ discover: () => discovery.promise }}>
+          <Probe />
+        </ThemeProvider>
+      </ConfigProvider>
+    ),
+    { width: 20, height: 2 },
+  )
+  app.renderer.start()
+
+  try {
+    await app.flush()
+    const cells = () => app.captureSpans().lines.flatMap((line) => line.spans)
+    expect(cells().every((span) => span.bg.toInts()[3] === 0)).toBeTrue()
+
+    discovery.resolve({ custom })
+    await wait(() => themes?.ready === true)
+    await app.flush()
+    expect(cells().some((span) => span.bg.equals(RGBA.fromHex("#123456")))).toBeTrue()
+  } finally {
+    app.renderer.destroy()
+  }
+})
