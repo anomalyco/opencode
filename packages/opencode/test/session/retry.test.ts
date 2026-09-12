@@ -263,6 +263,15 @@ describe("session.retry.retryable", () => {
     })
   })
 
+  test("retries unknown certificate verification errors", () => {
+    const request = MessageV2.fromError(new Error("unknown certificate verification error"), { providerID })
+
+    expect(SessionV1.APIError.isInstance(request)).toBe(true)
+    expect(SessionRetry.retryable(request, retryProvider)).toEqual({
+      message: "unknown certificate verification error",
+    })
+  })
+
   test("does not retry context overflow errors", () => {
     const error = new SessionV1.ContextOverflowError({
       message: "Input exceeds context window of this model",
