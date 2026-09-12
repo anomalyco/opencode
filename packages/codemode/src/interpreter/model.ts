@@ -1,7 +1,8 @@
-import type { BlockStatement, Expression, Node, Pattern } from "acorn"
+import type { Node } from "acorn"
+import type { ErrorType } from "./intrinsics.js"
 import type { Effect } from "effect"
 import type { DiagnosticKind } from "../codemode.js"
-import type { SafeObject } from "../data.js"
+import type { ProgramObject } from "./objects.js"
 import type { Values } from "../values.js"
 
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
@@ -20,18 +21,8 @@ export type StatementResult =
   | { kind: "continue"; label?: string }
 
 export type MemberReference = {
-  target: SafeObject | Array<unknown> | Values.RegExp | Values.URL
+  target: ProgramObject | Values.RegExp | Values.URL
   key: PropertyKey
-}
-
-export class CodeModeFunction {
-  constructor(
-    readonly parameters: ReadonlyArray<Pattern>,
-    readonly body: BlockStatement | Expression,
-    readonly capturedScopes: ReadonlyArray<Map<string, Binding>>,
-    readonly async: boolean,
-    readonly generator: boolean,
-  ) {}
 }
 
 export type GeneratorRequestKind = "next" | "return" | "throw"
@@ -90,24 +81,28 @@ export const OptionalShortCircuit: unique symbol = Symbol("codemode.optional-sho
 
 export class InterpreterRuntimeError extends Error {
   readonly node?: AstNode
-  errorName = "Error"
 
   constructor(
     message: string,
     node?: AstNode,
     readonly kind: DiagnosticKind = "ExecutionFailure",
     readonly suggestions?: ReadonlyArray<string>,
+    /** The JS error class a program sees when it catches this failure. */
+    readonly type: ErrorType = "TypeError",
   ) {
     super(message)
     this.name = "InterpreterRuntimeError"
     if (node) this.node = node
   }
-
-  as(errorName: string): this {
-    this.errorName = errorName
-    return this
-  }
 }
+
+const failure = (type: ErrorType) => (message: string, node?: AstNode) =>
+  new InterpreterRuntimeError(message, node, "ExecutionFailure", undefined, type)
+
+export const rangeError = failure("RangeError")
+export const referenceError = failure("ReferenceError")
+export const syntaxError = failure("SyntaxError")
+export const uriError = failure("URIError")
 
 // Orient the agent rather than enumerate JavaScript; interpreter-support.md is the full matrix.
 export const supportedSyntaxMessage =
@@ -119,6 +114,7 @@ export const unsupportedSyntax = (kind: string, node: AstNode): InterpreterRunti
     node,
     "UnsupportedSyntax",
     [supportedSyntaxMessage],
+    "SyntaxError",
   )
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>

@@ -1,0 +1,248 @@
+built-ins/Array/prototype/concat/create-ctor-non-object.js  # a.concat() throws a TypeError exception Expected a TypeError to be thrown but no exception was throw
+built-ins/Array/prototype/copyWithin/coerced-values-end.js  # Array.copyWithin expects end to be a number.
+built-ins/Array/prototype/copyWithin/coerced-values-start-change-target.js  # Array.copyWithin expects start to be a number.
+built-ins/Array/prototype/copyWithin/coerced-values-start.js  # Array.copyWithin expects start to be a number.
+built-ins/Array/prototype/copyWithin/coerced-values-target.js  # Array.copyWithin expects target index to be a number.
+built-ins/Array/prototype/copyWithin/fill-holes.js  # .hasOwnProperty is not a function.
+built-ins/Array/prototype/copyWithin/return-abrupt-from-end.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/copyWithin/return-abrupt-from-start.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/copyWithin/return-abrupt-from-target.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/entries/iteration-mutable.js  # .next is not a function.
+built-ins/Array/prototype/entries/iteration.js  # .next is not a function.
+built-ins/Array/prototype/every/15.4.4.16-7-7.js  # .hasOwnProperty is not a function.
+built-ins/Array/prototype/every/15.4.4.16-8-13.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/prototype/fill/coerced-indexes.js  # Array.fill expects start to be a number.
+built-ins/Array/prototype/fill/return-abrupt-from-end.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/fill/return-abrupt-from-start.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/filter/15.4.4.20-10-4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/prototype/filter/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/flat/non-numeric-depth-should-not-throw.js  # Array.flat expects depth to be a number.
+built-ins/Array/prototype/forEach/15.4.4.18-8-12.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/prototype/includes/length-zero-returns-false.js  # Array.includes expects a value and optional start index.
+built-ins/Array/prototype/includes/no-arg.js  # Array.includes expects a value and optional start index.
+built-ins/Array/prototype/includes/return-abrupt-tointeger-fromindex.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/includes/tointeger-fromindex.js  # Array.includes expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-1.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-15.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-16.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-17.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-18.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-19.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-20.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-21.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-22.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-23.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-24.js  # toStringAccessed
+built-ins/Array/prototype/indexOf/15.4.4.14-5-3.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-5-5.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-7.js  # Array assignment result contains a circular value.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-8.js  # .toString is not a function.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-a-3.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-a-6.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/length-zero-returns-minus-one.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/join/S15.4.4.5_A1.2_T2.js  # Array.join expects zero arguments or one string separator.
+built-ins/Array/prototype/join/S15.4.4.5_A3.1_T1.js  # Array.join expects zero arguments or one string separator.
+built-ins/Array/prototype/join/S15.4.4.5_A3.1_T2.js  # Array.join expects zero arguments or one string separator.
+built-ins/Array/prototype/join/S15.4.4.5_A3.2_T2.js  # x.join() must return "*" Expected SameValue(«"[object Object]"», «"*"») to be true
+built-ins/Array/prototype/keys/iteration-mutable.js  # .next is not a function.
+built-ins/Array/prototype/keys/iteration.js  # .next is not a function.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-1.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-15.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-16.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-17.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-18.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-19.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-20.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-21.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-22.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-23.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-24.js  # toStringAccessed
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-3.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-4.js  # a.lastIndexOf(2,undefined) Expected SameValue(«1», «-1») to be true
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-5.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-7.js  # Array assignment result contains a circular value.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-8.js  # .toString is not a function.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-3.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-6.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/length-zero-returns-minus-one.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/map/15.4.4.19-8-7.js  # .toString is not a function.
+built-ins/Array/prototype/map/15.4.4.19-9-4.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/prototype/map/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/push/S15.4.4.7_A3.js  # The value of x[4294967295] is expected to be "x" Expected SameValue(«undefined», «"x"») to be true
+built-ins/Array/prototype/reduce/15.4.4.21-10-8.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/prototype/reduce/15.4.4.21-9-7.js  # .hasOwnProperty is not a function.
+built-ins/Array/prototype/reduceRight/15.4.4.22-10-8.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-7.js  # .hasOwnProperty is not a function.
+built-ins/Array/prototype/slice/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/some/15.4.4.17-8-13.js  # Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.
+built-ins/Array/prototype/sort/S15.4.4.11_A2.1_T3.js  # #1: Check ToString operator
+built-ins/Array/prototype/sort/S15.4.4.11_A2.2_T3.js  # #1: Check ToString operator
+built-ins/Array/prototype/sort/bug_596_1.js  # #1: [object, object].sort(); counter < 2. Actual: 0
+built-ins/Array/prototype/sort/bug_596_2.js  # .hasOwnProperty is not a function.
+built-ins/Array/prototype/splice/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/toLocaleString/S15.4.4.3_A1_T1.js  # .toLocaleString is not a function.
+built-ins/Array/prototype/toString/S15.4.4.2_A1_T1.js  # .toString is not a function.
+built-ins/Array/prototype/toString/S15.4.4.2_A1_T2.js  # .toString is not a function.
+built-ins/Array/prototype/toString/S15.4.4.2_A1_T3.js  # .toString is not a function.
+built-ins/Array/prototype/toString/S15.4.4.2_A1_T4.js  # .toString is not a function.
+built-ins/Array/prototype/values/iteration-mutable.js  # .next is not a function.
+built-ins/Array/prototype/values/iteration.js  # .next is not a function.
+language/statements/async-function/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/statements/async-generator/dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/async-generator/dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/statements/async-generator/return-undefined-implicit-and-explicit.js  # Actual ["tick 1", "tick 2", "g1 ret", "g2 ret", "g3 ret", "g4 ret"] and expected ["tick 1", "g1 ret"
+language/statements/for-await-of/async-func-decl-dstr-array-elem-init-in.js  # Failed to parse TypeScript: '…' expected.
+language/statements/for-await-of/async-func-decl-dstr-obj-empty-bool.js  # TypeError: Object destructuring requires a data object or array value, received a boolean.
+language/statements/for-await-of/async-func-decl-dstr-obj-empty-num.js  # TypeError: Object destructuring requires a data object or array value, received a number.
+language/statements/for-await-of/async-func-decl-dstr-obj-empty-string.js  # TypeError: Object destructuring requires a data object or array value, received a string.
+language/statements/for-await-of/async-func-decl-dstr-obj-rest-number.js  # TypeError: Object destructuring requires a data object or array value, received a number.
+language/statements/for-await-of/async-func-decl-dstr-obj-rest-str-val.js  # TypeError: Object destructuring requires a data object or array value, received a string.
+language/statements/for-await-of/async-gen-decl-dstr-array-elem-init-in.js  # Failed to parse TypeScript: '…' expected.
+language/statements/for-await-of/async-gen-decl-dstr-array-elem-iter-rtrn-close-null.js  # "Promise incorrectly fulfilled."
+language/statements/for-await-of/async-gen-decl-dstr-obj-empty-bool.js  # TypeError: Object destructuring requires a data object or array value, received a boolean.
+language/statements/for-await-of/async-gen-decl-dstr-obj-empty-num.js  # TypeError: Object destructuring requires a data object or array value, received a number.
+language/statements/for-await-of/async-gen-decl-dstr-obj-empty-string.js  # TypeError: Object destructuring requires a data object or array value, received a string.
+language/statements/for-await-of/async-gen-decl-dstr-obj-rest-number.js  # TypeError: Object destructuring requires a data object or array value, received a number.
+language/statements/for-await-of/async-gen-decl-dstr-obj-rest-str-val.js  # TypeError: Object destructuring requires a data object or array value, received a string.
+language/statements/for-in/12.6.4-1.js  # .hasOwnProperty is not a function.
+language/statements/for-in/head-lhs-member.js  # Unsupported for...in binding.
+language/statements/for-of/Array.prototype.Symbol.iterator.js  # The called value is not a function.
+language/statements/for-of/dstr/array-elem-init-in.js  # Failed to parse TypeScript: '…' expected.
+language/statements/for-of/dstr/array-elem-iter-rtrn-close-err.js  # Iterator next must be a function.
+language/statements/for-of/dstr/array-elem-iter-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/for-of/dstr/array-elem-iter-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
+language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/for-of/dstr/array-elem-trlg-iter-list-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
+language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/for-of/dstr/array-elem-trlg-iter-rest-thrw-close-err.js  # Expected SameValue(«11», «1») to be true
+language/statements/for-of/dstr/array-rest-iter-rtrn-close-err.js  # Iterator next must be a function.
+language/statements/for-of/dstr/array-rest-iter-rtrn-close-null.js  # Iterator next must be a function.
+language/statements/for-of/dstr/array-rest-iter-thrw-close-err.js  # Expected SameValue(«11», «0») to be true
+language/statements/for-of/dstr/array-rest-lref-err.js  # Expected SameValue(«1», «0») to be true
+language/statements/for-of/dstr/obj-empty-bool.js  # Object destructuring requires a data object or array value, received a boolean.
+language/statements/for-of/dstr/obj-empty-num.js  # Object destructuring requires a data object or array value, received a number.
+language/statements/for-of/dstr/obj-empty-string.js  # Object destructuring requires a data object or array value, received a string.
+language/statements/for-of/dstr/obj-rest-number.js  # Object destructuring requires a data object or array value, received a number.
+language/statements/for-of/dstr/obj-rest-str-val.js  # Object destructuring requires a data object or array value, received a string.
+language/statements/for-of/throw-from-catch.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+language/statements/for-of/throw-from-finally.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+language/statements/for-of/throw.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+language/statements/function/13.2-19-b-3gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/function/13.2-2-s.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/function/S13.2.1_A5_T1.js  # .toString is not a function.
+language/statements/function/S13.2_A7_T1.js  # The called value is not a function.
+language/statements/function/S13_A3_T1.js  # Unknown identifier '…'.
+language/statements/function/S13_A6_T1.js  # Identifier '…' has already been declared.
+language/statements/function/S14_A2.js  # Unknown identifier '…'.
+language/statements/function/S14_A5_T1.js  # Identifier '…' has already been declared.
+language/statements/function/S14_A5_T2.js  # Identifier '…' has already been declared.
+language/statements/function/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/statements/generators/dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/generators/dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-ary-init-iter-get-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-ary-ptrn-elem-ary-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-ary-ptrn-elem-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-ary-ptrn-elem-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-ary-ptrn-elem-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-ary-ptrn-elem-obj-val-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-ary-ptrn-elem-obj-val-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-ary-ptrn-elision-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-ary-ptrn-rest-id-elision-next-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-ary-ptrn-rest-id-iter-step-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/dflt-obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-init-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-init-undefined.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-ptrn-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-ptrn-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-ptrn-list-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-ptrn-prop-ary-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-ptrn-prop-eval-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-ptrn-prop-id-init-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/has-instance.js  # The right-hand side of '…' must be a supported constructor: Error (or a specific error type like Typ
+language/statements/generators/rest-params-trailing-comma-early-error.js  # expected SyntaxError but the program ran
+language/statements/labeled/value-await-non-module-escaped.js  # Failed to parse TypeScript: Keywords cannot contain escape characters.
+language/statements/labeled/value-await-non-module.js  # Failed to parse TypeScript: Expression expected.
+language/statements/return/S12.9_A1_T1.js  # expected SyntaxError but the program ran
+language/statements/return/S12.9_A1_T10.js  # expected SyntaxError but the program ran
+language/statements/return/S12.9_A1_T2.js  # expected SyntaxError but the program ran
+language/statements/return/S12.9_A1_T3.js  # expected SyntaxError but the program ran
+language/statements/return/S12.9_A1_T4.js  # expected SyntaxError but the program ran
+language/statements/return/S12.9_A1_T5.js  # expected SyntaxError but the program ran
+language/statements/return/S12.9_A1_T6.js  # expected SyntaxError but the program ran
+language/statements/return/S12.9_A1_T7.js  # expected SyntaxError but the program ran
+language/statements/return/S12.9_A1_T8.js  # expected SyntaxError but the program ran
+language/statements/return/S12.9_A1_T9.js  # expected SyntaxError but the program ran
+language/statements/switch/S12.11_A1_T4.js  # Switch discriminants must be data values.
+language/statements/switch/scope-lex-open-dflt.js  # Switch discriminants must be data values.
+language/statements/try/S12.14_A19_T1.js  # .toString is not a function.
+language/statements/try/S12.14_A19_T2.js  # .toString is not a function.

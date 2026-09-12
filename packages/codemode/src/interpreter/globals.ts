@@ -10,10 +10,11 @@ import { objectGlobal } from "../stdlib/object.js"
 import { regexpGlobal } from "../stdlib/regexp.js"
 import { stringGlobal } from "../stdlib/string.js"
 import { uriGlobal, urlGlobal, urlSearchParamsGlobal } from "../stdlib/url.js"
-import { coercion, errorConstructors } from "../stdlib/value.js"
+import { coercion } from "../stdlib/value.js"
 import { atobGlobal, btoaGlobal, cryptoGlobal } from "../stdlib/web.js"
 import { ToolReference } from "../tool-runtime.js"
 import { errorGlobal } from "./errors.js"
+import { errorTypes } from "./intrinsics.js"
 import { HostFunction } from "./host.js"
 import { AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "./model.js"
 import { promiseGlobal, type PromiseRuntime } from "./promises.js"
@@ -35,7 +36,7 @@ const symbolGlobal = new HostFunction({
       throw new InterpreterRuntimeError(
         "Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available.",
         node,
-      ).as("TypeError")
+      )
     }),
   callback: false,
   members: { asyncIterator: AsyncIteratorSymbol, iterator: IteratorSymbol },
@@ -75,5 +76,5 @@ export const globals = <R>(host: Host<R>): ReadonlyArray<readonly [string, unkno
   ["atob", atobGlobal],
   ["btoa", btoaGlobal],
   ["crypto", cryptoGlobal],
-  ...[...errorConstructors].map((name) => [name, errorGlobal(name, host.runner)] as const),
+  ...errorTypes.map((type) => [type, errorGlobal(type, host.runner)] as const),
 ]

@@ -27,6 +27,7 @@ import {
 import { Agent } from "@opencode/schema/agent"
 import { Skill } from "@opencode/schema/skill"
 import { Model } from "@opencode/schema/model"
+import { Permission } from "@opencode/schema/permission"
 import { Location } from "@opencode/schema/location"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { EventLog } from "@opencode/schema/event-log"
@@ -175,6 +176,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           model: Model.Ref.pipe(Schema.optional),
           location: Location.Ref.pipe(Schema.optional),
           metadata: Session.Metadata.pipe(Schema.optional),
+          permissions: Permission.Ruleset.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
       }).annotateMerge(

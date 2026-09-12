@@ -3,6 +3,7 @@ export * as Session from "./session.js"
 import { DateTime, Effect, Fiber, Scope } from "effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
+import type { Permission } from "@opencode/schema/permission"
 import { Event } from "@opencode/schema/event"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "../bus.js"
@@ -71,6 +72,13 @@ export const make = Effect.fn("Session.make")(function* () {
   const rename = Effect.fn("Session.rename")(function* (sessionID: SessionSchema.ID, input: { title: string }) {
     yield* get(sessionID)
     yield* bus.publish(SessionEvent.Renamed, { sessionID, title: input.title })
+  })
+  const setPermissions = Effect.fn("Session.setPermissions")(function* (
+    sessionID: SessionSchema.ID,
+    input: { permissions: Permission.Ruleset },
+  ) {
+    yield* get(sessionID)
+    yield* bus.publish(SessionEvent.PermissionsUpdated, { sessionID, permissions: input.permissions })
   })
   const switchAgent = Effect.fn("Session.switchAgent")(function* (
     sessionID: SessionSchema.ID,
@@ -334,6 +342,7 @@ export const make = Effect.fn("Session.make")(function* () {
     message,
     view,
     rename,
+    setPermissions,
     switchAgent,
     switchModel,
     inbox,
@@ -356,6 +365,7 @@ export const make = Effect.fn("Session.make")(function* () {
     const message = operations.message.bind(undefined, sessionID)
     const view = operations.view.bind(undefined, sessionID)
     const rename = operations.rename.bind(undefined, sessionID)
+    const setPermissions = operations.setPermissions.bind(undefined, sessionID)
     const switchAgent = operations.switchAgent.bind(undefined, sessionID)
     const switchModel = operations.switchModel.bind(undefined, sessionID)
     const inbox = operations.inbox.bind(undefined, sessionID)
@@ -381,6 +391,7 @@ export const make = Effect.fn("Session.make")(function* () {
       message,
       view,
       rename,
+      setPermissions,
       switchAgent,
       switchModel,
       inbox,

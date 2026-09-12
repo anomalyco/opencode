@@ -427,17 +427,6 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
       <div class="py-2">
         <TimelineSeparator label={i18n.t("ui.messagePart.compaction.started")} />
       </div>
-      <Show when={props.message.status === "running"}>
-        <div role="status" class="py-2">
-          <BasicTool
-            icon="archive"
-            trigger={{ title: i18n.t("ui.messagePart.compaction.running") }}
-            status="running"
-            locked
-            hideDetails
-          />
-        </div>
-      </Show>
       <Show when={summary().trim()}>
         <div data-component="text-part" data-timeline-part-id={props.message.id}>
           <div data-slot="text-part-body">
@@ -447,6 +436,17 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
               streaming={props.message.status === "running"}
             />
           </div>
+        </div>
+      </Show>
+      <Show when={props.message.status === "running"}>
+        <div role="status" class="py-2">
+          <BasicTool
+            icon="archive"
+            trigger={{ title: i18n.t("ui.messagePart.compaction.running") }}
+            status="running"
+            locked
+            hideDetails
+          />
         </div>
       </Show>
       <Show when={props.message.status !== "running"}>

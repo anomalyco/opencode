@@ -126,15 +126,9 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
       if (command) {
         clearSubmission(input, submission)
-        // Commands always steer: the server applies a command's configured
-        // agent and model immediately at admission, so queueing one would
-        // reconfigure the turn it is supposed to wait behind.
-        void sendCommand(
-          session,
-          { ...value, delivery: "steer" },
-          command,
-          input.adapter.controls().model.selection.trackSessionCommit,
-        ).catch((error) => failSubmission(input, session, "command", error, restore, value.id))
+        void sendCommand(session, value, command, input.adapter.controls().model.selection.trackSessionCommit).catch(
+          (error) => failSubmission(input, session, "command", error, restore, value.id),
+        )
         return
       }
     } finally {
@@ -326,7 +320,8 @@ async function sendCommand(
   track?: ModelSelection["trackSessionCommit"],
 ) {
   const request = await buildSubmissionRequest(session, value)
-  await applySelection(session, value.selection, track)
+  // Like queued prompts, queued commands must not apply the composer's selection to active work.
+  if (value.delivery === "steer") await applySelection(session, value.selection, track)
   await session.api.command({
     sessionID: session.id,
     command: command.command,

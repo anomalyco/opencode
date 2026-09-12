@@ -17,8 +17,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
-import { AsyncIteratorSymbol, IteratorSymbol } from "../src/interpreter/model.js"
-import { objectAssign } from "../src/stdlib/object.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
@@ -770,13 +768,18 @@ describe("stdlib integration", () => {
       ],
     ])
     expect(await value(`const match = /a/.exec("ba"); return [Object.values(match), Object.entries(match)]`)).toEqual([
-      ["a", 1],
+      ["a", 1, "ba"],
       [
         ["0", "a"],
         ["index", 1],
+        ["input", "ba"],
       ],
     ])
-    expect(await value(`return Object.keys(Object.values({ match: /a/.exec("ba") })[0])`)).toEqual(["0", "index"])
+    expect(await value(`return Object.keys(Object.values({ match: /a/.exec("ba") })[0])`)).toEqual([
+      "0",
+      "index",
+      "input",
+    ])
   })
 
   test("Object.fromEntries accepts every supported entry collection", async () => {
@@ -849,86 +852,6 @@ describe("stdlib integration", () => {
     expect(await value(`try { Object.assign(null, { a: 1 }); return false } catch { return true }`)).toBe(true)
   })
 
-  test("Object.assign ignores non-enumerable supported symbols without reading them", () => {
-    const target = {}
-    const reads: Array<boolean> = []
-    const source = Object.defineProperty({}, IteratorSymbol, {
-      get() {
-        reads.push(true)
-        return target
-      },
-    })
-    expect(objectAssign([target, source], { type: "CallExpression", start: 0, end: 0 })).toBe(target)
-    expect(reads).toEqual([])
-    expect(Object.hasOwn(target, IteratorSymbol)).toBe(false)
-  })
-
-  test("Object.assign ignores nested non-enumerable supported symbols during cycle checks", () => {
-    const target = {}
-    const reads: Array<boolean> = []
-    const nested = Object.defineProperty({}, IteratorSymbol, {
-      get() {
-        reads.push(true)
-        return target
-      },
-    })
-    expect(objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toBe(target)
-    expect(reads).toEqual([])
-    expect(target).toEqual({ nested })
-  })
-
-  test("Object.assign rejects cycles through supported symbols on nested arrays", () => {
-    const target = {}
-    const nested = Object.defineProperty([], IteratorSymbol, { enumerable: true, value: target })
-    expect(() => objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toThrow(
-      "Object.assign result contains a circular value.",
-    )
-    expect(Object.hasOwn(target, "nested")).toBe(false)
-  })
-
-  test("Object.assign cycle checks traverse sparse keys lazily", () => {
-    const target = {}
-    const reads: Array<boolean> = []
-    const nested = Object.defineProperties([], {
-      4294967294: { enumerable: true, value: target },
-      later: {
-        enumerable: true,
-        get() {
-          reads.push(true)
-          return null
-        },
-      },
-    })
-    expect(() => objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toThrow(
-      "Object.assign result contains a circular value.",
-    )
-    expect(reads).toEqual([])
-  })
-
-  test("Object.assign stops after a supported symbol write fails", () => {
-    const previous = () => ({ done: true })
-    const target = Object.defineProperty({}, IteratorSymbol, { value: previous })
-    const reads: Array<boolean> = []
-    const source = Object.defineProperties(
-      {},
-      {
-        [IteratorSymbol]: { enumerable: true, value: () => ({ done: false }) },
-        [AsyncIteratorSymbol]: {
-          enumerable: true,
-          get() {
-            reads.push(true)
-            return () => ({ done: true })
-          },
-        },
-      },
-    )
-    expect(() => objectAssign([target, source], { type: "CallExpression", start: 0, end: 0 })).toThrow(
-      "Object.assign could not assign property",
-    )
-    expect(Reflect.get(target, IteratorSymbol)).toBe(previous)
-    expect(reads).toEqual([])
-  })
-
   test("Object.assign rejects direct and nested cycles", async () => {
     expect(
       await value(`
@@ -998,27 +921,6 @@ describe("stdlib integration", () => {
         return [result === target, result.left === shared, result.left === result.right, shared.count]
       `),
     ).toEqual([true, true, true, 2])
-  })
-
-  test("Object.assign traverses shared aliases once", () => {
-    const reads: Array<boolean> = []
-    const shared = Object.defineProperty({}, "value", {
-      enumerable: true,
-      get() {
-        reads.push(true)
-        return 1
-      },
-    })
-    const target = {}
-    expect(
-      objectAssign([target, { left: shared, right: shared }], {
-        type: "CallExpression",
-        start: 0,
-        end: 0,
-      }),
-    ).toBe(target)
-    expect(target).toEqual({ left: shared, right: shared })
-    expect(reads).toEqual([true])
   })
 
   test("assignment resolves and reads its left side before evaluating the right side", async () => {
@@ -1199,7 +1101,7 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     const diagnostic = await error(`return Array.from(Promise.resolve([1]))`)
     expect(diagnostic.kind).toBe("InvalidDataValue")
     expect(diagnostic.message).toContain("await")
-    expect((await error(`return Array.from(() => 1)`)).kind).toBe("InvalidDataValue")
+    expect(await value(`return Array.from((a, b) => 1)`)).toEqual([null, null])
   })
 
   test("regexes stay callable through Object.values", async () => {

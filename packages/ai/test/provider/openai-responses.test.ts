@@ -90,7 +90,11 @@ const classifyingChannelDriver = (message: string): WebSocketChannelDriver => {
   }
 }
 
-const continuationDriver = (request: Readonly<Record<string, unknown>>, base = baseChannelDriver) => {
+const continuationDriver = (
+  request: Readonly<Record<string, unknown>>,
+  base = baseChannelDriver,
+  continuation?: OpenResponsesContinuation.Shape,
+) => {
   const message = ProviderShared.encodeJson(request)
   return OpenResponsesContinuation.driver({
     id: "openai-responses",
@@ -98,6 +102,7 @@ const continuationDriver = (request: Readonly<Record<string, unknown>>, base = b
     request,
     message,
     base: base(message),
+    continuation,
   })
 }
 
@@ -921,6 +926,58 @@ describe("OpenAI Responses route", () => {
         type: "provider-failure",
         error: { reason: { _tag: "InvalidRequest", classification: "context-overflow" } },
       })
+
+      // A retryable failure stays one: the runner retries it, and the transport has already dropped the
+      // checkpoint, so that retry is a full send. xAI reports every rejection this way.
+      const internal = ProviderShared.encodeJson({
+        type: "error",
+        error: { type: "api_error", message: "gRPC error: Response with id=resp_1 not found" },
+      })
+      expect(yield* second.observe(yield* second.create(saved), internal)).toMatchObject({
+        type: "provider-failure",
+        error: { reason: { _tag: "ProviderInternal" } },
+      })
+    }),
+  )
+
+  it.effect("shapes the incremental send with the route continuation", () =>
+    Effect.gen(function* () {
+      const firstRequest = {
+        type: "response.create",
+        model: "grok-4.6",
+        store: true,
+        instructions: "You are terse.",
+        input: [{ role: "user", content: [{ type: "input_text", text: "First" }] }],
+      }
+      const secondRequest = {
+        ...firstRequest,
+        input: [...firstRequest.input, { role: "user", content: [{ type: "input_text", text: "Second" }] }],
+      }
+      const saved = checkpoint(
+        yield* continuationDriver(firstRequest).observe(
+          yield* continuationDriver(firstRequest).create(undefined),
+          ProviderShared.encodeJson({ type: "response.completed", response: { id: "resp_1" } }),
+        ),
+      )
+
+      const trimmed = yield* continuationDriver(
+        secondRequest,
+        baseChannelDriver,
+        ({ instructions: _, ...rest }) => rest,
+      ).create(saved)
+      expect(trimmed.mode).toBe("incremental")
+      expect(JSON.parse(trimmed.message)).toEqual({
+        type: "response.create",
+        model: "grok-4.6",
+        store: true,
+        previous_response_id: "resp_1",
+        input: [{ role: "user", content: [{ type: "input_text", text: "Second" }] }],
+      })
+
+      // Declining the continuation sends the step in full and never sends a previous_response_id.
+      const declined = yield* continuationDriver(secondRequest, baseChannelDriver, () => undefined).create(saved)
+      expect(declined.mode).toBe("full")
+      expect(JSON.parse(declined.message)).toEqual(secondRequest)
     }),
   )
 

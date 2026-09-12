@@ -173,7 +173,6 @@ const appBindingCommands = [
   "app.toggle.file_context",
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
-  "permission.mode",
 ] as const
 
 export type TuiInput = {
@@ -821,7 +820,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Switch model",
         suggested: true,
         category: "Agent",
-        slash: { name: "models", aliases: ["mo"] },
+        slash: { name: "models" },
         run: () => {
           dialog.replace(() => <DialogModel />)
         },
@@ -902,7 +901,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Switch model variant",
         category: "Agent",
         palette: local.model.variant.list().length === 0 ? undefined : (true as const),
-        slash: { name: "variants" },
+        slash: { name: "variants", aliases: ["thinking"] },
         run: () => {
           if (local.model.variant.list().length === 0) {
             return toast.show({
@@ -1165,16 +1164,6 @@ function App(props: { pair?: DialogPairCredentials }) {
               draft.prompt = { ...draft.prompt, paste: pasteSummaryEnabled() ? "full" : "compact" }
             })
             .catch(toast.error)
-          dialog.clear()
-        },
-      },
-      {
-        name: "permission.mode",
-        title:
-          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
-        category: "System",
-        run: () => {
-          local.permission.toggle()
           dialog.clear()
         },
       },
