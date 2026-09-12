@@ -304,3 +304,6 @@ export type Info =
   | Assistant
   | Compaction
 export type Type = Info["type"]
+
+export const InfoEncoded = Schema.toEncoded(Info).annotate({ identifier: "Session.Message.Info.Encoded" })
+export type InfoEncoded = typeof InfoEncoded.Type
