@@ -115,6 +115,25 @@ const convert = (content: string, contentType: string, format: Format) => {
   return content
 }
 
+export const charsetFromContentType = (contentType: string): string | undefined => {
+  const match = contentType.match(/charset\s*=\s*["']?([^;"'\s]+)/i)
+  return match?.[1]
+}
+
+export const charsetFromMeta = (bytes: Uint8Array): string | undefined => {
+  const head = new TextDecoder("windows-1252").decode(bytes.subarray(0, 4096))
+  return head.match(/<meta\b[^>]*charset\s*=\s*["']?\s*([^"'\s;>]+)/i)?.[1]
+}
+
+export const decodeBody = (body: Uint8Array, contentType: string): string => {
+  const charset = charsetFromContentType(contentType) ?? charsetFromMeta(body) ?? "utf-8"
+  try {
+    return new TextDecoder(charset as Bun.Encoding).decode(body)
+  } catch {
+    return new TextDecoder().decode(body)
+  }
+}
+
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
@@ -162,7 +181,7 @@ const layer = Layer.effectDiscard(
                   orElse: () => Effect.fail(new Error("Request timed out")),
                 }),
               )
-              const content = new TextDecoder().decode(body)
+              const content = decodeBody(body, contentType)
               const output = yield* Effect.try({
                 try: () => convert(content, contentType, input.format),
                 catch: (error) => error,
