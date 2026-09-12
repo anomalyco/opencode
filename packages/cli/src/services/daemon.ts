@@ -117,9 +117,38 @@ export const layer = Layer.effect(
       const entrypoint = compiled ? undefined : process.argv[1]
       if (!compiled && entrypoint === undefined)
         return yield* Effect.fail(new Error("Failed to resolve CLI entrypoint"))
+
+      const args = [...(entrypoint ? [entrypoint] : []), "serve", "--register"]
+
+      // `detached` frees the serve from the client's lifetime but not its
+      // cgroup: a client under memory/pids limits still starves the shared
+      // server until the health probe fails and it is recycled
+      // (anomalyco/opencode#48588). On Linux, hand the spawn to the user
+      // manager so the serve lands in its own scope — a sibling of the
+      // client's cgroup — instead of inheriting its limits.
+      const runtime = process.env.XDG_RUNTIME_DIR
+      const scoped =
+        process.platform === "linux" &&
+        runtime !== undefined &&
+        Bun.which("systemd-run") !== null &&
+        (yield* fs.exists(path.join(runtime, "bus")))
+      const command = scoped
+        ? [
+            "systemd-run",
+            "--user",
+            "--scope",
+            "--quiet",
+            "--collect",
+            "--description=opencode serve",
+            "--",
+            process.execPath,
+            ...args,
+          ]
+        : [process.execPath, ...args]
+
       yield* Effect.try({
         try: () => {
-          spawn(process.execPath, [...(entrypoint ? [entrypoint] : []), "serve", "--register"], {
+          spawn(command[0], command.slice(1), {
             detached: true,
             stdio: "ignore",
           }).unref()
