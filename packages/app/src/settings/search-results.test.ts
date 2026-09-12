@@ -73,6 +73,7 @@ describe("settings search index", () => {
         .map((item) => item.page),
     ).toEqual(["Desktop notifications", "Sound effects"])
     expect(rankSettings("terminal placement", items, root)[0].page).toBe("Preferences / General")
+    expect(rankSettings("vertical tabs", items, root)[0].page).toBe("Preferences / General")
     expect(items.some((item) => item.view.target === "settings-project-startup")).toBe(false)
   })
 
