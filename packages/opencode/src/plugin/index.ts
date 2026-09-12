@@ -288,6 +288,50 @@ const layer = Layer.effect(
     >(name: Name, input: Input, output: Output) {
       if (!name) return output
       const s = yield* InstanceState.get(state)
+
+      // `session.stopping` runs every listener sequentially in registration
+      // order over one shared output, with fail-closed merge semantics:
+      //
+      // - A listener opts the loop into continuing by setting `stop = false`
+      //   plus a non-empty `message`. The default `stop` is `true` (stop).
+      // - `stop` is sticky-true: once a listener vetoes (`stop` moves from
+      //   false -> true), a later `stop = false` cannot override it.
+      // - Listener errors are isolated: one listener throwing or rejecting
+      //   does not prevent the remaining listeners from running, and any
+      //   error forces the final output to `stop: true, message: undefined`.
+      if (name === "session.stopping") {
+        let failed = false
+        let vetoed = false
+        const stoppingInput = input as { sessionID: string }
+        const stoppingOutput = output as { stop: boolean; message?: string }
+        for (const [index, hook] of s.hooks.entries()) {
+          const fn = hook["session.stopping"]
+          if (!fn) continue
+          const before = stoppingOutput.stop
+          yield* Effect.tryPromise(() => fn(stoppingInput, stoppingOutput)).pipe(
+            Effect.catch((error) => {
+              failed = true
+              return Effect.logError("session.stopping hook error; failing closed", {
+                "session.id": stoppingInput.sessionID,
+                hook: name,
+                listener: index,
+                error: errorMessage(error),
+              })
+            }),
+          )
+          if (!before && stoppingOutput.stop) {
+            vetoed = true
+          }
+        }
+        // stop is sticky-true: once vetoed (or on any error) neither `stop`
+        // nor `message` written by a later listener can stay set.
+        if (failed || vetoed) {
+          stoppingOutput.stop = true
+          stoppingOutput.message = undefined
+        }
+        return output
+      }
+
       for (const hook of s.hooks) {
         const fn = hook[name] as any
         if (!fn) continue

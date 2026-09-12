@@ -81,6 +81,22 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+/**
+ * Conservative core-side re-entry cap for `session.stopping` continuations.
+ * Defense-in-depth only: client plugin policy is authoritative. On exhaustion the
+ * hook fails closed (`stop: true`, no continuation) with telemetry, so the
+ * fork can never loop unboundedly.
+ */
+const SESSION_STOPPING_REENTRY_CAP = 3
+
+interface SessionStoppingState {
+  /** Continuations consumed on this session since the last clean stop. */
+  continuations: number
+  /** Set while a continuation is being evaluated; prevents double-consume. */
+  inFlight: boolean
+}
+const sessionStopping = new Map<SessionID, SessionStoppingState>()
+
 function mcpResourceBase64Size(value: string) {
   const trimmed = value.replace(/\s/g, "")
   const padding = trimmed.endsWith("==") ? 2 : trimmed.endsWith("=") ? 1 : 0
@@ -1078,6 +1094,83 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
+    const stoppingStateFor = (sessionID: SessionID): SessionStoppingState => {
+      let state = sessionStopping.get(sessionID)
+      if (!state) {
+        state = { continuations: 0, inFlight: false }
+        sessionStopping.set(sessionID, state)
+      }
+      return state
+    }
+
+    const maybeContinueStopping = (sessionID: SessionID) =>
+    Effect.gen(function* () {
+      const state = stoppingStateFor(sessionID)
+      // Serialize per-session: a concurrent continuation evaluation for the
+      // same session must never double-consume or double-persist.
+      if (state.inFlight) {
+        yield* Effect.logWarning("session.stopping re-entry already in flight; skipping", {
+          "session.id": sessionID,
+        })
+        return false
+      }
+      state.inFlight = true
+      try {
+        const stoppingOutput = yield* plugin
+          .trigger("session.stopping", { sessionID }, { stop: true, message: undefined as string | undefined })
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError("session.stopping hook failed; stopping", { "session.id": sessionID, cause })
+                .pipe(Effect.as({ stop: true, message: undefined as string | undefined })),
+            ),
+          )
+        const message = stoppingOutput.message
+        const ok = !stoppingOutput.stop && typeof message === "string" && message.trim().length > 0
+        if (!ok) {
+          // Clean stop: the hook (or an empty/whitespace message) decided to
+          // stop. Reset the per-session counter so a future engagement starts
+          // with a full budget again.
+          state.continuations = 0
+          return false
+        }
+        if (state.continuations >= SESSION_STOPPING_REENTRY_CAP) {
+          // Cap exhausted: the 4th continuation request stops WITHOUT
+          // persisting and does NOT reset the counter, so a repeated
+          // `prompt.loop`/`prompt` invocation on the same session cannot
+          // restart the budget.
+          yield* Effect.logWarning("session.stopping re-entry cap exceeded; stopping", {
+            "session.id": sessionID,
+            continuations: state.continuations,
+          })
+          return false
+        }
+        const persisted = yield* createUserMessage({
+          sessionID,
+          parts: [{ type: "text", text: message }],
+        }).pipe(Effect.as(true), Effect.catchCause(() => Effect.succeed(false)))
+        if (!persisted) return false
+        state.continuations += 1
+        yield* Effect.logInfo("session.stopping hook prevented stop", {
+          "session.id": sessionID,
+          continuations: state.continuations,
+        })
+        return true
+      } finally {
+        state.inFlight = false
+      }
+    })
+
+    // Clean up per-session stopping state when a session is deleted.
+    // This is NOT triggered by natural completion — only by explicit session
+    // deletion — because a session may be deleted while a continuation budget
+    // is partially consumed, and the Map must not leak.
+    yield* events.listen((event) => {
+      if (event.type !== "session.deleted") return Effect.void
+      const sid = (event.data as any)?.id as SessionID | undefined
+      if (sid) sessionStopping.delete(sid)
+      return Effect.void
+    }).pipe(Effect.flatMap((unsub) => Effect.addFinalizer(() => unsub)))
+
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
@@ -1126,6 +1219,8 @@ const layer = Layer.effect(
               })
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+
+            if (yield* maybeContinueStopping(sessionID)) continue
             break
           }
 
@@ -1316,7 +1411,13 @@ const layer = Layer.effect(
               }
             }
 
-            if (result === "stop") return "break" as const
+            if (result === "stop") {
+              // Non-natural exit (provider error, tool error, blocked, retry
+              // exhausted). The `session.stopping` hook applies only to a
+              // genuine natural completion (detected at the loop top), so an
+              // errored/blocked stop must never invoke a stopping callback.
+              return "break" as const
+            }
             if (result === "compact") {
               yield* compaction.create({
                 sessionID,
