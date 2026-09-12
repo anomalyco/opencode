@@ -135,6 +135,7 @@ beforeAll(async () => {
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
     showToast: () => 0,
+    toaster: { dismiss: () => undefined },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -594,5 +595,88 @@ describe("prompt submit worktree selection", () => {
     expect(storedSessions["/repo/worktree-a"]).toHaveLength(1)
     expect(storedSessions["/repo/worktree-a"]?.[0]).toMatchObject({ id: "session-1", title: "New session 1" })
     expect(optimisticSeeded).toEqual([true])
+  })
+})
+
+describe("prompt submit follow-up delivery", () => {
+  const followupInput = (overrides: {
+    shouldQueue?: () => boolean
+    getDelivery?: () => "queue" | "steer"
+    onQueue?: (draft: { delivery?: string }) => void
+  }) =>
+    createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      shouldQueue: overrides.shouldQueue,
+      getDelivery: overrides.getDelivery,
+      onQueue: overrides.onQueue,
+    })
+
+  test("queues follow-ups locally when delivery is queue", async () => {
+    params = { id: "session-1" }
+    const queued: Array<{ delivery?: string }> = []
+    const submit = followupInput({
+      shouldQueue: () => true,
+      getDelivery: () => "queue",
+      onQueue: (draft) => {
+        queued.push(draft)
+      },
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    expect(queued).toHaveLength(1)
+    expect(queued[0]).toMatchObject({ sessionID: "session-1", delivery: "queue" })
+    expect(sentPrompts).toHaveLength(0)
+  })
+
+  test("sends follow-ups directly with steer delivery", async () => {
+    params = { id: "session-1" }
+    const queued: unknown[] = []
+    const submit = followupInput({
+      shouldQueue: () => true,
+      getDelivery: () => "steer",
+      onQueue: (draft) => {
+        queued.push(draft)
+      },
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect(queued).toHaveLength(0)
+    expect(sentPrompts).toEqual(["/repo/main"])
+    expect(promptInputs[0]).toMatchObject({ sessionID: "session-1", delivery: "steer" })
+  })
+
+  test("forces steer delivery on Ctrl+Enter", async () => {
+    params = { id: "session-1" }
+    const queued: unknown[] = []
+    const submit = followupInput({
+      shouldQueue: () => true,
+      getDelivery: () => "queue",
+      onQueue: (draft) => {
+        queued.push(draft)
+      },
+    })
+
+    await submit.handleSubmit(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true }))
+    await Bun.sleep(0)
+
+    expect(queued).toHaveLength(0)
+    expect(sentPrompts).toEqual(["/repo/main"])
+    expect(promptInputs[0]).toMatchObject({ sessionID: "session-1", delivery: "steer" })
   })
 })

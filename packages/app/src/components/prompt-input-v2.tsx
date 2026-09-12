@@ -91,6 +91,9 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   const platform = usePlatform()
   const prompt = props.state ?? usePrompt()
   let editor: HTMLDivElement | undefined
+  // Tracks a per-message steer override: Ctrl+Enter forces a steer while the
+  // session is busy. Consumed once by getDelivery during submit.
+  let steerOverride = false
 
   const interaction = createPromptInputV2State()
   const mode = () => interaction[0].mode
@@ -215,6 +218,13 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     shouldQueue: props.shouldQueue,
+    getDelivery: () => {
+      if (steerOverride) {
+        steerOverride = false
+        return "steer"
+      }
+      return props.getDelivery?.() ?? "queue"
+    },
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
@@ -405,6 +415,9 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
         working,
         onSubmit: () => void submission.handleSubmit(new Event("submit")),
         onStop: () => void submission.abort(),
+      },
+      onKeyDown: (event) => {
+        steerOverride = event.key === "Enter" && event.ctrlKey
       },
     },
   })

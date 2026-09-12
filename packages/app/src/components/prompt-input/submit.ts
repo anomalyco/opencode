@@ -31,6 +31,8 @@ type PendingPrompt = {
 
 const pending = new Map<string, PendingPrompt>()
 
+export type FollowupDelivery = "queue" | "steer"
+
 export type FollowupDraft = {
   sessionID: string
   sessionDirectory: string
@@ -39,6 +41,7 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  delivery?: FollowupDelivery
 }
 
 type FollowupSendInput = {
@@ -46,6 +49,7 @@ type FollowupSendInput = {
   serverSync: ServerSync
   sync: DirectorySync
   draft: FollowupDraft
+  delivery?: FollowupDelivery
   messageID?: string
   optimisticBusy?: boolean
   before?: () => Promise<boolean> | boolean
@@ -171,6 +175,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       agent: input.draft.agent,
       model: input.draft.model,
       variant: input.draft.variant,
+      delivery: input.delivery ?? input.draft.delivery ?? "queue",
       legacyParts: requestParts,
       text: requestParts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"),
       files: requestParts.flatMap((part) => {
@@ -225,6 +230,7 @@ type PromptSubmitInput = {
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
+  getDelivery?: () => FollowupDelivery
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
@@ -317,6 +323,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
+
+    // Codex-like delivery: Enter follows the follow-up setting (queue by default),
+    // Ctrl+Enter always steers the running session.
+    const keySteer = event instanceof KeyboardEvent && event.key === "Enter" && event.ctrlKey
+    const delivery = keySteer ? "steer" : (input.getDelivery?.() ?? "queue")
 
     const target = prompt.capture()
     const submission = createPromptSubmissionState({
@@ -454,6 +465,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       agent,
       model,
       variant,
+      delivery,
     }
 
     const clearInput = () => {
@@ -479,7 +491,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return true
     }
 
-    if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
+    if (!isNewSession && mode === "normal" && delivery === "queue" && input.shouldQueue?.()) {
       input.onQueue?.(draft)
       clearContext(submission.target())
       clearInput()

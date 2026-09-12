@@ -40,6 +40,9 @@ export type RunPrompt = {
     name: string
     arguments: string
   }
+  // Codex-like delivery: Enter queues behind the active turn, Ctrl+Enter
+  // steers by preempting it. Local-only; never sent to the backend.
+  steer?: boolean
 }
 
 export type FooterQueuedPrompt = {
