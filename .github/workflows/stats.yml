@@ -24,11 +24,16 @@ jobs:
       - name: Run stats script
         run: bun script/stats.ts
 
+      - name: Update GitHub stars
+        run: bun script/update-github-stars.ts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Commit stats
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add STATS.md
+          git add STATS.md packages/stats/app/src/routes/stats-shell.tsx
           git diff --staged --quiet || git commit -m "ignore: update download stats $(date -I)"
           git push
         env:
