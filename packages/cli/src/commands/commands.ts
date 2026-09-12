@@ -36,7 +36,7 @@ const PermissionParams = {
 }
 
 const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME : "opencode", {
-  description: "OpenCode 2.0 preview command line interface",
+  description: "OpenCode command line interface",
   params: {
     ...ServerParams,
     ...PermissionParams,

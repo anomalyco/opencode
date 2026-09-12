@@ -81,27 +81,26 @@ describe("H3: array property access reads as undefined (not a throw)", () => {
     ).toEqual(["b", "b", null, null, "a", null])
   })
 
-  test("noncanonical keys cannot mutate or delete an aliased element", async () => {
+  test("noncanonical keys are ordinary properties that never alias an element", async () => {
     expect(
       await value(`
         const values = ["a", "b"]
-        let writes = 0
-        try { values["01"] = ++writes } catch {}
+        values["01"] = "c"
+        const before = [values["01"], values[1], values.length]
         const removed = delete values["01"]
-        return [writes, removed, values]
+        return [before, removed, values["01"], values]
       `),
-    ).toEqual([0, true, ["a", "b"]])
+    ).toEqual([["c", "b", 2], true, null, ["a", "b"]])
   })
 
-  test("the maximum array length is not accepted as an array index", async () => {
+  test("the maximum array length is a property, not an index", async () => {
     expect(
       await value(`
         const values = []
-        let writes = 0
-        try { values["4294967295"] = ++writes } catch {}
-        return [writes, values.length]
+        values["4294967295"] = 1
+        return [values["4294967295"], values.length]
       `),
-    ).toEqual([0, 0])
+    ).toEqual([1, 0])
   })
 })
 
@@ -246,16 +245,14 @@ describe("property deletion", () => {
     expect(await value(`const values = [1, 2]; return [delete values.length, values.length]`)).toEqual([false, 2])
   })
 
-  test("does not broaden unsupported array property assignment", async () => {
+  test("arrays accept named properties like JS, and they stay out of the JSON form", async () => {
     expect(
       await value(`
-        const values = []
-        let rightHandSideRuns = 0
-        function next() { rightHandSideRuns++; return 1 }
-        try { values.field = next() } catch {}
-        return rightHandSideRuns
+        const values = [1]
+        values.field = 2
+        return [values.field, Object.keys(values), values]
       `),
-    ).toBe(0)
+    ).toEqual([2, ["0", "field"], [1]])
   })
 
   test("optional deletion short-circuits without evaluating the key", async () => {
@@ -395,11 +392,35 @@ describe("Error values and instanceof", () => {
     ])
   })
 
-  test("diagnostics without a specific real-JS analogue are named plain Error", async () => {
-    expect(await value(`try { JSON.parse(5) } catch (e) { return [e.name, e instanceof Error] }`)).toEqual([
-      "Error",
+  test("interpreter failures are TypeErrors; unsupported syntax is a SyntaxError", async () => {
+    expect(await value(`try { null.x } catch (e) { return [e.name, e instanceof TypeError] }`)).toEqual([
+      "TypeError",
       true,
     ])
+    expect(await value(`try { tools + 1 } catch (e) { return e.name }`)).toBe("TypeError")
+    expect(await value(`try { class A {} } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
+      "SyntaxError",
+      true,
+    ])
+  })
+
+  test("errors inherit constructor and instanceof through a real prototype chain", async () => {
+    expect(
+      await value(`
+        const { constructor } = new RangeError("r")
+        let caught
+        try { const { a } = null } catch (e) { caught = e }
+        return [
+          constructor === RangeError,
+          new RangeError("r") instanceof Error,
+          new RangeError("r") instanceof TypeError,
+          caught.constructor === TypeError,
+          ({ ...caught }).constructor === Object,
+          "constructor" in caught,
+          Object.keys(new RangeError("r")),
+        ]
+      `),
+    ).toEqual([true, true, false, true, true, true, ["message"]])
   })
 
   test("Promise.allSettled rejection reasons are Error values", async () => {
@@ -424,15 +445,19 @@ describe("Error values and instanceof", () => {
     ])
   })
 
-  test("error values still serialize as plain { name, message } data", async () => {
+  test("errors serialize as { name, message } by brand; name is inherited and message is own", async () => {
     expect(await value(`return new Error("m")`)).toEqual({ name: "Error", message: "m" })
     expect(await value(`return JSON.stringify(new Error("m"))`)).toBe('{"name":"Error","message":"m"}')
-    expect(await value(`try { throw new Error("m") } catch (e) { return Object.keys(e) }`)).toEqual(["name", "message"])
+    expect(await value(`try { throw new Error("m") } catch (e) { return [Object.keys(e), e.name] }`)).toEqual([
+      ["message"],
+      "Error",
+    ])
+    expect(await value(`return Object.keys(new Error())`)).toEqual([])
   })
 
   test("spreading an error loses the brand, like losing the prototype in JS", async () => {
     expect(await value(`const e = new Error("m"); return ({ ...e }) instanceof Error`)).toBe(false)
-    expect(await value(`const e = new Error("m"); return { ...e }`)).toEqual({ name: "Error", message: "m" })
+    expect(await value(`const e = new Error("m"); return { ...e }`)).toEqual({ message: "m" })
   })
 
   test("typeof Error is function; an unknown instanceof right-hand side is a catchable error", async () => {
@@ -914,5 +939,50 @@ describe("coercion parity: unknown static members read as undefined", () => {
       null,
       null,
     ])
+  })
+})
+
+describe("functions are objects", () => {
+  test("name follows NamedEvaluation and length counts required parameters", async () => {
+    expect(
+      await value(`
+        function decl(a, b = 1, ...rest) {}
+        const arrow = () => {}
+        const named = function inner() {}
+        let assigned
+        assigned = (a, b) => {}
+        const { fromDefault = () => {} } = {}
+        const [fromArray = function () {}] = []
+        const obj = { method() {}, key: () => {}, [Symbol.iterator]: () => {} }
+        const passthrough = (0, () => {})
+        return [
+          [decl.name, decl.length],
+          [arrow.name, named.name, assigned.name, assigned.length],
+          [fromDefault.name, fromArray.name],
+          [obj.method.name, obj.key.name, obj[Symbol.iterator].name],
+          passthrough.name,
+        ]
+      `),
+    ).toEqual([
+      ["decl", 1],
+      ["arrow", "inner", "assigned", 2],
+      ["fromDefault", "fromArray"],
+      ["method", "key", "[Symbol.iterator]"],
+      "",
+    ])
+  })
+
+  test("functions hold own properties; name and length are read-only", async () => {
+    expect(
+      await value(`
+        const fn = () => 1
+        fn.count = 2
+        fn.count += 1
+        let renamed = false
+        try { fn.name = "other" } catch (error) { renamed = error instanceof TypeError }
+        const { name, count } = fn
+        return [fn.count, Object.keys(fn), "count" in fn, "name" in fn, name, count, renamed, delete fn.count, fn.count]
+      `),
+    ).toEqual([3, ["count"], true, true, "fn", 3, true, true, null])
   })
 })

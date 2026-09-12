@@ -279,6 +279,52 @@ describe("Bedrock Converse route", () => {
       })
     }),
   )
+  ;["", " \t\r\n"].forEach((description) => {
+    it.effect(`omits blank tool description ${JSON.stringify(description)}`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(
+          LLMRequest.update(baseRequest, {
+            tools: [
+              ToolDefinition.make({
+                name: "lookup",
+                description,
+                inputSchema: { type: "object", properties: { query: { type: "string" } } },
+              }),
+            ],
+          }),
+        )
+
+        expect(prepared.body.toolConfig.tools).toEqual([
+          {
+            toolSpec: {
+              name: "lookup",
+              inputSchema: { json: { type: "object", properties: { query: { type: "string" } } } },
+            },
+          },
+        ])
+        expect(prepared.body.toolConfig.tools[0].toolSpec).not.toHaveProperty("description")
+      }),
+    )
+  })
+
+  it.effect("preserves meaningful tool descriptions including surrounding whitespace", () =>
+    Effect.gen(function* () {
+      const description = " \tLookup data.\n"
+      const prepared = yield* compileRequest(
+        LLMRequest.update(baseRequest, {
+          tools: [
+            ToolDefinition.make({
+              name: "lookup",
+              description,
+              inputSchema: { type: "object" },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.toolConfig.tools[0].toolSpec.description).toBe(description)
+    }),
+  )
 
   it.effect("keeps tools and omits the unsupported choice when tool choice is none", () =>
     Effect.gen(function* () {
@@ -1458,7 +1504,13 @@ describe("Bedrock Converse route", () => {
         expect(headers.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
         expect(headers.get("authorization")).toContain("/ap-southeast-2/bedrock/aws4_request")
       }
-      expect(() => AmazonBedrock.configure({ auth: "sigv4", apiKey: "k" })).toThrow("does not accept apiKey")
+      expect(() => AmazonBedrock.configure({ auth: "sigv4", apiKey: "k" })).toThrow(
+        expect.objectContaining({
+          _tag: "ProviderConfiguration",
+          provider: "amazon-bedrock",
+          message: "Amazon Bedrock SigV4 auth does not accept apiKey",
+        }),
+      )
     }).pipe(
       withProcessEnv({
         ...noAmbientAWS,

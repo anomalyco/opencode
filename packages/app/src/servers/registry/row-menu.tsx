@@ -45,7 +45,7 @@ export function serverMenuLabels(language: ReturnType<typeof useLanguage>) {
     edit: language.t("dialog.server.menu.edit"),
     default: language.t("dialog.server.menu.default"),
     defaultRemove: language.t("dialog.server.menu.defaultRemove"),
-    delete: language.t("dialog.server.menu.delete"),
+    remove: language.t("dialog.server.menu.remove"),
     hide: language.t("dialog.server.menu.hide"),
     show: language.t("dialog.server.menu.show"),
   }
@@ -106,7 +106,7 @@ export const ServerRowMenuView: Component<{
             </Show>
             <Show when={props.canRemove}>
               <Menu.Separator />
-              <Menu.Item onSelect={props.onRemove}>{props.labels.delete}</Menu.Item>
+              <Menu.Item onSelect={props.onRemove}>{props.labels.remove}</Menu.Item>
             </Show>
           </Menu.Group>
         </Menu.Content>

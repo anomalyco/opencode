@@ -1,17 +1,26 @@
 import { Effect } from "effect"
-import { type SafeObject, toProgram } from "../data.js"
+import { toProgram } from "../data.js"
 import { dateSetterArgumentCount, invokeDateMethod } from "../stdlib/date.js"
 import { invokeNumberMethod } from "../stdlib/number.js"
 import { invokeRegExpMethod, matchToValue, toHostRegex } from "../stdlib/regexp.js"
 import { invokeURLMethod, uriArgument } from "../stdlib/url.js"
-import { coerceToNumber, coerceToString, errorBrandName } from "../stdlib/value.js"
+import { coerceToNumber, coerceToString } from "../stdlib/value.js"
 import { compareText } from "../tool-runtime.js"
 import { Values } from "../values.js"
-import { type AstNode, IntrinsicReference, InterpreterRuntimeError } from "./model.js"
+import { type AstNode, InterpreterRuntimeError, IntrinsicReference, rangeError } from "./model.js"
+import { get, ProgramArray, ProgramObject, record } from "./objects.js"
 import { containsOpaqueReference, rejectCircularInsertion, typeofValue } from "./references.js"
 import { applyCollectionCallback, isSupportedCallback, type Runner, toPrimitive } from "./runner.js"
 
 export const invokeIntrinsic = <R>(
+  runner: Runner<R>,
+  ref: IntrinsicReference,
+  args: Array<unknown>,
+  node: AstNode,
+): Effect.Effect<unknown, unknown, R> =>
+  Effect.map(invoke(runner, ref, args, node), (result) => (Array.isArray(result) ? new ProgramArray(result) : result))
+
+const invoke = <R>(
   runner: Runner<R>,
   ref: IntrinsicReference,
   args: Array<unknown>,
@@ -32,7 +41,7 @@ export const invokeIntrinsic = <R>(
   if (typeof ref.receiver === "number") {
     return Effect.succeed(invokeNumberMethod(ref.receiver, ref.name, args, node))
   }
-  if (Array.isArray(ref.receiver)) {
+  if (ref.receiver instanceof ProgramArray) {
     return invokeArrayMethod(runner, ref.receiver, ref.name, args, node)
   }
   if (ref.receiver instanceof Values.Date) {
@@ -102,7 +111,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       throw new InterpreterRuntimeError(
         `String.${name} cannot take a regular expression; use regex.test(string) or String.search instead.`,
         node,
-      ).as("TypeError")
+      )
     }
   }
 
@@ -134,10 +143,10 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
       try {
         result = value.normalize(form)
       } catch {
-        throw new InterpreterRuntimeError(
+        throw rangeError(
           `String.normalize expects the form "NFC", "NFD", "NFKC", or "NFKD" (got ${JSON.stringify(form)}).`,
           node,
-        ).as("RangeError")
+        )
       }
       break
     }
@@ -215,7 +224,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
           node,
         )
       }
-      return Array.from(value.matchAll(pattern), matchToValue)
+      return new ProgramArray(Array.from(value.matchAll(pattern), matchToValue))
     }
     case "search": {
       result = value.search(toHostRegex(args[0], name, node))
@@ -224,7 +233,7 @@ const invokeStringMethod = (value: string, name: string, args: Array<unknown>, n
     case "repeat": {
       const count = num(0)
       if (!Number.isFinite(count) || count < 0)
-        throw new InterpreterRuntimeError("String.repeat expects a finite non-negative count.", node).as("RangeError")
+        throw rangeError("String.repeat expects a finite non-negative count.", node)
       result = value.repeat(count)
       break
     }
@@ -288,13 +297,7 @@ const invokeStringReplacer = <R>(
     if (typeof match !== "string" || typeof offset !== "number") {
       throw new InterpreterRuntimeError(`String.${name} produced an invalid replacement match.`, node)
     }
-    if (hasGroups) {
-      const safeGroups: SafeObject = Object.create(null) as SafeObject
-      for (const [key, group] of Object.entries(groups)) {
-        safeGroups[key] = group
-      }
-      callbackArgs[callbackArgs.length - 1] = safeGroups
-    }
+    if (hasGroups) callbackArgs[callbackArgs.length - 1] = record(groups as Record<string, unknown>)
     matches.push({ match, offset, args: callbackArgs })
     return match
   }
@@ -320,14 +323,11 @@ const invokeStringReplacer = <R>(
     let end = 0
     for (const match of matches) {
       const replacement = yield* apply(match.args)
-      // Error values are branded plain objects; toProgram would strip the brand before coercion.
       output.push(
         value.slice(end, match.offset),
         replacement instanceof Values.Promise
           ? "[object Promise]"
-          : errorBrandName(replacement)
-            ? coerceToString(replacement)
-            : coerceToString(toProgram(replacement, `String.${name} replacer result`)),
+          : coerceToString(toProgram(replacement, `String.${name} replacer result`)),
       )
       end = match.offset + match.match.length
     }
@@ -365,7 +365,7 @@ const invokeMapMethod = <R>(
     case "values":
       return Effect.sync(() => Array.from(target.map.values()))
     case "entries":
-      return Effect.sync(() => Array.from(target.map.entries(), ([key, item]): Array<unknown> => [key, item]))
+      return Effect.sync(() => Array.from(target.map.entries(), ([key, item]) => new ProgramArray([key, item])))
     case "forEach": {
       const apply = applyCollectionCallback(runner, args[0], "Map.forEach", node)
       return Effect.gen(function* () {
@@ -404,7 +404,7 @@ const invokeSetMethod = <R>(
     case "values":
       return Effect.sync(() => Array.from(target.set.values()))
     case "entries":
-      return Effect.sync(() => Array.from(target.set.values(), (item): Array<unknown> => [item, item]))
+      return Effect.sync(() => Array.from(target.set.values(), (item) => new ProgramArray([item, item])))
     case "forEach": {
       const apply = applyCollectionCallback(runner, args[0], "Set.forEach", node)
       return Effect.gen(function* () {
@@ -518,29 +518,26 @@ const loadSetRecord = <R>(runner: Runner<R>, source: unknown, name: string, node
       keys: () => Effect.succeed(source.map.keys()),
     })
   }
-  if (source === null || typeof source !== "object" || Values.isValue(source)) {
-    throw new InterpreterRuntimeError(`Set.${name} expects a Set-like object.`, node).as("TypeError")
+  if (!(source instanceof ProgramObject)) {
+    throw new InterpreterRuntimeError(`Set.${name} expects a Set-like object.`, node)
   }
-  const object = source as Record<string, unknown>
   return Effect.gen(function* () {
-    const size = yield* coerceNumericArgument(runner, object.size, node)
+    const size = yield* coerceNumericArgument(runner, get(source, "size"), node)
     if (Number.isNaN(size)) {
-      throw new InterpreterRuntimeError(`Set.${name} received a Set-like object with an invalid size.`, node).as(
-        "TypeError",
-      )
+      throw new InterpreterRuntimeError(`Set.${name} received a Set-like object with an invalid size.`, node)
     }
-    if (!isSupportedCallback(object.has) || !isSupportedCallback(object.keys)) {
-      throw new InterpreterRuntimeError(`Set.${name} expects callable 'has' and 'keys' methods.`, node).as("TypeError")
+    const has = get(source, "has")
+    const keys = get(source, "keys")
+    if (!isSupportedCallback(has) || !isSupportedCallback(keys)) {
+      throw new InterpreterRuntimeError(`Set.${name} expects callable 'has' and 'keys' methods.`, node)
     }
-    const has = object.has
-    const keys = object.keys
     return {
       size: Math.max(Math.trunc(size), 0),
       has: (item: unknown) => Effect.map(runner.invokeCallable(has, [item], node), Boolean),
       keys: () =>
         Effect.flatMap(runner.invokeCallable(keys, [], node), (result) => {
-          if (Array.isArray(result)) return Effect.succeed(result)
-          throw new InterpreterRuntimeError(`Set.${name} expected 'keys' to return an iterator.`, node).as("TypeError")
+          if (result instanceof ProgramArray) return Effect.succeed(result.items)
+          throw new InterpreterRuntimeError(`Set.${name} expected 'keys' to return an iterator.`, node)
         }),
     }
   })
@@ -559,7 +556,7 @@ const invokeURLSearchParamsMethod = <R>(
       throw new InterpreterRuntimeError(
         `URLSearchParams.${name} requires ${count} argument${count === 1 ? "" : "s"}.`,
         node,
-      ).as("TypeError")
+      )
     }
   }
   switch (name) {
@@ -604,7 +601,7 @@ const invokeURLSearchParamsMethod = <R>(
     case "values":
       return Effect.sync(() => Array.from(target.params.values()))
     case "entries":
-      return Effect.sync(() => Array.from(target.params.entries(), ([key, value]): Array<unknown> => [key, value]))
+      return Effect.sync(() => Array.from(target.params.entries(), ([key, value]) => new ProgramArray([key, value])))
     case "toString":
       return Effect.sync(() => target.params.toString())
     case "forEach": {
@@ -622,11 +619,12 @@ const invokeURLSearchParamsMethod = <R>(
 
 const invokeArrayMethod = <R>(
   runner: Runner<R>,
-  target: Array<unknown>,
+  receiver: ProgramArray,
   name: string,
   args: Array<unknown>,
   node: AstNode,
 ): Effect.Effect<unknown, unknown, R> => {
+  const target = receiver.items
   const optNumber = (value: unknown, label: string): number | undefined => {
     if (value === undefined) return undefined
     if (typeof value !== "number")
@@ -638,9 +636,8 @@ const invokeArrayMethod = <R>(
       if (args.length > 1 || (args.length === 1 && typeof args[0] !== "string")) {
         throw new InterpreterRuntimeError("Array.join expects zero arguments or one string separator.", node)
       }
-      const input = toProgram(target, "Array.join input") as Array<unknown>
       return Effect.succeed(
-        input.map((item) => coerceToString(item ?? "")).join(args.length === 0 ? "," : (args[0] as string)),
+        target.map((item) => coerceToString(item ?? "")).join(args.length === 0 ? "," : (args[0] as string)),
       )
     }
     case "includes":
@@ -660,11 +657,15 @@ const invokeArrayMethod = <R>(
     case "slice":
       return Effect.succeed(target.slice(optNumber(args[0], "start"), optNumber(args[1], "end")))
     case "concat":
-      return Effect.succeed(target.concat(...args))
-    case "flat":
-      return Effect.succeed(target.flat(optNumber(args[0], "depth") ?? 1))
+      return Effect.succeed(target.concat(...args.map((item) => (item instanceof ProgramArray ? item.items : item))))
+    case "flat": {
+      const flatten = (items: Array<unknown>, depth: number): Array<unknown> =>
+        items.flatMap((item) => (item instanceof ProgramArray && depth > 0 ? flatten(item.items, depth - 1) : [item]))
+      return Effect.succeed(flatten(target, optNumber(args[0], "depth") ?? 1))
+    }
     case "reverse":
-      return Effect.succeed(target.reverse())
+      target.reverse()
+      return Effect.succeed(receiver)
     case "sort": {
       const length = target.length
       const holeCount = Array.from({ length }, (_, index) => Object.hasOwn(target, index)).filter((own) => !own).length
@@ -676,7 +677,7 @@ const invokeArrayMethod = <R>(
         Array.from({ length: holeCount }, (_, index) => itemCount + index).forEach((index) => {
           Reflect.deleteProperty(target, index)
         })
-        return target
+        return receiver
       })
     }
     case "toSorted":
@@ -687,7 +688,7 @@ const invokeArrayMethod = <R>(
       const index = optNumber(args[0], "index") ?? 0
       const resolved = index < 0 ? target.length + index : index
       if (resolved < 0 || resolved >= target.length) {
-        throw new InterpreterRuntimeError("Array.with index is out of range.", node)
+        throw rangeError("Array.with index is out of range.", node)
       }
       const copied = [...target]
       copied[resolved] = args[1]
@@ -695,12 +696,12 @@ const invokeArrayMethod = <R>(
     }
     case "push": {
       // Validate all insertions before mutating to avoid partial cyclic updates.
-      for (const item of args) rejectCircularInsertion(target, item, "Array.push result", node)
+      for (const item of args) rejectCircularInsertion(receiver, item, "Array.push result", node)
       target.push(...args)
       return Effect.succeed(target.length)
     }
     case "unshift": {
-      for (const item of args) rejectCircularInsertion(target, item, "Array.unshift result", node)
+      for (const item of args) rejectCircularInsertion(receiver, item, "Array.unshift result", node)
       target.unshift(...args)
       return Effect.succeed(target.length)
     }
@@ -714,7 +715,7 @@ const invokeArrayMethod = <R>(
       if (args.length === 1) return Effect.succeed(target.splice(start))
       const deleteCount = optNumber(args[1], "delete count") ?? 0
       const inserted = args.slice(2)
-      for (const item of inserted) rejectCircularInsertion(target, item, "Array.splice result", node)
+      for (const item of inserted) rejectCircularInsertion(receiver, item, "Array.splice result", node)
       return Effect.succeed(target.splice(start, deleteCount, ...inserted))
     }
     case "toSpliced": {
@@ -731,23 +732,23 @@ const invokeArrayMethod = <R>(
       return Effect.succeed(copied)
     }
     case "fill": {
-      rejectCircularInsertion(target, args[0], "Array.fill result", node)
-      return Effect.succeed(target.fill(args[0], optNumber(args[1], "start"), optNumber(args[2], "end")))
+      rejectCircularInsertion(receiver, args[0], "Array.fill result", node)
+      target.fill(args[0], optNumber(args[1], "start"), optNumber(args[2], "end"))
+      return Effect.succeed(receiver)
     }
     case "copyWithin":
-      return Effect.succeed(
-        target.copyWithin(
-          optNumber(args[0], "target index") ?? 0,
-          optNumber(args[1], "start") ?? 0,
-          optNumber(args[2], "end"),
-        ),
+      target.copyWithin(
+        optNumber(args[0], "target index") ?? 0,
+        optNumber(args[1], "start") ?? 0,
+        optNumber(args[2], "end"),
       )
+      return Effect.succeed(receiver)
     case "keys":
       return Effect.succeed(Array.from(target.keys()))
     case "values":
       return Effect.succeed([...target])
     case "entries":
-      return Effect.succeed(Array.from(target.entries(), ([index, item]): Array<unknown> => [index, item]))
+      return Effect.succeed(Array.from(target.entries(), ([index, item]) => new ProgramArray([index, item])))
   }
 
   const apply = applyCollectionCallback(runner, args[0], `Array.${name}`, node)
@@ -760,7 +761,7 @@ const invokeArrayMethod = <R>(
         values.length = length
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
-          values[index] = yield* apply([target[index], index, target])
+          values[index] = yield* apply([target[index], index, receiver])
         }
         return values
       }
@@ -768,8 +769,8 @@ const invokeArrayMethod = <R>(
         const values: Array<unknown> = []
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
-          const mapped = yield* apply([target[index], index, target])
-          if (Array.isArray(mapped)) values.push(...mapped)
+          const mapped = yield* apply([target[index], index, receiver])
+          if (mapped instanceof ProgramArray) values.push(...mapped.items)
           else values.push(mapped)
         }
         return values
@@ -779,36 +780,36 @@ const invokeArrayMethod = <R>(
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
           const item = target[index]
-          if (yield* apply([item, index, target])) values.push(item)
+          if (yield* apply([item, index, receiver])) values.push(item)
         }
         return values
       }
       case "find":
         for (let index = 0; index < length; index += 1) {
           const item = target[index]
-          if (yield* apply([item, index, target])) return item
+          if (yield* apply([item, index, receiver])) return item
         }
         return undefined
       case "findIndex":
         for (let index = 0; index < length; index += 1) {
-          if (yield* apply([target[index], index, target])) return index
+          if (yield* apply([target[index], index, receiver])) return index
         }
         return -1
       case "some":
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
-          if (yield* apply([target[index], index, target])) return true
+          if (yield* apply([target[index], index, receiver])) return true
         }
         return false
       case "every":
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
-          if (!(yield* apply([target[index], index, target]))) return false
+          if (!(yield* apply([target[index], index, receiver]))) return false
         }
         return true
       case "forEach":
         for (let index = 0; index < length; index += 1) {
-          if (index in target) yield* apply([target[index], index, target])
+          if (index in target) yield* apply([target[index], index, receiver])
         }
         return undefined
       case "reduce": {
@@ -817,15 +818,13 @@ const invokeArrayMethod = <R>(
         if (args.length < 2) {
           while (start < length && !(start in target)) start += 1
           if (start === length)
-            throw new InterpreterRuntimeError("Array.reduce of an empty array with no initial value.", node).as(
-              "TypeError",
-            )
+            throw new InterpreterRuntimeError("Array.reduce of an empty array with no initial value.", node)
           accumulator = target[start]
           start += 1
         }
         for (let index = start; index < length; index += 1) {
           if (!(index in target)) continue
-          accumulator = yield* apply([accumulator, target[index], index, target])
+          accumulator = yield* apply([accumulator, target[index], index, receiver])
         }
         return accumulator
       }
@@ -835,27 +834,25 @@ const invokeArrayMethod = <R>(
         if (args.length < 2) {
           while (start >= 0 && !(start in target)) start -= 1
           if (start < 0)
-            throw new InterpreterRuntimeError("Array.reduceRight of an empty array with no initial value.", node).as(
-              "TypeError",
-            )
+            throw new InterpreterRuntimeError("Array.reduceRight of an empty array with no initial value.", node)
           accumulator = target[start]
           start -= 1
         }
         for (let index = start; index >= 0; index -= 1) {
           if (!(index in target)) continue
-          accumulator = yield* apply([accumulator, target[index], index, target])
+          accumulator = yield* apply([accumulator, target[index], index, receiver])
         }
         return accumulator
       }
       case "findLast":
         for (let index = length - 1; index >= 0; index -= 1) {
           const item = target[index]
-          if (yield* apply([item, index, target])) return item
+          if (yield* apply([item, index, receiver])) return item
         }
         return undefined
       case "findLastIndex":
         for (let index = length - 1; index >= 0; index -= 1) {
-          if (yield* apply([target[index], index, target])) return index
+          if (yield* apply([target[index], index, receiver])) return index
         }
         return -1
     }

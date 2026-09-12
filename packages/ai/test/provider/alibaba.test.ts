@@ -76,7 +76,13 @@ it.effect("Alibaba owns regional shared and workspace-specific endpoints", () =>
 
 test("Alibaba requires explicit placement and supports complete base URL overrides", () => {
   for (const region of ["eu-central-1", "ap-northeast-1", "future-region"])
-    expect(() => Alibaba.configure({ region })).toThrow("requires workspaceID or baseURL")
+    expect(() => Alibaba.configure({ region })).toThrow(
+      expect.objectContaining({
+        _tag: "ProviderConfiguration",
+        provider: "alibaba",
+        message: `Alibaba region ${region} requires workspaceID or baseURL`,
+      }),
+    )
   for (const config of [
     { baseURL: "https://gateway.example/prefix" },
     { region: "future-region", workspaceID: "ignored", baseURL: "https://gateway.example/prefix" },

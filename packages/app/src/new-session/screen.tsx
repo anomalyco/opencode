@@ -1,6 +1,7 @@
 import { createPromptProjectController } from "@/new-session/project/selector"
-import { useSettingsDialog } from "@/settings/command"
+import { useSettingsSurface } from "@/settings/surface"
 import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
+import { useSettingsServers } from "@/settings/servers/inventory"
 import { useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, createResource, untrack } from "solid-js"
 import { createComposerModel } from "@/composer/model"
@@ -15,10 +16,19 @@ import { createDraftMcpControls } from "./mcp"
 export default function NewSessionPage(props: { draftId: string }) {
   const [search, setSearch] = useSearchParams<{ draftId?: string; prompt?: string }>()
   const tabs = useTabs()
-  const openWorkspaces = useSettingsDialog("workspaces")
+  const servers = useSettingsServers()
+  const settingsSurface = useSettingsSurface()
   const draftTab = createMemo(() =>
     tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId),
   )
+  const openWorkspaces = () => {
+    const draft = draftTab()
+    if (servers().length > 1 && draft) {
+      settingsSurface.openServer(draft.server, "workspaces")
+      return
+    }
+    settingsSurface.open("workspaces")
+  }
   const workspace = createNewSessionWorkspaceController({
     selectedWorktree: () => draftTab()?.worktree,
     selectedBranch: () => draftTab()?.branch,

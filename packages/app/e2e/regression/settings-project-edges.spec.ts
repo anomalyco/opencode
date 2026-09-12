@@ -69,11 +69,8 @@ for (const colorScheme of ["light", "dark"] as const) {
       await page.setViewportSize({ width: 1280, height: 720 })
       await panel.getByText("rebase", { exact: true }).hover()
       await panel.getByText("rebase", { exact: true }).click()
-      const dialog = page.getByRole("dialog")
-      await expect(dialog.getByRole("textbox")).toHaveValue("rebase")
-      await expect(dialog.getByRole("textbox")).toBeFocused()
-      await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
-      await expect(dialog).toBeHidden()
+      await expect(settings.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("rebase")
+      await settings.getByRole("button", { name: "Back to projects", exact: true }).click()
       await expect(panel.getByText("rebase", { exact: true })).toBeVisible()
 
       await page.setViewportSize({ width: 1280, height: 260 })

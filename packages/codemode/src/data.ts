@@ -1,10 +1,17 @@
 export * as Data from "./data.js"
 
 import type { DiagnosticKind } from "./codemode.js"
+import {
+  get,
+  ownEntries,
+  parseArrayIndex,
+  ProgramArray,
+  ProgramError,
+  ProgramFunction,
+  ProgramObject,
+  set,
+} from "./interpreter/objects.js"
 import { Values } from "./values.js"
-
-/** A null-prototype object owned by the program. */
-export type SafeObject = Record<string, unknown>
 
 const MAX_VALUE_DEPTH = 32
 
@@ -23,15 +30,15 @@ export class ToolRuntimeError extends Error {
 }
 
 /**
- * Brings a host-produced runtime value into the program: runtime values pass through, their host
- * counterparts (Date, RegExp, Map, Set, URL, URLSearchParams) are wrapped, and objects become
- * null-prototype copies. Arrays keep extra enumerable properties such as `index` and `groups`.
+ * Brings a host-produced value into the program: program and runtime values pass through, their
+ * host counterparts (Date, RegExp, Map, Set, URL, URLSearchParams) are wrapped, and host objects
+ * and arrays are copied.
  */
 export const toProgram = (value: unknown, label: string): unknown => copy(value, label, "program", 0, new Set())
 
 /**
  * Brings host data into the program: Date and URL become strings, other host collections become
- * empty objects, and objects become null-prototype copies. Used for tool results and parsed JSON.
+ * empty objects, and objects become program copies. Used for tool results and parsed JSON.
  */
 export const fromData = (value: unknown, label: string): unknown => copy(value, label, "data", 0, new Set())
 
@@ -44,8 +51,7 @@ export const fromData = (value: unknown, label: string): unknown => copy(value, 
 export const toData = (value: unknown, label: string, undefinedAs: "json" | "result" = "json"): unknown =>
   copy(value, label, undefinedAs, 0, new Set())
 
-// "program" and "data" build program-owned null-prototype objects; "json" and "result" build
-// ordinary objects for the host.
+// "program" and "data" build program objects; "json" and "result" build ordinary objects for the host.
 type Mode = "program" | "data" | "json" | "result"
 
 const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Set<object>): unknown => {
@@ -64,9 +70,13 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
       `${label} contains an un-awaited Promise; await tool calls (e.g. \`const result = await tools.ns.tool(...)\`) before using their results.`,
     )
   }
+  if (value instanceof ProgramFunction && mode !== "program") {
+    throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
+  }
 
+  const plain = mode === "program" || mode === "data"
   if (mode === "program") {
-    if (Values.isValue(value)) return value
+    if (value instanceof ProgramObject || Values.isValue(value)) return value
     if (value instanceof Date) return new Values.Date(value.getTime())
     if (value instanceof RegExp) return new Values.RegExp(value.source, value.flags)
     if (value instanceof Map) {
@@ -85,7 +95,6 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
     if (value instanceof URLSearchParams) return new Values.URLSearchParams(new URLSearchParams(value))
   }
 
-  const plain = mode === "program" || mode === "data"
   if (value instanceof Values.Date) return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
   if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : null
   if (value instanceof Values.URL) return value.url.href
@@ -98,7 +107,7 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
     value instanceof Set ||
     value instanceof URLSearchParams
   ) {
-    return plain ? (Object.create(null) as SafeObject) : {}
+    return plain ? new ProgramObject() : {}
   }
 
   if (seen.has(value)) {
@@ -106,17 +115,37 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
   }
   seen.add(value)
 
-  if (Array.isArray(value)) {
-    // Host output densifies holes to null like JSON; program copies keep them.
-    const copied = plain
-      ? value.map((item) => copy(item, label, mode, depth + 1, seen))
-      : Array.from(value, (item) => copy(item, label, mode, depth + 1, seen) ?? null)
-    if (mode === "program") {
-      for (const [key, item] of Object.entries(value)) {
-        if (Object.hasOwn(copied, key)) continue
-        define(copied, key, copy(item, label, mode, depth + 1, seen))
-      }
+  if (value instanceof ProgramArray) {
+    const copied = Array.from(value.items, (item) => copy(item, label, mode, depth + 1, seen) ?? null)
+    seen.delete(value)
+    return copied
+  }
+  if (value instanceof ProgramObject) {
+    const copied: Record<string, unknown> = {}
+    // Errors serialize as { name, message, ...own }: both may be inherited, and neither is enumerable in JS.
+    if (value instanceof ProgramError) {
+      define(copied, "name", copy(get(value, "name"), label, mode, depth + 1, seen))
+      define(copied, "message", copy(get(value, "message"), label, mode, depth + 1, seen))
     }
+    for (const [key, item] of ownEntries(value)) {
+      const next = copy(item, label, mode, depth + 1, seen)
+      if (next === undefined && mode === "json") continue
+      define(copied, key, next)
+    }
+    seen.delete(value)
+    return copied
+  }
+
+  if (Array.isArray(value)) {
+    if (plain) {
+      const copied = new ProgramArray(value.map((item) => copy(item, label, mode, depth + 1, seen)))
+      for (const [key, item] of Object.entries(value)) {
+        if (parseArrayIndex(key) === undefined) set(copied, key, copy(item, label, mode, depth + 1, seen))
+      }
+      seen.delete(value)
+      return copied
+    }
+    const copied = Array.from(value, (item) => copy(item, label, mode, depth + 1, seen) ?? null)
     seen.delete(value)
     return copied
   }
@@ -126,7 +155,13 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
     throw new ToolRuntimeError("InvalidDataValue", `${label} must contain plain objects only.`)
   }
 
-  const copied: SafeObject = plain ? (Object.create(null) as SafeObject) : {}
+  if (plain) {
+    const copied = new ProgramObject()
+    for (const [key, item] of Object.entries(value)) set(copied, key, copy(item, label, mode, depth + 1, seen))
+    seen.delete(value)
+    return copied
+  }
+  const copied: Record<string, unknown> = {}
   for (const [key, item] of Object.entries(value)) {
     const next = copy(item, label, mode, depth + 1, seen)
     if (next === undefined && mode === "json") continue
@@ -136,8 +171,8 @@ const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Se
   return copied
 }
 
-// Own data property regardless of the target's prototype, so a "__proto__" key on a host object or
-// array never reaches the Object.prototype setter.
+// Own data property regardless of the target's prototype, so a "__proto__" key on a host object
+// never reaches the Object.prototype setter.
 const define = (target: object, key: string, value: unknown): void => {
   Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
 }
