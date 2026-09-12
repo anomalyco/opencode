@@ -53,11 +53,15 @@ export async function read() {
 
   if (platform() === "win32" || release().includes("WSL")) {
     const script =
-      "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-    const image = await command("powershell.exe", ["-NonInteractive", "-NoProfile", "-command", script]).catch(() =>
+      "$t=Get-Clipboard -Raw -EA SilentlyContinue;if($t){[Console]::OutputEncoding=[Text.Encoding]::UTF8;[Console]::Out.Write('T:'+$t)}else{$i=Get-Clipboard -Format Image -EA SilentlyContinue;if($i){$m=New-Object IO.MemoryStream;$i.Save($m,[Drawing.Imaging.ImageFormat]::Png);[Console]::Out.Write('I:'+[Convert]::ToBase64String($m.ToArray()))}}"
+    const output = await command("powershell.exe", ["-NonInteractive", "-NoProfile", "-command", script]).catch(() =>
       Buffer.alloc(0),
     )
-    if (image.length) return { data: image.toString().trim(), mime: "image/png" }
+    if (output.length) {
+      const text = output.toString("utf8")
+      if (text.startsWith("T:")) return { data: text.slice(2), mime: "text/plain" }
+      if (text.startsWith("I:")) return { data: text.slice(2).trim(), mime: "image/png" }
+    }
   }
 
   if (platform() === "linux") {
