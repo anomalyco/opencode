@@ -10,11 +10,10 @@ OpenCode installs and runs as `opencode`.
 
 <div data-install-code>
   <CodeBlock
-    code={`$ npm install -g @opencode/cli@beta
-$ bun install -g --trust @opencode/cli@beta
-$ pnpm add -g --allow-build=@opencode/cli @opencode/cli@beta
-$ yarn global add @opencode/cli@beta
-$ paru -S opencode-beta
+    code={`$ npm install -g @opencode/cli
+$ bun install -g --trust @opencode/cli
+$ pnpm add -g --allow-build=@opencode/cli @opencode/cli
+$ yarn global add @opencode/cli
 $ curl -fsSL https://opencode.ai/v2/install | bash`}
   />
 </div>
@@ -22,10 +21,9 @@ $ curl -fsSL https://opencode.ai/v2/install | bash`}
 The npm package uses a trusted postinstall script to select the native `opencode` binary for your platform. The Bun and pnpm
 commands above explicitly allow that script to run.
 
-On Arch Linux, install [`opencode-beta`](https://aur.archlinux.org/packages/opencode-beta) from the AUR with `paru`.
-It provides the `opencode` command; manage updates through your AUR helper.
+Docker images use versioned tags, for example `ghcr.io/anomalyco/opencode:2.0.0`.
 
-Homebrew, Windows package managers, Docker, and standalone binaries are not supported.
+Homebrew, AUR, Windows package managers, and standalone binaries are not supported.
 
 ---
 
