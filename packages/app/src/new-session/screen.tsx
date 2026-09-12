@@ -1,6 +1,5 @@
 import { createPromptProjectController } from "@/new-session/project/selector"
 import { useSettingsSurface } from "@/settings/surface"
-import { useSettings } from "@/settings/model"
 import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { useSettingsServers } from "@/settings/servers/inventory"
 import { useSearchParams } from "@solidjs/router"
@@ -8,13 +7,13 @@ import { createEffect, createMemo, createResource, untrack } from "solid-js"
 import { createComposerModel } from "@/composer/model"
 import { useComposerCommands } from "@/composer/commands"
 import { createNewSessionComposerAdapter } from "./composer-adapter"
-import { NewSessionStatus, NewSessionView } from "./view"
+import { NewSessionView } from "./view"
 import { createNewSessionWorkspaceController } from "./workspace/controller"
 import { useNewSessionCommands } from "./commands"
+import { createDraftMcpControls } from "./mcp"
 
 /** The draft-only Session page. Submitting promotes the draft into a real Session. */
 export default function NewSessionPage(props: { draftId: string }) {
-  const settings = useSettings()
   const [search, setSearch] = useSearchParams<{ draftId?: string; prompt?: string }>()
   const tabs = useTabs()
   const servers = useSettingsServers()
@@ -41,11 +40,13 @@ export default function NewSessionPage(props: { draftId: string }) {
     },
     onViewAll: openWorkspaces,
   })
+  const mcp = createDraftMcpControls({ draftID: props.draftId, worktree: workspace.selection.value })
   const composer = createNewSessionComposerAdapter({
     draftID: props.draftId,
     worktree: workspace.selection.value,
     branch: workspace.bar.branch,
     submitted: workspace.selection.remember,
+    mcp,
   })
   const model = createComposerModel(composer.adapter)
   useComposerCommands({ model: composer.model })
@@ -82,9 +83,8 @@ export default function NewSessionPage(props: { draftId: string }) {
   return (
     <div class="relative size-full overflow-hidden flex flex-col">
       {suspendUntilPromptReady()}
-      <NewSessionStatus visible={settings.visibility.status()} />
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
-        <NewSessionView composer={model} project={project} workspace={workspace} />
+        <NewSessionView composer={model} project={project} workspace={workspace} mcp={mcp} />
       </div>
     </div>
   )

@@ -89,12 +89,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
-    label: "settings.general.row.showStatus.title",
-    target: "settings-show-status",
-    section: "settings.general.section.advanced",
-  },
-  {
-    tab: "general",
     label: "settings.general.row.showCustomAgents.title",
     target: "settings-show-custom-agents",
     section: "settings.general.section.general",

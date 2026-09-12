@@ -15,13 +15,18 @@ export function PromptWorkspaceSelector(props: {
   branches: string[]
   branch?: string
   onboarding?: boolean
+  variant?: "inline" | "summary"
   onChange: (value: string) => void
   onCreate: (branch: string) => void
   onSearch: (search: string) => void
-  onDone: () => void
+  onDone?: () => void
   onViewAll: () => void
 }) {
   const language = useLanguage()
+  const summary = () => props.variant === "summary"
+  const placement = createMemo(() =>
+    summary() ? (language.direction() === "rtl" ? "right-start" : "left-start") : "bottom",
+  )
   const [search, setSearch] = createStore({ workspaces: "", branches: "" })
   let searchInput: HTMLInputElement | undefined
   let branchSearchInput: HTMLInputElement | undefined
@@ -58,17 +63,20 @@ export function PromptWorkspaceSelector(props: {
       props.onViewAll()
       return
     }
-    props.onDone()
+    props.onDone?.()
   }
   const label = () => {
-    if (selected() === "main") return language.t("session.new.workspace.triggerLocal")
+    if (selected() === "main")
+      return language.t(summary() ? "session.new.workspace.local" : "session.new.workspace.triggerLocal")
     if (props.value === "create") return language.t("workspace.new")
     return getFilename(props.value)
   }
 
   return (
     <>
-      <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
+      <Show when={!summary()}>
+        <span class="hidden select-none opacity-50 sm:inline mx-1">/</span>
+      </Show>
       <Tooltip
         appearance={props.onboarding ? "large" : undefined}
         placement="top"
@@ -87,18 +95,28 @@ export function PromptWorkspaceSelector(props: {
           )
         }
         contentClass={props.onboarding ? "max-w-[280px]" : undefined}
-        class="min-w-0"
+        class={summary() ? "min-w-0 w-full" : "min-w-0"}
       >
-        <Menu placement="bottom" gutter={4} overflowPadding={24} onOpenChange={onOpenChange}>
+        <Menu
+          placement={placement()}
+          gutter={4}
+          overflowPadding={24}
+          modal={summary() ? false : undefined}
+          onOpenChange={onOpenChange}
+        >
           <Menu.Trigger
             aria-description={language.t("session.new.workspace.trigger.tooltip")}
-            class="flex h-6 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted"
+            class={
+              summary()
+                ? "session-summary-row"
+                : "flex h-6 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-muted"
+            }
           >
             <Icon
               name={icon()}
-              class={`shrink-0 ${selected() === "main" || selected() === "create" ? "text-v2-icon-icon-muted" : "text-v2-icon-icon-accent"}`}
+              class={`shrink-0 ${summary() || selected() === "main" || selected() === "create" ? "text-v2-icon-icon-muted" : "text-v2-icon-icon-accent"}`}
             />
-            <span class="min-w-0 truncate">{label()}</span>
+            <span class={summary() ? "session-summary-label" : "min-w-0 truncate"}>{label()}</span>
             <Show when={props.onboarding}>
               <span
                 data-slot="workspace-onboarding-dot"
@@ -106,7 +124,11 @@ export function PromptWorkspaceSelector(props: {
                 class="size-1.5 shrink-0 rounded-full bg-v2-text-text-accent"
               />
             </Show>
-            <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+            <Icon
+              name={summary() ? "fill-triangle-down" : "chevron-down"}
+              size={summary() ? "normal" : "small"}
+              class="shrink-0 text-v2-icon-icon-muted"
+            />
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="w-[200px]">
@@ -233,22 +255,47 @@ export function PromptWorkspaceSelector(props: {
       </Tooltip>
       <Show
         when={selected() === "create" && props.branch}
-        fallback={<PromptGitStatus branch={props.branch} from={selected() === "create"} class="ms-1" />}
+        fallback={
+          summary() ? (
+            <Show when={props.branch}>
+              <div class="session-summary-row">
+                <Icon name="branch" class="shrink-0 text-v2-icon-icon-muted" />
+                <span dir="auto" class="session-summary-label">
+                  {props.branch}
+                </span>
+              </div>
+            </Show>
+          ) : (
+            <PromptGitStatus branch={props.branch} from={selected() === "create"} class="ms-1" />
+          )
+        }
       >
         <Tooltip
           placement="top"
           value={language.t("session.new.workspace.fromBranch", { branch: props.branch! })}
           disabled={!branchTruncation.truncated()}
-          class="ms-1 min-w-0 max-w-[220px]"
+          class={summary() ? "min-w-0 w-full" : "ms-1 min-w-0 max-w-[220px]"}
           contentClass="max-w-[calc(100vw-32px)] break-all"
         >
-          <Menu placement="bottom" gutter={4} onOpenChange={onOpenChange}>
-            <Menu.Trigger class="flex h-6 min-w-0 max-w-[220px] items-center gap-1.5 rounded-full bg-v2-background-bg-layer-02 px-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-background-bg-layer-03 hover:text-v2-text-text-muted focus-visible:bg-v2-background-bg-layer-03 focus-visible:text-v2-text-text-muted focus-visible:outline-none data-[expanded]:bg-v2-background-bg-layer-03 data-[expanded]:text-v2-text-text-muted">
-              <Icon name="branch-out" size="small" class="shrink-0 text-v2-icon-icon-muted" />
-              <span ref={branchTruncation.observe} class="min-w-0 truncate">
-                {language.t("session.new.workspace.fromBranch", { branch: props.branch! })}
+          <Menu placement={placement()} gutter={4} modal={summary() ? false : undefined} onOpenChange={onOpenChange}>
+            <Menu.Trigger
+              class={
+                summary()
+                  ? "session-summary-row"
+                  : "flex h-6 min-w-0 max-w-[220px] items-center gap-1.5 rounded-full bg-v2-background-bg-layer-02 px-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-background-bg-layer-03 hover:text-v2-text-text-muted focus-visible:bg-v2-background-bg-layer-03 focus-visible:text-v2-text-text-muted focus-visible:outline-none data-[expanded]:bg-v2-background-bg-layer-03 data-[expanded]:text-v2-text-text-muted"
+              }
+            >
+              <Icon name="branch-out" size={summary() ? "normal" : "small"} class="shrink-0 text-v2-icon-icon-muted" />
+              <span ref={branchTruncation.observe} class={summary() ? "session-summary-label" : "min-w-0 truncate"}>
+                {language.t(summary() ? "session.summary.basedOn" : "session.new.workspace.fromBranch", {
+                  branch: props.branch!,
+                })}
               </span>
-              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <Icon
+                name={summary() ? "fill-triangle-down" : "chevron-down"}
+                size={summary() ? "normal" : "small"}
+                class="shrink-0 text-v2-icon-icon-muted"
+              />
             </Menu.Trigger>
             <Menu.Portal>
               <Menu.Content

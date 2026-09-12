@@ -383,26 +383,6 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
-  const AdvancedSection = () => (
-    <div class="settings-section">
-      <h3 class="settings-section-title">{language.t("settings.general.section.advanced")}</h3>
-
-      <SettingsList>
-        <SettingsRow
-          title={language.t("settings.general.row.showStatus.title")}
-          description={language.t("settings.general.row.showStatus.description")}
-        >
-          <div data-action="settings-show-status">
-            <Switch
-              checked={settings.general.showStatus()}
-              onChange={(checked) => settings.general.setShowStatus(checked)}
-            />
-          </div>
-        </SettingsRow>
-      </SettingsList>
-    </div>
-  )
-
   const NotificationsSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.notifications")}</h3>
@@ -512,8 +492,6 @@ export const SettingsGeneral: Component = () => {
         <Show when={desktop()}>
           <UpdatesSection />
         </Show>
-
-        <AdvancedSection />
       </div>
     </>
   )

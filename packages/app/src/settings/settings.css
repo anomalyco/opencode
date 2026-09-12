@@ -42,7 +42,7 @@
   flex-shrink: 0;
   width: 328px;
   min-width: 328px;
-  padding-block: 48px;
+  padding-block: 70px 48px;
   padding-inline-start: 24px;
   padding-inline-end: 64px;
   border-inline-end: none;
@@ -74,6 +74,10 @@
   flex-shrink: 0;
   flex-direction: column;
   gap: 16px;
+}
+
+.settings-nav > .settings-back {
+  margin-block-end: 8px;
 }
 
 .settings-nav-groups {

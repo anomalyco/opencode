@@ -679,12 +679,11 @@ export function Titlebar(props: {
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col gap-2">
-                              <TitlebarRightMount vertical />
-                              <Show when={updateState().visible}>
+                            <Show when={updateState().visible}>
+                              <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
                                 <TitlebarUpdateIconButton state={updateState()} vertical />
-                              </Show>
-                            </div>
+                              </div>
+                            </Show>
                           </Portal>
                         )}
                       </Show>

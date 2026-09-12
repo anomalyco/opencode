@@ -22,9 +22,7 @@ test.beforeEach(async ({ page }) => {
   )
   await page.goto("/")
   await page.getByRole("button", { name: "Settings", exact: true }).click()
-  await expect(
-    page.getByTestId("settings-screen").getByRole("combobox", { name: "Search settings", exact: true }),
-  ).toBeFocused()
+  await expect(page.getByTestId("settings-screen")).toBeFocused()
 })
 
 for (const viewport of [

@@ -76,9 +76,7 @@ export function SettingsScreen() {
   let viewType = surface.view().type
   let activation = 0
 
-  onMount(() =>
-    (root?.querySelector<HTMLInputElement>(".settings-search input") ?? root)?.focus({ preventScroll: true }),
-  )
+  onMount(() => root?.focus({ preventScroll: true }))
   createEffect(() => {
     const next = surface.view().type
     if (next === viewType) return

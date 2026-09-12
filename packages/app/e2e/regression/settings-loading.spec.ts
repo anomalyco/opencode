@@ -192,7 +192,7 @@ test("clearing project fields sends explicit removal values", async ({ page }) =
 
 test("new session shortcut leaves settings and opens a new session screen", async ({ page }) => {
   const settings = page.getByTestId("settings-screen")
-  await expect(settings.getByRole("combobox", { name: "Search settings", exact: true })).toBeFocused()
+  await expect(settings).toBeFocused()
   await page.keyboard.press("Control+t")
 
   await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)

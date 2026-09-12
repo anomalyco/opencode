@@ -34,8 +34,9 @@ function ui(page: Page) {
   const settings = page.getByTestId("settings-screen")
   return {
     settings,
-    search: settings.getByRole("combobox", { name: "Search settings", exact: true }),
+    search: settings.getByRole("combobox", { name: "Search", exact: true }),
     results: settings.getByRole("listbox", { name: "Settings results", exact: true }),
+    viewport: settings.locator(".settings-search-scroll > .scroll-view__viewport"),
   }
 }
 
@@ -53,14 +54,14 @@ test.beforeEach(async ({ page }) => {
   if ((page.viewportSize()?.width ?? 1280) < 800) await page.getByRole("button", { name: "Tabs", exact: true }).click()
   await page.getByRole("button", { name: "Settings", exact: true }).click()
   const view = ui(page)
-  await expect(view.search).toBeFocused()
+  await expect(view.settings).toBeFocused()
   // Readiness includes the server-backed project inventory, not just the settings shell.
   await view.search.fill("OpenCode")
   await expect(view.results.getByRole("option")).toHaveCount(1)
   await view.search.clear()
 })
 
-test("autofocus, pointer selection, keyboard navigation, and local find shortcut", async ({ page }) => {
+test("pointer selection, keyboard navigation, and local find shortcut", async ({ page }) => {
   const view = ui(page)
   await view.search.fill("font")
   const code = view.results.getByRole("option", { name: "Code Font, Appearance", exact: true })
@@ -104,7 +105,7 @@ test("page priority, compact icons, section context, and the minimal empty state
   await view.search.fill("work")
   await expect(view.results.getByRole("option")).toHaveText(["Worktrees", "Default environmentPreferences / General"])
   const pageResult = view.results.getByRole("option", { name: /^Worktrees,/ })
-  await expect(pageResult).toHaveCSS("min-height", "32px")
+  await expect(pageResult).toHaveCSS("height", "28px")
   await expect(pageResult.locator("svg")).toHaveCount(1)
   await expect(view.settings.getByText("App settings", { exact: true })).toHaveCount(0)
   await view.search.fill("Agent")
@@ -116,11 +117,43 @@ test("page priority, compact icons, section context, and the minimal empty state
   )
   await view.search.fill("zzzzzzzzzz")
   await expect(view.results.getByRole("option")).toHaveCount(0)
-  await expect(view.settings.getByRole("status")).toHaveText("No setting found")
+  await expect(view.settings.getByRole("status")).toHaveText('No results for "zzzzzzzzzz"')
   await expect(view.settings.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible()
   await view.search.press("Escape")
   await expect(view.search).toHaveValue("")
   await expect(view.settings.getByRole("tab", { name: "Preferences", exact: true })).toBeVisible()
+})
+
+test("empty queries keep the closing quote beside the ellipsis while typing and resizing", async ({ page }) => {
+  const view = ui(page)
+  const query = "zzzz 🧑🏽‍💻 ".repeat(40)
+  await view.search.fill(query)
+  const status = view.settings.getByRole("status")
+  const quoted = status.locator("bdi")
+  await expect(status).toHaveAccessibleName(`No results for "${query}"`)
+  await expect(quoted).toHaveText(/^".+…"$/)
+  await expect(status).toHaveCSS("height", "28px")
+  await expect
+    .poll(() =>
+      quoted.evaluate((element) => element.getBoundingClientRect().width <= element.parentElement!.clientWidth),
+    )
+    .toBe(true)
+
+  const text = await quoted.textContent()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(quoted).toHaveText(/^".+…"$/)
+  await expect(quoted).not.toHaveText(text!)
+  await expect
+    .poll(() =>
+      quoted.evaluate((element) => element.getBoundingClientRect().width <= element.parentElement!.clientWidth),
+    )
+    .toBe(true)
+  expect(await view.settings.evaluate((root) => root.scrollWidth <= root.clientWidth)).toBe(true)
+
+  await view.search.fill("zzzzzzzzzz")
+  await expect(status).toHaveText('No results for "zzzzzzzzzz"')
+  await view.search.pressSequentially("x")
+  await expect(status).toHaveText('No results for "zzzzzzzzzzx"')
 })
 
 test("Models and Shortcuts autofocus their filters on normal navigation", async ({ page }) => {
@@ -214,8 +247,8 @@ test("qualified project results preserve query and selection on return", async (
   await expect(view.results.locator('[data-setting-target="settings-project-name"]')).toHaveCount(0)
   await view.search.fill("OpenCode")
   const project = view.results.getByRole("option")
-  await expect(project).toHaveText("OOpenCodeProjects")
-  await expect(project.locator('[data-component="project-avatar-v2"]')).toHaveCSS("width", "14px")
+  await expect(project).toHaveText("OOpenCode")
+  await expect(project.locator('[data-component="project-avatar-v2"]')).toHaveCSS("width", "16px")
   await expect(view.settings.locator(".settings-search-group")).toHaveCount(0)
   await view.search.fill("OpenCode name")
   const name = view.results.getByRole("option")
@@ -241,16 +274,29 @@ test("returning from a project restores a scrolled result list", async ({ page }
   const view = ui(page)
   await view.search.fill("OpenCode")
   await expect(view.results.getByRole("option")).toHaveCount(30)
+  const scrollbar = view.settings.locator('.settings-search-scroll > .scroll-view__thumb[data-orientation="vertical"]')
+  await view.viewport.hover()
+  await expect(scrollbar).toHaveAttribute("data-visible", "true")
+  const bounds = (await scrollbar.boundingBox())!
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+  await page.mouse.down()
+  await expect(scrollbar).toHaveAttribute("data-dragging", "true")
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2 + 80, { steps: 4 })
+  await page.mouse.up()
+  await expect.poll(() => view.viewport.evaluate((list) => list.scrollTop)).toBeGreaterThan(0)
   const project = view.results.getByRole("option", { name: /^OpenCode 25,/ })
   await project.scrollIntoViewIfNeeded()
-  await expect.poll(() => view.results.evaluate((list) => list.scrollTop)).toBeGreaterThan(0)
-  const scroll = await view.results.evaluate((list) => list.scrollTop)
+  await expect.poll(() => view.viewport.evaluate((list) => list.scrollTop)).toBeGreaterThan(0)
+  const scroll = await view.viewport.evaluate((list) => list.scrollTop)
   await project.click()
   await expect(view.settings.getByRole("heading", { name: "OpenCode 25", exact: true })).toBeVisible()
   await view.settings.getByRole("button", { name: "Back to settings", exact: true }).click()
   await expect(view.search).toBeFocused()
   await expect(project).toHaveAttribute("aria-selected", "true")
-  await expect.poll(() => view.results.evaluate((list) => list.scrollTop)).toBe(scroll)
+  await expect.poll(() => view.viewport.evaluate((list) => list.scrollTop)).toBe(scroll)
+  await view.search.fill("about")
+  await expect(view.results.getByRole("option", { name: "About", exact: true })).toBeVisible()
+  await expect(scrollbar).toHaveCount(0)
 })
 
 test("IME confirmation does not activate a search result", async ({ page }) => {
@@ -361,6 +407,44 @@ for (const direction of ["ltr", "rtl"] as const) {
       colorScheme: direction === "rtl" ? "dark" : "light",
       contextOptions: { reducedMotion: "reduce" },
     })
+    test("search input fades track typing, caret scrolling, resizing, and clearing", async ({ page }) => {
+      const view = ui(page)
+      await page.setViewportSize({ width: 1280, height: 900 })
+      await page.evaluate((direction) => {
+        document.documentElement.dir = direction
+      }, direction)
+      await view.search.fill(direction === "rtl" ? "غيرموجود ".repeat(30) : "zzzz ".repeat(30))
+      await view.search.press("End")
+      await expect(view.search).toHaveAttribute("data-overflow-start", "true")
+      await expect(view.search).toHaveAttribute("data-overflow-end", "false")
+      await expect(view.search).not.toHaveCSS("mask-image", "none")
+
+      await view.search.press("Home")
+      await expect(view.search).toHaveAttribute("data-overflow-start", "false")
+      await expect(view.search).toHaveAttribute("data-overflow-end", "true")
+      await view.search.evaluate((input: HTMLInputElement, direction) => {
+        input.scrollLeft = ((input.scrollWidth - input.clientWidth) / 2) * (direction === "rtl" ? -1 : 1)
+      }, direction)
+      await expect(view.search).toHaveAttribute("data-overflow-start", "true")
+      await expect(view.search).toHaveAttribute("data-overflow-end", "true")
+
+      await view.search.fill("z".repeat(50))
+      await expect(view.search).not.toHaveCSS("mask-image", "none")
+      await page.setViewportSize({ width: 600, height: 844 })
+      await expect(view.search).toHaveAttribute("data-overflow-start", "false")
+      await expect(view.search).toHaveAttribute("data-overflow-end", "false")
+      await expect(view.search).toHaveCSS("mask-image", "none")
+
+      await view.search.fill("zzzz ".repeat(30))
+      await expect(view.search).not.toHaveCSS("mask-image", "none")
+      await view.settings.getByRole("button", { name: "Clear", exact: true }).click()
+      await expect(view.search).toHaveValue("")
+      await expect(view.search).toBeFocused()
+      await expect(view.search).toHaveAttribute("data-overflow-start", "false")
+      await expect(view.search).toHaveAttribute("data-overflow-end", "false")
+      await expect(view.search).toHaveCSS("mask-image", "none")
+    })
+
     test("keeps input/content stable and hides the active descendant when results collapse", async ({ page }) => {
       const view = ui(page)
       await page.evaluate((direction) => {

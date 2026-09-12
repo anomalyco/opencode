@@ -79,7 +79,6 @@ const generalSchema = Persistence.struct({
   showFileTree: Schema.Boolean,
   showNavigation: Schema.Boolean,
   showSearch: Schema.Boolean,
-  showStatus: Schema.Boolean,
   showProjectIcon: Schema.Boolean,
   showTerminal: Schema.Boolean,
   timelineDetail: Persistence.struct({
@@ -135,6 +134,7 @@ const soundsSchema = Persistence.struct({
 
 export const settingsSchema = Persistence.struct({
   general: generalSchema,
+  sessionSummary: Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
   appearance: appearanceSchema,
   keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
   permissions: permissionsSchema,
@@ -243,7 +243,6 @@ export const defaultSettings: Settings = {
     showFileTree: false,
     showNavigation: false,
     showSearch: false,
-    showStatus: false,
     showProjectIcon: false,
     showTerminal: false,
     timelineDetail: { ...timelinePresets[2].value },
@@ -254,6 +253,7 @@ export const defaultSettings: Settings = {
     followUpBehavior: "steer",
     experimentalBrowser: false,
   },
+  sessionSummary: { projectExpanded: true, serverExpanded: true },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", showProjectName: false },
   keybinds: {},
   permissions: { autoApprove: false },
@@ -280,7 +280,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
-    const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
@@ -321,10 +320,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showSearch,
         setShowSearch(value: boolean) {
           setStore("general", "showSearch", value)
-        },
-        showStatus,
-        setShowStatus(value: boolean) {
-          setStore("general", "showStatus", value)
         },
         showProjectIcon: withFallback(() => store.general?.showProjectIcon, defaultSettings.general.showProjectIcon),
         setShowProjectIcon(value: boolean) {
@@ -372,10 +367,25 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("general", "experimentalBrowser", value)
         },
       },
+      sessionSummary: {
+        projectExpanded: withFallback(
+          () => store.sessionSummary?.projectExpanded,
+          defaultSettings.sessionSummary.projectExpanded,
+        ),
+        serverExpanded: withFallback(
+          () => store.sessionSummary?.serverExpanded,
+          defaultSettings.sessionSummary.serverExpanded,
+        ),
+        setProjectExpanded(value: boolean) {
+          setStore("sessionSummary", "projectExpanded", value)
+        },
+        setServerExpanded(value: boolean) {
+          setStore("sessionSummary", "serverExpanded", value)
+        },
+      },
       visibility: {
         fileTree: showFileTree,
         search: showSearch,
-        status: showStatus,
         customAgents: showCustomAgents,
       },
       appearance: {

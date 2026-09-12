@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
-import { MessageTimeline, SessionSummaryPanel } from "@/session/timeline/message-timeline"
+import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
 import { projectForSession } from "@/shell/layout/helpers"
 import { ComposerDropzone } from "@/composer/dropzone"
@@ -39,6 +39,11 @@ import { createTimelineCache } from "./timeline/cache"
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
   return { default: SessionMobileFiles }
+})
+
+const SessionSummaryPanel = lazy(async () => {
+  const { SessionSummaryPanel } = await import("./summary/panel")
+  return { default: SessionSummaryPanel }
 })
 
 export function SessionScreen(props: { session: SessionModel }) {

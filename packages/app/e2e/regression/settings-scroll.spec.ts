@@ -31,7 +31,7 @@ for (const viewport of [
     const panel = settings.getByRole("tabpanel")
     const main = page.getByRole("main")
     const slider = settings.getByRole("slider", { name: "Timeline detail", exact: true })
-    await expect(settings.getByRole("combobox", { name: "Search settings", exact: true })).toBeFocused()
+    await expect(settings).toBeFocused()
     await page.setViewportSize(viewport)
     await expect(slider).toHaveAccessibleDescription(/Choose how much detail appears in the session timeline/)
     await expect.poll(() => main.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1)

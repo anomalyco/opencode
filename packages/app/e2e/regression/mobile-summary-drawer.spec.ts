@@ -2,20 +2,21 @@ import { expect, test } from "@playwright/test"
 import { fixture } from "../performance/timeline/session-timeline-stress.fixture"
 import { mockStressTimeline, stressSessionHref } from "../performance/timeline/timeline-test-helpers"
 
-test("status drawer dismisses and reopens after button, backdrop, Escape, and drag", async ({ page }) => {
+test("summary drawer dismisses and reopens after button, backdrop, Escape, and drag", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await mockStressTimeline(page)
   await page.goto(stressSessionHref(fixture.targetID))
   const more = page
     .locator('[data-slot="session-mobile-view-navigation"]')
     .getByRole("button", { name: "More options", exact: true })
-  const drawer = page.getByRole("dialog", { name: "Status", exact: true })
+  const drawer = page.getByRole("dialog", { name: "Session details", exact: true })
   const overlay = page.locator('[data-slot="mobile-drawer-overlay"]')
 
   for (const dismissal of ["button", "backdrop", "escape", "drag", "button"] as const) {
     await more.click()
-    await page.getByRole("menuitem", { name: "Status", exact: true }).click()
-    await expect(drawer.getByRole("tab", { name: "MCP", exact: true })).toBeVisible()
+    await expect(page.getByRole("menuitem", { name: "Status", exact: true })).toHaveCount(0)
+    await page.getByRole("menuitem", { name: "Session details", exact: true }).click()
+    await expect(drawer.getByRole("button", { name: "MCP", exact: true })).toBeVisible()
     // Corvu starts opening after paint; the transition flag is also absent
     // before that callback. Wait for the open position before dismissing.
     await expect
