@@ -86,7 +86,6 @@ function legacyMessageSource(items: { info: Message; parts: Part[] }[]): Session
 
 // Most markers describe the current HTTP attempt; deltaParts persists non-durable stream state across retries.
 type MessageLoadState = {
-  attempt: number
   touchedMessages: Set<string>
   removedMessages: Set<string>
   retainedMessages: Set<string>
@@ -218,10 +217,7 @@ export function createServerSession(
   const pendingParts = new Map<string, Map<string, Set<string>>>()
   const orphanParts = new Map<string, Set<string>>()
   const removedMessages = new Map<string, Set<string>>()
-  const pendingDiffs = new Map<
-    string,
-    { load: MessageLoadState; attempt: number; diffs: Map<string, FileDiffInfo[]> }
-  >()
+  const pendingDiffs = new Map<string, Map<string, FileDiffInfo[]>>()
   const queuedRefreshes = new Set<string>()
   const deltaBases = new Map<string, { base: string; sessionID: string }>()
   const deleteMessageParts = (
@@ -237,8 +233,8 @@ export function createServerSession(
   const retirePendingDiff = (sessionID: string, messageID: string) => {
     const pending = pendingDiffs.get(sessionID)
     if (!pending) return
-    pending.diffs.delete(messageID)
-    if (pending.diffs.size === 0) pendingDiffs.delete(sessionID)
+    pending.delete(messageID)
+    if (pending.size === 0) pendingDiffs.delete(sessionID)
   }
   const seen = new Set<string>()
   const infoSeen = new Set<string>()
@@ -435,7 +431,8 @@ export function createServerSession(
   }
 
   const resetMessageLoad = (sessionID: string, load: MessageLoadState, baseline?: MessageLoadBaseline) => {
-    load.attempt += 1
+    // A new HTTP attempt supersedes any buffer written from the previous attempt's view.
+    pendingDiffs.delete(sessionID)
     load.touchedMessages.clear()
     load.retainedMessages.clear()
     load.touchedParts.clear()
@@ -728,15 +725,14 @@ export function createServerSession(
       compare: compareMessages,
     })
     const pending = pendingDiffs.get(sessionID)
-    const withPending =
-      pending && load && pending.load === load && pending.attempt === load.attempt
-        ? messages.map((message) => {
-            if (message.role !== "user") return message
-            const diffs = pending.diffs.get(message.id)
-            if (!diffs) return message
-            return { ...message, summary: { ...message.summary, diffs } }
-          })
-        : messages
+    const withPending = pending
+      ? messages.map((message) => {
+          if (message.role !== "user") return message
+          const diffs = pending.get(message.id)
+          if (!diffs) return message
+          return { ...message, summary: { ...message.summary, diffs } }
+        })
+      : messages
     batch(() => {
       if (source) setData("session_message", sessionID, reconcile(source))
       const messageIDs = replaceMessages(sessionID, withPending)
@@ -760,7 +756,6 @@ export function createServerSession(
     if (meta.loading[sessionID]) return
     const active = generation(sessionID)
     const load: MessageLoadState = {
-      attempt: 0,
       touchedMessages: new Set(),
       removedMessages: new Set(),
       retainedMessages: new Set(),
@@ -855,8 +850,10 @@ export function createServerSession(
         }
         if (orphanParts.get(sessionID)?.size === 0) orphanParts.delete(sessionID)
       }
-      if (pendingDiffs.get(sessionID)?.load === load) pendingDiffs.delete(sessionID)
-      if (messageLoads.get(sessionID) === load) messageLoads.delete(sessionID)
+      if (messageLoads.get(sessionID) === load) {
+        pendingDiffs.delete(sessionID)
+        messageLoads.delete(sessionID)
+      }
       if (generations.get(sessionID) === active) setMeta("loading", sessionID, false)
     }
   }
@@ -1111,21 +1108,12 @@ export function createServerSession(
         const index = messages?.findIndex((message) => message.id === props.messageID) ?? -1
         const current = index >= 0 ? messages?.[index] : undefined
         if (!current || current.role !== "user") {
-          // An in-flight page can resolve with a snapshot older than this diff; buffer it against the
-          // originating load attempt so a superseded or failed attempt can never replay over a newer
-          // result. Otherwise queue a distinct forced load rather than joining one already past its read.
-          const load = messageLoads.get(props.sessionID)
-          if (load) {
-            const pending = pendingDiffs.get(props.sessionID)
-            if (pending && pending.load === load && pending.attempt === load.attempt) {
-              pending.diffs.set(props.messageID, props.diffs)
-              return
-            }
-            pendingDiffs.set(props.sessionID, {
-              load,
-              attempt: load.attempt,
-              diffs: new Map([[props.messageID, props.diffs]]),
-            })
+          // An in-flight page can resolve with a snapshot older than this diff; buffer and overlay
+          // on completion. Otherwise queue a distinct forced load rather than joining the current one.
+          if (messageLoads.has(props.sessionID)) {
+            const pending = pendingDiffs.get(props.sessionID) ?? new Map<string, FileDiffInfo[]>()
+            pending.set(props.messageID, props.diffs)
+            pendingDiffs.set(props.sessionID, pending)
             return
           }
           void sync(props.sessionID, { force: true }).catch(() => {})

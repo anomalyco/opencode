@@ -551,7 +551,7 @@ describe("server session", () => {
     })
     const info = Promise.withResolvers<{ data: Session }>()
     const client = messageClient(response(), response([{ info: user, parts: [] }]))
-    client.session.get = (() => info.promise) as typeof client.session.get
+    client.session.get = (() => info.promise) as unknown as typeof client.session.get
     const store = createServerSession(client)
     const loading = store.sync("root")
     await client.requested(1)
