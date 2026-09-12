@@ -413,8 +413,11 @@ describe("server session", () => {
     expect(client.requests).toHaveLength(0)
   })
 
-  test("loads an uncached diff when the message cache is empty", async () => {
-    const user = userMessage("message-1", { sessionID: "root" })
+  test("ignores an uncached diff when no message load is active", async () => {
+    const user = userMessage("message-1", {
+      sessionID: "root",
+      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }] },
+    })
     const client = messageClient(response([{ info: user, parts: [] }]))
     const store = createServerSession(client)
     store.remember(session("root"))
@@ -427,44 +430,14 @@ describe("server session", () => {
         diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
       },
     })
-    await client.requested(1)
-
-    expect(client.requests).toHaveLength(1)
     await Bun.sleep(0)
-    expect(store.data.message.root?.[0]?.role).toBe("user")
-  })
 
-  test("force-refreshes a cached page when a diff targets an uncached message", async () => {
-    const cached = userMessage("message-cached", { sessionID: "root" })
-    const target = userMessage("message-target", {
-      sessionID: "root",
-      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }] },
-    })
-    const client = messageClient(
-      response([{ info: cached, parts: [] }]),
-      response([
-        { info: cached, parts: [] },
-        { info: target, parts: [] },
-      ]),
-    )
-    const store = createServerSession(client)
-    store.remember(session("root"))
+    expect(client.requests).toHaveLength(0)
+    expect(store.data.message.root).toBeUndefined()
+
     await store.sync("root")
-    expect(client.requests).toHaveLength(1)
-
-    store.apply({
-      type: "message.diff.updated",
-      properties: {
-        sessionID: "root",
-        messageID: target.id,
-        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
-      },
-    })
-    await Bun.sleep(0)
-
-    expect(client.requests).toHaveLength(2)
-    const message = store.data.message.root?.find((item) => item.id === target.id)
-    expect(message?.role === "user" ? message.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
+    const result = store.data.message.root?.[0]
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
   })
 
   test("a successful retry supersedes an older buffered durable diff", async () => {
@@ -653,272 +626,6 @@ describe("server session", () => {
     const result = store.data.message.root?.[0]
     expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-ACTIVE-B")
     void obsolete.catch(() => {})
-  })
-
-  test("refreshes messages when a diff arrives while session info is still resolving", async () => {
-    const user = userMessage("message-1", {
-      sessionID: "root",
-      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }] },
-    })
-    const info = Promise.withResolvers<{ data: Session }>()
-    const client = messageClient(response(), response([{ info: user, parts: [] }]))
-    client.session.get = (() => info.promise) as unknown as typeof client.session.get
-    const store = createServerSession(client)
-    const loading = store.sync("root")
-    await client.requested(1)
-    await Bun.sleep(0)
-    expect(store.history.loading("root")).toBe(false)
-
-    store.apply({
-      type: "message.diff.updated",
-      properties: {
-        sessionID: "root",
-        messageID: user.id,
-        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
-      },
-    })
-    info.resolve({ data: session("root") })
-    await loading
-    await Bun.sleep(0)
-
-    expect(client.requests).toHaveLength(2)
-    const result = store.data.message.root?.[0]
-    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
-  })
-
-  test("a second forced caller waits for the queued refresh", async () => {
-    const user = userMessage("message-1", { sessionID: "root" })
-    const first = deferredResponse()
-    const follow = deferredResponse()
-    const client = messageClient(first.promise, follow.promise)
-    const store = createServerSession(client)
-    store.remember(session("root"))
-    const initial = store.sync("root")
-    await client.requested(1)
-
-    const firstForced = store.sync("root", { force: true })
-    let secondResolved = false
-    const secondForced = store.sync("root", { force: true }).then(() => {
-      secondResolved = true
-    })
-
-    first.resolve(response([{ info: user, parts: [] }]))
-    await Bun.sleep(0)
-    expect(secondResolved).toBe(false)
-
-    follow.resolve(
-      response([
-        {
-          info: {
-            ...user,
-            summary: {
-              diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-FORCED-B" }],
-            },
-          },
-          parts: [],
-        },
-      ]),
-    )
-    await Promise.all([initial, firstForced, secondForced])
-    expect(secondResolved).toBe(true)
-  })
-
-  test("runs a queued forced refresh when the in-flight sync rejects", async () => {
-    const user = userMessage("message-1", {
-      sessionID: "root",
-      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }] },
-    })
-    const firstInfo = Promise.withResolvers<{ data: Session }>()
-    const secondInfo = Promise.withResolvers<{ data: Session }>()
-    let infoIndex = 0
-    const client = messageClient(response(), response([{ info: user, parts: [] }]))
-    client.session.get = (() =>
-      infoIndex++ === 0 ? firstInfo.promise : secondInfo.promise) as unknown as typeof client.session.get
-    const store = createServerSession(client)
-    const initial = store.sync("root").catch((error) => error)
-    await client.requested(1)
-    await Bun.sleep(0)
-
-    store.apply({
-      type: "message.diff.updated",
-      properties: {
-        sessionID: "root",
-        messageID: user.id,
-        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
-      },
-    })
-    await Bun.sleep(0)
-    firstInfo.reject(new Error("temporary failure"))
-    await initial
-    secondInfo.resolve({ data: session("root") })
-    await Bun.sleep(0)
-
-    expect(client.requests).toHaveLength(2)
-    const result = store.data.message.root?.find((item) => item.id === user.id)
-    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
-  })
-
-  test("a forced refresh waits for an in-flight message load when session info rejects", async () => {
-    const user = userMessage("message-1", {
-      sessionID: "root",
-      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-FRESH-B" }] },
-    })
-    const firstInfo = Promise.withResolvers<{ data: Session }>()
-    const secondInfo = Promise.withResolvers<{ data: Session }>()
-    let infoIndex = 0
-    const firstPage = deferredResponse()
-    const secondPage = deferredResponse()
-    const client = messageClient(firstPage.promise, secondPage.promise)
-    client.session.get = (() =>
-      infoIndex++ === 0 ? firstInfo.promise : secondInfo.promise) as unknown as typeof client.session.get
-    const store = createServerSession(client)
-    const initial = store.sync("root").catch((error) => error)
-    await client.requested(1)
-    await Bun.sleep(0)
-
-    const forced = store.sync("root", { force: true })
-    let premature = false
-    const tracked = forced.then(() => {
-      premature = true
-    })
-
-    firstInfo.reject(new Error("temporary failure"))
-    secondInfo.resolve({ data: session("root") })
-    await Bun.sleep(0)
-    expect(premature).toBe(false)
-
-    firstPage.resolve(response([{ info: userMessage("message-stale", { sessionID: "root" }), parts: [] }]))
-    await Bun.sleep(0)
-    expect(client.requests).toHaveLength(2)
-
-    secondPage.resolve(response([{ info: user, parts: [] }]))
-    await Promise.all([initial, tracked])
-
-    expect(premature).toBe(true)
-    const result = store.data.message.root?.find((item) => item.id === user.id)
-    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-FRESH-B")
-  })
-
-  test("rejects a sync whose session info fails", async () => {
-    const page = deferredResponse()
-    const info = Promise.withResolvers<{ data: Session }>()
-    const client = messageClient(page.promise)
-    client.session.get = (() => info.promise) as unknown as typeof client.session.get
-    const store = createServerSession(client)
-    const initial = store.sync("root")
-    await client.requested(1)
-
-    info.reject(new Error("info failure"))
-    await Bun.sleep(0)
-    page.resolve(response())
-
-    await expect(initial).rejects.toThrow("info failure")
-  })
-
-  test("rejects a sync whose initial message page fails", async () => {
-    const page = deferredResponse()
-    const client = messageClient(page.promise)
-    const store = createServerSession(client)
-    const initial = store.sync("root")
-    await client.requested(1)
-
-    page.reject(new Error("page failure"))
-
-    await expect(initial).rejects.toThrow("page failure")
-  })
-
-  test("a queued forced refresh waits for an in-flight history load before fetching a fresh page", async () => {
-    const latest = userMessage("message-2", { time: { created: 2 } })
-    const older = userMessage("message-1", { time: { created: 1 } })
-    const fresh = userMessage("message-3", { time: { created: 3 } })
-    const initialPage = deferredResponse()
-    const historyPage = deferredResponse()
-    const freshPage = deferredResponse()
-    const info = Promise.withResolvers<{ data: Session }>()
-    const client = messageClient(initialPage.promise, historyPage.promise, freshPage.promise)
-    client.session.get = (() => info.promise) as unknown as typeof client.session.get
-    const store = createServerSession(client)
-    const initial = store.sync("child")
-    await client.requested(1)
-
-    initialPage.resolve(response([{ info: latest, parts: [] }], "older"))
-    await Bun.sleep(0)
-
-    const forced = store.sync("child", { force: true })
-    let premature = false
-    forced.then(() => {
-      premature = true
-    })
-    const history = store.history.loadMore("child")
-    await client.requested(2)
-
-    info.resolve({ data: session("child") })
-    await Bun.sleep(0)
-    expect(premature).toBe(false)
-
-    historyPage.resolve(response([{ info: older, parts: [] }]))
-    await client.requested(3)
-    freshPage.resolve(response([{ info: latest, parts: [] }, { info: fresh, parts: [] }], "older"))
-    await Promise.all([initial, forced, history])
-
-    expect(premature).toBe(true)
-    expect(client.requests).toHaveLength(3)
-    expect(store.data.message.child?.map((message) => message.id)).toContain("message-3")
-  })
-
-  test("a skipped prefetch cannot displace an active history load registration", async () => {
-    const latest = userMessage("message-2", { time: { created: 2 } })
-    const older = userMessage("message-1", { time: { created: 1 } })
-    const fresh = userMessage("message-3", { time: { created: 3 } })
-    const historyPage = deferredResponse()
-    const freshPage = deferredResponse()
-    const client = messageClient(response([{ info: latest, parts: [] }], "older"), historyPage.promise, freshPage.promise)
-    const store = createServerSession(client)
-    await store.sync("child")
-
-    const history = store.history.loadMore("child")
-    await store.prefetch("child", 100)
-    const forced = store.sync("child", { force: true })
-    let premature = false
-    forced.then(() => {
-      premature = true
-    })
-    await Bun.sleep(0)
-    expect(premature).toBe(false)
-
-    historyPage.resolve(response([{ info: older, parts: [] }]))
-    await client.requested(3)
-    freshPage.resolve(response([{ info: latest, parts: [] }, { info: fresh, parts: [] }], "older"))
-    await Promise.all([forced, history])
-
-    expect(store.data.message.child?.map((message) => message.id)).toContain("message-3")
-  })
-
-  test("does not start queued work after session teardown", async () => {
-    const user = userMessage("message-1", { sessionID: "root" })
-    const info = Promise.withResolvers<{ data: Session }>()
-    const client = messageClient(response(), response([{ info: user, parts: [] }]))
-    client.session.get = (() => info.promise) as unknown as typeof client.session.get
-    const store = createServerSession(client)
-    const initial = store.sync("root").catch((error) => error)
-    await client.requested(1)
-    await Bun.sleep(0)
-
-    store.apply({
-      type: "message.diff.updated",
-      properties: {
-        sessionID: "root",
-        messageID: user.id,
-        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
-      },
-    })
-    await Bun.sleep(0)
-    store.apply({ type: "session.deleted", properties: { sessionID: "root", info: session("root") } })
-    info.resolve({ data: session("root") })
-    await initial
-    await Bun.sleep(0)
-
-    expect(client.requests).toHaveLength(1)
   })
 
   test("backfills an assistant-only initial page through its user root", async () => {
