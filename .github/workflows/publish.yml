@@ -217,6 +217,103 @@ jobs:
             packages/opencode/dist/opencode-windows-x64
             packages/opencode/dist/opencode-windows-x64-baseline
 
+  package-cli-linux:
+    needs:
+      - version
+      - build-cli
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-cli
+          path: packages/opencode/dist
+
+      - name: Install nfpm and rpm
+        run: |
+          curl -sfL https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_linux_amd64.tar.gz | tar xz -C /usr/local/bin nfpm
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm
+
+      - name: Build DEB and RPM packages
+        run: bun packages/opencode/script/package.ts --linux
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+
+      - name: Validate packages
+        run: |
+          for deb in packages/opencode/dist/packages/*.deb; do
+            bash packages/opencode/packaging/validate.sh --deb "$deb" --version "${{ needs.version.outputs.version }}"
+          done
+          for rpm in packages/opencode/dist/packages/*.rpm; do
+            bash packages/opencode/packaging/validate.sh --rpm "$rpm" --version "${{ needs.version.outputs.version }}"
+          done
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-cli-packages-linux
+          path: packages/opencode/dist/packages/*
+
+  package-cli-macos:
+    needs:
+      - version
+      - build-cli
+    if: github.repository == 'anomalyco/opencode'
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-26-intel
+            arch: x64
+          - host: macos-26
+            arch: arm64
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
+        if: needs.version.outputs.release
+        with:
+          keychain: build
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Setup Apple API Key
+        if: needs.version.outputs.release
+        run: echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-cli
+          path: packages/opencode/dist
+
+      - name: Build macOS .pkg
+        run: bun packages/opencode/script/package.ts --macos --arch ${{ matrix.settings.arch }}
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+          APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+      - name: Validate .pkg
+        run: |
+          for pkg in packages/opencode/dist/packages/*.pkg; do
+            bash packages/opencode/packaging/validate.sh --pkg "$pkg" --version "${{ needs.version.outputs.version }}"
+          done
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-cli-packages-macos-${{ matrix.settings.arch }}
+          path: packages/opencode/dist/packages/*
+
   build-electron:
     needs:
       - version
@@ -407,6 +504,8 @@ jobs:
       - build-cli
       - sign-cli-windows
       - build-electron
+      - package-cli-linux
+      - package-cli-macos
     if: always() && !failure() && !cancelled()
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
@@ -465,6 +564,19 @@ jobs:
           path: /tmp/desktop
           merge-multiple: true
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.version.outputs.release
+        with:
+          name: opencode-cli-packages-linux
+          path: /tmp/cli-packages
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.version.outputs.release
+        with:
+          pattern: opencode-cli-packages-macos-*
+          path: /tmp/cli-packages
+          merge-multiple: true
+
       - name: Setup git committer
         id: committer
         uses: ./.github/actions/setup-git-committer
@@ -502,6 +614,20 @@ jobs:
             echo "No desktop release assets found"
             exit 1
           fi
+          gh release upload "v${{ needs.version.outputs.version }}" "${files[@]}" --clobber --repo "${{ needs.version.outputs.repo }}"
+
+      - name: Upload CLI package release assets
+        if: needs.version.outputs.release
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+        run: |
+          shopt -s nullglob
+          files=(/tmp/cli-packages/*.{deb,rpm,pkg})
+          if (( ${#files[@]} == 0 )); then
+            echo "No CLI package release assets found"
+            exit 1
+          fi
+          echo "Uploading CLI packages: ${files[*]}"
           gh release upload "v${{ needs.version.outputs.version }}" "${files[@]}" --clobber --repo "${{ needs.version.outputs.repo }}"
 
       - run: ./script/publish.ts
