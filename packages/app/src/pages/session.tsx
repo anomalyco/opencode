@@ -2095,9 +2095,11 @@ export default function Page() {
                   onUserScroll={markUserScroll}
                   onHistoryScroll={onHistoryScroll}
                   onAutoScrollInteraction={autoScroll.handleInteraction}
-                  shouldAnchorBottom={() =>
-                    !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
-                  }
+                  shouldAnchorBottom={() => {
+                    if (location.hash || store.messageId || ui.pendingMessage) return false
+                    if (autoScroll.userScrolled()) return false
+                    return autoScroll.atBottom()
+                  }}
                   centered={centered()}
                   setContentRef={(el) => {
                     content = el
