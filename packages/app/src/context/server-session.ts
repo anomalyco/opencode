@@ -215,6 +215,7 @@ export function createServerSession(
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
   const v2 = createV2SessionReducer()
   const messageLoads = new Map<string, MessageLoadState>()
+  const messageWork = new Map<string, Promise<void>>()
   const pendingParts = new Map<string, Map<string, Set<string>>>()
   const orphanParts = new Map<string, Set<string>>()
   const removedMessages = new Map<string, Set<string>>()
@@ -512,6 +513,7 @@ export function createServerSession(
       inflight.delete(sessionID)
       inflightTodo.delete(sessionID)
       messageLoads.delete(sessionID)
+      messageWork.delete(sessionID)
       v2.clear(sessionID)
       pendingParts.delete(sessionID)
       orphanParts.delete(sessionID)
@@ -767,7 +769,7 @@ export function createServerSession(
     pendingDiffs.delete(sessionID)
   }
 
-  const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
+  const performMessageLoad = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
     if (meta.loading[sessionID]) return
     const active = generation(sessionID)
     const load: MessageLoadState = {
@@ -878,6 +880,19 @@ export function createServerSession(
     }
   }
 
+  // Every message load registers its lifetime here, including history pagination. Callers that must
+  // issue a fresh page (a queued forced refresh) await competing work instead of being skipped by the
+  // loading guard, so a skipped load can never fulfill that contract.
+  const loadMessages = (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
+    const run = performMessageLoad(sessionID, limit, before, mode)
+    messageWork.set(sessionID, run)
+    const cleanup = () => {
+      if (messageWork.get(sessionID) === run) messageWork.delete(sessionID)
+    }
+    void run.then(cleanup, cleanup)
+    return run
+  }
+
   const sync = (sessionID: string, options?: { force?: boolean; messageLimit?: number }): Promise<void> => {
     touch(sessionID)
     const pending = inflight.get(sessionID)
@@ -885,17 +900,19 @@ export function createServerSession(
       return runInflight(inflight, sessionID, async () => {
         const cached = data.message[sessionID] !== undefined && meta.limit[sessionID] !== undefined
         if (cached && data.info[sessionID] && !options?.force) return
+        const info = resolve(sessionID, options)
+        const competing = messageWork.get(sessionID)
+        if (competing) await competing
         // Settle every constituent before completing the operation: a queued forced refresh awaits
         // this promise and must not run while a message load is still active, or its load is skipped
         // by the loading guard and the forced caller completes without a fresh page.
-        const [info, loaded] = await Promise.allSettled([
-          resolve(sessionID, options),
+        const loaded =
           cached && !options?.force
             ? Promise.resolve()
-            : loadMessages(sessionID, options?.messageLimit ?? meta.limit[sessionID] ?? initialMessagePageSize),
-        ])
-        if (info.status === "rejected") throw info.reason
-        if (loaded.status === "rejected") throw loaded.reason
+            : loadMessages(sessionID, options?.messageLimit ?? meta.limit[sessionID] ?? initialMessagePageSize)
+        const [infoResult, loadedResult] = await Promise.allSettled([info, loaded])
+        if (infoResult.status === "rejected") throw infoResult.reason
+        if (loadedResult.status === "rejected") throw loadedResult.reason
       })
     if (!options?.force) return pending
     const queued = queuedRefreshes.get(sessionID)

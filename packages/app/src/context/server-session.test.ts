@@ -827,6 +827,45 @@ describe("server session", () => {
     await expect(initial).rejects.toThrow("page failure")
   })
 
+  test("a queued forced refresh waits for an in-flight history load before fetching a fresh page", async () => {
+    const latest = userMessage("message-2", { time: { created: 2 } })
+    const older = userMessage("message-1", { time: { created: 1 } })
+    const fresh = userMessage("message-3", { time: { created: 3 } })
+    const initialPage = deferredResponse()
+    const historyPage = deferredResponse()
+    const freshPage = deferredResponse()
+    const info = Promise.withResolvers<{ data: Session }>()
+    const client = messageClient(initialPage.promise, historyPage.promise, freshPage.promise)
+    client.session.get = (() => info.promise) as unknown as typeof client.session.get
+    const store = createServerSession(client)
+    const initial = store.sync("child")
+    await client.requested(1)
+
+    initialPage.resolve(response([{ info: latest, parts: [] }], "older"))
+    await Bun.sleep(0)
+
+    const forced = store.sync("child", { force: true })
+    let premature = false
+    forced.then(() => {
+      premature = true
+    })
+    const history = store.history.loadMore("child")
+    await client.requested(2)
+
+    info.resolve({ data: session("child") })
+    await Bun.sleep(0)
+    expect(premature).toBe(false)
+
+    historyPage.resolve(response([{ info: older, parts: [] }]))
+    await client.requested(3)
+    freshPage.resolve(response([{ info: latest, parts: [] }, { info: fresh, parts: [] }], "older"))
+    await Promise.all([initial, forced, history])
+
+    expect(premature).toBe(true)
+    expect(client.requests).toHaveLength(3)
+    expect(store.data.message.child?.map((message) => message.id)).toContain("message-3")
+  })
+
   test("does not start queued work after session teardown", async () => {
     const user = userMessage("message-1", { sessionID: "root" })
     const info = Promise.withResolvers<{ data: Session }>()
