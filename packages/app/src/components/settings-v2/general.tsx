@@ -15,13 +15,11 @@ import { SettingsRowV2 } from "./parts/row"
 import { LayoutRetirementNotice, LayoutTransitionToggle } from "./interface-transition"
 import {
   createAppearanceSettingsController,
-  createPermissionScopeController,
   createShellOptions,
   createShellSettingsController,
   createSoundSettingsController,
   soundOptions,
   type AppearanceSettingsController,
-  type PermissionScopeController,
   type ShellSettingsController,
   type SoundSettingsController,
 } from "./general-controllers"
@@ -69,8 +67,9 @@ const soundSettings = {
   },
 } as const
 
-const PermissionScopeSetting: Component<{ controller: PermissionScopeController }> = (props) => {
+const AutoApprovePermissionsSetting: Component = () => {
   const language = useLanguage()
+  const settings = useSettings()
   return (
     <SettingsRowV2
       title={language.t("command.permissions.autoaccept.enable")}
@@ -78,9 +77,8 @@ const PermissionScopeSetting: Component<{ controller: PermissionScopeController 
     >
       <div data-action="settings-auto-accept-permissions">
         <Switch
-          checked={props.controller.accepting()}
-          disabled={!props.controller.enabled()}
-          onChange={props.controller.set}
+          checked={settings.permissions.autoApprove()}
+          onChange={(checked) => settings.permissions.setAutoApprove(checked)}
         />
       </div>
     </SettingsRowV2>
@@ -271,16 +269,13 @@ const LanguageSetting = () => {
   )
 }
 
-export const SettingsGeneralV2: Component<{
-  sessionID?: string
-}> = (props) => {
+export const SettingsGeneralV2: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
   const settings = useSettings()
   const mobile = createMediaQuery("(max-width: 767px)")
   const updater = useUpdaterAction()
-  const permissionScope = createPermissionScopeController(() => props.sessionID)
   const shell = createShellSettingsController()
   const appearance = createAppearanceSettingsController()
   const sounds = createSoundSettingsController()
@@ -329,7 +324,7 @@ export const SettingsGeneralV2: Component<{
       <SettingsListV2>
         <LanguageSetting />
 
-        <PermissionScopeSetting controller={permissionScope} />
+        <AutoApprovePermissionsSetting />
 
         <ShellSetting controller={shell} />
 

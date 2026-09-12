@@ -8,9 +8,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
-import { usePermission } from "@/context/permission"
 import { usePlatform, type DisplayBackend } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
@@ -27,7 +25,6 @@ import {
   terminalInput,
   useSettings,
 } from "@/context/settings"
-import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { ExternalLink } from "./external-link"
 import { SettingsList } from "./settings-list"
@@ -85,40 +82,13 @@ const playDemoSound = (id: string | undefined) => {
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
   const language = useLanguage()
-  const permission = usePermission()
   const platform = usePlatform()
   const dialog = useDialog()
-  const params = useParams()
   const settings = useSettings()
 
   const updater = useUpdaterAction()
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
-  const dir = createMemo(() => decode64(params.dir))
-  const accepting = createMemo(() => {
-    const value = dir()
-    if (!value) return false
-    if (!params.id) return permission.isAutoAcceptingDirectory(value)
-    return permission.isAutoAccepting(params.id, value)
-  })
-
-  const toggleAccept = (checked: boolean) => {
-    const value = dir()
-    if (!value) return
-
-    if (!params.id) {
-      if (permission.isAutoAcceptingDirectory(value) === checked) return
-      permission.toggleAutoAcceptDirectory(value)
-      return
-    }
-
-    if (checked) {
-      permission.enableAutoAccept(params.id, value)
-      return
-    }
-
-    permission.disableAutoAccept(params.id, value)
-  }
   const desktop = createMemo(() => platform.platform === "desktop")
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
@@ -321,7 +291,10 @@ export const SettingsGeneral: Component = () => {
           description={language.t("toast.permissions.autoaccept.on.description")}
         >
           <div data-action="settings-auto-accept-permissions">
-            <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
+            <Switch
+              checked={settings.permissions.autoApprove()}
+              onChange={(checked) => settings.permissions.setAutoApprove(checked)}
+            />
           </div>
         </SettingsRow>
 
