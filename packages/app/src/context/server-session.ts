@@ -219,7 +219,7 @@ export function createServerSession(
   const orphanParts = new Map<string, Set<string>>()
   const removedMessages = new Map<string, Set<string>>()
   const pendingDiffs = new Map<string, Map<string, FileDiffInfo[]>>()
-  const queuedRefreshes = new Set<string>()
+  const queuedRefreshes = new Map<string, Promise<void>>()
   const deltaBases = new Map<string, { base: string; sessionID: string }>()
   const deleteMessageParts = (
     cache: { part: Record<string, Part[] | undefined>; part_text_accum_delta: Record<string, string | undefined> },
@@ -431,10 +431,15 @@ export function createServerSession(
     load.touchedParts.set(messageID, new Set([partID]))
   }
 
-  const resetMessageLoad = (sessionID: string, load: MessageLoadState, baseline?: MessageLoadBaseline) => {
+  // A page retry supersedes any buffer written from the previous page attempt's view. A parent
+  // backfill reuses the marker reset below and must not retire the still-current page buffer, and an
+  // obsolete load must never mutate the replacement session's buffer.
+  const beginPageAttempt = (sessionID: string, load: MessageLoadState) => {
     load.attempt += 1
-    // A retry supersedes any buffer written from the previous attempt's view.
-    if (load.attempt > 1) pendingDiffs.delete(sessionID)
+    if (load.attempt > 1 && messageLoads.get(sessionID) === load) pendingDiffs.delete(sessionID)
+  }
+
+  const resetMessageLoad = (sessionID: string, load: MessageLoadState, baseline?: MessageLoadBaseline) => {
     load.touchedMessages.clear()
     load.retainedMessages.clear()
     load.touchedParts.clear()
@@ -775,7 +780,10 @@ export function createServerSession(
     setMeta("loading", sessionID, true)
     let applied = false
     try {
-      const page = await fetchMessages(sessionID, limit, before, () => resetMessageLoad(sessionID, load))
+      const page = await fetchMessages(sessionID, limit, before, () => {
+        beginPageAttempt(sessionID, load)
+        resetMessageLoad(sessionID, load)
+      })
       const first = page.session.reduce<Message | undefined>(
         (oldest, message) => (!oldest || compareMessages(message, oldest) < 0 ? message : oldest),
         undefined,
@@ -876,18 +884,23 @@ export function createServerSession(
         ])
       })
     if (!options?.force) return pending
-    if (queuedRefreshes.has(sessionID)) return pending
-    queuedRefreshes.add(sessionID)
-    return pending.then(
-      () => {
+    const queued = queuedRefreshes.get(sessionID)
+    if (queued) return queued
+    // The queued refresh is one shared operation: every forced caller receives its completion, and it
+    // runs after the predecessor settles whether that predecessor fulfilled or rejected. Teardown
+    // removes the queue entry, which makes the continuation a no-op instead of reviving queued work.
+    const refresh = pending
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .then(() => {
+        if (queuedRefreshes.get(sessionID) !== refresh) return
         queuedRefreshes.delete(sessionID)
         return sync(sessionID, { force: true, messageLimit: options.messageLimit })
-      },
-      (error: unknown) => {
-        queuedRefreshes.delete(sessionID)
-        throw error
-      },
-    )
+      })
+    queuedRefreshes.set(sessionID, refresh)
+    return refresh
   }
 
   const prefetch = async (sessionID: string, limit: number) => {
