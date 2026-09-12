@@ -11,6 +11,7 @@ import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { SessionID, MessageID } from "./schema"
 import { Config } from "@/config/config"
+import { createDurableParentCache } from "./durable-parent-cache"
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -84,9 +85,9 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const database = yield* Database.Service
-    // A message that has ever had a durable baseline keeps it; once observed, skip the
-    // historical-event scan (the new hot-path read) on every subsequent summarize.
-    const durableParents = new Set<string>()
+    // A message with a durable baseline is remembered so later changed summarizes skip the
+    // historical-event scan; the bounded cache evicts least-recently-used identities.
+    const durableParents = createDurableParentCache()
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
