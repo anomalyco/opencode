@@ -67,7 +67,7 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
         .catch((cause: unknown) => {
           if (disposed) return
           missing = isShellNotFoundError(cause)
-          setError(missing ? "Shell output is no longer available." : "Unable to read shell output. Retrying…")
+          setError(language.t(missing ? "tui.dialogs.shellOutputUnavailable" : "tui.dialogs.shellOutputRetry"))
         })
         .then((more) => {
           // Poll only while the viewer is open, including after exit so the final
@@ -83,10 +83,12 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
   })
 
   const status = () => {
-    if (info().status === "running") return "Running"
-    if (info().status === "timeout") return "Timed out"
-    if (info().status === "killed") return "Killed"
-    return info().exit === undefined ? "Exited" : `Exited · code ${info().exit}`
+    if (info().status === "running") return language.t("tui.transcript.running")
+    if (info().status === "timeout") return language.t("tui.dialogs.timedOut")
+    if (info().status === "killed") return language.t("tui.dialogs.killed")
+    return info().exit === undefined
+      ? language.t("tui.dialogs.exited")
+      : language.t("tui.dialogs.exitCode", { code: info().exit! })
   }
 
   Keymap.createLayer(() => ({
@@ -135,7 +137,7 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
       <box flexDirection="row" gap={2}>
         <text fg={theme.text.default} attributes={TextAttributes.BOLD} flexGrow={1}>
-          Shell output
+          {language.t("tui.dialogs.shellOutput")}
         </text>
         <text fg={theme.text.subdued}>{status()}</text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
@@ -159,8 +161,8 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
         <text fg={theme.text.default} wrapMode="word">
           {text() ||
             (output() === undefined
-              ? "Loading output…"
-              : "No captured output. Output redirected to files is not shown here.")}
+              ? language.t("tui.dialogs.loadingOutput")
+              : language.t("tui.dialogs.noCapturedOutput"))}
         </text>
       </scrollbox>
       <Show when={error()}>

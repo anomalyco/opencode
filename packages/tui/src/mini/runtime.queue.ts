@@ -9,7 +9,7 @@
 //
 // Resolves when the footer closes and all in-flight work finishes.
 import { SessionMessage } from "@opencode/schema/session-message"
-import { Locale } from "../util/locale"
+import { defaultMiniLanguage, type MiniLanguage } from "./language"
 import { isCompactCommand, isExitCommand, isNewCommand } from "./prompt.shared"
 import type { FooterApi, FooterEvent, RunDelivery, RunPrompt } from "./types"
 
@@ -18,6 +18,7 @@ type Trace = {
 }
 
 export type QueueInput = {
+  language?: MiniLanguage
   footer: FooterApi
   initialInput?: string
   trace?: Trace
@@ -44,6 +45,7 @@ type State = {
 // Ordinary prompts submitted during an ordinary active turn are admitted as
 // durable queued work instead of remaining editable process-local state.
 export async function runPromptQueue(input: QueueInput): Promise<void> {
+  const language = input.language ?? defaultMiniLanguage
   const stop = Promise.withResolvers<{ type: "closed" }>()
   const done = Promise.withResolvers<void>()
   const state: State = {
@@ -98,7 +100,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
                 {
                   type: "stream.patch",
                   patch: {
-                    status: "new sessions unavailable",
+                    status: language.t("tui.mini.newSessionsUnavailable"),
                   },
                 },
                 {
@@ -113,7 +115,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
                 type: "stream.patch",
                 patch: {
                   phase: "running",
-                  status: "starting new session",
+                  status: language.t("tui.mini.startingSession"),
                 },
               },
               {
@@ -131,7 +133,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
                 type: "stream.patch",
                 patch: {
                   phase: "running",
-                  status: "compacting session",
+                  status: language.t("tui.mini.compacting"),
                 },
               },
               {
@@ -220,7 +222,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             if (state.admission === admission.promise) state.admission = undefined
 
             if (sent.mode !== "shell") {
-              const duration = Locale.duration(Math.max(0, Date.now() - start))
+              const duration = language.duration(Math.max(0, Date.now() - start))
               emit(
                 {
                   type: "turn.duration",

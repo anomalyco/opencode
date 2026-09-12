@@ -18,11 +18,12 @@ import { stringWidth } from "../util/string-width"
 import { go } from "../logo"
 import { monoTruncate } from "./mono"
 import type { RunSplashTheme } from "./theme"
+import { defaultMiniLanguage, type MiniLanguage } from "./language"
 
 const SPLASH_TITLE_LIMIT = 50
-const SPLASH_TITLE_FALLBACK = "Untitled session"
 
 type SplashInput = {
+  language?: MiniLanguage
   title: string | undefined
   session_id: string
   mono?: boolean
@@ -67,9 +68,9 @@ function cells(line: string): Cell[] {
   return list
 }
 
-function title(text: string | undefined, mono = false): string {
+function title(text: string | undefined, mono = false, language = defaultMiniLanguage): string {
   if (!text) {
-    return SPLASH_TITLE_FALLBACK
+    return language.t("tui.mini.untitledSession")
   }
 
   let value = ""
@@ -89,7 +90,7 @@ function title(text: string | undefined, mono = false): string {
   }
 
   if (!value) {
-    return SPLASH_TITLE_FALLBACK
+    return language.t("tui.mini.untitledSession")
   }
 
   return mono ? monoTruncate(value, SPLASH_TITLE_LIMIT, true) : Locale.truncate(value, SPLASH_TITLE_LIMIT)
@@ -179,8 +180,9 @@ function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): Scro
   const mark = input.mono ? ["[O]"] : go.right.slice(1)
   const top = 1
   const body_left = (mark[0]?.length ?? 0) + 2
-  const session = "Session  "
-  const label = "Continue "
+  const language = input.language ?? defaultMiniLanguage
+  const session = language.t("tui.mini.session") + "  "
+  const label = language.t("tui.mini.continue") + " "
   const command = `opencode mini -s ${meta.session_id}`
   const wide = body_left + stringWidth(label + command) <= width
   const commandHeight = wide ? 1 : Math.ceil(stringWidth(command) / width)
@@ -197,7 +199,7 @@ function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): Scro
 
     if (input.showSession !== false) {
       push(lines, body_left, top, session, left)
-      push(lines, body_left + session.length, top, meta.title, right, undefined, TextAttributes.BOLD)
+      push(lines, body_left + stringWidth(session), top, meta.title, right, undefined, TextAttributes.BOLD)
     }
     push(lines, body_left, top + 1, label, left)
   }
@@ -217,9 +219,9 @@ function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): Scro
   root.add(
     new TextRenderable(ctx.renderContext, {
       position: "absolute",
-      left: wide ? body_left + label.length : 0,
+      left: wide ? body_left + stringWidth(label) : 0,
       top: wide ? top + 1 : top,
-      width: wide ? width - body_left - label.length : width,
+      width: wide ? width - body_left - stringWidth(label) : width,
       height: commandHeight,
       wrapMode: "char",
       content: command,
@@ -240,7 +242,7 @@ function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): Scro
 
 export function splashMeta(input: SplashInput): SplashMeta {
   return {
-    title: title(input.title, input.mono),
+    title: title(input.title, input.mono, input.language),
     session_id: input.session_id,
   }
 }

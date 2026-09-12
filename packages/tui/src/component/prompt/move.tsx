@@ -8,8 +8,10 @@ import { DialogWorkspaces, type WorkspaceSelection } from "../dialog-workspaces"
 import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { useRoute } from "../../context/route"
+import { useLanguage } from "../../context/language"
 
 export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
+  const language = useLanguage()
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
@@ -29,34 +31,34 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
 
   async function create(name: string) {
     setCreating(true)
-    setProgress("Creating worktree")
+    setProgress(language.t("tui.promptUi.creatingWorktree"))
     try {
       const sessionID = input.sessionID()
       const session = sessionID ? await resolveSession(sessionID) : undefined
-      if (sessionID && !session) throw new Error("Unable to determine current session location")
+      if (sessionID && !session) throw new Error(language.t("tui.promptUi.sessionLocationUnknown"))
       const location = session?.location ?? homeLocation()
       if (!data.location.info(location)) await data.location.syncInfo(location)
       const project = data.location.info(location)?.project
-      if (!project) throw new Error("Unable to determine current project")
+      if (!project) throw new Error(language.t("tui.promptUi.projectUnknown"))
       const result = await client.api.worktree.create({
         location: { directory: location.directory, workspace: location.workspaceID },
         name,
       })
       const directory = result.directory
-      if (!directory) throw new Error("No worktree directory returned")
+      if (!directory) throw new Error(language.t("tui.promptUi.noWorktreeDirectory"))
 
       // Seed the location store before optimistic session creation mounts the
       // destination. A raw read initializes the server location but leaves the
       // optimistic session without its project until the create request echoes.
       await data.location.syncInfo({ directory })
 
-      setProgress("Creating session")
+      setProgress(language.t("tui.promptUi.creatingSession"))
       return directory
     } catch (err) {
       setDestination(undefined)
       setProgress(undefined)
       setCreating(false)
-      toast.show({ title: "Creating workspace failed", message: errorMessage(err), variant: "error" })
+      toast.show({ title: language.t("tui.promptUi.workspaceFailed"), message: errorMessage(err), variant: "error" })
       return
     }
   }
@@ -64,7 +66,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   async function open() {
     const projectID = await resolveProjectID()
     if (!projectID) {
-      toast.show({ message: "Unable to determine current project", variant: "error" })
+      toast.show({ message: language.t("tui.promptUi.projectUnknown"), variant: "error" })
       return
     }
     const sessionID = input.sessionID()
@@ -144,7 +146,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   }
 
   function startSubmit() {
-    if (progress()) setProgress("Submitting prompt")
+    if (progress()) setProgress(language.t("tui.promptUi.submittingPrompt"))
   }
 
   function finishSubmit() {

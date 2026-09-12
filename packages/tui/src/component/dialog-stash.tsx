@@ -5,8 +5,9 @@ import { Locale } from "../util/locale"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { usePromptStash, type StashEntry } from "../prompt/stash"
+import { useLanguage } from "../context/language"
 
-function getRelativeTime(timestamp: number): string {
+function getRelativeTime(timestamp: number, language: ReturnType<typeof useLanguage>): string {
   const now = Date.now()
   const diff = now - timestamp
   const seconds = Math.floor(diff / 1000)
@@ -14,11 +15,12 @@ function getRelativeTime(timestamp: number): string {
   const hours = Math.floor(minutes / 60)
   const days = Math.floor(hours / 24)
 
-  if (seconds < 60) return "just now"
-  if (minutes < 60) return `${minutes}m ago`
-  if (hours < 24) return `${hours}h ago`
-  if (days < 7) return `${days}d ago`
-  return Locale.datetime(timestamp)
+  if (seconds < 60) return language.t("tui.dialogs.justNow")
+  const relative = new Intl.RelativeTimeFormat(language.intl(), { style: "short" })
+  if (minutes < 60) return relative.format(-minutes, "minute")
+  if (hours < 24) return relative.format(-hours, "hour")
+  if (days < 7) return relative.format(-days, "day")
+  return language.date(timestamp, { dateStyle: "medium", timeStyle: "short" })
 }
 
 function getStashPreview(input: string, maxLength: number = 50): string {
@@ -27,6 +29,7 @@ function getStashPreview(input: string, maxLength: number = 50): string {
 }
 
 export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
+  const language = useLanguage()
   const dialog = useDialog()
   const stash = usePromptStash()
   const theme = useTheme("elevated")
@@ -43,13 +46,13 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
         const lineCount = (entry.prompt.text.match(/\n/g)?.length ?? 0) + 1
         return {
           title: isDeleting
-            ? `Press ${shortcuts.get("stash.delete")} again to confirm`
+            ? language.t("tui.pressKeyAgainToConfirm", { key: shortcuts.get("stash.delete") ?? "" })
             : getStashPreview(entry.prompt.text),
           bg: isDeleting ? theme.background.action.destructive.focused : undefined,
           fg: isDeleting ? theme.text.action.destructive.focused : undefined,
           value: index,
-          description: getRelativeTime(entry.timestamp),
-          footer: lineCount > 1 ? `~${lineCount} lines` : undefined,
+          description: getRelativeTime(entry.timestamp, language),
+          footer: lineCount > 1 ? language.t("tui.dialogs.stashLines", { count: lineCount }) : undefined,
         }
       })
       .toReversed()
@@ -57,7 +60,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
 
   return (
     <DialogSelect
-      title="Stash"
+      title={language.t("tui.dialogs.stash")}
       options={options()}
       onMove={() => {
         setToDelete(undefined)
@@ -74,7 +77,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
       actions={[
         {
           command: "stash.delete",
-          title: "delete",
+          title: language.t("tui.delete"),
           onTrigger: (option) => {
             if (toDelete() === option.value) {
               stash.remove(option.value)

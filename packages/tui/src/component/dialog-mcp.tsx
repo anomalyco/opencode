@@ -12,6 +12,7 @@ import { useToast } from "../ui/toast"
 import { DialogErrorDetails } from "./dialog-error-details"
 import { DialogIntegration } from "./dialog-integration"
 import { useLocation } from "../context/location"
+import { useLanguage } from "../context/language"
 
 function statusError(status: McpServer["status"]) {
   if (status.status === "failed") return status.error
@@ -19,22 +20,24 @@ function statusError(status: McpServer["status"]) {
 }
 
 function Status(props: { status: McpServer["status"]; loading: boolean }) {
+  const language = useLanguage()
   if (props.loading || props.status.status === "pending") {
-    return <>Connecting …</>
+    return <>{language.t("tui.dialogs.mcpConnecting")}</>
   }
   if (props.status.status === "connected") {
-    return <span style={{ attributes: TextAttributes.BOLD }}>Connected ✓</span>
+    return <span style={{ attributes: TextAttributes.BOLD }}>{language.t("tui.dialogs.mcpConnected")}</span>
   }
   if (props.status.status === "failed") {
-    return <>Failed !</>
+    return <>{language.t("tui.dialogs.mcpFailed")}</>
   }
   if (props.status.status === "needs_auth") {
-    return <>Sign in required →</>
+    return <>{language.t("tui.dialogs.mcpSignIn")}</>
   }
-  return <>Disabled ○</>
+  return <>{language.t("tui.dialogs.mcpDisabled")}</>
 }
 
 export function DialogMcp(props: { initialServer?: string; details?: boolean } = {}) {
+  const language = useLanguage()
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
@@ -85,10 +88,10 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
 
   const toggleTitle = createMemo(() => {
     const status = focusedServer()?.status.status
-    if (status === "connected") return "disconnect"
-    if (status === "failed") return "retry"
-    if (status === "needs_auth") return "sign in"
-    return "connect"
+    if (status === "connected") return language.t("tui.dialogs.disconnect")
+    if (status === "failed") return language.t("tui.dialogs.retry")
+    if (status === "needs_auth") return language.t("tui.dialogs.signIn")
+    return language.t("tui.dialogs.connect")
   })
 
   const focusedError = createMemo(() => {
@@ -130,7 +133,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
         when={detail()}
         fallback={
           <DialogSelect
-            title="MCP servers"
+            title={language.t("tui.mcpServers")}
             options={options()}
             preserveSelection
             onMove={(option) => setFocused(option.value as string)}
@@ -147,7 +150,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
             ]}
             footer={
               <Show when={focusedError()}>
-                <text fg={theme.text.subdued}>enter to view error</text>
+                <text fg={theme.text.subdued}>{language.t("tui.dialogs.viewError", { key: "enter" })}</text>
               </Show>
             }
           />
@@ -155,10 +158,10 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
       >
         {(server) => (
           <DialogErrorDetails
-            title={`MCP server: ${server().name}`}
-            error={statusError(server().status) ?? "Unknown MCP connection error"}
-            context={`Status: failed\nConfiguration: mcp.servers.${server().name}${
-              server().integrationID ? `\nIntegration: ${server().integrationID}` : ""
+            title={language.t("tui.dialogs.mcpServer", { name: server().name })}
+            error={statusError(server().status) ?? language.t("tui.dialogs.mcpUnknownError")}
+            context={`${language.t("tui.devtools.status")}: failed\n${language.t("tui.dialogs.configuration")}: mcp.servers.${server().name}${
+              server().integrationID ? `\n${language.t("tui.integration")}: ${server().integrationID}` : ""
             }`}
             onBack={() => {
               setDetail(undefined)

@@ -167,10 +167,12 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
       return {
         title,
         titleView: isRemoving ? (
-          <span style={{ fg: theme.text.feedback.error.default }}>Deleting {item.location}</span>
+          <span style={{ fg: theme.text.feedback.error.default }}>
+            {language.t("tui.dialogs.deleting", { name: item.location })}
+          </span>
         ) : deleting ? (
           <span style={{ fg: theme.text.action.destructive.default }}>
-            Press {shortcuts.get("dialog.move_session.delete")} again to confirm
+            {language.t("tui.pressKeyAgainToConfirm", { key: shortcuts.get("dialog.move_session.delete") ?? "" })}
           </span>
         ) : suffix ? (
           <>
@@ -184,7 +186,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
           directory: item.location,
           subdirectory: item.location !== item.root.directory,
         } as const,
-        category: item.root.directory === current ? "Current" : "Other",
+        category: language.t(item.root.directory === current ? "tui.dialogs.current" : "tui.dialogs.other"),
         titleWidth,
         truncateTitle: "left" as const,
       }
@@ -320,7 +322,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
         titleView={
           <box flexDirection="row" gap={1}>
             <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-              Worktrees
+              {language.t("tui.projects.worktrees")}
             </text>
             <Show when={working() || directories.loading || loadedProject.loading}>
               <Spinner />
@@ -334,7 +336,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
           showError() ? (
             <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.feedback.error.default} attributes={TextAttributes.BOLD}>
-                Could not load worktrees
+                {language.t("tui.dialogs.worktreesLoadFailed")}
               </text>
               <text fg={theme.text.subdued}>{errorMessage(loadError())}</text>
               <text fg={theme.text.subdued}>{language.t("tui.projects.closeAndReopenWorktreesToTryAgain")}</text>

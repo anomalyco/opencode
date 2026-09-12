@@ -2,6 +2,7 @@ import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { useDialog } from "./dialog"
+import { useLanguage } from "../context/language"
 
 export type DialogAlertProps = {
   title: string
@@ -10,6 +11,7 @@ export type DialogAlertProps = {
 }
 
 export function DialogAlert(props: DialogAlertProps) {
+  const language = useLanguage()
   const dialog = useDialog()
   const theme = useTheme("elevated")
 
@@ -18,8 +20,8 @@ export function DialogAlert(props: DialogAlertProps) {
     commands: [
       {
         bind: "return",
-        title: "Confirm alert",
-        group: "Dialog",
+        title: language.t("tui.dialogs.confirmAlert"),
+        group: language.t("tui.dialog"),
         run: () => {
           props.onConfirm?.()
           dialog.clear()
@@ -50,7 +52,7 @@ export function DialogAlert(props: DialogAlertProps) {
             dialog.clear()
           }}
         >
-          <text fg={theme.text.action.primary.focused}>ok</text>
+          <text fg={theme.text.action.primary.focused}>{language.t("tui.dialogs.ok")}</text>
         </box>
       </box>
     </box>

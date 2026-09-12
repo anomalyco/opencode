@@ -4,6 +4,7 @@ import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For, Show } from "solid-js"
+import { useLanguage } from "../context/language"
 
 export type ExportFormat = "markdown" | "json"
 
@@ -22,6 +23,7 @@ export type DialogExportOptionsProps = {
 type Active = ExportFormat | "thinking" | "tools" | "sanitize" | "copy" | "export"
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
+  const language = useLanguage()
   const dialog = useDialog()
   const theme = useTheme("elevated")
   const overlayTheme = useTheme("overlay")
@@ -58,8 +60,8 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     commands: [
       {
         bind: "tab",
-        title: "Next export option",
-        group: "Dialog",
+        title: language.t("tui.dialogs.nextExportOption"),
+        group: language.t("tui.dialog"),
         run: () => {
           const order: Active[] =
             store.format === "markdown"
@@ -70,8 +72,8 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
       },
       {
         bind: "return",
-        title: "Select export option",
-        group: "Dialog",
+        title: language.t("tui.dialogs.selectExportOption"),
+        group: language.t("tui.dialog"),
         run: activate,
       },
     ],
@@ -86,14 +88,14 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-          Export session
+          {language.t("tui.dialogs.exportSession")}
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <box flexDirection="row" gap={1}>
-        <text fg={theme.text.default}>Export as:</text>
+        <text fg={theme.text.default}>{language.t("tui.dialogs.exportAs")}</text>
         <box flexDirection="row" gap={1}>
           <For each={["markdown", "json"] as const}>
             {(format) => (
@@ -161,7 +163,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
                   : theme.text.formfield.default
             }
           >
-            Include thinking
+            {language.t("tui.dialogs.includeThinking")}
           </text>
         </box>
         <box
@@ -199,7 +201,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
                   : theme.text.formfield.default
             }
           >
-            Include tools
+            {language.t("tui.dialogs.includeTools")}
           </text>
         </box>
       </Show>
@@ -239,7 +241,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
                   : theme.text.formfield.default
             }
           >
-            Sanitize sensitive data
+            {language.t("tui.dialogs.sanitize")}
           </text>
         </box>
       </Show>
@@ -250,7 +252,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           backgroundColor={overlayTheme.background.default}
           onMouseUp={() => confirm("copy")}
         >
-          <text fg={overlayTheme.text.default}>Copy</text>
+          <text fg={overlayTheme.text.default}>{language.t("tui.details.copy")}</text>
         </box>
         <box
           paddingLeft={4}
@@ -263,7 +265,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           onMouseUp={() => confirm("export")}
         >
           <text fg={store.active === "export" ? theme.text.action.primary.focused : theme.text.action.primary.default}>
-            Export
+            {language.t("tui.dialogs.export")}
           </text>
         </box>
       </box>

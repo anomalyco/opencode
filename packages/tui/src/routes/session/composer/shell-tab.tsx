@@ -1,5 +1,5 @@
 import { useLanguage } from "../../../context/language"
-import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
+import { createMemo, For, Show, createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
 import { useData } from "../../../context/data"
@@ -48,20 +48,28 @@ export function ShellTab(props: { sessionID: string }) {
     }
   })
 
-  onMount(() => {
-    const cleanup = composer.register({
-      id: "shell",
-      label: language.t("tui.details.shell"),
-      hints: () =>
-        selectedEntry()
-          ? [
-              { label: "output", shortcut: shortcuts.get("composer.shell.select") ?? "" },
-              { label: "kill", shortcut: shortcuts.get("composer.shell.kill") ?? "" },
-            ]
-          : [],
-    })
-    onCleanup(cleanup)
-  })
+  createEffect(
+    on(
+      () => language.t("tui.details.shell"),
+      (label) => {
+        const cleanup = composer.register({
+          id: "shell",
+          label,
+          hints: () =>
+            selectedEntry()
+              ? [
+                  {
+                    label: language.t("tui.transcript.output"),
+                    shortcut: shortcuts.get("composer.shell.select") ?? "",
+                  },
+                  { label: language.t("tui.transcript.kill"), shortcut: shortcuts.get("composer.shell.kill") ?? "" },
+                ]
+              : [],
+        })
+        onCleanup(cleanup)
+      },
+    ),
+  )
 
   Keymap.createLayer(() => ({
     mode: "composer",

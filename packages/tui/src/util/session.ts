@@ -1,5 +1,5 @@
 import type { ModelInfo, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
-import { Locale } from "./locale"
+import { createLanguage } from "../i18n/translate"
 
 type SessionNode = {
   id: string
@@ -72,7 +72,11 @@ export function contextUsage(
   }
 }
 
-export function formatContextUsage(tokens: number, percent?: number) {
-  const value = Locale.number(tokens)
-  return percent === undefined ? value : `${value} (${percent}%)`
+export function formatContextUsage(tokens: number, percent?: number, language = createLanguage(() => "en")) {
+  const value = language.number(tokens, {
+    notation: "compact",
+    minimumFractionDigits: tokens >= 1000 ? 1 : 0,
+    maximumFractionDigits: 1,
+  })
+  return percent === undefined ? value : `${value} (${language.number(percent / 100, { style: "percent" })})`
 }

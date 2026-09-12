@@ -2,6 +2,7 @@ import { RGBA, TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
+import { useLanguage } from "../../context/language"
 import { Locale } from "../../util/locale"
 import { stringWidth } from "../../util/string-width"
 
@@ -19,14 +20,15 @@ export function PromptMetadataRow(props: {
   variantAlpha: number
 }) {
   const theme = useTheme()
+  const language = useLanguage()
   const dimensions = useTerminalDimensions()
   const layout = createMemo(() => {
-    if (props.mode === "shell") return { agent: props.agent ?? "Shell", model: "" }
+    if (props.mode === "shell") return { agent: props.agent ?? language.t("tui.details.shell"), model: "" }
     return promptMetadataLayout({
       width: Math.max(0, dimensions().width - (dimensions().width < 44 ? 9 : 13)),
       terminalWidth: dimensions().width,
       agent: props.agent ?? "",
-      auto: props.auto,
+      auto: props.auto ? language.t("tui.auto") : undefined,
       model: props.model,
       provider: props.provider,
       variant: props.variant,
@@ -43,7 +45,7 @@ export function PromptMetadataRow(props: {
           {(agent) => <text fg={fade(props.highlight, props.agentAlpha)}>{agent()}</text>}
         </Show>
         <Show when={props.mode === "normal" && layout().auto}>
-          <text fg={fade(theme.text.subdued, props.agentAlpha)}>auto</text>
+          <text fg={fade(theme.text.subdued, props.agentAlpha)}>{layout().auto}</text>
         </Show>
         <Show when={props.mode === "normal" && layout().model}>
           <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
@@ -92,7 +94,7 @@ function fade(color: RGBA, alpha: number) {
 
 type Layout = {
   agent?: string
-  auto?: boolean
+  auto?: string
   model: string
   provider?: string
   variant?: string
@@ -102,7 +104,7 @@ function promptMetadataLayout(input: {
   width: number
   terminalWidth: number
   agent: string
-  auto?: boolean
+  auto?: string
   model: string
   provider: string
   variant?: string
@@ -138,7 +140,7 @@ function promptMetadataLayout(input: {
 function text(input: Layout) {
   return [
     ...(input.agent ? [input.agent] : []),
-    ...(input.auto ? ["auto"] : []),
+    ...(input.auto ? [input.auto] : []),
     ...(input.model ? [...(input.agent ? ["·"] : []), input.model] : []),
     ...(input.provider ? [input.provider] : []),
     ...(input.variant ? ["·", input.variant] : []),

@@ -7,6 +7,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { Link } from "../ui/link"
 import { errorMessage } from "../util/error"
+import { useLanguage } from "../context/language"
 
 export type DialogPairCredentials = {
   readonly username: string
@@ -14,6 +15,7 @@ export type DialogPairCredentials = {
 }
 
 export function DialogPair(props: { credentials?: DialogPairCredentials }) {
+  const language = useLanguage()
   const client = useClient()
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
@@ -61,7 +63,7 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
       <box flexDirection={horizontal() ? "row" : "column"} alignItems={horizontal() ? "flex-start" : "center"} gap={2}>
         <box width={horizontal() ? 29 : "100%"} flexShrink={0} gap={1}>
           <box>
-            <text fg={theme.text.subdued}>This device</text>
+            <text fg={theme.text.subdued}>{language.t("tui.dialogs.thisDevice")}</text>
             <Show when={localhost()}>
               {(url) => (
                 <Link href={href(url())} fg={theme.text.default}>
@@ -71,7 +73,7 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
             </Show>
           </box>
           <box>
-            <text fg={theme.text.subdued}>URLs</text>
+            <text fg={theme.text.subdued}>{language.t("tui.dialogs.urls")}</text>
             <For each={value.urls}>
               {(url) => (
                 <Link href={href(url)} fg={theme.text.default}>
@@ -81,11 +83,11 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
             </For>
           </box>
           <box>
-            <text fg={theme.text.subdued}>Username</text>
+            <text fg={theme.text.subdued}>{language.t("tui.dialogs.username")}</text>
             <text fg={theme.text.default}>{value.username}</text>
           </box>
           <box>
-            <text fg={theme.text.subdued}>Password</text>
+            <text fg={theme.text.subdued}>{language.t("tui.dialogs.password")}</text>
             <text
               fg={passwordHover() ? theme.text.default : theme.text.subdued}
               wrapMode="word"
@@ -98,7 +100,7 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
           </box>
           <Show when={value.urls.some((url) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname))}>
             <text fg={theme.text.subdued} wrapMode="word">
-              Run `opencode service set hostname 0.0.0.0` to access the service remotely.
+              {language.t("tui.dialogs.remoteAccess", { command: "opencode service set hostname 0.0.0.0" })}
             </text>
           </Show>
         </box>
@@ -118,7 +120,7 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-          Pair
+          {language.t("tui.dialogs.pair")}
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
@@ -127,7 +129,7 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
       <Show
         when={loadError()}
         fallback={
-          <Show when={info()} fallback={<text fg={theme.text.subdued}>Loading server information…</text>}>
+          <Show when={info()} fallback={<text fg={theme.text.subdued}>{language.t("tui.dialogs.loadingServer")}</text>}>
             <Show
               when={dimensions().height >= 36}
               fallback={
@@ -147,10 +149,10 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
         {(error) => (
           <box>
             <text fg={theme.text.feedback.error.default} attributes={TextAttributes.BOLD}>
-              Could not load server information
+              {language.t("tui.dialogs.serverLoadFailed")}
             </text>
             <text fg={theme.text.subdued}>{errorMessage(error())}</text>
-            <text fg={theme.text.subdued}>Close and reopen Pair to try again.</text>
+            <text fg={theme.text.subdued}>{language.t("tui.dialogs.retryPair")}</text>
           </box>
         )}
       </Show>

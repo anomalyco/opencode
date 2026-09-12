@@ -19,6 +19,7 @@ import {
 import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import { monoSnapshot } from "./mono"
 import { entrySplash, exitSplash } from "./splash"
+import { createLanguage, loadDictionary } from "../i18n/translate"
 import { resolveRunTheme } from "./theme"
 import type {
   FooterApi,
@@ -152,6 +153,8 @@ function queueSplash(
 export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lifecycle> {
   const footerTask = import("./footer")
   const tuiConfig = await input.tuiConfig
+  await loadDictionary(tuiConfig.language ?? "en")
+  const language = createLanguage(() => tuiConfig.language ?? "en")
   const miniSettings = resolveMiniSettings(tuiConfig)
   const mono = miniSettings.mono
   const renderer = await createCliRenderer({
@@ -210,12 +213,13 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   let detachSigintListener: (() => void) | undefined
 
   const footer = new RunFooter(renderer, {
+    language,
     directory: input.getDirectory,
     findFiles: input.findFiles,
     agents: input.agents,
     references: input.references,
     agent: input.agent,
-    modelLabel: input.model ? formatModelLabel(input.model, input.variant) : "Default model",
+    modelLabel: input.model ? formatModelLabel(input.model, input.variant) : language.t("tui.mini.defaultModel"),
     model: input.model,
     variant: input.variant,
     first: input.first,
@@ -322,6 +326,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           state,
           "exit",
           exitSplash({
+            language,
             title: splashTitle(next.sessionTitle ?? input.sessionTitle, next.history ?? input.history),
             session_id: sessionID,
             theme: footer.currentTheme().splash,

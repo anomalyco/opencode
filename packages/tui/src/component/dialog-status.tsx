@@ -22,7 +22,7 @@ export function DialogStatus() {
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-          Status
+          {language.t("tui.devtools.status")}
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
@@ -33,9 +33,7 @@ export function DialogStatus() {
         fallback={<text fg={theme.text.default}>{language.t("tui.details.noMCPServers")}</text>}
       >
         <box>
-          <text fg={theme.text.default}>
-            {mcp().length} MCP server{mcp().length === 1 ? "" : "s"}
-          </text>
+          <text fg={theme.text.default}>{language.plural("tui.dialogs.mcpCount", mcp().length)}</text>
           <For each={mcp()}>
             {(item) => (
               <box flexDirection="row" gap={1}>
@@ -45,7 +43,7 @@ export function DialogStatus() {
                 <text fg={theme.text.default} wrapMode="word">
                   <b>{item.name}</b>{" "}
                   <span style={{ fg: theme.text.subdued }}>
-                    <Switch fallback={item.status.status}>
+                    <Switch fallback={language.t("tui.devtools.connecting")}>
                       <Match when={item.status.status === "connected"}>{language.t("tui.details.connected")}</Match>
                       <Match when={item.status.status === "failed" && item.status}>{(val) => val().error}</Match>
                       <Match when={item.status.status === "disabled"}>

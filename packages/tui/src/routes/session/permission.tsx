@@ -1,4 +1,5 @@
 import { useLanguage } from "../../context/language"
+import { createLanguage } from "../../i18n/translate"
 import { createStore } from "solid-js/store"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -158,31 +159,34 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
       </Match>
       <Match when={store.stage === "permission"}>
         {(() => {
-          const current = permissionPresentation(
-            {
-              action: props.request.action,
-              resources: props.request.resources,
-              metadata: props.request.metadata,
-              input: source().input,
-              toolMetadata: source().metadata,
-            },
-            pathFormatter.format,
+          const current = createMemo(() =>
+            permissionPresentation(
+              {
+                action: props.request.action,
+                resources: props.request.resources,
+                metadata: props.request.metadata,
+                input: source().input,
+                toolMetadata: source().metadata,
+              },
+              pathFormatter.format,
+              language.t,
+            ),
           )
           const presentationBody = () =>
             props.request.action === "edit" ? (
-              <EditBody file={current.file} diff={current.diff} patch={current.patch} />
+              <EditBody file={current().file} diff={current().diff} patch={current().patch} />
             ) : props.request.action === "external_directory" ? (
-              <Show when={current.lines.length > 0}>
+              <Show when={current().lines.length > 0}>
                 <box paddingLeft={1} gap={1}>
                   <text fg={theme.text.subdued}>{language.t("tui.patterns")}</text>
                   <box>
-                    <For each={current.lines}>{(line) => <text fg={theme.text.default}>{line}</text>}</For>
+                    <For each={current().lines}>{(line) => <text fg={theme.text.default}>{line}</text>}</For>
                   </box>
                 </box>
               </Show>
             ) : (
               <box paddingLeft={1}>
-                <For each={current.lines}>
+                <For each={current().lines}>
                   {(line) => (
                     <text
                       fg={
@@ -206,12 +210,12 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 <text fg={theme.text.feedback.warning.default}>{"△"}</text>
                 <text fg={theme.text.default}>{language.t("notification.permission.title")}</text>
               </box>
-              <Show when={props.request.action !== "shell" && current.title}>
+              <Show when={props.request.action !== "shell" && current().title}>
                 <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
                   <text fg={theme.text.subdued} flexShrink={0}>
-                    {current.icon}
+                    {current().icon}
                   </text>
-                  <text fg={theme.text.default}>{current.title}</text>
+                  <text fg={theme.text.default}>{current().title}</text>
                 </box>
               </Show>
             </box>
@@ -220,13 +224,13 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           const body = (
             <SessionQuestion
               title={language.t("notification.permission.title")}
-              semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
+              semanticLabel={permissionSemanticLabel(props.request.action, current().title, language.t)}
               instance={props.request.id}
               header={header()}
               body={(option) => (
                 <Show when={option === "always"} fallback={presentationBody()}>
                   <box paddingLeft={1} gap={1}>
-                    <For each={permissionAlwaysLines(props.request)}>
+                    <For each={permissionAlwaysLines(props.request, language.t)}>
                       {(line, index) => (
                         <text fg={index() === 0 ? theme.text.subdued : theme.text.default}>{line}</text>
                       )}
@@ -273,8 +277,8 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
   )
 }
 
-export function permissionSemanticLabel(action: string, title?: string) {
-  return `Permission required: ${title ?? action}`
+export function permissionSemanticLabel(action: string, title?: string, t = createLanguage(() => "en").t) {
+  return t("tui.permissionDisplay.required", { title: title ?? action })
 }
 
 function RejectPrompt(props: {
@@ -326,7 +330,7 @@ function RejectPrompt(props: {
       ref={SimulationSemantics.bind(() => ({
         instance: props.instance,
         role: "dialog",
-        label: `Reject permission: ${props.action}`,
+        label: language.t("tui.permissionDisplay.rejectAction", { action: props.action }),
       }))}
       backgroundColor={theme.background.default}
       border={["left"]}
@@ -361,7 +365,7 @@ function RejectPrompt(props: {
             SimulationSemantics.bind(() => ({
               instance: props.instance,
               role: "textbox",
-              label: "Rejection reason",
+              label: language.t("tui.permissionDisplay.rejectionReason"),
               focused: val.focused,
               disabled: false,
             }))(val)
@@ -378,7 +382,7 @@ function RejectPrompt(props: {
           ref={SimulationSemantics.bind(() => ({
             instance: props.instance,
             role: "group",
-            label: "Rejection actions",
+            label: language.t("tui.permissionDisplay.rejectionActions"),
           }))}
           flexDirection="row"
           gap={2}
@@ -389,7 +393,7 @@ function RejectPrompt(props: {
             ref={SimulationSemantics.bind(() => ({
               instance: props.instance,
               role: "button",
-              label: "Confirm rejection",
+              label: language.t("tui.permissionDisplay.confirmRejection"),
               disabled: false,
             }))}
             onMouseUp={() => props.onConfirm(input.plainText)}
@@ -403,7 +407,7 @@ function RejectPrompt(props: {
             ref={SimulationSemantics.bind(() => ({
               instance: props.instance,
               role: "button",
-              label: "Cancel rejection",
+              label: language.t("tui.permissionDisplay.cancelRejection"),
               disabled: false,
             }))}
             onMouseUp={props.onCancel}
@@ -443,7 +447,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   const narrow = createMemo(() => dimensions().width < 80)
   const shortcuts = Keymap.useShortcuts()
   const id = () => props.id ?? "session.permission"
-  const group = () => props.group ?? "Permission"
+  const group = () => props.group ?? language.t("tui.permission")
   const dismiss = () => {
     if (store.expanded) {
       setStore("expanded", false)
@@ -512,7 +516,9 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
     bindings: [...(props.escapeKey ? ["app.exit"] : []), ...(props.fullscreen ? ["permission.prompt.fullscreen"] : [])],
   }))
 
-  const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
+  const hint = createMemo(() =>
+    language.t(store.expanded ? "tui.permissionDisplay.minimize" : "tui.permissionDisplay.fullscreen"),
+  )
   useRenderer()
 
   const content = () => (
@@ -572,7 +578,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
           ref={SimulationSemantics.bind(() => ({
             instance: props.instance,
             role: "listbox",
-            label: props.choicesLabel ?? "Permission choices",
+            label: props.choicesLabel ?? language.t("tui.permissionDisplay.choices"),
           }))}
           flexDirection="row"
           gap={1}

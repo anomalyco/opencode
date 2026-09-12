@@ -6,6 +6,7 @@ import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useEditorContext } from "../../context/editor"
+import { useLanguage } from "../../context/language"
 import { useClient } from "../../context/client"
 import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -77,6 +78,7 @@ export function Autocomplete(props: {
   const data = useData()
   const keymap = Keymap.use()
   const keymapCommands = Keymap.useCommands()
+  const language = useLanguage()
   const theme = useTheme("overlay")
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
@@ -711,48 +713,48 @@ export function Autocomplete(props: {
     commands: [
       {
         id: "prompt.autocomplete.prev",
-        title: "Previous autocomplete item",
-        group: "Autocomplete",
+        title: language.t("tui.promptUi.previousItem"),
+        group: language.t("tui.promptUi.autocomplete"),
         run() {
           move(-1)
         },
       },
       {
         id: "prompt.autocomplete.next",
-        title: "Next autocomplete item",
-        group: "Autocomplete",
+        title: language.t("tui.promptUi.nextItem"),
+        group: language.t("tui.promptUi.autocomplete"),
         run() {
           move(1)
         },
       },
       {
         id: "prompt.autocomplete.hide",
-        title: "Hide autocomplete",
-        group: "Autocomplete",
+        title: language.t("tui.promptUi.hide"),
+        group: language.t("tui.promptUi.autocomplete"),
         run() {
           hide()
         },
       },
       {
         id: "prompt.clear",
-        title: "Dismiss autocomplete",
-        group: "Autocomplete",
+        title: language.t("tui.promptUi.dismiss"),
+        group: language.t("tui.promptUi.autocomplete"),
         run() {
           hide(true)
         },
       },
       {
         id: "prompt.autocomplete.select",
-        title: "Select autocomplete item",
-        group: "Autocomplete",
+        title: language.t("tui.promptUi.select"),
+        group: language.t("tui.promptUi.autocomplete"),
         run() {
           select()
         },
       },
       {
         id: "prompt.autocomplete.complete",
-        title: "Complete autocomplete item",
-        group: "Autocomplete",
+        title: language.t("tui.promptUi.complete"),
+        group: language.t("tui.promptUi.autocomplete"),
         run() {
           const selected = options()[store.selected]
           if (selected?.isDirectory) {
@@ -765,8 +767,8 @@ export function Autocomplete(props: {
       },
       {
         id: "prompt.autocomplete.destructive",
-        title: "Confirm autocomplete action",
-        group: "Autocomplete",
+        title: language.t("tui.promptUi.confirm"),
+        group: language.t("tui.promptUi.autocomplete"),
         bind: "ctrl+d",
         run: triggerDestructive,
       },
@@ -870,15 +872,15 @@ export function Autocomplete(props: {
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const emptyMessage = createMemo(() => {
     const fileSearch = visibleFiles()
-    if (store.visible === "command") return "No matching commands"
+    if (store.visible === "command") return language.t("tui.promptUi.noCommands")
     if (store.visible === "directory") {
-      if (files.loading) return "Searching…"
-      if (fileSearch.failed) return "Could not search directories. Keep typing to try again."
-      return "No matching directories"
+      if (files.loading) return language.t("tui.promptUi.searching")
+      if (fileSearch.failed) return language.t("tui.promptUi.directorySearchFailed")
+      return language.t("tui.promptUi.noDirectories")
     }
-    if (files.loading) return "Searching…"
-    if (fileSearch.failed) return "Could not search files. Keep typing to try again."
-    return "No matching files, agents, or references"
+    if (files.loading) return language.t("tui.promptUi.searching")
+    if (fileSearch.failed) return language.t("tui.promptUi.fileSearchFailed")
+    return language.t("tui.promptUi.noReferences")
   })
   const emptyError = createMemo(() => store.visible === "reference" && !files.loading && visibleFiles().failed)
 

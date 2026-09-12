@@ -1,5 +1,5 @@
 import { useLanguage } from "../../../context/language"
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, on, Show } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../../../context/keymap"
 import { useSessionTerminals } from "../../../context/session-terminals"
@@ -13,15 +13,20 @@ export function TerminalsTab(props: { sessionID: string; visibleTerminalID?: str
   const language = useLanguage()
   const theme = useTheme()
   const toast = useToast()
-  const failure = () => toast.show({ variant: "error", message: "Unable to load terminal" })
+  const failure = () => toast.show({ variant: "error", message: language.t("tui.transcript.unableLoadTerminal") })
   const [selected, setSelected] = createSignal<number>()
   const session = () => terminals.get(props.sessionID)
   const entries = () => session()?.terminals ?? []
 
-  onMount(() => {
-    const cleanup = composer.register({ id: "terminals", label: "Terminals" })
-    onCleanup(cleanup)
-  })
+  createEffect(
+    on(
+      () => language.t("tui.transcript.terminals"),
+      (label) => {
+        const cleanup = composer.register({ id: "terminals", label })
+        onCleanup(cleanup)
+      },
+    ),
+  )
 
   createEffect(() => {
     if (!composer.active("terminals")) return
@@ -104,7 +109,7 @@ export function TerminalsTab(props: { sessionID: string; visibleTerminalID?: str
                   wrapMode="none"
                   truncate
                 >
-                  {terminal?.foregroundProcess ?? terminal?.title ?? "+ New terminal"}
+                  {terminal?.foregroundProcess ?? terminal?.title ?? language.t("tui.transcript.newTerminal")}
                 </text>
               </box>
             )

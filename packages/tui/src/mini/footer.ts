@@ -34,6 +34,7 @@ import { RUN_SUBAGENT_PANEL_ROWS, footerPanelLayout } from "./footer.command"
 import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { TEXTAREA_MIN_ROWS, footerPromptLayout } from "./footer.prompt"
 import { RunFooterView } from "./footer.view"
+import { MiniLanguageContext, defaultMiniLanguage, type MiniLanguage } from "./language"
 import { monoSnapshot } from "./mono"
 import { RunScrollbackStream } from "./scrollback.surface"
 import { resolveRunTheme, type RunTheme } from "./theme"
@@ -73,6 +74,7 @@ type CycleResult = {
 }
 
 type RunFooterOptions = {
+  language?: MiniLanguage
   directory: () => string
   findFiles: (query: string) => Promise<string[]>
   agents: RunAgent[]
@@ -129,7 +131,7 @@ function createEmptySubagentState(): FooterSubagentState {
   }
 }
 
-function eventPatch(next: FooterEvent): FooterPatch | undefined {
+function eventPatch(next: FooterEvent, language: MiniLanguage): FooterPatch | undefined {
   if (next.type === "first") {
     return { first: next.first }
   }
@@ -141,7 +143,7 @@ function eventPatch(next: FooterEvent): FooterPatch | undefined {
   if (next.type === "turn.send") {
     return {
       phase: "running",
-      status: "sending prompt",
+      status: language.t("tui.mini.sendingPrompt"),
       interrupt: 0,
       exit: 0,
     }
@@ -162,6 +164,7 @@ function eventPatch(next: FooterEvent): FooterPatch | undefined {
 }
 
 export class RunFooter implements FooterApi {
+  private language: MiniLanguage
   private closed = false
   private destroyed = false
   private prompts = new Set<(input: RunPrompt) => void>()
@@ -224,6 +227,7 @@ export class RunFooter implements FooterApi {
 
   private createScrollback(wrote: boolean): RunScrollbackStream {
     return new RunScrollbackStream(this.renderer, this.theme(), {
+      language: this.language,
       wrote,
       onThemeRelease: (theme) => {
         void this.renderer
@@ -241,6 +245,7 @@ export class RunFooter implements FooterApi {
     private renderer: CliRenderer,
     private options: RunFooterOptions,
   ) {
+    this.language = options.language ?? defaultMiniLanguage
     const [state, setState] = createSignal<FooterState>({
       phase: "idle",
       status: "",
@@ -276,7 +281,7 @@ export class RunFooter implements FooterApi {
       const agent = currentAgent()
       if (agent) return agent.name
       const selected = selectedAgentID()
-      return selected ? Locale.titlecase(selected) : "Default"
+      return selected ? Locale.titlecase(selected) : this.language.t("tui.mini.default")
     }
     const [currentModel, setCurrentModel] = createSignal<RunInput["model"]>(options.model)
     this.currentModel = currentModel
@@ -325,58 +330,63 @@ export class RunFooter implements FooterApi {
     const footer = this
     void render(
       () =>
-        createComponent(Keymap.Provider, {
-          config: options.tuiConfig,
+        createComponent(MiniLanguageContext.Provider, {
+          value: footer.language,
           get children() {
-            return createComponent(RunFooterView, {
-              directory: options.directory,
-              state: footer.state,
-              startup: footer.startup,
-              view: footer.view,
-              subagent: footer.subagent,
-              queuedPrompts: footer.queuedPrompts,
-              findFiles: options.findFiles,
-              agents: footer.agents,
-              references: footer.references,
-              commands: footer.commands,
-              providers: footer.providers,
-              currentAgent: footer.currentAgent,
-              currentAgentID: footer.currentAgentID,
-              currentModel: footer.currentModel,
-              variants: footer.variants,
-              currentVariant: footer.currentVariant,
-              theme: footer.theme,
-              tuiConfig: options.tuiConfig,
-              get mono() {
-                return footer.miniSettings().mono
+            return createComponent(Keymap.Provider, {
+              config: options.tuiConfig,
+              get children() {
+                return createComponent(RunFooterView, {
+                  directory: options.directory,
+                  state: footer.state,
+                  startup: footer.startup,
+                  view: footer.view,
+                  subagent: footer.subagent,
+                  queuedPrompts: footer.queuedPrompts,
+                  findFiles: options.findFiles,
+                  agents: footer.agents,
+                  references: footer.references,
+                  commands: footer.commands,
+                  providers: footer.providers,
+                  currentAgent: footer.currentAgent,
+                  currentAgentID: footer.currentAgentID,
+                  currentModel: footer.currentModel,
+                  variants: footer.variants,
+                  currentVariant: footer.currentVariant,
+                  theme: footer.theme,
+                  tuiConfig: options.tuiConfig,
+                  get mono() {
+                    return footer.miniSettings().mono
+                  },
+                  miniSettings: footer.miniSettings,
+                  history: footer.history,
+                  onSubmit: footer.handlePrompt,
+                  onPermissionReply: footer.handlePermissionReply,
+                  onFormReply: footer.handleFormReply,
+                  onFormCancel: footer.handleFormCancel,
+                  onCycle: footer.handleCycle,
+                  onInterrupt: footer.handleInterrupt,
+                  onBackground: options.onBackground,
+                  onQueuedPromptAction: options.onQueuedPromptAction,
+                  onEditorOpen: (input) => {
+                    footer.finishStartup()
+                    return options.onEditorOpen(input)
+                  },
+                  onInputClear: footer.handleInputClear,
+                  onExitRequest: footer.handleExit,
+                  onRequestExit: footer.setRequestExitHandler,
+                  onExit: () => footer.close(),
+                  onAgentSelect: footer.handleAgentSelect,
+                  onModelSelect: footer.handleModelSelect,
+                  onVariantSelect: footer.handleVariantSelect,
+                  onRows: footer.syncRows,
+                  onLayout: footer.syncLayout,
+                  onStatus: footer.setStatus,
+                  onMiniSettingChange: footer.handleMiniSettingChange,
+                  onSubagentSelect: options.onSubagentSelect,
+                  onSubagentInterrupt: options.onSubagentInterrupt,
+                })
               },
-              miniSettings: footer.miniSettings,
-              history: footer.history,
-              onSubmit: footer.handlePrompt,
-              onPermissionReply: footer.handlePermissionReply,
-              onFormReply: footer.handleFormReply,
-              onFormCancel: footer.handleFormCancel,
-              onCycle: footer.handleCycle,
-              onInterrupt: footer.handleInterrupt,
-              onBackground: options.onBackground,
-              onQueuedPromptAction: options.onQueuedPromptAction,
-              onEditorOpen: (input) => {
-                footer.finishStartup()
-                return options.onEditorOpen(input)
-              },
-              onInputClear: footer.handleInputClear,
-              onExitRequest: footer.handleExit,
-              onRequestExit: footer.setRequestExitHandler,
-              onExit: () => footer.close(),
-              onAgentSelect: footer.handleAgentSelect,
-              onModelSelect: footer.handleModelSelect,
-              onVariantSelect: footer.handleVariantSelect,
-              onRows: footer.syncRows,
-              onLayout: footer.syncLayout,
-              onStatus: footer.setStatus,
-              onMiniSettingChange: footer.handleMiniSettingChange,
-              onSubagentSelect: options.onSubagentSelect,
-              onSubagentInterrupt: options.onSubagentInterrupt,
             })
           },
         }),
@@ -512,7 +522,7 @@ export class RunFooter implements FooterApi {
       return
     }
 
-    const patch = eventPatch(next)
+    const patch = eventPatch(next, this.language)
     if (patch) {
       if (typeof patch.status === "string") {
         this.clearNoticeTimer()
@@ -804,7 +814,7 @@ export class RunFooter implements FooterApi {
     }
 
     if (this.prompts.size === 0) {
-      this.setNotice("input queue unavailable")
+      this.setNotice(this.language.t("tui.mini.queueUnavailable"))
       return false
     }
 
@@ -836,12 +846,12 @@ export class RunFooter implements FooterApi {
   private handleCycle = (): void => {
     const result = this.options.onCycleVariant?.()
     if (!result) {
-      this.setNotice("no variants available")
+      this.setNotice(this.language.t("tui.mini.noVariants"))
       return
     }
 
     this.applySelectionResult(result)
-    if (result.status === undefined) this.setNotice("variant updated")
+    if (result.status === undefined) this.setNotice(this.language.t("tui.mini.variantUpdated"))
   }
 
   private handleModelSelect = (model: NonNullable<RunInput["model"]>): void => {
@@ -876,7 +886,7 @@ export class RunFooter implements FooterApi {
     if (this.isClosed || this.currentAgentID() === agent) return
     this.setCurrentAgentID(agent)
     this.options.onAgentSelect?.(agent)
-    this.setNotice(`agent ${this.currentAgent()}`)
+    this.setNotice(this.language.t("tui.mini.agentStatus", { agent: this.currentAgent() }))
   }
 
   private handleVariantSelect = (variant: string | undefined): void => {
@@ -910,7 +920,7 @@ export class RunFooter implements FooterApi {
 
   private handleMiniSettingChange = async (change: MiniSettingChange): Promise<void> => {
     if (!this.options.miniSettings.update) {
-      this.setNotice("settings are unavailable")
+      this.setNotice(this.language.t("tui.mini.settingsUnavailable"))
       return
     }
 
@@ -919,7 +929,7 @@ export class RunFooter implements FooterApi {
       if (this.isClosed) return
       if (settings.mono === this.miniSettings().mono) {
         this.setMiniSettings(settings)
-        this.setNotice("settings updated")
+        this.setNotice(this.language.t("tui.mini.settingsUpdated"))
         return
       }
       const theme = await resolveRunTheme(this.renderer, this.options.tuiConfig.theme, settings.mono)
@@ -937,9 +947,9 @@ export class RunFooter implements FooterApi {
         })
       })
       await this.flushing
-      this.setNotice("settings updated")
+      this.setNotice(this.language.t("tui.mini.settingsUpdated"))
     } catch (error) {
-      this.setNotice("failed to save settings")
+      this.setNotice(this.language.t("tui.mini.settingsFailed"))
       throw error
     }
   }
@@ -1009,7 +1019,7 @@ export class RunFooter implements FooterApi {
 
     this.clearInterruptTimer()
     this.patch({ interrupt: 0 })
-    this.setNotice("interrupting")
+    this.setNotice(this.language.t("tui.mini.interrupting"))
     this.options.onInterrupt?.()
     return true
   }
@@ -1029,7 +1039,7 @@ export class RunFooter implements FooterApi {
     }
 
     this.clearExitTimer()
-    this.patch({ exit: 0, status: "exiting" })
+    this.patch({ exit: 0, status: this.language.t("tui.mini.exiting") })
     this.close()
     return true
   }

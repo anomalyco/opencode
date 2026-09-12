@@ -30,7 +30,7 @@ export function DialogExperiments() {
     experiments.map((experiment) => ({
       title: experiment.title,
       searchText: experiment.description,
-      footer: enabled(experiment) ? "on" : "off",
+      footer: language.t(enabled(experiment) ? "tui.on" : "tui.off"),
       value: experiment,
     })),
   )

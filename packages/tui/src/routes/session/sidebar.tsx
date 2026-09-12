@@ -1,9 +1,9 @@
 import { useData } from "../../context/data"
+import { useLanguage } from "../../context/language"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useConfig } from "../../config"
 import { Slot } from "../../plugin/render"
-import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { TextAttributes } from "@opentui/core"
 import "../../component/title-shimmer"
 
@@ -11,10 +11,21 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+  const language = useLanguage()
   const data = useData()
   const theme = useTheme("elevated")
   const config = useConfig().data
   const session = createMemo(() => data.session.get(props.sessionID))
+  const title = createMemo(() => {
+    const current = session()
+    if (!current) return ""
+    return (
+      current.title ??
+      language.t(current.parentID ? "tui.transcript.childSessionTitle" : "tui.transcript.newSessionTitle", {
+        date: new Date(current.time.created).toISOString(),
+      })
+    )
+  })
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
 
   return (
@@ -34,7 +45,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             fg={theme.text.default}
             rename={{
               pending: data.session.title.pending(props.sessionID),
-              title: withTimestampedFallback(session()),
+              title: title(),
             }}
             enabled={config.animations ?? true}
             backdrop={theme.background.default}
@@ -44,7 +55,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 : TextAttributes.BOLD
             }
           >
-            {withTimestampedFallback(session())}
+            {title()}
           </title_shimmer>
           <Show when={session().location.workspaceID}>
             <text fg={theme.text.subdued}>{session().location.workspaceID}</text>

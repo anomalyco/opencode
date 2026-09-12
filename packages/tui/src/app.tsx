@@ -308,7 +308,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                     <ErrorBoundary
                       fallback={(error, reset) => (
                         <ClipboardProvider value={clipboard}>
-                          <ErrorComponent error={error} reset={reset} mode={mode} />
+                          <ErrorComponent error={error} reset={reset} mode={mode} locale={config.language} />
                         </ClipboardProvider>
                       )}
                     >
@@ -539,16 +539,16 @@ function App(props: { pair?: DialogPairCredentials }) {
       if (status.status === "needs_auth")
         toast.show({
           variant: "warning",
-          title: "MCP server needs authentication",
-          message: `Connect "${server.name}" to use its tools.`,
-          action: { label: "Open MCP servers", run: () => keymap.dispatch("mcp.list") },
+          title: language.t("tui.app.mcpAuthentication"),
+          message: language.t("tui.app.connectMcp", { name: server.name }),
+          action: { label: language.t("tui.app.openMcp"), run: () => keymap.dispatch("mcp.list") },
         })
       else
         toast.show({
           variant: "error",
-          title: `MCP server failed: ${server.name}`,
-          message: "Run /mcps to view details.",
-          action: { label: "Open MCP servers", run: () => keymap.dispatch("mcp.list") },
+          title: language.t("tui.app.mcpFailed", { name: server.name }),
+          message: language.t("tui.app.mcpDetails"),
+          action: { label: language.t("tui.app.openMcp"), run: () => keymap.dispatch("mcp.list") },
         })
     }
   })
@@ -560,7 +560,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const offSelectionKeys = keymap.intercept(
     "key",
     ({ event }) => {
-      Selection.handleSelectionKey(renderer, toast, event, clipboard, copyOnSelectEnabled())
+      Selection.handleSelectionKey(renderer, toast, event, clipboard, copyOnSelectEnabled(), language.t)
     },
     { priority: 101 },
   )
@@ -574,7 +574,7 @@ function App(props: { pair?: DialogPairCredentials }) {
 
     await clipboard
       .write(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .then(() => toast.show({ message: language.t("tui.session.copiedToClipboard"), variant: "info" }))
       .catch(toast.error)
 
     renderer.clearSelection()
@@ -641,7 +641,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         if (!providerID || !modelID)
           return toast.show({
             variant: "warning",
-            message: `Invalid model format: ${args.model}`,
+            message: language.t("tui.app.invalidModel", { model: args.model }),
             duration: 3000,
           })
         local.model.set({ providerID, modelID }, { recent: true })
@@ -910,7 +910,7 @@ function App(props: { pair?: DialogPairCredentials }) {
           if (local.model.variant.list().length === 0) {
             return toast.show({
               title: language.t("tui.noVariantsAvailable"),
-              message: "The current model does not support any variants.",
+              message: language.t("tui.app.noVariants"),
               variant: "info",
             })
           }
@@ -1261,7 +1261,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
-        message: title ? `Session "${title}" was deleted` : "The current session was deleted",
+        message: title ? language.t("tui.app.sessionDeleted", { title }) : language.t("tui.app.currentSessionDeleted"),
       })
     }
   })
@@ -1302,12 +1302,14 @@ function App(props: { pair?: DialogPairCredentials }) {
         if (copyOnSelectEnabled()) return
         if (evt.button !== MouseButton.RIGHT) return
 
-        if (!Selection.copy(renderer, toast, clipboard)) return
+        if (!Selection.copy(renderer, toast, clipboard, language.t)) return
         evt.preventDefault()
         evt.stopPropagation()
       }}
       onMouseUp={
-        copyOnSelectEnabled() ? (event) => Selection.copyOnSelectRelease(event, renderer, toast, clipboard) : undefined
+        copyOnSelectEnabled()
+          ? (event) => Selection.copyOnSelectRelease(event, renderer, toast, clipboard, language.t)
+          : undefined
       }
     >
       <box

@@ -1,8 +1,10 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, For, Match, Show, Switch, createSignal } from "solid-js"
 import { DialogMcp } from "../../component/dialog-mcp"
+import { useLanguage } from "../../context/language"
 
 function View(props: { context: Plugin.Context; sessionID: string }) {
+  const language = useLanguage()
   const [open, setOpen] = createSignal(true)
   const theme = props.context.theme
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
@@ -32,7 +34,8 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
             <Show when={!open()}>
               <span style={{ fg: theme.text.subdued }}>
                 {" "}
-                ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
+                ({language.t("tui.sidebar.active", { count: language.number(on()) })}
+                {bad() > 0 ? `, ${language.plural("tui.sidebar.errors", bad())}` : ""})
               </span>
             </Show>
           </text>
@@ -67,11 +70,11 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
                   flexShrink={0}
                 >
                   <Switch fallback={item.status.status}>
-                    <Match when={item.status.status === "connected"}>Connected</Match>
-                    <Match when={item.status.status === "pending"}>Connecting</Match>
-                    <Match when={item.status.status === "failed"}>Error</Match>
-                    <Match when={item.status.status === "disabled"}>Disabled</Match>
-                    <Match when={item.status.status === "needs_auth"}>Sign in</Match>
+                    <Match when={item.status.status === "connected"}>{language.t("tui.sidebar.connected")}</Match>
+                    <Match when={item.status.status === "pending"}>{language.t("tui.sidebar.connecting")}</Match>
+                    <Match when={item.status.status === "failed"}>{language.t("tui.sidebar.error")}</Match>
+                    <Match when={item.status.status === "disabled"}>{language.t("tui.sidebar.disabled")}</Match>
+                    <Match when={item.status.status === "needs_auth"}>{language.t("tui.sidebar.signIn")}</Match>
                   </Switch>
                 </text>
               </box>

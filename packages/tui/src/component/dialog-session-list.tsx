@@ -22,7 +22,6 @@ import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
 import { useConfig } from "../config"
-import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { projectName } from "../util/project"
 import { useLocation } from "../context/location"
 
@@ -43,6 +42,9 @@ export function DialogSessionList() {
   const [filter, setFilter] = createSignal("")
   const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
+  const sessionTitle = (session: SessionInfo) =>
+    session.title ??
+    language.t("tui.dialogs.newSessionTitle", { timestamp: new Date(session.time.created).toISOString() })
   const [toDelete, setToDelete] = createSignal<string>()
   const [prefs, updatePrefs] = useStorage().store("session-list", {
     initial: { allProjects: config.tabs?.scope !== "cwd" },
@@ -99,9 +101,7 @@ export function DialogSessionList() {
           (session.projectID === current?.project.id && session.location.directory === current.directory),
       )
     if (!query) return sessions
-    return sessions.filter(
-      (session) => !session.parentID && withTimestampedFallback(session).toLowerCase().includes(query),
-    )
+    return sessions.filter((session) => !session.parentID && sessionTitle(session).toLowerCase().includes(query))
   })
   const sessions = createMemo(() => {
     const query = filter().trim()
@@ -170,7 +170,7 @@ export function DialogSessionList() {
       return {
         title: deleting
           ? language.t("tui.pressKeyAgainToConfirm", { key: shortcuts.get("session.delete") ?? "" })
-          : withTimestampedFallback(session),
+          : sessionTitle(session),
         value: session.id,
         category,
         footer,
@@ -209,7 +209,7 @@ export function DialogSessionList() {
       titleView={
         <box flexDirection="row">
           <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-            Sessions
+            {language.t("home.sessions.search.sessions")}
           </text>
           <Show when={!allProjects() && currentProjectName()}>
             <text fg={theme.text.subdued}> for {currentProjectName()}</text>

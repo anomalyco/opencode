@@ -22,6 +22,7 @@ import type {
   SessionMessageAssistantTool,
 } from "@opencode/client/promise"
 import type { Config } from "../config"
+import type { MiniLanguage } from "./language"
 import type { CliRenderer } from "@opentui/core"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 
@@ -194,6 +195,7 @@ export type TurnSummary = {
 }
 
 export type ScrollbackOptions = {
+  language?: MiniLanguage
   suppressBackgrounds?: boolean
   shellOutput?: boolean
   mono?: boolean
@@ -397,7 +399,7 @@ export type FormCancel = {
 
 export type RunTuiConfig = Pick<
   Config.Resolved,
-  "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor" | "animations"
+  "keybinds" | "leader" | "theme" | "mini" | "prompt" | "session" | "cursor" | "animations" | "language"
 >
 
 export type MiniSettings = {

@@ -72,7 +72,7 @@ export function DialogSkill(props: DialogSkillProps) {
           <Match when={showError()}>
             <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.feedback.error.default} attributes={TextAttributes.BOLD}>
-                Could not load skills
+                {language.t("tui.dialogs.skillsLoadFailed")}
               </text>
               <text fg={theme.text.subdued}>{errorMessage(loadError())}</text>
               <text fg={theme.text.subdued}>{language.t("tui.details.closeAndReopenSkillsToTryAgain")}</text>

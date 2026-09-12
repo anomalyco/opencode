@@ -2,16 +2,21 @@ import type { SessionMessageAssistantTool, SessionMessageUser } from "@opencode/
 import { deduplicateVisibleImages } from "../prompt/attachment"
 import { toolDisplayContent } from "../util/tool-display"
 import type { StreamCommit } from "./types"
+import { defaultMiniLanguage } from "./language"
 
 export type ImageCommit = StreamCommit & { image: string; messageID: string; partID: string }
 
-export function userImageCommits(messageID: string, files: SessionMessageUser["files"]): ImageCommit[] {
+export function userImageCommits(
+  messageID: string,
+  files: SessionMessageUser["files"],
+  language = defaultMiniLanguage,
+): ImageCommit[] {
   return deduplicateVisibleImages(files ?? [])
     .filter((file) => file.mime.startsWith("image/"))
     .map((file, index) => ({
       kind: "user",
       source: "system",
-      text: file.name ?? file.mention?.text ?? `[Image ${index + 1}]`,
+      text: file.name ?? file.mention?.text ?? language.t("tui.mini.imageNumber", { number: index + 1 }),
       image: `data:${file.mime};base64,${file.data}`,
       phase: "final",
       messageID,
@@ -19,7 +24,11 @@ export function userImageCommits(messageID: string, files: SessionMessageUser["f
     }))
 }
 
-export function toolImageCommits(part: SessionMessageAssistantTool, messageID: string): ImageCommit[] {
+export function toolImageCommits(
+  part: SessionMessageAssistantTool,
+  messageID: string,
+  language = defaultMiniLanguage,
+): ImageCommit[] {
   return toolDisplayContent(part.state)
     .flatMap((content) =>
       content.type === "file" && content.mime.startsWith("image/") && content.uri.startsWith("data:image/")
@@ -29,7 +38,7 @@ export function toolImageCommits(part: SessionMessageAssistantTool, messageID: s
     .map((content, index) => ({
       kind: "tool",
       source: "tool",
-      text: content.name ?? `[Image ${index + 1}]`,
+      text: content.name ?? language.t("tui.mini.imageNumber", { number: index + 1 }),
       image: content.uri,
       phase: "final",
       messageID,

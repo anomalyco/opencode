@@ -39,6 +39,7 @@ import {
 } from "../context/session-tabs-model"
 import { createAnimatable, spring, tween } from "../ui/animation"
 import { Locale } from "../util/locale"
+import { stringWidth } from "../util/string-width"
 import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
 import { SESSION_SIDEBAR_WIDTH, SESSION_TABS_COMPACT_BREAKPOINT } from "../ui/layout"
@@ -385,37 +386,50 @@ export function createTabMarquee(animations: () => boolean) {
 }
 
 function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsController; onClose: () => void }) {
+  const language = useLanguage()
   const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
   const dialog = useDialog()
   onCleanup(Keymap.use().mode.push("menu"))
   Keymap.createLayer(() => ({
     mode: "menu",
-    commands: [{ bind: "escape,ctrl+c", title: "Close tab menu", group: "Tabs", run: props.onClose }],
+    commands: [
+      {
+        bind: "escape,ctrl+c",
+        title: language.t("tui.dialogs.closeTabMenu"),
+        group: language.t("titlebar.tabs"),
+        run: props.onClose,
+      },
+    ],
   }))
   const actions = createMemo(() => {
     const sessionID = props.state.sessionID
     const title = props.state.title
     return [
-      ...(props.tabs.add ? [{ title: "New tab", run: () => props.tabs.add?.() }] : []),
+      ...(props.tabs.add ? [{ title: language.t("tui.dialogs.newTab"), run: () => props.tabs.add?.() }] : []),
       ...(sessionID
         ? [
             ...(props.tabs.promote && props.tabs.isPreview?.(sessionID)
-              ? [{ title: "Keep open", run: () => props.tabs.promote?.(sessionID) }]
+              ? [{ title: language.t("tui.dialogs.keepOpen"), run: () => props.tabs.promote?.(sessionID) }]
               : []),
             {
-              title: "Rename",
+              title: language.t("tui.dialogs.rename"),
               run: () =>
                 props.tabs.rename ? props.tabs.rename(sessionID) : DialogSessionRename.show(dialog, sessionID, title),
             },
-            { title: "Close", run: () => props.tabs.close(sessionID) },
+            { title: language.t("tui.dialogs.close"), run: () => props.tabs.close(sessionID) },
           ]
         : []),
     ]
   })
   const [selected, setSelected] = createSignal<number>()
+  const menuWidth = () =>
+    Math.min(
+      dimensions().width,
+      Math.max(CONTEXT_MENU_WIDTH, ...actions().map((action) => stringWidth(action.title) + 2)),
+    )
   const top = () => Math.max(0, Math.min(props.state.y + 1, dimensions().height - actions().length))
-  const left = () => Math.max(0, Math.min(props.state.x, dimensions().width - CONTEXT_MENU_WIDTH))
+  const left = () => Math.max(0, Math.min(props.state.x, dimensions().width - menuWidth()))
   const run = (index: number) => {
     const action = actions()[index]
     props.onClose()
@@ -451,7 +465,7 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
           left={left()}
           top={top()}
           height={actions().length}
-          width={CONTEXT_MENU_WIDTH}
+          width={menuWidth()}
           flexDirection="column"
           backgroundColor={theme.background.default}
           onMouseDown={(event) => {
@@ -938,7 +952,7 @@ function VerticalSessionTabs(props: {
                         width={width()}
                         status={status()}
                         label={sessionTabNumberLabel(index())}
-                        idleLabel={Locale.graphemes(title().trimStart())[0] ?? "U"}
+                        idleLabel={Locale.graphemes(title().trimStart() || language.t("tui.tabs.untitled"))[0]}
                         color={
                           selected()
                             ? theme.text.default

@@ -47,6 +47,8 @@ import { RejectField } from "../../src/mini/footer.permission"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { tmpdir } from "../fixture/fixture"
 import { diffImageFixture } from "../fixture/diff-image"
+import { createLanguage, loadDictionary } from "../../src/i18n/translate"
+import { MiniLanguageContext } from "../../src/mini/language"
 
 const tuiConfig = createTuiResolvedConfig()
 
@@ -921,6 +923,40 @@ test("direct command panel renders grouped actions without catalog commands", as
     expect(app.captureCharFrame()).toContain("Show status")
     app.mockInput.pressEnter()
     expect(status).toBe(1)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("Mini settings use their language context without a full TUI Config provider", async () => {
+  await loadDictionary("fr")
+  const [settings, setSettings] = createSignal(resolveMiniSettings())
+  const app = await testRender(
+    () => (
+      <MiniLanguageContext.Provider value={createLanguage(() => "fr")}>
+        <RunSettingsBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          settings={settings}
+          onClose={() => {}}
+          onChange={(change) => {
+            setSettings((current) => applyMiniSettingChange(current, change))
+          }}
+          animations={false}
+        />
+      </MiniLanguageContext.Provider>
+    ),
+    { width: 100, height: RUN_COMMAND_PANEL_ROWS },
+  )
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Paramètres")
+    expect(app.captureCharFrame()).toContain("Niveau de détail")
+    expect(app.captureCharFrame()).toContain("Réflexion")
+    app.mockInput.pressKey("ARROW_RIGHT")
+    await app.waitForFrame((frame) => /tout/i.test(frame))
+    expect(settings()).toEqual(applyMiniSettingChange(resolveMiniSettings(), { key: "verbosity", value: "everything" }))
+    expect(app.captureCharFrame()).toMatch(/tout/i)
   } finally {
     app.renderer.destroy()
   }

@@ -1,4 +1,5 @@
 import type { MiniSettingChange, MiniSettings, MiniVerbosity } from "./types"
+import { defaultMiniLanguage } from "./language"
 
 const levels: readonly MiniVerbosity[] = ["quiet", "default", "everything"]
 
@@ -30,19 +31,12 @@ const presets = {
   },
 } as const satisfies Record<MiniVerbosity, VerbosityKnobs>
 
-const labels = {
-  quiet: "Quiet",
-  default: "Default",
-  everything: "Everything",
-  custom: "Custom",
-} as const
-
 export function verbosityPreset(level: MiniVerbosity): VerbosityKnobs {
   return { ...presets[level] }
 }
 
-export function verbosityLabel(level: MiniVerbosity | "custom") {
-  return labels[level]
+export function verbosityLabel(level: MiniVerbosity | "custom", language = defaultMiniLanguage) {
+  return language.t(`tui.mini.verbosity.${level}`)
 }
 
 export function matchMiniVerbosity(settings: MiniSettings): MiniVerbosity | "custom" {

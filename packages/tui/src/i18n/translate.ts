@@ -52,9 +52,28 @@ export function createLanguage(locale: () => Locale, currentDictionary: () => Di
     plural: (key: PluralKey, count: number) => {
       const category = new Intl.PluralRules(intl()).select(count)
       const current = currentDictionary()
-      return resolveTemplate(current[`${key}.${category}`] ?? current[`${key}.other`] ?? key, { count })
+      return resolveTemplate(current[`${key}.${category}`] ?? current[`${key}.other`] ?? key, {
+        count: new Intl.NumberFormat(intl()).format(count),
+      })
     },
     number: (value: number, options?: Intl.NumberFormatOptions) => new Intl.NumberFormat(intl(), options).format(value),
+    duration: (value: number) => {
+      const format = (value: number, unit: string, minimumFractionDigits = 0) =>
+        new Intl.NumberFormat(intl(), {
+          style: "unit",
+          unit,
+          unitDisplay: "narrow",
+          minimumFractionDigits,
+          maximumFractionDigits: minimumFractionDigits,
+        }).format(value)
+      if (value < 1000) return format(value, "millisecond")
+      if (value < 60000) return format(value / 1000, "second", 1)
+      if (value < 3600000)
+        return `${format(Math.floor(value / 60000), "minute")} ${format(Math.floor((value % 60000) / 1000), "second")}`
+      if (value < 86400000)
+        return `${format(Math.floor(value / 3600000), "hour")} ${format(Math.floor((value % 3600000) / 60000), "minute")}`
+      return `${format(Math.floor(value / 86400000), "day")} ${format(Math.floor((value % 86400000) / 3600000), "hour")}`
+    },
     date: (value: number, options?: Intl.DateTimeFormatOptions) =>
       new Intl.DateTimeFormat(intl(), options).format(value),
   }

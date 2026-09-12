@@ -13,6 +13,7 @@ import {
   type CliRendererExternalOutputEvent,
   type TreeSitterClient,
 } from "@opentui/core"
+import { defaultMiniLanguage } from "./language"
 
 const prefixes: Record<number, string> = {
   0x2192: "->",
@@ -220,14 +221,19 @@ export function monoPrefix(value: string, mono: boolean): string {
   return prefix + value.slice(point > 0xffff ? 2 : 1)
 }
 
-export function monoToolText(value: string, mono: boolean): string {
+export function monoToolText(value: string, mono: boolean, language = defaultMiniLanguage): string {
   const result = monoPrefix(value, mono)
   if (!mono) return result
   const separator = ` ${String.fromCodePoint(0xb7)} `
   const index = result.lastIndexOf(separator)
   if (index === -1) return result
   const head = result.slice(0, index)
-  if (!head.includes(" completed") && head !== "patch" && !/^\d+ questions$/.test(head)) return result
+  if (
+    !head.includes(language.t("tui.mini.tool.completed", { tool: "" }).trim()) &&
+    head !== language.t("tui.mini.tool.patchAction") &&
+    head !== language.plural("tui.mini.tool.questionCount", 0)
+  )
+    return result
   return result.slice(0, index) + " - " + result.slice(index + separator.length)
 }
 

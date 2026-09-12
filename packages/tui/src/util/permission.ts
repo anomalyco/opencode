@@ -1,5 +1,9 @@
 import { Locale } from "./locale"
-import { canonicalToolName, finiteNumber, webSearchProviderLabel } from "./tool-display"
+import { canonicalToolName, finiteNumber, webSearchProviderName } from "./tool-display"
+import { createLanguage } from "../i18n/translate"
+
+type Translate = ReturnType<typeof createLanguage>["t"]
+const english = createLanguage(() => "en")
 
 type Dict = Record<string, unknown>
 
@@ -23,6 +27,7 @@ export type PermissionPresentationInput = {
 export function permissionPresentation(
   source: PermissionPresentationInput,
   formatPath: (value: string) => string = (value) => value,
+  t: Translate = english.t,
 ): PermissionPresentation {
   const action = canonicalToolName(source.action)
   const input = normalizeInput(action, source.input)
@@ -35,7 +40,7 @@ export function permissionPresentation(
     const diff = text(first.patch) || text(first.diff) || text(metadata.diff) || undefined
     return {
       icon: "→",
-      title: `Edit ${formatPath(file)}`,
+      title: t("tui.permissionDisplay.edit", { path: formatPath(file) }),
       lines: [],
       diff,
       patch: diff ? undefined : text(input.patchText) || undefined,
@@ -45,21 +50,21 @@ export function permissionPresentation(
 
   if (action === "read" || action === "list") {
     const value = text(input.path) || resources[0] || ""
-    const title = action === "read" ? "Read" : "List"
     return {
       icon: "→",
-      title: `${title} ${formatPath(value)}`,
-      lines: value ? [`Path: ${formatPath(value)}`] : [],
+      title: t(action === "read" ? "tui.permissionDisplay.read" : "tui.permissionDisplay.list", {
+        path: formatPath(value),
+      }),
+      lines: value ? [t("tui.permissionDisplay.path", { path: formatPath(value) })] : [],
     }
   }
 
   if (action === "glob" || action === "grep") {
     const pattern = text(input.pattern) || resources[0] || ""
-    const title = action === "glob" ? "Glob" : "Grep"
     return {
       icon: "✱",
-      title: `${title} "${pattern}"`,
-      lines: pattern ? [`Pattern: ${pattern}`] : [],
+      title: t(action === "glob" ? "tui.permissionDisplay.glob" : "tui.permissionDisplay.grep", { pattern }),
+      lines: pattern ? [t("tui.permissionDisplay.pattern", { pattern })] : [],
     }
   }
 
@@ -67,17 +72,19 @@ export function permissionPresentation(
     const command = text(input.command)
     return {
       icon: "#",
-      title: "Shell command",
+      title: t("tui.permissionDisplay.shell"),
       lines: command ? [`$ ${command}`] : resources.map((item) => `- ${item}`),
     }
   }
 
   if (action === "subagent") {
-    const agent = text(input.agent) || "general"
+    const agent = text(input.agent)
     const description = text(input.description)
     return {
       icon: "#",
-      title: `${Locale.titlecase(agent)} Subagent`,
+      title: t("tui.permissionDisplay.subagent", {
+        agent: agent ? Locale.titlecase(agent) : t("tui.permissionDisplay.general"),
+      }),
       lines: description ? [`◉ ${description}`] : [],
     }
   }
@@ -86,34 +93,40 @@ export function permissionPresentation(
     const url = text(input.url) || text(metadata.url)
     return {
       icon: "%",
-      title: `WebFetch ${url}`,
-      lines: url ? [`URL: ${url}`] : [],
+      title: t("tui.permissionDisplay.webfetch", { url }),
+      lines: url ? [t("tui.permissionDisplay.url", { url })] : [],
     }
   }
 
   if (action === "websearch") {
     const query = text(input.query) || text(metadata.query)
-    const title = webSearchProviderLabel(metadata.provider)
+    const provider = webSearchProviderName(metadata.provider)
+    const title = provider
+      ? t("tui.permissionDisplay.websearchProvider", { provider })
+      : t("tui.permissionDisplay.websearch")
     return {
       icon: "◈",
-      title: query ? `${title} "${query}"` : title,
-      lines: query ? [`Query: ${query}`] : [],
+      title: query ? t("tui.permissionDisplay.websearchQuery", { provider: title, query }) : title,
+      lines: query ? [t("tui.permissionDisplay.query", { query })] : [],
     }
   }
 
   if (action === "lsp") {
     const file = text(input.path)
-    const operation = text(input.operation) || "request"
+    const operation = text(input.operation) || t("tui.permissionDisplay.request")
     const line = finiteNumber(input.line)
     const character = finiteNumber(input.character)
     const position = line !== undefined && character !== undefined ? `${line}:${character}` : undefined
     return {
       icon: "→",
-      title: `LSP ${operation}${file ? ` ${formatPath(file)}${position ? `:${position}` : ""}` : ""}`,
+      title: t("tui.permissionDisplay.lsp", {
+        operation,
+        path: file ? ` ${formatPath(file)}${position ? `:${position}` : ""}` : "",
+      }),
       lines: [
-        ...(input.operation ? [`Operation: ${operation}`] : []),
-        ...(file ? [`Path: ${formatPath(file)}`] : []),
-        ...(position ? [`Position: ${position}`] : []),
+        ...(input.operation ? [t("tui.permissionDisplay.operation", { operation })] : []),
+        ...(file ? [t("tui.permissionDisplay.path", { path: formatPath(file) })] : []),
+        ...(position ? [t("tui.permissionDisplay.position", { position })] : []),
       ],
     }
   }
@@ -123,7 +136,7 @@ export function permissionPresentation(
     const directory = wildcardDirectory(raw)
     return {
       icon: "←",
-      title: `Access external directory ${formatPath(directory)}`,
+      title: t("tui.permissionDisplay.externalDirectory", { path: formatPath(directory) }),
       lines: resources.map((item) => `- ${item}`),
     }
   }
@@ -131,15 +144,15 @@ export function permissionPresentation(
   if (action === "doom_loop") {
     return {
       icon: "⟳",
-      title: "Continue after repeated failures",
-      lines: ["This keeps the session running despite repeated failures."],
+      title: t("tui.permissionDisplay.doomLoop"),
+      lines: [t("tui.permissionDisplay.doomLoopDescription")],
     }
   }
 
   return {
     icon: "⚙",
-    title: `Call tool ${source.action}`,
-    lines: [`Tool: ${source.action}`],
+    title: t("tui.permissionDisplay.callTool", { tool: source.action }),
+    lines: [t("tui.permissionDisplay.tool", { tool: source.action })],
   }
 }
 
@@ -151,20 +164,22 @@ function wildcardDirectory(value: string) {
   return prefix.replace(/[\\/]+$/, "")
 }
 
-export function permissionAlwaysLines(input: { action: string; save?: ReadonlyArray<string> }): string[] {
+export function permissionAlwaysLines(
+  input: { action: string; save?: ReadonlyArray<string> },
+  t: Translate = english.t,
+): string[] {
   const save = input.save ?? []
   if (save.length === 1 && save[0] === "*") {
-    return [`This will always allow ${input.action} for this project.`]
+    return [t("tui.permissionDisplay.alwaysAction", { action: input.action })]
   }
-  return ["This will always allow the following patterns for this project.", ...save.map((item) => `- ${item}`)]
+  return [t("tui.permissionDisplay.alwaysPatterns"), ...save.map((item) => `- ${item}`)]
 }
 
-export function permissionOptionLabel(option: "once" | "always" | "reject" | "confirm" | "cancel") {
-  if (option === "once") return "Allow once"
-  if (option === "always") return "Always allow"
-  if (option === "reject") return "Reject"
-  if (option === "confirm") return "Confirm"
-  return "Cancel"
+export function permissionOptionLabel(
+  option: "once" | "always" | "reject" | "confirm" | "cancel",
+  t: Translate = english.t,
+) {
+  return t(`tui.permissionDisplay.${option}`)
 }
 
 function normalizeInput(action: string, value: unknown): Dict {

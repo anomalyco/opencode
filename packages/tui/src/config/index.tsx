@@ -361,8 +361,12 @@ export function ConfigProvider(props: {
   )
 }
 
+export function useOptionalConfig() {
+  return useContext(ConfigContext)
+}
+
 export function useConfig() {
-  const value = useContext(ConfigContext)
+  const value = useOptionalConfig()
   if (!value) throw new Error("ConfigProvider is missing")
   return value
 }

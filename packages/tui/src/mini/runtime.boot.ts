@@ -6,6 +6,7 @@
 // none block each other.
 import type { LocationRef } from "@opencode/client/promise"
 import { resolve } from "../config"
+import { loadDictionary } from "../i18n/translate"
 import { loadRunProviders } from "./catalog.shared"
 import { resolveCurrentSession, sessionHistory } from "./session.shared"
 import type { MiniSettings, RunInput, RunPrompt, RunProvider, RunTuiConfig } from "./types"
@@ -79,9 +80,11 @@ export async function resolveRunTuiConfig(
   config?: RunTuiConfig | Promise<RunTuiConfig>,
   platform: NodeJS.Platform = "linux",
 ): Promise<RunTuiConfig> {
-  return Promise.resolve(config)
+  const resolved = await Promise.resolve(config)
     .then((value) => value ?? defaultRunTuiConfig(platform))
     .catch(() => defaultRunTuiConfig(platform))
+  await loadDictionary(resolved.language ?? "en")
+  return resolved
 }
 
 export function resolveMiniSettings(config?: { mini?: Partial<MiniSettings> }): MiniSettings {

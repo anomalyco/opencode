@@ -14,6 +14,7 @@ import {
   type ScrollbackSurface,
 } from "@opentui/core"
 import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
+import { defaultMiniLanguage, type MiniLanguage } from "./language"
 import { monoMarkdownRenderable, monoMarkdownTableOptions } from "./mono"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { turnSummaryCommit } from "./turn-summary"
@@ -84,6 +85,7 @@ function staticBody(commit: StreamCommit, body: RunEntryBody, spaced: number): R
 }
 
 export class RunScrollbackStream {
+  private language: MiniLanguage
   private tail: StreamCommit | undefined
   private rendered: StreamCommit | undefined
   private active: ActiveEntry | undefined
@@ -100,6 +102,7 @@ export class RunScrollbackStream {
     private renderer: CliRenderer,
     private theme: RunTheme,
     options: {
+      language?: MiniLanguage
       wrote?: boolean
       treeSitterClient?: TreeSitterClient
       onThemeRelease?: (theme: RunTheme) => void
@@ -108,6 +111,7 @@ export class RunScrollbackStream {
       imagePreview?: boolean
     } = {},
   ) {
+    this.language = options.language ?? defaultMiniLanguage
     this.treeSitterClient = options.treeSitterClient
     this.wrote = options.wrote ?? false
     this.shellOutput = options.shellOutput ?? (() => true)
@@ -385,11 +389,11 @@ export class RunScrollbackStream {
       await image.loadPromise
       if (surface.isDestroyed) return
 
-      const body = entryBody(commit, { mono: this.mono })
+      const body = entryBody(commit, { mono: this.mono, language: this.language })
       if (body.type !== "text") return
       const style = entryLook(commit, this.theme.entry)
       const caption = new TextRenderable(surface.renderContext, {
-        content: body.content + (image.image ? "" : "\nNo preview"),
+        content: body.content + (image.image ? "" : "\n" + this.language.t("tui.mini.noPreview")),
         width: "100%",
         wrapMode: "word",
         fg: style.fg,
@@ -454,7 +458,7 @@ export class RunScrollbackStream {
       return
     }
 
-    const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono })
+    const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono, language: this.language })
     if (body.type === "none") {
       if (entryDone(commit)) {
         this.markRendered(await this.finishActive(false))
@@ -489,7 +493,7 @@ export class RunScrollbackStream {
         commit,
         body: staticBody(commit, body, spaced),
         theme: this.theme,
-        opts: { mono: this.mono },
+        opts: { mono: this.mono, language: this.language },
       }),
     )
     this.markRendered(commit)

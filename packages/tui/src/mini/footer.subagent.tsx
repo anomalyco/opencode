@@ -1,4 +1,5 @@
 /** @jsxImportSource @opentui/solid */
+import { useMiniLanguage } from "./language"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "../component/register-spinner"
@@ -62,6 +63,7 @@ export function RunFooterSubagentBody(props: {
   mono?: boolean
 }) {
   const dims = useTerminalDimensions()
+  const language = useMiniLanguage()
   const [size, setSize] = createSignal(dims())
   const width = () => size().width
   const compact = () => width() < 56 || size().height < 12
@@ -98,7 +100,7 @@ export function RunFooterSubagentBody(props: {
       <RunEntryContent
         commit={commit()}
         theme={theme()}
-        opts={{ shellOutput: props.shellOutput?.() ?? true, mono: props.mono }}
+        opts={{ shellOutput: props.shellOutput?.() ?? true, mono: props.mono, language }}
       />
     </box>
   ))
@@ -108,9 +110,13 @@ export function RunFooterSubagentBody(props: {
     if (tab()?.status !== "running") return undefined
     return props.interrupt?.()
   })
-  const count = () => (props.total() > 1 && props.index() > 0 ? `${props.index()} of ${props.total()}` : "")
+  const count = () =>
+    props.total() > 1 && props.index() > 0
+      ? language.t("tui.mini.position", { index: props.index(), total: props.total() })
+      : ""
   const headerControlsWidth = () =>
-    (interruptHint() ? stringWidth(`${interruptHint()} interrupt`) + 1 : 0) + (count() ? stringWidth(count()) + 1 : 0)
+    (interruptHint() ? stringWidth(language.t("tui.mini.interruptHint", { key: interruptHint()! })) + 1 : 0) +
+    (count() ? stringWidth(count()) + 1 : 0)
   const headerControls = () => !compact() && stringWidth(title()) + 2 + headerControlsWidth() <= width() - 4
   const titleWidth = () => Math.max(1, width() - (compact() ? 2 : 6) - (headerControls() ? headerControlsWidth() : 0))
 
@@ -197,7 +203,7 @@ export function RunFooterSubagentBody(props: {
               <Show when={interruptHint()}>
                 {(hint) => (
                   <text fg={footer().muted} wrapMode="none" flexShrink={0}>
-                    {hint()} interrupt
+                    {language.t("tui.mini.interruptHint", { key: hint() })}
                   </text>
                 )}
               </Show>
@@ -229,7 +235,7 @@ export function RunFooterSubagentBody(props: {
             rows()
           ) : (
             <text width="100%" fg={footer().muted} wrapMode="word" flexShrink={0}>
-              No subagent activity yet
+              {language.t("tui.mini.noSubagentActivity")}
             </text>
           )}
         </box>
@@ -237,18 +243,23 @@ export function RunFooterSubagentBody(props: {
       <Show when={!headerControls()}>
         <box width="100%" flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
           <text height={1} fg={footer().actionSecondaryText} wrapMode="none" flexShrink={0} onMouseUp={props.onClose}>
-            esc back
+            {language.t("tui.mini.backHint")}
           </text>
           <Show when={interruptHint()}>
             {(hint) => (
               <text maxWidth="100%" fg={footer().actionSecondaryText} wrapMode="word" flexShrink={0}>
-                {hint()} {width() >= stringWidth(hint()) + 10 ? "interrupt" : "stop"}
+                {language.t(
+                  width() >= stringWidth(language.t("tui.mini.interruptHint", { key: hint() }))
+                    ? "tui.mini.interruptHint"
+                    : "tui.mini.stopHint",
+                  { key: hint() },
+                )}
               </text>
             )}
           </Show>
           <Show when={width() >= 56}>
             <text height={1} fg={footer().muted} wrapMode="none" flexShrink={0}>
-              pgup/pgdn scroll
+              {language.t("tui.mini.scrollHint")}
             </text>
             <Show when={props.total() > 1 && props.index() > 0}>
               <text
@@ -258,7 +269,7 @@ export function RunFooterSubagentBody(props: {
                 flexShrink={0}
                 onMouseUp={() => props.onCycle(1)}
               >
-                tab next {props.index()}/{props.total()}
+                {language.t("tui.mini.nextTabHint", { index: props.index(), total: props.total() })}
               </text>
             </Show>
           </Show>

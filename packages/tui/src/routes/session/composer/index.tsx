@@ -1,4 +1,5 @@
 import { createEffect, createMemo, For, onCleanup, Show, useContext, createContext } from "solid-js"
+import { useLanguage } from "../../../context/language"
 import { createStore } from "solid-js/store"
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../../../context/theme"
@@ -42,6 +43,7 @@ export type ComposerProps = {
 }
 
 export function Composer(props: ComposerProps) {
+  const language = useLanguage()
   const theme = useTheme("elevated")
   const config = useConfig().data
 
@@ -100,10 +102,30 @@ export function Composer(props: ComposerProps) {
     enabled: () => props.open,
     priority: 1,
     commands: [
-      { bind: "left", title: "Previous tab", group: "Composer", run: () => switchTab(-1) },
-      { bind: "right", title: "Next tab", group: "Composer", run: () => switchTab(1) },
-      { bind: "escape", title: "Close composer", group: "Composer", run: close },
-      { bind: "ctrl+c", title: "Close composer", group: "Composer", run: close },
+      {
+        bind: "left",
+        title: language.t("tui.transcript.previousTab"),
+        group: language.t("tui.session.composer"),
+        run: () => switchTab(-1),
+      },
+      {
+        bind: "right",
+        title: language.t("tui.transcript.nextTab"),
+        group: language.t("tui.session.composer"),
+        run: () => switchTab(1),
+      },
+      {
+        bind: "escape",
+        title: language.t("tui.transcript.closeComposer"),
+        group: language.t("tui.session.composer"),
+        run: close,
+      },
+      {
+        bind: "ctrl+c",
+        title: language.t("tui.transcript.closeComposer"),
+        group: language.t("tui.session.composer"),
+        run: close,
+      },
     ],
   }))
 
@@ -169,7 +191,7 @@ export function Composer(props: ComposerProps) {
               <Show when={tabList().length > 1}>
                 <text>
                   <span style={{ fg: theme.text.default }}>
-                    <b>tabs</b>{" "}
+                    <b>{language.t("tui.transcript.tabs")}</b>{" "}
                   </span>
                   <span style={{ fg: theme.text.subdued }}>←/→</span>
                 </text>

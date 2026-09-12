@@ -513,7 +513,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   function submit() {
     const unacknowledged = fields().find((field) => field.type === "external" && store.answers[field.key] !== true)
     if (unacknowledged) {
-      setStore("error", `External action must be acknowledged: ${formLabel(unacknowledged)}`)
+      setStore("error", language.t("tui.transcript.externalAcknowledgement", { label: formLabel(unacknowledged) }))
       return
     }
     const invalid = fields()
@@ -761,7 +761,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
             : [
                 ...Array.from({ length: max }, (_, index) => ({
                   bind: String(index + 1),
-                  title: `Select answer ${index + 1}`,
+                  title: language.t("tui.transcript.selectAnswer", { number: index + 1 }),
                   group: language.t("tui.details.form"),
                   run: () => {
                     setStore("selected", index)
@@ -847,7 +847,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
             </text>
             <Show when={fields().length > 0}>
               <text fg={theme.text.subdued}>
-                · {answered()}/{fields().length} completed
+                · {language.t("tui.transcript.formCompleted", { answered: answered(), total: fields().length })}
               </text>
             </Show>
           </box>
@@ -912,7 +912,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 }
                 attributes={confirm() ? TextAttributes.BOLD : undefined}
               >
-                Submit
+                {language.t("tui.transcript.submit")}
               </text>
             </box>
           </box>
@@ -940,7 +940,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 fg={store.answers[external().key] === true ? theme.text.feedback.success.default : theme.text.subdued}
               >
                 {store.answers[external().key] === true
-                  ? "✓ Acknowledged"
+                  ? language.t("tui.transcript.acknowledged")
                   : store.externalReady[external().key]
                     ? language.t("tui.details.completeTheExternalActionThenPressEnterToConfirm")
                     : language.t("tui.details.openOrCopyTheURLCompleteTheExternalActionThenConfirm")}
@@ -1186,7 +1186,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                                 : theme.text.subdued,
                         }}
                       >
-                        {invalid() ?? (answered() ? value() : missing() ? "(required)" : "(not answered)")}
+                        {invalid() ??
+                          (answered()
+                            ? value()
+                            : language.t(missing() ? "tui.transcript.required" : "tui.transcript.notAnswered"))}
                       </span>
                     </text>
                   </box>

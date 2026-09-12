@@ -8,6 +8,7 @@ import { useToast } from "./toast"
 import { useClipboard } from "../context/clipboard"
 import { useConfig } from "../config"
 import { copy, copyOnSelectRelease } from "../util/selection"
+import { useLanguage } from "../context/language"
 
 export type DialogSize = "medium" | "large" | "xlarge"
 
@@ -72,6 +73,7 @@ export function Dialog(
 }
 
 function init() {
+  const language = useLanguage()
   const [store, setStore] = createStore({
     stack: [] as {
       element: JSX.Element
@@ -116,8 +118,8 @@ function init() {
     commands: [
       {
         bind: "escape",
-        title: "Close dialog",
-        group: "Dialog",
+        title: language.t("tui.dialogs.closeDialog"),
+        group: language.t("tui.dialog"),
         run: () => {
           if (renderer.getSelection()) {
             renderer.clearSelection()
@@ -131,8 +133,8 @@ function init() {
       },
       {
         bind: "ctrl+c",
-        title: "Close dialog",
-        group: "Dialog",
+        title: language.t("tui.dialogs.closeDialog"),
+        group: language.t("tui.dialog"),
         run: () => {
           if (renderer.getSelection()) {
             renderer.clearSelection()

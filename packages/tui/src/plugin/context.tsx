@@ -26,6 +26,7 @@ import { useConfig } from "../config"
 import { useTuiLifecycle } from "../context/runtime"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
+import { useLanguage } from "../context/language"
 import { errorMessage } from "../util/error"
 import { builtins } from "./builtins"
 import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
@@ -85,6 +86,7 @@ type Desired = Pick<Registration, "plugin" | "source" | "target" | "version" | "
 const PluginContext = createContext<Value>()
 
 export function PluginProvider(props: ParentProps<{ packages: PackageSource; directories: string[] }>) {
+  const language = useLanguage()
   const host = usePluginHost()
   const config = useConfig()
   const lifecycle = useTuiLifecycle()
@@ -200,7 +202,11 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
   // vanish either: the old generation may still own listeners or intervals.
   const deactivateNoisily = (id: string) =>
     deactivate(id).catch((error) =>
-      host.toast.show({ variant: "error", title: "Plugin", message: `${id}: cleanup failed: ${errorMessage(error)}` }),
+      host.toast.show({
+        variant: "error",
+        title: language.t("tui.app.plugin"),
+        message: language.t("tui.app.pluginCleanupFailed", { name: id, error: errorMessage(error) }),
+      }),
     )
 
   // Every lifecycle mutation — reconciles, manual dialog toggles, shutdown —
@@ -421,9 +427,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       )
         host.toast.show({
           variant: "error",
-          title: `Plugin failed: ${state.target}`,
-          message: "Run /plugins to view details.",
-          action: { label: "Open plugins", run: () => host.keymap.dispatch("plugins.list") },
+          title: language.t("tui.app.pluginFailed", { name: state.target }),
+          message: language.t("tui.app.pluginDetails"),
+          action: { label: language.t("tui.app.openPlugins"), run: () => host.keymap.dispatch("plugins.list") },
         })
     setStore("states", reconcileStore(states))
   }
@@ -494,10 +500,14 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
         if (!first) return
         host.toast.show({
           variant: "error",
-          title: failed.length === 1 ? `Plugin failed: ${serverPluginName(first)}` : `${failed.length} plugins failed`,
+          title:
+            failed.length === 1
+              ? language.t("tui.app.pluginFailed", { name: serverPluginName(first) })
+              : language.plural("tui.app.pluginsFailed", failed.length),
           message:
-            (failed.length > 1 ? `${failed.map(serverPluginName).join(", ")}\n` : "") + "Run /plugins to view details.",
-          action: { label: "Open plugins", run: () => host.keymap.dispatch("plugins.list") },
+            (failed.length > 1 ? `${failed.map(serverPluginName).join(", ")}\n` : "") +
+            language.t("tui.app.pluginDetails"),
+          action: { label: language.t("tui.app.openPlugins"), run: () => host.keymap.dispatch("plugins.list") },
         })
       })
       .catch(() => undefined)

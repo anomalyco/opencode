@@ -33,6 +33,7 @@ import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
 import type { MiniPermissionRequest, PermissionReply } from "./types"
 import { PatchDiff } from "../component/patch-diff"
+import { useMiniLanguage, type MiniLanguage } from "./language"
 
 function buttons(
   list: PermissionOption[],
@@ -42,13 +43,14 @@ function buttons(
   onHover: (option: PermissionOption) => void,
   onSelect: (option: PermissionOption) => void,
   mono: boolean,
+  language: MiniLanguage,
 ) {
   return (
     <box width="100%" flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={0}>
       <For each={list}>
         {(option) => (
           <box
-            width={stringWidth(permissionLabel(option)) + 2}
+            width={stringWidth(permissionLabel(option, language)) + 2}
             height={1}
             flexShrink={0}
             paddingLeft={1}
@@ -66,7 +68,7 @@ function buttons(
               fg={option === selected ? theme.actionFocusedText : theme.actionSecondaryText}
               attributes={option === selected && mono ? TextAttributes.INVERSE : undefined}
             >
-              {permissionLabel(option)}
+              {permissionLabel(option, language)}
             </text>
           </box>
         )}
@@ -85,6 +87,7 @@ export function RejectField(props: {
   onCancel: () => void
 }) {
   let area: TextareaRenderable | undefined
+  const language = useMiniLanguage()
 
   createEffect(() => {
     if (!area || area.isDestroyed) {
@@ -110,7 +113,7 @@ export function RejectField(props: {
       minHeight={1}
       maxHeight={3}
       wrapMode="word"
-      placeholder="Tell OpenCode what to do differently"
+      placeholder={language.t("tui.mini.permission.rejectPlaceholder")}
       placeholderColor={props.theme.muted}
       textColor={props.theme.formfieldText}
       focusedTextColor={props.theme.formfieldFocusedText}
@@ -148,12 +151,13 @@ export function RunPermissionBody(props: {
   mono?: boolean
 }) {
   const dims = useTerminalDimensions()
+  const language = useMiniLanguage()
   const [size, setSize] = createSignal(dims())
   const width = () => size().width
   const compact = () => width() < 56 || size().height < 12
   const [state, setState] = createSignal(createPermissionBodyState(props.request))
   const stage = createMemo(() => state().stage)
-  const info = createMemo(() => permissionInfo(props.request, props.directory?.(), props.mono))
+  const info = createMemo(() => permissionInfo(props.request, props.directory?.(), props.mono, language))
   const ft = createMemo(() => toolFiletype(info().file))
   let scroll: ScrollBoxRenderable | undefined
   const scrollbar = createMemo(() => ({
@@ -167,22 +171,26 @@ export function RunPermissionBody(props: {
     permissionOptions(stage()).filter((option) => option !== "always" || (props.request.save?.length ?? 0) > 0),
   )
   const busy = createMemo(() => state().submitting)
-  const controlsWidth = () => opts().reduce((total, option) => total + stringWidth(permissionLabel(option)) + 3, -1)
+  const controlsWidth = () =>
+    opts().reduce((total, option) => total + stringWidth(permissionLabel(option, language)) + 3, -1)
   const hint = () =>
     compact() && width() < 56
-      ? "pgup/pgdn scroll"
-      : `${props.mono ? "left/right" : "⇆"} select  enter confirm  esc ${stage() === "always" ? "cancel" : "reject"}`
+      ? language.t("tui.mini.scrollHint")
+      : language.t("tui.mini.permission.controlsHint", {
+          arrows: props.mono ? "left/right" : "⇆",
+          action: language.t(stage() === "always" ? "tui.mini.cancel" : "tui.mini.reject"),
+        })
   const inlineControls = () => controlsWidth() + stringWidth(hint()) + 1 <= width() - (compact() ? 0 : 5)
   const title = createMemo(() => {
     if (stage() === "always") {
-      return "Always allow"
+      return language.t("tui.mini.permission.alwaysAllow")
     }
 
     if (stage() === "reject") {
-      return width() < 24 ? "Reject" : "Reject permission"
+      return language.t(width() < 24 ? "tui.mini.permission.reject" : "tui.mini.permission.rejectTitle")
     }
 
-    return width() < 24 ? "Permission" : "Permission required"
+    return language.t(width() < 24 ? "tui.mini.permission.title" : "tui.mini.permission.required")
   })
 
   createEffect(() => {
@@ -322,7 +330,7 @@ export function RunPermissionBody(props: {
           {title()}
         </text>
         <Show when={!compact() && stage() === "reject"}>
-          <text fg={props.theme.muted}>Tell OpenCode what to do differently</text>
+          <text fg={props.theme.muted}>{language.t("tui.mini.permission.rejectPlaceholder")}</text>
         </Show>
       </box>
 
@@ -361,16 +369,22 @@ export function RunPermissionBody(props: {
                 when={!busy()}
                 fallback={
                   <text fg={props.theme.running} height={1} wrapMode="none" truncate flexShrink={0}>
-                    {compact() ? "Waiting…" : "Waiting for permission event…"}
+                    {language.t(compact() ? "tui.mini.permission.waitingShort" : "tui.mini.permission.waiting")}
                   </text>
                 }
               >
                 <box flexDirection="row" flexWrap="wrap" columnGap={compact() ? 1 : 2} flexShrink={0}>
                   <text fg={props.theme.text} height={1} wrapMode="none" flexShrink={0}>
-                    enter <span style={{ fg: props.theme.muted }}>{compact() ? "reject" : "confirm"}</span>
+                    enter{" "}
+                    <span style={{ fg: props.theme.muted }}>
+                      {language.t(compact() ? "tui.mini.reject" : "tui.mini.confirm")}
+                    </span>
                   </text>
                   <text fg={props.theme.text} height={1} wrapMode="none" flexShrink={0}>
-                    esc <span style={{ fg: props.theme.muted }}>{compact() ? "back" : "cancel"}</span>
+                    esc{" "}
+                    <span style={{ fg: props.theme.muted }}>
+                      {language.t(compact() ? "tui.mini.back" : "tui.mini.cancel")}
+                    </span>
                   </text>
                 </box>
               </Show>
@@ -485,14 +499,14 @@ export function RunPermissionBody(props: {
                   </Show>
                   <Show when={!info().diff && !info().patch && info().lines.length === 0}>
                     <text width="100%" fg={props.theme.muted} flexShrink={0}>
-                      No diff provided
+                      {language.t("tui.mini.noDiff")}
                     </text>
                   </Show>
                 </box>
               </Match>
               <Match when={true}>
                 <box width="100%" flexDirection="column" flexShrink={0} gap={compact() ? 0 : 1}>
-                  <For each={permissionAlwaysLines(props.request)}>
+                  <For each={permissionAlwaysLines(props.request, language.t)}>
                     {(line) => (
                       <text width="100%" fg={props.theme.text} wrapMode="word" flexShrink={0}>
                         {line}
@@ -528,13 +542,14 @@ export function RunPermissionBody(props: {
               },
               run,
               props.mono ?? false,
+              language,
             )}
           </box>
           <Show
             when={!busy()}
             fallback={
               <text fg={props.theme.running} height={1} wrapMode="none" truncate flexShrink={0}>
-                {compact() ? "Waiting…" : "Waiting for permission event…"}
+                {language.t(compact() ? "tui.mini.permission.waitingShort" : "tui.mini.permission.waiting")}
               </text>
             }
           >
@@ -544,13 +559,17 @@ export function RunPermissionBody(props: {
                 fallback={
                   <>
                     {props.mono ? "left/right" : "⇆"}
-                    <span style={{ fg: props.theme.muted }}>{" select  "}</span>
-                    enter<span style={{ fg: props.theme.muted }}>{" confirm  "}</span>
-                    esc<span style={{ fg: props.theme.muted }}> {stage() === "always" ? "cancel" : "reject"}</span>
+                    <span style={{ fg: props.theme.muted }}>{" " + language.t("tui.mini.select") + "  "}</span>
+                    enter<span style={{ fg: props.theme.muted }}>{" " + language.t("tui.mini.confirm") + "  "}</span>
+                    esc
+                    <span style={{ fg: props.theme.muted }}>
+                      {" "}
+                      {language.t(stage() === "always" ? "tui.mini.cancel" : "tui.mini.reject")}
+                    </span>
                   </>
                 }
               >
-                pgup/pgdn<span style={{ fg: props.theme.muted }}> scroll</span>
+                {language.t("tui.mini.scrollHint")}
               </Show>
             </text>
           </Show>

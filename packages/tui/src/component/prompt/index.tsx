@@ -1194,7 +1194,7 @@ export function Prompt(props: PromptProps) {
     if (usesModel && !local.model.available(selection)) {
       toast.show({
         title: language.t("tui.modelUnavailable"),
-        message: `${selection.providerID}/${selection.modelID} is not available in this session's location`,
+        message: language.t("tui.promptUi.modelUnavailable", { model: `${selection.providerID}/${selection.modelID}` }),
         variant: "warning",
       })
       return false
@@ -2023,7 +2023,7 @@ export function Prompt(props: PromptProps) {
             return {
               display: value,
               value,
-              description: "recent",
+              description: language.t("tui.promptUi.recent"),
               isDirectory: true,
               path: value,
               absolute: item.directory,

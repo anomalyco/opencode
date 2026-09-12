@@ -39,7 +39,7 @@ export function PromptFooter(props: {
     )
     const cost = props.context.data.session.cost(props.sessionID)
     return [
-      usage ? formatContextUsage(usage.tokens, usage.percent) : undefined,
+      usage ? formatContextUsage(usage.tokens, usage.percent, language) : undefined,
       cost > 0 ? language.number(cost, { style: "currency", currency: "USD" }) : undefined,
     ].filter((item): item is string => Boolean(item))
   })
