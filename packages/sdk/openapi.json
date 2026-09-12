@@ -15452,6 +15452,9 @@
             "$ref": "#/components/schemas/EventLspUpdated"
           },
           {
+            "$ref": "#/components/schemas/EventCommandUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventPermissionAsked"
           },
           {
@@ -19653,6 +19656,25 @@
                   "type": {
                     "type": "string",
                     "enum": ["lsp.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {}
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["command.updated"]
                   },
                   "properties": {
                     "type": "object",
@@ -24193,6 +24215,9 @@
           },
           {
             "$ref": "#/components/schemas/LspUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/CommandUpdated"
           },
           {
             "$ref": "#/components/schemas/PermissionAsked"
@@ -32580,6 +32605,47 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
+      "CommandUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["command.updated"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
       "PermissionAsked": {
         "type": "object",
         "properties": {
@@ -36056,6 +36122,25 @@
           "type": {
             "type": "string",
             "enum": ["lsp.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventCommandUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["command.updated"]
           },
           "properties": {
             "type": "object",
