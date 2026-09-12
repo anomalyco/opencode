@@ -14,15 +14,30 @@ const body: unknown = await response.json()
 if (!body || typeof body !== "object" || !("stargazers_count" in body) || typeof body.stargazers_count !== "number")
   throw new Error("GitHub API response did not include a star count")
 
-const stars = new Intl.NumberFormat("en", {
+const compact = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 0,
 }).format(body.stargazers_count)
-const file = "packages/stats/app/src/routes/stats-shell.tsx"
-const content = await Bun.file(file).text()
-const pattern = /fallbackStars: "[^"]+"/
+const full = new Intl.NumberFormat("en").format(Math.round(body.stargazers_count / 1_000) * 1_000)
+const statsFile = "packages/stats/app/src/routes/stats-shell.tsx"
+const statsContent = await Bun.file(statsFile).text()
+const statsPattern = /fallbackStars: "[^"]+"/
 
-if (!pattern.test(content)) throw new Error(`GitHub star fallback not found in ${file}`)
+if (!statsPattern.test(statsContent)) throw new Error(`GitHub star fallback not found in ${statsFile}`)
 
-await Bun.write(file, content.replace(pattern, `fallbackStars: "${stars}"`))
-console.log(`Updated GitHub star fallback to ${stars}`)
+const siteFile = "packages/console/app/src/config.ts"
+const siteContent = await Bun.file(siteFile).text()
+const compactPattern = /compact: "[^"]+"/
+const fullPattern = /full: "[^"]+"/
+
+if (!compactPattern.test(siteContent) || !fullPattern.test(siteContent))
+  throw new Error(`GitHub star fallbacks not found in ${siteFile}`)
+
+await Promise.all([
+  Bun.write(statsFile, statsContent.replace(statsPattern, `fallbackStars: "${compact}"`)),
+  Bun.write(
+    siteFile,
+    siteContent.replace(compactPattern, `compact: "${compact}"`).replace(fullPattern, `full: "${full}"`),
+  ),
+])
+console.log(`Updated GitHub star fallbacks to ${compact} (${full})`)
