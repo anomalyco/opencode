@@ -26,6 +26,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { jsonrepair } from "jsonrepair"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
@@ -301,6 +302,22 @@ const live: Layer.Layer<
                 toolName: lower,
               }
             }
+
+            const toolInput = failed.toolCall.input
+            if (typeof toolInput === "string" && toolInput.trim().startsWith("{")) {
+              try {
+                const repaired = jsonrepair(toolInput)
+                if (repaired !== toolInput) {
+                  return {
+                    ...failed.toolCall,
+                    input: repaired,
+                  }
+                }
+              } catch {
+                // jsonrepair failed, fall through to invalid tool handler
+              }
+            }
+
             return {
               ...failed.toolCall,
               input: JSON.stringify({
