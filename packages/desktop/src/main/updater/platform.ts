@@ -2,6 +2,7 @@ import { app, autoUpdater } from "electron"
 import pkg from "electron-updater"
 import { Effect } from "effect"
 import { setAppQuitting } from "../windows"
+import { configureStableUpdates } from "./config"
 import type { Platform } from "./index"
 
 const updateClient = pkg.autoUpdater
@@ -15,9 +16,7 @@ export const make = Effect.gen(function* () {
     error: (...args) => runFork(Effect.logError(...args)),
     debug: (...args) => runFork(Effect.logDebug(...args)),
   }
-  updateClient.channel = "latest"
-  updateClient.allowPrerelease = false
-  updateClient.allowDowngrade = true
+  configureStableUpdates(updateClient)
   updateClient.autoDownload = false
   updateClient.autoInstallOnAppQuit = process.platform === "darwin"
   yield* Effect.logInfo("auto updater configured", {
