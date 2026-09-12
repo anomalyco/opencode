@@ -217,6 +217,7 @@ export function createServerSession(
   const pendingParts = new Map<string, Map<string, Set<string>>>()
   const orphanParts = new Map<string, Set<string>>()
   const removedMessages = new Map<string, Set<string>>()
+  const pendingDiffs = new Map<string, Map<string, FileDiffInfo[]>>()
   const deltaBases = new Map<string, { base: string; sessionID: string }>()
   const deleteMessageParts = (
     cache: { part: Record<string, Part[] | undefined>; part_text_accum_delta: Record<string, string | undefined> },
@@ -227,6 +228,12 @@ export function createServerSession(
       deltaBases.delete(part.id)
     }
     delete cache.part[messageID]
+  }
+  const retirePendingDiff = (sessionID: string, messageID: string) => {
+    const pending = pendingDiffs.get(sessionID)
+    if (!pending) return
+    pending.delete(messageID)
+    if (pending.size === 0) pendingDiffs.delete(sessionID)
   }
   const seen = new Set<string>()
   const infoSeen = new Set<string>()
@@ -491,6 +498,7 @@ export function createServerSession(
       pendingParts.delete(sessionID)
       orphanParts.delete(sessionID)
       removedMessages.delete(sessionID)
+      pendingDiffs.delete(sessionID)
     })
     setData(
       produce((draft) => {
@@ -712,9 +720,18 @@ export function createServerSession(
       preserveUnfetched,
       compare: compareMessages,
     })
+    const pending = pendingDiffs.get(sessionID)
+    const withPending = pending
+      ? messages.map((message) => {
+          if (message.role !== "user") return message
+          const diffs = pending.get(message.id)
+          if (!diffs) return message
+          return { ...message, summary: { ...message.summary, diffs } }
+        })
+      : messages
     batch(() => {
       if (source) setData("session_message", sessionID, reconcile(source))
-      const messageIDs = replaceMessages(sessionID, messages)
+      const messageIDs = replaceMessages(sessionID, withPending)
       replaceParts(sessionID, merged.part, messageIDs, load)
       const orphans = orphanParts.get(sessionID)
       if (cleanupOrphans && page.complete && orphans) {
@@ -723,11 +740,12 @@ export function createServerSession(
         }
         orphanParts.delete(sessionID)
       }
-      setMeta("limit", sessionID, messages.length)
+      setMeta("limit", sessionID, withPending.length)
       setMeta("cursor", sessionID, merged.cursor)
       setMeta("complete", sessionID, merged.complete)
       setMeta("at", sessionID, Date.now())
     })
+    pendingDiffs.delete(sessionID)
   }
 
   const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
@@ -1029,6 +1047,7 @@ export function createServerSession(
       }
       case "message.updated": {
         const info = cleanMessage((event.properties as { info: Message }).info)
+        retirePendingDiff(info.sessionID, info.id)
         indexLegacyMessage(info)
         const load = messageLoads.get(info.sessionID)
         load?.touchedMessages.add(info.id)
@@ -1067,6 +1086,14 @@ export function createServerSession(
         const index = messages?.findIndex((message) => message.id === props.messageID) ?? -1
         const current = index >= 0 ? messages?.[index] : undefined
         if (!current || current.role !== "user") {
+          // An in-flight page can resolve with a snapshot older than this diff; buffer and overlay
+          // on completion. Otherwise queue a distinct forced load rather than joining the current one.
+          if (messageLoads.has(props.sessionID)) {
+            const pending = pendingDiffs.get(props.sessionID) ?? new Map<string, FileDiffInfo[]>()
+            pending.set(props.messageID, props.diffs)
+            pendingDiffs.set(props.sessionID, pending)
+            return
+          }
           void sync(props.sessionID, { force: true }).catch(() => {})
           return
         }
@@ -1091,6 +1118,7 @@ export function createServerSession(
         load?.optimisticParts.delete(props.messageID)
         pendingParts.get(props.sessionID)?.delete(props.messageID)
         if (pendingParts.get(props.sessionID)?.size === 0) pendingParts.delete(props.sessionID)
+        retirePendingDiff(props.sessionID, props.messageID)
         const removedMessagesForSession = removedMessages.get(props.sessionID) ?? new Set<string>()
         removedMessagesForSession.add(props.messageID)
         removedMessages.set(props.sessionID, removedMessagesForSession)

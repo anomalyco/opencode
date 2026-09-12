@@ -446,6 +446,25 @@ describe("applyDirectoryEvent", () => {
 
     const first = store.message[sessionID]?.[0]
     expect(first?.role === "user" ? first.summary?.diffs : undefined).toBeUndefined()
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.diff.updated",
+        properties: {
+          sessionID,
+          messageID,
+          diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PATCH-CONTENT" }],
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    const ungated = store.message[sessionID]?.[0]
+    expect(ungated?.role === "user" ? ungated.summary?.diffs : undefined).toBeUndefined()
   })
 
   test("upserts and prunes message parts", () => {

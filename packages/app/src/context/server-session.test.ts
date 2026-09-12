@@ -366,6 +366,72 @@ describe("server session", () => {
     expect(store.data.session_message.root[0]).toMatchObject({ id: user.id, type: "user" })
   })
 
+  test("buffers an uncached diff delivered during the first message load", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const deferred = deferredResponse()
+    const client = messageClient(deferred.promise, response([{ info: user, parts: [] }]))
+    const store = createServerSession(client, {} as SessionApi, {} as MessageApi, { protocol: Promise.resolve("v1") })
+    store.remember(session("root"))
+    const loading = store.sync("root")
+    await client.requested(1)
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
+      },
+    })
+    deferred.resolve(response([{ info: user, parts: [] }]))
+    await loading
+
+    const message = store.data.message.root?.[0]
+    expect(message?.role === "user" ? message.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
+    expect(client.requests).toHaveLength(1)
+  })
+
+  test("ignores a diff for a removed message without requesting a load", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const client = messageClient(response([{ info: user, parts: [] }]))
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    store.apply({ type: "message.removed", properties: { sessionID: "root", messageID: user.id } })
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
+      },
+    })
+    await Bun.sleep(0)
+
+    expect(client.requests).toHaveLength(0)
+  })
+
+  test("requests a load for an uncached diff when no load is in flight", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const client = messageClient(response([{ info: user, parts: [] }]))
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
+      },
+    })
+    await client.requested(1)
+
+    expect(client.requests).toHaveLength(1)
+    await Bun.sleep(0)
+    expect(store.data.message.root?.[0]?.role).toBe("user")
+  })
+
   test("backfills an assistant-only initial page through its user root", async () => {
     const user = userMessage("message-1")
     const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]
