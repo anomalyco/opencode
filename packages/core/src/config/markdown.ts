@@ -2,10 +2,11 @@ export * as ConfigMarkdown from "./markdown"
 
 import matter from "gray-matter"
 export function parse(content: string) {
+  // gray-matter mutates its shared defaults after a failed parse; fresh options keep retries isolated.
   try {
-    return matter(content)
+    return matter(content, {})
   } catch {
-    return matter(sanitize(content))
+    return matter(sanitize(content), {})
   }
 }
 
