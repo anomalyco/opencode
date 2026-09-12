@@ -799,6 +799,34 @@ describe("server session", () => {
     expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-FRESH-B")
   })
 
+  test("rejects a sync whose session info fails", async () => {
+    const page = deferredResponse()
+    const info = Promise.withResolvers<{ data: Session }>()
+    const client = messageClient(page.promise)
+    client.session.get = (() => info.promise) as unknown as typeof client.session.get
+    const store = createServerSession(client)
+    const initial = store.sync("root")
+    await client.requested(1)
+
+    info.reject(new Error("info failure"))
+    await Bun.sleep(0)
+    page.resolve(response())
+
+    await expect(initial).rejects.toThrow("info failure")
+  })
+
+  test("rejects a sync whose initial message page fails", async () => {
+    const page = deferredResponse()
+    const client = messageClient(page.promise)
+    const store = createServerSession(client)
+    const initial = store.sync("root")
+    await client.requested(1)
+
+    page.reject(new Error("page failure"))
+
+    await expect(initial).rejects.toThrow("page failure")
+  })
+
   test("does not start queued work after session teardown", async () => {
     const user = userMessage("message-1", { sessionID: "root" })
     const info = Promise.withResolvers<{ data: Session }>()
