@@ -1002,7 +1002,6 @@ export function createServerSession(
       case "session.updated": {
         const info = (event.properties as { info: Session }).info
         remember(info)
-        if (info.time.archived) evict([info.id])
         return
       }
       case "session.deleted": {
