@@ -23,7 +23,15 @@
 - **النسخ واللصق سليم**: التحديد بيرجّع النص المنطقي الأصلي، مش ترتيب بصري
   ولا حروف تحكم مخفية.
 
+## الخطوط
+
+التطبيق ميقدرش يختار خطوط — الـ terminal هو اللي بيختار. سيب الخط الـ
+monospaced زي ما هو وضيف خط عربي كـ **fallback** (Cairo، Noto Naskh Arabic،
+Segoe UI، Tahoma). التفاصيل في [fonts.ar.md](./fonts.ar.md) والسكربت
+[`configure-windows-terminal-font.ps1`](./configure-windows-terminal-font.ps1).
+
 ## التثبيت (ويندوز، من نفس المستودع)
+
 
 ```powershell
 # 1) تثبيت اعتماديات الـ workspace

@@ -23,6 +23,13 @@ terminal-side BiDi requirement and no destructive text rewriting.
 - **Copy/paste is untouched**: selection returns the original logical text,
   never visual-order or control characters.
 
+## Fonts
+
+The TUI cannot select fonts — the terminal does. Keep your monospaced font and
+add an Arabic-capable font as a **fallback** (Cairo, Noto Naskh Arabic, Segoe
+UI, Tahoma). See [fonts.md](./fonts.md) and the helper script
+[`configure-windows-terminal-font.ps1`](./configure-windows-terminal-font.ps1).
+
 ## Install (Windows, from this repository)
 
 ```powershell
