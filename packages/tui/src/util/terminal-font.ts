@@ -139,10 +139,27 @@ export function writeWindowsTerminalFont(input: { face?: string; fallbacks: stri
   const profiles = (json.profiles ??= {}) as Record<string, unknown>
   const defaults = (profiles.defaults ??= {}) as Record<string, unknown>
   const font = (defaults.font ??= {}) as Record<string, unknown>
-  font.fallbacks = [...input.fallbacks]
+  const existing = Array.isArray(font.fallbacks)
+    ? font.fallbacks.filter((item): item is string => typeof item === "string")
+    : []
+  font.fallbacks = mergeFallbacks(existing, input.fallbacks)
   if (input.face !== undefined) font.face = input.face
   writeJson(file, json)
   return { path: file, backup: created }
+}
+
+// Keeps the user's existing fallbacks after the Arabic ones so choosing a font
+// never drops a fallback the terminal already relied on.
+export function mergeFallbacks(existing: string[], incoming: string[]) {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const family of [...incoming, ...existing]) {
+    const key = family.trim().toLowerCase()
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(family)
+  }
+  return out
 }
 
 export function appendFontFamily(existing: string | undefined, family: string) {
@@ -207,27 +224,48 @@ export function fontChoices(): FontChoice[] {
   return [...recommended, ...others]
 }
 
+export type TerminalHost = "windows-terminal" | "vscode" | "other"
+
+// Which terminal is actually hosting this process. Picking the settings file by
+// presence alone is wrong when both Windows Terminal and VS Code are installed:
+// the dialog must write the settings of the terminal that renders the cells.
+export function detectTerminalHost(env: NodeJS.ProcessEnv = process.env): TerminalHost {
+  if (env.WT_SESSION) return "windows-terminal"
+  if (env.TERM_PROGRAM === "vscode" || env.VSCODE_INJECTION || env.VSCODE_IPC_HOOK_CLI) return "vscode"
+  return "other"
+}
+
 export function applyArabicFont(family: string): ApplyOutcome {
-  if (windowsTerminalSettingsPath()) {
-    const fallbacks = [family, ...RECOMMENDED_ARABIC_FONTS.filter((item) => item !== family)]
-    const written = writeWindowsTerminalFont({ fallbacks })
-    return {
-      ok: true,
-      target: "Windows Terminal",
-      path: written.path,
-      backup: written.backup,
-      hint: "Close every Windows Terminal window and reopen it for the font to take effect.",
-    }
-  }
-  if (vscodeSettingsPath()) {
-    const written = writeVSCodeFontFamily(family)
-    return {
-      ok: true,
-      target: "VS Code integrated terminal",
-      path: written.path,
-      backup: written.backup,
-      hint: "Open a new terminal in VS Code for the font to take effect.",
-    }
-  }
+  const host = detectTerminalHost()
+  const windowsTerminal = windowsTerminalSettingsPath()
+  const vscode = vscodeSettingsPath()
+
+  if (host === "windows-terminal" && windowsTerminal) return applyWindowsTerminalFont(family)
+  if (host === "vscode" && vscode) return applyVSCodeFont(family)
+  if (windowsTerminal) return applyWindowsTerminalFont(family)
+  if (vscode) return applyVSCodeFont(family)
   return { ok: false, message: "No supported terminal settings found (Windows Terminal or VS Code)." }
+}
+
+function applyWindowsTerminalFont(family: string): ApplyOutcome {
+  const fallbacks = [family, ...RECOMMENDED_ARABIC_FONTS.filter((item) => item !== family)]
+  const written = writeWindowsTerminalFont({ fallbacks })
+  return {
+    ok: true,
+    target: "Windows Terminal",
+    path: written.path,
+    backup: written.backup,
+    hint: "Close every Windows Terminal window and reopen it for the font to take effect.",
+  }
+}
+
+function applyVSCodeFont(family: string): ApplyOutcome {
+  const written = writeVSCodeFontFamily(family)
+  return {
+    ok: true,
+    target: "VS Code integrated terminal",
+    path: written.path,
+    backup: written.backup,
+    hint: "Open a new terminal in VS Code for the font to take effect.",
+  }
 }
