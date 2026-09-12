@@ -4,7 +4,8 @@ import { Effect, Layer, Context, Schema } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { MessageDiffTable } from "@opencode-ai/core/session/sql"
-import { eq } from "drizzle-orm"
+import { EventTable } from "@opencode-ai/core/event/sql"
+import { and, eq, sql } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
@@ -134,11 +135,25 @@ const layer = Layer.effect(
         .get()
         .pipe(Effect.orDie)
       if (dedicated && isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
-      if (!dedicated && target.info.summary?.diffs !== undefined) {
-        // Historic/imported projections have no durable message event, so a diff-only publish would
-        // replay without its parent. Re-establish the full message baseline once before dedup takes over.
-        yield* sessions.updateMessage(target.info)
-        return
+      // Imported/historic rows have no durable message event, so a diff-only publish would replay
+      // without its parent. Normal turns already have one, so this never adds a duplicate stream.
+      const durableParent = yield* database.db
+        .select({ id: EventTable.id })
+        .from(EventTable)
+        .where(
+          and(
+            eq(EventTable.aggregate_id, input.sessionID),
+            eq(EventTable.type, "message.updated.1"),
+            sql`json_extract(${EventTable.data}, '$.info.id') = ${input.messageID}`,
+          ),
+        )
+        .get()
+        .pipe(Effect.orDie)
+      if (!durableParent) {
+        const baseline = target.info.summary
+          ? { ...target.info, summary: { ...target.info.summary, diffs: [] } }
+          : target.info
+        yield* sessions.updateMessage(baseline)
       }
       // Turn patches are their own durable stream: ordinary message updates must never duplicate them.
       yield* events.publish(Session.Event.MessageDiffUpdated, {
