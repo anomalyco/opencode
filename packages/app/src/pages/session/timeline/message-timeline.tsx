@@ -1299,7 +1299,7 @@ export function MessageTimeline(props: {
   return (
     <div class="relative w-full h-full min-w-0">
       <div
-        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-all duration-200 ease-out"
+        class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-[opacity,translate,scale] duration-200 ease-out"
         classList={{
           "bottom-8": settings.general.newLayoutDesigns(),
           "bottom-6": !settings.general.newLayoutDesigns(),
