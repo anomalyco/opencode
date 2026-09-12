@@ -1,5 +1,5 @@
 import { Select as Kobalte } from "@kobalte/core/select"
-import { createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { Show, createMemo, createSignal, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
 import { pipe, groupBy, entries, map } from "remeda"
 import { Button, ButtonProps } from "./button"
 import { Icon } from "./icon"
@@ -82,93 +82,107 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
     return result
   })
 
+  // Kobalte's <Portal> enters a broken state after the first item selection: the
+  // next open fires onOpenChange(true) but the content never mounts to the DOM,
+  // so dropdowns (theme, color scheme, language, shell, ...) stop reopening until
+  // the component is recreated. Remounting a fresh instance after every selection
+  // gives the portal a clean state so the next open always renders.
+  const [mounted, setMounted] = createSignal(true)
+  const remount = () => {
+    setMounted(false)
+    setTimeout(() => setMounted(true), 0)
+  }
+
   return (
-    // @ts-ignore
-    <Kobalte<T, { category: string; options: T[] }>
-      {...others}
-      data-component="select"
-      data-trigger-style={local.triggerVariant}
-      placement={local.triggerVariant === "settings" ? "bottom-end" : "bottom-start"}
-      gutter={4}
-      value={local.current}
-      options={grouped()}
-      optionValue={(x) => (local.value ? local.value(x) : (x as string))}
-      optionTextValue={(x) => (local.label ? local.label(x) : (x as string))}
-      optionGroupChildren="options"
-      placeholder={local.placeholder}
-      sectionComponent={(local) => (
-        <Kobalte.Section data-slot="select-section">{local.section.rawValue.category}</Kobalte.Section>
-      )}
-      itemComponent={(itemProps) => (
-        <Kobalte.Item
-          {...itemProps}
-          data-slot="select-select-item"
-          classList={{
-            ...local.classList,
-            [local.class ?? ""]: !!local.class,
-          }}
-          onPointerEnter={() => move(itemProps.item.rawValue)}
-          onPointerMove={() => move(itemProps.item.rawValue)}
-          onFocus={() => move(itemProps.item.rawValue)}
-        >
-          <Kobalte.ItemLabel data-slot="select-select-item-label">
-            {local.children
-              ? local.children(itemProps.item.rawValue)
-              : local.label
-                ? local.label(itemProps.item.rawValue)
-                : (itemProps.item.rawValue as string)}
-          </Kobalte.ItemLabel>
-          <Kobalte.ItemIndicator data-slot="select-select-item-indicator">
-            <Icon name="check-small" size="small" />
-          </Kobalte.ItemIndicator>
-        </Kobalte.Item>
-      )}
-      onChange={(v) => {
-        local.onSelect?.(v ?? undefined)
-        stop()
-      }}
-      onOpenChange={(open) => {
-        local.onOpenChange?.(open)
-        if (!open) stop()
-      }}
-    >
-      <Kobalte.Trigger
-        {...local.triggerProps}
-        disabled={props.disabled}
-        data-slot="select-select-trigger"
-        as={Button}
-        size={props.size}
-        variant={props.variant}
-        style={local.triggerStyle}
-        classList={{
-          ...local.classList,
-          [local.class ?? ""]: !!local.class,
+    <Show when={mounted()}>
+      {/* @ts-ignore */}
+      <Kobalte<T, { category: string; options: T[] }>
+        {...others}
+        data-component="select"
+        data-trigger-style={local.triggerVariant}
+        placement={local.triggerVariant === "settings" ? "bottom-end" : "bottom-start"}
+        gutter={4}
+        value={local.current}
+        options={grouped()}
+        optionValue={(x) => (local.value ? local.value(x) : (x as string))}
+        optionTextValue={(x) => (local.label ? local.label(x) : (x as string))}
+        optionGroupChildren="options"
+        placeholder={local.placeholder}
+        sectionComponent={(local) => (
+          <Kobalte.Section data-slot="select-section">{local.section.rawValue.category}</Kobalte.Section>
+        )}
+        itemComponent={(itemProps) => (
+          <Kobalte.Item
+            {...itemProps}
+            data-slot="select-select-item"
+            classList={{
+              ...local.classList,
+              [local.class ?? ""]: !!local.class,
+            }}
+            onPointerEnter={() => move(itemProps.item.rawValue)}
+            onPointerMove={() => move(itemProps.item.rawValue)}
+            onFocus={() => move(itemProps.item.rawValue)}
+          >
+            <Kobalte.ItemLabel data-slot="select-select-item-label">
+              {local.children
+                ? local.children(itemProps.item.rawValue)
+                : local.label
+                  ? local.label(itemProps.item.rawValue)
+                  : (itemProps.item.rawValue as string)}
+            </Kobalte.ItemLabel>
+            <Kobalte.ItemIndicator data-slot="select-select-item-indicator">
+              <Icon name="check-small" size="small" />
+            </Kobalte.ItemIndicator>
+          </Kobalte.Item>
+        )}
+        onChange={(v) => {
+          local.onSelect?.(v ?? undefined)
+          stop()
+          remount()
+        }}
+        onOpenChange={(open) => {
+          local.onOpenChange?.(open)
+          if (!open) stop()
         }}
       >
-        <Kobalte.Value<T> data-slot="select-select-trigger-value" class={local.valueClass}>
-          {(state) => {
-            const selected = state.selectedOption() ?? local.current
-            if (!selected) return local.placeholder || ""
-            if (local.label) return local.label(selected)
-            return selected as string
-          }}
-        </Kobalte.Value>
-        <Kobalte.Icon data-slot="select-select-trigger-icon">
-          <Icon name={local.triggerVariant === "settings" ? "selector" : "chevron-down"} size="small" />
-        </Kobalte.Icon>
-      </Kobalte.Trigger>
-      <Kobalte.Portal>
-        <Kobalte.Content
+        <Kobalte.Trigger
+          {...local.triggerProps}
+          disabled={props.disabled}
+          data-slot="select-select-trigger"
+          as={Button}
+          size={props.size}
+          variant={props.variant}
+          style={local.triggerStyle}
           classList={{
             ...local.classList,
             [local.class ?? ""]: !!local.class,
           }}
-          data-component="select-content"
-          data-trigger-style={local.triggerVariant}
         >
-          <Kobalte.Listbox data-slot="select-select-content-list" />
-        </Kobalte.Content>
-      </Kobalte.Portal>
-    </Kobalte>
+          <Kobalte.Value<T> data-slot="select-select-trigger-value" class={local.valueClass}>
+            {(state) => {
+              const selected = state.selectedOption() ?? local.current
+              if (!selected) return local.placeholder || ""
+              if (local.label) return local.label(selected)
+              return selected as string
+            }}
+          </Kobalte.Value>
+          <Kobalte.Icon data-slot="select-select-trigger-icon">
+            <Icon name={local.triggerVariant === "settings" ? "selector" : "chevron-down"} size="small" />
+          </Kobalte.Icon>
+        </Kobalte.Trigger>
+        <Kobalte.Portal>
+          <Kobalte.Content
+            classList={{
+              ...local.classList,
+              [local.class ?? ""]: !!local.class,
+            }}
+            data-component="select-content"
+            data-trigger-style={local.triggerVariant}
+          >
+            <Kobalte.Listbox data-slot="select-select-content-list" />
+          </Kobalte.Content>
+        </Kobalte.Portal>
+      </Kobalte>
+    </Show>
   )
 }
