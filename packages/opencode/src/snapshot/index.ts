@@ -382,24 +382,43 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         const restore = Effect.fnUntraced(function* (snapshot: string) {
           return yield* locked(
             Effect.gen(function* () {
-              yield* Effect.logInfo("restore", { commit: snapshot })
-              const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
-              if (result.code === 0) {
-                const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
-                  cwd: state.worktree,
-                })
-                if (checkout.code === 0) return
-                yield* Effect.logError("failed to restore snapshot", {
+              yield* Effect.logInfo("restore", { commit: snapshot, cwd: state.directory })
+              // The snapshot index is shared across the whole project, but a snapshot taken from a
+              // subdirectory only updates that subdirectory's entries. Scope the restore to files
+              // under the session directory so entries for sibling directories (which may be stale)
+              // are not written back over the current worktree with checkout-index -a.
+              const prefix = path.relative(state.worktree, state.directory).replaceAll("\\", "/")
+              const spec = prefix ? `${prefix}/` : "."
+              const listed = yield* git([...quote, ...args(["ls-tree", "-r", "--name-only", snapshot, "--", spec])], {
+                cwd: state.worktree,
+              })
+              if (listed.code !== 0) {
+                yield* Effect.logError("failed to list snapshot files", {
                   snapshot,
-                  exitCode: checkout.code,
-                  stderr: checkout.stderr,
+                  exitCode: listed.code,
+                  stderr: listed.stderr,
                 })
                 return
               }
+              const files = listed.text.split("\n").filter(Boolean)
+              if (!files.length) return
+              const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
+              if (result.code !== 0) {
+                yield* Effect.logError("failed to restore snapshot", {
+                  snapshot,
+                  exitCode: result.code,
+                  stderr: result.stderr,
+                })
+                return
+              }
+              const checkout = yield* git([...core, ...args(["checkout-index", "-f", "--", ...files])], {
+                cwd: state.worktree,
+              })
+              if (checkout.code === 0) return
               yield* Effect.logError("failed to restore snapshot", {
                 snapshot,
-                exitCode: result.code,
-                stderr: result.stderr,
+                exitCode: checkout.code,
+                stderr: checkout.stderr,
               })
             }),
           )
@@ -527,8 +546,11 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           return yield* locked(
             Effect.gen(function* () {
               yield* add()
+              // Run from the session directory so the "-- ." path spec scopes the diff to the
+              // current directory, matching what restore() writes back, rather than reporting
+              // changes for sibling directories that share the project-wide snapshot index.
               const result = yield* git([...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])], {
-                cwd: state.worktree,
+                cwd: state.directory,
               })
               if (result.code !== 0) {
                 yield* Effect.logWarning("failed to get diff", {
