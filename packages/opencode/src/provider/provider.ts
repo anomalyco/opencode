@@ -182,6 +182,15 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    "kimi-for-coding": () =>
+      Effect.succeed({
+        autoload: false,
+        options: {
+          headers: {
+            "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+          },
+        },
+      }),
     opencode: Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
       const hasKey = iife(() => {
