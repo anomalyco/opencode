@@ -5,3 +5,4 @@ bun.lock
 .gitignore
 package-lock.json
 references/
+artifacts/

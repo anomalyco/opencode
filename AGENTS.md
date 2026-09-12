@@ -159,3 +159,10 @@ const table = sqliteTable("session", {
 - Keep delivery vocabulary explicit. Prompts steer by default and promote at the next safe provider-turn boundary while the current drain requires continuation. An explicit `queue` input remains pending until the Session would otherwise become idle; promote one queued input at that boundary, then reevaluate continuation before promoting another. Promoting any new user input resets the selected agent's provider-turn allowance; a batch of steers resets it once.
 - Keep EventV2 replay owner claims separate from clustered Session execution ownership.
 - Keep the System Context algebra, registry, and built-ins in `src/system-context`; keep Context Source producers with their observed domains, and keep Session History selection plus Context Epoch persistence Session-owned.
+
+## Visualizer Commands
+
+- Use `opencode visualize [target] [subject]` (or `/visualize` in TUI sessions) to diagram architecture, execution flows, ERD schemas, dependencies, state machines, or System Context.
+- Supported targets: `context` (OpenCode Session Runtime & System Context pipeline), `architecture` (package/layer topology), `flow <module>` (sequence diagrams), `schema <path>` (database ERD), `deps` (workspace dependencies), `state` (Session drain/turn lifecycle), and empty target (inferred from `git status` diff).
+- When running in CLI mode, an interactive self-contained HTML artifact (`.opencode/artifacts/visualize-<key>-<timestamp>.html`) is always generated and presented as clickable output (`file:///...`) to the end-user alongside any terminal rendering.
+- Rendering destinations: `browser` (opens interactive dark-mode Mermaid canvas with pan/zoom and SVG export), `terminal` (inline Mermaid markdown block), `ascii` (Unicode box-drawing), and `file` (writes `.mmd` / `.svg` to disk).
