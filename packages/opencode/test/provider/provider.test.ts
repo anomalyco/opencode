@@ -1200,6 +1200,73 @@ it.instance("ModelNotFoundError suggests catalog models for unloaded providers",
   }),
 )
 
+// Providers such as NVIDIA NIM, OpenRouter and Clarifai publish model IDs that
+// already carry a vendor segment, so a catalog key can repeat the provider name
+// (`nvidia/nemotron-3-ultra-550b-a55b` under provider `nvidia`). The provider ID
+// below is synthetic so the assertions never depend on the live models.dev catalog.
+const prefixedModelConfig = {
+  provider: {
+    "prefixed-provider": {
+      name: "Prefixed Provider",
+      npm: "@ai-sdk/openai-compatible",
+      api: "https://api.prefixed.test/v1",
+      models: {
+        "prefixed-provider/self-prefixed-model": { name: "Self Prefixed Model" },
+        "vendor/vendor-prefixed-model": { name: "Vendor Prefixed Model" },
+      },
+      options: { apiKey: "test-key" },
+    },
+  },
+}
+
+it.instance(
+  "getModel resolves a bare ref whose model ID repeats the provider prefix",
+  Effect.gen(function* () {
+    const info = yield* Provider.use.getModel(
+      ProviderV2.ID.make("prefixed-provider"),
+      ModelV2.ID.make("self-prefixed-model"),
+    )
+    expect(info.id).toBe(ModelV2.ID.make("prefixed-provider/self-prefixed-model"))
+  }),
+  { config: prefixedModelConfig },
+)
+
+it.instance(
+  "getModel still resolves the fully qualified form of a self-prefixed model ID",
+  Effect.gen(function* () {
+    const info = yield* Provider.use.getModel(
+      ProviderV2.ID.make("prefixed-provider"),
+      ModelV2.ID.make("prefixed-provider/self-prefixed-model"),
+    )
+    expect(info.id).toBe(ModelV2.ID.make("prefixed-provider/self-prefixed-model"))
+  }),
+  { config: prefixedModelConfig },
+)
+
+it.instance(
+  "getModel still resolves vendor-prefixed model IDs by exact match",
+  Effect.gen(function* () {
+    const info = yield* Provider.use.getModel(
+      ProviderV2.ID.make("prefixed-provider"),
+      ModelV2.ID.make("vendor/vendor-prefixed-model"),
+    )
+    expect(info.id).toBe(ModelV2.ID.make("vendor/vendor-prefixed-model"))
+  }),
+  { config: prefixedModelConfig },
+)
+
+it.instance(
+  "getModel still reports unknown models on a provider with self-prefixed keys",
+  Effect.gen(function* () {
+    const error = yield* Provider.use
+      .getModel(ProviderV2.ID.make("prefixed-provider"), ModelV2.ID.make("does-not-exist"))
+      .pipe(Effect.flip)
+    if (!Provider.ModelNotFoundError.isInstance(error)) throw error
+    expect(error.message).toContain("Model not found: prefixed-provider/does-not-exist")
+  }),
+  { config: prefixedModelConfig },
+)
+
 it.instance("getProvider returns undefined for nonexistent provider", () =>
   Effect.gen(function* () {
     const provider = yield* Provider.Service.use((svc) => svc.getProvider(ProviderV2.ID.make("nonexistent")))
