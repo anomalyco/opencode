@@ -25,6 +25,12 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
   {
     tab: "general",
+    label: "settings.appearance.row.tabs.title",
+    target: "settings-tab-layout",
+    keywords: "vertical horizontal tabs",
+  },
+  {
+    tab: "general",
     label: "settings.workspaces.default.title",
     target: "settings-workspace-destination",
     description: "settings.workspaces.default.description",
@@ -171,12 +177,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     label: "settings.general.row.browserPane.title",
     target: "settings-experimental-browser",
     available: "browser",
-  },
-  {
-    tab: "experimental",
-    label: "settings.appearance.row.tabs.title",
-    target: "settings-tab-layout",
-    keywords: "vertical horizontal tabs",
   },
   { tab: "experimental", label: "settings.appearance.row.projectName.title", target: "settings-show-project-name" },
   {
