@@ -1,6 +1,6 @@
 import { Prompt, type PromptRef } from "../component/prompt"
 import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "solid-js"
-import { Logo } from "../component/logo"
+import { Logo, logoSize } from "../component/logo"
 import { useArgs } from "../context/args"
 import { useRouteData } from "../context/route"
 import { usePromptRef } from "../context/prompt"
@@ -15,6 +15,7 @@ import { useTheme } from "../context/theme"
 import { useUpdateNotification } from "../context/update-notification"
 import { useExit } from "../context/exit"
 import { FadeInText } from "../component/fade-in-text"
+import { homeFooterHeight } from "../ui/layout"
 
 let once = false
 const placeholder = {
@@ -22,7 +23,7 @@ const placeholder = {
   shell: ["ls -la", "git status", "pwd"],
 }
 
-export function Home() {
+export function Home(props: { ready: boolean }) {
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
@@ -33,6 +34,7 @@ export function Home() {
   const location = useLocation()
   const dimensions = useTerminalDimensions()
   const [logoWidth, setLogoWidth] = createSignal(0)
+  const reservedLogoSize = createMemo(() => logoSize(dimensions().width, dimensions().height))
   // Global MCP elicitations can arrive without a session route, so keep them reachable from Home.
   const currentLocation = () => route.location ?? data.location.default()
   const forms = createMemo(() => data.session.form.list("global", currentLocation()) ?? [])
@@ -88,12 +90,16 @@ export function Home() {
         <box flexGrow={1} minHeight={0} />
         <box height={3} minHeight={0} flexShrink={1} />
         <box
+          width={reservedLogoSize().width}
+          height={reservedLogoSize().height}
           flexShrink={0}
           onSizeChange={function () {
             setLogoWidth(this.width)
           }}
         >
-          <Logo />
+          <Show when={props.ready}>
+            <Logo />
+          </Show>
         </box>
         <box height={1} flexShrink={0} />
         <UpdateNotification width={logoWidth()} />
@@ -102,9 +108,16 @@ export function Home() {
         </box>
         <box flexGrow={1} minHeight={0} />
       </box>
-      <box width="100%" flexShrink={0}>
-        <Slot path="home.footer" />
-      </box>
+      <Show
+        when={props.ready}
+        fallback={
+          <box width="100%" height={homeFooterHeight(dimensions().width, dimensions().height)} flexShrink={0} />
+        }
+      >
+        <box width="100%" flexShrink={0}>
+          <Slot path="home.footer" />
+        </box>
+      </Show>
       <Show when={forms()[0]?.id} keyed>
         {(_) => {
           const form = forms()[0]

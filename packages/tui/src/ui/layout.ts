@@ -20,3 +20,16 @@ export function clampSessionPaneWidth(width: number, total: number) {
   // Preserve the equal split when there is not enough room for both pane minima.
   return Math.max(Math.min(24, half), Math.min(width, Math.max(half, total - SESSION_CONTENT_MIN_WIDTH)))
 }
+
+export function homeFooterHeight(width: number, height: number) {
+  if (height < 12 || width < 44) return 0
+  return height < 16 ? 1 : 3
+}
+
+export function homeFooterVisibility(width: number) {
+  return {
+    mcpCommand: width >= 64,
+    pluginCommand: width >= 80,
+    version: width >= 64,
+  }
+}

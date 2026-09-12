@@ -494,14 +494,22 @@ function App(props: { pair?: DialogPairCredentials }) {
   const clipboard = useClipboard()
   const terminalEnvironment = useTuiTerminalEnvironment()
   let systemThemeTimeout: ReturnType<typeof setTimeout> | undefined
+  let terminalTitleTimeout: ReturnType<typeof setTimeout> | undefined
+  const [terminalTitleReady, setTerminalTitleReady] = createSignal(false)
   const prepareSystemTheme = () => {
     // The native writer can still be flushing the frame when FRAME fires. Keep OSC probes behind visible app output.
     systemThemeTimeout = setTimeout(themes.prepareSystem, 50)
   }
-  onMount(() => renderer.once(CliRenderEvents.FRAME, prepareSystemTheme))
+  const finishFirstFrame = () => {
+    // Native terminal updates serialize behind frame output, so keep them from forcing an empty frame ahead of Home.
+    prepareSystemTheme()
+    terminalTitleTimeout = setTimeout(() => setTerminalTitleReady(true), 50)
+  }
+  onMount(() => renderer.once(CliRenderEvents.FRAME, finishFirstFrame))
   onCleanup(() => {
-    renderer.off(CliRenderEvents.FRAME, prepareSystemTheme)
+    renderer.off(CliRenderEvents.FRAME, finishFirstFrame)
     if (systemThemeTimeout) clearTimeout(systemThemeTimeout)
+    if (terminalTitleTimeout) clearTimeout(terminalTitleTimeout)
   })
   createEffect(() => {
     if (client.connection.status() !== "connected") return
@@ -616,6 +624,7 @@ function App(props: { pair?: DialogPairCredentials }) {
     const session = route.data.type === "session" ? data.session.get(route.data.sessionID) : undefined
     if (session) active = { id: session.id, title: session.title }
     if (!terminalTitleEnabled()) return
+    if (!terminalTitleReady()) return
 
     if (route.data.type === "home") {
       renderer.setTerminalTitle("OpenCode")
@@ -639,6 +648,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   })
 
   const args = useArgs()
+  const promptFirstHome = () => route.data.type === "home" && !args.sessionID && !args.continue
   const startupPrompt = args.prompt ? { text: args.prompt, files: [], agents: [], pasted: [] } : undefined
   onMount(() => {
     batch(() => {
@@ -1323,14 +1333,14 @@ function App(props: { pair?: DialogPairCredentials }) {
           <SessionTabs orientation="vertical" width={tabsResize.size()} />
         </Show>
         <box flexGrow={1} minWidth={0} flexDirection="column">
-          <Show when={plugins.ready()}>
+          <Show when={promptFirstHome() || plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
               <Show when={tabsVisible() && !tabsVertical()}>
                 <SessionTabs />
               </Show>
               <Switch>
                 <Match when={route.data.type === "home"}>
-                  <Home />
+                  <Home ready={plugins.ready()} />
                 </Match>
                 <Match when={route.data.type === "session"}>
                   <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
@@ -1351,7 +1361,9 @@ function App(props: { pair?: DialogPairCredentials }) {
                 </Match>
               </Switch>
             </box>
-            <Slot path="app" />
+            <Show when={plugins.ready()}>
+              <Slot path="app" />
+            </Show>
           </Show>
         </box>
         <Show when={verticalTabsVisible()}>
@@ -1361,7 +1373,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       <Show when={devtools() && !(route.data.type === "plugin" && route.data.id === "opencode.stats")}>
         <DevToolsBar />
       </Show>
-      <Show when={!startup.skipInitialLoading}>
+      <Show when={!startup.skipInitialLoading && !promptFirstHome()}>
         <StartupLoading ready={plugins.ready} />
       </Show>
       <Show when={showReconnecting()}>

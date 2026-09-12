@@ -157,7 +157,8 @@ const themeContext = createSimpleContext({
         draft.lock = lock
         const active = config.theme?.name ?? "opencode"
         draft.active = typeof active === "string" ? active : "opencode"
-        draft.ready = false
+        // Built-ins are complete synchronously; custom and system themes still gate their first paint on discovery.
+        draft.ready = active !== "system" && Boolean(draft.themes[active])
       }),
     )
 

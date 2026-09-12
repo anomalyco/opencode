@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { EmbeddedTerminalRenderable } from "@opentui/core"
+import { EmbeddedTerminalRenderable, TextareaRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -427,6 +427,115 @@ test("session title generated while an untitled session is loading remains visib
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
+  }
+})
+
+test.each([
+  { name: "wide", width: 100, height: 30 },
+  { name: "narrow", width: 40, height: 12 },
+])("prompt-first Home preserves its production prompt through plugin readiness ($name)", async (size) => {
+  await using state = await tmpdir()
+  const requested = Promise.withResolvers<void>()
+  const plugins = Promise.withResolvers<{ directory: string }>()
+  await using setup = await createAppFixture({
+    width: size.width,
+    height: size.height,
+    state: state.path,
+    config: { animations: false, tabs: { enabled: false }, plugins: ["fixture"] },
+    packages: {
+      prepare: async () => {
+        requested.resolve()
+        return plugins.promise
+      },
+    },
+  })
+
+  try {
+    await requested.promise
+    await setup.ready
+    await setup.waitFor(() => setup.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    const prompt = setup.renderer.currentFocusedEditor!
+    await setup.mockInput.typeText("typed before plugins")
+    await setup.waitForFrame((frame) => frame.includes("typed before plugins"))
+    const geometry = { x: prompt.x, y: prompt.y, width: prompt.width, height: prompt.height }
+    expect(setup.renderer.root.findDescendantById("home-logo")).toBeUndefined()
+
+    plugins.resolve({ directory: "" })
+    await setup.waitFor(() => setup.renderer.root.findDescendantById("home-logo") !== undefined)
+    await setup.renderOnce()
+
+    expect(setup.renderer.currentFocusedEditor).toBe(prompt)
+    expect(prompt.plainText).toBe("typed before plugins")
+    expect({ x: prompt.x, y: prompt.y, width: prompt.width, height: prompt.height }).toEqual(geometry)
+    await setup.mockInput.typeText(" and remains usable")
+    await setup.waitFor(() => prompt.plainText === "typed before plugins and remains usable")
+    expect(setup.renderer.currentFocusedEditor).toBe(prompt)
+  } finally {
+    const prompt = setup.renderer.currentFocusedEditor
+    if (prompt instanceof TextareaRenderable && prompt.plainText) {
+      setup.mockInput.pressKey("c", { ctrl: true })
+      await setup.waitFor(() => prompt.plainText === "")
+    }
+    plugins.resolve({ directory: "" })
+  }
+})
+
+test.each([
+  { name: "session", args: { sessionID: "ses_startup_gate" } },
+  { name: "continue", args: { continue: true } },
+])("initial $name routing stays gated while plugins load", async ({ args }) => {
+  await using state = await tmpdir()
+  const requested = Promise.withResolvers<void>()
+  const plugins = Promise.withResolvers<{ directory: string }>()
+  const session = {
+    id: "ses_startup_gate",
+    title: "Startup gate fixture",
+    projectID: "proj_test",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 1 },
+  }
+  await using setup = await createAppFixture({
+    state: state.path,
+    args,
+    config: { animations: false, tabs: { enabled: false }, plugins: ["fixture"] },
+    packages: {
+      prepare: async () => {
+        requested.resolve()
+        return plugins.promise
+      },
+    },
+    fetch: (url) => {
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`) return json({ data: [], cursor: {} })
+      if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+        return json({ data: [] })
+      return undefined
+    },
+  })
+
+  try {
+    await requested.promise
+    await setup.ready
+    await setup.renderOnce()
+    expect(setup.renderer.currentFocusedEditor).toBeNull()
+    expect(setup.renderer.root.findDescendantById("home-logo")).toBeUndefined()
+    expect(setup.captureCharFrame()).not.toContain("Ask anything")
+
+    plugins.resolve({ directory: "" })
+    await setup.waitFor(() => setup.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    expect(setup.renderer.root.findDescendantById("home-logo")).toBeUndefined()
+    await setup.mockInput.typeText("session prompt ready")
+    await setup.waitForFrame((frame) => frame.includes("session prompt ready"))
+  } finally {
+    const prompt = setup.renderer.currentFocusedEditor
+    if (prompt instanceof TextareaRenderable && prompt.plainText) {
+      setup.mockInput.pressKey("c", { ctrl: true })
+      await setup.waitFor(() => prompt.plainText === "")
+    }
+    plugins.resolve({ directory: "" })
   }
 })
 

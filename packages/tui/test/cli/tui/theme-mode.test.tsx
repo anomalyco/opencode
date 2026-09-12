@@ -129,6 +129,54 @@ test.each([
   }
 })
 
+test("mounts built-in theme contents while custom theme discovery continues", async () => {
+  const discovery = Promise.withResolvers<Record<string, unknown>>()
+  const discovered = Promise.withResolvers<void>()
+  let mounts = 0
+  let themes: ReturnType<typeof useThemes> | undefined
+
+  function Probe() {
+    mounts++
+    themes = useThemes()
+    return <text>ready</text>
+  }
+
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig({})}>
+        <ThemeProvider
+          mode="dark"
+          source={{
+            discover: async () => {
+              const value = await discovery.promise
+              discovered.resolve()
+              return value
+            },
+          }}
+        >
+          <Probe />
+        </ThemeProvider>
+      </ConfigProvider>
+    ),
+    { width: 20, height: 2 },
+  )
+  app.renderer.start()
+
+  try {
+    expect(mounts).toBe(1)
+    expect(themes?.ready).toBeTrue()
+    expect(themes?.selected).toBe("opencode")
+    discovery.resolve({})
+    await discovered.promise
+    await app.renderOnce()
+    expect(mounts).toBe(1)
+    expect(themes?.selected).toBe("opencode")
+  } finally {
+    discovery.resolve({})
+    app.renderer.destroy()
+  }
+})
+
 test("contextual hooks resolve overrides and fall back to a standalone theme's base view", async () => {
   const standalone = {
     version: 2,

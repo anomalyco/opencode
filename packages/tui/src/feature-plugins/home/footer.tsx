@@ -2,14 +2,7 @@ import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { usePlugin } from "../../plugin/context"
-
-export function homeFooterVisibility(width: number) {
-  return {
-    mcpCommand: width >= 64,
-    pluginCommand: width >= 80,
-    version: width >= 64,
-  }
-}
+import { homeFooterHeight, homeFooterVisibility } from "../../ui/layout"
 
 function Mcp(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
@@ -76,13 +69,14 @@ function Plugins(props: { context: Plugin.Context }) {
 function View(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
+  const height = createMemo(() => homeFooterHeight(dimensions().width, dimensions().height))
 
   return (
-    <Show when={dimensions().height >= 12 && dimensions().width >= 44}>
+    <Show when={height() > 0}>
       <box
         width="100%"
-        paddingTop={dimensions().height < 16 ? 0 : 1}
-        paddingBottom={dimensions().height < 16 ? 0 : 1}
+        paddingTop={height() === 1 ? 0 : 1}
+        paddingBottom={height() === 1 ? 0 : 1}
         paddingLeft={2}
         paddingRight={2}
         flexDirection="row"

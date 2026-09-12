@@ -4,6 +4,26 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { useTheme } from "../context/theme"
 import { tint } from "../theme/color"
 import { go, logo } from "../logo"
+import { stringWidth } from "../util/string-width"
+
+export function logoSize(width: number, height: number) {
+  if (height < 12) return { width: 0, height: 0 }
+  if (width < 22)
+    return {
+      width: Math.max(...go.right.slice(1).map((line) => stringWidth(line))),
+      height: go.right.length - 1,
+    }
+  if (width < 44) {
+    const lines = [...logo.left.slice(1), ...logo.right]
+    return { width: Math.max(...lines.map((line) => stringWidth(line))), height: lines.length }
+  }
+  return {
+    width: Math.max(
+      ...logo.left.map((line, index) => stringWidth(line) + 1 + stringWidth(logo.right[index] ?? "")),
+    ),
+    height: logo.left.length,
+  }
+}
 
 export function Logo() {
   const theme = useTheme()
@@ -50,7 +70,7 @@ export function Logo() {
   }
 
   return (
-    <box>
+    <box id="home-logo">
       {dimensions().height < 12 ? null : dimensions().width < 22 ? (
         <For each={go.right.slice(1)}>
           {(line) => <box flexDirection="row">{renderLine(line, theme.text.default, true)}</box>}
