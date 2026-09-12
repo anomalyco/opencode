@@ -125,6 +125,10 @@ export const TuiThreadCommand = cmd({
         describe: "start the minimal interactive interface",
         default: false,
       })
+      .option("ephemeral", {
+        type: "boolean",
+        describe: "do not persist sessions created in this instance after exiting",
+      })
       .option("replay", {
         type: "boolean",
         hidden: true,
@@ -158,6 +162,11 @@ export const TuiThreadCommand = cmd({
         process.exitCode = 1
         return
       }
+      if (args.ephemeral && (args.continue || args.session)) {
+        UI.error("--ephemeral cannot be used with --continue or --session")
+        process.exitCode = 1
+        return
+      }
 
       const { runMini } = await import("./run")
       await runMini({
@@ -171,6 +180,7 @@ export const TuiThreadCommand = cmd({
         replay: noReplay ? false : undefined,
         replayLimit: args.replayLimit,
         demo: args.demo,
+        ephemeral: args.ephemeral,
       })
       return
     }
@@ -191,6 +201,11 @@ export const TuiThreadCommand = cmd({
       const { TuiConfig } = await import("@/config/tui")
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
+        process.exitCode = 1
+        return
+      }
+      if (args.ephemeral && (args.continue || args.session)) {
+        UI.error("--ephemeral cannot be used with --continue or --session")
         process.exitCode = 1
         return
       }
@@ -266,10 +281,14 @@ export const TuiThreadCommand = cmd({
         client.call("checkUpgrade", { directory: cwd }).catch(() => {})
       }, 1000).unref?.()
 
+      const { Effect } = await import("effect")
+      const { run } = await import("../tui/layer")
+      const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
+      // Sessions created by an ephemeral instance, deleted on exit. Cleanup
+      // is best-effort promptness: the server hides ephemeral sessions from
+      // lists and sweeps abandoned ones on startup.
+      const ephemeralSessions = new Set<string>()
       try {
-        const { Effect } = await import("effect")
-        const { run } = await import("../tui/layer")
-        const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
         await Effect.runPromise(
           run({
             url: transport.url,
@@ -292,10 +311,32 @@ export const TuiThreadCommand = cmd({
               prompt,
               fork: args.fork,
               auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
+              ephemeral: args.ephemeral,
+              onSessionCreated: (sessionID: string) => {
+                if (args.ephemeral) ephemeralSessions.add(sessionID)
+              },
             },
           }),
         )
       } finally {
+        if (ephemeralSessions.size > 0) {
+          const { createOpencodeClient } = await import("@opencode-ai/sdk/v2")
+          const sdk = createOpencodeClient({
+            baseUrl: transport.url,
+            fetch: transport.fetch,
+            headers: transport.headers,
+          })
+          await Promise.all(
+            [...ephemeralSessions].map((sessionID) =>
+              withTimeout(sdk.session.delete({ sessionID }), 5000).then(
+                () => undefined,
+                () => {
+                  process.stderr.write(`failed to delete ephemeral session ${sessionID}\n`)
+                },
+              ),
+            ),
+          )
+        }
         await stop()
       }
     } finally {

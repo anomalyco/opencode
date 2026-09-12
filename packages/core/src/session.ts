@@ -81,6 +81,7 @@ type CreateInput = {
   agent?: AgentV2.ID
   model?: ModelV2.Ref
   location: Location.Ref
+  ephemeral?: boolean
 }
 
 type CompactInput = {
@@ -236,6 +237,7 @@ const layer = Layer.effect(
             : undefined,
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          ephemeral: input.ephemeral || undefined,
           time: { created: now, updated: now },
         })
         const projected = yield* events
@@ -270,7 +272,8 @@ const layer = Layer.effect(
         const requestedOrder = input.order ?? "desc"
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
         const sortColumn = SessionTable.time_created
-        const conditions: SQL[] = []
+        // Ephemeral sessions are fire-and-forget: they never appear in history.
+        const conditions: SQL[] = [eq(SessionTable.ephemeral, false)]
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))

@@ -1006,6 +1006,7 @@ export function Prompt(props: PromptProps) {
           id: selectedModel.modelID,
           variant,
         },
+        ephemeral: args.ephemeral || undefined,
       })
 
       if (res.error) {
@@ -1021,6 +1022,7 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = res.data.id
+      args.onSessionCreated?.(sessionID)
     }
 
     const inputText = expandTrackedPastedText(

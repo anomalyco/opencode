@@ -205,6 +205,7 @@ export type Session = {
   metadata?: {
     [key: string]: unknown
   }
+  ephemeral?: boolean
   time: {
     created: number
     updated: number
@@ -2233,6 +2234,7 @@ export type GlobalSession = {
   metadata?: {
     [key: string]: unknown
   }
+  ephemeral?: boolean
   time: {
     created: number
     updated: number
@@ -3930,6 +3932,7 @@ export type SessionV2Info = {
   location: LocationRef
   subpath?: string
   revert?: RevertState
+  ephemeral?: boolean
 }
 
 export type PromptInputFileAttachment = {
@@ -9488,6 +9491,7 @@ export type SessionCreateData = {
     }
     permission?: PermissionRuleset
     workspaceID?: string
+    ephemeral?: boolean
   }
   path?: never
   query?: {

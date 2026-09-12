@@ -22,6 +22,7 @@ import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
+import { withTimeout } from "@/util/timeout"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
@@ -161,6 +162,10 @@ export const RunCommand = effectCmd({
       .option("share", {
         type: "boolean",
         describe: "share the session",
+      })
+      .option("ephemeral", {
+        type: "boolean",
+        describe: "do not persist the session after the run completes",
       })
       .option("model", {
         type: "string",
@@ -427,6 +432,11 @@ export const RunCommand = effectCmd({
         process.exit(1)
       }
 
+      if (args.ephemeral && (args.continue || args.session || args.attach || args.share)) {
+        UI.error("--ephemeral cannot be used with --continue, --session, --attach, or --share")
+        process.exit(1)
+      }
+
       const rules: PermissionV1.Ruleset = interactive
         ? []
         : [
@@ -451,6 +461,29 @@ export const RunCommand = effectCmd({
         if (args.title === undefined) return
         if (args.title !== "") return args.title
         return message.slice(0, 50) + (message.length > 50 ? "..." : "")
+      }
+
+      // Every ephemeral session created in this invocation, including extra
+      // ones from interactive mode. Deletion is best-effort promptness: the
+      // server hides ephemeral sessions from lists and sweeps abandoned ones
+      // on startup, so uncovered exits (kill -9, crashes) only delay cleanup.
+      // The timeout keeps a hung delete from wedging the process at exit.
+      const ephemeralSessions = new Map<string, OpencodeClient>()
+      let ephemeralCleanup: Promise<void> | undefined
+      const removeEphemeral = () => {
+        if (!args.ephemeral) return Promise.resolve()
+        if (ephemeralCleanup) return ephemeralCleanup
+        ephemeralCleanup = Promise.all(
+          [...ephemeralSessions].map(([sessionID, sdk]) =>
+            withTimeout(sdk.session.delete({ sessionID }), 5000).then(
+              () => undefined,
+              () => {
+                process.stderr.write(`failed to delete ephemeral session ${sessionID}\n`)
+              },
+            ),
+          ),
+        ).then(() => undefined)
+        return ephemeralCleanup
       }
 
       async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
@@ -519,11 +552,13 @@ export const RunCommand = effectCmd({
         const result = await sdk.session.create({
           title: name,
           permission: [...rules],
+          ephemeral: args.ephemeral,
         })
         const id = result.data?.id
         if (!id) {
           return
         }
+        if (args.ephemeral) ephemeralSessions.set(id, sdk)
 
         return {
           id,
@@ -533,6 +568,7 @@ export const RunCommand = effectCmd({
       }
 
       async function share(sdk: OpencodeClient, sessionID: string) {
+        if (args.ephemeral) return
         const cfg = await sdk.config.get()
         if (!cfg.data) return
         if (cfg.data.share !== "auto" && !flags.autoShare && !args.share) return
@@ -562,11 +598,13 @@ export const RunCommand = effectCmd({
               }
             : undefined,
           permission: [...rules],
+          ephemeral: args.ephemeral,
         })
         const id = result.data?.id
         if (!id) {
           throw new Error("Failed to create session")
         }
+        if (args.ephemeral) ephemeralSessions.set(id, sdk)
 
         void share(sdk, id).catch(() => {})
         return {
@@ -674,6 +712,25 @@ export const RunCommand = effectCmd({
           process.exit(1)
         }
         const sessionID = sess.id
+
+        const interrupted = (signal: "SIGINT" | "SIGTERM") => async () => {
+          await removeEphemeral()
+          process.exit(signal === "SIGINT" ? 130 : 143)
+        }
+        const sigint = interrupted("SIGINT")
+        const sigterm = interrupted("SIGTERM")
+        // Interactive mode owns SIGINT as a UI gesture and exits through its
+        // own lifecycle, which lands in done() below; raw handlers would race
+        // the renderer teardown.
+        if (args.ephemeral && !interactive) {
+          process.on("SIGINT", sigint)
+          process.on("SIGTERM", sigterm)
+        }
+        const done = async () => {
+          process.off("SIGINT", sigint)
+          process.off("SIGTERM", sigterm)
+          await removeEphemeral()
+        }
 
         function emit(type: string, data: Record<string, unknown>) {
           if (args.format === "json") {
@@ -854,10 +911,10 @@ export const RunCommand = effectCmd({
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
               process.exitCode = 1
-              return
+              return done()
             }
             await finish()
-            return
+            return done()
           }
 
           const model = pick(args.model)
@@ -871,10 +928,10 @@ export const RunCommand = effectCmd({
           if (result.error) {
             if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
             process.exitCode = 1
-            return
+            return done()
           }
           await finish()
-          return
+          return done()
         }
 
         const model = pick(args.model)
@@ -901,7 +958,7 @@ export const RunCommand = effectCmd({
         } catch (error) {
           dieInteractive(error)
         }
-        return
+        return done()
       }
 
       if (interactive && !args.attach && !args.session && !args.continue) {
@@ -917,7 +974,7 @@ export const RunCommand = effectCmd({
         }) as typeof globalThis.fetch
 
         try {
-          return await runInteractiveLocalMode({
+          await runInteractiveLocalMode({
             directory: directory ?? root,
             fetch: fetchFn,
             resolveAgent: localAgent,
@@ -938,6 +995,7 @@ export const RunCommand = effectCmd({
         } catch (error) {
           dieInteractive(error)
         }
+        return removeEphemeral()
       }
 
       if (args.attach) {
@@ -977,6 +1035,7 @@ type MiniCommandInput = {
   replay?: boolean
   replayLimit?: number
   demo?: boolean
+  ephemeral?: boolean
 }
 
 export async function runMini(input: MiniCommandInput) {
@@ -990,6 +1049,7 @@ export async function runMini(input: MiniCommandInput) {
     session: input.session,
     fork: input.fork,
     share: undefined,
+    ephemeral: input.ephemeral ?? false,
     model: input.model,
     agent: input.agent,
     format: "default",
