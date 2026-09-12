@@ -598,7 +598,7 @@ const EndpointSessionDiff = (raw: RawClient["server.session"]) => (input: Sessio
   preserveEffect<SessionDiffOutput>()(
     raw["session.diff"]({
       params: { sessionID: input["sessionID"] },
-      query: { messageID: input["messageID"], to: input["to"], context: input["context"] },
+      query: { from: input["from"], to: input["to"], context: input["context"] },
     }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),

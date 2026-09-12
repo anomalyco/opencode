@@ -140,7 +140,7 @@ export interface Interface {
   /** Structured diffs of the files changed by a turn or range of turns; see `SessionDiff.turn`. */
   readonly diff: (input: {
     readonly sessionID: SessionSchema.ID
-    readonly messageID?: SessionMessage.ID
+    readonly from?: SessionMessage.ID
     readonly to?: SessionMessage.ID
     readonly context?: number
   }) => Effect.Effect<readonly FileDiff.Info[], NotFoundError | MessageNotFoundError | TurnRangeError | Snapshot.Error>
@@ -370,7 +370,7 @@ const layer = Layer.effect(
         return yield* SessionDiff.turn(db, locations, {
           session,
           active,
-          messageID: input.messageID,
+          from: input.from,
           to: input.to,
           context: input.context,
         })

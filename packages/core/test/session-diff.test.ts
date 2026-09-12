@@ -63,7 +63,7 @@ describe("Session.diff", () => {
         const bus = yield* Bus.Service
         const locations = yield* LocationServiceMap.Service
         const created = yield* sessions.create({ location: { directory: AbsolutePath.make(directory) } })
-        const diff = (input?: { messageID?: SessionMessage.ID; to?: SessionMessage.ID }) =>
+        const diff = (input?: { from?: SessionMessage.ID; to?: SessionMessage.ID }) =>
           sessions
             .diff({ sessionID: created.id, context: 0, ...input })
             .pipe(Effect.map((files) => files.map(summarize)))
@@ -123,7 +123,7 @@ describe("Session.diff", () => {
           const second = yield* prompt("Edit the second file")
           yield* step(write("second.txt", "second edited\n"), "recorded")
           expect(yield* diff()).toEqual([["second.txt", "modified", 1, 1]])
-          expect(yield* diff({ messageID: first })).toEqual([["first.txt", "modified", 1, 1]])
+          expect(yield* diff({ from: first })).toEqual([["first.txt", "modified", 1, 1]])
 
           // Once markers exist, a turn spans a whole busy period, steers included; earlier history merges into the first one.
           yield* idle("succeeded")
@@ -137,30 +137,30 @@ describe("Session.diff", () => {
             ["third.txt", "added", 1, 0],
           ]
           expect(yield* diff()).toEqual(busy)
-          expect(yield* diff({ messageID: steer })).toEqual(busy)
-          expect(yield* diff({ messageID: second })).toEqual([
+          expect(yield* diff({ from: steer })).toEqual(busy)
+          expect(yield* diff({ from: second })).toEqual([
             ["first.txt", "modified", 1, 1],
             ["manual.txt", "modified", 1, 1],
             ["second.txt", "modified", 1, 1],
           ])
-          expect(yield* diff({ messageID: first, to: third })).toEqual([
+          expect(yield* diff({ from: first, to: third })).toEqual([
             ["first.txt", "modified", 1, 1],
             ["fourth.txt", "added", 1, 0],
             ["manual.txt", "modified", 1, 1],
             ["second.txt", "modified", 1, 1],
             ["third.txt", "added", 1, 0],
           ])
-          const full = yield* sessions.diff({ sessionID: created.id, messageID: first })
+          const full = yield* sessions.diff({ sessionID: created.id, from: first })
           expect(full[0]?.patch).toContain("-first\n+first edited\n")
-          expect(yield* diff({ messageID: steer, to: second }).pipe(Effect.flip)).toMatchObject({
+          expect(yield* diff({ from: steer, to: second }).pipe(Effect.flip)).toMatchObject({
             _tag: "Session.TurnRangeError",
             field: "to",
           })
-          expect(yield* diff({ messageID: firstStep }).pipe(Effect.flip)).toMatchObject({
+          expect(yield* diff({ from: firstStep }).pipe(Effect.flip)).toMatchObject({
             _tag: "Session.TurnRangeError",
-            field: "messageID",
+            field: "from",
           })
-          expect(yield* diff({ messageID: SessionMessage.ID.create() }).pipe(Effect.flip)).toMatchObject({
+          expect(yield* diff({ from: SessionMessage.ID.create() }).pipe(Effect.flip)).toMatchObject({
             _tag: "Session.MessageNotFoundError",
           })
 
@@ -183,7 +183,7 @@ describe("Session.diff", () => {
           yield* sessions.revert.stage({ sessionID: created.id, messageID: steer, files: false })
           yield* sessions.revert.commit(created.id)
           expect(yield* diff()).toEqual([["third.txt", "added", 1, 0]])
-          expect(yield* diff({ messageID: steer }).pipe(Effect.flip)).toMatchObject({
+          expect(yield* diff({ from: steer }).pipe(Effect.flip)).toMatchObject({
             _tag: "Session.MessageNotFoundError",
           })
           const forked = yield* sessions.fork({ sessionID: created.id, boundary: { type: "through" } })

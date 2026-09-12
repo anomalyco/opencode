@@ -84,12 +84,12 @@ it.live("serves turn diffs by user message with range validation", () =>
     expect(yield* diff()).toEqual({ status: 200, body: { data: [] } })
     expect((yield* request(`/api/session/${sessionID}/prompt`, { id: ids.user, text: "prompt" })).status).toBe(200)
     // Not a git repository, so steps record no snapshots and the turn has no diff.
-    expect(yield* diff(`?messageID=${ids.user}&context=3`)).toEqual({ status: 200, body: { data: [] } })
-    expect(yield* diff(`?messageID=${ids.assistant}`)).toMatchObject({
+    expect(yield* diff(`?from=${ids.user}&context=3`)).toEqual({ status: 200, body: { data: [] } })
+    expect(yield* diff(`?from=${ids.assistant}`)).toMatchObject({
       status: 400,
-      body: { _tag: "InvalidRequestError", field: "messageID" },
+      body: { _tag: "InvalidRequestError", field: "from" },
     })
-    expect(yield* diff(`?messageID=${SessionMessage.ID.create()}`)).toMatchObject({
+    expect(yield* diff(`?from=${SessionMessage.ID.create()}`)).toMatchObject({
       status: 404,
       body: { _tag: "MessageNotFoundError" },
     })

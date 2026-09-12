@@ -4283,18 +4283,18 @@ export type SessionContextOutput = { data: Array<SessionMessageInfo> }["data"]
 
 export type SessionDiffInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly messageID?: {
-    readonly messageID?: string | undefined
+  readonly from?: {
+    readonly from?: string | undefined
     readonly to?: string | undefined
     readonly context?: number | undefined
-  }["messageID"]
+  }["from"]
   readonly to?: {
-    readonly messageID?: string | undefined
+    readonly from?: string | undefined
     readonly to?: string | undefined
     readonly context?: number | undefined
   }["to"]
   readonly context?: {
-    readonly messageID?: string | undefined
+    readonly from?: string | undefined
     readonly to?: string | undefined
     readonly context?: number | undefined
   }["context"]

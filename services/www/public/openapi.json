@@ -3257,7 +3257,7 @@
             "required": true
           },
           {
-            "name": "messageID",
+            "name": "from",
             "in": "query",
             "schema": {
               "anyOf": [
@@ -3286,7 +3286,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Later user message whose turn ends the range. Defaults to the turn of `messageID` alone."
+              "description": "Later user message whose turn ends the range. Defaults to the turn of `from` alone."
             },
             "required": false
           },

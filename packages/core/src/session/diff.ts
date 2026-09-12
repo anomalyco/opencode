@@ -14,7 +14,7 @@ import { SessionMessageTable } from "./sql.js"
 
 export class TurnRangeError extends Schema.TaggedError<TurnRangeError>()("Session.TurnRangeError", {
   sessionID: SessionSchema.ID,
-  field: Schema.Literals(["messageID", "to"]),
+  field: Schema.Literals(["from", "to"]),
   message: Schema.String,
 }) {}
 
@@ -42,7 +42,7 @@ export const turn = Effect.fn("SessionDiff.turn")(function* (
     readonly session: SessionSchema.Info
     /** The process is currently executing this Session. */
     readonly active: boolean
-    readonly messageID?: SessionMessage.ID
+    readonly from?: SessionMessage.ID
     readonly to?: SessionMessage.ID
     readonly context?: number
   },
@@ -56,7 +56,7 @@ export const turn = Effect.fn("SessionDiff.turn")(function* (
         eq(SessionMessageTable.session_id, sessionID),
         or(
           inArray(SessionMessageTable.type, ["user", "idle"]),
-          input.messageID ? eq(SessionMessageTable.id, input.messageID) : undefined,
+          input.from ? eq(SessionMessageTable.id, input.from) : undefined,
           input.to ? eq(SessionMessageTable.id, input.to) : undefined,
         ),
       ),
@@ -66,14 +66,14 @@ export const turn = Effect.fn("SessionDiff.turn")(function* (
     .pipe(Effect.orDie)
   const users = rows.filter((row) => row.type === "user")
   const markers = rows.filter((row) => row.type === "idle")
-  const resolve = Effect.fn(function* (field: "messageID" | "to", id: SessionMessage.ID) {
+  const resolve = Effect.fn(function* (field: "from" | "to", id: SessionMessage.ID) {
     const row = rows.find((row) => row.id === id)
     if (!row) return yield* new MessageNotFoundError({ sessionID, messageID: id })
     if (row.type !== "user")
       return yield* new TurnRangeError({ sessionID, field, message: `Message ${id} is not a user message` })
     return row
   })
-  const anchor = input.messageID ? yield* resolve("messageID", input.messageID) : users[users.length - 1]
+  const anchor = input.from ? yield* resolve("from", input.from) : users[users.length - 1]
   if (!anchor) return []
   const last = input.to ? yield* resolve("to", input.to) : anchor
   if (last.seq < anchor.seq)

@@ -526,11 +526,11 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
       HttpApiEndpoint.get("session.diff", "/api/session/:sessionID/diff", {
         params: { sessionID: Session.ID },
         query: Schema.Struct({
-          messageID: Schema.optional(SessionMessage.ID).annotate({
+          from: Schema.optional(SessionMessage.ID).annotate({
             description: "User message whose turn to diff. Defaults to the turn of the newest user message.",
           }),
           to: Schema.optional(SessionMessage.ID).annotate({
-            description: "Later user message whose turn ends the range. Defaults to the turn of `messageID` alone.",
+            description: "Later user message whose turn ends the range. Defaults to the turn of `from` alone.",
           }),
           context: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional).annotate({
             description: "Unchanged lines around each hunk. Omit for full-file patches.",

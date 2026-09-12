@@ -362,7 +362,7 @@ export type SessionContextOperation<E = never> = (input: SessionContextInput) =>
 
 export type SessionDiffInput = {
   readonly sessionID: Session.ID
-  readonly messageID?: SessionMessage.ID | undefined
+  readonly from?: SessionMessage.ID | undefined
   readonly to?: SessionMessage.ID | undefined
   readonly context?: number | undefined
 }
