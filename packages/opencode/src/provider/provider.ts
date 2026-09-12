@@ -1360,6 +1360,7 @@ function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
 function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enableExperimentalModels: boolean) {
   const available = provider
     ? Object.keys(provider.models).filter((id) => {
+        if (id === modelID) return false
         const model = provider.models[id]
         if (model.status === "deprecated") return false
         if (model.status === "alpha" && !enableExperimentalModels) return false
