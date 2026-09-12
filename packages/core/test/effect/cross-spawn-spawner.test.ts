@@ -59,6 +59,19 @@ async function gone(pid: number, timeout = 5_000) {
   return !alive(pid)
 }
 
+async function waitForFile(file: string, timeout = 5_000) {
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    try {
+      return await fs.readFile(file, "utf8")
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  }
+  throw new Error(`timed out waiting for ${file}`)
+}
+
 describe("cross-spawn spawner", () => {
   describe("basic spawning", () => {
     fx.effect(
@@ -373,6 +386,51 @@ describe("cross-spawn spawner", () => {
         expect(out).toContain("stdout")
         expect(out).toContain("stderr")
       }),
+    )
+  })
+
+  describe("exit signal", () => {
+    fx.effect(
+      "exit code resolves while a descendant keeps stdout open",
+      Effect.gen(function* () {
+        const tmp = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+        )
+        const stop = path.join(tmp.path, "stop")
+        const done = path.join(tmp.path, "done")
+        const descendant = [
+          'const fs = require("node:fs")',
+          `const stop = ${JSON.stringify(stop)}`,
+          "const timer = setInterval(() => {",
+          "  if (!fs.existsSync(stop)) return",
+          "  clearInterval(timer)",
+          `  fs.writeFileSync(${JSON.stringify(done)}, "done")`,
+          "}, 10)",
+        ].join("\n")
+        const parent = [
+          'const { spawn } = require("node:child_process")',
+          `const child = spawn(process.execPath, ["-e", ${JSON.stringify(descendant)}], {`,
+          '  stdio: ["ignore", "inherit", "inherit"],',
+          "})",
+          "child.unref()",
+        ].join("\n")
+
+        const handle = yield* js(parent)
+        const cleanup = Effect.promise(async () => {
+          await fs.writeFile(stop, "stop")
+          await waitForFile(done)
+        })
+        const code = yield* handle.exitCode.pipe(
+          Effect.timeoutOrElse({
+            duration: "1 second",
+            orElse: () => Effect.die(new Error("exit code did not resolve after the parent exited")),
+          }),
+          Effect.ensuring(cleanup),
+        )
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+      }),
+      10_000,
     )
   })
 
