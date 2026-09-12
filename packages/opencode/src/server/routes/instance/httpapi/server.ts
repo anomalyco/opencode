@@ -191,6 +191,31 @@ const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effe
   Layer.provide(authOnlyRouterLayer),
 )
 
+const rcRoute = HttpRouter.use((router) =>
+  Effect.gen(function* () {
+    yield* router.add("GET", "/rc/qr", (request) =>
+      Effect.gen(function* () {
+        const reqUrl = new URL(request.url)
+        const host = request.headers.get("host") ?? `localhost:${reqUrl.port || "4096"}`
+        const proto = request.headers.get("x-forwarded-proto") ?? reqUrl.protocol.replace(":", "") ?? "http"
+        const fullUrl = `${proto}://${host}`
+        const attach = `opencode attach ${fullUrl}`
+        const qr = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(fullUrl)}`
+        return HttpServerResponse.json({ url: fullUrl, attach, qr })
+      }),
+    )
+    yield* router.add("GET", "/rc/status", (request) =>
+      Effect.gen(function* () {
+        const reqUrl = new URL(request.url)
+        const host = request.headers.get("host") ?? `localhost:${reqUrl.port || "4096"}`
+        const proto = request.headers.get("x-forwarded-proto") ?? reqUrl.protocol.replace(":", "") ?? "http"
+        const fullUrl = `${proto}://${host}`
+        return HttpServerResponse.json({ url: fullUrl, host, status: "ok" })
+      }),
+    )
+  }),
+).pipe(Layer.provide(authOnlyRouterLayer))
+
 const uiRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -280,6 +305,7 @@ export function createRoutes(
     instanceRoutes,
     serverRoutes,
     docRoute,
+    rcRoute,
     uiRoute,
   ).pipe(
     Layer.provide([
