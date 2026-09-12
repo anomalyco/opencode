@@ -1,15 +1,14 @@
-import {
-  FileFinder,
-  type DirItem,
-  type DirSearchResult,
-  type FileItem,
-  type GrepCursor,
-  type GrepMatch,
-  type GrepResult,
-  type InitOptions,
-  type MixedItem,
-  type MixedSearchResult,
-  type SearchResult,
+import type {
+  DirItem,
+  DirSearchResult,
+  FileItem,
+  GrepCursor,
+  GrepMatch,
+  GrepResult,
+  InitOptions,
+  MixedItem,
+  MixedSearchResult,
+  SearchResult,
 } from "@ff-labs/fff-bun"
 
 declare global {
@@ -111,12 +110,17 @@ export interface Picker {
   getHistoricalQuery(offset: number): Result<string | null>
 }
 
+// @ff-labs/fff-bun is not published for every platform (e.g. FreeBSD), so
+// degrade to unavailable when the module is missing
+const binding = await import("@ff-labs/fff-bun").catch(() => undefined)
+
 export function available() {
-  return FileFinder.isAvailable()
+  return binding?.FileFinder.isAvailable() ?? false
 }
 
 export function create(opts: Init): Result<Picker> {
-  const made = FileFinder.create(opts)
+  if (!binding) return { ok: false, error: "fff unavailable: @ff-labs/fff-bun is not installed" }
+  const made = binding.FileFinder.create(opts)
   if (!made.ok) return made
   const pick = made.value
   return {
