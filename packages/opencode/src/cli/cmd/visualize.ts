@@ -103,7 +103,7 @@ export const VisualizeCommand = effectCmd({
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Output File:   " + UI.Style.TEXT_NORMAL + htmlFile)
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Browser View:  " + UI.Style.TEXT_NORMAL + fileUri)
       UI.empty()
-      yield* Effect.promise(() => open(htmlFile).catch(() => {}))
+      yield* Effect.promise(() => open(htmlFile).catch(() => { }))
       return
     }
 
@@ -753,3 +753,4 @@ ${mermaidCode}
 function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 }
+
