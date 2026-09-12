@@ -381,6 +381,26 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("matches LF regions in a mixed-ending file and keeps other lines untouched", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "mixed.txt")
+        return Effect.promise(() => fs.writeFile(target, "alpha\nbeta\r\ngamma\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              executeTool(registry, call({ path: "mixed.txt", oldString: "alpha\nbeta", newString: "ALPHA" })),
+            ),
+          ),
+          Effect.andThen(() => Effect.promise(() => fs.readFile(target, "utf8"))),
+          Effect.tap((content) => Effect.sync(() => expect(content).toBe("ALPHA\r\ngamma\n"))),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("rejects an in-place content change after matching but before conditional commit", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
