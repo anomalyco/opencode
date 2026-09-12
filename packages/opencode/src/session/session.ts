@@ -380,10 +380,7 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   const costInfo =
     input.model.cost?.tiers
       ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
-      .sort((a, b) => b.tier.size - a.tier.size)[0] ??
-    (input.model.cost?.experimentalOver200K && contextTokens > 200_000
-      ? input.model.cost.experimentalOver200K
-      : input.model.cost)
+      .sort((a, b) => b.tier.size - a.tier.size)[0] ?? input.model.cost
   const totalNanoAiu = input.metadata?.["copilot"]?.["totalNanoAiu"]
   return {
     cost:
