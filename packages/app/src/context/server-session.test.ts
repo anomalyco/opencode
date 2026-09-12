@@ -758,6 +758,47 @@ describe("server session", () => {
     expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
   })
 
+  test("a forced refresh waits for an in-flight message load when session info rejects", async () => {
+    const user = userMessage("message-1", {
+      sessionID: "root",
+      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-FRESH-B" }] },
+    })
+    const firstInfo = Promise.withResolvers<{ data: Session }>()
+    const secondInfo = Promise.withResolvers<{ data: Session }>()
+    let infoIndex = 0
+    const firstPage = deferredResponse()
+    const secondPage = deferredResponse()
+    const client = messageClient(firstPage.promise, secondPage.promise)
+    client.session.get = (() =>
+      infoIndex++ === 0 ? firstInfo.promise : secondInfo.promise) as unknown as typeof client.session.get
+    const store = createServerSession(client)
+    const initial = store.sync("root").catch((error) => error)
+    await client.requested(1)
+    await Bun.sleep(0)
+
+    const forced = store.sync("root", { force: true })
+    let premature = false
+    const tracked = forced.then(() => {
+      premature = true
+    })
+
+    firstInfo.reject(new Error("temporary failure"))
+    secondInfo.resolve({ data: session("root") })
+    await Bun.sleep(0)
+    expect(premature).toBe(false)
+
+    firstPage.resolve(response([{ info: userMessage("message-stale", { sessionID: "root" }), parts: [] }]))
+    await Bun.sleep(0)
+    expect(client.requests).toHaveLength(2)
+
+    secondPage.resolve(response([{ info: user, parts: [] }]))
+    await Promise.all([initial, tracked])
+
+    expect(premature).toBe(true)
+    const result = store.data.message.root?.find((item) => item.id === user.id)
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-FRESH-B")
+  })
+
   test("does not start queued work after session teardown", async () => {
     const user = userMessage("message-1", { sessionID: "root" })
     const info = Promise.withResolvers<{ data: Session }>()

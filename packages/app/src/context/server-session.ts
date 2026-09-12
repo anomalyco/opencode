@@ -887,12 +887,17 @@ export function createServerSession(
       return runInflight(inflight, sessionID, async () => {
         const cached = data.message[sessionID] !== undefined && meta.limit[sessionID] !== undefined
         if (cached && data.info[sessionID] && !options?.force) return
-        await Promise.all([
+        // Settle every constituent before completing the operation: a queued forced refresh awaits
+        // this promise and must not run while a message load is still active, or its load is skipped
+        // by the loading guard and the forced caller completes without a fresh page.
+        const [info, loaded] = await Promise.allSettled([
           resolve(sessionID, options),
           cached && !options?.force
             ? Promise.resolve()
             : loadMessages(sessionID, options?.messageLimit ?? meta.limit[sessionID] ?? initialMessagePageSize),
         ])
+        if (info.status === "rejected") throw info.reason
+        if (loaded.status === "rejected") throw loaded.reason
       })
     if (!options?.force) return pending
     const queued = queuedRefreshes.get(sessionID)
