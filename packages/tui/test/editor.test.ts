@@ -9,7 +9,7 @@ afterEach(() => {
   process.env.VISUAL = visual
 })
 
-test("rejects when the external editor cannot start", async () => {
+test("returns undefined when the external editor cannot start", async () => {
   delete process.env.VISUAL
   process.env.EDITOR = "opencode-editor-that-does-not-exist"
   const renderer = {
@@ -19,7 +19,22 @@ test("rejects when the external editor cannot start", async () => {
     currentRenderBuffer: { clear() {} },
   }
 
-  await expect(openEditor({ value: "original", renderer: renderer as never })).rejects.toThrow()
+  const result = await openEditor({ value: "original", renderer: renderer as never })
+  expect(result).toBeUndefined()
+})
+
+test("resolves with undefined when editor exits non-zero", async () => {
+  delete process.env.VISUAL
+  process.env.EDITOR = 'node -e "process.exit(1)"'
+  const renderer = {
+    suspend() {},
+    resume() {},
+    requestRender() {},
+    currentRenderBuffer: { clear() {} },
+  }
+
+  const result = await openEditor({ value: "original", renderer: renderer as never })
+  expect(result).toBeUndefined()
 })
 
 test("normalizes a single trailing editor newline for one-line prompts", () => {
