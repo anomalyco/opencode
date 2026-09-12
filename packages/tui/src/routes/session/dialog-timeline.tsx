@@ -1,7 +1,7 @@
+import { useLanguage } from "../../context/language"
 import { createMemo, onMount } from "solid-js"
 import { useData } from "../../context/data"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
-import { Locale } from "../../util/locale"
 import { DialogMessage } from "./dialog-message"
 import { useDialog } from "../../ui/dialog"
 import type { PromptInfo } from "../../prompt/history"
@@ -11,6 +11,7 @@ export function DialogTimeline(props: {
   onMove: (messageID: string) => void
   setPrompt?: (prompt: PromptInfo) => void
 }) {
+  const language = useLanguage()
   const data = useData()
   const dialog = useDialog()
 
@@ -26,7 +27,7 @@ export function DialogTimeline(props: {
       result.push({
         title: message.text.replace(/\n/g, " "),
         value: message.id,
-        footer: Locale.time(message.time.created),
+        footer: language.date(message.time.created, { timeStyle: "short" }),
         onSelect: (dialog) => {
           dialog.replace(() => (
             <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} />
@@ -38,5 +39,11 @@ export function DialogTimeline(props: {
     return result
   })
 
-  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Timeline" options={options()} />
+  return (
+    <DialogSelect
+      onMove={(option) => props.onMove(option.value)}
+      title={language.t("tui.details.timeline")}
+      options={options()}
+    />
+  )
 }

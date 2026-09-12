@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { TextAttributes } from "@opentui/core"
 import type {
   ConnectionInfo,
@@ -78,6 +79,7 @@ export function DialogIntegration(
   const data = useData()
   const currentLocation = useLocation()
   const dialog = useDialog()
+  const language = useLanguage()
   const theme = useTheme("elevated")
   const location = currentLocation.ref ?? data.location.default()
   const integrations = createMemo(() =>
@@ -112,7 +114,7 @@ export function DialogIntegration(
       return {
         title: integration.name,
         value: integration.id,
-        description: methods.length === 0 ? "Environment only" : undefined,
+        description: methods.length === 0 ? language.t("tui.projects.environmentOnly") : undefined,
         footer: connectionSummary(integration) || undefined,
         category,
         disabled: methods.length === 0 && credentials.length === 0,
@@ -130,16 +132,16 @@ export function DialogIntegration(
 
   return (
     <DialogSelect
-      title="Connect an integration"
+      title={language.t("tui.connectAnIntegration")}
       options={options()}
       emptyView={
         <box paddingLeft={4} paddingRight={4}>
-          <text fg={theme.text.subdued}>No integrations available</text>
+          <text fg={theme.text.subdued}>{language.t("tui.projects.noIntegrationsAvailable")}</text>
         </box>
       }
       noMatchView={
         <box paddingLeft={4} paddingRight={4}>
-          <text fg={theme.text.subdued}>No integrations found</text>
+          <text fg={theme.text.subdued}>{language.t("tui.projects.noIntegrationsFound")}</text>
         </box>
       }
     />
@@ -312,7 +314,13 @@ async function beginKey(
     : undefined
   if (answer === null) return
   dialog.replace(() => (
-    <KeyMethod integration={integration} method={method} location={location} answer={answer} onConnected={onConnected} />
+    <KeyMethod
+      integration={integration}
+      method={method}
+      location={location}
+      answer={answer}
+      onConnected={onConnected}
+    />
   ))
 }
 

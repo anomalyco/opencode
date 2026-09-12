@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { createMemo, createSignal } from "solid-js"
 import { useConfig } from "../config"
 import { DialogSelect } from "../ui/dialog-select"
@@ -17,6 +18,7 @@ export const experiments: Experiment[] = []
 
 export function DialogExperiments() {
   const config = useConfig()
+  const language = useLanguage()
   const theme = useTheme()
   const toast = useToast()
   const [selected, setSelected] = createSignal<Experiment>()
@@ -50,30 +52,30 @@ export function DialogExperiments() {
 
   return (
     <DialogSelect
-      title="Experiments"
+      title={language.t("tui.details.experiments")}
       options={options()}
       renderFilter={experiments.length > 0}
       onMove={(option) => setSelected(option.value)}
       onSelect={(option) => void change(option.value)}
       emptyView={
         <box paddingLeft={4} paddingRight={4}>
-          <text fg={theme.text.subdued}>No experiments available</text>
+          <text fg={theme.text.subdued}>{language.t("tui.details.noExperimentsAvailable")}</text>
         </box>
       }
-      footerHints={experiments.length > 0 ? [{ title: "←/→", label: "change" }] : []}
+      footerHints={experiments.length > 0 ? [{ title: "←/→", label: language.t("tui.change") }] : []}
       bindings={
         experiments.length > 0
           ? [
               {
                 bind: "left",
-                title: "Previous value",
-                group: "Experiments",
+                title: language.t("tui.previousValue"),
+                group: language.t("tui.details.experiments"),
                 run: () => void change(),
               },
               {
                 bind: "right",
-                title: "Next value",
-                group: "Experiments",
+                title: language.t("tui.nextValue"),
+                group: language.t("tui.details.experiments"),
                 run: () => void change(),
               },
             ]

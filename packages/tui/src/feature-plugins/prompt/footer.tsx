@@ -1,13 +1,9 @@
+import { useLanguage } from "../../context/language"
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { contextUsage, formatContextUsage } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
 import { stringWidth } from "../../util/string-width"
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-})
 
 export function PromptFooter(props: {
   context: Plugin.Context
@@ -15,6 +11,7 @@ export function PromptFooter(props: {
   mode: "normal" | "shell"
   showDetails: boolean
 }) {
+  const language = useLanguage()
   const dimensions = useTerminalDimensions()
   const [liveHovered, setLiveHovered] = createSignal(false)
   const subagents = createMemo(() => {
@@ -22,14 +19,14 @@ export function PromptFooter(props: {
     const count = props.context.data.session
       .family(props.sessionID)
       .filter((id) => id !== props.sessionID && props.context.data.session.status(id) === "running").length
-    return count ? `${count} subagent${count === 1 ? "" : "s"}` : undefined
+    return count ? language.plural("tui.footer.subagents", count) : undefined
   })
   const shells = createMemo(() => {
     if (!props.sessionID) return 0
     const count = props.context.data.shell
       .list(props.context.location)
       .filter((shell) => shell.metadata.sessionID === props.sessionID).length
-    return count ? `${count} shell${count === 1 ? "" : "s"}` : undefined
+    return count ? language.plural("tui.footer.shells", count) : undefined
   })
   const status = createMemo(() => {
     if (!props.sessionID) return []
@@ -43,7 +40,7 @@ export function PromptFooter(props: {
     const cost = props.context.data.session.cost(props.sessionID)
     return [
       usage ? formatContextUsage(usage.tokens, usage.percent) : undefined,
-      cost > 0 ? money.format(cost) : undefined,
+      cost > 0 ? language.number(cost, { style: "currency", currency: "USD" }) : undefined,
     ].filter((item): item is string => Boolean(item))
   })
   const live = createMemo(() => Boolean(subagents() || shells()))
@@ -54,7 +51,7 @@ export function PromptFooter(props: {
     return promptFooterLayout({
       width: Math.max(0, dimensions().width - 8),
       usage: status(),
-      shortcuts: command ? [`${command} commands`] : [],
+      shortcuts: command ? [`${command} ${language.t("tui.footer.commands")}`] : [],
     })
   })
 
@@ -94,13 +91,15 @@ export function PromptFooter(props: {
           </Match>
           <Match when={props.showDetails && layout().shortcuts}>
             <text fg={props.context.theme.text.default} flexShrink={0}>
-              {shortcut("agent.cycle")} <span style={{ fg: props.context.theme.text.subdued }}>agents</span>
+              {shortcut("agent.cycle")}{" "}
+              <span style={{ fg: props.context.theme.text.subdued }}>{language.t("tui.footer.agents")}</span>
             </text>
           </Match>
         </Switch>
         <Show when={props.showDetails && layout().shortcuts}>
           <text fg={props.context.theme.text.default} wrapMode="none" flexShrink={0}>
-            {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.subdued }}>commands</span>
+            {shortcut("command.palette.show")}{" "}
+            <span style={{ fg: props.context.theme.text.subdued }}>{language.t("tui.footer.commands")}</span>
           </text>
         </Show>
       </Match>
@@ -108,7 +107,7 @@ export function PromptFooter(props: {
         <text fg={props.context.theme.text.default} flexShrink={0}>
           esc{" "}
           <span style={{ fg: props.context.theme.text.subdued }}>
-            {dimensions().width < 44 ? "shell" : "exit shell mode"}
+            {dimensions().width < 44 ? language.t("tui.footer.shell") : language.t("tui.footer.exitShell")}
           </span>
         </text>
       </Match>

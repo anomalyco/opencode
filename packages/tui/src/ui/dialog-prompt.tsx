@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
@@ -20,6 +21,7 @@ export type DialogPromptProps = {
 }
 
 export function DialogPrompt(props: DialogPromptProps) {
+  const language = useLanguage()
   const dialog = useDialog()
   const renderer = useRenderer()
   const theme = useTheme("elevated")
@@ -42,8 +44,8 @@ export function DialogPrompt(props: DialogPromptProps) {
     commands: [
       {
         id: "dialog.prompt.submit",
-        title: "Submit dialog prompt",
-        group: "Dialog",
+        title: language.t("tui.submitDialogPrompt"),
+        group: language.t("tui.dialog"),
         run: confirm,
       },
     ],
@@ -56,8 +58,8 @@ export function DialogPrompt(props: DialogPromptProps) {
     commands: [
       {
         bind: "escape",
-        title: "Back",
-        group: "Dialog",
+        title: language.t("ui.common.back"),
+        group: language.t("tui.dialog"),
         run: () => {
           if (renderer.getSelection()) {
             renderer.clearSelection()
@@ -120,7 +122,7 @@ export function DialogPrompt(props: DialogPromptProps) {
             setTextareaTarget(val)
           }}
           initialValue={props.value}
-          placeholder={props.placeholder ?? "Enter text"}
+          placeholder={props.placeholder ?? language.t("tui.enterText")}
           placeholderColor={theme.text.subdued}
           textColor={props.busy ? theme.text.formfield.disabled : theme.text.formfield.default}
           focusedTextColor={props.busy ? theme.text.formfield.disabled : theme.text.formfield.default}
@@ -128,14 +130,15 @@ export function DialogPrompt(props: DialogPromptProps) {
           cursorStyle={config.cursor}
         />
         <Show when={props.busy}>
-          <Spinner color={theme.text.subdued}>{props.busyText ?? "Working…"}</Spinner>
+          <Spinner color={theme.text.subdued}>{props.busyText ?? language.t("tui.working")}</Spinner>
         </Show>
       </box>
       <box paddingBottom={1} gap={1} flexDirection="row">
-        <Show when={!props.busy} fallback={<text fg={theme.text.subdued}>processing…</text>}>
+        <Show when={!props.busy} fallback={<text fg={theme.text.subdued}>{language.t("tui.processing")}</text>}>
           <Show when={shortcuts.get("dialog.prompt.submit")}>
             <text fg={theme.text.default}>
-              {shortcuts.get("dialog.prompt.submit")} <span style={{ fg: theme.text.subdued }}>submit</span>
+              {shortcuts.get("dialog.prompt.submit")}{" "}
+              <span style={{ fg: theme.text.subdued }}>{language.t("tui.submit")}</span>
             </text>
           </Show>
         </Show>

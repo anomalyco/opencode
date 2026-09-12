@@ -1,3 +1,4 @@
+import { useLanguage } from "../../../context/language"
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
@@ -25,6 +26,7 @@ export function SubagentsTab(props: { sessionID: string }) {
   const route = useRouteData("session")
   const data = useData()
   const client = useClient()
+  const language = useLanguage()
   const theme = useTheme()
   const navigate = useRoute().navigate
   const composer = useComposerTab()
@@ -137,8 +139,8 @@ export function SubagentsTab(props: { sessionID: string }) {
     commands: [
       {
         id: "composer.subagent.up",
-        title: "Previous subagent",
-        group: "Composer",
+        title: language.t("tui.session.previousSubagent"),
+        group: language.t("tui.session.composer"),
         run() {
           if (store.selected === 0) {
             composer.close()
@@ -149,8 +151,8 @@ export function SubagentsTab(props: { sessionID: string }) {
       },
       {
         id: "composer.subagent.down",
-        title: "Next subagent",
-        group: "Composer",
+        title: language.t("tui.session.nextSubagent"),
+        group: language.t("tui.session.composer"),
         run() {
           const list = entries()
           if (list.length === 0) return
@@ -160,7 +162,7 @@ export function SubagentsTab(props: { sessionID: string }) {
       {
         id: "composer.subagent.select",
         title: "Navigate to subagent",
-        group: "Composer",
+        group: language.t("tui.session.composer"),
         run() {
           const entry = entries()[store.selected]
           if (entry) navigate({ type: "session", sessionID: entry.sessionID })
@@ -169,7 +171,7 @@ export function SubagentsTab(props: { sessionID: string }) {
       {
         id: "composer.subagent.toggle-activity",
         title: "Toggle active subagents",
-        group: "Composer",
+        group: language.t("tui.session.composer"),
         bind: "ctrl+a",
         run() {
           setStore({ selected: 0, active: !store.active })
@@ -178,8 +180,8 @@ export function SubagentsTab(props: { sessionID: string }) {
       },
       {
         id: "composer.subagent.interrupt",
-        title: "Interrupt subagent",
-        group: "Composer",
+        title: language.t("tui.session.interruptSubagent"),
+        group: language.t("tui.session.composer"),
         run() {
           const entry = selectedEntry()
           if (!entry || entry.status !== "running") return

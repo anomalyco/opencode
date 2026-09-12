@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { isShellNotFoundError, type LocationRef, type ShellInfo } from "@opencode/client"
@@ -13,6 +14,7 @@ const PAGE_BYTES = 64 * 1024
 export function DialogShellOutput(props: { shell: ShellInfo; location: LocationRef }) {
   const client = useClient()
   const dialog = useDialog()
+  const language = useLanguage()
   const theme = useTheme("elevated")
   const dimensions = useTerminalDimensions()
   const [info, setInfo] = createSignal(props.shell)
@@ -90,12 +92,42 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "up", title: "Scroll output up", group: "Shell", run: () => scroll?.scrollBy(-1) },
-      { bind: "down", title: "Scroll output down", group: "Shell", run: () => scroll?.scrollBy(1) },
-      { bind: "pageup", title: "Previous output page", group: "Shell", run: () => scroll?.scrollBy(-height()) },
-      { bind: "pagedown", title: "Next output page", group: "Shell", run: () => scroll?.scrollBy(height()) },
-      { bind: "home", title: "First loaded output", group: "Shell", run: () => scroll?.scrollTo(0) },
-      { bind: "end", title: "Follow shell output", group: "Shell", run: () => scroll?.scrollTo(Infinity) },
+      {
+        bind: "up",
+        title: language.t("tui.details.scrollOutputUp"),
+        group: language.t("tui.details.shell"),
+        run: () => scroll?.scrollBy(-1),
+      },
+      {
+        bind: "down",
+        title: language.t("tui.details.scrollOutputDown"),
+        group: language.t("tui.details.shell"),
+        run: () => scroll?.scrollBy(1),
+      },
+      {
+        bind: "pageup",
+        title: language.t("tui.details.previousOutputPage"),
+        group: language.t("tui.details.shell"),
+        run: () => scroll?.scrollBy(-height()),
+      },
+      {
+        bind: "pagedown",
+        title: language.t("tui.details.nextOutputPage"),
+        group: language.t("tui.details.shell"),
+        run: () => scroll?.scrollBy(height()),
+      },
+      {
+        bind: "home",
+        title: language.t("tui.details.firstLoadedOutput"),
+        group: language.t("tui.details.shell"),
+        run: () => scroll?.scrollTo(0),
+      },
+      {
+        bind: "end",
+        title: language.t("tui.details.followShellOutput"),
+        group: language.t("tui.details.shell"),
+        run: () => scroll?.scrollTo(Infinity),
+      },
     ],
   }))
 
@@ -114,7 +146,7 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
         {props.shell.command}
       </text>
       <Show when={omitted()}>
-        <text fg={theme.text.subdued}>Earlier output omitted · showing recent output</text>
+        <text fg={theme.text.subdued}>{language.t("tui.details.earlierOutputOmittedShowingRecentOutput")}</text>
       </Show>
       <scrollbox
         id="shell-output-scroll"
@@ -135,9 +167,9 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
         <text fg={theme.text.feedback.error.default}>{error()}</text>
       </Show>
       <box flexDirection="row" gap={2} flexWrap="wrap">
-        <text fg={theme.text.subdued}>↑/↓ scroll</text>
-        <text fg={theme.text.subdued}>end follow</text>
-        <text fg={theme.text.subdued}>esc back</text>
+        <text fg={theme.text.subdued}>{language.t("tui.details.scroll")}</text>
+        <text fg={theme.text.subdued}>{language.t("tui.details.endFollow")}</text>
+        <text fg={theme.text.subdued}>{language.t("tui.details.escBack")}</text>
       </box>
     </box>
   )

@@ -1,3 +1,5 @@
+import { loadDictionary } from "./i18n/translate"
+import { useLanguage } from "./context/language"
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Effect, Latch } from "effect"
@@ -206,6 +208,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
     terminalSuspend: process.platform !== "win32",
   })
+  yield* Effect.tryPromise(() => loadDictionary(config.language ?? "en"))
   const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
   const api = OpenCode.make(options)
   const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
@@ -466,6 +469,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
 })
 
 function App(props: { pair?: DialogPairCredentials }) {
+  const language = useLanguage()
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
@@ -696,8 +700,8 @@ function App(props: { pair?: DialogPairCredentials }) {
     [
       {
         name: COMMAND_PALETTE_COMMAND,
-        title: "Show command palette",
-        category: "System",
+        title: language.t("tui.showCommandPalette"),
+        category: language.t("theme.scheme.system"),
         palette: undefined,
         run: () => {
           dialog.replace(() => <CommandPaletteDialog />)
@@ -705,8 +709,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "session.list",
-        title: "Switch session",
-        category: "Session",
+        title: language.t("tui.switchSession"),
+        category: language.t("command.category.session"),
         suggested: data.session.list().length > 0,
         slash: { name: "sessions", aliases: ["resume", "continue"] },
         run: () => {
@@ -715,9 +719,9 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "session.new",
-        title: "New session",
+        title: language.t("command.session.new"),
         suggested: route.data.type === "session",
-        category: "Session",
+        category: language.t("command.category.session"),
         slash: { name: "new", aliases: ["clear"] },
         run: () => {
           const model = local.model.current()
@@ -742,8 +746,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "open.menu",
-        title: "Open session or project",
-        category: "Session",
+        title: language.t("tui.openSessionOrProject"),
+        category: language.t("command.category.session"),
         slash: { name: "open", aliases: ["projects", "project"] },
         run: () => {
           if (dialog.key === DialogOpenKey) return
@@ -755,71 +759,71 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       ...Array.from({ length: 9 }, (_, i) => ({
         name: `session.quick_switch.${i + 1}`,
-        title: `Switch to session in quick slot ${i + 1}`,
-        category: "Session",
+        title: language.t("tui.switchToSessionInQuickSlotNumber", { number: i + 1 }),
+        category: language.t("command.category.session"),
         palette: undefined,
         enabled: () => !sessionTabs.enabled(),
         run: () => local.session.quickSwitch(i + 1),
       })),
       {
         name: "session.tab.next",
-        title: "Next tab",
-        category: "Session",
+        title: language.t("tui.nextTab"),
+        category: language.t("command.category.session"),
         palette: undefined,
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycle(1),
       },
       {
         name: "session.tab.previous",
-        title: "Previous tab",
-        category: "Session",
+        title: language.t("tui.previousTab"),
+        category: language.t("command.category.session"),
         palette: undefined,
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycle(-1),
       },
       {
         name: "session.tab.next_unread",
-        title: "Next unread tab",
-        category: "Session",
+        title: language.t("tui.nextUnreadTab"),
+        category: language.t("command.category.session"),
         palette: undefined,
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycleUnread(1),
       },
       {
         name: "session.tab.previous_unread",
-        title: "Previous unread tab",
-        category: "Session",
+        title: language.t("tui.previousUnreadTab"),
+        category: language.t("command.category.session"),
         palette: undefined,
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycleUnread(-1),
       },
       {
         name: "session.tab.close",
-        title: "Close tab",
-        category: "Session",
+        title: language.t("command.tab.close"),
+        category: language.t("command.category.session"),
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.close(),
       },
       {
         name: "session.tab.reopen",
-        title: "Reopen closed tab",
-        category: "Session",
+        title: language.t("command.tab.reopenClosed"),
+        category: language.t("command.category.session"),
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.reopen(),
       },
       ...Array.from({ length: 10 }, (_, i) => ({
         name: `session.tab.select.${i + 1}`,
-        title: `Switch to tab ${i + 1}`,
-        category: "Session",
+        title: language.t("tui.switchToTabNumber", { number: i + 1 }),
+        category: language.t("command.category.session"),
         palette: undefined,
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.selectIndex(i),
       })),
       {
         name: "model.list",
-        title: "Switch model",
+        title: language.t("tui.switchModel"),
         suggested: true,
-        category: "Agent",
+        category: language.t("command.category.agent"),
         slash: { name: "models" },
         run: () => {
           dialog.replace(() => <DialogModel />)
@@ -827,8 +831,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "model.cycle_recent",
-        title: "Model cycle",
-        category: "Agent",
+        title: language.t("tui.modelCycle"),
+        category: language.t("command.category.agent"),
         palette: undefined,
         run: () => {
           local.model.cycle(1)
@@ -836,8 +840,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "model.cycle_recent_reverse",
-        title: "Model cycle reverse",
-        category: "Agent",
+        title: language.t("tui.modelCycleReverse"),
+        category: language.t("command.category.agent"),
         palette: undefined,
         run: () => {
           local.model.cycle(-1)
@@ -845,8 +849,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "model.cycle_favorite",
-        title: "Favorite cycle",
-        category: "Agent",
+        title: language.t("tui.favoriteCycle"),
+        category: language.t("command.category.agent"),
         palette: undefined,
         run: () => {
           local.model.cycleFavorite(1)
@@ -854,8 +858,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "model.cycle_favorite_reverse",
-        title: "Favorite cycle reverse",
-        category: "Agent",
+        title: language.t("tui.favoriteCycleReverse"),
+        category: language.t("command.category.agent"),
         palette: undefined,
         run: () => {
           local.model.cycleFavorite(-1)
@@ -863,8 +867,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "agent.list",
-        title: "Switch agent",
-        category: "Agent",
+        title: language.t("tui.switchAgent"),
+        category: language.t("command.category.agent"),
         slash: { name: "agents" },
         run: () => {
           dialog.replace(() => <DialogAgent />)
@@ -872,8 +876,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "mcp.list",
-        title: "MCP servers",
-        category: "Agent",
+        title: language.t("tui.mcpServers"),
+        category: language.t("command.category.agent"),
         slash: { name: "mcps" },
         run: () => {
           dialog.replace(() => <DialogMcp />)
@@ -881,8 +885,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "agent.cycle",
-        title: "Agent cycle",
-        category: "Agent",
+        title: language.t("tui.agentCycle"),
+        category: language.t("command.category.agent"),
         palette: undefined,
         run: () => {
           local.agent.move(1)
@@ -890,22 +894,22 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "variant.cycle",
-        title: "Variant cycle",
-        category: "Agent",
+        title: language.t("tui.variantCycle"),
+        category: language.t("command.category.agent"),
         run: () => {
           local.model.variant.cycle()
         },
       },
       {
         name: "variant.list",
-        title: "Switch model variant",
-        category: "Agent",
+        title: language.t("tui.switchModelVariant"),
+        category: language.t("command.category.agent"),
         palette: local.model.variant.list().length === 0 ? undefined : (true as const),
         slash: { name: "variants", aliases: ["thinking"] },
         run: () => {
           if (local.model.variant.list().length === 0) {
             return toast.show({
-              title: "No variants available",
+              title: language.t("tui.noVariantsAvailable"),
               message: "The current model does not support any variants.",
               variant: "info",
             })
@@ -915,8 +919,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "agent.cycle.reverse",
-        title: "Agent cycle reverse",
-        category: "Agent",
+        title: language.t("tui.agentCycleReverse"),
+        category: language.t("command.category.agent"),
         palette: undefined,
         run: () => {
           local.agent.move(-1)
@@ -924,7 +928,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "provider.connect",
-        title: "Connect an integration",
+        title: language.t("tui.connectAnIntegration"),
         suggested: !connected(),
         slash: { name: "connect" },
         run: () => {
@@ -934,137 +938,137 @@ function App(props: { pair?: DialogPairCredentials }) {
             />
           ))
         },
-        category: "Integration",
+        category: language.t("tui.integration"),
       },
       {
         name: "opencode.settings",
-        title: "Open settings",
+        title: language.t("command.settings.open"),
         suggested: true,
         slash: { name: "settings" },
         run: () => {
           dialog.replace(() => <DialogConfig />)
         },
-        category: "System",
+        category: language.t("theme.scheme.system"),
       },
       {
         name: "opencode.status",
-        title: "View status",
+        title: language.t("tui.viewStatus"),
         slash: { name: "status" },
         run: () => {
           dialog.replace(() => <DialogStatus />)
         },
-        category: "System",
+        category: language.t("theme.scheme.system"),
       },
       ...(updater.open
         ? [
             {
               name: "opencode.update",
-              title: "Update OpenCode",
+              title: language.t("wsl.onboarding.updateOpencode"),
               slash: { name: "update", aliases: ["upgrade"] },
               run: () => updater.open?.("manual"),
-              category: "System",
+              category: language.t("theme.scheme.system"),
             },
           ]
         : []),
       {
         name: "server.pair",
-        title: "Pair device",
+        title: language.t("tui.pairDevice"),
         slash: { name: "pair", aliases: ["web"] },
         run: () => {
           dialog.replace(() => <DialogPair credentials={props.pair} />)
         },
-        category: "System",
+        category: language.t("theme.scheme.system"),
       },
       ...(client.restart
         ? [
             {
               name: "service.restart",
-              title: "Restart service",
+              title: language.t("tui.restartService"),
               slash: { name: "restart" },
               run: async () => {
                 const restart = client.restart
                 if (!restart) return
                 dialog.clear()
-                toast.show({ variant: "info", message: "Restarting service…", duration: 30000 })
+                toast.show({ variant: "info", message: language.t("tui.restartingService"), duration: 30000 })
                 // restart resolves once the replacement service is healthy; the
                 // event stream reattaches through the reconnect loop.
                 await restart()
-                  .then(() => toast.show({ variant: "success", message: "Service restarted" }))
+                  .then(() => toast.show({ variant: "success", message: language.t("tui.serviceRestarted") }))
                   .catch(toast.error)
               },
-              category: "System",
+              category: language.t("theme.scheme.system"),
             },
           ]
         : []),
       {
         name: "opencode.debug",
-        title: "View debug info",
+        title: language.t("tui.viewDebugInfo"),
         slash: { name: "debug" },
         run: () => {
           dialog.replace(() => <DialogDebug />)
         },
-        category: "System",
+        category: language.t("theme.scheme.system"),
       },
       {
         name: "theme.switch",
-        title: "Switch theme",
+        title: language.t("tui.switchTheme"),
         slash: { name: "themes" },
         run: () => {
           dialog.replace(() => <DialogThemeList />)
         },
-        category: "System",
+        category: language.t("theme.scheme.system"),
       },
       {
         name: "theme.switch_mode",
-        title: mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
+        title: mode() === "dark" ? language.t("tui.switchToLightMode") : language.t("tui.switchToDarkMode"),
         palette: undefined,
         enabled: () => supports(mode() === "dark" ? "light" : "dark"),
         run: () => {
           setMode(mode() === "dark" ? "light" : "dark")
           dialog.clear()
         },
-        category: "System",
+        category: language.t("theme.scheme.system"),
       },
       {
         name: "theme.mode.lock",
-        title: locked() ? "Unlock theme mode" : "Lock theme mode",
+        title: locked() ? language.t("tui.unlockThemeMode") : language.t("tui.lockThemeMode"),
         palette: undefined,
         run: () => {
           if (locked()) unlock()
           else lock()
           dialog.clear()
         },
-        category: "System",
+        category: language.t("theme.scheme.system"),
       },
       {
         name: "help.show",
-        title: "Help",
+        title: language.t("sidebar.help"),
         slash: { name: "help" },
         run: () => {
           dialog.replace(() => <DialogHelp />)
         },
-        category: "System",
+        category: language.t("theme.scheme.system"),
       },
       {
         name: "docs.open",
-        title: "Open docs",
+        title: language.t("tui.openDocs"),
         run: () => {
           open("https://opencode.ai/docs").catch(() => {})
           dialog.clear()
         },
-        category: "System",
+        category: language.t("theme.scheme.system"),
       },
       {
         name: "app.exit",
-        title: "Exit the app",
+        title: language.t("tui.exitTheApp"),
         slash: { name: "exit", aliases: ["quit", "q"] },
         run: () => exit(),
-        category: "System",
+        category: language.t("theme.scheme.system"),
       },
       {
         name: "app.debug",
-        title: "Toggle debug panel",
-        category: "System",
+        title: language.t("tui.toggleDebugPanel"),
+        category: language.t("theme.scheme.system"),
         palette: undefined,
         run: () => {
           renderer.toggleDebugOverlay()
@@ -1073,8 +1077,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "app.console",
-        title: "Toggle console",
-        category: "System",
+        title: language.t("tui.toggleConsole"),
+        category: language.t("theme.scheme.system"),
         run: () => {
           renderer.console.toggle()
           dialog.clear()
@@ -1082,8 +1086,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "terminal.suspend",
-        title: "Suspend terminal",
-        category: "System",
+        title: language.t("tui.suspendTerminal"),
+        category: language.t("theme.scheme.system"),
         palette: undefined,
         enabled: process.platform !== "win32",
         run: () => {
@@ -1094,8 +1098,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "terminal.title.toggle",
-        title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
-        category: "System",
+        title: terminalTitleEnabled() ? language.t("tui.disableTerminalTitle") : language.t("tui.enableTerminalTitle"),
+        category: language.t("theme.scheme.system"),
         palette: undefined,
         run: () => {
           const next = !terminalTitleEnabled()
@@ -1110,8 +1114,9 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "app.toggle.animations",
-        title: (config.data.animations ?? true) ? "Disable animations" : "Enable animations",
-        category: "System",
+        title:
+          (config.data.animations ?? true) ? language.t("tui.disableAnimations") : language.t("tui.enableAnimations"),
+        category: language.t("theme.scheme.system"),
         palette: undefined,
         run: () => {
           void config
@@ -1124,8 +1129,11 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "app.toggle.file_context",
-        title: (config.data.prompt?.editor ?? true) ? "Disable file context" : "Enable file context",
-        category: "System",
+        title:
+          (config.data.prompt?.editor ?? true)
+            ? language.t("tui.disableFileContext")
+            : language.t("tui.enableFileContext"),
+        category: language.t("theme.scheme.system"),
         palette: undefined,
         run: () => {
           void config
@@ -1138,8 +1146,11 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "app.toggle.diffwrap",
-        title: (config.data.diffs?.wrap ?? "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
-        category: "System",
+        title:
+          (config.data.diffs?.wrap ?? "word") === "word"
+            ? language.t("tui.disableDiffWrapping")
+            : language.t("tui.enableDiffWrapping"),
+        category: language.t("theme.scheme.system"),
         palette: undefined,
         run: () => {
           void config
@@ -1155,8 +1166,8 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "app.toggle.paste_summary",
-        title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
-        category: "System",
+        title: pasteSummaryEnabled() ? language.t("tui.disablePasteSummary") : language.t("tui.enablePasteSummary"),
+        category: language.t("theme.scheme.system"),
         palette: undefined,
         run: () => {
           void config

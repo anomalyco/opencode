@@ -1,16 +1,22 @@
+import { DialogLanguage } from "./dialog-language"
+import { useDialog } from "../ui/dialog"
+import { useLanguage } from "../context/language"
 import { createMemo, createSignal } from "solid-js"
 import { useConfig } from "../config"
 import { useThemes } from "../context/theme"
 import { DialogSelect } from "../ui/dialog-select"
 import { useToast } from "../ui/toast"
 
+import type { TranslationKey } from "../i18n/translate"
+import en from "../i18n/en"
+
 type Setting = {
-  title: string
-  category: string
+  title: TranslationKey
+  category: TranslationKey
   path: string[]
   default: unknown
   values?: readonly unknown[]
-  labels?: readonly string[]
+  labels?: readonly TranslationKey[]
   step?: number
   min?: number
   max?: number
@@ -20,185 +26,200 @@ type Setting = {
 
 export const settings: Setting[] = [
   {
-    title: "Theme",
-    category: "Appearance",
+    title: "command.category.language",
+    category: "settings.general.section.appearance",
+    path: ["language"],
+    default: "en",
+    keywords: ["language", "locale", "język", "polski", "english"],
+  },
+  {
+    title: "command.category.theme",
+    category: "settings.general.section.appearance",
     path: ["theme", "name"],
     default: "opencode",
     keywords: ["color scheme", "colors"],
   },
   {
-    title: "Color mode",
-    category: "Appearance",
+    title: "tui.colorMode",
+    category: "settings.general.section.appearance",
     path: ["theme", "mode"],
     default: "system",
     values: ["system", "dark", "light"],
+    labels: ["tui.system", "tui.dark", "tui.light"],
     keywords: ["dark mode", "light mode", "system theme"],
   },
   {
-    title: "Animations",
-    category: "Appearance",
+    title: "tui.animations",
+    category: "settings.general.section.appearance",
     path: ["animations"],
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["motion", "effects"],
   },
   {
-    title: "Sidebar",
-    category: "Session",
+    title: "tui.sidebar",
+    category: "command.category.session",
     path: ["session", "sidebar"],
     default: "auto",
     values: ["hide", "auto"],
+    labels: ["tui.hide", "tui.auto"],
     keywords: ["side panel"],
   },
   {
-    title: "Terminal",
-    category: "Session",
+    title: "command.category.terminal",
+    category: "command.category.session",
     path: ["session", "terminal"],
     default: process.platform !== "win32",
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["pty", "shell", "terminal pane"],
   },
   {
-    title: "Scrollbar",
-    category: "Session",
+    title: "tui.scrollbar",
+    category: "command.category.session",
     path: ["session", "scrollbar"],
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["scroll bar"],
   },
   {
-    title: "Thinking",
-    category: "Session",
+    title: "settings.timeline.category.thinking",
+    category: "command.category.session",
     path: ["session", "thinking"],
     default: "hide",
     values: ["hide", "show"],
+    labels: ["tui.hide", "tui.show"],
     keywords: ["reasoning", "chain of thought"],
   },
   {
-    title: "Markdown",
-    category: "Session",
+    title: "tui.markdown",
+    category: "command.category.session",
     path: ["session", "markdown"],
     default: "rendered",
     values: ["source", "rendered"],
+    labels: ["tui.source", "tui.rendered"],
     keywords: ["syntax", "concealment", "rendering"],
   },
   {
-    title: "Tool grouping",
-    category: "Session",
+    title: "tui.toolGrouping",
+    category: "command.category.session",
     path: ["session", "grouping"],
     default: "auto",
     values: ["none", "auto"],
+    labels: ["tui.none", "tui.auto"],
     keywords: ["transcript", "messages", "reads", "searches"],
   },
   {
-    title: "Transcript images",
-    category: "Session",
+    title: "tui.transcriptImages",
+    category: "command.category.session",
     path: ["session", "image_preview"],
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["attachments", "images", "tool output"],
   },
   {
-    title: "TPS",
-    category: "Session",
+    title: "tui.tps",
+    category: "command.category.session",
     path: ["session", "tps"],
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["tokens per second", "throughput"],
   },
   {
-    title: "New session location",
-    category: "Session",
+    title: "tui.newSessionLocation",
+    category: "command.category.session",
     path: ["session", "new_location"],
     default: "launch",
     values: ["launch", "inherit"],
-    labels: ["launch directory", "active session"],
+    labels: ["tui.launchDirectory", "tui.activeSession"],
     keywords: ["directory", "cwd", "inherit"],
   },
   {
-    title: "Permissions",
-    category: "Session",
+    title: "command.category.permissions",
+    category: "command.category.session",
     path: ["session", "permissions"],
     default: "prompt",
     values: ["prompt", "autoaccept"],
-    labels: ["prompt", "auto accept"],
+    labels: ["tui.prompt", "tui.autoAccept"],
     keywords: ["approve", "accept", "permission requests"],
   },
   {
-    title: "Enabled",
-    category: "Tabs",
+    title: "tui.enabled",
+    category: "titlebar.tabs",
     path: ["tabs", "enabled"],
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
   },
   {
-    title: "Scope",
-    category: "Tabs",
+    title: "tui.scope",
+    category: "titlebar.tabs",
     path: ["tabs", "scope"],
     default: "cwd",
     values: ["cwd", "global"],
-    labels: ["current directory", "global"],
+    labels: ["tui.currentDirectory", "tui.global"],
   },
   {
-    title: "Layout",
-    category: "Tabs",
+    title: "tui.layout",
+    category: "titlebar.tabs",
     path: ["tabs", "layout"],
     default: "horizontal",
     values: ["horizontal", "vertical"],
+    labels: ["tui.horizontal", "tui.vertical"],
     keywords: ["sidebar", "orientation", "left"],
   },
   {
-    title: "Indicators",
-    category: "Tabs",
+    title: "tui.indicators",
+    category: "titlebar.tabs",
     path: ["tabs", "indicators"],
     default: "status",
     values: ["status", "numbers"],
-    labels: ["status icons", "always show numbers"],
+    labels: ["tui.statusIcons", "tui.alwaysShowNumbers"],
     keywords: ["tab numbers", "number mode", "status icons"],
   },
   {
-    title: "Layout",
-    category: "Diffs",
+    title: "tui.layout",
+    category: "tui.diffs",
     path: ["diffs", "view"],
     default: "auto",
     values: ["auto", "split", "unified"],
+    labels: ["tui.auto", "tui.split", "tui.unified"],
     keywords: ["diff layout", "split diff", "unified diff"],
   },
   {
-    title: "Wrapping",
-    category: "Diffs",
+    title: "tui.wrapping",
+    category: "tui.diffs",
     path: ["diffs", "wrap"],
     default: "word",
     values: ["none", "word"],
+    labels: ["tui.none", "tui.word"],
     keywords: ["diff wrap", "word wrap", "line wrap"],
   },
   {
-    title: "File tree",
-    category: "Diffs",
+    title: "settings.general.row.showFileTree.title",
+    category: "tui.diffs",
     path: ["diffs", "tree"],
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["diff files"],
   },
   {
-    title: "Single patch",
-    category: "Diffs",
+    title: "tui.singlePatch",
+    category: "tui.diffs",
     path: ["diffs", "single"],
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["one file", "selected file"],
   },
   {
-    title: "Scroll speed",
-    category: "Input",
+    title: "tui.scrollSpeed",
+    category: "tui.input",
     path: ["scroll", "speed"],
     default: 3,
     step: 0.25,
@@ -208,52 +229,53 @@ export const settings: Setting[] = [
     keywords: ["scrolling"],
   },
   {
-    title: "Acceleration",
-    category: "Input",
+    title: "tui.acceleration",
+    category: "tui.input",
     path: ["scroll", "acceleration"],
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["scroll acceleration"],
   },
   {
-    title: "Mouse",
-    category: "Input",
+    title: "tui.mouse",
+    category: "tui.input",
     path: ["mouse"],
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["mouse capture"],
   },
   {
-    title: "Editor context",
-    category: "Input",
+    title: "tui.editorContext",
+    category: "tui.input",
     path: ["prompt", "editor"],
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["file context", "prompt context", "editor selection"],
   },
   {
-    title: "Large pastes",
-    category: "Input",
+    title: "tui.largePastes",
+    category: "tui.input",
     path: ["prompt", "paste"],
     default: "compact",
     values: ["compact", "full"],
+    labels: ["tui.compact", "tui.full"],
     keywords: ["paste summary", "clipboard", "pasted content"],
   },
   {
-    title: "Image previews",
-    category: "Input",
+    title: "tui.imagePreviews",
+    category: "tui.input",
     path: ["prompt", "image_preview"],
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["attachments", "clipboard", "images", "prompt"],
   },
   {
-    title: "Leader timeout",
-    category: "Input",
+    title: "tui.leaderTimeout",
+    category: "tui.input",
     path: ["leader", "timeout"],
     default: 2000,
     step: 250,
@@ -263,35 +285,35 @@ export const settings: Setting[] = [
     keywords: ["leader key", "shortcut timeout"],
   },
   {
-    title: "Attention",
-    category: "Alerts",
+    title: "tui.attention",
+    category: "tui.alerts",
     path: ["attention", "enabled"],
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["alerts"],
   },
   {
-    title: "Notifications",
-    category: "Alerts",
+    title: "settings.tab.notifications",
+    category: "tui.alerts",
     path: ["attention", "notifications"],
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["system notifications", "desktop notifications", "alerts"],
   },
   {
-    title: "Sounds",
-    category: "Alerts",
+    title: "tui.sounds",
+    category: "tui.alerts",
     path: ["attention", "sound"],
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["audio", "sound effects"],
   },
   {
-    title: "Volume",
-    category: "Alerts",
+    title: "tui.volume",
+    category: "tui.alerts",
     path: ["attention", "volume"],
     default: 0.4,
     step: 0.1,
@@ -301,29 +323,30 @@ export const settings: Setting[] = [
     keywords: ["sound volume", "audio volume"],
   },
   {
-    title: "Window title",
-    category: "Terminal",
+    title: "tui.windowTitle",
+    category: "command.category.terminal",
     path: ["terminal", "title"],
     default: true,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["terminal title", "tab title"],
   },
   {
-    title: "Copy behavior",
-    category: "Terminal",
+    title: "tui.copyBehavior",
+    category: "command.category.terminal",
     path: ["terminal", "copy"],
     default: process.platform === "win32" ? "manual" : "select",
     values: ["manual", "select"],
+    labels: ["tui.manual", "tui.select"],
     keywords: ["selection", "clipboard"],
   },
   {
-    title: "Developer tools",
-    category: "Debug",
+    title: "tui.developerTools",
+    category: "tui.debug",
     path: ["debug", "devtools"],
     default: false,
     values: [false, true],
-    labels: ["off", "on"],
+    labels: ["tui.off", "tui.on"],
     keywords: ["debug bar", "developer tools"],
   },
 ]
@@ -333,6 +356,8 @@ export function settingID(setting: Setting) {
 }
 
 export function DialogConfig(props: { current?: string }) {
+  const language = useLanguage()
+  const dialog = useDialog()
   const config = useConfig()
   const toast = useToast()
   const themes = useThemes()
@@ -357,15 +382,17 @@ export function DialogConfig(props: { current?: string }) {
       : setting.values
   const display = (setting: Setting) => {
     const current = value(setting)
+    if (settingID(setting) === "language") return language.label(language.locale())
     if (setting.format) return setting.format(current)
     const index = setting.values?.indexOf(current)
-    return index === undefined || index < 0 ? String(current) : (setting.labels?.[index] ?? String(current))
+    const label = index === undefined || index < 0 ? undefined : setting.labels?.[index]
+    return label ? language.t(label) : String(current)
   }
   const options = createMemo(() =>
     settings.map((setting, index) => ({
-      title: setting.title,
-      category: setting.category,
-      searchText: setting.keywords?.join(" "),
+      title: language.t(setting.title),
+      category: language.t(setting.category),
+      searchText: [en[setting.title], ...(setting.keywords ?? [])].join(" "),
       footer: display(setting),
       value: index,
     })),
@@ -374,6 +401,10 @@ export function DialogConfig(props: { current?: string }) {
   async function change(direction: number, index = selected()) {
     if (saving()) return
     const setting = settings[index]
+    if (settingID(setting) === "language") {
+      dialog.replace(() => <DialogLanguage />)
+      return
+    }
     const current = value(setting)
     const choices = values(setting)
     const next = choices
@@ -395,24 +426,24 @@ export function DialogConfig(props: { current?: string }) {
 
   return (
     <DialogSelect
-      title="Settings"
+      title={language.t("command.category.settings")}
       options={options()}
       current={current}
       filterThreshold={0.7}
       onMove={(option) => setSelected(option.value)}
       onSelect={(option) => void change(1, option.value)}
-      footerHints={[{ title: "←/→", label: "change" }]}
+      footerHints={[{ title: "←/→", label: language.t("tui.change") }]}
       bindings={[
         {
           bind: "left",
-          title: "Previous value",
-          group: "Settings",
+          title: language.t("tui.previousValue"),
+          group: language.t("command.category.settings"),
           run: () => void change(-1),
         },
         {
           bind: "right",
-          title: "Next value",
-          group: "Settings",
+          title: language.t("tui.nextValue"),
+          group: language.t("command.category.settings"),
           run: () => void change(1),
         },
       ]}

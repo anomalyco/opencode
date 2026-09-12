@@ -8,6 +8,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { watch } from "fs"
 import path from "path"
 import { TuiKeybind } from "./keybind"
+import { locales } from "../i18n/locales"
 
 export interface Interface {
   readonly path?: string
@@ -64,6 +65,9 @@ export const Cursor = Schema.Struct({
 }).annotate({ description: "Terminal cursor settings" })
 
 export const Info = Schema.Struct({
+  language: Schema.optional(Schema.Literals(locales)).annotate({
+    description: "TUI display language; defaults to English (en)",
+  }),
   theme: Schema.optional(
     Schema.Struct({
       name: Schema.optional(Schema.String).annotate({ description: "Theme name" }),

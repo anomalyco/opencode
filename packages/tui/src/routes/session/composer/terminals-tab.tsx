@@ -1,3 +1,4 @@
+import { useLanguage } from "../../../context/language"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../../../context/keymap"
@@ -9,6 +10,7 @@ import { useComposerTab } from "./index"
 export function TerminalsTab(props: { sessionID: string; visibleTerminalID?: string }) {
   const composer = useComposerTab()
   const terminals = useSessionTerminals()
+  const language = useLanguage()
   const theme = useTheme()
   const toast = useToast()
   const failure = () => toast.show({ variant: "error", message: "Unable to load terminal" })
@@ -46,20 +48,20 @@ export function TerminalsTab(props: { sessionID: string; visibleTerminalID?: str
     commands: [
       {
         id: "composer.terminal.up",
-        title: "Previous terminal",
-        group: "Composer",
+        title: language.t("tui.session.previousTerminal"),
+        group: language.t("tui.session.composer"),
         run: () => setSelected((index) => ((index ?? 0) + entries().length) % (entries().length + 1)),
       },
       {
         id: "composer.terminal.down",
-        title: "Next terminal",
-        group: "Composer",
+        title: language.t("tui.session.nextTerminal"),
+        group: language.t("tui.session.composer"),
         run: () => setSelected((index) => ((index ?? -1) + 1) % (entries().length + 1)),
       },
       {
         id: "composer.terminal.select",
-        title: "Select terminal",
-        group: "Composer",
+        title: language.t("tui.session.selectTerminal"),
+        group: language.t("tui.session.composer"),
         run: select,
       },
     ],

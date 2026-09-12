@@ -1,3 +1,4 @@
+import { useLanguage } from "../../context/language"
 import { createStore } from "solid-js/store"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -7,7 +8,7 @@ import type { PermissionReply, PermissionRequest } from "@opencode/client"
 import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
 import { filetype } from "../../util/filetype"
-import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../../util/permission"
+import { permissionAlwaysLines, permissionPresentation } from "../../util/permission"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
@@ -20,6 +21,7 @@ import { useToast } from "../../ui/toast"
 type PermissionStage = "permission" | "reject"
 
 function EditBody(props: { file?: string; diff?: string; patch?: string }) {
+  const language = useLanguage()
   const theme = useTheme()
   const themes = useThemes()
   const syntax = themes.currentSyntax
@@ -79,7 +81,7 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
           when={props.patch}
           fallback={
             <box paddingLeft={1}>
-              <text fg={theme.text.subdued}>No diff provided</text>
+              <text fg={theme.text.subdued}>{language.t("tui.noDiffProvided")}</text>
             </box>
           }
         >
@@ -131,6 +133,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
     return { input: undefined, metadata: undefined }
   })
 
+  const language = useLanguage()
   const theme = useTheme()
 
   function reply(value: PermissionReply, message?: string) {
@@ -171,7 +174,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             ) : props.request.action === "external_directory" ? (
               <Show when={current.lines.length > 0}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.text.subdued}>Patterns</text>
+                  <text fg={theme.text.subdued}>{language.t("tui.patterns")}</text>
                   <box>
                     <For each={current.lines}>{(line) => <text fg={theme.text.default}>{line}</text>}</For>
                   </box>
@@ -201,7 +204,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <text fg={theme.text.feedback.warning.default}>{"△"}</text>
-                <text fg={theme.text.default}>Permission required</text>
+                <text fg={theme.text.default}>{language.t("notification.permission.title")}</text>
               </box>
               <Show when={props.request.action !== "shell" && current.title}>
                 <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
@@ -216,7 +219,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
           const body = (
             <SessionQuestion
-              title="Permission required"
+              title={language.t("notification.permission.title")}
               semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
               instance={props.request.id}
               header={header()}
@@ -224,7 +227,9 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 <Show when={option === "always"} fallback={presentationBody()}>
                   <box paddingLeft={1} gap={1}>
                     <For each={permissionAlwaysLines(props.request)}>
-                      {(line, index) => <text fg={index() === 0 ? theme.text.subdued : theme.text.default}>{line}</text>}
+                      {(line, index) => (
+                        <text fg={index() === 0 ? theme.text.subdued : theme.text.default}>{line}</text>
+                      )}
                     </For>
                   </box>
                 </Show>
@@ -232,11 +237,14 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               options={
                 props.request.save?.length
                   ? {
-                      once: permissionOptionLabel("once"),
-                      always: permissionOptionLabel("always"),
-                      reject: permissionOptionLabel("reject"),
+                      once: language.t("ui.permission.allowOnce"),
+                      always: language.t("tui.alwaysAllow"),
+                      reject: language.t("tui.reject"),
                     }
-                  : { once: permissionOptionLabel("once"), reject: permissionOptionLabel("reject") }
+                  : {
+                      once: language.t("ui.permission.allowOnce"),
+                      reject: language.t("tui.reject"),
+                    }
               }
               escapeKey="reject"
               fullscreen
@@ -277,6 +285,7 @@ function RejectPrompt(props: {
 }) {
   let input: TextareaRenderable
   const enabled = useInteractivity()
+  const language = useLanguage()
   const theme = useTheme("elevated")
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
@@ -286,8 +295,8 @@ function RejectPrompt(props: {
     commands: [
       {
         id: "app.exit",
-        title: "Cancel permission rejection",
-        group: "Permission",
+        title: language.t("tui.cancelPermissionRejection"),
+        group: language.t("tui.permission"),
         run(_input, event) {
           if (event?.ctrl && event.name === "c" && input.plainText) {
             input.setText("")
@@ -296,11 +305,16 @@ function RejectPrompt(props: {
           props.onCancel()
         },
       },
-      { bind: "escape", title: "Cancel permission rejection", group: "Permission", run: () => props.onCancel() },
+      {
+        bind: "escape",
+        title: language.t("tui.cancelPermissionRejection"),
+        group: language.t("tui.permission"),
+        run: () => props.onCancel(),
+      },
       {
         bind: "return",
-        title: "Confirm permission rejection",
-        group: "Permission",
+        title: language.t("tui.confirmPermissionRejection"),
+        group: language.t("tui.permission"),
         run: () => props.onConfirm(input.plainText),
       },
     ],
@@ -322,10 +336,10 @@ function RejectPrompt(props: {
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box flexDirection="row" gap={1} paddingLeft={1}>
           <text fg={theme.text.feedback.error.default}>{"△"}</text>
-          <text fg={theme.text.default}>Reject permission</text>
+          <text fg={theme.text.default}>{language.t("tui.rejectPermission")}</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.text.subdued}>Tell OpenCode what to do differently</text>
+          <text fg={theme.text.subdued}>{language.t("tui.tellOpenCodeWhatToDoDifferently")}</text>
         </box>
       </box>
       <box
@@ -381,7 +395,7 @@ function RejectPrompt(props: {
             onMouseUp={() => props.onConfirm(input.plainText)}
           >
             <text fg={theme.text.default}>
-              enter <span style={{ fg: theme.text.subdued }}>confirm</span>
+              enter <span style={{ fg: theme.text.subdued }}>{language.t("tui.confirm")}</span>
             </text>
           </box>
           <box
@@ -395,7 +409,7 @@ function RejectPrompt(props: {
             onMouseUp={props.onCancel}
           >
             <text fg={theme.text.default}>
-              esc <span style={{ fg: theme.text.subdued }}>cancel</span>
+              esc <span style={{ fg: theme.text.subdued }}>{language.t("tui.cancel")}</span>
             </text>
           </box>
         </box>
@@ -418,6 +432,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   fullscreen?: boolean
   onSelect: (option: keyof T) => void
 }) {
+  const language = useLanguage()
   const theme = useTheme("elevated")
   const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
@@ -444,7 +459,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         ? [
             {
               id: "app.exit",
-              title: "Reject permission",
+              title: language.t("tui.rejectPermission"),
               group: group(),
               bind: false as const,
               run: dismiss,
@@ -455,7 +470,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         ? [
             {
               id: "permission.prompt.fullscreen",
-              title: "Toggle permission fullscreen",
+              title: language.t("tui.togglePermissionFullscreen"),
               group: group(),
               bind: false as const,
               run: () => setStore("expanded", (value) => !value),
@@ -466,7 +481,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         ? [
             {
               bind: "left,h",
-              title: "Previous option",
+              title: language.t("tui.previousOption"),
               group: group(),
               run: () => {
                 const index = keys.indexOf(store.selected)
@@ -475,7 +490,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
             },
             {
               bind: "right,l",
-              title: "Next option",
+              title: language.t("tui.nextOption"),
               group: group(),
               run: () => {
                 const index = keys.indexOf(store.selected)
@@ -486,11 +501,13 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         : []),
       {
         bind: "return",
-        title: "Select option",
+        title: language.t("tui.selectOption"),
         group: group(),
         run: () => props.onSelect(store.selected),
       },
-      ...(props.escapeKey ? [{ bind: "escape", title: "Reject permission", group: group(), run: dismiss }] : []),
+      ...(props.escapeKey
+        ? [{ bind: "escape", title: language.t("tui.rejectPermission"), group: group(), run: dismiss }]
+        : []),
     ],
     bindings: [...(props.escapeKey ? ["app.exit"] : []), ...(props.fullscreen ? ["permission.prompt.fullscreen"] : [])],
   }))
@@ -603,11 +620,11 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
           </Show>
           <Show when={keys.length > 1}>
             <text fg={theme.text.default}>
-              {"⇆"} <span style={{ fg: theme.text.subdued }}>select</span>
+              {"⇆"} <span style={{ fg: theme.text.subdued }}>{language.t("tui.select")}</span>
             </text>
           </Show>
           <text fg={theme.text.default}>
-            enter <span style={{ fg: theme.text.subdued }}>confirm</span>
+            enter <span style={{ fg: theme.text.subdued }}>{language.t("tui.confirm")}</span>
           </text>
         </box>
       </box>

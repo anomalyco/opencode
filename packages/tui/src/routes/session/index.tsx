@@ -1,3 +1,4 @@
+import { useLanguage } from "../../context/language"
 import {
   batch,
   createEffect,
@@ -148,6 +149,7 @@ export function Session(props: {
   const paths = useTuiPaths()
   const configState = useConfig()
   const config = configState.data
+  const language = useLanguage()
   const theme = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
@@ -225,7 +227,14 @@ export function Session(props: {
   Keymap.createLayer(() => ({
     priority: 10,
     enabled: () => props.sidebarVisible && dimensions().width - props.verticalTabsWidth <= 120 && !disabled(),
-    commands: [{ bind: "escape,ctrl+c", title: "Close sidebar", group: "Session", run: props.onToggleSidebar }],
+    commands: [
+      {
+        bind: "escape,ctrl+c",
+        title: language.t("tui.session.closeSidebar"),
+        group: language.t("command.category.session"),
+        run: props.onToggleSidebar,
+      },
+    ],
   }))
   const contentWidth = createMemo(() => (props.width ?? dimensions().width - props.verticalTabsWidth) - 4)
   const models = createMemo(() => data.location.model.list(location()) ?? [])
@@ -561,7 +570,7 @@ export function Session(props: {
   const openQueuedPrompts = () =>
     dialog.replace(() => (
       <DialogSelect
-        title="Queued prompts"
+        title={language.t("tui.session.queuedPrompts")}
         options={queuedPrompts().map((prompt, index) => ({
           title: prompt.text,
           value: prompt.id,
@@ -575,7 +584,7 @@ export function Session(props: {
         actions={[
           {
             command: "queued_prompt.delete",
-            title: "delete",
+            title: language.t("tui.delete"),
             onTrigger: (option) => {
               const last = queuedPrompts().length === 1
               void mutatePending("cancel", option.value).then((cancelled) => {
@@ -584,7 +593,7 @@ export function Session(props: {
             },
           },
         ]}
-        footerHints={[{ title: "steer", label: "enter" }]}
+        footerHints={[{ title: language.t("tui.session.steer"), label: "enter" }]}
       />
     ))
   const unavailable = (feature: string) => {
@@ -677,43 +686,43 @@ export function Session(props: {
   const globalCommands = [
     {
       id: "session.page.up",
-      title: "Page up",
-      group: "Session",
+      title: language.t("tui.pageUp"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(-scroll.height / 2),
     },
     {
       id: "session.page.down",
-      title: "Page down",
-      group: "Session",
+      title: language.t("tui.pageDown"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(scroll.height / 2),
     },
     {
       id: "session.line.up",
-      title: "Line up",
-      group: "Session",
+      title: language.t("tui.session.lineUp"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(-1),
     },
     {
       id: "session.line.down",
-      title: "Line down",
-      group: "Session",
+      title: language.t("tui.session.lineDown"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(1),
     },
     {
       id: "session.half.page.up",
-      title: "Half page up",
-      group: "Session",
+      title: language.t("tui.session.halfPageUp"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(-scroll.height / 4),
     },
     {
       id: "session.half.page.down",
-      title: "Half page down",
-      group: "Session",
+      title: language.t("tui.session.halfPageDown"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => moveTranscript(scroll.height / 4),
     },
@@ -722,8 +731,8 @@ export function Session(props: {
   const baseAndUnfocusedCommands = [
     {
       id: "session.first",
-      title: "First message",
-      group: "Session",
+      title: language.t("tui.session.firstMessage"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         if (firstJump()) return
@@ -790,8 +799,8 @@ export function Session(props: {
     },
     {
       id: "session.last",
-      title: "Last message",
-      group: "Session",
+      title: language.t("tui.session.lastMessage"),
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         toBottom()
@@ -802,17 +811,17 @@ export function Session(props: {
 
   const baseCommands = createMemo(() => [
     {
-      title: "Share session",
+      title: language.t("tui.session.shareSession"),
       id: "session.share",
       suggested: route.type === "session",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: { name: "share" },
       run: () => unavailable("Sharing"),
     },
     {
-      title: "Rename session",
+      title: language.t("tui.renameSession"),
       id: "session.rename",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: { name: "rename", arguments: true as const },
       run: (input?: string) => {
         if (input === undefined) return DialogSessionRename.show(dialog, route.sessionID, session()?.title)
@@ -825,9 +834,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Jump to message",
+      title: language.t("tui.session.jumpToMessage"),
       id: "session.timeline",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: { name: "timeline" },
       run: () => {
         dialog.replace(() => (
@@ -840,9 +849,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Fork session",
+      title: language.t("tui.session.forkSession"),
       id: "session.fork",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: { name: "fork" },
       run: () => {
         dialog.replace(() => (
@@ -857,9 +866,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Compact session",
+      title: language.t("tui.session.compactSession"),
       id: "session.compact",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: {
         name: "compact",
       },
@@ -881,24 +890,24 @@ export function Session(props: {
       },
     },
     {
-      title: "Unshare session",
+      title: language.t("tui.session.unshareSession"),
       id: "session.unshare",
-      group: "Session",
+      group: language.t("command.category.session"),
       enabled: false,
       slash: { name: "unshare" },
       run: () => unavailable("Unsharing"),
     },
     {
-      title: "Undo previous message",
+      title: language.t("tui.session.undoPreviousMessage"),
       id: "session.undo",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: { name: "undo" },
       run: () => {
         const message = messagesBeforeRevert().findLast(
           (message): message is SessionMessageUser => message.type === "user" && !!message.text.trim(),
         )
         if (!message) {
-          toast.show({ message: "Nothing to undo", variant: "error", duration: 3000 })
+          toast.show({ message: language.t("tui.session.nothingToUndo"), variant: "error", duration: 3000 })
           dialog.clear()
           return
         }
@@ -921,9 +930,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Redo",
+      title: language.t("tui.session.redo"),
       id: "session.redo",
-      group: "Session",
+      group: language.t("command.category.session"),
       enabled: !!session()?.revert?.messageID,
       slash: { name: "redo" },
       run: () => {
@@ -944,7 +953,7 @@ export function Session(props: {
         return "Expand thinking"
       })(),
       id: "session.toggle.thinking",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         void configState
@@ -956,9 +965,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Toggle session scrollbar",
+      title: language.t("tui.session.toggleSessionScrollbar"),
       id: "session.toggle.scrollbar",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         void configState
@@ -970,9 +979,11 @@ export function Session(props: {
       },
     },
     {
-      title: groupExploration() ? "Show tool calls individually" : "Group related tool calls",
+      title: groupExploration()
+        ? language.t("tui.session.showToolCallsIndividually")
+        : language.t("tui.session.groupRelatedToolCalls"),
       id: "session.toggle.exploration_grouping",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         void configState
@@ -984,9 +995,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Jump to last user message",
+      title: language.t("tui.session.jumpToLastUserMessage"),
       id: "session.messages_last_user",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         const messages = data.session.message.list(route.sessionID)
@@ -1004,50 +1015,50 @@ export function Session(props: {
       },
     },
     {
-      title: "Next message",
+      title: language.t("tui.session.nextMessage"),
       id: "session.message.next",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => scrollToMessage("next", dialog),
     },
     {
-      title: "Previous message",
+      title: language.t("tui.session.previousMessage"),
       id: "session.message.previous",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => scrollToMessage("prev", dialog),
     },
     {
-      title: "Next user message",
+      title: language.t("tui.session.nextUserMessage"),
       id: "session.message.user.next",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => scrollToMessage("next", dialog, true),
     },
     {
-      title: "Previous user message",
+      title: language.t("tui.session.previousUserMessage"),
       id: "session.message.user.previous",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => scrollToMessage("prev", dialog, true),
     },
     {
-      title: "Copy last assistant message",
+      title: language.t("tui.session.copyLastAssistantMessage"),
       id: "messages.copy",
-      group: "Session",
+      group: language.t("command.category.session"),
       run: () => {
         const lastAssistantMessage = messagesBeforeRevert().findLast(
           (msg): msg is SessionMessageAssistant => msg.type === "assistant",
         )
         if (!lastAssistantMessage) {
-          toast.show({ message: "No assistant messages found", variant: "error" })
+          toast.show({ message: language.t("tui.session.noAssistantMessagesFound"), variant: "error" })
           dialog.clear()
           return
         }
 
         const textParts = lastAssistantMessage.content.filter((part) => part.type === "text")
         if (textParts.length === 0) {
-          toast.show({ message: "No text parts found in last assistant message", variant: "error" })
+          toast.show({ message: language.t("tui.session.noTextPartsFoundInLastAssistantMessage"), variant: "error" })
           dialog.clear()
           return
         }
@@ -1058,7 +1069,7 @@ export function Session(props: {
           .trim()
         if (!text) {
           toast.show({
-            message: "No text content found in last assistant message",
+            message: language.t("tui.session.noTextContentFoundInLastAssistantMessage"),
             variant: "error",
           })
           dialog.clear()
@@ -1067,27 +1078,27 @@ export function Session(props: {
 
         clipboard
           .write(text)
-          .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+          .then(() => toast.show({ message: language.t("tui.session.messageCopiedToClipboard"), variant: "success" }))
+          .catch(() => toast.show({ message: language.t("tui.session.failedToCopyToClipboard"), variant: "error" }))
         dialog.clear()
       },
     },
     {
-      title: "Copy session ID",
+      title: language.t("tui.session.copySessionID"),
       id: "session.copy.id",
-      group: "Session",
+      group: language.t("command.category.session"),
       run: () => {
         clipboard
           .write(route.sessionID)
-          .then(() => toast.show({ message: "Session ID copied to clipboard!", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to copy session ID", variant: "error" }))
+          .then(() => toast.show({ message: language.t("tui.session.sessionIDCopiedToClipboard"), variant: "success" }))
+          .catch(() => toast.show({ message: language.t("tui.session.failedToCopySessionID"), variant: "error" }))
         dialog.clear()
       },
     },
     {
-      title: "Copy session transcript",
+      title: language.t("tui.session.copySessionTranscript"),
       id: "session.copy",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: {
         name: "copy",
       },
@@ -1097,17 +1108,17 @@ export function Session(props: {
           if (!sessionData) return
           const transcript = formatSessionTranscript(sessionData, messages(), true)
           await clipboard.write(transcript)
-          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+          toast.show({ message: language.t("tui.session.sessionTranscriptCopiedToClipboard"), variant: "success" })
         } catch {
-          toast.show({ message: "Failed to copy session transcript", variant: "error" })
+          toast.show({ message: language.t("tui.session.failedToCopySessionTranscript"), variant: "error" })
         }
         dialog.clear()
       },
     },
     {
-      title: "Export session transcript",
+      title: language.t("tui.session.exportSessionTranscript"),
       id: "session.export",
-      group: "Session",
+      group: language.t("command.category.session"),
       slash: {
         name: "export",
       },
@@ -1132,7 +1143,7 @@ export function Session(props: {
           if (options.action === "copy") {
             await clipboard.write(content)
             dialog.clear()
-            toast.show({ message: "Copied to clipboard", variant: "success" })
+            toast.show({ message: language.t("tui.session.copiedToClipboard"), variant: "success" })
             return
           }
 
@@ -1143,15 +1154,15 @@ export function Session(props: {
           await writeExport(filepath, content)
           await DialogExportResult.show(dialog, filepath)
         } catch {
-          toast.show({ message: "Failed to export session", variant: "error" })
+          toast.show({ message: language.t("tui.session.failedToExportSession"), variant: "error" })
         }
         dialog.clear()
       },
     },
     {
-      title: "Background blocking tools",
+      title: language.t("tui.backgroundBlockingTools"),
       id: "session.background",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       run: () => {
         void client.api.session.background({ sessionID: route.sessionID })
@@ -1159,9 +1170,9 @@ export function Session(props: {
       },
     },
     {
-      title: "Toggle subagent picker",
+      title: language.t("tui.session.toggleSubagentPicker"),
       id: "session.child.first",
-      group: "Session",
+      group: language.t("command.category.session"),
       run: () => {
         if (composer.open || session()?.parentID) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
@@ -1169,16 +1180,16 @@ export function Session(props: {
       },
     },
     {
-      title: "View queued prompts",
+      title: language.t("tui.session.viewQueuedPrompts"),
       id: "session.queued_prompts",
-      group: "Prompt",
+      group: language.t("command.prompt.mode.normal"),
       enabled: queuedPrompts().length > 0,
       run: openQueuedPrompts,
     },
     {
-      title: "Go to parent session",
+      title: language.t("tui.session.goToParentSession"),
       id: "session.parent",
-      group: "Session",
+      group: language.t("command.category.session"),
       palette: undefined,
       enabled: !!session()?.parentID,
       run: () => {
@@ -1322,7 +1333,7 @@ export function Session(props: {
             </box>
             <box height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
               <Show when={firstJump()}>
-                <text fg={theme.text.feedback.info.default}>Loading session history…</text>
+                <text fg={theme.text.feedback.info.default}>{language.t("tui.session.loadingSessionHistory")}</text>
               </Show>
               <Show when={!firstJump() && awayFromBottom()}>
                 <box
@@ -1479,6 +1490,7 @@ function TurnTokenUsage(props: {
   previousCache?: CacheUsage
   message: (messageID: string) => SessionMessageInfo | undefined
 }) {
+  const language = useLanguage()
   const config = useConfig()
   const theme = useTheme()
   const renderer = useRenderer()
@@ -1545,7 +1557,7 @@ function TurnTokenUsage(props: {
         >
           <text fg={hover() ? theme.text.default : theme.text.subdued} wrapMode="none">
             <span>{expanded() ? "- " : "+ "}</span>
-            <span style={{ attributes: TextAttributes.BOLD }}>Tokens</span>
+            <span style={{ attributes: TextAttributes.BOLD }}>{language.t("tui.session.tokens")}</span>
             <span>
               : {summary().count} {summary().count === 1 ? "step" : "steps"} · {summary().newTokens.toLocaleString()}{" "}
               new · {summary().cached.toLocaleString()} cached · {summary().total.toLocaleString()} total
@@ -1925,6 +1937,7 @@ function SessionGroupView(props: {
 }
 
 function AssistantFooter(props: { message: SessionMessageAssistant }) {
+  const language = useLanguage()
   const ctx = use()
   const config = useConfig()
   const data = useData()
@@ -1966,7 +1979,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
             {(value) => <span style={{ fg: theme.text.subdued }}> · {value().toFixed(1)} tok/s</span>}
           </Show>
           <Show when={interrupted()}>
-            <span style={{ fg: theme.text.subdued }}> · interrupted</span>
+            <span style={{ fg: theme.text.subdued }}>{language.t("tui.session.interrupted")}</span>
           </Show>
         </text>
       </box>
@@ -1975,13 +1988,14 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
 }
 
 function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
+  const language = useLanguage()
   const ctx = use()
   const theme = useTheme()
   if (props.message.type === "location-switched")
     return (
       <box paddingLeft={3}>
         <text>
-          <span style={{ fg: theme.text.subdued }}>↳ Moved to </span>
+          <span style={{ fg: theme.text.subdued }}>{language.t("tui.session.movedTo")}</span>
           <span style={{ fg: theme.text.feedback.info.default }}>{props.message.location.directory}</span>
         </text>
       </box>
@@ -2059,6 +2073,7 @@ function SessionSkillMessage(props: { message: Extract<SessionMessageInfo, { typ
 }
 
 function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type: "compaction" }> }) {
+  const language = useLanguage()
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
@@ -2095,11 +2110,11 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
           </Switch>
           <text fg={color()}>
             {props.message.status === "completed" && props.message.providerContext
-              ? "Provider compaction"
-              : "Compaction"}
+              ? language.t("tui.session.providerCompaction")
+              : language.t("tui.session.compaction")}
           </text>
           <Show when={cancelled()}>
-            <text fg={color()}>· cancelled</text>
+            <text fg={color()}>{language.t("tui.session.cancelled")}</text>
           </Show>
           <Show when={usage()}>
             <text fg={color()}>· {usage()}</text>
@@ -2127,13 +2142,14 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
 }
 
 function CompactionQueued() {
+  const language = useLanguage()
   const theme = useTheme()
   return (
     <box flexDirection="row" alignItems="center">
       <box border={["top"]} borderColor={theme.border.default} flexGrow={1} />
       <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
         <text fg={theme.text.subdued}>◇</text>
-        <text fg={theme.text.subdued}>Compaction queued</text>
+        <text fg={theme.text.subdued}>{language.t("tui.session.compactionQueued")}</text>
       </box>
       <box border={["top"]} borderColor={theme.border.default} flexGrow={1} />
     </box>
@@ -2248,6 +2264,7 @@ function ShellMessage(props: { message: Extract<SessionMessageInfo, { type: "she
 }
 
 function UserMessage(props: { message: SessionMessageUser }) {
+  const language = useLanguage()
   const ctx = use()
   const data = useData()
   const local = useLocal()
@@ -2293,10 +2310,10 @@ function UserMessage(props: { message: SessionMessageUser }) {
             if (delivery() === "steer") {
               dialog.replace(() => (
                 <DialogSelect
-                  title="Pending steer"
+                  title={language.t("tui.session.pendingSteer")}
                   options={[
-                    { title: "Move to queue", value: "queue" as const },
-                    { title: "Delete", value: "cancel" as const },
+                    { title: language.t("tui.session.moveToQueue"), value: "queue" as const },
+                    { title: language.t("tui.session.delete"), value: "cancel" as const },
                   ]}
                   onSelect={(option) => {
                     void updatePendingSteer(option.value)
@@ -2519,6 +2536,7 @@ function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {
 }
 
 function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?: number }) {
+  const language = useLanguage()
   const ctx = use()
   const dialog = useDialog()
   const images = createMemo(() => (ctx.config.session?.image_preview ? props.images : []))
@@ -2553,7 +2571,7 @@ function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?
                   dialog.replace(() => <DialogImagePreview images={images()} initial={index()} />)
                 }}
               >
-                <Show when={!failed()} fallback={<text>No preview</text>}>
+                <Show when={!failed()} fallback={<text>{language.t("tui.noPreview")}</text>}>
                   <image
                     source={image.uri}
                     fit="cover"
@@ -2874,6 +2892,7 @@ function ShellDisplay(props: {
   output?: string
   error?: string
 }) {
+  const language = useLanguage()
   const theme = useTheme()
   const ctx = use()
   const client = useClient()
@@ -2986,9 +3005,9 @@ function ShellDisplay(props: {
           when={props.command}
           fallback={
             isRunning() || props.status === "streaming" ? (
-              <Spinner color={color()}>Writing command…</Spinner>
+              <Spinner color={color()}>{language.t("tui.session.writingCommand")}</Spinner>
             ) : (
-              <text fg={theme.text.subdued}>Writing command…</text>
+              <text fg={theme.text.subdued}>{language.t("tui.session.writingCommand")}</text>
             )
           }
         >
@@ -3000,7 +3019,7 @@ function ShellDisplay(props: {
           </Show>
         </Show>
         <Show when={props.background}>
-          <StatusBadge>Background</StatusBadge>
+          <StatusBadge>{language.t("tui.session.background")}</StatusBadge>
         </Show>
       </box>
     </BlockTool>
@@ -3137,6 +3156,7 @@ function WebSearch(props: ToolProps) {
 }
 
 function Subagent(props: ToolProps) {
+  const language = useLanguage()
   const { navigate } = useRoute()
   const data = useData()
   const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
@@ -3161,7 +3181,7 @@ function Subagent(props: ToolProps) {
       }}
       status={
         isBackgroundSubagent(props.metadata, props.part.state.status) ? (
-          <StatusBadge>Background</StatusBadge>
+          <StatusBadge>{language.t("tui.session.background")}</StatusBadge>
         ) : undefined
       }
     >
@@ -3573,7 +3593,12 @@ function recordValue(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined
 }
 
-function formatSessionTranscript(session: SessionInfo, messages: SessionMessageInfo[], thinking: boolean, tools = true) {
+function formatSessionTranscript(
+  session: SessionInfo,
+  messages: SessionMessageInfo[],
+  thinking: boolean,
+  tools = true,
+) {
   const body = messages.flatMap((message) => {
     if (message.type === "user") return [`## User\n\n${message.text}`]
     if (message.type === "shell")

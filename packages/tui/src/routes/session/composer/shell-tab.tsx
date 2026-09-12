@@ -1,3 +1,4 @@
+import { useLanguage } from "../../../context/language"
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
@@ -12,6 +13,7 @@ import { DialogShellOutput } from "../../../component/dialog-shell-output"
 export function ShellTab(props: { sessionID: string }) {
   const data = useData()
   const client = useClient()
+  const language = useLanguage()
   const theme = useTheme()
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
@@ -49,7 +51,7 @@ export function ShellTab(props: { sessionID: string }) {
   onMount(() => {
     const cleanup = composer.register({
       id: "shell",
-      label: "Shell",
+      label: language.t("tui.details.shell"),
       hints: () =>
         selectedEntry()
           ? [
@@ -68,8 +70,8 @@ export function ShellTab(props: { sessionID: string }) {
     commands: [
       {
         id: "composer.shell.up",
-        title: "Previous shell",
-        group: "Composer",
+        title: language.t("tui.session.previousShell"),
+        group: language.t("tui.session.composer"),
         run() {
           if (store.selected === 0) {
             composer.close()
@@ -80,8 +82,8 @@ export function ShellTab(props: { sessionID: string }) {
       },
       {
         id: "composer.shell.down",
-        title: "Next shell",
-        group: "Composer",
+        title: language.t("tui.session.nextShell"),
+        group: language.t("tui.session.composer"),
         run() {
           const list = entries()
           if (list.length === 0) return
@@ -90,14 +92,14 @@ export function ShellTab(props: { sessionID: string }) {
       },
       {
         id: "composer.shell.select",
-        title: "View shell output",
-        group: "Composer",
+        title: language.t("tui.session.viewShellOutput"),
+        group: language.t("tui.session.composer"),
         run: open,
       },
       {
         id: "composer.shell.kill",
-        title: "Kill shell command",
-        group: "Composer",
+        title: language.t("tui.session.killShellCommand"),
+        group: language.t("tui.session.composer"),
         run() {
           const entry = selectedEntry()
           if (!entry) return
@@ -113,7 +115,10 @@ export function ShellTab(props: { sessionID: string }) {
   return (
     <Show when={composer.active("shell")}>
       <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
-        <Show when={entries().length > 0} fallback={<text fg={theme.text.subdued}> No shell commands</text>}>
+        <Show
+          when={entries().length > 0}
+          fallback={<text fg={theme.text.subdued}>{language.t("tui.session.noShellCommands")}</text>}
+        >
           <For each={entries()}>
             {(shell, index) => {
               const active = createMemo(() => index() === store.selected)

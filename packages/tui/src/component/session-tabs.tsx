@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import {
   BoxRenderable,
   CliRenderEvents,
@@ -533,6 +534,7 @@ function VerticalSessionTabs(props: {
   unreadMarker?: TabUnreadMarker
   width?: number
 }) {
+  const language = useLanguage()
   const tabs: SessionTabsController = props.controller ?? useSessionTabs()
   const data = props.controller ? undefined : useData()
   const dimensions = useTerminalDimensions()
@@ -733,7 +735,8 @@ function VerticalSessionTabs(props: {
               const restingTitleWidth = () => Math.max(1, width() - prefixWidth() - 1)
               const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 1)
               const titleWidth = () => (hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth())
-              const title = () => (props.controller ? undefined : session()?.title) ?? tab.title ?? "Untitled session"
+              const title = () =>
+                (props.controller ? undefined : session()?.title) ?? tab.title ?? language.t("tui.tabs.untitled")
               const scrolling = () => marquee.active() === tab.sessionID
               const visibleTitleParts = createMemo(() =>
                 scrolling()
@@ -1197,7 +1200,7 @@ function VerticalSessionTabs(props: {
                   selectable={false}
                   attributes={newTab() ? TextAttributes.BOLD : undefined}
                 >
-                  {NEW_SESSION_TAB_TITLE}
+                  {language.t("command.session.new")}
                 </text>
               </Show>
               <Show when={newTab() && !compact()}>
@@ -1246,7 +1249,7 @@ function VerticalSessionTabs(props: {
                 {Locale.truncateWidth(
                   data?.session.get(sessionID())?.title ??
                     items().find((tab) => tab.sessionID === sessionID())?.title ??
-                    "Untitled session",
+                    language.t("tui.tabs.untitled"),
                   tooltipWidth() - 2,
                 )}
               </text>
@@ -1278,6 +1281,7 @@ function HorizontalSessionTabs(props: {
   unreadMarker?: TabUnreadMarker
   numbers: boolean
 }) {
+  const language = useLanguage()
   const tabs = props.controller ?? useSessionTabs()
   const data = props.controller ? undefined : useData()
   const dimensions = useTerminalDimensions()
@@ -1569,7 +1573,10 @@ function HorizontalSessionTabs(props: {
           const glowColor = createMemo(() => tint(background(), feedbackColor() ?? unreadColor(), glowLevel()))
           const glows = () =>
             Boolean(status().attention || (!selected() && !status().busy && status().unread !== undefined))
-          const title = () => data?.session.get(tab.sessionID)?.title ?? tab.title ?? "Untitled session"
+          const title = () =>
+            tab === NEW_SESSION_TAB
+              ? language.t("command.session.new")
+              : (data?.session.get(tab.sessionID)?.title ?? tab.title ?? language.t("tui.tabs.untitled"))
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
           const numberWidth = () => Math.max(2, String(items().length).length)
           // Hovering reveals the close mark, so the title's right bound shifts left of it.

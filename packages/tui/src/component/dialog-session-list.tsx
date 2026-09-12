@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { createMemo, createResource, createSignal, onMount, Show } from "solid-js"
 import path from "path"
 import type { SessionInfo } from "@opencode/client"
@@ -26,6 +27,7 @@ import { projectName } from "../util/project"
 import { useLocation } from "../context/location"
 
 export function DialogSessionList() {
+  const language = useLanguage()
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
@@ -113,14 +115,16 @@ export function DialogSessionList() {
   const searchState = createMemo(() => {
     const query = filter().trim()
     if (query !== search().trim() || searchResults.loading)
-      return { message: query ? "Searching sessions…" : "Loading sessions…", error: false }
+      return { message: query ? language.t("tui.searchingSessions") : language.t("tui.loadingSessions"), error: false }
     const result = searchResults()
     if (result?.query === query && result.error)
       return {
-        message: query ? "Could not search sessions. Change the search to try again." : "Could not load sessions.",
+        message: query
+          ? language.t("tui.couldNotSearchSessionsChangeTheSearchToTryAgain")
+          : language.t("tui.couldNotLoadSessions"),
         error: true,
       }
-    return { message: query ? "No sessions found" : "No sessions available", error: false }
+    return { message: query ? language.t("tui.noSessionsFound") : language.t("tui.noSessionsAvailable"), error: false }
   })
 
   const quickSwitchHint = createMemo(() => {
@@ -132,7 +136,7 @@ export function DialogSessionList() {
   })
   const quickSwitchFooterHints = createMemo(() => {
     const hint = quickSwitchHint()
-    return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
+    return hint && local.session.slots().length > 0 ? [{ title: language.t("tui.switch"), label: hint }] : []
   })
   const currentProjectName = createMemo(() => {
     const current = data.location.info(pickerLocation())
@@ -165,7 +169,7 @@ export function DialogSessionList() {
       const deleting = toDelete() === session.id
       return {
         title: deleting
-          ? `Press ${shortcuts.get("session.delete")} again to confirm`
+          ? language.t("tui.pressKeyAgainToConfirm", { key: shortcuts.get("session.delete") ?? "" })
           : withTimestampedFallback(session),
         value: session.id,
         category,
@@ -186,17 +190,22 @@ export function DialogSessionList() {
       .filter((session) => !session.parentID && !pinnedSet.has(session.id))
       .map((session) => {
         const date = new Date(session.time.updated).toDateString()
-        return option(session, date === today ? "Today" : date)
+        return option(
+          session,
+          date === today
+            ? language.t("home.sessions.group.today")
+            : language.date(session.time.updated, { dateStyle: "medium" }),
+        )
       })
 
-    return [...pinned.map((sessionID) => option(sessionMap.get(sessionID)!, "Pinned")), ...remaining]
+    return [...pinned.map((sessionID) => option(sessionMap.get(sessionID)!, language.t("tui.pinned"))), ...remaining]
   })
 
   onMount(() => dialog.setSize("large"))
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={language.t("home.sessions.search.sessions")}
       titleView={
         <box flexDirection="row">
           <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
@@ -217,8 +226,10 @@ export function DialogSessionList() {
       bindings={[
         {
           bind: "ctrl+a",
-          title: allProjects() ? "Show current directory sessions" : "Show all project sessions",
-          group: "Dialog",
+          title: allProjects()
+            ? language.t("tui.showCurrentDirectorySessions")
+            : language.t("tui.showAllProjectSessions"),
+          group: language.t("tui.dialog"),
           run: () => {
             void updatePrefs((draft) => {
               draft.allProjects = !draft.allProjects
@@ -248,13 +259,13 @@ export function DialogSessionList() {
       actions={[
         {
           command: "session.pin.toggle",
-          title: "pin/unpin",
+          title: language.t("tui.pinUnpin"),
           hidden: sessionTabs.enabled(),
           onTrigger: (option) => local.session.togglePin(option.value),
         },
         {
           command: "session.delete",
-          title: "delete",
+          title: language.t("tui.delete"),
           onTrigger: (option: { value: string }) => {
             if (toDelete() !== option.value) {
               setToDelete(option.value)
@@ -272,7 +283,7 @@ export function DialogSessionList() {
               .catch((error) => {
                 setToDelete(undefined)
                 toast.show({
-                  message: `Failed to delete session: ${errorMessage(error)}`,
+                  message: language.t("tui.failedToDeleteSessionError", { error: errorMessage(error) }),
                   variant: "error",
                   duration: 5000,
                 })
@@ -281,14 +292,18 @@ export function DialogSessionList() {
         },
         {
           command: "session.rename",
-          title: "rename",
+          title: language.t("tui.rename"),
           onTrigger: (option: { value: string; title: string }) =>
             DialogSessionRename.show(dialog, option.value, option.title),
         },
       ]}
       footerHints={[
         ...quickSwitchFooterHints(),
-        { title: allProjects() ? "current directory" : "all projects", label: "ctrl+a", side: "right" },
+        {
+          title: allProjects() ? language.t("tui.currentDirectory") : language.t("tui.allProjects"),
+          label: "ctrl+a",
+          side: "right",
+        },
       ]}
     />
   )

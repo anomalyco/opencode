@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { createMemo } from "solid-js"
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
 import { type DialogContext } from "../ui/dialog"
@@ -12,6 +13,7 @@ function isSuggestedPaletteCommand(command: KeymapCommand) {
 }
 
 export function CommandPaletteDialog() {
+  const language = useLanguage()
   const commands = Keymap.useCommands()
   const shortcuts = Keymap.useShortcuts()
   const options = createMemo(() =>
@@ -34,33 +36,40 @@ export function CommandPaletteDialog() {
       }
     }),
   )
-  const settingOptions = settings.map((setting) => ({
-    title: setting.title,
-    category: setting.category,
-    searchText: setting.keywords?.join(" "),
-    searchFooter: `Settings · ${setting.category}`,
-    value: `setting:${settingID(setting)}`,
-    onSelect: (dialog: DialogContext) => {
-      dialog.replace(() => <DialogConfig current={settingID(setting)} />)
-    },
-  }))
+  const settingOptions = () =>
+    settings.map((setting) => ({
+      title: language.t(setting.title),
+      category: language.t(setting.category),
+      searchText: setting.keywords?.join(" "),
+      searchFooter: `${language.t("command.category.settings")} · ${language.t(setting.category)}`,
+      value: `setting:${settingID(setting)}`,
+      onSelect: (dialog: DialogContext) => {
+        dialog.replace(() => <DialogConfig current={settingID(setting)} />)
+      },
+    }))
 
   let ref: DialogSelectRef<string>
   const list = () => {
-    if (ref?.filter) return [...options(), ...settingOptions]
+    if (ref?.filter) return [...options(), ...settingOptions()]
     return [
       ...options()
         .filter((option) => option.suggested)
         .map((option) => ({
           ...option,
           value: `suggested:${option.value}`,
-          category: "Suggested",
+          category: language.t("command.category.suggested"),
         })),
       ...options(),
     ]
   }
 
   return (
-    <DialogSelect ref={(value) => (ref = value)} title="Commands" options={list()} flat={true} filterThreshold={0.7} />
+    <DialogSelect
+      ref={(value) => (ref = value)}
+      title={language.t("palette.group.commands")}
+      options={list()}
+      flat={true}
+      filterThreshold={0.7}
+    />
   )
 }
