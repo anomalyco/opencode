@@ -1,11 +1,17 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { isDeepStrictEqual } from "node:util"
 import { Effect, Layer, Context, Schema } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Database } from "@opencode-ai/core/database/database"
+import { MessageDiffTable } from "@opencode-ai/core/session/sql"
+import { EventTable } from "@opencode-ai/core/event/sql"
+import { and, eq, sql } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { SessionID, MessageID } from "./schema"
 import { Config } from "@/config/config"
+import { createDurableParentCache } from "./durable-parent-cache"
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -78,6 +84,10 @@ const layer = Layer.effect(
     const snapshot = yield* Snapshot.Service
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
+    const database = yield* Database.Service
+    // A message with a durable baseline is remembered so later changed summarizes skip the
+    // historical-event scan; the bounded cache evicts least-recently-used identities.
+    const durableParents = createDurableParentCache()
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
@@ -122,8 +132,44 @@ const layer = Layer.effect(
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
       const msgDiffs = yield* computeDiff({ messages })
-      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
-      yield* sessions.updateMessage(target.info)
+      const dedicated = yield* database.db
+        .select({ message_id: MessageDiffTable.message_id })
+        .from(MessageDiffTable)
+        .where(eq(MessageDiffTable.message_id, input.messageID))
+        .get()
+        .pipe(Effect.orDie)
+      if (dedicated && isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
+      // Imported/historic rows have no durable message event, so a diff-only publish would replay
+      // without its parent. Normal turns already have one, so this never adds a duplicate stream.
+      const parentKey = `${input.sessionID}:${input.messageID}`
+      const durableParent =
+        durableParents.has(parentKey) ||
+        (yield* database.db
+          .select({ id: EventTable.id })
+          .from(EventTable)
+          .where(
+            and(
+              eq(EventTable.aggregate_id, input.sessionID),
+              eq(EventTable.type, "message.updated.1"),
+              sql`json_extract(${EventTable.data}, '$.info.id') = ${input.messageID}`,
+            ),
+          )
+          .limit(1)
+          .get()
+          .pipe(Effect.orDie))
+      if (!durableParent) {
+        const baseline = target.info.summary
+          ? { ...target.info, summary: { ...target.info.summary, diffs: [] } }
+          : target.info
+        yield* sessions.updateMessage(baseline)
+      }
+      durableParents.add(parentKey)
+      // Turn patches are their own durable stream: ordinary message updates must never duplicate them.
+      yield* events.publish(Session.Event.MessageDiffUpdated, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        diffs: msgDiffs,
+      })
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
@@ -154,7 +200,7 @@ export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node],
+  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Database.node],
 })
 
 export * as SessionSummary from "./summary"

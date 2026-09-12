@@ -17,6 +17,8 @@ import { SessionPaths } from "@/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { Storage } from "@/storage/storage"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Database } from "@opencode-ai/core/database/database"
+import { MessageTable } from "@opencode-ai/core/session/sql"
 import { MessageID } from "@/session/schema"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -25,7 +27,12 @@ import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-const it = testEffect(Layer.mergeAll(LayerNode.compile(LayerNode.group([Session.node, Storage.node])), httpApiLayer))
+const it = testEffect(
+  Layer.mergeAll(
+    LayerNode.compile(LayerNode.group([Session.node, Storage.node, Database.node])),
+    httpApiLayer,
+  ),
+)
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -91,6 +98,45 @@ describe("session diff with missing patch (#26574)", () => {
 
         expect(response.status).toBe(200)
         expect(yield* response.json).toEqual([{ file: "turn.ts", additions: 1, deletions: 0, status: "modified" }])
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "GET /session/<id>/diff reads diffs from the historic message projection without a dedicated row",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* withSession({ title: "historic-fallback" })
+        const messageID = MessageID.ascending()
+        const { db } = yield* Database.Service
+        const diffs = [
+          { file: "historic.txt", additions: 3, deletions: 1, status: "modified", patch: "HISTORIC-PATCH" },
+        ]
+        yield* db
+          .insert(MessageTable)
+          .values({
+            id: messageID,
+            session_id: session.id,
+            time_created: Date.now(),
+            data: {
+              role: "user",
+              time: { created: Date.now() },
+              agent: "build",
+              model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+              summary: { diffs },
+            } as never,
+          })
+          .run()
+          .pipe(Effect.orDie)
+
+        const response = yield* requestInDirectory(
+          `${pathFor(SessionPaths.diff, { sessionID: session.id })}?messageID=${messageID}`,
+          test.directory,
+        )
+
+        expect(response.status).toBe(200)
+        expect(yield* response.json).toEqual(diffs)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

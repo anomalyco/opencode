@@ -2,8 +2,8 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import type * as SDK from "@opencode-ai/sdk/v2"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import { Effect, Exit, Layer, Option, Schema, Scope, Context, Stream } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Effect, Exit, Layer, Option, Schema, Scope, Context } from "effect"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Account } from "@/account/account"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -189,6 +189,19 @@ const layer = Layer.effect(
             if (info.role !== "user") return
             const model = yield* provider.getModel(info.model.providerID, info.model.modelID)
             yield* sync(info.sessionID, [{ type: "model", data: [model] }])
+          }),
+        )
+        yield* watch(Session.Event.MessageDiffUpdated, (data) =>
+          Effect.gen(function* () {
+            // The publish path runs listeners inline, so avoid the hydrated list read
+            // unless this session is actually being shared.
+            const share = yield* getCached(data.sessionID)
+            if (!share) return
+            const info = (yield* session.messages({ sessionID: data.sessionID })).find(
+              (item) => item.info.id === data.messageID,
+            )?.info
+            if (!info) return
+            yield* sync(info.sessionID, [{ type: "message", data: structuredClone(info) as SDK.Message }])
           }),
         )
         yield* watch(MessageV2.Event.PartUpdated, (data) =>

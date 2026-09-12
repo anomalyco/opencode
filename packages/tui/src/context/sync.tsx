@@ -150,11 +150,18 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const pendingDiffs = new Map<string, Map<string, SnapshotFileDiff[]>>()
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
     const touchPart = (sessionID: string, partID: string) => {
       hydratingSessions.get(sessionID)?.parts.add(partID)
+    }
+    const retirePendingDiff = (sessionID: string, messageID: string) => {
+      const pending = pendingDiffs.get(sessionID)
+      if (!pending) return
+      pending.delete(messageID)
+      if (pending.size === 0) pendingDiffs.delete(sessionID)
     }
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
@@ -174,6 +181,27 @@ export const {
     }
 
     event.subscribe((event, { directory, workspace }) => {
+      if (event.type === "message.diff.updated") {
+        const messages = store.message[event.properties.sessionID]
+        const index = messages?.findIndex((message) => message.id === event.properties.messageID) ?? -1
+        const current = index >= 0 ? messages?.[index] : undefined
+        if (!current || current.role !== "user") {
+          // Buffer only across an in-flight first page; a later fetch reads the durable diff itself.
+          if (!hydratingSessions.has(event.properties.sessionID)) return
+          const pending = pendingDiffs.get(event.properties.sessionID) ?? new Map<string, SnapshotFileDiff[]>()
+          pending.set(event.properties.messageID, event.properties.diffs)
+          pendingDiffs.set(event.properties.sessionID, pending)
+          return
+        }
+        touchMessage(event.properties.sessionID, event.properties.messageID)
+        setStore(
+          "message",
+          event.properties.sessionID,
+          index,
+          reconcile({ ...current, summary: { ...current.summary, diffs: event.properties.diffs } }),
+        )
+        return
+      }
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
@@ -271,6 +299,7 @@ export const {
           break
 
         case "session.deleted": {
+          pendingDiffs.delete(event.properties.info.id)
           const result = search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore(
@@ -319,6 +348,7 @@ export const {
         }
 
         case "message.updated": {
+          retirePendingDiff(event.properties.info.sessionID, event.properties.info.id)
           touchMessage(event.properties.info.sessionID, event.properties.info.id)
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
@@ -358,10 +388,11 @@ export const {
           }
           break
         }
+
         case "message.removed": {
           touchMessage(event.properties.sessionID, event.properties.messageID)
           const messages = store.message[event.properties.sessionID]
-          const index = messages.findIndex((message) => message.id === event.properties.messageID)
+          const index = messages?.findIndex((message) => message.id === event.properties.messageID) ?? -1
           if (index !== -1) {
             setStore(
               "message",
@@ -653,12 +684,23 @@ export const {
                   draft.part[message.info.id] = parts
                 }
                 for (const message of removed) delete draft.part[message.id]
+                const pending = pendingDiffs.get(sessionID)
+                if (pending) {
+                  visible.forEach((message, index) => {
+                    if (message.role !== "user") return
+                    const diffs = pending.get(message.id)
+                    if (!diffs) return
+                    visible[index] = { ...message, summary: { ...message.summary, diffs } }
+                  })
+                  pendingDiffs.delete(sessionID)
+                }
                 draft.message[sessionID] = visible
                 draft.session_diff[sessionID] = diff.data ?? []
               }),
             )
             fullSyncedSessions.add(sessionID)
           })().finally(() => {
+            pendingDiffs.delete(sessionID)
             syncingSessions.delete(sessionID)
             hydratingSessions.delete(sessionID)
           })

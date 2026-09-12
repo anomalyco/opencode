@@ -140,6 +140,8 @@ const retryImmediately: typeof retry = async (task, options = {}) => {
   }
 }
 
+const noRetry: typeof retry = async (task) => task()
+
 function setup(sessions: Record<string, Session>) {
   const get: unknown[] = []
   const messages: unknown[] = []
@@ -342,6 +344,515 @@ describe("server session", () => {
 
     store.apply({ type: "message.removed", properties: { sessionID: "root", messageID: next.id } })
     expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
+  })
+
+  test("projects summarized patches into the authoritative legacy message store", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const client = messageClient(response([{ info: user, parts: [] }]))
+    const store = createServerSession(client, {} as SessionApi, {} as MessageApi, { protocol: Promise.resolve("v1") })
+    store.remember(session("root"))
+    await store.sync("root")
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PATCH-CONTENT" }],
+      },
+    })
+
+    expect(store.data.message.root[0]?.role === "user" ? store.data.message.root[0].summary?.diffs[0]?.patch : undefined).toBe(
+      "PATCH-CONTENT",
+    )
+    expect(store.data.session_message.root[0]).toMatchObject({ id: user.id, type: "user" })
+  })
+
+  test("buffers an uncached diff delivered during the first message load", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const deferred = deferredResponse()
+    const client = messageClient(deferred.promise, response([{ info: user, parts: [] }]))
+    const store = createServerSession(client, {} as SessionApi, {} as MessageApi, { protocol: Promise.resolve("v1") })
+    store.remember(session("root"))
+    const loading = store.sync("root")
+    await client.requested(1)
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
+      },
+    })
+    deferred.resolve(response([{ info: user, parts: [] }]))
+    await loading
+
+    const message = store.data.message.root?.[0]
+    expect(message?.role === "user" ? message.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
+    expect(client.requests).toHaveLength(1)
+  })
+
+  test("ignores a diff for a removed message without requesting a load", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const client = messageClient(response([{ info: user, parts: [] }]))
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    store.apply({ type: "message.removed", properties: { sessionID: "root", messageID: user.id } })
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
+      },
+    })
+    await Bun.sleep(0)
+
+    expect(client.requests).toHaveLength(0)
+  })
+
+  test("does not apply a late diff to a message re-added after removal", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const page = deferredResponse()
+    const client = messageClient(page.promise)
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    const loading = store.sync("root")
+    await client.requested(1)
+    store.apply({ type: "message.removed", properties: { sessionID: "root", messageID: user.id } })
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "REMOVED-PATCH" }],
+      },
+    })
+    store.optimistic.add({ sessionID: "root", message: user, parts: [] })
+    page.resolve(response())
+    await loading
+
+    const result = store.data.message.root?.[0]
+    expect(result?.id).toBe(user.id)
+    expect(result?.role === "user" ? result.summary?.diffs?.[0]?.patch : undefined).toBeUndefined()
+  })
+
+  test("retires a buffered diff when its message is removed and re-added", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const page = deferredResponse()
+    const client = messageClient(page.promise)
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    const loading = store.sync("root")
+    await client.requested(1)
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "OLD-PATCH" }],
+      },
+    })
+    store.apply({ type: "message.removed", properties: { sessionID: "root", messageID: user.id } })
+    store.optimistic.add({ sessionID: "root", message: user, parts: [] })
+    page.resolve(response())
+    await loading
+
+    const result = store.data.message.root?.[0]
+    expect(result?.id).toBe(user.id)
+    expect(result?.role === "user" ? result.summary?.diffs?.[0]?.patch : undefined).toBeUndefined()
+  })
+
+  test("ignores an uncached diff when no message load is active", async () => {
+    const user = userMessage("message-1", {
+      sessionID: "root",
+      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }] },
+    })
+    const client = messageClient(response([{ info: user, parts: [] }]))
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
+      },
+    })
+    await Bun.sleep(0)
+
+    expect(client.requests).toHaveLength(0)
+    expect(store.data.message.root).toBeUndefined()
+
+    await store.sync("root")
+    const result = store.data.message.root?.[0]
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
+  })
+
+  test("does not replay an ignored diff into the next authoritative page", async () => {
+    const omitted = userMessage("message-1", { sessionID: "root" })
+    const omittedClient = messageClient(response([{ info: omitted, parts: [] }]))
+    const omittedStore = createServerSession(omittedClient)
+    omittedStore.remember(session("root"))
+
+    omittedStore.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: omitted.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-IGNORED-A" }],
+      },
+    })
+    await Bun.sleep(0)
+    expect(omittedClient.requests).toHaveLength(0)
+
+    await omittedStore.sync("root")
+    const omittedResult = omittedStore.data.message.root?.[0]
+    expect(omittedResult?.role === "user" ? omittedResult.summary?.diffs[0]?.patch : undefined).toBeUndefined()
+
+    const newer = userMessage("message-2", {
+      sessionID: "root",
+      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-FRESH-B" }] },
+    })
+    const newerClient = messageClient(response([{ info: newer, parts: [] }]))
+    const newerStore = createServerSession(newerClient)
+    newerStore.remember(session("root"))
+
+    newerStore.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: newer.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-STALE-A" }],
+      },
+    })
+    await Bun.sleep(0)
+    expect(newerClient.requests).toHaveLength(0)
+
+    await newerStore.sync("root")
+    const newerResult = newerStore.data.message.root?.[0]
+    expect(newerResult?.role === "user" ? newerResult.summary?.diffs[0]?.patch : undefined).toBe("APP-FRESH-B")
+  })
+
+  test("clears a buffered diff when the session is evicted", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const first = deferredResponse()
+    const replacement = deferredResponse()
+    const client = messageClient(first.promise, replacement.promise)
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    const obsolete = store.sync("root")
+    await client.requested(1)
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-EVICTED-A" }],
+      },
+    })
+    store.apply({ type: "session.deleted", properties: { sessionID: "root", info: session("root") } })
+
+    const current = store.sync("root")
+    await client.requested(2)
+    replacement.resolve(response([{ info: user, parts: [] }]))
+    await current
+    await Bun.sleep(0)
+    void obsolete.catch(() => {})
+
+    const result = store.data.message.root?.[0]
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBeUndefined()
+  })
+
+  test("preserves a cached diff applied during a refresh that omits its turn", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const first = deferredResponse()
+    const refresh = deferredResponse()
+    const client = messageClient(first.promise, refresh.promise)
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    const initial = store.sync("root")
+    await client.requested(1)
+    first.resolve(response([{ info: user, parts: [] }]))
+    await initial
+
+    const refreshing = store.sync("root", { force: true })
+    await client.requested(2)
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
+      },
+    })
+    refresh.resolve(response())
+    await refreshing
+
+    const result = store.data.message.root?.[0]
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
+  })
+
+  test("lets an authoritative message update retire a buffered diff", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const page = deferredResponse()
+    const client = messageClient(page.promise)
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    const loading = store.sync("root")
+    await client.requested(1)
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-STALE-A" }],
+      },
+    })
+    store.apply({
+      type: "message.updated",
+      properties: {
+        info: {
+          ...user,
+          summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-NEW-B" }] },
+        },
+      },
+    })
+    page.resolve(response([{ info: user, parts: [] }]))
+    await loading
+
+    const result = store.data.message.root?.[0]
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-NEW-B")
+  })
+
+  test("a successful retry supersedes an older buffered durable diff", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const failed = deferredResponse()
+    const retried = deferredResponse()
+    const client = messageClient(failed.promise, retried.promise)
+    const store = createServerSession(client, { retry: retryImmediately })
+    store.remember(session("root"))
+    const loading = store.sync("root")
+    await client.requested(1)
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-A" }],
+      },
+    })
+    failed.reject(new Error("connection reset"))
+    await client.requested(2)
+    retried.resolve(
+      response([
+        {
+          info: {
+            ...user,
+            summary: {
+              diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
+            },
+          },
+          parts: [],
+        },
+      ]),
+    )
+    await loading
+
+    const result = store.data.message.root?.[0]
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
+  })
+
+  test("a fresh sync after a terminal load failure ignores the failed buffer", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const failed = deferredResponse()
+    const client = messageClient(
+      failed.promise,
+      response([
+        {
+          info: {
+            ...user,
+            summary: {
+              diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
+            },
+          },
+          parts: [],
+        },
+      ]),
+    )
+    const store = createServerSession(client, { retry: noRetry })
+    store.remember(session("root"))
+    const loading = store.sync("root").catch((error) => error)
+    await client.requested(1)
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-A" }],
+      },
+    })
+    failed.reject(new Error("connection reset"))
+    await loading
+    await store.sync("root")
+
+    const result = store.data.message.root?.[0]
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
+  })
+
+  test("rejects a sync whose session info fails", async () => {
+    const page = deferredResponse()
+    const info = Promise.withResolvers<{ data: Session }>()
+    const client = messageClient(page.promise)
+    client.session.get = (() => info.promise) as unknown as typeof client.session.get
+    const store = createServerSession(client)
+    const initial = store.sync("root").then(
+      () => "resolved",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    )
+    await client.requested(1)
+
+    info.reject(new Error("info failure"))
+    await Bun.sleep(0)
+    page.resolve(response())
+
+    expect(await initial).toBe("info failure")
+  })
+
+  test("rejects a sync whose initial message page fails", async () => {
+    const page = deferredResponse()
+    const client = messageClient(page.promise)
+    const store = createServerSession(client)
+    const initial = store.sync("root").then(
+      () => "resolved",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    )
+    await client.requested(1)
+
+    page.reject(new Error("page failure"))
+
+    expect(await initial).toBe("page failure")
+  })
+
+  test("keeps a buffered page diff when an unrelated parent backfill starts", async () => {
+    const target = userMessage("message-1")
+    const outside = userMessage("message-0", { time: { created: 0 } })
+    const assistant = assistantMessage("message-2", outside.id)
+    const pending = deferredResponse()
+    const client = rootMessageClient([pending.promise], [singleResponse(outside)])
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+    await Bun.sleep(0)
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: target.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "NEWER-PAGE-B" }],
+      },
+    })
+    pending.resolve(response([{ info: target, parts: [] }, { info: assistant, parts: [] }], "older"))
+    await loading
+    await Bun.sleep(0)
+
+    const message = store.data.message.child?.find((item) => item.id === target.id)
+    expect(message?.role === "user" ? message.summary?.diffs[0]?.patch : undefined).toBe("NEWER-PAGE-B")
+    expect(client.rootRequests).toHaveLength(1)
+  })
+
+  test("a third request cannot replay the second attempt's buffered diff", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const first = deferredResponse()
+    const second = deferredResponse()
+    const third = deferredResponse()
+    const client = messageClient(first.promise, second.promise, third.promise)
+    const store = createServerSession(client, { retry: retryImmediately })
+    store.remember(session("root"))
+    const loading = store.sync("root")
+    await client.requested(1)
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-A" }],
+      },
+    })
+    first.reject(new Error("first failure"))
+    await client.requested(2)
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-B" }],
+      },
+    })
+    second.reject(new Error("second failure"))
+    await client.requested(3)
+    third.resolve(
+      response([
+        {
+          info: {
+            ...user,
+            summary: {
+              diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-LIVE-C" }],
+            },
+          },
+          parts: [],
+        },
+      ]),
+    )
+    await loading
+
+    const result = store.data.message.root?.[0]
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-C")
+  })
+
+  test("an obsolete load retry cannot clear a replacement load's buffered diff", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const first = deferredResponse()
+    const replacement = deferredResponse()
+    const retried = deferredResponse()
+    const client = messageClient(first.promise, replacement.promise, retried.promise)
+    const store = createServerSession(client, { retry: retryImmediately })
+    store.remember(session("root"))
+    const obsolete = store.sync("root")
+    await client.requested(1)
+
+    store.apply({ type: "session.deleted", properties: { sessionID: "root", info: session("root") } })
+    const current = store.sync("root")
+    await client.requested(2)
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "APP-ACTIVE-B" }],
+      },
+    })
+
+    first.reject(new Error("stale failure"))
+    await client.requested(3)
+    replacement.resolve(response([{ info: { ...user, summary: { diffs: [] } }, parts: [] }]))
+    await current
+    await Bun.sleep(0)
+
+    const result = store.data.message.root?.[0]
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-ACTIVE-B")
+    void obsolete.catch(() => {})
   })
 
   test("backfills an assistant-only initial page through its user root", async () => {
@@ -576,6 +1087,198 @@ describe("server session", () => {
     await loading
 
     expect(store.data.message.child).toEqual([user, live])
+  })
+
+  test("retires a failed parent attempt's buffered diff while keeping the page's buffered diff", async () => {
+    const target = userMessage("message-1")
+    const outside = userMessage("message-0", {
+      time: { created: 0 },
+      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PARENT-C" }] },
+    })
+    const assistant = assistantMessage("message-2", outside.id)
+    const failed = Promise.withResolvers<SingleMessageResponse>()
+    const client = rootMessageClient(
+      [response([{ info: target, parts: [] }, { info: assistant, parts: [] }], "older")],
+      [failed.promise, singleResponse(outside)],
+    )
+    const store = createServerSession(client, { retry: retryImmediately })
+    const loading = store.sync("child")
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: target.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PAGE-B" }],
+      },
+    })
+    await client.rootRequested(1)
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: outside.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PARENT-B" }],
+      },
+    })
+    failed.reject(new Error("retry"))
+    await loading
+
+    const page = store.data.message.child?.find((item) => item.id === target.id)
+    const parent = store.data.message.child?.find((item) => item.id === outside.id)
+    expect(page?.role === "user" ? page.summary?.diffs[0]?.patch : undefined).toBe("PAGE-B")
+    expect(parent?.role === "user" ? parent.summary?.diffs[0]?.patch : undefined).toBe("PARENT-C")
+    expect(client.rootRequests).toHaveLength(2)
+  })
+
+  test("retires a parent's pre-request buffered diff in favor of its first fetch", async () => {
+    const target = userMessage("message-1")
+    const outside = userMessage("message-0", {
+      time: { created: 0 },
+      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PARENT-C" }] },
+    })
+    const assistant = assistantMessage("message-2", outside.id)
+    const page = deferredResponse()
+    const client = rootMessageClient([page.promise], [singleResponse(outside)])
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: target.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PAGE-B" }],
+      },
+    })
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: outside.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PARENT-B" }],
+      },
+    })
+    page.resolve(response([{ info: target, parts: [] }, { info: assistant, parts: [] }], "older"))
+    await loading
+
+    const parent = store.data.message.child?.find((item) => item.id === outside.id)
+    const pageUser = store.data.message.child?.find((item) => item.id === target.id)
+    expect(parent?.role === "user" ? parent.summary?.diffs[0]?.patch : undefined).toBe("PARENT-C")
+    expect(pageUser?.role === "user" ? pageUser.summary?.diffs[0]?.patch : undefined).toBe("PAGE-B")
+    expect(client.rootRequests).toHaveLength(1)
+  })
+
+  test("preserves a diff delivered during a parent request over its older response", async () => {
+    const parent = userMessage("message-0", {
+      time: { created: 0 },
+      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PARENT-A" }] },
+    })
+    const assistant = assistantMessage("message-2", parent.id)
+    const page = deferredResponse()
+    const parentResponse = Promise.withResolvers<SingleMessageResponse>()
+    const client = rootMessageClient([page.promise], [parentResponse.promise])
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+    page.resolve(response([{ info: assistant, parts: [] }], "older"))
+    await client.rootRequested(1)
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: parent.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "DURING-B" }],
+      },
+    })
+    parentResponse.resolve(singleResponse(parent))
+    await loading
+
+    const result = store.data.message.child?.find((item) => item.id === parent.id)
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("DURING-B")
+  })
+
+  test("retires only the fetched parent's pre-request buffer and preserves siblings", async () => {
+    const target = userMessage("message-1")
+    const p1 = userMessage("message-p1", { time: { created: 0 } })
+    const p2 = userMessage("message-p2", { time: { created: 0 } })
+    const a1 = assistantMessage("message-2", p1.id)
+    const a2 = assistantMessage("message-3", p2.id)
+    const page = deferredResponse()
+    const client = rootMessageClient(
+      [page.promise],
+      [
+        singleResponse({
+          ...p1,
+          summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "P1-C" }] },
+        }),
+        singleResponse({
+          ...p2,
+          summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "P2-C" }] },
+        }),
+      ],
+    )
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+    for (const [id, patch] of [
+      [target.id, "PAGE-B"],
+      [p1.id, "P1-B"],
+      [p2.id, "P2-B"],
+    ] as const) {
+      store.apply({
+        type: "message.diff.updated",
+        properties: {
+          sessionID: "child",
+          messageID: id,
+          diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch }],
+        },
+      })
+    }
+    page.resolve(response([{ info: target, parts: [] }, { info: a1, parts: [] }, { info: a2, parts: [] }], "older"))
+    await loading
+
+    const patchOf = (id: string) => {
+      const message = store.data.message.child?.find((item) => item.id === id)
+      return message?.role === "user" ? message.summary?.diffs[0]?.patch : undefined
+    }
+    expect(patchOf(p1.id)).toBe("P1-C")
+    expect(patchOf(p2.id)).toBe("P2-C")
+    expect(patchOf(target.id)).toBe("PAGE-B")
+  })
+
+  test("an obsolete parent retry cannot clear a replacement load's buffered diff", async () => {
+    const user = userMessage("message-1")
+    const assistant = assistantMessage("message-2", user.id)
+    const failed = Promise.withResolvers<SingleMessageResponse>()
+    const replacement = deferredResponse()
+    const client = rootMessageClient(
+      [response([{ info: assistant, parts: [] }], "older"), replacement.promise],
+      [failed.promise, singleResponse(user)],
+    )
+    const store = createServerSession(client, { retry: retryImmediately })
+    const obsolete = store.sync("child")
+    await client.rootRequested(1)
+
+    store.apply({ type: "session.deleted", properties: { sessionID: "child", info: session("child", "root") } })
+    const current = store.sync("child")
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "ACTIVE-B" }],
+      },
+    })
+
+    failed.reject(new Error("retry"))
+    await client.rootRequested(2)
+    replacement.resolve(response([{ info: user, parts: [] }]))
+    await current
+    await Bun.sleep(0)
+
+    const result = store.data.message.child?.find((item) => item.id === user.id)
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("ACTIVE-B")
+    void obsolete.catch(() => {})
   })
 
   test("preserves unrelated message events across a failed parent retry", async () => {

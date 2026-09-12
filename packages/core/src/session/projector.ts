@@ -12,7 +12,7 @@ import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
-import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
+import { MessageDiffTable, MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -74,9 +74,7 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
   }
 }
 
-function messageData(
-  info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"],
-): typeof MessageTable.$inferInsert.data {
+function messageData(info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"]): typeof MessageTable.$inferInsert.data {
   const { id: _, sessionID: __, ...rest } = info
   return rest as DeepMutable<typeof rest>
 }
@@ -257,7 +255,7 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionV1.Event.Deleted, (event) =>
       db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
     )
-    yield* events.project(SessionV1.Event.MessageUpdated, (event) =>
+    const projectMessage = (event: { data: { info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"] } }) =>
       Effect.gen(function* () {
         const time_created = event.data.info.time.created
         const id = event.data.info.id
@@ -267,6 +265,53 @@ const layer = Layer.effectDiscard(
           .insert(MessageTable)
           .values({ id, session_id: sessionID, time_created, data })
           .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
+          .run()
+          .pipe(Effect.orDie)
+        if (event.data.info.role !== "user") return
+        const diffs = event.data.info.summary?.diffs
+        if (!diffs) {
+          // A complete V1 user replacement with no diff array retires the obsolete dedicated row so
+          // hydration cannot resurrect a diff the replacement removed.
+          yield* db
+            .delete(MessageDiffTable)
+            .where(eq(MessageDiffTable.message_id, id))
+            .run()
+            .pipe(Effect.orDie)
+          return
+        }
+        yield* db
+          .insert(MessageDiffTable)
+          .values({ message_id: id, session_id: sessionID, diffs: diffs.map((item) => ({ ...item })) })
+          .onConflictDoUpdate({
+            target: MessageDiffTable.message_id,
+            set: { diffs: diffs.map((item) => ({ ...item })) },
+          })
+          .run()
+          .pipe(Effect.orDie)
+      })
+    yield* events.project(SessionV1.Event.MessageUpdated, projectMessage)
+    yield* events.project(SessionV1.Event.MessageDiffUpdated, (event) =>
+      Effect.gen(function* () {
+        // A diff can outlive its parent when removal races the summarize producer. The foreign key
+        // would otherwise abort the whole projector transaction, so an absent parent is a no-op.
+        const parent = yield* db
+          .select({ id: MessageTable.id })
+          .from(MessageTable)
+          .where(eq(MessageTable.id, event.data.messageID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!parent) return
+        yield* db
+          .insert(MessageDiffTable)
+          .values({
+            message_id: event.data.messageID,
+            session_id: event.data.sessionID,
+            diffs: event.data.diffs.map((item) => ({ ...item })),
+          })
+          .onConflictDoUpdate({
+            target: MessageDiffTable.message_id,
+            set: { diffs: event.data.diffs.map((item) => ({ ...item })) },
+          })
           .run()
           .pipe(Effect.orDie)
       }),
@@ -283,6 +328,7 @@ const layer = Layer.effectDiscard(
           const previous = usage(row.data)
           if (previous) yield* applyUsage(db, event.data.sessionID, previous, -1)
         }
+        // message_diff is removed by the message FK cascade below.
         yield* db
           .delete(MessageTable)
           .where(and(eq(MessageTable.id, event.data.messageID), eq(MessageTable.session_id, event.data.sessionID)))
