@@ -410,3 +410,50 @@ test("missing external input schemas fall back to an empty schema", () => {
     inputSchema: {},
   })
 })
+
+test("decodes tool input through the schema's own instance when the host decoder cannot interpret it", async () => {
+  const schema = Schema.Struct({ value: Schema.String })
+  // Simulate an effect-version drift: a plugin bundles a different effect version than the
+  // server. The host `isSchema` check still passes (the `~effect/Schema/Schema` TypeId string
+  // is stable across versions) but the host decoder cannot interpret the foreign AST and
+  // rejects even valid inputs with a generic error. The schema's own constructor stays
+  // consistent with the schema, so the runtime falls back to it.
+  const drifted = Object.assign(Object.create(Object.getPrototypeOf(schema)) as typeof schema, {
+    ...schema,
+    ast: Schema.String.ast,
+  })
+  const tool: Info = {
+    name: "drifted",
+    description: "Drifted",
+    input: drifted,
+    execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
+  }
+
+  // Valid input: the host decode fails on the drifted AST, the schema's own instance accepts.
+  const settled = await Effect.runPromiseExit(execute(tool, { value: "ok" }, {} as Tool.Context))
+  expect(settled._tag).toBe("Success")
+  if (settled._tag === "Success") {
+    expect(settled.value.content).toEqual([{ type: "text", text: '{"value":"ok"}' }])
+  }
+
+  // Invalid input: the fallback also rejects, surfacing a Tool.Error instead of accepting.
+  const rejected = await Effect.runPromiseExit(execute(tool, { value: 123 }, {} as Tool.Context))
+  expect(rejected._tag).toBe("Failure")
+  if (rejected._tag === "Failure") {
+    expect(rejected.cause.toString()).toContain("Invalid arguments for tool")
+  }
+
+  // The same-host schema keeps its prior behavior: valid input decodes, invalid input fails.
+  const normal: Info = {
+    name: "normal",
+    description: "Normal",
+    input: schema,
+    execute: (input) => Effect.succeed({ content: JSON.stringify(input) }),
+  }
+  expect(await Effect.runPromise(execute(normal, { value: "ok" }, {} as Tool.Context))).toEqual({
+    output: undefined,
+    content: [{ type: "text", text: '{"value":"ok"}' }],
+  })
+  const normalRejected = await Effect.runPromiseExit(execute(normal, { value: 123 }, {} as Tool.Context))
+  expect(normalRejected._tag).toBe("Failure")
+})
