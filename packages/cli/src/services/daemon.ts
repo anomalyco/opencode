@@ -119,6 +119,7 @@ export const layer = Layer.effect(
         return yield* Effect.fail(new Error("Failed to resolve CLI entrypoint"))
 
       const args = [...(entrypoint ? [entrypoint] : []), "serve", "--register"]
+      const direct = [process.execPath, ...args]
 
       // `detached` frees the serve from the client's lifetime but not its
       // cgroup: a client under memory/pids limits still starves the shared
@@ -129,38 +130,41 @@ export const layer = Layer.effect(
       const runtime = process.env.XDG_RUNTIME_DIR
       const scoped =
         process.platform === "linux" &&
-        runtime !== undefined &&
+        !!runtime &&
         Bun.which("systemd-run") !== null &&
         (yield* fs.exists(path.join(runtime, "bus")))
-      const command = scoped
-        ? [
-            "systemd-run",
-            "--user",
-            "--scope",
-            "--quiet",
-            "--collect",
-            "--description=opencode serve",
-            "--",
-            process.execPath,
-            ...args,
-          ]
-        : [process.execPath, ...args]
 
-      yield* Effect.try({
-        try: () => {
-          spawn(command[0], command.slice(1), {
-            detached: true,
-            stdio: "ignore",
-          }).unref()
-        },
-        catch: (cause) => new Error("Failed to start server", { cause }),
-      })
+      // Spawn detached, then wait for a healthy registration. A scoped spawn
+      // can still fail at exec — a stale or forwarded bus socket passes the
+      // gate while the user manager rejects the scope — and `detached` hides
+      // the exit, so fall back to the direct spawn after the retry budget.
+      const startWith = (command: string[]) =>
+        Effect.try({
+          try: () => {
+            spawn(command[0], command.slice(1), { detached: true, stdio: "ignore" }).unref()
+          },
+          catch: (cause) => new Error("Failed to start server", { cause }),
+        }).pipe(
+          Effect.andThen(
+            compatible().pipe(
+              Effect.retry(Schedule.spaced("50 millis").pipe(Schedule.both(Schedule.recurs(100)))),
+              Effect.map((info) => info.url),
+            ),
+          ),
+          Effect.mapError(() => new Error("Failed to start server")),
+        )
 
-      return yield* compatible().pipe(
-        Effect.retry(Schedule.spaced("50 millis").pipe(Schedule.both(Schedule.recurs(100)))),
-        Effect.map((info) => info.url),
-        Effect.mapError(() => new Error("Failed to start server")),
-      )
+      const scopedCommand = [
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        "--description=opencode serve",
+        "--",
+        ...direct,
+      ]
+      return yield* scoped ? startWith(scopedCommand).pipe(Effect.catch(() => startWith(direct))) : startWith(direct)
     })
 
     const transport = Effect.fn("cli.daemon.transport")(function* () {
