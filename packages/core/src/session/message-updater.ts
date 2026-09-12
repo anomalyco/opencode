@@ -207,6 +207,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 draft.rawFinish = undefined
                 draft.providerState = undefined
                 draft.time.streamed = undefined
+                draft.time.requestDurationMs = undefined
                 draft.time.completed = undefined
                 if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, start: event.data.snapshot }
               }),
@@ -248,6 +249,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           draft.providerState = castDraft(event.data.providerState)
           draft.cost = event.data.cost
           draft.tokens = event.data.tokens
+          draft.time.requestDurationMs = event.data.requestDurationMs
           projectTerminalSnapshot(draft, event)
         })
       },
