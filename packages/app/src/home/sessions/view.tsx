@@ -44,7 +44,7 @@ function isBackgroundOpen(event: MouseEvent) {
 
 export type HomeSessionsViewProps = {
   language: ReturnType<typeof useLanguage>
-  groups: HomeSessionGroup[]
+  groups?: HomeSessionGroup[]
   loading: boolean
   showProjectName: boolean
   server: ServerConnection.Key
@@ -91,6 +91,9 @@ type HomeSessionRowUI = {
 
 export function HomeSessionsView(props: HomeSessionsViewProps) {
   const [rowUI, setRowUI] = createStore<HomeSessionRowUI>({ menu: undefined, editor: undefined })
+  // Session data arrives async, so groups can be missing on slow or cold
+  // clients. Fall back to empty and let the view show its empty state.
+  const list = () => props.groups ?? []
   return (
     <section
       ref={props.onSetHoverTarget}
@@ -102,7 +105,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
         onWheel={props.onWheel}
       >
         <HomeSessionSearch {...props} />
-        <Show when={props.groups.length > 0 && props.canCreateSession}>
+        <Show when={list().length > 0 && props.canCreateSession}>
           <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
             <Button
               data-action="home-new-session"
@@ -134,7 +137,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           }
         >
           <Show
-            when={props.groups.length > 0}
+            when={list().length > 0}
             fallback={
               <HomeSessionsEmpty
                 onNewSession={props.canCreateSession ? props.onCreateSession : undefined}
@@ -145,7 +148,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
             <div ref={props.onSetContent} class="flex flex-col pt-1 pr-3 pb-16 md:pt-3">
               {/* Index keeps group subtrees mounted when the group arrays are
                   rebuilt, so store updates cannot recreate rows mid-gesture. */}
-              <Index each={props.groups}>
+              <Index each={list}>
                 {(group, index) => (
                   <>
                     <HomeSessionGroupHeader
@@ -155,7 +158,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                       elevated={index === 0}
                     />
                     <div
-                      class={`flex min-w-0 flex-col gap-px pt-2 md:pt-4 ${index === props.groups.length - 1 ? "" : "mb-6"}`}
+                      class={`flex min-w-0 flex-col gap-px pt-2 md:pt-4 ${index === list().length - 1 ? "" : "mb-6"}`}
                     >
                       {/* Rows key by session ID: session.sync replaces the
                           stored session object wholesale, so reference-keyed
