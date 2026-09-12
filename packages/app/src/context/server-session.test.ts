@@ -413,6 +413,60 @@ describe("server session", () => {
     expect(client.requests).toHaveLength(0)
   })
 
+  test("does not apply a late diff to a message re-added after removal", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const page = deferredResponse()
+    const client = messageClient(page.promise)
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    const loading = store.sync("root")
+    await client.requested(1)
+    store.apply({ type: "message.removed", properties: { sessionID: "root", messageID: user.id } })
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "REMOVED-PATCH" }],
+      },
+    })
+    store.optimistic.add({ sessionID: "root", message: user, parts: [] })
+    page.resolve(response())
+    await loading
+
+    const result = store.data.message.root?.[0]
+    expect(result?.id).toBe(user.id)
+    expect(result?.role === "user" ? result.summary?.diffs?.[0]?.patch : undefined).toBeUndefined()
+  })
+
+  test("retires a buffered diff when its message is removed and re-added", async () => {
+    const user = userMessage("message-1", { sessionID: "root" })
+    const page = deferredResponse()
+    const client = messageClient(page.promise)
+    const store = createServerSession(client)
+    store.remember(session("root"))
+
+    const loading = store.sync("root")
+    await client.requested(1)
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "root",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "OLD-PATCH" }],
+      },
+    })
+    store.apply({ type: "message.removed", properties: { sessionID: "root", messageID: user.id } })
+    store.optimistic.add({ sessionID: "root", message: user, parts: [] })
+    page.resolve(response())
+    await loading
+
+    const result = store.data.message.root?.[0]
+    expect(result?.id).toBe(user.id)
+    expect(result?.role === "user" ? result.summary?.diffs?.[0]?.patch : undefined).toBeUndefined()
+  })
+
   test("ignores an uncached diff when no message load is active", async () => {
     const user = userMessage("message-1", {
       sessionID: "root",
@@ -654,6 +708,40 @@ describe("server session", () => {
 
     const result = store.data.message.root?.[0]
     expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("APP-LIVE-B")
+  })
+
+  test("rejects a sync whose session info fails", async () => {
+    const page = deferredResponse()
+    const info = Promise.withResolvers<{ data: Session }>()
+    const client = messageClient(page.promise)
+    client.session.get = (() => info.promise) as unknown as typeof client.session.get
+    const store = createServerSession(client)
+    const initial = store.sync("root").then(
+      () => "resolved",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    )
+    await client.requested(1)
+
+    info.reject(new Error("info failure"))
+    await Bun.sleep(0)
+    page.resolve(response())
+
+    expect(await initial).toBe("info failure")
+  })
+
+  test("rejects a sync whose initial message page fails", async () => {
+    const page = deferredResponse()
+    const client = messageClient(page.promise)
+    const store = createServerSession(client)
+    const initial = store.sync("root").then(
+      () => "resolved",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    )
+    await client.requested(1)
+
+    page.reject(new Error("page failure"))
+
+    expect(await initial).toBe("page failure")
   })
 
   test("keeps a buffered page diff when an unrelated parent backfill starts", async () => {
