@@ -193,6 +193,10 @@ const layer = Layer.effect(
         )
         yield* watch(Session.Event.MessageDiffUpdated, (data) =>
           Effect.gen(function* () {
+            // The publish path runs listeners inline, so avoid the hydrated list read
+            // unless this session is actually being shared.
+            const share = yield* getCached(data.sessionID)
+            if (!share) return
             const info = (yield* session.messages({ sessionID: data.sessionID })).find(
               (item) => item.info.id === data.messageID,
             )?.info
