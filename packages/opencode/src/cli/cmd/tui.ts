@@ -164,6 +164,7 @@ export const TuiThreadCommand = cmd({
         directory: resolveThreadDirectory(args.project),
         continue: args.continue,
         session: args.session,
+        sessionList: (hasArg("--session") || hasArg("-s")) && !args.session,
         fork: args.fork,
         model: args.model,
         agent: args.agent,
@@ -287,6 +288,7 @@ export const TuiThreadCommand = cmd({
             args: {
               continue: args.continue,
               sessionID: args.session,
+              sessionList: (hasArg("--session") || hasArg("-s")) && !args.session,
               agent: args.agent,
               model: args.model,
               prompt,

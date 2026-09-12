@@ -970,6 +970,7 @@ type MiniCommandInput = {
   username?: string
   continue?: boolean
   session?: string
+  sessionList?: boolean
   fork?: boolean
   model?: string
   agent?: string
@@ -988,6 +989,7 @@ export async function runMini(input: MiniCommandInput) {
     command: undefined,
     continue: input.continue,
     session: input.session,
+    sessionList: input.sessionList,
     fork: input.fork,
     share: undefined,
     model: input.model,
