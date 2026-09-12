@@ -87,7 +87,6 @@ function legacyMessageSource(items: { info: Message; parts: Part[] }[]): Session
 // Most markers describe the current HTTP attempt; deltaParts persists non-durable stream state across retries.
 type MessageLoadState = {
   attempt: number
-  parentAttempts: Set<string>
   touchedMessages: Set<string>
   removedMessages: Set<string>
   retainedMessages: Set<string>
@@ -440,12 +439,12 @@ export function createServerSession(
     if (load.attempt > 1 && messageLoads.get(sessionID) === load) pendingDiffs.delete(sessionID)
   }
 
-  // A parent retry re-reads the durable diff, so its response supersedes a buffer captured by the
-  // earlier attempt. Only that parent's buffer is retired; page and sibling-parent buffers survive.
+  // Every parent HTTP read is a fresh authoritative snapshot for that identity, so a diff buffered
+  // before the request started is superseded whether this is the first attempt or a retry. Only that
+  // parent's buffer is retired; page and sibling-parent buffers survive, and an obsolete load must
+  // never mutate the replacement session's buffer.
   const beginParentAttempt = (sessionID: string, load: MessageLoadState, messageID: string) => {
-    const superseded = load.parentAttempts.has(messageID)
-    load.parentAttempts.add(messageID)
-    if (superseded && messageLoads.get(sessionID) === load) retirePendingDiff(sessionID, messageID)
+    if (messageLoads.get(sessionID) === load) retirePendingDiff(sessionID, messageID)
   }
 
   const resetMessageLoad = (sessionID: string, load: MessageLoadState, baseline?: MessageLoadBaseline) => {
@@ -773,7 +772,6 @@ export function createServerSession(
     const active = generation(sessionID)
     const load: MessageLoadState = {
       attempt: 0,
-      parentAttempts: new Set(),
       touchedMessages: new Set(),
       removedMessages: new Set(),
       retainedMessages: new Set(),

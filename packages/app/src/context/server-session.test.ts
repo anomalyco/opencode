@@ -1102,6 +1102,79 @@ describe("server session", () => {
     expect(client.rootRequests).toHaveLength(2)
   })
 
+  test("retires a parent's pre-request buffered diff in favor of its first fetch", async () => {
+    const target = userMessage("message-1")
+    const outside = userMessage("message-0", {
+      time: { created: 0 },
+      summary: { diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PARENT-C" }] },
+    })
+    const assistant = assistantMessage("message-2", outside.id)
+    const page = deferredResponse()
+    const client = rootMessageClient([page.promise], [singleResponse(outside)])
+    const store = createServerSession(client)
+    const loading = store.sync("child")
+
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: target.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PAGE-B" }],
+      },
+    })
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: outside.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "PARENT-B" }],
+      },
+    })
+    page.resolve(response([{ info: target, parts: [] }, { info: assistant, parts: [] }], "older"))
+    await loading
+
+    const parent = store.data.message.child?.find((item) => item.id === outside.id)
+    const pageUser = store.data.message.child?.find((item) => item.id === target.id)
+    expect(parent?.role === "user" ? parent.summary?.diffs[0]?.patch : undefined).toBe("PARENT-C")
+    expect(pageUser?.role === "user" ? pageUser.summary?.diffs[0]?.patch : undefined).toBe("PAGE-B")
+    expect(client.rootRequests).toHaveLength(1)
+  })
+
+  test("an obsolete parent retry cannot clear a replacement load's buffered diff", async () => {
+    const user = userMessage("message-1")
+    const assistant = assistantMessage("message-2", user.id)
+    const failed = Promise.withResolvers<SingleMessageResponse>()
+    const replacement = deferredResponse()
+    const client = rootMessageClient(
+      [response([{ info: assistant, parts: [] }], "older"), replacement.promise],
+      [failed.promise, singleResponse(user)],
+    )
+    const store = createServerSession(client, { retry: retryImmediately })
+    const obsolete = store.sync("child")
+    await client.rootRequested(1)
+
+    store.apply({ type: "session.deleted", properties: { sessionID: "child", info: session("child", "root") } })
+    const current = store.sync("child")
+    store.apply({
+      type: "message.diff.updated",
+      properties: {
+        sessionID: "child",
+        messageID: user.id,
+        diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified", patch: "ACTIVE-B" }],
+      },
+    })
+
+    failed.reject(new Error("retry"))
+    await client.rootRequested(2)
+    replacement.resolve(response([{ info: user, parts: [] }]))
+    await current
+    await Bun.sleep(0)
+
+    const result = store.data.message.child?.find((item) => item.id === user.id)
+    expect(result?.role === "user" ? result.summary?.diffs[0]?.patch : undefined).toBe("ACTIVE-B")
+    void obsolete.catch(() => {})
+  })
+
   test("preserves unrelated message events across a failed parent retry", async () => {
     const failed = deferredResponse()
     const user = userMessage("message-1")
