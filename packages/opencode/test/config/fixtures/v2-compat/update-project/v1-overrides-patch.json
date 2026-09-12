@@ -1,0 +1,6 @@
+{
+  "snapshot": false,
+  "agent": { "reviewer": { "disable": true } },
+  "mcp": { "modern": { "enabled": false } },
+  "shell": ""
+}

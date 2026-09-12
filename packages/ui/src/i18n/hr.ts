@@ -71,7 +71,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "Dodaj kredite",
   "dialog.usageExceeded.freeTier.title": "Dosegnuto je besplatno ograničenje",
   "dialog.usageExceeded.freeTier.description":
-    "Pretplatite se na OpenCode Go za pouzdan pristup najboljim modelima otvorenog koda, počevši od 5 USD mjesečno.",
+    "Pretplatite se na OpenCode Go za 10 USD mjesečno i ostvarite pouzdan pristup najboljim modelima otvorenog koda.",
   "dialog.usageExceeded.freeTier.actionLabel": "Pretplatite se",
   "dialog.usageExceeded.accountRateLimit.title": "Dosegnuto je ograničenje usluge Go",
   "dialog.usageExceeded.accountRateLimit.description":

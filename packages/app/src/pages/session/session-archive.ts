@@ -2,6 +2,7 @@ import { useNavigate } from "@solidjs/router"
 import { produce } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { useTabs } from "@/context/tabs"
 import { errorMessage } from "@/pages/layout/helpers"
@@ -14,6 +15,7 @@ export function useSessionArchive() {
   const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
+  const serverSync = useServerSync()
   const tabs = useTabs()
   const { params } = useSessionKey()
 
@@ -51,6 +53,7 @@ export function useSessionArchive() {
             if (index !== -1) draft.session.splice(index, 1)
           }),
         )
+        serverSync().homeSessions.remove(sessionID)
       })
       .catch((err) => {
         showToast({
