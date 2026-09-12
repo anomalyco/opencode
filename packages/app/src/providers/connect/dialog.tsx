@@ -394,7 +394,7 @@ function ProviderConnection(props: {
         if (consoleMethod()) return
       }
       dialog.close()
-      surface.open("providers")
+      surface.openServer(ServerConnection.key(sdk.server), "providers")
       showToast({
         variant: "success",
         icon: "circle-check",
@@ -1045,7 +1045,7 @@ function ProviderConnection(props: {
             icon="outline-sliders"
             onClick={() => {
               dialog.close()
-              surface.open("models")
+              surface.openServer(ServerConnection.key(sdk.server), "models")
             }}
           >
             {language.t("dialog.model.manage")}

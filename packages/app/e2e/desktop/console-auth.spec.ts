@@ -26,7 +26,7 @@ const model = {
   status: "active",
   capabilities: { tools: true, input: ["text"], output: ["text"] },
   variants: [],
-  cost: [],
+  cost: [{ input: 1, output: 2, cache: { read: 0, write: 0 } }],
   time: { released: 1700000000000 },
   limit: { context: 200000, output: 32000 },
 }
@@ -59,6 +59,7 @@ async function fixture(
     slowStart?: Promise<void>
     existingConnection?: boolean
     singleProvider?: boolean
+    multipleServers?: boolean
   } = {},
 ) {
   const state = {
@@ -172,6 +173,7 @@ async function fixture(
   const params = new URLSearchParams()
   if (server) params.set("server", server)
   if (options.browserFailed) params.set("browserFailed", "1")
+  if (options.multipleServers) params.set("multipleServers", "1")
   await page.goto(`/e2e/desktop/index.html?${params}`)
   const dialog = page.locator('[data-component="dialog-v2"]').getByRole("dialog")
   if (options.draft) {
@@ -186,6 +188,7 @@ async function fixture(
     return { state, dialog }
   }
   await page.getByRole("button", { name: "Settings", exact: true }).click()
+  if (options.multipleServers) await page.getByRole("tab", { name: "Production server", exact: true }).click()
   await page.getByRole("tab", { name: "Providers", exact: true }).click()
   // Use the picker so this also exercises the existing Settings entry point.
   await page.getByRole("button", { name: "Show more providers", exact: true }).click()
@@ -314,6 +317,45 @@ test("Manage models opens the Models settings page", async ({ page }) => {
   await expect(dialog).toBeHidden()
   await expect(page.getByRole("tab", { name: "Models", exact: true })).toHaveAttribute("aria-selected", "true")
 })
+
+test("Manage models keeps the connected server in multi-server settings", async ({ page }) => {
+  const { state, dialog } = await fixture(page, true, { multipleServers: true })
+  await dialog.getByRole("button", { name: "Continue with OpenCode Console" }).click()
+  await expect(dialog.getByRole("group", { name: "Device code: TFXS-STXG" })).toBeVisible()
+  state.status = "complete"
+  await expect(dialog.getByRole("heading", { name: "Connected to OpenCode" })).toBeVisible()
+  await dialog.getByRole("button", { name: "Manage models", exact: true }).click()
+  await expect(dialog).toBeHidden()
+  const settings = page.getByTestId("settings-screen")
+  await expect(settings.getByRole("tab", { name: "Production server", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "Models", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(settings.getByRole("switch", { name: "Console Gemini", exact: true })).toBeEnabled()
+})
+
+for (const multipleServers of [false, true]) {
+  test(`Console provider links reveal their models with ${multipleServers ? "multiple servers" : "one server"}`, async ({
+    page,
+  }) => {
+    const { state, dialog } = await fixture(page, multipleServers, { existingConnection: true, multipleServers })
+    await dialog.getByRole("button", { name: "Continue with OpenCode Console" }).click()
+    await expect(dialog.getByRole("group", { name: "Device code: TFXS-STXG" })).toBeVisible()
+    state.status = "complete"
+    await expect(dialog).toBeHidden()
+    const settings = page.getByTestId("settings-screen")
+    await expect(settings.getByRole("tab", { name: "Providers", exact: true })).toHaveAttribute("aria-selected", "true")
+    await settings.locator(".settings-provider-console-toggle").click()
+    await settings.getByRole("button", { name: "Google", exact: true }).click()
+    await expect(settings.getByRole("tab", { name: "Models", exact: true })).toHaveAttribute("aria-selected", "true")
+    const google = settings.getByRole("button", { name: "Anomaly / Google", exact: true })
+    await expect(google).toHaveAttribute("aria-expanded", "true")
+    await expect(google).toBeFocused()
+    await expect(settings.getByRole("switch", { name: "Console Gemini", exact: true })).toBeEnabled()
+    await expect(settings.getByRole("button", { name: "Anomaly / OpenCode", exact: true })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    )
+  })
+}
 
 test("a single connected provider has a non-collapsible heading", async ({ page }) => {
   const { state, dialog } = await fixture(page, false, { singleProvider: true })

@@ -9,9 +9,14 @@ import { ServerConnection } from "@/runtime/server/registry"
 // an HTTP fixture. No Electron service or account credentials are touched.
 const params = new URLSearchParams(window.location.search)
 const remote = params.get("server")
+const local: ServerConnection.Any = {
+  type: "sidecar",
+  variant: "base",
+  http: { url: "http://127.0.0.1:4096" },
+}
 const server: ServerConnection.Any = remote
   ? { type: "http", displayName: "Production server", http: { url: remote } }
-  : { type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } }
+  : local
 const root = document.getElementById("root")
 if (!root) throw new Error("Missing fixture root")
 render(
@@ -38,7 +43,11 @@ render(
       }}
     >
       <AppBaseProviders locale="en">
-        <AppInterface servers={[server]} defaultServer={ServerConnection.key(server)} router={MemoryRouter} />
+        <AppInterface
+          servers={params.has("multipleServers") ? [local, server] : [server]}
+          defaultServer={ServerConnection.key(server)}
+          router={MemoryRouter}
+        />
       </AppBaseProviders>
     </PlatformProvider>
   ),
