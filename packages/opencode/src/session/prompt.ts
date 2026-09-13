@@ -232,6 +232,37 @@ const layer = Layer.effect(
       return size
     })
 
+    // Ends the turn with a visible error: persists an assistant message
+    // carrying the error (so it renders inline in the timeline) and publishes
+    // the session error event, without spending an LLM request.
+    const failTurn = Effect.fn("SessionPrompt.failTurn")(function* (input: {
+      sessionID: SessionID
+      lastUser: SessionV1.User
+      model: Provider.Model
+      error: InstanceType<typeof SessionV1.ContextOverflowError>
+    }) {
+      const ctx = yield* InstanceState.context
+      const msg: SessionV1.Assistant = {
+        id: MessageID.ascending(),
+        parentID: input.lastUser.id,
+        role: "assistant",
+        mode: input.lastUser.agent,
+        agent: input.lastUser.agent,
+        variant: input.lastUser.model.variant,
+        path: { cwd: ctx.directory, root: ctx.worktree },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: input.model.id,
+        providerID: input.model.providerID,
+        time: { created: Date.now() },
+        sessionID: input.sessionID,
+        error: input.error.toObject(),
+        finish: "error",
+      }
+      yield* sessions.updateMessage(msg)
+      yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: input.error.toObject() })
+    })
+
     const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
       session: Session.Info
       history: SessionV1.WithParts[]
@@ -1220,7 +1251,7 @@ const layer = Layer.effect(
                   floor,
                   usable: budget,
                 })
-                yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+                yield* failTurn({ sessionID, lastUser, model, error })
                 break
               }
             }
@@ -1231,7 +1262,7 @@ const layer = Layer.effect(
                 "session.id": sessionID,
                 streak,
               })
-              yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+              yield* failTurn({ sessionID, lastUser, model, error })
               break
             }
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
