@@ -199,8 +199,10 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
         ? undefined
         : yield* Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, toolSchemaCompatibility)),
     tool_choice:
-      OpenResponses.allowedToolChoice(request) ??
-      (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined),
+      request.tools.length === 0
+        ? undefined
+        : (OpenResponses.allowedToolChoice(request) ??
+          (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined)),
   })
 })
 

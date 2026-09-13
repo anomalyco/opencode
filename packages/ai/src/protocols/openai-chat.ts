@@ -766,7 +766,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
               supportsStrictMode,
             ),
           ),
-    tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
+    tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     ...(supportsUsageInStreaming ? { stream_options: { include_usage: true } } : {}),
     ...(zaiToolStream && hasActiveTools ? { tool_stream: true } : {}),
