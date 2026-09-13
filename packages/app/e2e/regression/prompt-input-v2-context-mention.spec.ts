@@ -46,24 +46,28 @@ test("keeps existing mentions in place when the context menu opens", async ({ pa
   const input = composer.locator('[data-component="prompt-input"]')
   await expectAppVisible(composer)
 
+  // Mention chips are uneditable spans, so the editor pads them with zero-width
+  // spaces; strip them before asserting on the text.
+  const editorText = () =>
+    page.evaluate(
+      () => (document.querySelector('[data-component="prompt-input"]')?.textContent ?? "").replace(/\u200B/g, ""),
+    )
+
   // Build a draft with two mentions separated by text: "hi @src/index.ts and @src/index.ts"
   await input.click()
   await page.keyboard.type("hi ")
   await page.keyboard.type("@src")
   await page.locator('[data-suggestion-id="file:src/index.ts"]').click()
-  await page.waitForTimeout(100)
+  await expect.poll(editorText).toContain("@src/index.ts")
   await page.keyboard.type(" and ")
   await page.keyboard.type("@src")
   await page.locator('[data-suggestion-id="file:src/index.ts"]').click()
-  await page.waitForTimeout(100)
-
-  const editorText = () =>
-    page.evaluate(() => document.querySelector('[data-component="prompt-input"]')?.textContent ?? "")
+  await expect.poll(async () => (await editorText()).trimEnd().endsWith("@src/index.ts")).toBe(true)
 
   // Open the context menu via the plus button (this is the bug trigger).
   await composer.getByRole("button", { name: "Add images and files" }).click()
   await page.getByRole("menuitem", { name: "Context" }).click()
-  await page.waitForTimeout(100)
+  await expect.poll(editorText).toMatch(/@$/)
 
   const after = await editorText()
 
