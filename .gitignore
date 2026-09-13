@@ -32,3 +32,17 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Local SQLite runtime artifacts — narrow & anchored.
+# Verified 2026-09-13: zero *.db tracked; tracked routes/data are *.ts only, unaffected.
+/data/
+**/*.db-shm
+**/*.db-wal
+packages/knowledge-engine/knowledge.db
+data/knowledge.db
+**/*.sqlite-shm
+**/*.sqlite-wal
+# Intentionally NOT ignoring **/*.db / **/*.sqlite broadly: future fixtures
+# must be allow-listed explicitly instead of being silently hidden.
+# If a new runtime DB appears, add its explicit path above + re-run:
+#   git check-ignore -v <path>; git status --short
