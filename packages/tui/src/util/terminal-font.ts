@@ -126,14 +126,24 @@ export function splitFontFaces(face: string | undefined): string[] {
     .filter(Boolean)
 }
 
+// The chosen font is always kept (the dialog already warns when it is not
+// installed); the rest of the tail is limited to resolving families.
+export function availableFontFamilies(family: string, installed: string[]) {
+  return [
+    family,
+    ...RECOMMENDED_ARABIC_FONTS.filter((item) => item !== family && isFontInstalled(item, installed)),
+  ]
+}
+
 // Builds the fallback chain: the user's current faces first (never reordered),
-// then the chosen Arabic font plus the other recommended Arabic fonts.
-export function buildFontFaceChain(existingFace: string | undefined, family: string) {
+// then the given tail. Windows Terminal warns about every missing family in
+// the chain, so callers pass only resolving families in the tail.
+export function buildFontFaceChain(existingFace: string | undefined, tail: string[]) {
   const base = splitFontFaces(existingFace)
   if (base.length === 0) base.push(DEFAULT_WINDOWS_TERMINAL_FACE)
   const seen = new Set(base.map((name) => name.toLowerCase()))
   const out = [...base]
-  for (const name of [family, ...RECOMMENDED_ARABIC_FONTS.filter((item) => item !== family)]) {
+  for (const name of tail) {
     if (seen.has(name.toLowerCase())) continue
     seen.add(name.toLowerCase())
     out.push(name)
@@ -258,7 +268,8 @@ export function applyArabicFont(family: string): ApplyOutcome {
 }
 
 function applyWindowsTerminalFont(family: string): ApplyOutcome {
-  const face = buildFontFaceChain(readWindowsTerminalFont()?.face, family)
+  const tail = availableFontFamilies(family, installedFontFamilies())
+  const face = buildFontFaceChain(readWindowsTerminalFont()?.face, tail)
   const written = writeWindowsTerminalFont({ face })
   return {
     ok: true,
