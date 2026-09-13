@@ -8,11 +8,14 @@ import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
+import type { EventPermissionAsked, EventQuestionAsked, PermissionRequest } from "@opencode-ai/sdk/v2/client"
 import { Persist, persisted } from "@/utils/persist"
 import { playSoundById } from "@/utils/sound"
 import { useGlobal } from "./global"
+import { usePermission } from "./permission"
 import { ServerConnection, useServer } from "./server"
 import { type DraftTab, useTabs } from "./tabs"
 import { requireServerKey } from "@/utils/session-route"
@@ -122,6 +125,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const platform = usePlatform()
     const settings = useSettings()
     const language = useLanguage()
+    const permission = usePermission()
     const owner = getOwner()
     const states = new Map<ServerScope, { dispose: () => void; state: NotificationState }>()
 
@@ -155,6 +159,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             settings,
             language,
             navigate,
+            autoResponds: (request, directory) => permission.ensureServerState(key).autoResponds(request, directory),
           }),
         }),
         owner ?? undefined,
@@ -220,6 +225,7 @@ function createServerNotificationState(input: {
   settings: ReturnType<typeof useSettings>
   language: ReturnType<typeof useLanguage>
   navigate: (href: string) => void
+  autoResponds: (permission: PermissionRequest, directory?: string) => boolean
 }) {
   const serverSDK = () => input.sdk
   const serverSync = () => input.sync
@@ -396,9 +402,75 @@ function createServerNotificationState(input: {
     })
   }
 
+  const ALERT_COOLDOWN_MS = 5000
+  const alertedAt = new Map<string, number>()
+
+  const shouldAlert = (directory: string, sessionID: string | undefined, time: number) => {
+    const sessionKey = `${directory}:${sessionID ?? "global"}`
+    const last = alertedAt.get(sessionKey) ?? 0
+    if (time - last < ALERT_COOLDOWN_MS) return false
+    alertedAt.set(sessionKey, time)
+    return true
+  }
+
+  const notifyRequest = (
+    directory: string,
+    sessionID: string,
+    titleKey: "notification.permission.title" | "notification.question.title",
+    descriptionKey: "notification.permission.description" | "notification.question.description",
+  ) => {
+    void lookup(directory, sessionID).then((session) => {
+      if (meta.disposed) return
+      const href = `/${base64Encode(directory)}/session/${sessionID}`
+      void platform.notify(
+        language.t(titleKey),
+        language.t(descriptionKey, {
+          sessionTitle: session?.title ?? language.t("command.session.new"),
+          projectName: getFilename(directory),
+        }),
+        () => input.navigate(href),
+      )
+    })
+  }
+
+  const handlePermissionAsked = (directory: string, event: EventPermissionAsked, time: number) => {
+    if (meta.disposed) return
+    if (input.autoResponds(event.properties, directory)) return
+    if (!shouldAlert(directory, event.properties.sessionID, time)) return
+
+    if (settings.sounds.permissionsEnabled()) {
+      void playSoundById(settings.sounds.permissions())
+    }
+    if (!settings.notifications.permissions()) return
+    notifyRequest(
+      directory,
+      event.properties.sessionID,
+      "notification.permission.title",
+      "notification.permission.description",
+    )
+  }
+
+  const handleQuestionAsked = (directory: string, event: EventQuestionAsked, time: number) => {
+    if (meta.disposed) return
+    if (!shouldAlert(directory, event.properties.sessionID, time)) return
+    if (!settings.notifications.agent()) return
+    notifyRequest(
+      directory,
+      event.properties.sessionID,
+      "notification.question.title",
+      "notification.question.description",
+    )
+  }
+
   const unsub = serverSDK().event.listen((e) => {
     const event = e.details
-    if (event.type !== "session.idle" && event.type !== "session.error") return
+    if (
+      event.type !== "session.idle" &&
+      event.type !== "session.error" &&
+      event.type !== "permission.asked" &&
+      event.type !== "question.asked"
+    )
+      return
 
     const directory = e.name
     const time = Date.now()
@@ -406,7 +478,15 @@ function createServerNotificationState(input: {
       handleSessionIdle(directory, event, time)
       return
     }
-    handleSessionError(directory, event, time)
+    if (event.type === "session.error") {
+      handleSessionError(directory, event, time)
+      return
+    }
+    if (event.type === "permission.asked") {
+      handlePermissionAsked(directory, event, time)
+      return
+    }
+    handleQuestionAsked(directory, event, time)
   })
   onCleanup(() => {
     meta.disposed = true
