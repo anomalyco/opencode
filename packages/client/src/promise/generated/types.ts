@@ -1985,7 +1985,6 @@ export type ConfigEntry =
         tool_output?: { max_lines?: number; max_bytes?: number }
         mcp?: {
           timeout?: { startup?: number; catalog?: number; execution?: number }
-          protocol?: McpProtocol
           servers?: {
             [x: string]:
               | {

@@ -1362,7 +1362,6 @@ testEffect(Layer.empty).live(
           info: new Info({
             mcp: new ConfigMCP.Info({
               timeout: { startup: 10, catalog: 20, execution: 30 },
-              protocol: "auto",
               servers: {
                 resources: { type: "local", command: ["earlier"], disabled: true, timeout: { execution: 90 } },
                 pinned: { type: "local", command: ["pinned"], disabled: true, protocol: "2026-07-28" },
@@ -1391,7 +1390,6 @@ testEffect(Layer.empty).live(
             command: ["later"],
             disabled: true,
             timeout: { startup: 50, catalog: 40, execution: 30 },
-            protocol: "auto",
           })
           expect(editor.get("pinned")).toEqual({
             type: "local",

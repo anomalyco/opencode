@@ -271,13 +271,12 @@ Timeouts are positive integer milliseconds. Set defaults under `mcp.timeout`; a 
 
 ## Protocol version
 
-OpenCode opens every server with the classic MCP `initialize` handshake by default. Set `protocol` to talk to servers built on the 2026-07-28 revision:
+OpenCode opens every server with the classic MCP `initialize` handshake by default. Set a server's `protocol` to talk to one built on the 2026-07-28 revision:
 
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "protocol": "legacy",
     "servers": {
       "modern": {
         "type": "remote",
@@ -295,7 +294,7 @@ OpenCode opens every server with the classic MCP `initialize` handshake by defau
 | `auto` | Probes with `server/discover` for the 2026-07-28 revision and falls back to `legacy` when the server does not support it. |
 | `2026-07-28` | Requires the 2026-07-28 revision. The connection fails against older servers. |
 
-Set a default under `mcp.protocol`; a server's `protocol` field overrides it. Probing a local `legacy` server adds a short-lived extra process and can wait up to the startup timeout when the server ignores unknown requests, so keep `auto` scoped to servers that need it.
+Probing a local `legacy` server adds a short-lived extra process and can wait up to the startup timeout when the server ignores unknown requests, so keep `auto` scoped to servers that need it.
 
 ## Names
 
