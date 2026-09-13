@@ -50,6 +50,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   )
 
   const globalEnabled = options?.global !== false
+  const file = options?.file ?? process.env.OPENCODE_CONFIG
   const globalFiles = yield* Effect.forEach(names, (name) => fs.resolve(path.join(globalDirectory, name)))
   // Global sources must not re-enter through the project walk.
   const visible = discovered
@@ -62,7 +63,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
 
   return {
     global: globalEnabled ? globalDirectory : undefined,
-    explicit: options?.file ? AbsolutePath.make(path.resolve(options.file)) : undefined,
+    explicit: file ? AbsolutePath.make(path.resolve(file)) : undefined,
     direct: visible.filter((item) => ![".agents", ".claude", ".opencode"].includes(path.basename(item))).toReversed(),
     project: yield* Effect.forEach(
       visible.filter((item) => path.basename(item) === ".opencode").toReversed(),
