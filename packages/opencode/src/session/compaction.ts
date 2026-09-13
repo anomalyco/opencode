@@ -12,7 +12,7 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/storage"
 
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -22,22 +22,38 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { buildPrompt } from "@opencode-ai/core/session/compaction"
 import { SessionCompactionEvent } from "@opencode-ai/schema/session-compaction-event"
+import { LLM } from "./llm"
+import { LLMEvent } from "@opencode-ai/llm"
 
 export const Event = SessionCompactionEvent
 
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
+// Retained-tail budget ladder for repeated automatic compactions, indexed by
+// the number of consecutive failed attempts: full budget, half, nothing. Each
+// rung gives compaction a chance to restore headroom by keeping less recent
+// context verbatim before the loop guard below stops the session loop.
+const TAIL_ESCALATION = [1, 0.5, 0]
 // Auto-compaction loop guard. When a session's irreducible context (system
 // prompt, retained tail) exceeds the model's usable window, automatic
 // compaction can never get the session back under the overflow threshold, so
 // the session loop would otherwise compact after every single step forever,
-// burning provider quota. After this many consecutive failed compactions the
-// loop stops with an error instead.
-export const MAX_FAILED_AUTO_COMPACTIONS = 2
+// burning provider quota. After every escalation rung has failed the loop
+// stops with an error instead.
+export const MAX_FAILED_AUTO_COMPACTIONS = TAIL_ESCALATION.length
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 15_000
+// The summarization request itself must fit in the compaction model's window.
+// Oversized heads are summarized in chunks capped at this fraction of the
+// usable window, leaving comfortable room for the prompt template and the
+// model's answer even if the estimate undercounts.
+const CHUNK_REQUEST_FRACTION = 0.5
+// Merge rounds for re-summarizing partial summaries that still exceed the
+// chunk budget. Practically converges in one round; the cap guards against a
+// misbehaving compaction model returning unbounded text.
+const MAX_SUMMARY_ROUNDS = 4
 type Turn = {
   start: number
   end: number
@@ -119,11 +135,69 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
   })
 }
 
-function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
-  return (
+export function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model; escalation?: number }) {
+  const base =
     input.cfg.compaction?.preserve_recent_tokens ??
     Math.min(MAX_PRESERVE_RECENT_TOKENS, Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)))
-  )
+  const rung = TAIL_ESCALATION[Math.min(Math.max(input.escalation ?? 0, 0), TAIL_ESCALATION.length - 1)]!
+  return Math.floor(base * rung)
+}
+
+// Per-request budget for the compaction model. Zero or negative means the
+// model's limits are unknown, in which case no chunking is attempted.
+function chunkBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
+  return Math.floor(usable(input) * CHUNK_REQUEST_FRACTION)
+}
+
+const TRUNCATED = "\n[truncated]"
+
+// Serializes messages and packs them greedily into budget-sized chunks,
+// preserving order. A single message larger than the budget is hard-truncated
+// (tool outputs are already capped at TOOL_OUTPUT_MAX_CHARS, so this is a
+// last resort for giant text/reasoning parts). Returns [] for empty input.
+export function chunkSerialized(messages: SessionV1.WithParts[], budget: number) {
+  const chunks: string[] = []
+  let current: string[] = []
+  let size = 0
+  for (const message of messages) {
+    let text = serialize(message)
+    if (!text) continue
+    if (Token.estimate(text) > budget) {
+      text = `${text.slice(0, Math.max(0, budget * 4 - TRUNCATED.length))}${TRUNCATED}`
+    }
+    const next = Token.estimate(text)
+    if (current.length && size + next > budget) {
+      chunks.push(current.join("\n\n"))
+      current = []
+      size = 0
+    }
+    current.push(text)
+    size += next
+  }
+  if (current.length) chunks.push(current.join("\n\n"))
+  return chunks
+}
+
+// Packs texts into consecutive groups whose joined serialization prompt stays
+// under budget. A text that exceeds the budget alone gets its own group.
+function packByBudget(texts: string[], budget: number) {
+  const overhead = Token.estimate(buildPrompt({ context: [] }))
+  const limit = Math.max(1, budget - overhead)
+  const groups: string[][] = []
+  let current: string[] = []
+  let size = 0
+  for (const text of texts) {
+    const est = Token.estimate(text)
+    if (current.length && size + est > limit) {
+      groups.push(current)
+      current = []
+      size = 0
+    }
+    current.push(text)
+    size += est
+  }
+  if (current.length) groups.push(current)
+  return groups
 }
 
 // Counts the trailing run of automatic compactions that failed to restore
@@ -163,7 +237,7 @@ export function failedAutoCompactions(
 export function compactionStuckError(streak: number) {
   return new SessionV1.ContextOverflowError({
     message: [
-      `Session still exceeds the model's usable context window after ${streak} automatic compactions.`,
+      `Session still exceeds the model's usable context window after ${streak} automatic compactions with progressively smaller retained context.`,
       "Start a new session or switch to a model with a larger context window.",
     ].join(" "),
   })
@@ -250,6 +324,7 @@ const layer = Layer.effect(
     const provider = yield* Provider.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const llm = yield* LLM.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: SessionV1.Assistant["tokens"]
@@ -286,10 +361,11 @@ const layer = Layer.effect(
       messages: SessionV1.WithParts[]
       cfg: ConfigV1.Info
       model: Provider.Model
+      escalation?: number
     }) {
       const limit = input.cfg.compaction?.tail_turns
       if (limit !== undefined && limit <= 0) return { head: input.messages, tail_start_id: undefined }
-      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
+      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model, escalation: input.escalation })
       const all = turns(input.messages)
       if (!all.length) return { head: input.messages, tail_start_id: undefined }
       const recent = limit === undefined ? all : all.slice(-limit)
@@ -378,6 +454,97 @@ const layer = Layer.effect(
       }
     })
 
+    // Runs one ephemeral summarization request against the compaction model
+    // and returns the produced text. Chunk calls are not persisted to the
+    // session and their token usage is not tracked.
+    const summarizeText = Effect.fn("SessionCompaction.summarizeText")(function* (input: {
+      sessionID: SessionID
+      userMessage: SessionV1.User
+      agent: Agent.Info
+      model: Provider.Model
+      prompt: string
+    }) {
+      let text = ""
+      let failed: string | undefined
+      const streamError = yield* llm
+        .stream({
+          user: { ...input.userMessage, id: MessageID.ascending() },
+          sessionID: input.sessionID,
+          model: input.model,
+          agent: input.agent,
+          system: [],
+          messages: [{ role: "user", content: [{ type: "text", text: input.prompt }] }],
+          tools: {},
+        })
+        .pipe(
+          Stream.runForEach((event) =>
+            Effect.sync(() => {
+              if (LLMEvent.is.textDelta(event)) text += event.text
+              if (LLMEvent.is.providerError(event)) failed = event.message
+            }),
+          ),
+          Effect.as(undefined as string | undefined),
+          Effect.catch((error: unknown) => Effect.succeed(`summarization request failed: ${String(error)}`)),
+        )
+      const error = failed ?? streamError
+      if (error) return { ok: false as const, error }
+      if (!text.trim()) return { ok: false as const, error: "summarization request returned no text" }
+      return { ok: true as const, text }
+    })
+
+    // Reduces the serialized head to a conversation string whose summarization
+    // prompt fits the compaction model's chunk budget. Oversized heads are
+    // summarized chunk by chunk (map); partial summaries that still exceed the
+    // budget are packed and re-summarized (reduce). Fails when the reduction
+    // does not converge within MAX_SUMMARY_ROUNDS.
+    const reduceContexts = Effect.fn("SessionCompaction.reduceContexts")(function* (input: {
+      sessionID: SessionID
+      userMessage: SessionV1.User
+      agent: Agent.Info
+      model: Provider.Model
+      previousSummary: string | undefined
+      messages: SessionV1.WithParts[]
+      budget: number
+    }) {
+      if (input.budget <= 0)
+        return { ok: true as const, conversation: input.messages.map(serialize).filter(Boolean).join("\n\n") }
+      const chunks = chunkSerialized(input.messages, input.budget)
+      if (chunks.length <= 1) return { ok: true as const, conversation: chunks[0] ?? "" }
+      const partials: string[] = []
+      for (const chunk of chunks) {
+        const summarized = yield* summarizeText({
+          sessionID: input.sessionID,
+          userMessage: input.userMessage,
+          agent: input.agent,
+          model: input.model,
+          prompt: buildPrompt({ context: [chunk] }),
+        })
+        if (!summarized.ok) return summarized
+        partials.push(summarized.text)
+      }
+      let contexts = partials
+      for (let round = 0; ; round++) {
+        const prompt = buildPrompt({ previousSummary: input.previousSummary, context: contexts })
+        if (Token.estimate(prompt) <= input.budget) return { ok: true as const, conversation: contexts.join("\n\n") }
+        if (round >= MAX_SUMMARY_ROUNDS) {
+          return { ok: false as const, error: "conversation summaries did not fit the model's context window" }
+        }
+        const next: string[] = []
+        for (const group of packByBudget(contexts, input.budget)) {
+          const summarized = yield* summarizeText({
+            sessionID: input.sessionID,
+            userMessage: input.userMessage,
+            agent: input.agent,
+            model: input.model,
+            prompt: buildPrompt({ context: group }),
+          })
+          if (!summarized.ok) return summarized
+          next.push(summarized.text)
+        }
+        contexts = next
+      }
+    })
+
     const processCompaction = Effect.fn("SessionCompaction.process")(function* (input: {
       parentID: MessageID
       messages: SessionV1.WithParts[]
@@ -421,15 +588,25 @@ const layer = Layer.effect(
       const model = agent.model
         ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
+      const sessionModel = yield* provider
+        .getModel(userMessage.model.providerID, userMessage.model.modelID)
+        .pipe(Effect.orDie)
       const cfg = yield* config.get()
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
       const previousSummary = prior.at(-1)?.summary
+      // The retained tail lives in the session model's context, so its budget
+      // derives from the session model (not a possibly larger compaction
+      // model), shrinking on each consecutive failed auto-compaction.
+      const streak = failedAutoCompactions(history, (tokens) =>
+        overflow({ cfg, tokens, model: sessionModel, outputTokenMax: flags.outputTokenMax }),
+      )
       const selected = yield* select({
         messages: history.filter((_, index) => !hidden.has(index)),
         cfg,
-        model,
+        model: sessionModel,
+        escalation: streak,
       })
       // Allow plugins to inject context or replace compaction prompt.
       const compacting = yield* plugin.trigger(
@@ -439,7 +616,16 @@ const layer = Layer.effect(
       )
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-      const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
+      const reduced = yield* reduceContexts({
+        sessionID: input.sessionID,
+        userMessage,
+        agent,
+        model,
+        previousSummary,
+        messages: msgs,
+        budget: chunkBudget({ cfg, model }),
+      })
+      const conversation = reduced.ok ? reduced.conversation : ""
       const nextPrompt =
         compacting.prompt ??
         [
@@ -484,6 +670,14 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         model,
       })
+      if (!reduced.ok) {
+        processor.message.error = new SessionV1.ContextOverflowError({
+          message: `Session too large to compact - ${reduced.error}`,
+        }).toObject()
+        processor.message.finish = "error"
+        yield* session.updateMessage(processor.message)
+        return "stop"
+      }
       const result = yield* processor.process({
         user: userMessage,
         agent,
@@ -665,6 +859,7 @@ export const node = LayerNode.make({
     Provider.node,
     EventV2Bridge.node,
     RuntimeFlags.node,
+    LLM.node,
   ],
 })
 

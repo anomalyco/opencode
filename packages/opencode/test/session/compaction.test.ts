@@ -738,6 +738,272 @@ describe("session.compaction.failedAutoCompactions", () => {
   )
 })
 
+describe("session.compaction.chunkSerialized", () => {
+  const sid = SessionID.make("ses_chunkSerialized")
+  function userMsg(text: string): SessionV1.WithParts {
+    const id = MessageID.ascending()
+    return {
+      info: { id, role: "user", sessionID: sid, agent: "build", model: ref, time: { created: Date.now() } },
+      parts: [{ id: PartID.ascending(), messageID: id, sessionID: sid, type: "text", text }],
+    } as SessionV1.WithParts
+  }
+
+  test("packs messages greedily under the budget, preserving order", () => {
+    // each message serializes to "[User]: " + text (~250 tokens per 1000 chars)
+    const msgs = [userMsg("a".repeat(1000)), userMsg("b".repeat(1000)), userMsg("c".repeat(1000))]
+    const chunks = SessionCompaction.chunkSerialized(msgs, 600)
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0]).toContain("a".repeat(1000))
+    expect(chunks[0]).toContain("b".repeat(1000))
+    expect(chunks[0]).not.toContain("c".repeat(1000))
+    expect(chunks[1]).toContain("c".repeat(1000))
+    for (const chunk of chunks) expect(Token.estimate(chunk)).toBeLessThanOrEqual(600)
+  })
+
+  test("keeps everything in one chunk when it fits", () => {
+    const msgs = [userMsg("a".repeat(400)), userMsg("b".repeat(400))]
+    const chunks = SessionCompaction.chunkSerialized(msgs, 10_000)
+    expect(chunks).toHaveLength(1)
+  })
+
+  test("hard-truncates a single message larger than the budget", () => {
+    const chunks = SessionCompaction.chunkSerialized([userMsg("x".repeat(4000))], 500)
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]).toContain("[truncated]")
+    expect(Token.estimate(chunks[0])).toBeLessThanOrEqual(500)
+  })
+
+  test("returns [] when nothing serializes", () => {
+    const id = MessageID.ascending()
+    const empty = {
+      info: { id, role: "user", sessionID: sid, agent: "build", model: ref, time: { created: Date.now() } },
+      parts: [],
+    } as SessionV1.WithParts
+    expect(SessionCompaction.chunkSerialized([empty], 100)).toEqual([])
+  })
+})
+
+describe("session.compaction.preserveRecentBudget", () => {
+  const cfg = Schema.decodeUnknownSync(ConfigV1.Info)({}) as ConfigV1.Info
+  const model = createModel({ context: 100_000, output: 32_000 })
+  // usable = 100000 - 32000 = 68000 -> base = clamp(68000 * 0.25) = 15000
+
+  test("defaults to the full budget", () => {
+    expect(SessionCompaction.preserveRecentBudget({ cfg, model })).toBe(15_000)
+    expect(SessionCompaction.preserveRecentBudget({ cfg, model, escalation: 0 })).toBe(15_000)
+  })
+
+  test("escalation halves then drops the retained tail", () => {
+    expect(SessionCompaction.preserveRecentBudget({ cfg, model, escalation: 1 })).toBe(7_500)
+    expect(SessionCompaction.preserveRecentBudget({ cfg, model, escalation: 2 })).toBe(0)
+  })
+
+  test("escalation clamps at the last rung", () => {
+    expect(SessionCompaction.preserveRecentBudget({ cfg, model, escalation: 99 })).toBe(0)
+  })
+
+  test("explicit preserve_recent_tokens scales with escalation too", () => {
+    const explicit = Schema.decodeUnknownSync(ConfigV1.Info)({
+      compaction: { preserve_recent_tokens: 10_000 },
+    }) as ConfigV1.Info
+    expect(SessionCompaction.preserveRecentBudget({ cfg: explicit, model, escalation: 1 })).toBe(5_000)
+  })
+})
+
+describe("session.compaction.process chunking", () => {
+  const small = () => ProviderTest.fake({ model: createModel({ context: 20_000, output: 4_000 }) })
+  // usable = 16000 -> chunk budget 8000, tail budget 4000
+
+  function promptText(input: LLM.StreamInput) {
+    const content = (input.messages[0] as { content: { text: string }[] }).content
+    return content.map((part) => part.text).join("\n")
+  }
+
+  itCompaction.instance(
+    "summarizes oversized heads in chunks that each fit the budget",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      for (let i = 0; i < 6; i++) {
+        yield* createUserMessage(session.id, `message-${i} ` + "x".repeat(12_000))
+      }
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const captured: LLM.StreamInput[] = []
+      const fake = llm()
+      for (let i = 0; i < 8; i++) fake.push(reply("## Objective\n- partial summary", (input) => captured.push(input)))
+
+      const result = yield* SessionCompaction.use
+        .process({
+          parentID: msgs.at(-1)!.info.id,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+        .pipe(withCompaction({ llm: fake.llmLayer, provider: small() }))
+
+      expect(result).toBe("continue")
+      // 5-message head (~60k chars) at an 8000-token budget -> 3 chunk calls + 1 final call
+      expect(captured).toHaveLength(4)
+      for (const input of captured) {
+        expect(Token.estimate(promptText(input))).toBeLessThanOrEqual(8_000)
+      }
+      // the chunk prompts carry conversation; the final prompt carries the partial summaries
+      expect(promptText(captured[0]!)).toContain("message-0")
+      expect(promptText(captured.at(-1)!)).toContain("partial summary")
+
+      const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+        (msg) => msg.info.role === "assistant" && msg.info.summary,
+      )
+      expect(summary?.info.role).toBe("assistant")
+      if (summary?.info.role === "assistant") {
+        expect(summary.info.error).toBeUndefined()
+      }
+    }),
+  )
+
+  itCompaction.instance(
+    "re-summarizes partial summaries that still exceed the budget",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      for (let i = 0; i < 6; i++) {
+        yield* createUserMessage(session.id, `message-${i} ` + "x".repeat(12_000))
+      }
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+
+      const fake = llm()
+      // 3 chunk calls return bloated partial summaries that overflow the budget
+      // when combined, forcing one merge round (3 more calls) before the final call
+      for (let i = 0; i < 3; i++) fake.push(reply("y".repeat(30_000)))
+      for (let i = 0; i < 6; i++) fake.push(reply("## Objective\n- merged summary"))
+
+      const result = yield* SessionCompaction.use
+        .process({
+          parentID: msgs.at(-1)!.info.id,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+        .pipe(withCompaction({ llm: fake.llmLayer, provider: small() }))
+
+      expect(result).toBe("continue")
+      const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+        (msg) => msg.info.role === "assistant" && msg.info.summary,
+      )
+      expect(summary?.info.role).toBe("assistant")
+      if (summary?.info.role === "assistant") {
+        expect(summary.info.error).toBeUndefined()
+      }
+    }),
+  )
+})
+
+describe("session.compaction.process tail escalation", () => {
+  const small = () => ProviderTest.fake({ model: createModel({ context: 20_000, output: 4_000 }) })
+  // usable = 16000 -> tail budget 4000; overflow threshold for streak: total >= 16000
+
+  function overflowingAssistant(sessionID: SessionID, parentID: MessageID, root: string, total = 20_000, text?: string) {
+    return SessionNs.Service.use((ssn) =>
+      Effect.gen(function* () {
+        const msg = yield* ssn.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID,
+          mode: "build",
+          agent: "build",
+          path: { cwd: root, root },
+          cost: 0,
+          tokens: { input: total, output: 0, reasoning: 0, cache: { read: 0, write: 0 }, total },
+          modelID: ref.modelID,
+          providerID: ref.providerID,
+          parentID,
+          finish: "stop",
+          time: { created: Date.now(), completed: Date.now() },
+        })
+        if (text) {
+          yield* ssn.updatePart({
+            id: PartID.ascending(),
+            messageID: msg.id,
+            sessionID,
+            type: "text",
+            text,
+          })
+        }
+        return msg
+      }),
+    )
+  }
+
+  itCompaction.instance(
+    "retains the recent tail on the first auto-compaction",
+    Effect.gen(function* () {
+      const provide = withCompaction({ result: "continue", provider: small() })
+      const test = yield* TestInstance
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const u1 = yield* createUserMessage(session.id, "first " + "a".repeat(12_000))
+      // bulky enough that splitTurn cannot keep this turn's suffix in the tail
+      yield* overflowingAssistant(session.id, u1.id, test.directory, 1_000, "r".repeat(6_000))
+      const u2 = yield* createUserMessage(session.id, "second " + "b".repeat(12_000))
+      yield* SessionCompaction.use
+        .create({ sessionID: session.id, agent: "build", model: ref, auto: true })
+        .pipe(provide)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const parent = msgs.findLast(
+        (msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "compaction"),
+      )!
+
+      const result = yield* SessionCompaction.use
+        .process({ parentID: parent.info.id, messages: msgs, sessionID: session.id, auto: false })
+        .pipe(provide)
+
+      expect(result).toBe("continue")
+      const part = yield* readCompactionPart(session.id)
+      expect(part?.tail_start_id).toBe(u2.id)
+    }),
+  )
+
+  itCompaction.instance(
+    "drops the retained tail after repeated failed auto-compactions",
+    Effect.gen(function* () {
+      const provide = withCompaction({ result: "continue", provider: small() })
+      const test = yield* TestInstance
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const u1 = yield* createUserMessage(session.id, "start " + "z".repeat(12_000))
+      yield* overflowingAssistant(session.id, u1.id, test.directory)
+      // two consecutive failed auto-compactions (successor still overflows)
+      for (let i = 0; i < 2; i++) {
+        yield* SessionCompaction.use
+          .create({ sessionID: session.id, agent: "build", model: ref, auto: true })
+          .pipe(provide)
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const marker = msgs.findLast(
+          (msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "compaction"),
+        )!
+        yield* createSummaryAssistantMessage(session.id, marker.info.id, test.directory, `summary ${i}`)
+        yield* overflowingAssistant(session.id, marker.info.id, test.directory)
+      }
+      yield* SessionCompaction.use
+        .create({ sessionID: session.id, agent: "build", model: ref, auto: true })
+        .pipe(provide)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const parent = msgs.findLast(
+        (msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "compaction"),
+      )!
+
+      const result = yield* SessionCompaction.use
+        .process({ parentID: parent.info.id, messages: msgs, sessionID: session.id, auto: false })
+        .pipe(provide)
+
+      expect(result).toBe("continue")
+      const part = yield* readCompactionPart(session.id)
+      expect(part?.tail_start_id).toBeUndefined()
+    }),
+  )
+})
+
 describe("session.compaction.create", () => {
   it.live(
     "creates a compaction user message and part",
