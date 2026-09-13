@@ -1,15 +1,17 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, PartTable, SessionTable, TodoTable } from "@opencode-ai/core/session/sql"
+import { EventTable } from "@opencode-ai/core/event/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus } from "@/bus/global"
 import { which } from "@opencode-ai/core/util/which"
 import { Command } from "@/command"
 import { InstanceState } from "@/effect/instance-state"
+import * as Relocation from "@/project/relocation"
 import { Effect, Layer, Scope, Context, Stream, Types, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -62,6 +64,8 @@ export const UpdateInput = Schema.Struct({
   name: Schema.optional(Schema.String),
   icon: Schema.optional(Project.Icon),
   commands: Schema.optional(Project.Commands),
+  /** new absolute location for an existing worktree; relocates stored history */
+  worktree: Schema.optional(Schema.String),
 })
 export type UpdateInput = Types.DeepMutable<Schema.Schema.Type<typeof UpdateInput>>
 
@@ -92,6 +96,10 @@ export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: ProjectV2.ID) => Effect.Effect<Info | undefined>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
+  readonly remove: (input: {
+    projectID: ProjectV2.ID
+    mode: "cascade" | "detach"
+  }) => Effect.Effect<void, NotFoundError>
   readonly initGit: (input: { directory: string; project: Info }) => Effect.Effect<Info>
   readonly setInitialized: (id: ProjectV2.ID) => Effect.Effect<void>
   readonly sandboxes: (id: ProjectV2.ID) => Effect.Effect<string[]>
@@ -232,6 +240,37 @@ const layer = Layer.effect(
 
       if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
+      // A renamed or moved worktree leaves every stored reference pointing at the
+      // old location while this directory still resolves to the same project
+      // identity. If the previous worktree no longer exists on disk, migrate the
+      // stored history over so sessions stay visible instead of being orphaned.
+      if (
+        projectID !== ProjectV2.ID.global &&
+        existing.worktree !== "/" &&
+        worktree !== existing.worktree &&
+        !(yield* fs.exists(existing.worktree).pipe(Effect.orDie))
+      ) {
+        // never let a failed migration brick opening the project - degrade to
+        // pre-existing behavior (orphaned history) instead of failing startup
+        const relocated = yield* Relocation.relocateProjectData({
+          from: existing.worktree,
+          to: data.directory,
+        }).pipe(
+          Effect.catchAllCause((cause) =>
+            Effect.logError("project history relocation failed", { cause }).pipe(
+              Effect.as(Relocation.zeroRelocation),
+            ),
+          ),
+        )
+        if (relocated.sessions > 0 || relocated.events > 0) {
+          yield* Effect.logInfo("project history relocated", {
+            from: existing.worktree,
+            to: data.directory,
+            ...relocated,
+          })
+        }
+      }
+
       const result: Info = {
         ...existing,
         worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
@@ -343,9 +382,36 @@ const layer = Layer.effect(
     })
 
     const update = Effect.fn("Project.update")(function* (input: UpdateInput) {
+      const current = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, input.projectID))
+        .get()
+        .pipe(Effect.orDie)
+      if (!current) return yield* new NotFoundError({ projectID: input.projectID })
+
+      let worktree = current.worktree
+      if (input.worktree && input.worktree !== current.worktree) {
+        const next = AbsolutePath.make(input.worktree)
+        if (!(yield* fs.exists(next).pipe(Effect.orDie))) {
+          // typed failure instead of a raw defect -> surfaces as a clean API error
+          return yield* new NotFoundError({ projectID: input.projectID })
+        }
+        // history follows the folder: migrate every stored reference (#23248, #34737)
+        yield* Relocation.relocateProjectData({ from: current.worktree, to: next }).pipe(
+          Effect.catchAllCause((cause) =>
+            Effect.logError("project history relocation failed", { cause, projectID: input.projectID }).pipe(
+              Effect.asVoid,
+            ),
+          ),
+        )
+        worktree = next
+      }
+
       const result = yield* db
         .update(ProjectTable)
         .set({
+          worktree,
           name: input.name,
           icon_url: input.icon?.url,
           icon_url_override: input.icon?.override,
@@ -372,6 +438,45 @@ const layer = Layer.effect(
       }
       const { project } = yield* fromDirectory(input.directory)
       return project
+    })
+
+    const remove = Effect.fn("Project.remove")(function* (input: {
+      projectID: ProjectV2.ID
+      mode: "cascade" | "detach"
+    }) {
+      if (input.projectID === ProjectV2.ID.make("global")) {
+        return yield* new NotFoundError({ projectID: input.projectID })
+      }
+      const row = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, input.projectID))
+        .get()
+        .pipe(Effect.orDie)
+      if (!row) return yield* new NotFoundError({ projectID: input.projectID })
+
+      const sessionRows = yield* db
+        .select({ id: SessionTable.id })
+        .from(SessionTable)
+        .where(eq(SessionTable.project_id, input.projectID))
+        .all()
+        .pipe(Effect.orDie)
+      const ids = sessionRows.map((r) => r.id)
+
+      yield* db.transaction((tx) =>
+        Effect.gen(function* () {
+          // messages/parts/todos cascade from session rows; events do not
+          for (let i = 0; i < ids.length; i += 400) {
+            const chunk = ids.slice(i, i + 400)
+            yield* tx.delete(EventTable).where(inArray(EventTable.aggregate_id, chunk)).run().pipe(Effect.orDie)
+          }
+          if (input.mode === "cascade") {
+            yield* tx.delete(SessionTable).where(eq(SessionTable.project_id, input.projectID)).run().pipe(Effect.orDie)
+          }
+          yield* tx.delete(ProjectDirectoryTable).where(eq(ProjectDirectoryTable.project_id, input.projectID)).run().pipe(Effect.orDie)
+          yield* tx.delete(ProjectTable).where(eq(ProjectTable.id, input.projectID)).run().pipe(Effect.orDie)
+        }),
+      )
     })
 
     const setInitialized = Effect.fn("Project.setInitialized")(function* (id: ProjectV2.ID) {
@@ -454,6 +559,7 @@ const layer = Layer.effect(
       list,
       get,
       update,
+      remove,
       initGit,
       setInitialized,
       sandboxes,
