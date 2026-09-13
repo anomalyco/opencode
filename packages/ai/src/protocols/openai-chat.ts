@@ -323,7 +323,11 @@ const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart
   const media = ProviderShared.normalizeMedia(part)
   if (!media.mime.startsWith("image/"))
     return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.mediaType}`)
-  return { type: "image_url" as const, image_url: { url: media.dataUrl } }
+  const url =
+    typeof part.data === "string" && (part.data.startsWith("https://") || part.data.startsWith("http://"))
+      ? part.data
+      : media.dataUrl
+  return { type: "image_url" as const, image_url: { url } }
 })
 
 const openAICompatibleReasoningContent = (native: unknown) =>
