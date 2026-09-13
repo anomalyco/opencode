@@ -6,8 +6,10 @@ import {
   RECOMMENDED_ARABIC_FONTS,
   appendFontFamily,
   applyArabicFont,
+  availableFontFamilies,
   buildFontFaceChain,
   detectTerminalHost,
+  installedFontFamilies,
   isFontInstalled,
   sanitizeJsonc,
   splitFontFaces,
@@ -101,22 +103,25 @@ describe("splitFontFaces", () => {
   })
 })
 
+describe("availableFontFamilies", () => {
+  test("keeps the chosen font and only resolving recommended fonts", () => {
+    const installed = ["Cairo", "Cairo Regular", "Segoe UI", "Tahoma"]
+    expect(availableFontFamilies("Amiri", installed)).toEqual(["Amiri", "Cairo", "Segoe UI", "Tahoma"])
+  })
+})
+
 describe("buildFontFaceChain", () => {
-  test("keeps the current faces first, then the chosen Arabic font", () => {
-    expect(buildFontFaceChain("Cascadia Mono", "Cairo")).toBe(
-      ["Cascadia Mono", "Cairo", ...RECOMMENDED_ARABIC_FONTS.filter((f) => f !== "Cairo")].join(", "),
-    )
+  test("keeps the current faces first, then the tail", () => {
+    expect(buildFontFaceChain("Cascadia Mono", ["Cairo", "Segoe UI"])).toBe("Cascadia Mono, Cairo, Segoe UI")
   })
 
   test("defaults to Cascadia Mono when no face is set", () => {
-    expect(buildFontFaceChain(undefined, "Amiri").startsWith("Cascadia Mono, Amiri")).toBe(true)
+    expect(buildFontFaceChain(undefined, ["Amiri"]).startsWith("Cascadia Mono, Amiri")).toBe(true)
   })
 
   test("never reorders or duplicates the user's faces", () => {
-    expect(buildFontFaceChain("Cascadia Mono, Segoe UI", "Cairo")).toBe(
-      ["Cascadia Mono", "Segoe UI", "Cairo", ...RECOMMENDED_ARABIC_FONTS.filter((f) => f !== "Cairo" && f !== "Segoe UI")].join(
-        ", ",
-      ),
+    expect(buildFontFaceChain("Cascadia Mono, Segoe UI", ["Cairo", "Segoe UI"])).toBe(
+      "Cascadia Mono, Segoe UI, Cairo",
     )
   })
 })
@@ -141,9 +146,13 @@ describe("applyArabicFont", () => {
       .map((part: string) => part.trim())
     expect(faces[0]).toBe("Cascadia Mono")
     expect(faces[1]).toBe("Amiri")
+    // The tail mirrors what resolves on this machine: installed recommended
+    // fonts are present, missing ones are left out so the terminal never warns.
+    const installed = installedFontFamilies()
     for (const font of RECOMMENDED_ARABIC_FONTS) {
       if (font === "Amiri") continue
-      expect(faces).toContain(font)
+      if (isFontInstalled(font, installed)) expect(faces).toContain(font)
+      else expect(faces).not.toContain(font)
     }
     expect(written.profiles.defaults.font.fallbacks).toBeUndefined()
     expect(readFileSync(result.backup, "utf8")).toContain("Cascadia Mono")
