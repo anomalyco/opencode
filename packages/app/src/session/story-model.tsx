@@ -9,6 +9,8 @@ import {
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/client/promise"
 import type { SessionDocument } from "@opencode/session-ui/document"
+import type { TimelineDetail } from "@opencode/session-ui/timeline/detail"
+import type { SessionUserPresentation } from "@opencode/session-ui/timeline"
 import { CurrentSessionProviders, STORY_MODEL } from "@opencode/session-ui/storybook"
 import { SessionTimeline } from "@opencode/session-ui/timeline"
 import { SessionReviewEmptyChangesV2 } from "@opencode/session-ui/v2/session-review-empty-changes-v2"
@@ -87,6 +89,8 @@ export type SessionPreviewProps = {
   reviewOpened?: boolean
   child?: { parentID: string }
   terminal?: { title: string; lines: string[] }
+  timelineDetail?: TimelineDetail
+  presentation?: Record<string, SessionUserPresentation | undefined>
 }
 
 export function SessionPreview(props: SessionPreviewProps) {
@@ -259,6 +263,15 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                   <div class="min-h-0 flex-1 overflow-y-auto py-6">
                     <SessionTimeline
                       document={props.document}
+                      presentation={props.presentation}
+                      timelineDetail={props.timelineDetail}
+                      reasoningMode={
+                        props.timelineDetail?.thinking.placement === "hidden"
+                          ? "hidden"
+                          : props.timelineDetail?.thinking.details === "expanded"
+                            ? "full"
+                            : "compact"
+                      }
                       editToolDefaultOpen
                       shellToolDefaultOpen
                       class="mx-auto w-full max-w-[840px]"
