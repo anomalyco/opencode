@@ -4,6 +4,7 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { Session } from "./session"
 import { SessionID, MessageID, PartID } from "./schema"
 import { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
 import { MessageV2 } from "./message-v2"
 import { Token } from "@/util/token"
 import { SessionProcessor } from "./processor"
@@ -178,7 +179,7 @@ export interface Interface {
     sessionID: SessionID
     auto: boolean
     overflow?: boolean
-    capture?: { request: LLM.InternalStreamInput; messageIDs: ReadonlySet<MessageID> }
+    capture?: { request: LLM.InternalStreamInput; messageIDs: ReadonlySet<MessageID>; inputTokens?: number }
     rebuild?: (input: {
       messages: SessionV1.WithParts[]
       processor: SessionProcessor.Handle
@@ -332,7 +333,7 @@ const layer = Layer.effect(
       sessionID: SessionID
       auto: boolean
       overflow?: boolean
-      capture?: { request: LLM.InternalStreamInput; messageIDs: ReadonlySet<MessageID> }
+      capture?: { request: LLM.InternalStreamInput; messageIDs: ReadonlySet<MessageID>; inputTokens?: number }
       rebuild?: (input: {
         messages: SessionV1.WithParts[]
         processor: SessionProcessor.Handle
@@ -428,20 +429,27 @@ const layer = Layer.effect(
         }
         return undefined
       }
-      const fitsSuffix = (request: LLM.InternalStreamInput) =>
-        Token.estimate(
-          JSON.stringify({
-            system: request.system,
-            messages: request.messages,
-            tools: request.tools,
-            toolChoice: request.toolChoice,
-          }),
-        ) <=
-        usable({
-          cfg,
-          model: request.model,
-          outputTokenMax: Math.min(SUMMARY_OUTPUT_TOKENS, flags.outputTokenMax ?? SUMMARY_OUTPUT_TOKENS),
-        })
+      const fitsSuffix = (request: LLM.InternalStreamInput, measured = 0) => {
+        const output = Math.min(
+          SUMMARY_OUTPUT_TOKENS,
+          ProviderTransform.maxOutputTokens(request.model, flags.outputTokenMax),
+        )
+        // The reserve triggers compaction. It remains available to the summary request.
+        const limit = Math.min(request.model.limit.input || Infinity, request.model.limit.context - output)
+        return (
+          Math.max(
+            measured,
+            Token.estimate(
+              JSON.stringify({
+                system: request.system,
+                messages: request.messages,
+                tools: request.tools,
+                toolChoice: request.toolChoice,
+              }),
+            ),
+          ) <= limit
+        )
+      }
       const canSuffix = suffix ? !suffixUnavailable(suffix.request) : !!suffixRebuild
       if (suffix && !canSuffix) fallback = suffixUnavailable(suffix.request)
       const ctx = yield* InstanceState.context
@@ -482,17 +490,21 @@ const layer = Layer.effect(
         const rawRequest = capture?.request ?? rebuilt
         const request = capture
           ? (() => {
-              const { prepareSystem: _prepareSystem, onSystemPrepared: _onSystemPrepared, ...prepared } = capture.request
+              const {
+                prepareSystem: _prepareSystem,
+                onSystemPrepared: _onSystemPrepared,
+                ...prepared
+              } = capture.request
               return { ...prepared, systemPrepared: true }
             })()
           : rawRequest?.prepareSystem
-          ? yield* rawRequest.prepareSystem().pipe(
-              Effect.map((system) => {
-                const { prepareSystem: _prepareSystem, onSystemPrepared: _onSystemPrepared, ...prepared } = rawRequest
-                return { ...prepared, system, systemPrepared: true }
-              }),
-            )
-          : rawRequest
+            ? yield* rawRequest.prepareSystem().pipe(
+                Effect.map((system) => {
+                  const { prepareSystem: _prepareSystem, onSystemPrepared: _onSystemPrepared, ...prepared } = rawRequest
+                  return { ...prepared, system, systemPrepared: true }
+                }),
+              )
+            : rawRequest
         const unavailable = request ? suffixUnavailable(request) : undefined
         if (request && !unavailable) {
           const additions = capture
@@ -511,7 +523,10 @@ const layer = Layer.effect(
             maxOutputTokens: SUMMARY_OUTPUT_TOKENS,
             messages: [...request.messages, ...additionMessages, { role: "user" as const, content: suffixPrompt }],
           }
-          if (fitsSuffix(suffixRequest)) {
+          const measured = capture?.inputTokens
+            ? capture.inputTokens + Token.estimate(JSON.stringify([...additions, suffixPrompt]))
+            : 0
+          if (fitsSuffix(suffixRequest, measured)) {
             const tools: Record<string, Tool> = {}
             for (const [name, definition] of Object.entries(request.tools)) {
               tools[name] = {
@@ -520,12 +535,15 @@ const layer = Layer.effect(
               }
             }
             activeMode = "suffix"
-            const result = yield* processor.process({
-              ...suffixRequest,
-              agent: request.agent,
-              model,
-              tools,
-            })
+            const result = yield* processor.process(
+              {
+                ...suffixRequest,
+                agent: request.agent,
+                model,
+                tools,
+              },
+              { deferError: true },
+            )
             return { processor, result, suffix: true }
           }
           fallback = "context"
@@ -545,6 +563,7 @@ const layer = Layer.effect(
         activeMode = "prepend"
         const result = yield* processor.process({
           user: userMessage,
+          maxOutputTokens: SUMMARY_OUTPUT_TOKENS,
           agent,
           sessionID: input.sessionID,
           tools: {},
@@ -639,6 +658,7 @@ const layer = Layer.effect(
         run.suffix &&
         (run.result === "compact" ||
           !!run.processor.message.error ||
+          run.processor.message.finish === "length" ||
           !suffixText ||
           !SessionCompactionSuffix.validateSummary(suffixText) ||
           suffixToolCall)
@@ -677,6 +697,21 @@ const layer = Layer.effect(
         return "stop"
       }
       if (processor.message.error) {
+        yield* persistDiagnostics({ result })
+        return "stop"
+      }
+      const completed = yield* suffixMessage()
+      if (
+        processor.message.finish === "length" ||
+        (processor.message.finish && (!completed || !summaryText(completed)?.trim()))
+      ) {
+        processor.message.error = new SessionV1.APIError({
+          message: "Compaction stopped before the summary was complete.",
+          isRetryable: false,
+        }).toObject()
+        processor.message.finish = "error"
+        yield* session.updateMessage(processor.message)
+        yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: processor.message.error })
         yield* persistDiagnostics({ result })
         return "stop"
       }

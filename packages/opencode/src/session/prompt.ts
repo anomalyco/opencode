@@ -1084,7 +1084,9 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
-        let latestRequest: { request: LLM.InternalStreamInput; messageIDs: ReadonlySet<MessageID> } | undefined
+        let latestRequest:
+          | { request: LLM.InternalStreamInput; messageIDs: ReadonlySet<MessageID>; inputTokens?: number }
+          | undefined
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1339,6 +1341,7 @@ const layer = Layer.effect(
               },
             }
             const result = yield* handle.process(preparedRequest)
+            if (latestRequest?.messageIDs === messageIDs) latestRequest.inputTokens = handle.latestUsage()?.inputTokens
 
             if (structured !== undefined) {
               handle.message.structured = structured

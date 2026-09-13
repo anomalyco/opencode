@@ -938,79 +938,84 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
   ),
 )
 
-it.live("session.processor effect tests record aborted errors and idle state", () =>
-  provideTmpdirServer(
-    ({ dir, llm }) =>
-      Effect.gen(function* () {
-        const seen = defer<void>()
-        const { processors, session, provider } = yield* boot()
-        const events = yield* EventV2Bridge.Service
-        const sts = yield* SessionStatus.Service
+for (const summary of [false, true]) {
+  it.live(`session.processor effect tests record aborted errors and idle state (summary=${summary})`, () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          const seen = defer<void>()
+          const { processors, session, provider } = yield* boot()
+          const events = yield* EventV2Bridge.Service
+          const sts = yield* SessionStatus.Service
 
-        yield* llm.hang
+          yield* llm.hang
 
-        const chat = yield* session.create({})
-        const parent = yield* user(chat.id, "abort")
-        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
-        const errs: string[] = []
-        const off = yield* events.listen((evt) => {
-          if (evt.type !== Session.Event.Error.type) return Effect.void
-          const data = evt.data as typeof Session.Event.Error.data.Type
-          if (data.sessionID !== chat.id || !data.error) return Effect.void
-          errs.push(data.error.name)
-          seen.resolve()
-          return Effect.void
-        })
-        const handle = yield* processors.create({
-          assistantMessage: msg,
-          sessionID: chat.id,
-          model: mdl,
-        })
-
-        const run = yield* handle
-          .process({
-            user: {
-              id: parent.id,
-              sessionID: chat.id,
-              role: "user",
-              time: parent.time,
-              agent: parent.agent,
-              model: { providerID: ref.providerID, modelID: ref.modelID },
-            } satisfies SessionV1.User,
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "abort")
+          const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+          const errs: string[] = []
+          const off = yield* events.listen((evt) => {
+            if (evt.type !== Session.Event.Error.type) return Effect.void
+            const data = evt.data as typeof Session.Event.Error.data.Type
+            if (data.sessionID !== chat.id || !data.error) return Effect.void
+            errs.push(data.error.name)
+            seen.resolve()
+            return Effect.void
+          })
+          const handle = yield* processors.create({
+            assistantMessage: { ...msg, summary },
             sessionID: chat.id,
             model: mdl,
-            agent: agent(),
-            system: [],
-            messages: [{ role: "user", content: "abort" }],
-            tools: {},
           })
-          .pipe(Effect.forkChild)
 
-        yield* llm.wait(1)
-        yield* Fiber.interrupt(run)
+          const run = yield* handle
+            .process(
+              {
+                user: {
+                  id: parent.id,
+                  sessionID: chat.id,
+                  role: "user",
+                  time: parent.time,
+                  agent: parent.agent,
+                  model: { providerID: ref.providerID, modelID: ref.modelID },
+                } satisfies SessionV1.User,
+                sessionID: chat.id,
+                model: mdl,
+                agent: agent(),
+                system: [],
+                messages: [{ role: "user", content: "abort" }],
+                tools: {},
+              },
+              { deferError: summary },
+            )
+            .pipe(Effect.forkChild)
 
-        const exit = yield* Fiber.await(run)
-        yield* Effect.promise(() => seen.promise)
-        const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: msg.id })
-        const state = yield* sts.get(chat.id)
-        yield* off
+          yield* llm.wait(1)
+          yield* Fiber.interrupt(run)
 
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) {
-          expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
-        }
-        expect(handle.message.error?.name).toBe("MessageAbortedError")
-        expect(stored.info.role).toBe("assistant")
-        if (stored.info.role === "assistant") {
-          expect(stored.info.error?.name).toBe("MessageAbortedError")
-        }
-        expect(state).toMatchObject({ type: "idle" })
-        expect(errs).toContain("MessageAbortedError")
-      }),
-    { config: (url) => providerCfg(url) },
-  ),
-)
+          const exit = yield* Fiber.await(run)
+          yield* Effect.promise(() => seen.promise)
+          const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: msg.id })
+          const state = yield* sts.get(chat.id)
+          yield* off
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) {
+            expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+          }
+          expect(handle.message.error?.name).toBe("MessageAbortedError")
+          expect(stored.info.role).toBe("assistant")
+          if (stored.info.role === "assistant") {
+            expect(stored.info.error?.name).toBe("MessageAbortedError")
+          }
+          expect(state).toMatchObject({ type: "idle" })
+          expect(errs).toContain("MessageAbortedError")
+        }),
+      { config: (url) => providerCfg(url) },
+    ),
+  )
+}
 
 it.live("session.processor effect tests mark interruptions aborted without manual abort", () =>
   provideTmpdirServer(

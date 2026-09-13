@@ -242,6 +242,9 @@ export const make = (dependencies: Dependencies) => {
             if (LLMEvent.is.providerError(event)) failure = "provider_error"
             if (LLMEvent.is.toolCall(event)) failure = "tool_call"
             if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+            if ((LLMEvent.is.stepFinish(event) || LLMEvent.is.finish(event)) && event.reason === "length") {
+              failure = "invalid_summary"
+            }
             if (LLMEvent.is.stepFinish(event) || LLMEvent.is.finish(event)) {
               usage = event.usage
               attemptedUsage = usage
