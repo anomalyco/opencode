@@ -62,9 +62,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    install -Dm755 dist/cli-*/bin/opencode2 $out/bin/opencode2
+    install -Dm755 dist/cli-*/bin/opencode $out/bin/opencode
 
-    wrapProgram $out/bin/opencode2 \
+    wrapProgram $out/bin/opencode \
       --prefix PATH : ${
         lib.makeBinPath (
           [
@@ -75,11 +75,17 @@ stdenvNoCC.mkDerivation (finalAttrs: {
         )
       }
 
+    ln -s opencode $out/bin/opencode2
+
     runHook postInstall
   '';
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
     # trick yargs into also generating zsh completions
+    installShellCompletion --cmd opencode \
+      --bash <($out/bin/opencode completion) \
+      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+
     installShellCompletion --cmd opencode2 \
       --bash <($out/bin/opencode2 completion) \
       --zsh <(SHELL=/bin/zsh $out/bin/opencode2 completion)
@@ -101,7 +107,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     description = "The open source coding agent";
     homepage = "https://opencode.ai";
     license = lib.licenses.mit;
-    mainProgram = "opencode2";
+    mainProgram = "opencode";
     inherit (node_modules.meta) platforms;
   };
 })
