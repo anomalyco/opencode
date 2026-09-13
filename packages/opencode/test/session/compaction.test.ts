@@ -563,6 +563,181 @@ describe("session.compaction.isOverflow", () => {
   )
 })
 
+describe("session.compaction.failedAutoCompactions", () => {
+  const sid = SessionID.make("ses_failedAutoCompactions")
+  const OVER = 100
+  const over = (tokens: SessionV1.Assistant["tokens"]) =>
+    (tokens.total ?? tokens.input + tokens.output + tokens.cache.read + tokens.cache.write) >= OVER
+
+  let clock = 0
+  function nextTime() {
+    return { created: ++clock }
+  }
+
+  function userText(text: string, opts?: { synthetic?: boolean }): SessionV1.WithParts {
+    const id = MessageID.ascending()
+    return {
+      info: { id, role: "user", sessionID: sid, agent: "build", model: ref, time: nextTime() },
+      parts: [{ id: PartID.ascending(), messageID: id, sessionID: sid, type: "text", text, synthetic: opts?.synthetic }],
+    } as SessionV1.WithParts
+  }
+
+  function compactionMsg(opts?: { auto?: boolean }): SessionV1.WithParts {
+    const id = MessageID.ascending()
+    return {
+      info: { id, role: "user", sessionID: sid, agent: "build", model: ref, time: nextTime() },
+      parts: [{ id: PartID.ascending(), messageID: id, sessionID: sid, type: "compaction", auto: opts?.auto ?? true }],
+    } as SessionV1.WithParts
+  }
+
+  function assistant(total: number, opts?: { summary?: boolean; finish?: string }): SessionV1.WithParts {
+    const id = MessageID.ascending()
+    return {
+      info: {
+        id,
+        role: "assistant",
+        sessionID: sid,
+        mode: "build",
+        agent: opts?.summary ? "compaction" : "build",
+        path: { cwd: "/tmp", root: "/tmp" },
+        cost: 0,
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        parentID: MessageID.ascending(),
+        tokens: { input: total, output: 0, reasoning: 0, cache: { read: 0, write: 0 }, total },
+        summary: opts?.summary,
+        finish: opts?.finish === undefined ? "stop" : opts.finish,
+        time: { ...nextTime(), completed: clock },
+      },
+      parts: [],
+    } as SessionV1.WithParts
+  }
+
+  test("returns 0 with no compactions", () => {
+    expect(SessionCompaction.failedAutoCompactions([userText("hi"), assistant(150)], over)).toBe(0)
+  })
+
+  test("counts an auto-compaction whose successor still overflows", () => {
+    const msgs = [userText("hi"), assistant(150), compactionMsg(), assistant(50, { summary: true }), assistant(150)]
+    expect(SessionCompaction.failedAutoCompactions(msgs, over)).toBe(1)
+  })
+
+  test("compaction with headroom-restoring successor is not a failure", () => {
+    const msgs = [userText("hi"), assistant(150), compactionMsg(), assistant(50, { summary: true }), assistant(50)]
+    expect(SessionCompaction.failedAutoCompactions(msgs, over)).toBe(0)
+  })
+
+  test("later overflowing steps do not mark a good compaction failed", () => {
+    // first step after compaction is fine (50); a later step overflows after
+    // pulling in a huge tool result — the compaction itself succeeded
+    const msgs = [
+      userText("hi"),
+      assistant(150),
+      compactionMsg(),
+      assistant(50, { summary: true }),
+      assistant(50),
+      assistant(150),
+    ]
+    expect(SessionCompaction.failedAutoCompactions(msgs, over)).toBe(0)
+  })
+
+  test("counts consecutive failures", () => {
+    const msgs = [
+      userText("hi"),
+      assistant(150),
+      compactionMsg(),
+      assistant(50, { summary: true }),
+      assistant(150),
+      compactionMsg(),
+      assistant(50, { summary: true }),
+      assistant(150),
+    ]
+    expect(SessionCompaction.failedAutoCompactions(msgs, over)).toBe(2)
+  })
+
+  test("a real user turn resets the streak", () => {
+    const msgs = [
+      userText("hi"),
+      compactionMsg(),
+      assistant(150),
+      userText("new instruction"),
+      compactionMsg(),
+      assistant(150),
+    ]
+    expect(SessionCompaction.failedAutoCompactions(msgs, over)).toBe(1)
+  })
+
+  test("synthetic compaction-continue messages do not reset the streak", () => {
+    const msgs = [
+      userText("hi"),
+      compactionMsg(),
+      assistant(150),
+      userText("Continue if you have next steps", { synthetic: true }),
+      compactionMsg(),
+      assistant(150),
+    ]
+    expect(SessionCompaction.failedAutoCompactions(msgs, over)).toBe(2)
+  })
+
+  test("manual compactions are not counted", () => {
+    const msgs = [userText("hi"), compactionMsg({ auto: false }), assistant(150)]
+    expect(SessionCompaction.failedAutoCompactions(msgs, over)).toBe(0)
+  })
+
+  test("compaction without a finished successor is not a failure", () => {
+    const msgs = [userText("hi"), assistant(150), compactionMsg()]
+    expect(SessionCompaction.failedAutoCompactions(msgs, over)).toBe(0)
+  })
+
+  it.live(
+    "failedStreak reads session history and counts consecutive failures",
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const ssn = yield* SessionNs.Service
+        const info = yield* ssn.create({})
+
+        const tokens = (total: number): SessionV1.Assistant["tokens"] => ({
+          input: total,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+          total,
+        })
+        const addAssistant = (parentID: MessageID, total: number, summary?: boolean) =>
+          ssn.updateMessage({
+            id: MessageID.ascending(),
+            role: "assistant",
+            sessionID: info.id,
+            mode: "build",
+            agent: summary ? "compaction" : "build",
+            path: { cwd: dir, root: dir },
+            cost: 0,
+            tokens: tokens(total),
+            modelID: ref.modelID,
+            providerID: ref.providerID,
+            parentID,
+            summary,
+            finish: "stop",
+            time: { created: Date.now(), completed: Date.now() },
+          })
+
+        // two consecutive auto-compactions, each followed by an overflowing step
+        const u1 = yield* createUserMessage(info.id, "start")
+        yield* addAssistant(u1.id, 500_000)
+        yield* compact.create({ sessionID: info.id, agent: "build", model: ref, auto: true })
+        yield* addAssistant(u1.id, 500, true)
+        yield* addAssistant(u1.id, 500_000)
+        yield* compact.create({ sessionID: info.id, agent: "build", model: ref, auto: true })
+        yield* addAssistant(u1.id, 500_000)
+
+        const model = createModel({ context: 100_000, output: 32_000 })
+        expect(yield* compact.failedStreak({ sessionID: info.id, model })).toBe(2)
+      }),
+    ),
+  )
+})
+
 describe("session.compaction.create", () => {
   it.live(
     "creates a compaction user message and part",

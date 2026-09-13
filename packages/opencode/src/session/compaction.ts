@@ -27,6 +27,13 @@ export const Event = SessionCompactionEvent
 
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
+// Auto-compaction loop guard. When a session's irreducible context (system
+// prompt, retained tail) exceeds the model's usable window, automatic
+// compaction can never get the session back under the overflow threshold, so
+// the session loop would otherwise compact after every single step forever,
+// burning provider quota. After this many consecutive failed compactions the
+// loop stops with an error instead.
+export const MAX_FAILED_AUTO_COMPACTIONS = 2
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
@@ -119,6 +126,49 @@ function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model
   )
 }
 
+// Counts the trailing run of automatic compactions that failed to restore
+// headroom. A compaction "failed" when the first finished (non-summary)
+// assistant step after it still overflows the model's usable window — meaning
+// compacting again would summarize the same irreducible context and loop
+// forever. A real user turn, a manual compaction, or a successful compaction
+// resets the run. Messages must be in chronological order.
+export function failedAutoCompactions(
+  msgs: SessionV1.WithParts[],
+  over: (tokens: SessionV1.Assistant["tokens"]) => boolean,
+): number {
+  const outcomes: boolean[] = []
+  for (let i = 0; i < msgs.length; i++) {
+    const msg = msgs[i]
+    if (msg.info.role !== "user") continue
+    const part = msg.parts.find((p): p is SessionV1.CompactionPart => p.type === "compaction")
+    if (part) {
+      if (!part.auto) continue
+      const successor = msgs
+        .slice(i + 1)
+        .find(
+          (m): m is SessionV1.WithParts & { info: SessionV1.Assistant } =>
+            m.info.role === "assistant" && m.info.summary !== true && !!m.info.finish,
+        )
+      outcomes.push(successor ? over(successor.info.tokens) : false)
+      continue
+    }
+    if (msg.parts.every((p) => ("synthetic" in p ? p.synthetic : false))) continue
+    outcomes.length = 0
+  }
+  let streak = 0
+  for (let i = outcomes.length - 1; i >= 0 && outcomes[i]; i--) streak++
+  return streak
+}
+
+export function compactionStuckError(streak: number) {
+  return new SessionV1.ContextOverflowError({
+    message: [
+      `Session still exceeds the model's usable context window after ${streak} automatic compactions.`,
+      "Start a new session or switch to a model with a larger context window.",
+    ].join(" "),
+  })
+}
+
 function turns(messages: SessionV1.WithParts[]) {
   const result: Turn[] = []
   for (let i = 0; i < messages.length; i++) {
@@ -167,6 +217,7 @@ export interface Interface {
     tokens: SessionV1.Assistant["tokens"]
     model: Provider.Model
   }) => Effect.Effect<boolean>
+  readonly failedStreak: (input: { sessionID: SessionID; model: Provider.Model }) => Effect.Effect<number>
   readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
   readonly process: (input: {
     parentID: MessageID
@@ -210,6 +261,17 @@ const layer = Layer.effect(
         model: input.model,
         outputTokenMax: flags.outputTokenMax,
       })
+    })
+
+    const failedStreak = Effect.fn("SessionCompaction.failedStreak")(function* (input: {
+      sessionID: SessionID
+      model: Provider.Model
+    }) {
+      const cfg = yield* config.get()
+      const msgs = yield* session.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      return failedAutoCompactions(msgs, (tokens) =>
+        overflow({ cfg, tokens, model: input.model, outputTokenMax: flags.outputTokenMax }),
+      )
     })
 
     const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {
@@ -583,6 +645,7 @@ const layer = Layer.effect(
 
     return Service.of({
       isOverflow,
+      failedStreak,
       prune,
       process: processCompaction,
       create,

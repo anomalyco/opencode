@@ -1163,6 +1163,16 @@ const layer = Layer.effect(
             lastFinished.summary !== true &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
+            const streak = yield* compaction.failedStreak({ sessionID, model })
+            if (streak >= SessionCompaction.MAX_FAILED_AUTO_COMPACTIONS) {
+              const error = SessionCompaction.compactionStuckError(streak)
+              yield* Effect.logWarning("auto-compaction loop detected, stopping", {
+                "session.id": sessionID,
+                streak,
+              })
+              yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+              break
+            }
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
             continue
           }
@@ -1318,6 +1328,17 @@ const layer = Layer.effect(
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
+              const streak = yield* compaction.failedStreak({ sessionID, model })
+              if (streak >= SessionCompaction.MAX_FAILED_AUTO_COMPACTIONS) {
+                yield* Effect.logWarning("auto-compaction loop detected, stopping", {
+                  "session.id": sessionID,
+                  streak,
+                })
+                handle.message.error = SessionCompaction.compactionStuckError(streak).toObject()
+                yield* sessions.updateMessage(handle.message)
+                yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+                return "break" as const
+              }
               yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,
