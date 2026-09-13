@@ -347,6 +347,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
+    // Run the caller's submit hook before any session work or navigation so
+    // exit animations (e.g. the new-session wordmark) can play first.
+    await input.onSubmit?.()
+
     input.addToHistory(currentPrompt, mode)
     input.resetHistoryNavigation()
 
@@ -485,8 +489,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       clearInput()
       return
     }
-
-    await input.onSubmit?.()
 
     if (mode === "shell") {
       clearInput()
