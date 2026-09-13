@@ -237,7 +237,7 @@ describe("acp service prompt routing and usage", () => {
 
 function requestID(request: FixtureRequest) {
   if (!request.body || typeof request.body !== "object") throw new Error(`missing body for ${request.path}`)
-  const id = Reflect.get(request.body, "id")
+  const id = "id" in request.body ? request.body.id : undefined
   if (typeof id !== "string") throw new Error(`missing prompt id for ${request.path}`)
   return id
 }

@@ -159,7 +159,7 @@ function formRequestOptions(location: LocationRef | undefined) {
 }
 
 function formAlreadySettled(error: unknown) {
-  return !!error && typeof error === "object" && Reflect.get(error, "_tag") === "FormAlreadySettledError"
+  return !!error && typeof error === "object" && "_tag" in error && error._tag === "FormAlreadySettledError"
 }
 
 const RESIZE_DELAY = 250

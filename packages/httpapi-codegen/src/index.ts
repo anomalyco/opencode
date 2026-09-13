@@ -1726,6 +1726,7 @@ function streamDataSchema(schema: Extract<HttpApiSchema.StreamSchema, { readonly
 }
 
 function streamEncodedDataSchema(schema: Extract<HttpApiSchema.StreamSchema, { readonly _tag: "StreamSse" }>) {
+  // oxlint-disable-next-line no-restricted-globals -- Effect exposes this runtime helper without a public type.
   const replaceEncoding: unknown = Reflect.get(SchemaAST, "replaceEncoding")
   if (typeof replaceEncoding !== "function") throw new GenerationError({ reason: "Invalid SSE data schema" })
   const ast: unknown = replaceEncoding(streamDataAst(schema.events.ast), undefined)

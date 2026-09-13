@@ -14,9 +14,9 @@ for (const scenario of ["mounted", "leave", "shared"]) {
     await expect(page.locator("body")).toHaveAttribute("data-ready", "true")
     await expect(page.locator("body")).toHaveAttribute("data-settled", "true")
     const after = await session.send("Performance.getMetrics")
-    const stats = await page.evaluate(() => Reflect.get(window, "markdownLifetime"))
+    const stats = await page.evaluate(() => window.markdownLifetime)
     // The frozen initial baseline used a byte label for this character count.
-    stats.cacheChars ??= stats.cacheBytes
+    stats.cacheChars ??= stats.cacheBytes ?? 0
     delete stats.cacheBytes
     expect(stats.requests).toBe(1)
     expect(stats.responses).toBe(1)

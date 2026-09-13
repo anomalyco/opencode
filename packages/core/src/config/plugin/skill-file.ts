@@ -23,7 +23,7 @@ const metadataBoolean = (metadata: unknown, key: string) => {
   if (metadata === undefined || metadata === null || typeof metadata !== "object" || Array.isArray(metadata)) {
     return undefined
   }
-  const value = Reflect.get(metadata, key)
+  const value = (metadata as Record<string, unknown>)[key]
   if (typeof value === "boolean") return value
   if (typeof value !== "string") return undefined
   const normalized = value.trim().toLowerCase()

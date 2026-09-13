@@ -102,7 +102,7 @@ async function selectSession(input: {
 }) {
   const explicit = input.session
     ? await input.client.session.get({ sessionID: input.session }, ...requestOptions(input.signal)).catch((error) => {
-        if (error && typeof error === "object" && Reflect.get(error, "_tag") === "SessionNotFoundError")
+        if (error && typeof error === "object" && "_tag" in error && error._tag === "SessionNotFoundError")
           return undefined
         throw error
       })

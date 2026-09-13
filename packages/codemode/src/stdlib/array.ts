@@ -249,7 +249,7 @@ export const arrayGlobal = <R>(runner: Runner<R>) => {
             items[index] = item
           })
           Array.from({ length: holeCount }, (_, index) => itemCount + index).forEach((index) => {
-            Reflect.deleteProperty(items, index)
+            delete items[index]
           })
           return target
         })

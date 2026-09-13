@@ -177,6 +177,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
               options: event.options,
               sdk: event.sdk,
             }
+            // oxlint-disable-next-line no-restricted-globals -- The generic hook callback remains a union after narrowing by hook name.
             return Reflect.apply(callback, undefined, [output]).pipe(
               Effect.tap(() => Effect.sync(() => (event.sdk = output.sdk))),
             )
@@ -190,6 +191,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
             sdk: event.sdk,
             language: event.language,
           }
+          // oxlint-disable-next-line no-restricted-globals -- The generic hook callback remains a union after narrowing by hook name.
           return Reflect.apply(callback, undefined, [output]).pipe(
             Effect.tap(() => Effect.sync(() => (event.language = output.language))),
           )

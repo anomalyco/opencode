@@ -59,7 +59,7 @@ describe("checkServerHealth", () => {
 
     await checkServerHealth(server, fetch).finally(() => {
       if (timeout) Object.defineProperty(AbortSignal, "timeout", timeout)
-      if (!timeout) Reflect.deleteProperty(AbortSignal, "timeout")
+      if (!timeout) delete (AbortSignal as Partial<typeof AbortSignal>).timeout
     })
 
     expect(timeoutMs).toBe(30_000)
@@ -100,7 +100,7 @@ describe("checkServerHealth", () => {
       timeoutMs: 10,
     }).finally(() => {
       if (timeout) Object.defineProperty(AbortSignal, "timeout", timeout)
-      if (!timeout) Reflect.deleteProperty(AbortSignal, "timeout")
+      if (!timeout) delete (AbortSignal as Partial<typeof AbortSignal>).timeout
     })
 
     expect(aborted).toBe(true)

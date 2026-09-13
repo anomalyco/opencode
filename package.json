@@ -24,6 +24,7 @@
     "test:lint-rules": "ast-grep test -c script/ast-grep/sgconfig.yml",
     "test:effect-simplification-rules": "ast-grep test -c script/ast-grep/effect-simplifications/sgconfig.yml",
     "typecheck": "bun turbo typecheck --concurrency=3",
+    "check": "bun run lint && bun run typecheck",
     "typecheck:profile": "bun script/profile-typecheck.ts",
     "typecheck:profile:packages": "bun script/profile-typecheck-packages.ts",
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",

@@ -301,6 +301,7 @@ test("uses migrated keybinds when persistence fails", async () => {
   const fs = new Proxy(node, {
     get(target, property, receiver) {
       if (property === "rename") return () => Effect.die(new Error("read-only config"))
+      // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property access.
       return Reflect.get(target, property, receiver)
     },
   })

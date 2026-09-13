@@ -761,7 +761,7 @@ function formRequestOptions(location: LocationRef | undefined): [] | [{ headers:
 }
 
 function formAlreadySettled(error: unknown) {
-  return !!error && typeof error === "object" && Reflect.get(error, "_tag") === "FormAlreadySettledError"
+  return !!error && typeof error === "object" && "_tag" in error && error._tag === "FormAlreadySettledError"
 }
 
 function partID(eventID: string) {

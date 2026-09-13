@@ -99,6 +99,7 @@ describe("WebSocket", () => {
       Effect.gen(function* () {
         const constructor = yield* Socket.WebSocketConstructor
         const options = { headers: { authorization: "Bearer fixture" } }
+        // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes runtime constructor options absent from the public socket type.
         const socket = Reflect.apply(constructor, undefined, ["wss://echo.example.test/options", options])
         yield* Effect.callback<void>((resume) => {
           socket.addEventListener("open", () => {

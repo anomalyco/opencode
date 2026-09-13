@@ -78,7 +78,7 @@ export async function syncEditedFiles(input: {
   const files = Array.isArray(input.metadata.files)
     ? input.metadata.files.flatMap((file): string[] => {
         if (!file || typeof file !== "object") return []
-        const path = Reflect.get(file, "file")
+        const path = "file" in file ? file.file : undefined
         return typeof path === "string" ? [path] : []
       })
     : []

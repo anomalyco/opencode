@@ -168,9 +168,9 @@ export function formatUnknownError(error: unknown): string {
   if (typeof error === "string") return error
   if (error instanceof Error) return error.message || error.name
   if (error && typeof error === "object") {
-    const message = Reflect.get(error, "message")
+    const message = "message" in error ? error.message : undefined
     if (typeof message === "string" && message.trim()) return message
-    const tag = Reflect.get(error, "_tag")
+    const tag = "_tag" in error ? error._tag : undefined
     if (typeof tag === "string" && tag.trim()) return tag
   }
   return "unknown error"

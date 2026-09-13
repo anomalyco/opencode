@@ -1,4 +1,4 @@
-name: typecheck
+name: check
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  typecheck:
+  check:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
@@ -17,5 +17,5 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Run typecheck
-        run: bun typecheck
+      - name: Run checks
+        run: bun run check
