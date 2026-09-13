@@ -444,5 +444,6 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] One failure is one error object: every `catch`, rejection handler, and `allSettled` reason for the same
       failure sees the identical value, so `a === b` holds after awaiting the same rejected promise twice.
 - [x] Rethrowing an interpreter failure keeps its diagnostic: `catch (e) { throw e }` still reports the original
-      kind and source location. An uncaught program `Error` reports as `name: message` (`TypeError: bad input`);
-      other thrown values report as `Uncaught: <value>`.
+      kind and source location. Uncaught errors report as `name: message` whoever raised them, as
+      `Error.prototype.toString` would (`TypeError: Cannot read properties of null (reading 'foo').`,
+      `TypeError: bad input`); other thrown values report as `Uncaught: <value>`.

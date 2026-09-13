@@ -737,9 +737,9 @@ describe("stdlib integration", () => {
     expect(await value(`const make = (C) => new C([["a", 1]]); return make(Map).get("a")`)).toBe(1)
     expect(await value(`const t = { M: Map }; return new t.M() instanceof Map`)).toBe(true)
     const shadowed = await error(`const Date = 5; return new Date()`)
-    expect(shadowed.message).toStartWith("Date is not a constructor.")
+    expect(shadowed.message).toStartWith("TypeError: Date is not a constructor.")
     const fn = await error(`const f = () => 1; return new f()`)
-    expect(fn.message).toStartWith("f cannot be constructed")
+    expect(fn.message).toStartWith("TypeError: f cannot be constructed")
   })
 
   test("Object.is uses SameValue semantics", async () => {

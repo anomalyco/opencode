@@ -54,7 +54,7 @@ describe("rethrown interpreter failures", () => {
   test("keep their diagnostic kind and source location", async () => {
     const failure = await error(`try { switch (Symbol) {} } catch (e) { throw e }`)
     expect(failure.kind).toBe("InvalidDataValue")
-    expect(failure.message).toStartWith("Switch discriminants must be data values. (line ")
+    expect(failure.message).toStartWith("TypeError: Switch discriminants must be data values. (line ")
     expect(failure.location).toBeDefined()
   })
 
@@ -101,11 +101,11 @@ describe("host errors escaping built-ins", () => {
   test("report the location of the call that raised them", async () => {
     const failure = await error(`return [1].map((n) => n.toFixed(200))`)
     expect(failure.kind).toBe("ExecutionFailure")
-    expect(failure.message).toBe("toFixed() argument must be between 0 and 100 (line 1, col 23)")
+    expect(failure.message).toBe("RangeError: toFixed() argument must be between 0 and 100 (line 1, col 23)")
   })
 
   test("a failure inside a built-in called by another built-in is located at the outer call", async () => {
     const failure = await error(`return Array.from({ [Symbol.iterator]: () => ({ next: 1 }) })`)
-    expect(failure.message).toBe("Iterator next must be a function. (line 1, col 8)")
+    expect(failure.message).toBe("TypeError: Iterator next must be a function. (line 1, col 8)")
   })
 })

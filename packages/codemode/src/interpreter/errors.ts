@@ -23,7 +23,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof PendingThrow) {
     return {
       kind: error.kind,
-      message: `${error.message}${formatLocation(error.node)}`,
+      message: `${error.type}: ${error.message}${formatLocation(error.node)}`,
       ...(error.node?.loc ? { location: sourceLocation(error.node) } : {}),
       ...(error.suggestions ? { suggestions: error.suggestions } : {}),
     }
