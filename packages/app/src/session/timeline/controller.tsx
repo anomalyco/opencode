@@ -80,13 +80,13 @@ export function createTimelineController(input: { session: TimelineSessionSource
     )
   })
   const titleValue = createMemo(() => input.session.data.info()?.title)
-  const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("command.session.new"))
+  const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("session.tab.session"))
   const parentMessages = createMemo(() => {
     const id = input.session.data.parentID()
     return id ? data.session.message.list(id) : emptyMessages
   })
   const parentTitle = createMemo(
-    () => sessionTitle(input.session.data.parent()?.title) ?? language.t("command.session.new"),
+    () => sessionTitle(input.session.data.parent()?.title) ?? language.t("session.tab.session"),
   )
   const childTaskDescription = createMemo(() => {
     const id = input.session.identity.sessionID()
@@ -100,7 +100,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       parentID: input.session.data.parentID(),
       taskDescription: childTaskDescription(),
       title: titleLabel(),
-      fallback: language.t("command.session.new"),
+      fallback: language.t("session.tab.session"),
     })
   })
   const showHeader = createMemo(() => !!input.session.identity.sessionID())
@@ -209,7 +209,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
 
   function DeleteDialog(props: { sessionID: string }) {
     const name = createMemo(
-      () => sessionTitle(data.session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
+      () => sessionTitle(data.session.get(props.sessionID)?.title) ?? language.t("session.tab.session"),
     )
     const confirm = async () => {
       await remove(props.sessionID)
