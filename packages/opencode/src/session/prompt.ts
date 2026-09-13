@@ -55,7 +55,11 @@ import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
+import { usable } from "./overflow"
 import { LLMEvent } from "@opencode-ai/llm"
+import { Token } from "@/util/token"
+import { ToolJsonSchema } from "@/tool/json-schema"
+import { ProviderTransform } from "@/provider/transform"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -188,6 +192,44 @@ const layer = Layer.effect(
         { concurrency: "unbounded", discard: true },
       )
       return parts
+    })
+
+    // Estimated token size of everything a request carries besides conversation
+    // content: system prompt parts (environment, instructions, MCP hints,
+    // skills) plus tool schemas. When this alone meets or exceeds the model's
+    // usable window, no amount of compaction can make the session fit.
+    const fixedFloor = Effect.fn("SessionPrompt.fixedFloor")(function* (input: {
+      model: Provider.Model
+      agent: Agent.Info
+      session: Session.Info
+    }) {
+      const [skills, env, instructions, mcpInstructions, items, mcpTools] = yield* Effect.all([
+        sys.skills(input.agent),
+        sys.environment(input.model),
+        instruction.system().pipe(Effect.orDie),
+        sys.mcp(input.agent, input.session.permission),
+        registry.tools({
+          modelID: ModelV2.ID.make(input.model.api.id),
+          providerID: input.model.providerID,
+          agent: input.agent,
+          permission: input.session.permission,
+        }),
+        mcp.tools(),
+      ])
+      let size = Token.estimate(
+        [...env, ...instructions, ...(mcpInstructions ? [mcpInstructions] : []), ...(skills ? [skills] : [])].join(
+          "\n\n",
+        ),
+      )
+      for (const item of items) {
+        size += Token.estimate(
+          item.description + JSON.stringify(ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))),
+        )
+      }
+      for (const entry of Object.values(mcpTools)) {
+        size += Token.estimate(JSON.stringify(entry.def))
+      }
+      return size
     })
 
     const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
@@ -1163,6 +1205,25 @@ const layer = Layer.effect(
             lastFinished.summary !== true &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
+            const overflowAgent = yield* agents.get(lastUser.agent)
+            if (overflowAgent) {
+              const floor = yield* fixedFloor({ model, agent: overflowAgent, session })
+              const budget = usable({
+                cfg: yield* config.get(),
+                model,
+                outputTokenMax: flags.outputTokenMax,
+              })
+              if (budget > 0 && floor >= budget) {
+                const error = SessionCompaction.windowTooSmallError({ floor, usable: budget })
+                yield* Effect.logWarning("fixed request size exceeds usable window, skipping futile compaction", {
+                  "session.id": sessionID,
+                  floor,
+                  usable: budget,
+                })
+                yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+                break
+              }
+            }
             const streak = yield* compaction.failedStreak({ sessionID, model })
             if (streak >= SessionCompaction.MAX_FAILED_AUTO_COMPACTIONS) {
               const error = SessionCompaction.compactionStuckError(streak)
@@ -1328,6 +1389,23 @@ const layer = Layer.effect(
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
+              const floor = yield* fixedFloor({ model, agent, session })
+              const budget = usable({
+                cfg: yield* config.get(),
+                model,
+                outputTokenMax: flags.outputTokenMax,
+              })
+              if (budget > 0 && floor >= budget) {
+                yield* Effect.logWarning("fixed request size exceeds usable window, skipping futile compaction", {
+                  "session.id": sessionID,
+                  floor,
+                  usable: budget,
+                })
+                handle.message.error = SessionCompaction.windowTooSmallError({ floor, usable: budget }).toObject()
+                yield* sessions.updateMessage(handle.message)
+                yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+                return "break" as const
+              }
               const streak = yield* compaction.failedStreak({ sessionID, model })
               if (streak >= SessionCompaction.MAX_FAILED_AUTO_COMPACTIONS) {
                 yield* Effect.logWarning("auto-compaction loop detected, stopping", {

@@ -810,6 +810,18 @@ describe("session.compaction.preserveRecentBudget", () => {
   })
 })
 
+describe("session.compaction.windowTooSmallError", () => {
+  test("reports the floor, the usable window, and actionable advice", () => {
+    const error = SessionCompaction.windowTooSmallError({ floor: 34_500, usable: 33_536 })
+    expect(error).toBeInstanceOf(SessionV1.ContextOverflowError)
+    expect(error.data.message).toContain("34,500")
+    expect(error.data.message).toContain("33,536")
+    expect(error.data.message).toContain("compacting the conversation cannot help")
+    expect(error.data.message).toContain("larger context window")
+    expect(error.data.message).toContain("tools/MCP servers")
+  })
+})
+
 describe("session.compaction.process chunking", () => {
   const small = () => ProviderTest.fake({ model: createModel({ context: 20_000, output: 4_000 }) })
   // usable = 16000 -> chunk budget 8000, tail budget 4000

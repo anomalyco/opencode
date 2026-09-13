@@ -243,6 +243,19 @@ export function compactionStuckError(streak: number) {
   })
 }
 
+// Fail-fast signal for sessions whose floor can never fit: when the fixed
+// request overhead (system prompt, tool schemas, instructions) alone meets or
+// exceeds the model's usable window, every request overflows no matter how
+// little conversation content remains, so compaction is provably futile.
+export function windowTooSmallError(input: { floor: number; usable: number }) {
+  return new SessionV1.ContextOverflowError({
+    message: [
+      `This project's baseline request size (~${input.floor.toLocaleString("en-US")} tokens of system prompt, tool definitions, and instructions) already exceeds this model's usable context window (${input.usable.toLocaleString("en-US")} tokens), so compacting the conversation cannot help.`,
+      "Switch to a model with a larger context window, or reduce enabled tools/MCP servers and instruction files.",
+    ].join(" "),
+  })
+}
+
 function turns(messages: SessionV1.WithParts[]) {
   const result: Turn[] = []
   for (let i = 0; i < messages.length; i++) {
