@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { auth, refreshAuthorization } from "@modelcontextprotocol/sdk/client/auth.js"
+import { auth, refreshAuthorization } from "@modelcontextprotocol/client"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/schema/credential"
 import { Integration } from "@opencode/core/integration"
@@ -112,7 +112,13 @@ describe("MCP OAuth", () => {
     const result = await auth(oauthProvider, { serverUrl: server.url.href }).finally(() => server.stop(true))
 
     expect(result).toBe("AUTHORIZED")
-    expect(await store.tokens()).toEqual({ access_token: "next", token_type: "Bearer", refresh_token: "refresh" })
+    // The SDK stamps the issuer it refreshed against so the credential stays bound to that server.
+    expect(await store.tokens()).toEqual({
+      access_token: "next",
+      token_type: "Bearer",
+      refresh_token: "refresh",
+      issuer: server.url.href,
+    })
     expect(tokenRequests).toHaveLength(1)
     expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
     expect(tokenRequests[0]?.get("refresh_token")).toBe("refresh")
@@ -121,29 +127,38 @@ describe("MCP OAuth", () => {
   test("shares concurrent refreshes for the same token", async () => {
     let requests = 0
     const pending = Promise.withResolvers<void>()
-    const options = {
-      metadata: {
-        issuer: "https://auth.example.com",
-        authorization_endpoint: "https://auth.example.com/authorize",
-        token_endpoint: "https://auth.example.com/token",
-        response_types_supported: ["code"],
-      },
-      clientInformation: { client_id: "client" },
-      refreshToken: "refresh",
-      fetchFn: async () => {
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const body = new URLSearchParams(await request.text())
+        if (body.get("grant_type") !== "refresh_token") return new Response(null, { status: 404 })
         requests++
         await pending.promise
         return Response.json({ access_token: "access", token_type: "Bearer", refresh_token: "next" })
       },
+    })
+    const fetchFn = await Effect.runPromise(McpOAuth.loggedFetch({ server: "test" }))
+    const options = {
+      metadata: {
+        issuer: server.url.origin,
+        authorization_endpoint: `${server.url.origin}/authorize`,
+        token_endpoint: `${server.url.origin}/token`,
+        response_types_supported: ["code"],
+      },
+      clientInformation: { client_id: "client" },
+      refreshToken: "refresh",
+      fetchFn,
     }
 
-    const first = refreshAuthorization(new URL("https://auth.example.com"), options)
-    const second = refreshAuthorization(new URL("https://auth.example.com"), options)
-    await Promise.resolve()
+    const first = refreshAuthorization(new URL(server.url.origin), options)
+    const second = refreshAuthorization(new URL(server.url.origin), options)
+    // Both refreshes must reach the token endpoint before the shared response is released.
+    await new Promise((resolve) => setTimeout(resolve, 50))
 
     expect(requests).toBe(1)
     pending.resolve()
-    expect(await Promise.all([first, second])).toEqual([
+    const results = await Promise.all([first, second]).finally(() => server.stop(true))
+    expect(results).toEqual([
       { access_token: "access", token_type: "Bearer", refresh_token: "next" },
       { access_token: "access", token_type: "Bearer", refresh_token: "next" },
     ])
@@ -227,7 +242,10 @@ describe("MCP OAuth", () => {
 
       expect(registrations).toHaveLength(0)
       expect(tokenRequests[0]?.get("client_id")).toBe(McpOAuth.CLIENT_METADATA_URL)
-      expect(McpOAuth.clientFromCredential(credential)).toEqual({ client_id: McpOAuth.CLIENT_METADATA_URL })
+      expect(McpOAuth.clientFromCredential(credential)).toEqual({
+        client_id: McpOAuth.CLIENT_METADATA_URL,
+        issuer: server.url.origin,
+      })
     })
 
     test("registers dynamically when the server does not accept public clients", async () => {

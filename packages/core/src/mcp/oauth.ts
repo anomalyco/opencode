@@ -4,11 +4,12 @@ import {
   auth,
   discoverOAuthServerInfo,
   parseErrorResponse,
+  type FetchLike,
   type OAuthClientProvider,
   type OAuthServerInfo,
-} from "@modelcontextprotocol/sdk/client/auth.js"
-import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js"
-import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js"
+  type StoredOAuthClientInformation,
+  type StoredOAuthTokens,
+} from "@modelcontextprotocol/client"
 import { Cause, Deferred, Effect } from "effect"
 import { Credential } from "@opencode/schema/credential"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
@@ -22,6 +23,34 @@ import { ErrorSummary } from "../util/error-summary.js"
  */
 export const CLIENT_METADATA_URL = "https://opencode.ai/oauth/opencode/client.json"
 
+// Refresh tokens rotate on many servers, so two concurrent refreshes of the same token would make the
+// second fail with invalid_grant. Concurrent refreshes share one in-flight request, process-wide, so
+// separate connections holding the same credential row cannot race each other.
+const refreshes = new Map<string, ReturnType<FetchLike>>()
+
+const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
+  if (!(init?.body instanceof URLSearchParams) || init.body.get("grant_type") !== "refresh_token") return undefined
+  return [String(url), init.body.get("client_id") ?? "", init.body.get("refresh_token") ?? ""].join("\u0000")
+}
+
+// `fetch` is typed against undici's Response while the SDK's FetchLike uses the global one.
+const base = fetch as unknown as FetchLike
+
+// Every waiter gets its own body; `clone()` is typed against the DOM Response, hence the assertion.
+const share = (pending: ReturnType<FetchLike>) => pending.then((response) => response.clone() as typeof response)
+
+const send: FetchLike = (url, init) => {
+  const key = refreshKey(url, init)
+  if (key === undefined) return base(url, init)
+  const current = refreshes.get(key)
+  if (current) return share(current)
+  const pending = base(url, init).finally(() => {
+    if (refreshes.get(key) === pending) refreshes.delete(key)
+  })
+  refreshes.set(key, pending)
+  return share(pending)
+}
+
 /** Observe OAuth failures before the SDK handles them by invalidating credentials or redirecting. */
 export const loggedFetch = (fields: { readonly server: string; readonly directory?: string }) =>
   Effect.gen(function* () {
@@ -33,12 +62,12 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
       return run(
         Effect.gen(function* () {
           if (operation) yield* Effect.logInfo("mcp oauth request started")
-          const response = yield* Effect.tryPromise({ try: () => fetch(url, init), catch: (error) => error })
+          const response = yield* Effect.tryPromise({ try: () => send(url, init), catch: (error) => error })
           const result = { status: response.status, durationMs: Date.now() - started }
           if (operation && !response.ok) {
             // Only retain the SDK's standard error code. Descriptions and raw bodies can echo credentials.
             const error = yield* Effect.tryPromise(async () => parseErrorResponse(await response.clone().text())).pipe(
-              Effect.map((error) => error.errorCode),
+              Effect.map((error) => error.code),
               Effect.orElseSucceed(() => "unreadable_response"),
             )
             yield* Effect.logWarning("mcp oauth request rejected", { ...result, error })
@@ -73,10 +102,10 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
 
 /** Persists the OAuth artifacts for one MCP server session: DCR client info, PKCE verifier, and tokens. */
 export interface Store {
-  readonly tokens: () => Promise<OAuthTokens | undefined>
-  readonly saveTokens: (tokens: OAuthTokens) => Promise<void>
-  readonly clientInformation: () => Promise<OAuthClientInformationMixed | undefined>
-  readonly saveClientInformation: (info: OAuthClientInformationMixed) => Promise<void>
+  readonly tokens: () => Promise<StoredOAuthTokens | undefined>
+  readonly saveTokens: (tokens: StoredOAuthTokens) => Promise<void>
+  readonly clientInformation: () => Promise<StoredOAuthClientInformation | undefined>
+  readonly saveClientInformation: (info: StoredOAuthClientInformation) => Promise<void>
   readonly codeVerifier: () => Promise<string | undefined>
   readonly saveCodeVerifier: (verifier: string) => Promise<void>
 }
@@ -146,8 +175,8 @@ export const provider = (options: Options): OAuthClientProvider => {
 
 /** A Store that keeps OAuth artifacts in memory for the duration of one interactive login attempt. */
 export const memoryStore = (): Store => {
-  let tokens: OAuthTokens | undefined
-  let client: OAuthClientInformationMixed | undefined
+  let tokens: StoredOAuthTokens | undefined
+  let client: StoredOAuthClientInformation | undefined
   let verifier: string | undefined
   return {
     tokens: async () => tokens,
@@ -167,14 +196,14 @@ export const memoryStore = (): Store => {
 
 /** Reads the dynamically-registered client info we stash in a credential's metadata, for token refresh. */
 export const clientFromCredential = (credential: Credential.OAuth) =>
-  credential.metadata?.client as OAuthClientInformationMixed | undefined
+  credential.metadata?.client as StoredOAuthClientInformation | undefined
 
 /** Folds SDK tokens (plus DCR client info and the server URL) into a storable credential. */
 export const toCredential = (input: {
   readonly methodID: Integration.MethodID
   readonly serverUrl: string
-  readonly tokens: OAuthTokens
-  readonly client: OAuthClientInformationMixed | undefined
+  readonly tokens: StoredOAuthTokens
+  readonly client: StoredOAuthClientInformation | undefined
 }) =>
   Credential.OAuth.make({
     type: "oauth",
@@ -187,12 +216,15 @@ export const toCredential = (input: {
       serverUrl: input.serverUrl,
       tokenType: input.tokens.token_type,
       ...(input.tokens.scope ? { scope: input.tokens.scope } : {}),
+      // The SDK binds credentials to the authorization server that issued them and refuses to present
+      // them elsewhere; the issuer must round-trip through storage for that check to stay active.
+      ...(input.tokens.issuer ? { issuer: input.tokens.issuer } : {}),
       ...(input.client ? { client: input.client } : {}),
     },
   })
 
 /** Reconstructs SDK tokens from a stored credential so the connect-time provider can present them. */
-export const toTokens = (credential: Credential.OAuth): OAuthTokens => {
+export const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
   const metadata = credential.metadata ?? {}
   return {
     access_token: credential.access,
@@ -200,6 +232,7 @@ export const toTokens = (credential: Credential.OAuth): OAuthTokens => {
     ...(credential.refresh ? { refresh_token: credential.refresh } : {}),
     ...(credential.expires ? { expires_in: Math.max(0, Math.floor((credential.expires - Date.now()) / 1000)) } : {}),
     ...(typeof metadata.scope === "string" ? { scope: metadata.scope } : {}),
+    ...(typeof metadata.issuer === "string" ? { issuer: metadata.issuer } : {}),
   }
 }
 

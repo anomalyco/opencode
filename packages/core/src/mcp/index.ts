@@ -506,6 +506,35 @@ export const layer = (options?: Options) =>
             ),
           )
 
+      // Re-establishes a server whose HTTP session the server dropped, unless another path already
+      // replaced the connection while this one waited for the lock.
+      const recover = (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) =>
+        Effect.gen(function* () {
+          if (entry.client !== connection) return
+          yield* Effect.logInfo("mcp session expired, reconnecting", { server: name })
+          yield* stopServer(name, entry)
+          yield* startServer(name, entry)
+        }).pipe(locks.withLock(name))
+
+      // Runs a request against the live connection and, if that request observed a session expiry,
+      // reconnects and runs it once more against the replacement. Any other failure passes through.
+      const recovering = <A, E extends Error>(
+        name: ServerName,
+        entry: ServerEntry,
+        connection: McpClient.Connection,
+        run: (connection: McpClient.Connection) => Effect.Effect<A, E>,
+      ) =>
+        run(connection).pipe(
+          Effect.catchIf(
+            // The client module is loaded lazily, so match the tagged error by tag rather than class.
+            (error) => "_tag" in error && error._tag === "MCP.SessionExpiredError",
+            (error) =>
+              recover(name, entry, connection).pipe(
+                Effect.flatMap(() => (entry.client ? run(entry.client) : Effect.fail(error))),
+              ),
+          ),
+        )
+
       const watch = (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) => {
         const live = whenLive(name, entry, connection)
         connection.onClose(() =>
@@ -517,6 +546,9 @@ export const layer = (options?: Options) =>
             }),
           ),
         )
+        // Background refreshes (list-changed) can observe the expiry too; they do not retry, so
+        // reconnect here for them. Foreground calls reconnect through `recovering`.
+        connection.onSessionExpired(() => fork(recover(name, entry, connection)))
         connection.onLog((message) => fork(serverLog(name, message)))
         connection.onToolsChanged(() =>
           live(
@@ -805,13 +837,13 @@ export const layer = (options?: Options) =>
               tool: input.name,
               message: "MCP server is not connected",
             })
-          const result = yield* target.entry.client
-            .callTool({ name: input.name, args: input.args, sessionID: input.sessionID })
-            .pipe(
-              Effect.mapError(
-                (error) => new ToolCallError({ server: target.name, tool: input.name, message: error.message }),
-              ),
-            )
+          const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
+            connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID }),
+          ).pipe(
+            Effect.mapError(
+              (error) => new ToolCallError({ server: target.name, tool: input.name, message: error.message }),
+            ),
+          )
           return new ToolResult({
             server: target.name,
             tool: input.name,
@@ -839,9 +871,9 @@ export const layer = (options?: Options) =>
           const target = yield* requireServer(input.server)
           yield* target.entry.startup.await
           if (!target.entry.client) return undefined
-          const result = yield* target.entry.client
-            .prompt({ name: input.name, args: input.args })
-            .pipe(Effect.orElseSucceed(() => undefined))
+          const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
+            connection.prompt({ name: input.name, args: input.args }),
+          ).pipe(Effect.orElseSucceed(() => undefined))
           if (!result) return undefined
           return new PromptResult({
             server: target.name,
@@ -893,9 +925,9 @@ export const layer = (options?: Options) =>
           const target = yield* requireServer(input.server)
           yield* target.entry.startup.await
           if (!target.entry.client) return undefined
-          const result = yield* target.entry.client
-            .readResource({ uri: input.uri })
-            .pipe(Effect.orElseSucceed(() => undefined))
+          const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
+            connection.readResource({ uri: input.uri }),
+          ).pipe(Effect.orElseSucceed(() => undefined))
           if (!result) return undefined
           return ResourceContent.make({
             server: target.name,

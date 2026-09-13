@@ -1,8 +1,6 @@
 export * as McpStdio from "./stdio.js"
 
-import { ReadBuffer, serializeMessage } from "@modelcontextprotocol/sdk/shared/stdio.js"
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
-import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js"
+import { ReadBuffer, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
 import { Cause, Duration, Effect, Queue, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"

@@ -2,28 +2,22 @@ export * as McpClient from "./client.js"
 
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
-import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
-  CallToolResultSchema,
-  ElicitationCompleteNotificationSchema,
-  ElicitRequestSchema,
-  type Implementation,
+  Client,
+  SdkHttpError,
+  StreamableHTTPClientTransport,
+  UnauthorizedError,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
   type ElicitRequestURLParams,
   type ElicitResult,
-  ListRootsRequestSchema,
-  ListToolsResultSchema,
-  PromptListChangedNotificationSchema,
-  ResourceListChangedNotificationSchema,
+  type Implementation,
   type LoggingMessageNotification,
-  LoggingMessageNotificationSchema,
-  ToolListChangedNotificationSchema,
-  ToolSchema,
-} from "@modelcontextprotocol/sdk/types.js"
+  type OAuthClientProvider,
+  type ProtocolEra,
+  type Transport,
+  type VersionNegotiationOptions,
+} from "@modelcontextprotocol/client"
 import { Cause, Effect, Exit, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
@@ -34,11 +28,8 @@ const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 
-// Some servers advertise tool outputSchemas the SDK's strict validator can't resolve; this drops
-// only that field so a single bad schema doesn't blank out the whole tool list.
-const TolerantListToolsResult = ListToolsResultSchema.extend({
-  tools: ToolSchema.omit({ outputSchema: true }).array(),
-})
+export type Era = ProtocolEra
+
 export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
   server: Schema.String,
 }) {
@@ -51,6 +42,19 @@ export class ConnectError extends Schema.TaggedError<ConnectError>()("MCP.Connec
   server: Schema.String,
   message: Schema.String,
 }) {}
+
+/**
+ * A legacy Streamable HTTP server no longer recognizes this connection's session, typically because
+ * it restarted. The connection is unusable until it is re-established; the request that observed
+ * the expiry is not retried here.
+ */
+export class SessionExpiredError extends Schema.TaggedError<SessionExpiredError>()("MCP.SessionExpiredError", {
+  server: Schema.String,
+}) {
+  override get message() {
+    return `MCP server session expired: ${this.server}`
+  }
+}
 
 export interface ToolDefinition {
   readonly name: string
@@ -136,7 +140,12 @@ export interface LogMessage {
 
 /** Handle over a connected MCP server that keeps the SDK `Client` out of the rest of core. */
 export interface Connection {
-  /** Server-supplied usage instructions from the initialize result, if any. */
+  /**
+   * Protocol family negotiated for this connection. `legacy` covers revisions through 2025-11-25
+   * (initialize handshake, server-initiated requests); `modern` is 2026-07-28 and later.
+   */
+  readonly era: Era
+  /** Server-supplied usage instructions from the initialize or discover result, if any. */
   readonly instructions: string | undefined
   /** Lists the server's tools; returns [] when the server doesn't advertise tool support, fails on a transport error. */
   readonly tools: () => Effect.Effect<ToolDefinition[], Error>
@@ -160,6 +169,8 @@ export interface Connection {
     readonly sessionID?: Session.ID
   }) => Effect.Effect<CallToolResult, Error>
   readonly onClose: (callback: () => void) => void
+  /** Registers a callback fired once when a request observes that the server dropped this session. */
+  readonly onSessionExpired: (callback: () => void) => void
   /** Registers a callback fired when the server emits an MCP logging notification. */
   readonly onLog: (callback: (message: LogMessage) => void) => void
   /** Registers a callback fired when the server announces its tool list changed; no-op if unsupported. */
@@ -186,6 +197,17 @@ export const connect = Effect.fnUntraced(function* (
   elicitation?: ElicitationHandler,
   clientInfo: Implementation = { name: "opencode", version: "unknown" },
 ) {
+  // List-changed handlers must be supplied when the SDK client is built, but Connection consumers
+  // register theirs after connect. These slots bridge the two; the SDK only activates a handler
+  // when the server advertises the matching listChanged capability, and on a modern connection it
+  // opens the subscriptions/listen stream that carries those notifications.
+  const changed = { tools: () => {}, prompts: () => {}, resources: () => {} }
+  const listChanged = (key: keyof typeof changed) => ({
+    autoRefresh: false,
+    debounceMs: 0,
+    onChanged: () => changed[key](),
+  })
+
   const initialize = Effect.fnUntraced(function* (transport: Transport) {
     const client = new Client(clientInfo, {
       capabilities: {
@@ -193,15 +215,19 @@ export const connect = Effect.fnUntraced(function* (
         // https://github.com/anomalyco/opencode/issues/2308
         roots: {},
       },
+      versionNegotiation: negotiation(config.protocol),
+      listChanged: {
+        tools: listChanged("tools"),
+        prompts: listChanged("prompts"),
+        resources: listChanged("resources"),
+      },
     })
-    client.setRequestHandler(ListRootsRequestSchema, () =>
-      Promise.resolve({ roots: [{ uri: pathToFileURL(directory).href }] }),
-    )
+    client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(directory).href }] }))
     if (elicitation) {
-      client.setRequestHandler(ElicitRequestSchema, (request, extra) =>
-        Effect.runPromise(elicitation.create({ server, params: request.params, signal: extra.signal })),
+      client.setRequestHandler("elicitation/create", (request, ctx) =>
+        Effect.runPromise(elicitation.create({ server, params: request.params, signal: ctx.mcpReq.signal })),
       )
-      client.setNotificationHandler(ElicitationCompleteNotificationSchema, (notification) =>
+      client.setNotificationHandler("notifications/elicitation/complete", (notification) =>
         Effect.runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
       )
     }
@@ -213,6 +239,29 @@ export const connect = Effect.fnUntraced(function* (
     }).pipe(Effect.onError(() => Effect.promise(() => transport.close()).pipe(Effect.ignore)))
     return client
   })
+
+  // Only a legacy HTTP session can expire: the transport holds the session id the server minted, and
+  // the server answering that id with 404 (unknown session) or the specific 400 a freshly restarted
+  // single-session server emits means it no longer knows this connection. Modern connections never
+  // carry a session id, so a modern 404 for an unknown method is not mistaken for expiry. Other 400s
+  // are real request errors and pass through untouched.
+  const session: { transport?: StreamableHTTPClientTransport; expired?: () => void; reported: boolean } = {
+    reported: false,
+  }
+  const failure = (error: unknown) => {
+    if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return toError(error)
+    const expired =
+      error.status === 404 ||
+      (error.status === 400 &&
+        typeof error.data.text === "string" &&
+        error.data.text.includes("Bad Request: Server not initialized"))
+    if (!expired) return toError(error)
+    if (!session.reported) {
+      session.reported = true
+      session.expired?.()
+    }
+    return new SessionExpiredError({ server })
+  }
 
   const exit = yield* Effect.gen(function* () {
     if (config.type === "local") {
@@ -237,18 +286,18 @@ export const connect = Effect.fnUntraced(function* (
     const url = new URL(config.url)
     const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode")
     if (addedCodemode) url.searchParams.set("codemode", "false")
-    const open = (url: URL) =>
-      initialize(
-        new StreamableHTTPClientTransport(url, {
-          requestInit: config.headers ? { headers: config.headers } : undefined,
-          authProvider,
-          fetch,
-        }),
-      )
+    const open = (url: URL) => {
+      session.transport = new StreamableHTTPClientTransport(url, {
+        requestInit: config.headers ? { headers: config.headers } : undefined,
+        authProvider,
+        fetch,
+      })
+      return initialize(session.transport)
+    }
 
     return yield* open(url).pipe(
       Effect.catch((error) => {
-        if (!addedCodemode || !(error instanceof StreamableHTTPError) || (error.code !== 400 && error.code !== 404))
+        if (!addedCodemode || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
           return Effect.fail(error)
         // Some servers reject unknown query params. Retry once with the user's original URL.
         return open(new URL(config.url))
@@ -263,27 +312,16 @@ export const connect = Effect.fnUntraced(function* (
     const catalogTimeout = config.timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT
     const executionTimeout = config.timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     return {
+      // The SDK reports the era once connect() resolves; a legacy default with no probe is still legacy.
+      era: client.getProtocolEra() ?? "legacy",
       instructions: client.getInstructions()?.trim() || undefined,
       tools: () =>
         Effect.gen(function* () {
           if (!client.getServerCapabilities()?.tools) return []
           const tools = yield* Effect.tryPromise({
             try: () =>
-              paginate(
-                async (cursor) => {
-                  const params = cursor === undefined ? undefined : { cursor }
-                  try {
-                    return await client.listTools(params, { timeout: catalogTimeout })
-                  } catch (error) {
-                    if (!(error instanceof Error) || !isOutputSchemaError(error)) throw error
-                    return client.request({ method: "tools/list", params }, TolerantListToolsResult, {
-                      timeout: catalogTimeout,
-                    })
-                  }
-                },
-                (result) => result.tools,
-              ),
-            catch: toError,
+              client.listTools(undefined, { timeout: catalogTimeout }).then((result) => result.tools),
+            catch: failure,
           }).pipe(
             Effect.tapError((error) => Effect.logWarning("failed to list MCP tools", { server, error: error.message })),
           )
@@ -299,12 +337,8 @@ export const connect = Effect.fnUntraced(function* (
           if (!client.getServerCapabilities()?.prompts) return []
           const prompts = yield* Effect.tryPromise({
             try: () =>
-              paginate(
-                (cursor) =>
-                  client.listPrompts(cursor === undefined ? undefined : { cursor }, { timeout: catalogTimeout }),
-                (result) => result.prompts,
-              ),
-            catch: toError,
+              client.listPrompts(undefined, { timeout: catalogTimeout }).then((result) => result.prompts),
+            catch: failure,
           }).pipe(
             Effect.tapError((error) =>
               Effect.logWarning("failed to list MCP prompts", { server, error: error.message }),
@@ -325,12 +359,8 @@ export const connect = Effect.fnUntraced(function* (
           if (!client.getServerCapabilities()?.resources) return []
           const resources = yield* Effect.tryPromise({
             try: () =>
-              paginate(
-                (cursor) =>
-                  client.listResources(cursor === undefined ? undefined : { cursor }, { timeout: catalogTimeout }),
-                (result) => result.resources,
-              ),
-            catch: toError,
+              client.listResources(undefined, { timeout: catalogTimeout }).then((result) => result.resources),
+            catch: failure,
           }).pipe(
             Effect.tapError((error) =>
               Effect.logWarning("failed to list MCP resources", { server, error: error.message }),
@@ -348,14 +378,10 @@ export const connect = Effect.fnUntraced(function* (
           if (!client.getServerCapabilities()?.resources) return []
           const templates = yield* Effect.tryPromise({
             try: () =>
-              paginate(
-                (cursor) =>
-                  client.listResourceTemplates(cursor === undefined ? undefined : { cursor }, {
-                    timeout: catalogTimeout,
-                  }),
-                (result) => result.resourceTemplates,
-              ),
-            catch: toError,
+              client
+                .listResourceTemplates(undefined, { timeout: catalogTimeout })
+                .then((result) => result.resourceTemplates),
+            catch: failure,
           }).pipe(
             Effect.tapError((error) =>
               Effect.logWarning("failed to list MCP resource templates", { server, error: error.message }),
@@ -373,7 +399,7 @@ export const connect = Effect.fnUntraced(function* (
           if (!client.getServerCapabilities()?.resources) return undefined
           const result = yield* Effect.tryPromise({
             try: (signal) => client.readResource({ uri: input.uri }, { signal, timeout: executionTimeout }),
-            catch: toError,
+            catch: failure,
           }).pipe(
             Effect.tapError((error) =>
               Effect.logWarning("failed to read MCP resource", { server, uri: input.uri, error: error.message }),
@@ -392,7 +418,7 @@ export const connect = Effect.fnUntraced(function* (
         Effect.tryPromise({
           try: (signal) =>
             client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: executionTimeout }),
-          catch: toError,
+          catch: failure,
         }).pipe(
           Effect.map((result) => ({
             messages: result.messages.map((message) => ({ role: message.role, content: message.content })),
@@ -407,11 +433,10 @@ export const connect = Effect.fnUntraced(function* (
                 arguments: input.args ?? {},
                 ...(input.sessionID === undefined ? {} : { _meta: { sessionID: input.sessionID } }),
               },
-              CallToolResultSchema,
               // Keep progress tokens available while enforcing a hard wall-clock execution timeout.
               { signal, timeout: executionTimeout, onprogress: () => {} },
             ),
-          catch: toError,
+          catch: failure,
         }).pipe(
           Effect.map((result) => ({
             isError: result.isError === true,
@@ -436,20 +461,20 @@ export const connect = Effect.fnUntraced(function* (
       onClose: (callback) => {
         client.onclose = callback
       },
+      onSessionExpired: (callback) => {
+        session.expired = callback
+      },
       onLog: (callback) => {
-        client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) => callback(notification.params))
+        client.setNotificationHandler("notifications/message", (notification) => callback(notification.params))
       },
       onToolsChanged: (callback) => {
-        if (!client.getServerCapabilities()?.tools?.listChanged) return
-        client.setNotificationHandler(ToolListChangedNotificationSchema, async () => callback())
+        changed.tools = callback
       },
       onPromptsChanged: (callback) => {
-        if (!client.getServerCapabilities()?.prompts?.listChanged) return
-        client.setNotificationHandler(PromptListChangedNotificationSchema, async () => callback())
+        changed.prompts = callback
       },
       onResourcesChanged: (callback) => {
-        if (!client.getServerCapabilities()?.resources?.listChanged) return
-        client.setNotificationHandler(ResourceListChangedNotificationSchema, async () => callback())
+        changed.resources = callback
       },
     } satisfies Connection
   }
@@ -459,25 +484,9 @@ export const connect = Effect.fnUntraced(function* (
   return yield* new ConnectError({ server, message: error instanceof Error ? error.message : String(error) })
 })
 
-async function paginate<R extends { nextCursor?: string }, T>(
-  list: (cursor: string | undefined) => Promise<R>,
-  items: (result: R) => T[],
-) {
-  const collected: T[] = []
-  const seen = new Set<string>()
-  let cursor: string | undefined
-  while (true) {
-    const result = await list(cursor)
-    collected.push(...items(result))
-    if (result.nextCursor === undefined) return collected
-    // A repeating cursor never terminates; bail instead of hanging the connection forever.
-    if (seen.has(result.nextCursor)) throw new Error(`MCP list returned duplicate cursor: ${result.nextCursor}`)
-    seen.add(result.nextCursor)
-    cursor = result.nextCursor
-  }
+// Absent config is legacy: the SDK sends the plain initialize handshake with no discover probe.
+function negotiation(protocol: ConfigMCP.Protocol | undefined): VersionNegotiationOptions | undefined {
+  if (protocol === undefined || protocol === "legacy") return undefined
+  if (protocol === "auto") return { mode: "auto" }
+  return { mode: { pin: protocol } }
 }
-
-const isOutputSchemaError = (error: Error) =>
-  /can't resolve reference|resolves to more than one schema|outputSchema|schema.*reference|reference.*schema/i.test(
-    error.message,
-  )

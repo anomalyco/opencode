@@ -1,18 +1,8 @@
 import path from "node:path"
 import fs from "node:fs/promises"
 import { describe, expect, test } from "bun:test"
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
-import { Server } from "@modelcontextprotocol/sdk/server/index.js"
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
-import {
-  CallToolRequestSchema,
-  ListResourcesRequestSchema,
-  ListResourceTemplatesRequestSchema,
-  ListToolsRequestSchema,
-  ReadResourceRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js"
+import { Client, InMemoryTransport, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
+import { Server, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
@@ -110,101 +100,114 @@ function resourceServer(
         }>,
         initializations: 0,
         urls: [] as string[],
+        sessions: [] as string[],
       }
-      const protocol = new Server(
-        { name: "mcp-resources", version: "1.0.0" },
-        {
-          capabilities: {
-            tools: {},
-            ...(input.resources === false ? {} : { resources: { listChanged: input.listChanged } }),
+      // One Server speaks one session, so a restart is a fresh Server and transport. Requests that
+      // still carry the previous session id are then unknown to the new transport.
+      const build = async () => {
+        const protocol = new Server(
+          { name: "mcp-resources", version: "1.0.0" },
+          {
+            capabilities: {
+              tools: {},
+              ...(input.resources === false ? {} : { resources: { listChanged: input.listChanged } }),
+            },
           },
-        },
-      )
-      protocol.setRequestHandler(ListToolsRequestSchema, () => {
-        state.toolLists += 1
-        return Promise.resolve({
-          tools: input.emptyElicitation
-            ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
-            : input.urlElicitation
-              ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
-              : [],
-        })
-      })
-      if (input.emptyElicitation) {
-        protocol.setRequestHandler(CallToolRequestSchema, async () => {
-          const result = await protocol.elicitInput({
-            mode: "form",
-            message: "Confirm",
-            requestedSchema: { type: "object", properties: {} },
+        )
+        protocol.setRequestHandler("tools/list", () => {
+          state.toolLists += 1
+          return Promise.resolve({
+            tools: input.emptyElicitation
+              ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+              : input.urlElicitation
+                ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+                : [],
           })
-          return {
-            content: [{ type: "text", text: JSON.stringify(result) }],
-            structuredContent: result,
-          }
         })
-      }
-      if (input.urlElicitation) {
-        protocol.setRequestHandler(CallToolRequestSchema, async () => {
-          const result = await protocol.elicitInput({
-            mode: "url",
-            message: "Authorize access",
-            url: "https://example.com/authorize",
-            elicitationId: "elicitation-test",
+        if (input.emptyElicitation) {
+          protocol.setRequestHandler("tools/call", async () => {
+            const result = await protocol.elicitInput({
+              mode: "form",
+              message: "Confirm",
+              requestedSchema: { type: "object", properties: {} },
+            })
+            return {
+              content: [{ type: "text", text: JSON.stringify(result) }],
+              structuredContent: result,
+            }
           })
-          return {
-            content: [{ type: "text", text: JSON.stringify(result) }],
-            structuredContent: result,
-          }
-        })
-      }
-      if (!input.emptyElicitation && !input.urlElicitation) {
-        protocol.setRequestHandler(CallToolRequestSchema, (request) => {
-          state.toolCalls.push({
-            name: request.params.name,
-            arguments: request.params.arguments,
-            sessionID: request.params._meta?.sessionID,
-            progressToken: request.params._meta?.progressToken,
+        }
+        if (input.urlElicitation) {
+          protocol.setRequestHandler("tools/call", async () => {
+            const result = await protocol.elicitInput({
+              mode: "url",
+              message: "Authorize access",
+              url: "https://example.com/authorize",
+              elicitationId: "elicitation-test",
+            })
+            return {
+              content: [{ type: "text", text: JSON.stringify(result) }],
+              structuredContent: result,
+            }
           })
-          return Promise.resolve({ content: [] })
+        }
+        if (!input.emptyElicitation && !input.urlElicitation) {
+          protocol.setRequestHandler("tools/call", (request) => {
+            state.toolCalls.push({
+              name: request.params.name,
+              arguments: request.params.arguments,
+              sessionID: request.params._meta?.sessionID,
+              progressToken: request.params._meta?.progressToken,
+            })
+            return Promise.resolve({ content: [] })
+          })
+        }
+        if (input.resources !== false) {
+          protocol.setRequestHandler("resources/list", (request) => {
+            state.resourceLists += 1
+            const page = state.resourcePages?.[request.params?.cursor ?? "initial"]
+            return Promise.resolve({ resources: page?.items ?? state.resources, nextCursor: page?.nextCursor })
+          })
+          protocol.setRequestHandler("resources/templates/list", (request) => {
+            state.templateLists += 1
+            const page = state.templatePages?.[request.params?.cursor ?? "initial"]
+            return Promise.resolve({ resourceTemplates: page?.items ?? state.templates, nextCursor: page?.nextCursor })
+          })
+          protocol.setRequestHandler("resources/read", () => Promise.resolve({ contents: state.contents }))
+        }
+        const transport = new WebStandardStreamableHTTPServerTransport({
+          sessionIdGenerator: () => crypto.randomUUID(),
+          enableJsonResponse: true,
         })
+        await protocol.connect(transport)
+        return { protocol, transport }
       }
-      if (input.resources !== false) {
-        protocol.setRequestHandler(ListResourcesRequestSchema, (request) => {
-          state.resourceLists += 1
-          const page = state.resourcePages?.[request.params?.cursor ?? "initial"]
-          return Promise.resolve({ resources: page?.items ?? state.resources, nextCursor: page?.nextCursor })
-        })
-        protocol.setRequestHandler(ListResourceTemplatesRequestSchema, (request) => {
-          state.templateLists += 1
-          const page = state.templatePages?.[request.params?.cursor ?? "initial"]
-          return Promise.resolve({ resourceTemplates: page?.items ?? state.templates, nextCursor: page?.nextCursor })
-        })
-        protocol.setRequestHandler(ReadResourceRequestSchema, () => Promise.resolve({ contents: state.contents }))
-      }
-      const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
-        enableJsonResponse: true,
-      })
-      await protocol.connect(transport)
+      let current = await build()
       const http = Bun.serve({
         port: 0,
         fetch: async (request) => {
           state.urls.push(request.url)
+          const session = request.headers.get("mcp-session-id")
+          if (session !== null && !state.sessions.includes(session)) state.sessions.push(session)
           const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
           if (typeof body === "object" && body !== null && "method" in body && body.method === "initialize") {
             state.initializations += 1
           }
-          return (await input.respond?.(request)) ?? transport.handleRequest(request)
+          return (await input.respond?.(request)) ?? current.transport.handleRequest(request)
         },
       })
       return {
         state,
         url: http.url.toString(),
-        clientVersion: () => protocol.getClientVersion(),
-        sendResourceListChanged: () => protocol.sendResourceListChanged(),
-        completeElicitation: () => protocol.createElicitationCompletionNotifier("elicitation-test")(),
+        clientVersion: () => current.protocol.getClientVersion(),
+        sendResourceListChanged: () => current.protocol.sendResourceListChanged(),
+        completeElicitation: () => current.protocol.createElicitationCompletionNotifier("elicitation-test")(),
+        restart: async () => {
+          await current.protocol.close().catch(() => {})
+          current = await build()
+        },
         close: async () => {
-          await protocol.close().catch(() => {})
+          await current.protocol.close().catch(() => {})
           await http.stop(true)
         },
       }
@@ -496,7 +499,7 @@ test("passes session IDs as MCP request metadata", async () => {
 
 test("preserves output schema validation across paginated tool discovery", async () => {
   const server = new Server({ name: "pagination", version: "1.0.0" }, { capabilities: { tools: {} } })
-  server.setRequestHandler(ListToolsRequestSchema, ({ params }) =>
+  server.setRequestHandler("tools/list", ({ params }) =>
     Promise.resolve(
       params?.cursor === "page-2"
         ? {
@@ -528,7 +531,7 @@ test("preserves output schema validation across paginated tool discovery", async
           },
     ),
   )
-  server.setRequestHandler(CallToolRequestSchema, ({ params }) =>
+  server.setRequestHandler("tools/call", ({ params }) =>
     Promise.resolve({
       content: [],
       structuredContent: { value: params.name === "first" ? 42 : 1 },
@@ -540,12 +543,16 @@ test("preserves output schema validation across paginated tool discovery", async
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
 
   try {
-    const first = await client.listTools()
-    const second = await client.listTools({ cursor: first.nextCursor })
-    expect([...first.tools, ...second.tools].map((tool) => tool.name)).toEqual(["first", "second"])
+    // Without a cursor the SDK walks every page; the page-1 validator must survive the page-2 fetch.
+    const listed = await client.listTools()
+    expect(listed.tools.map((tool) => tool.name)).toEqual(["first", "second"])
+    expect(listed.nextCursor).toBeUndefined()
     await expect(client.callTool({ name: "first", arguments: {} })).rejects.toThrow(
       "Structured content does not match the tool's output schema",
     )
+    await expect(client.callTool({ name: "second", arguments: {} })).resolves.toMatchObject({
+      structuredContent: { value: 1 },
+    })
   } finally {
     await Promise.all([client.close(), server.close()])
   }
@@ -1026,15 +1033,46 @@ for (const status of [400, 404]) {
       const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false })
       const connection = yield* connect("resources", config, import.meta.dir)
       expired = true
-      expect(yield* connection.tools().pipe(Effect.flip)).toBeInstanceOf(Error)
+      const error = yield* connection.tools().pipe(Effect.flip)
 
-      // The SDK tries to recover an expired session on 404, but must keep the same URL.
-      expect(server.state.initializations).toBe(status === 404 ? 2 : 1)
+      // A 404 against a live session is reported as an expiry for the lifecycle to recover; the
+      // connection itself never re-initializes or changes URL.
+      if (status === 404) expect(error).toBeInstanceOf(McpClient.SessionExpiredError)
+      else expect(error).not.toBeInstanceOf(McpClient.SessionExpiredError)
+      expect(server.state.initializations).toBe(1)
       expect(new Set(server.state.urls)).toEqual(new Set([server.url + "?codemode=false"]))
       expect(server.state.toolLists).toBe(0)
     }),
   )
 }
+
+test("reconnects and retries a tool call after the MCP session expires", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer()
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+          expect(server.state.toolCalls).toHaveLength(1)
+          expect(server.state.initializations).toBe(1)
+
+          // The restarted server does not know the client's session, so the next request 404s.
+          yield* Effect.promise(server.restart)
+          const result = yield* service.callTool({ server: "resources", name: "echo", args: { n: 2 } })
+
+          expect(result.isError).toBe(false)
+          expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ n: 1 }, { n: 2 }])
+          expect(server.state.initializations).toBe(2)
+          expect(server.state.sessions).toHaveLength(2)
+          expect((yield* service.servers()).find((entry) => entry.name === "resources")?.status).toEqual({
+            status: "connected",
+          })
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
 
 test("lists, reads, and reports MCP resource changes", async () => {
   await Effect.runPromise(
