@@ -227,7 +227,7 @@ type PromptSubmitInput = {
   shouldQueue?: Accessor<boolean>
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
-  onSubmit?: () => void
+  onSubmit?: () => void | Promise<void>
   model?: ModelSelection
 }
 
@@ -486,7 +486,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    input.onSubmit?.()
+    await input.onSubmit?.()
 
     if (mode === "shell") {
       clearInput()

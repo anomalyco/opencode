@@ -23,11 +23,13 @@ import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 import { Persist, persisted } from "@/utils/persist"
 import type { NewSessionDraftController } from "./new-session-draft-controller"
 import type { NewSessionWorkspaceController } from "./new-session-workspace-controller"
+import "./new-session-view.css"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
 export function NewSessionView(props: {
   input: NewSessionDraftController["input"]
+  leaving?: Accessor<boolean>
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
 }) {
@@ -37,9 +39,14 @@ export function NewSessionView(props: {
         data-component="session-new-design"
         class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-deep"
       >
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+        <div
+          class="absolute inset-x-0 top-[25.375%] flex justify-center px-6"
+          data-leaving={props.leaving?.() ? "true" : undefined}
+        >
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
+            <div data-slot="new-session-wordmark">
+              <WordmarkV2 class="h-auto w-full text-v2-background-bg-inverse" />
+            </div>
             <div class="mt-8 flex flex-col gap-8">
               <PromptInputV2Composer controller={props.input} />
               <Show when={props.project.empty()}>

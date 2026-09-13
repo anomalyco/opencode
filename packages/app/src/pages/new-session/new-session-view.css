@@ -1,0 +1,20 @@
+[data-slot="new-session-wordmark"] {
+  transition:
+    opacity 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-leaving="true"] [data-slot="new-session-wordmark"] {
+  opacity: 0;
+  transform: translateY(-18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="new-session-wordmark"] {
+    transition-property: opacity;
+  }
+
+  [data-leaving="true"] [data-slot="new-session-wordmark"] {
+    transform: none;
+  }
+}

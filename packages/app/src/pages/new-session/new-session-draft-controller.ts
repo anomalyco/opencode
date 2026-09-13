@@ -1,5 +1,5 @@
 import { useSearchParams } from "@solidjs/router"
-import { createEffect, untrack } from "solid-js"
+import { createEffect, createSignal, onCleanup, untrack } from "solid-js"
 import { usePromptInputV2Controller } from "@/components/prompt-input-v2"
 import { useComments } from "@/context/comments"
 import { useLocal } from "@/context/local"
@@ -28,6 +28,21 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
     model,
   })
   const projectControls = createPromptProjectControls()
+  const [leaving, setLeaving] = createSignal(false)
+  let leaveTimer: ReturnType<typeof setTimeout> | undefined
+
+  // Let the wordmark play its exit animation before the submit flow navigates to the session.
+  const leave = () => {
+    setLeaving(true)
+    if (leaveTimer !== undefined) clearTimeout(leaveTimer)
+    leaveTimer = setTimeout(() => setLeaving(false), 2500)
+    return new Promise<void>((resolve) => setTimeout(resolve, 200))
+  }
+
+  onCleanup(() => {
+    if (leaveTimer !== undefined) clearTimeout(leaveTimer)
+  })
+
   const input = usePromptInputV2Controller({
     get controls() {
       return controls()
@@ -36,7 +51,10 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
       return workspace.worktree()
     },
     onNewSessionWorktreeReset: workspace.resetWorktree,
-    onSubmit: comments.clear,
+    onSubmit: () => {
+      comments.clear()
+      return leave()
+    },
   })
 
   createEffect(() => {
@@ -50,6 +68,7 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
   })
 
   return {
+    leaving,
     input,
     prompt: {
       ready: prompt.ready,
