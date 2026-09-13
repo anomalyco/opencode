@@ -1269,9 +1269,7 @@ class Frame<R> {
         throw typeError(message, node)
       }
       const args = yield* self.evaluateCallArguments(node.arguments)
-      return yield* Effect.catchDefect(construct(args, callee as NativeFunction<R>), (defect) =>
-        Effect.die(locate(defect, node)),
-      )
+      return yield* self.native(() => construct(args, callee as NativeFunction<R>), node)
     })
   }
 
@@ -1572,12 +1570,15 @@ class Frame<R> {
       }
       if (callable instanceof ProgramFunction) return yield* self.invokeFunction(callable, args)
       if (callable instanceof NativeFunction) {
-        return yield* Effect.catchDefect((callable as NativeFunction<R>).call(thisValue, args), (defect) =>
-          Effect.die(locate(defect, node)),
-        )
+        return yield* self.native(() => (callable as NativeFunction<R>).call(thisValue, args), node)
       }
       throw typeError(`${calleeDescription(callee)} is not a function.`, callee ?? node)
     })
+  }
+
+  // Built-ins throw without a location, synchronously or inside their Effect; the call site supplies it.
+  private native(body: () => Effect.Effect<unknown, unknown, R>, node?: AstNode): Effect.Effect<unknown, unknown, R> {
+    return Effect.catchDefect(Effect.suspend(body), (defect) => Effect.die(locate(defect, node)))
   }
 
   private evaluateCallArguments(

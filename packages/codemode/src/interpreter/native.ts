@@ -7,13 +7,13 @@ import { describeValue } from "./references.js"
 /** A native function body: a plain value, a thrown `PendingThrow`, or an Effect. */
 export type Impl = (thisValue: unknown, args: Array<unknown>) => unknown
 
+// The dispatch in `Frame.invokeCallable` suspends every native call, so a synchronous throw here is a defect.
 const lift =
   <R>(impl: Impl) =>
-  (thisValue: unknown, args: Array<unknown>): Effect.Effect<unknown, unknown, R> =>
-    Effect.suspend(() => {
-      const result = impl(thisValue, args)
-      return Effect.isEffect(result) ? (result as Effect.Effect<unknown, unknown, R>) : Effect.succeed(result)
-    })
+  (thisValue: unknown, args: Array<unknown>): Effect.Effect<unknown, unknown, R> => {
+    const result = impl(thisValue, args)
+    return Effect.isEffect(result) ? (result as Effect.Effect<unknown, unknown, R>) : Effect.succeed(result)
+  }
 
 export const native = <R>(protos: Prototypes, options: NativeOptions<R>): NativeFunction<R> =>
   new NativeFunction<R>(protos.Function, options)

@@ -104,6 +104,10 @@ describe("host errors escaping built-ins", () => {
     expect(failure.message).toBe("RangeError: toFixed() argument must be between 0 and 100 (line 1, col 23)")
   })
 
+  test("a built-in that rejects its arguments before doing any work is located at the call", async () => {
+    expect((await error(`new Promise(Symbol)`)).message).toEndWith("(line 1, col 1)")
+  })
+
   test("a failure inside a built-in called by another built-in is located at the outer call", async () => {
     const failure = await error(`return Array.from({ [Symbol.iterator]: () => ({ next: 1 }) })`)
     expect(failure.message).toBe("TypeError: Iterator next must be a function. (line 1, col 8)")
