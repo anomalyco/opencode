@@ -315,7 +315,7 @@ const lowerToolCall = (part: ToolCallPart, options: LoweringOptions): OpenAIChat
   type: "function",
   function: {
     name: part.name,
-    arguments: ProviderShared.encodeJson(part.input),
+    arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   },
 })
 
