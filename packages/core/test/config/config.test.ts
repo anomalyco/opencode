@@ -1163,6 +1163,7 @@ describe("Config", () => {
                 tool_output: { max_lines: 1000, max_bytes: 32768 },
                 mcp: {
                   timeout: { startup: 5000, catalog: 60000, execution: 43200000 },
+                  protocol: "auto",
                   servers: {
                     local: {
                       type: "local",
@@ -1171,6 +1172,7 @@ describe("Config", () => {
                       disabled: false,
                       codemode: false,
                       timeout: { catalog: 10000 },
+                      protocol: "legacy",
                     },
                     remote: {
                       type: "remote",
@@ -1180,6 +1182,7 @@ describe("Config", () => {
                       disabled: true,
                       codemode: false,
                       timeout: { startup: 15000 },
+                      protocol: "2026-07-28",
                     },
                   },
                 },
@@ -1246,6 +1249,7 @@ describe("Config", () => {
             expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
             expect(documents[0]?.info.mcp).toEqual({
               timeout: { startup: 5000, catalog: 60000, execution: 43200000 },
+              protocol: "auto",
               servers: {
                 local: {
                   type: "local",
@@ -1254,6 +1258,7 @@ describe("Config", () => {
                   disabled: false,
                   codemode: false,
                   timeout: { catalog: 10000 },
+                  protocol: "legacy",
                 },
                 remote: {
                   type: "remote",
@@ -1263,6 +1268,7 @@ describe("Config", () => {
                   disabled: true,
                   codemode: false,
                   timeout: { startup: 15000 },
+                  protocol: "2026-07-28",
                 },
               },
             })

@@ -429,6 +429,8 @@ export type WebSearchProvider = { id: string; name: string }
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
 
+export type McpProtocol = "legacy" | "auto" | "2026-07-28"
+
 export type ConfigWorktree = { directory: string }
 
 export type ProviderRequest = {
@@ -1983,6 +1985,7 @@ export type ConfigEntry =
         tool_output?: { max_lines?: number; max_bytes?: number }
         mcp?: {
           timeout?: { startup?: number; catalog?: number; execution?: number }
+          protocol?: McpProtocol
           servers?: {
             [x: string]:
               | {
@@ -1993,6 +1996,7 @@ export type ConfigEntry =
                   disabled?: boolean
                   codemode?: boolean
                   timeout?: { startup?: number; catalog?: number; execution?: number }
+                  protocol?: McpProtocol
                 }
               | {
                   type: "remote"
@@ -2010,6 +2014,7 @@ export type ConfigEntry =
                   disabled?: boolean
                   codemode?: boolean
                   timeout?: { startup?: number; catalog?: number; execution?: number }
+                  protocol?: McpProtocol
                 }
           }
         }
@@ -4732,6 +4737,7 @@ export type McpAddInput = {
           readonly disabled?: boolean
           readonly codemode?: boolean
           readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+          readonly protocol?: "legacy" | "auto" | "2026-07-28"
         }
       | {
           readonly type: "remote"
@@ -4749,6 +4755,7 @@ export type McpAddInput = {
           readonly disabled?: boolean
           readonly codemode?: boolean
           readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+          readonly protocol?: "legacy" | "auto" | "2026-07-28"
         }
   }["config"]
 }

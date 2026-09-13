@@ -38,11 +38,12 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
   loaded.entries = yield* config.entries()
   yield* mcp.transform((editor) => {
     const documents = loaded.entries.filter((entry): entry is Document => entry.type === "document")
-    // Global timeout defaults merge in config order; each server can override them.
+    // Global defaults merge in config order; each server can override them.
     const timeout = Object.assign(
       {},
       ...documents.flatMap((entry) => (entry.info.mcp?.timeout ? [entry.info.mcp.timeout] : [])),
     )
+    const protocol = documents.flatMap((entry) => (entry.info.mcp?.protocol ? [entry.info.mcp.protocol] : [])).at(-1)
     const servers = new Map<string, ServerConfig>()
     for (const document of documents) {
       for (const [name, server] of Object.entries(document.info.mcp?.servers ?? {})) {
@@ -51,7 +52,12 @@ export const register = Effect.fn("ConfigMCPPlugin.register")(function* (
     }
     for (const [name, server] of servers) {
       if (editor.get(name)) continue
-      editor.set(name, { ...server, timeout: { ...timeout, ...server.timeout } })
+      const resolved = server.protocol ?? protocol
+      editor.set(name, {
+        ...server,
+        timeout: { ...timeout, ...server.timeout },
+        ...(resolved ? { protocol: resolved } : {}),
+      })
     }
   })
 })

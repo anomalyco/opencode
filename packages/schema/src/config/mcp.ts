@@ -13,8 +13,13 @@ export type OAuth = Mcp.OAuthConfig
 export const Remote = Mcp.RemoteConfig
 export type Remote = Mcp.RemoteConfig
 export const Server = Mcp.ServerConfig
+export const Protocol = Mcp.Protocol
+export type Protocol = Mcp.Protocol
 
 export class Info extends Schema.Class<Info>("Config.MCP")({
   timeout: Timeout.pipe(optional),
+  protocol: Protocol.pipe(optional).annotate({
+    description: "Default protocol negotiation for every MCP server. Each server may override it.",
+  }),
   servers: Schema.Record(Schema.String, Server).pipe(optional),
 }) {}
