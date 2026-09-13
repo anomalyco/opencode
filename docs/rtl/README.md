@@ -26,9 +26,9 @@ terminal-side BiDi requirement and no destructive text rewriting.
 ## Fonts
 
 The TUI cannot select fonts — the terminal does. Keep your monospaced font and
-add an Arabic-capable font as a **fallback** (Cairo, Noto Naskh Arabic, Segoe
-UI, Tahoma). See [fonts.md](./fonts.md) and the helper script
-[`configure-windows-terminal-font.ps1`](./configure-windows-terminal-font.ps1).
+make sure an Arabic-capable font is available as a fallback in your terminal
+settings (for example `"face": "Cascadia Mono, Cairo, Segoe UI"` in Windows
+Terminal), then restart the terminal.
 
 ## Install (Windows, from this repository)
 

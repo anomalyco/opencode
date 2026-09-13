@@ -45,7 +45,6 @@ import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogThemeList } from "./component/dialog-theme-list"
-import { DialogFonts } from "./component/dialog-fonts"
 import "./component/bidi-elements"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
@@ -746,17 +745,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.replace(() => <DialogProviderList />)
         },
         category: "Provider",
-      },
-      {
-        name: "font.pick",
-        title: "Terminal font for Arabic",
-        desc: "Choose the font the terminal uses for RTL text",
-        slashName: "fonts",
-        slashAliases: ["font"],
-        run: () => {
-          dialog.replace(() => <DialogFonts />)
-        },
-        category: "System",
       },
       ...(sync.data.console_state.switchableOrgCount > 1
         ? [

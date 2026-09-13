@@ -137,18 +137,6 @@ async function bootApp(args: Record<string, unknown> = {}) {
   }
 }
 
-test("e2e: /fonts command opens the terminal font dialog", async () => {
-  const app = await bootApp({ sessionID: "ses_test" })
-  try {
-    app.dispatch("font.pick")
-    const frame = await app.waitForFrame((f) => f.includes("Terminal font for Arabic"), "fonts dialog")
-    expect(frame.includes("Terminal font for Arabic")).toBe(true)
-    expect(frame.includes("Recommended for Arabic")).toBe(true)
-  } finally {
-    await app.exit()
-  }
-}, 60000)
-
 test("e2e: Arabic renders RTL inside a DialogSelect list", async () => {
   const app = await bootApp({ sessionID: "ses_test" })
   try {
