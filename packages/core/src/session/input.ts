@@ -188,6 +188,30 @@ export const hasPending = Effect.fn("SessionInput.hasPending")(function* (
   return row !== undefined
 })
 
+export const peekPending = Effect.fn("SessionInput.peekPending")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  for (const delivery of ["steer", "queue"] as const) {
+    const row = yield* db
+      .select()
+      .from(SessionInputTable)
+      .where(
+        and(
+          eq(SessionInputTable.session_id, sessionID),
+          isNull(SessionInputTable.promoted_seq),
+          eq(SessionInputTable.delivery, delivery),
+        ),
+      )
+      .orderBy(asc(SessionInputTable.admitted_seq))
+      .limit(1)
+      .get()
+      .pipe(Effect.orDie)
+    if (row !== undefined) return fromRow(row)
+  }
+  return undefined
+})
+
 export const equivalent = (
   input: Admitted,
   expected: {

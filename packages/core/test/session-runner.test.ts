@@ -52,6 +52,7 @@ import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
+import { KnowledgeGuidance } from "@opencode-ai/core/knowledge/guidance"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -208,6 +209,22 @@ const skillGuidance = Layer.mock(SkillGuidance.Service, {
     ),
 })
 const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
+const knowledgeBaselines = new Map<string, string>()
+const knowledgeGuidance = Layer.mock(KnowledgeGuidance.Service, {
+  load: (sessionID) =>
+    Effect.succeed(
+      knowledgeBaselines.has(sessionID)
+        ? SystemContext.make({
+            key: SystemContext.Key.make("test/knowledge-guidance"),
+            codec: Schema.toCodecJson(Schema.String),
+            load: Effect.succeed(knowledgeBaselines.get(sessionID)!),
+            baseline: String,
+            update: (_previous, current) => current,
+            removed: () => "Knowledge guidance removed",
+          })
+        : SystemContext.empty,
+    ),
+})
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
@@ -233,6 +250,7 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
   [SkillGuidance.node, skillGuidance],
   [ReferenceGuidance.node, referenceGuidance],
+  [KnowledgeGuidance.node, knowledgeGuidance],
   [PermissionV2.node, permission],
   [Config.node, config],
 ])
@@ -268,6 +286,7 @@ const it = testEffect(
       SystemContextRegistry.node,
       SkillGuidance.node,
       ReferenceGuidance.node,
+      KnowledgeGuidance.node,
       Config.node,
       Snapshot.node,
       SessionRunnerLLM.node,
@@ -282,6 +301,7 @@ const it = testEffect(
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
       [SkillGuidance.node, skillGuidance],
       [ReferenceGuidance.node, referenceGuidance],
+      [KnowledgeGuidance.node, knowledgeGuidance],
       [Snapshot.node, Snapshot.noopLayer],
       [SessionExecution.node, execution],
       [Config.node, config],
@@ -319,6 +339,7 @@ const setup = Effect.gen(function* () {
   modelResolveHook = Effect.void
   currentModel = model
   skillBaselines.clear()
+  knowledgeBaselines.clear()
   responses = undefined
   streamFailure = undefined
   responseStream = undefined
@@ -875,6 +896,27 @@ describe("SessionRunnerLLM", () => {
         ["Initial context\n\nBuild skills"],
       ])
       expect(systemTexts(requests[1]!)).toContainEqual(expect.stringContaining("Reviewer skills"))
+    }),
+  )
+
+  it.effect("injects retrieved knowledge into the provider system baseline", () =>
+    Effect.gen(function* () {
+      yield* setup
+      knowledgeBaselines.set(sessionID, "Retrieved session architecture")
+      const session = yield* SessionV2.Service
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "fix session bug in the runner" }),
+        resume: false,
+      })
+
+      requests.length = 0
+      response = fragmentFixture("text", "text-knowledge", ["Done"]).completeEvents
+      yield* session.resume(sessionID)
+
+      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual([
+        "Initial context\n\nRetrieved session architecture",
+      ])
     }),
   )
 

@@ -29,6 +29,8 @@ import { SessionRunnerModel } from "./session/runner/model"
 import { SessionTodo } from "./session/todo"
 import { SkillV2 } from "./skill"
 import { SkillGuidance } from "./skill/guidance"
+import { KnowledgeGuidance } from "./knowledge/guidance"
+import { KnowledgeRetrieval } from "./knowledge/retrieval"
 import { Snapshot } from "./snapshot"
 import { SystemContextBuiltIns } from "./system-context/builtins"
 import { SystemContextRegistry } from "./system-context/registry"
@@ -43,6 +45,8 @@ export const locationServices = LayerNode.group([
   Location.node,
   Policy.node,
   Config.node,
+  FileSystemSearch.node,
+  FileSystem.node,
   AgentV2.node,
   CommandV2.node,
   Reference.node,
@@ -53,8 +57,6 @@ export const locationServices = LayerNode.group([
   PluginInternal.node,
   ProjectCopy.node,
   ProjectCopy.refreshNode,
-  FileSystemSearch.node,
-  FileSystem.node,
   Watcher.node,
   Pty.node,
   SkillV2.node,
@@ -69,6 +71,8 @@ export const locationServices = LayerNode.group([
   Image.node,
   SkillGuidance.node,
   ReferenceGuidance.node,
+  KnowledgeRetrieval.node,
+  KnowledgeGuidance.node,
   SessionTodo.node,
   QuestionV2.node,
   ReadToolFileSystem.node,
