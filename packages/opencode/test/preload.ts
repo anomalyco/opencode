@@ -10,8 +10,17 @@ import { afterAll } from "bun:test"
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
 afterAll(async () => {
-  const { AppRuntime } = await import("../src/effect/app-runtime")
-  await AppRuntime.dispose()
+  // Pure tests (learn-memory, account, …) never import the singleton. Importing
+  // it here for the first time costs ~12s and trips the hook timeout, while
+  // there is nothing to dispose. Only pay for import+dispose when a test
+  // actually loaded the module (marker set at module evaluation).
+  const loaded =
+    (globalThis as typeof globalThis & { __OPENCODE_APP_RUNTIME_LOADED?: boolean })
+      .__OPENCODE_APP_RUNTIME_LOADED === true
+  if (loaded) {
+    const { AppRuntime } = await import("../src/effect/app-runtime")
+    await AppRuntime.dispose()
+  }
 
   const busy = (error: unknown) =>
     typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY"

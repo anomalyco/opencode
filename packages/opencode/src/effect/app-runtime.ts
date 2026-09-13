@@ -133,3 +133,9 @@ export const AppRuntime: Runtime = {
   },
   dispose: () => rt.dispose(),
 }
+
+// Module-load marker so test teardown can skip the expensive first import
+// when no test ever touched the singleton (pure CLI tests time out otherwise).
+// Read by test/preload.ts without importing this module.
+;(globalThis as typeof globalThis & { __OPENCODE_APP_RUNTIME_LOADED?: boolean }).__OPENCODE_APP_RUNTIME_LOADED =
+  true
