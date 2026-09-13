@@ -1,4 +1,5 @@
 import type { CliRenderer } from "@opentui/core"
+import * as fs from "node:fs"
 
 // Written synchronously so it can also run from `process.on("exit")`, where
 // async renderer teardown is not guaranteed to have flushed before exit.
@@ -19,8 +20,14 @@ const TERMINAL_RESET = [
   "\x1b[?9001l",
   "\x1b[?2004l",
   "\x1b[<u",
-  "\x1b[?1049l",
 ].join("")
+
+// On Windows ConPTY, emitting `\x1b[?1049l` (leaving the alternate screen buffer)
+// races with process teardown and terminates the parent shell — e.g. it killed
+// the zellij pane that launched opencode. There we clear the screen instead.
+// Everywhere else we leave the alternate screen as before.
+const RESET_ON_EXIT =
+  process.platform === "win32" ? TERMINAL_RESET + "\x1b[2J\x1b[H" : TERMINAL_RESET + "\x1b[?1049l"
 
 function stdoutIsTty(): boolean {
   try {
@@ -33,7 +40,7 @@ function stdoutIsTty(): boolean {
 export function terminalReset(): void {
   if (!stdoutIsTty()) return
   try {
-    process.stdout.write(TERMINAL_RESET)
+    fs.writeSync(1, Buffer.from(RESET_ON_EXIT, "utf8"))
   } catch {
     // best-effort teardown; never let the reset throw across exit paths
   }
@@ -42,6 +49,17 @@ export function terminalReset(): void {
 export function destroyRenderer(renderer: Pick<CliRenderer, "isDestroyed" | "setTerminalTitle" | "destroy">) {
   renderer.setTerminalTitle("")
   if (renderer.isDestroyed) return
+  // On Windows, @opentui's native renderer teardown closes the shared console
+  // (ConPTY) and terminates the parent shell. The OS releases the native handle
+  // when the process exits, so skip that call and let `terminalReset()` clean up.
+  if (process.platform === "win32") {
+    const lib = (renderer as unknown as { lib?: { destroyRenderer?: (...args: unknown[]) => unknown } }).lib
+    if (lib && typeof lib.destroyRenderer === "function") {
+      try {
+        lib.destroyRenderer = () => {}
+      } catch {}
+    }
+  }
   renderer.destroy()
   terminalReset()
 }
