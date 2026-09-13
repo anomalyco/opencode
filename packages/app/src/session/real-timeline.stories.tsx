@@ -1,4 +1,8 @@
 import { timelinePresets, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
+import { Show } from "solid-js"
+import { createStore } from "solid-js/store"
+import { SettingsList } from "@/settings/list"
+import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { SessionPreview } from "./story-model"
 import {
   realTimelineCoverageDocument,
@@ -7,6 +11,7 @@ import {
   realTimelinePresentation,
   realTimelineVerboseDocument,
 } from "./real-timeline-fixtures"
+import "@/settings/settings.css"
 
 const description = "anonymized seven-day session shape · lorem ipsum content"
 const presets = Object.fromEntries(timelinePresets.map((preset) => [preset.id, preset.value])) as Record<
@@ -27,6 +32,35 @@ function Representative(props: { preset: string }) {
   )
 }
 
+function TimelineSettingsPlayground() {
+  const [state, setState] = createStore({ value: structuredClone(timelinePresets[2].value) as TimelineDetail })
+
+  return (
+    <div class="flex h-screen min-h-[640px] w-full flex-col bg-background-base lg:flex-row">
+      <aside class="max-h-[46vh] w-full shrink-0 overflow-y-auto border-b border-border-weak-base bg-background-stronger p-4 lg:max-h-none lg:w-[420px] lg:border-b-0 lg:border-r">
+        <SettingsList>
+          <div class="py-5">
+            <TimelineDetailControl value={state.value} onChange={(value) => setState("value", value)} />
+          </div>
+        </SettingsList>
+      </aside>
+      <section class="min-h-0 min-w-0 flex-1">
+        <Show when={state.value} keyed>
+          {(timelineDetail) => (
+            <SessionPreview
+              title="Real Timeline · settings playground"
+              description={description}
+              document={realTimelineDocument}
+              presentation={realTimelinePresentation}
+              timelineDetail={timelineDetail}
+            />
+          )}
+        </Show>
+      </section>
+    </div>
+  )
+}
+
 export default {
   title: "OpenCode/Session/Real Timeline",
   id: "app-real-timeline",
@@ -43,15 +77,7 @@ export default {
 }
 
 export const PresetExplorer = {
-  args: { preset: "compact" },
-  argTypes: {
-    preset: {
-      control: "select",
-      options: timelinePresets.map((preset) => preset.id),
-      description: "Production desktop timeline detail preset",
-    },
-  },
-  render: (args: { preset: string }) => <Representative preset={args.preset} />,
+  render: () => <TimelineSettingsPlayground />,
 }
 
 export const RepresentativeCompact = {
