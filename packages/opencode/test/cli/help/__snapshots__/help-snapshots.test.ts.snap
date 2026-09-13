@@ -284,7 +284,7 @@ Options:
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode export --help 1`] = `
 "opencode export [sessionID]
 
-export session data as JSON
+export session data
 
 Positionals:
   sessionID  session id to export                                                           [string]
@@ -295,7 +295,9 @@ Options:
       --print-logs  print logs to stderr                                                   [boolean]
       --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --pure        run without external plugins                                           [boolean]
-      --sanitize    redact sensitive transcript and file data                              [boolean]"
+      --sanitize    redact sensitive transcript and file data                              [boolean]
+      --format      output transcript JSON or structured usage
+                                      [choices: "json", "usage-json", "usage-csv"] [default: "json"]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode import --help 1`] = `
