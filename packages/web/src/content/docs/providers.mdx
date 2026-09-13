@@ -2418,6 +2418,46 @@ Some useful routing options:
 
 ---
 
+### Volcengine Ark
+
+[Volcengine Ark](https://www.volcengine.com/product/ark) is ByteDance's model
+platform, serving the Doubao Seed models alongside third-party ones like DeepSeek
+and GLM.
+
+1. Head over to the [Ark console](https://console.volcengine.com/ark), create an
+   account, and generate an API key.
+
+2. Run the `/connect` command and search for **Volcengine Ark**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Ark API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _Seed 2.1 Pro_.
+
+   ```txt
+   /models
+   ```
+
+Model IDs on Ark carry a version date — `doubao-seed-2-1-pro-260628` rather than
+`doubao-seed-2.1-pro`. The unversioned form returns a 404, so use the IDs as
+listed by `/models`.
+
+Outside mainland China the same models are served by
+[BytePlus](https://www.byteplus.com/) at
+`https://ark.ap-southeast.bytepluses.com/api/v3`, which uses a separate account.
+
+---
+
 ### xAI
 
 Two ways to authenticate: a SuperGrok subscription via device-code OAuth or a pay-as-you-go API key from the xAI console.
