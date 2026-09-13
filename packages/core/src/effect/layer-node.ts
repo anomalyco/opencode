@@ -78,6 +78,22 @@ type MakeInput<
   readonly tag?: T
 }
 
+/**
+ * Dependency arrays are built at module-evaluation time, so a circular import can leave an entry
+ * `undefined` instead of a node. That stays invisible until the graph is walked, where it surfaces
+ * as a `TypeError` reading `.name` off `undefined` with no indication of which module is at fault.
+ * Failing here instead names the node and the offending position.
+ */
+function checkDependencies(name: string, dependencies: readonly AnyNode[]) {
+  const index = dependencies.findIndex((dependency) => dependency === undefined)
+  if (index === -1) return
+  throw new Error(
+    `Layer node "${name}" has an undefined dependency at index ${index}. ` +
+      `This usually means a circular import: the module that provides it has not finished ` +
+      `initializing. Break the cycle, for example by making the import type-only.`,
+  )
+}
+
 export function make<
   const Implementation extends Layer.Any,
   const Items extends NodeList,
@@ -85,9 +101,11 @@ export function make<
 >(
   input: MakeInput<Implementation, Items, T>,
 ): Node<Layer.Success<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, T> {
+  const name = input.service !== undefined ? input.service.key : input.name
+  checkDependencies(name, input.deps)
   return {
     kind: "layer",
-    name: input.service !== undefined ? input.service.key : input.name,
+    name,
     service: input.service,
     implementation: input.layer,
     dependencies: input.deps,
@@ -108,6 +126,7 @@ export function unbound<R, Shape, const T extends Tag>(service: Context.Key<R, S
 export function group<const Items extends readonly AnyNode[]>(
   dependencies: Items,
 ): Node<Output<Items[number]>, Error<Items[number]>, NodeTag<Items[number]>> {
+  checkDependencies("group", dependencies)
   return { kind: "group", name: "group", dependencies }
 }
 
@@ -258,6 +277,9 @@ export function compile<A, E, const Items extends Replacements = readonly []>(
       node,
       (node, context) => {
         if (node.kind === "unbound") throw new Error(`Unbound layer node: ${node.name}`)
+        // nodes are normally validated in `make`, but `Node` is a structural interface so a
+        // hand-built or externally-produced node can still reach compilation unchecked
+        checkDependencies(node.name, node.dependencies)
         const dependencies = node.dependencies.flatMap(flatten).map(context.visit)
         const implementation = node.implementation! as RuntimeLayer
         return dependencies.length === 0

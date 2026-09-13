@@ -63,6 +63,37 @@ describe("layer node", () => {
     expect(await Effect.runPromise(program)).toEqual(["first", "second"])
   })
 
+  test("rejects an undefined dependency", () => {
+    // a circular import leaves the dependency undefined at module-evaluation time
+    // @ts-expect-error A dependency must be a node
+    expect(() => make({ service: Greeting, layer: greetingLayer, deps: [undefined] })).toThrow(
+      'Layer node "test/LayerNodeGreeting" has an undefined dependency at index 0',
+    )
+  })
+
+  test("reports the position of an undefined dependency", () => {
+    // @ts-expect-error A dependency must be a node
+    expect(() => make({ service: Greeting, layer: greetingLayer, deps: [value, undefined] })).toThrow(
+      "undefined dependency at index 1",
+    )
+  })
+
+  test("rejects an undefined dependency in a group", () => {
+    // @ts-expect-error A dependency must be a node
+    expect(() => LayerNode.group([value, undefined])).toThrow(
+      'Layer node "group" has an undefined dependency at index 1',
+    )
+  })
+
+  test("rejects an undefined dependency on a node that bypassed make", () => {
+    // `Node` is structural, so a node built by hand never passes through `make`
+    // @ts-expect-error A dependency must be a node
+    const handBuilt: LayerNode.Node<Greeting> = { ...greeting, dependencies: [undefined] }
+    expect(() => LayerNode.compile(handBuilt)).toThrow(
+      'Layer node "test/LayerNodeGreeting" has an undefined dependency at index 0',
+    )
+  })
+
   test("requires unbound nodes to be replaced before compilation", async () => {
     const unbound = LayerNode.unbound(Value, tags.values.app)
     const greeting = make({ service: Greeting, layer: greetingLayer, deps: [unbound] })
