@@ -12,7 +12,6 @@ import {
   type ElicitRequestURLParams,
   type ElicitResult,
   type Implementation,
-  type LoggingMessageNotification,
   type OAuthClientProvider,
   type ProtocolEra,
   type Transport,
@@ -132,12 +131,6 @@ export interface ElicitationHandler {
   }) => Effect.Effect<void>
 }
 
-export interface LogMessage {
-  readonly level: LoggingMessageNotification["params"]["level"]
-  readonly logger?: LoggingMessageNotification["params"]["logger"]
-  readonly data: LoggingMessageNotification["params"]["data"]
-}
-
 /** Handle over a connected MCP server that keeps the SDK `Client` out of the rest of core. */
 export interface Connection {
   /**
@@ -171,8 +164,6 @@ export interface Connection {
   readonly onClose: (callback: () => void) => void
   /** Registers a callback fired once when a request observes that the server dropped this session. */
   readonly onSessionExpired: (callback: () => void) => void
-  /** Registers a callback fired when the server emits an MCP logging notification. */
-  readonly onLog: (callback: (message: LogMessage) => void) => void
   /** Registers a callback fired when the server announces its tool list changed; no-op if unsupported. */
   readonly onToolsChanged: (callback: () => void) => void
   /** Registers a callback fired when the server announces its prompt list changed; no-op if unsupported. */
@@ -463,9 +454,6 @@ export const connect = Effect.fnUntraced(function* (
       },
       onSessionExpired: (callback) => {
         session.expired = callback
-      },
-      onLog: (callback) => {
-        client.setNotificationHandler("notifications/message", (notification) => callback(notification.params))
       },
       onToolsChanged: (callback) => {
         changed.tools = callback
