@@ -84,8 +84,9 @@ type MakeInput<
  * as a `TypeError` reading `.name` off `undefined` with no indication of which module is at fault.
  * Failing here instead names the node and the offending position.
  */
-function checkDependencies(name: string, dependencies: readonly AnyNode[]) {
-  const index = dependencies.findIndex((dependency) => dependency === undefined)
+function checkDependencies(name: string, dependencies: readonly AnyNode[] | undefined) {
+  if (dependencies === undefined) return
+  const index = dependencies.findIndex((dependency) => dependency === undefined || dependency === null)
   if (index === -1) return
   throw new Error(
     `Layer node "${name}" has an undefined dependency at index ${index}. ` +
@@ -212,6 +213,9 @@ function walk<Result>(
       )
     }
 
+    // validate before any visitor dereferences an entry
+    checkDependencies(target.name, target.dependencies)
+
     visiting.add(target)
     stack.push(target)
     try {
@@ -277,9 +281,6 @@ export function compile<A, E, const Items extends Replacements = readonly []>(
       node,
       (node, context) => {
         if (node.kind === "unbound") throw new Error(`Unbound layer node: ${node.name}`)
-        // nodes are normally validated in `make`, but `Node` is a structural interface so a
-        // hand-built or externally-produced node can still reach compilation unchecked
-        checkDependencies(node.name, node.dependencies)
         const dependencies = node.dependencies.flatMap(flatten).map(context.visit)
         const implementation = node.implementation! as RuntimeLayer
         return dependencies.length === 0
@@ -325,6 +326,8 @@ function rewriteReplacementDependencies(root: AnyNode, replacements: ReadonlyMap
     visiting.add(target)
     stack.push(target)
     try {
+      // this recursion is separate from `walk`, and hoisting a tagged subtree reaches it directly
+      checkDependencies(target.name, target.dependencies)
       const dependencies = target.dependencies.map((dependency) => recur(dependency))
       const result = dependencies.every((dependency, index) => dependency === target.dependencies[index])
         ? target
@@ -349,7 +352,10 @@ export function hasUnbound(root: Node<unknown, unknown, any>, source: AnyNode): 
 }
 
 function flatten(node: AnyNode): readonly AnyNode[] {
-  return node.kind === "group" ? node.dependencies.flatMap(flatten) : [node]
+  if (node.kind !== "group") return [node]
+  // groups are expanded before the compile-time check runs, so validate here too
+  checkDependencies(node.name, node.dependencies)
+  return node.dependencies.flatMap(flatten)
 }
 
 export * as LayerNode from "./layer-node"
