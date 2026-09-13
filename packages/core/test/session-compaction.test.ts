@@ -191,7 +191,10 @@ test("compaction executes the default prepend request without inheriting convers
   expect(requests[0]).not.toMatchObject({ messages: request.messages })
 })
 
-test("suffix compaction preserves the request prefix and reports failed suffix usage after prepend fallback", async () => {
+test.each([
+  { text: "invalid", reason: "stop" as const },
+  { text: validSummary, reason: "length" as const },
+])("suffix compaction preserves the prefix and rejects invalid output ($reason)", async ({ text, reason }) => {
   const requests: Array<ReturnType<typeof LLM.request>> = []
   const published: Array<{ type: string; data: unknown }> = []
   const compaction = SessionCompaction.make({
@@ -212,8 +215,8 @@ test("suffix compaction preserves the request prefix and reports failed suffix u
         requests.push(request)
         if (requests.length === 1)
           return Stream.fromIterable([
-            TextDelta.make({ type: "text-delta", id: "txt_1", text: "invalid" }),
-            Finish.make({ type: "finish", reason: "stop", usage: new Usage({ inputTokens: 7 }) }),
+            TextDelta.make({ type: "text-delta", id: "txt_1", text }),
+            Finish.make({ type: "finish", reason, usage: new Usage({ inputTokens: 7 }) }),
           ])
         return Stream.fromIterable([
           TextDelta.make({ type: "text-delta", id: "txt_2", text: validSummary }),
@@ -272,7 +275,7 @@ test("suffix compaction preserves the request prefix and reports failed suffix u
   expect(requests[0]?.toolChoice).toEqual(request.toolChoice)
   expect(requests[0]?.http).toEqual(request.http)
   expect(requests[0]?.providerOptions).toEqual(request.providerOptions)
-  expect(requests[0]?.generation).toEqual(mergeGenerationOptions(request.generation, { maxTokens: 4_096 }))
+  expect(requests[0]?.generation).toEqual(mergeGenerationOptions(request.generation, { maxTokens: 8_192 }))
   expect(published.at(-1)).toMatchObject({
     type: "session.next.compaction.ended",
     data: { diagnostics: { requested: "suffix", used: "prepend", fallback: "invalid_summary", tokens: { input: 7 } } },

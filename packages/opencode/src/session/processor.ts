@@ -29,6 +29,8 @@ import { Usage, type LLMEvent } from "@opencode-ai/llm"
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
 
+type ProcessOptions = { deferError?: boolean }
+
 export interface Handle {
   readonly message: SessionV1.Assistant
   readonly latestUsage: () => Usage | undefined
@@ -46,7 +48,7 @@ export interface Handle {
       attachments?: SessionV1.FilePart[]
     },
   ) => Effect.Effect<void>
-  readonly process: (streamInput: LLM.InternalStreamInput) => Effect.Effect<Result>
+  readonly process: (streamInput: LLM.InternalStreamInput, options?: ProcessOptions) => Effect.Effect<Result>
 }
 
 type Input = {
@@ -628,7 +630,7 @@ const layer = Layer.effect(
         yield* session.updateMessage(ctx.assistantMessage)
       })
 
-      const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
+      const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown, deferError = false) {
         yield* Effect.logError("process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
@@ -636,6 +638,7 @@ const layer = Layer.effect(
           stack: e instanceof Error ? e.stack : undefined,
         })
         const error = parse(e)
+        const deferred = deferError && ctx.assistantMessage.summary === true && error.name !== "MessageAbortedError"
         if (SessionV1.ContextOverflowError.isInstance(error)) {
           if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
             ctx.assistantMessage.error = error
@@ -645,10 +648,11 @@ const layer = Layer.effect(
             return
           }
           ctx.needsCompaction = true
-          yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+          if (!deferred) yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
         ctx.assistantMessage.error = error
+        if (deferred) return
         yield* events.publish(Session.Event.Error, {
           sessionID: ctx.assistantMessage.sessionID,
           error: ctx.assistantMessage.error,
@@ -656,7 +660,10 @@ const layer = Layer.effect(
         yield* status.set(ctx.sessionID, { type: "idle" })
       })
 
-      const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.InternalStreamInput) {
+      const process = Effect.fn("SessionProcessor.process")(function* (
+        streamInput: LLM.InternalStreamInput,
+        options?: ProcessOptions,
+      ) {
         yield* Effect.logInfo("process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
@@ -704,7 +711,7 @@ const layer = Layer.effect(
                 },
               }),
             ),
-            Effect.catch(halt),
+            Effect.catch((error) => halt(error, options?.deferError)),
             Effect.ensuring(cleanup()),
           )
 
