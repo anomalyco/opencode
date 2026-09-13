@@ -666,6 +666,15 @@ function anthropicOpus45(apiId: string) {
   return ["opus-4-5", "opus-4.5"].some((value) => apiId.includes(value))
 }
 
+function isOfficialOpenAIEndpoint(url: string | undefined) {
+  if (!url) return true
+  try {
+    return new URL(url).hostname.toLowerCase() === "api.openai.com"
+  } catch {
+    return false
+  }
+}
+
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
   if (anthropicUsesModernAdaptiveThinking(apiId)) {
     return ["low", "medium", "high", "xhigh", "max"]
@@ -1354,12 +1363,14 @@ export function options(input: {
     }
 
     // Generic OpenAI-compatible APIs do not necessarily support OpenAI's verbosity parameter.
-    // Only enable the default for integrations known to implement it.
+    // Only enable the default for integrations known to implement it when using the standard official endpoint.
     if (
       input.model.api.id.includes("gpt-5.") &&
       !input.model.api.id.includes("codex") &&
       !input.model.api.id.includes("-chat") &&
-      (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle")
+      (input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle" ||
+        (input.model.api.npm === "@ai-sdk/openai" &&
+          isOfficialOpenAIEndpoint(input.model.api.url)))
     ) {
       result["textVerbosity"] = "low"
     }

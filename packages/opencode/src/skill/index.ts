@@ -39,6 +39,7 @@ export const Info = Schema.Struct({
   description: Schema.optional(Schema.String),
   location: Schema.String,
   content: Schema.String,
+  scope: Schema.optional(Schema.Literals(["builtin", "project", "global"])),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
@@ -75,7 +76,12 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ski
   available: Schema.Array(Schema.String),
 }) {
   override get message() {
-    return `Skill "${this.name}" not found. Available skills: ${this.available.join(", ") || "none"}`
+    const list = this.available
+    if (list.length === 0) return `Skill "${this.name}" not found. No skills available.`
+    if (list.length <= 25) return `Skill "${this.name}" not found. Available skills: ${list.join(", ")}`
+    const matches = list.filter((s) => s.toLowerCase().includes(this.name.toLowerCase())).slice(0, 10)
+    const hint = matches.length > 0 ? ` Matching candidates: ${matches.join(", ")}` : ""
+    return `Skill "${this.name}" not found (${list.length} total skills installed).${hint}`
   }
 }
 
@@ -84,13 +90,18 @@ type State = {
   dirs: Set<string>
 }
 
+type MatchedSkill = {
+  path: string
+  scope: "project" | "global"
+}
+
 type DiscoveryState = {
-  matches: string[]
+  matches: MatchedSkill[]
   dirs: string[]
 }
 
 type ScanState = {
-  matches: Set<string>
+  matches: Map<string, "project" | "global">
   dirs: Set<string>
 }
 
@@ -102,7 +113,13 @@ export interface Interface {
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
 }
 
-const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"]) {
+const add = Effect.fnUntraced(function* (
+  state: State,
+  item: MatchedSkill,
+  events: EventV2Bridge.Service["Service"],
+) {
+  const match = item.path
+  const scope = item.scope
   const md = yield* Effect.tryPromise({
     try: () => ConfigMarkdown.parse(match),
     catch: (err) => err,
@@ -136,6 +153,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
     description: md.data.description,
     location: match,
     content: md.content,
+    scope,
   }
 })
 
@@ -143,8 +161,9 @@ const scan = Effect.fnUntraced(function* (
   state: ScanState,
   root: string,
   pattern: string,
-  opts?: { dot?: boolean; scope?: string },
+  opts?: { dot?: boolean; scope?: "project" | "global" },
 ) {
+  const scope = opts?.scope ?? "project"
   const matches = yield* Effect.tryPromise({
     try: () =>
       Glob.scan(pattern, {
@@ -165,7 +184,9 @@ const scan = Effect.fnUntraced(function* (
   )
 
   for (const match of matches) {
-    state.matches.add(match)
+    const prevScope = state.matches.get(match)
+    const effectiveScope = prevScope === "global" ? "global" : scope
+    state.matches.set(match, effectiveScope)
     state.dirs.add(path.dirname(match))
   }
 })
@@ -180,7 +201,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   directory: string,
   worktree: string,
 ) {
-  const state: ScanState = { matches: new Set(), dirs: new Set() }
+  const state: ScanState = { matches: new Map(), dirs: new Set() }
 
   const externalDirs: string[] = []
   if (!disableExternalSkills) {
@@ -193,9 +214,12 @@ const discoverSkills = Effect.fnUntraced(function* (
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
     }
 
-    const upDirs = yield* fsys
-      .up({ targets: externalDirs, start: directory, stop: worktree })
-      .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+    const globalRoots = new Set(externalDirs.map((dir) => path.resolve(global.home, dir)))
+    const upStop = worktree === "/" ? directory : worktree
+    const upDirs = (yield* fsys
+      .up({ targets: externalDirs, start: directory, stop: upStop })
+      .pipe(Effect.catch(() => Effect.succeed([] as string[]))))
+      .filter((dir) => !globalRoots.has(path.resolve(dir)))
 
     for (const root of upDirs) {
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
@@ -204,7 +228,7 @@ const discoverSkills = Effect.fnUntraced(function* (
 
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
-    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    yield* scan(state, dir, OPENCODE_SKILL_PATTERN, { scope: "project" })
   }
 
   const cfg = yield* config.get()
@@ -216,18 +240,18 @@ const discoverSkills = Effect.fnUntraced(function* (
       continue
     }
 
-    yield* scan(state, dir, SKILL_PATTERN)
+    yield* scan(state, dir, SKILL_PATTERN, { scope: "project" })
   }
 
   for (const url of cfg.skills?.urls ?? []) {
     const pulledDirs = yield* discovery.pull(url)
     for (const dir of pulledDirs) {
-      yield* scan(state, dir, SKILL_PATTERN)
+      yield* scan(state, dir, SKILL_PATTERN, { scope: "project" })
     }
   }
 
   return {
-    matches: Array.from(state.matches),
+    matches: Array.from(state.matches.entries()).map(([filePath, scope]) => ({ path: filePath, scope })),
     dirs: Array.from(state.dirs),
   }
 })
@@ -237,7 +261,7 @@ const loadSkills = Effect.fnUntraced(function* (
   discovered: DiscoveryState,
   events: EventV2Bridge.Service["Service"],
 ) {
-  yield* Effect.forEach(discovered.matches, (match) => add(state, match, events), {
+  yield* Effect.forEach(discovered.matches, (item) => add(state, item, events), {
     concurrency: "unbounded",
     discard: true,
   })
@@ -280,6 +304,7 @@ const layer = Layer.effect(
           description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+          scope: "builtin",
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), events)
         return s
@@ -318,31 +343,113 @@ const layer = Layer.effect(
   }),
 )
 
+const MAX_GLOBAL_SKILLS_INLINE = 15
+const MAX_SKILL_PROMPT_CHARS = 300_000
+
 export function fmt(list: Info[], opts: { verbose: boolean }) {
   const described = list.filter((skill) => skill.description !== undefined)
   if (described.length === 0) return "No skills are currently available."
-  if (opts.verbose) {
-    return [
-      "<available_skills>",
-      ...described
-        .toSorted((a, b) => a.name.localeCompare(b.name))
-        .flatMap((skill) => [
-          "  <skill>",
-          `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
-          `    <location>${escapeHtml(skill.location)}</location>`,
-          "  </skill>",
-        ]),
-      "</available_skills>",
-    ].join("\n")
+
+  const projectSkills = described.filter((s) => s.scope !== "global")
+  const globalSkills = described.filter((s) => s.scope === "global")
+
+  const inlineGlobal = globalSkills.length <= MAX_GLOBAL_SKILLS_INLINE
+  const inlineSkills = (inlineGlobal ? described : projectSkills).toSorted((a, b) => a.name.localeCompare(b.name))
+
+  const render = (descriptionLimit?: number, includeLocation = true) => {
+    const description = (skill: Info) =>
+      descriptionLimit === undefined ? skill.description! : skill.description!.slice(0, descriptionLimit)
+
+    if (opts.verbose) {
+      const sections: string[] = []
+      if (inlineSkills.length > 0) {
+        sections.push(
+          "<available_skills>",
+          ...inlineSkills.flatMap((skill) => [
+            "  <skill>",
+            `    <name>${escapeHtml(skill.name)}</name>`,
+            `    <description>${escapeHtml(description(skill))}</description>`,
+            ...(includeLocation ? [`    <location>${escapeHtml(skill.location)}</location>`] : []),
+            "  </skill>",
+          ]),
+          "</available_skills>",
+        )
+      }
+
+      if (!inlineGlobal && globalSkills.length > 0) {
+        sections.push(
+          `<global_skills count="${globalSkills.length}">`,
+          `  There are ${globalSkills.length} additional global skills installed in your machine environment (~/.agents/skills, ~/.claude/skills).`,
+          ...globalSkills.toSorted((a, b) => a.name.localeCompare(b.name)).map(
+            (skill) => `  - ${escapeHtml(skill.name)}: ${escapeHtml(description(skill))}`,
+          ),
+          "</global_skills>",
+        )
+      }
+
+      return sections.join("\n")
+    }
+
+    const sections: string[] = []
+    if (inlineSkills.length > 0) {
+      sections.push(
+        "## Available Skills",
+        ...inlineSkills.map((skill) => `- **${skill.name}**: ${description(skill)}`),
+      )
+    }
+
+    if (!inlineGlobal && globalSkills.length > 0) {
+      sections.push(
+        `\n*Plus ${globalSkills.length} global skills available on-demand via the \`skill\` tool:*`,
+        ...globalSkills.toSorted((a, b) => a.name.localeCompare(b.name)).map(
+          (skill) => `- **${skill.name}**: ${description(skill)}`,
+        ),
+      )
+    }
+
+    return sections.join("\n")
   }
 
-  return [
-    "## Available Skills",
-    ...described
-      .toSorted((a, b) => a.name.localeCompare(b.name))
-      .map((skill) => `- **${skill.name}**: ${skill.description}`),
-  ].join("\n")
+  const full = render()
+  if (full.length <= MAX_SKILL_PROMPT_CHARS) return full
+
+  const staticOutput = render(0)
+  const compactStaticOutput = render(0, false)
+  if (compactStaticOutput.length > MAX_SKILL_PROMPT_CHARS) {
+    const lines = [
+      ...(inlineSkills.length > 0
+        ? [
+            "<available_skills>",
+            ...inlineSkills.map((skill) => `  <skill>\n    <name>${escapeHtml(skill.name)}</name>\n  </skill>`),
+            "</available_skills>",
+          ]
+        : []),
+      ...(globalSkills.length > 0
+        ? [
+            `<global_skills count="${globalSkills.length}">`,
+            ...globalSkills.map((skill) => `  - ${escapeHtml(skill.name)}`),
+            "</global_skills>",
+          ]
+        : []),
+    ]
+    const output: string[] = []
+    let length = 0
+    for (const line of lines) {
+      const next = length === 0 ? line.length : length + 1 + line.length
+      if (next > MAX_SKILL_PROMPT_CHARS) continue
+      output.push(line)
+      length = next
+    }
+    return output.join("\n")
+  }
+
+  const includeLocation = staticOutput.length <= MAX_SKILL_PROMPT_CHARS
+  const descriptionBudget = Math.max(
+    0,
+    MAX_SKILL_PROMPT_CHARS - (includeLocation ? staticOutput.length : compactStaticOutput.length),
+  )
+  const descriptionLimit = Math.floor(descriptionBudget / described.length)
+  return render(descriptionLimit, includeLocation)
 }
 
 export const node = LayerNode.make({
