@@ -1,0 +1,25 @@
+{
+  "name": "@opencode-ai/knowledge-engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsgo --noEmit",
+    "index": "bun run src/cli.ts index",
+    "search": "bun run src/cli.ts search",
+    "stats": "bun run src/cli.ts stats"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./retriever": "./src/retriever.ts",
+    "./integration": "./src/agent-integration.ts",
+    "./manager": "./src/manager.ts"
+  }
+}
