@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -8,6 +8,7 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
+import { getScrollAcceleration } from "../../util/scroll"
 
 const QUESTION_MODE = "question"
 
@@ -15,8 +16,10 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   const sdk = useSDK()
   const { theme } = useTheme()
   const renderer = useRenderer()
+  const dimensions = useTerminalDimensions()
   const tuiConfig = useTuiConfig()
   const modeStack = useOpencodeModeStack()
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -39,6 +42,35 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   const other = createMemo(() => custom() && store.selected === options().length)
   const input = createMemo(() => store.custom[store.tab] ?? "")
   const multi = createMemo(() => question()?.multiple === true)
+  // Reserve session history above the prompt, proportionally: a fixed row count
+  // starves the question body on short terminals.
+  const panelHeight = createMemo(() => {
+    const height = dimensions().height
+    return Math.max(8, Math.min(Math.floor(height * 0.75), height - Math.max(4, Math.floor(height * 0.2))))
+  })
+  // The sidebar auto-opens past 120 columns and takes 42 of them, so the question
+  // renders into a narrower column than the terminal width suggests. Mirrors the
+  // contentWidth calculation in ./index.tsx.
+  const contentWidth = createMemo(() => Math.max(20, dimensions().width - (dimensions().width > 120 ? 42 : 0) - 8))
+  // Rendered rows, not source lines: a long paragraph wraps across many rows. Word
+  // wrapping breaks on whitespace rather than exactly at the boundary, so round up —
+  // undercounting clips the body, overcounting only leaves the scrollbox slack.
+  const questionRowCount = createMemo(() => {
+    const width = contentWidth()
+    const lines = (question()?.question ?? "").split("\n")
+    const suffix = multi() ? " (select all that apply)".length : 0
+    return lines.reduce(
+      (rows, line, index) =>
+        rows + Math.max(1, Math.ceil(((line.length + (index === lines.length - 1 ? suffix : 0)) * 1.1) / width)),
+      0,
+    )
+  })
+  // Cap the body so a long prompt cannot push session history off screen. Clamping to
+  // the real row count matters: without it a one-line question still stretches to the
+  // full budget, leaving a large gap above the options.
+  const questionHeight = createMemo(() =>
+    Math.min(Math.max(3, Math.min(14, Math.floor(dimensions().height * 0.35))), questionRowCount()),
+  )
   const customPicked = createMemo(() => {
     const value = input()
     if (!value) return false
@@ -291,8 +323,10 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
       border={["left"]}
       borderColor={theme.accent}
       customBorderChars={SplitBorder.customBorderChars}
+      maxHeight={panelHeight()}
+      minHeight={0}
     >
-      <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
+      <box flexShrink={1} minHeight={0} gap={1} paddingLeft={1} paddingRight={2} paddingTop={1} paddingBottom={1}>
         <Show when={!single()}>
           <box flexDirection="row" gap={1} paddingLeft={1}>
             <For each={questions()}>
@@ -353,14 +387,25 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         </Show>
 
         <Show when={!confirm()}>
-          <box paddingLeft={1} gap={1}>
-            <box>
-              <text fg={theme.text}>
+          <box paddingLeft={1} gap={1} flexShrink={1} minHeight={0}>
+            <scrollbox
+              flexShrink={1}
+              minHeight={1}
+              maxHeight={questionHeight()}
+              scrollAcceleration={scrollAcceleration()}
+              verticalScrollbarOptions={{
+                trackOptions: {
+                  backgroundColor: theme.background,
+                  foregroundColor: theme.borderActive,
+                },
+              }}
+            >
+              <text fg={theme.text} wrapMode="word">
                 {question()?.question}
                 {multi() ? " (select all that apply)" : ""}
               </text>
-            </box>
-            <box>
+            </scrollbox>
+            <box flexShrink={0}>
               <For each={options()}>
                 {(opt, i) => {
                   const active = () => i() === store.selected
