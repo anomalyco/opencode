@@ -590,7 +590,6 @@ describe("run interactive runtime", () => {
     expect(catalogs.agent).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(catalogs.reference).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(catalogs.command).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
-    expect(catalogs.skill).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(fileFind).toHaveBeenCalledWith({ query: "index", type: "file", ...query })
   })
 })

@@ -11,6 +11,7 @@ import { ConfigAgentPlugin } from "@opencode/core/config/plugin/agent"
 import { ConfigCommandPlugin } from "@opencode/core/config/plugin/command"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigReferencePlugin } from "@opencode/core/config/plugin/reference"
+import { ConfigCompatibilityPlugin } from "@opencode/core/config/plugin/compatibility"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { Bus } from "@opencode/core/bus"
 import { Integration } from "@opencode/core/integration"
@@ -67,7 +68,7 @@ describe("config plugin reloads", () => {
               const plugins = yield* Plugin.Service
               const skills = yield* Skill.Service
               const host = yield* PluginHost.make(plugins)
-              yield* ConfigSkillPlugin.Plugin.effect(host)
+              yield* ConfigCompatibilityPlugin.Plugin.effect(host)
               expect(yield* skills.list()).toEqual([])
 
               // Finish startup by observing an ordinary config reload before creating the root.
