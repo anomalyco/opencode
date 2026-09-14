@@ -46,6 +46,17 @@ interface FetchDecompressionError extends Error {
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
 export { isMedia }
 
+// Tool output is stored as a string. Provider-executed tools carry structured
+// results the provider has to reconstruct verbatim, so recover the original
+// value where the stored text is JSON.
+function structuredProviderOutput(output: string): unknown {
+  try {
+    return JSON.parse(output)
+  } catch {
+    return output
+  }
+}
+
 function truncateToolOutput(text: string, maxChars?: number) {
   if (!maxChars || text.length <= maxChars) return text
   const omitted = text.length - maxChars
@@ -135,6 +146,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
+  // Provider-executed tools (Anthropic tool search, web search) return typed
+  // result blocks the provider must rebuild verbatim. Handing them a synthetic
+  // toModelOutput collapses them into a generic tool_result, which Anthropic
+  // then rejects as a server_tool_use with no matching result block.
+  const providerExecutedTools = new Set<string>()
   // Track media from tool results that need to be injected as user messages
   // for providers that don't support that media type in tool results.
   //
@@ -289,6 +305,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         if (part.type === "tool") {
           toolNames.add(part.tool)
+          if (part.metadata?.providerExecuted) providerExecutedTools.add(part.tool)
           if (part.state.status === "completed") {
             const outputText = part.state.time.compacted
               ? "[Old tool result content cleared]"
@@ -304,8 +321,13 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             }
             const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
 
-            const output =
-              finalAttachments.length > 0
+            // Provider-executed results (e.g. Anthropic tool search) must be
+            // replayed in their original structured form. Anthropic rejects the
+            // conversation if a server_tool_use has no matching typed result
+            // block, and a stringified result cannot be rebuilt into one.
+            const output = part.metadata?.providerExecuted
+              ? structuredProviderOutput(part.state.output)
+              : finalAttachments.length > 0
                 ? {
                     text: outputText,
                     attachments: finalAttachments,
@@ -401,7 +423,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     }
   }
 
-  const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
+  const tools = Object.fromEntries(
+    Array.from(toolNames)
+      .filter((toolName) => !providerExecutedTools.has(toolName))
+      .map((toolName) => [toolName, { toModelOutput }]),
+  )
 
   return yield* Effect.promise(() =>
     convertToModelMessages(

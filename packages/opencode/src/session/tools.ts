@@ -29,6 +29,9 @@ const MCP_RESOURCE_TOOLS = {
   listTemplates: "list_mcp_resource_templates",
   read: "read_mcp_resource",
 } as const
+// Must match the tool name Anthropic emits for tool_search_tool_bm25_20251119,
+// otherwise the returned call cannot be matched back to an entry in the record.
+const TOOL_SEARCH_TOOL = "tool_search_tool_bm25"
 const MAX_MCP_RESOURCE_BLOB_BYTES = 10 * 1024 * 1024
 const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "application/pdf",
@@ -387,6 +390,18 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
   if (flags.experimentalCodeMode) return tools
 
+  // MCP servers routinely contribute a hundred or more tools, and their schemas
+  // dominate the prompt prefix. Where the provider supports tool search, defer
+  // them so the model discovers what it needs instead of carrying everything.
+  // Built-in tools stay direct: the core loop uses them constantly, so making
+  // it search first would cost a round-trip on every action, and a deferred
+  // tool cannot anchor the prompt cache.
+  const deferredOptions =
+    flags.experimentalToolSearch && ProviderTransform.supportsToolSearch(input.model)
+      ? ProviderTransform.deferLoading(input.model)
+      : undefined
+  let deferred = 0
+
   for (const [key, entry] of Object.entries(yield* mcp.tools())) {
     const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
     const execute = item.execute
@@ -486,7 +501,16 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           return output
         }),
       )
+    if (deferredOptions) {
+      item.providerOptions = deferredOptions
+      deferred++
+    }
     tools[key] = item
+  }
+
+  if (deferred > 0) {
+    const { anthropic: anthropicSdk } = yield* Effect.promise(() => import("@ai-sdk/anthropic"))
+    tools[TOOL_SEARCH_TOOL] = anthropicSdk.tools.toolSearchBm25_20251119({}) as unknown as AITool
   }
 
   return tools

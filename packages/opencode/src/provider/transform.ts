@@ -15,6 +15,23 @@ function mimeToModality(mime: string): Modality | undefined {
   return undefined
 }
 
+// Anthropic can keep tool definitions out of the prompt prefix and let the
+// model pull them back in through a server-side search tool. Deferred tools are
+// still transmitted on every request; what changes is that they no longer
+// occupy the context window.
+export function supportsToolSearch(model: Provider.Model) {
+  return sdkKey(model.api.npm ?? "") === "anthropic"
+}
+
+// At least one tool must stay non-deferred or the API rejects the request, and
+// a deferred tool may not carry cache_control. Callers defer MCP tools only and
+// leave built-ins direct, which satisfies both.
+export function deferLoading(model: Provider.Model) {
+  const key = sdkKey(model.api.npm ?? "")
+  if (!key) return undefined
+  return { [key]: { deferLoading: true } }
+}
+
 export const OUTPUT_TOKEN_MAX = 32_000
 
 // OpenAI Responses `include` value that returns the encrypted reasoning state
