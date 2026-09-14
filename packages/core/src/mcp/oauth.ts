@@ -8,6 +8,7 @@ import {
   UnauthorizedError,
   type FetchLike,
   type OAuthClientProvider,
+  type OAuthDiscoveryState,
   type OAuthServerInfo,
   type StoredOAuthClientInformation,
   type StoredOAuthTokens,
@@ -129,8 +130,13 @@ export const provider = (options: Options): OAuthClientProvider => {
   const refuse = (what: string) => new UnauthorizedError(`MCP server "${options.config.url}" requires ${what}`)
   const identity = new URL(options.config.url)
   identity.hash = ""
+  let discovery: OAuthDiscoveryState | undefined = options.discovery
   return {
     redirectUrl,
+    discoveryState: () => discovery,
+    saveDiscoveryState: (state) => {
+      discovery = state
+    },
     // The SDK sends no RFC 8707 resource when the server publishes no resource metadata; some
     // authorization servers require one, so fall back to the configured URL.
     validateResourceURL: async (_serverUrl, resource) => {
@@ -140,7 +146,6 @@ export const provider = (options: Options): OAuthClientProvider => {
       return new URL(resource)
     },
     ...(options.clientMetadataUrl ? { clientMetadataUrl: options.clientMetadataUrl } : {}),
-    ...(options.discovery ? { discoveryState: () => options.discovery } : {}),
     ...(redirect ? { state: () => redirect.state } : {}),
     clientMetadata: {
       redirect_uris: [redirectUrl],
