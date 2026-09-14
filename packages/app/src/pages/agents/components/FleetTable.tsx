@@ -1,154 +1,204 @@
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import type { JSX } from "solid-js"
+import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/context/language"
-import { Spark } from "./Spark"
+import { Pulse } from "./Pulse"
+import { SparkBars } from "./Spark"
 import { latText, money, pctText, rateText, tok } from "../lib/format"
+import type { TreeNode } from "../lib/tree"
 import type { FleetRowData, FleetSeverity } from "../fleetTypes"
 
-const SEVERITY_COLOR: Record<FleetSeverity, string> = {
-  cyan: "rgba(122,209,255,.92)",
-  mid: "rgba(255,255,255,.72)",
-  green: "rgba(107,230,140,.95)",
-  amber: "rgba(255,194,82,.95)",
-  bright: "rgba(255,255,255,.95)",
-  dim: "rgba(255,255,255,.42)",
-  red: "rgba(255,107,102,.95)",
+export const SEVERITY_COLOR: Record<FleetSeverity, string> = {
+  cyan: "var(--icon-info-base)",
+  mid: "var(--text-base)",
+  green: "var(--icon-success-base)",
+  amber: "var(--icon-warning-base)",
+  bright: "var(--text-strong)",
+  dim: "var(--text-weak)",
+  red: "var(--icon-critical-base)",
 }
 
-const MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
-const BRIGHT = "rgba(255,255,255,.95)"
-const DIM = "rgba(255,255,255,.42)"
-const GREEN = "rgba(107,230,140,.95)"
-const AMBER = "rgba(255,194,82,.95)"
-const CYAN = "rgba(122,209,255,.92)"
+type ColID = "stage" | "in" | "out" | "rate" | "cache" | "cost" | "lat" | "spark"
 
-const num = (width: number) => ({
-  width: `${width}px`,
-  "text-align": "right" as const,
-  "flex-shrink": 0,
-})
+// Left-to-right display order (name is always first, not included here).
+const DISPLAY_ORDER: ColID[] = ["stage", "in", "out", "rate", "cache", "cost", "lat", "spark"]
+
+// Fixed pixel width per optional column (matches the original fixed grid).
+const COL_WIDTH: Record<ColID, number> = {
+  stage: 72,
+  in: 64,
+  out: 64,
+  rate: 56,
+  cache: 52,
+  cost: 72,
+  lat: 56,
+  spark: 96,
+}
+
+// Drop order when space runs out — first entry drops first. Keep-priority is the reverse:
+// name (always kept) > stage > out > cost > spark > rate (tok/s) > in > cache > lat.
+const DROP_ORDER: ColID[] = ["lat", "cache", "in", "rate", "spark", "cost", "out", "stage"]
+
+const NAME_MIN = 160
+const GAP = 8 // gap-2
+const ROW_PAD = 24 // px-3 on both sides
+
+function visibleColumns(width: number): ColID[] {
+  const visible = new Set<ColID>(DISPLAY_ORDER)
+  const fits = (cols: Set<ColID>) => {
+    const count = cols.size + 1 // +1 for the name column
+    let fixed = 0
+    for (const id of cols) fixed += COL_WIDTH[id]
+    const total = ROW_PAD + fixed + NAME_MIN + GAP * (count - 1)
+    return total <= width
+  }
+  if (width <= 0) return DISPLAY_ORDER
+  for (const id of DROP_ORDER) {
+    if (fits(visible)) break
+    visible.delete(id)
+  }
+  return DISPLAY_ORDER.filter((id) => visible.has(id))
+}
 
 export default function FleetTable(props: {
-  rows: FleetRowData[]
+  nodes: TreeNode<FleetRowData>[]
   selectedID: string | null
   onSelect: (sessionID: string) => void
-  totalSpark: number[]
-  anyLive: boolean
-  window: "5m" | "1h" | "24h"
+  onToggle: (sessionID: string) => void
+  window: string
 }): JSX.Element {
   const language = useLanguage()
-  const labels = createMemo(() => ({
-    agent: language.t("agents.col.agent"),
-    stage: language.t("agents.col.stage"),
-    in: language.t("agents.col.in"),
-    out: language.t("agents.col.out"),
-    rate: language.t("agents.col.rate"),
-    cache: language.t("agents.col.cache"),
-    cost: language.t("agents.col.cost"),
-    lat: language.t("agents.col.lat"),
-    graph: `${language.t("agents.col.graph")}/${props.window}`,
-    total: language.t("agents.total"),
-  }))
+  const [width, setWidth] = createSignal(0)
+  let root: HTMLDivElement | undefined
 
-  const head = (w: number, label: string) => (
-    <span style={{ ...num(w), "text-align": "right", color: DIM, "font-size": "12px" }}>{label}</span>
+  onMount(() => {
+    const measure = () => setWidth(root?.clientWidth ?? 0)
+    measure()
+    const observer = new ResizeObserver(measure)
+    if (root) observer.observe(root)
+    onCleanup(() => observer.disconnect())
+  })
+
+  const cols = createMemo(() => visibleColumns(width()))
+  const gridTemplate = createMemo(() => ["minmax(0,1fr)", ...cols().map((id) => `${COL_WIDTH[id]}px`)].join(" "))
+  const has = (id: ColID) => cols().includes(id)
+
+  const head = (label: string, align: "left" | "right" = "right") => (
+    <span class="text-12-regular text-text-weak truncate" style={{ "text-align": align }}>
+      {label}
+    </span>
   )
 
   return (
-    <div
-      role="table"
-      style={{
-        display: "flex",
-        "flex-direction": "column",
-        "min-width": "0",
-        "font-family": MONO,
-        "font-size": "14px",
-        "font-variant-numeric": "tabular-nums",
-      }}
-    >
+    <div ref={root} role="treegrid" class="flex flex-col min-w-0 min-h-0 h-full text-12-mono tabular-nums">
       <div
         role="row"
-        style={{
-          display: "flex",
-          "align-items": "center",
-          gap: "8px",
-          padding: "2px 8px",
-          "white-space": "nowrap",
-        }}
+        class="grid items-center gap-2 px-3 py-1.5 border-b border-border-weaker-base sticky top-0 bg-background-base"
+        style={{ "grid-template-columns": gridTemplate() }}
       >
-        <span style={{ flex: "1 1 auto", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "text-align": "left", color: DIM, "font-size": "12px" }}>
-          {labels().agent}
-        </span>
-        <span style={{ ...num(64), color: DIM, "font-size": "12px" }}>{labels().stage}</span>
-        {head(56, labels().in)}
-        {head(56, labels().out)}
-        {head(64, labels().rate)}
-        {head(56, labels().cache)}
-        {head(72, labels().cost)}
-        {head(64, labels().lat)}
-        <span style={{ width: "96px", "flex-shrink": 0, "text-align": "left", color: DIM, "font-size": "12px" }}>{labels().graph}</span>
+        {head(language.t("agents.col.agent"), "left")}
+        <Show when={has("stage")}>{head(language.t("agents.col.stage"), "left")}</Show>
+        <Show when={has("in")}>{head(language.t("agents.col.in"))}</Show>
+        <Show when={has("out")}>{head(language.t("agents.col.out"))}</Show>
+        <Show when={has("rate")}>{head(language.t("agents.col.rate"))}</Show>
+        <Show when={has("cache")}>{head(language.t("agents.col.cache"))}</Show>
+        <Show when={has("cost")}>{head(language.t("agents.col.cost"))}</Show>
+        <Show when={has("lat")}>{head(language.t("agents.col.lat"))}</Show>
+        <Show when={has("spark")}>{head(`${language.t("agents.col.graph")}/${props.window}`, "left")}</Show>
       </div>
-      <div style={{ "overflow-y": "auto", "min-height": "0", "flex": "1 1 auto" }}>
-        <For each={props.rows}>
-          {(row) => (
-            <div
-              role="row"
-              tabindex={0}
-              data-session-id={row.sessionID}
-              aria-selected={props.selectedID === row.sessionID}
-              title={`${row.directory} · ${row.agent} · ${row.model} · ${row.stage.state}`}
-              onClick={() => props.onSelect(row.sessionID)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") props.onSelect(row.sessionID)
-              }}
-              style={{
-                display: "flex",
-                "align-items": "center",
-                gap: "8px",
-                padding: "2px 8px",
-                "white-space": "nowrap",
-                cursor: "pointer",
-                overflow: "hidden",
-                background: props.selectedID === row.sessionID ? "rgba(122,209,255,.12)" : "transparent",
-              }}
-            >
-              <span style={{ flex: "1 1 auto", "min-width": "0", overflow: "hidden", "text-overflow": "ellipsis", "text-align": "left", color: row.live ? GREEN : SEVERITY_COLOR.mid }}>
-                {`${row.agent || "—"}/${row.directory.split("/").pop() || row.directory} · ${row.title}`}
-              </span>
-              <span style={{ ...num(64), "font-size": "12px", "font-weight": 700, color: SEVERITY_COLOR[row.stage.severity] }}>{row.stage.state}</span>
-              <span style={{ ...num(56), color: BRIGHT }}>{tok(row.tin)}</span>
-              <span style={{ ...num(56), color: BRIGHT }}>{tok(row.tout)}</span>
-              <span style={{ ...num(64), color: row.tps > 0 ? GREEN : DIM }}>{rateText(row.tps)}</span>
-              <span style={{ ...num(56), color: row.cachePct >= 70 ? GREEN : AMBER }}>{pctText(row.cachePct)}</span>
-              <span style={{ ...num(72), color: row.priced ? CYAN : DIM }}>{row.priced ? money(row.cost) : "—"}</span>
-              <span style={{ ...num(64), color: BRIGHT }}>{latText(row.lat)}</span>
-              <span style={{ width: "96px", "flex-shrink": 0, "text-align": "left" }}>
-                <Spark data={row.spark} live={row.live} />
-              </span>
-            </div>
-          )}
+      <div class="flex-1 min-h-0 overflow-y-auto">
+        <For each={props.nodes}>
+          {(node) => {
+            const row = () => node.row
+            const selected = () => props.selectedID === row().sessionID
+            // Collapsed parents show the branch total so hidden subagent spend stays visible.
+            const tin = () => (node.collapsed ? node.rollup.tin : row().tin)
+            const tout = () => (node.collapsed ? node.rollup.tout : row().tout)
+            const cost = () => (node.collapsed ? node.rollup.cost : row().cost)
+            return (
+              <div
+                role="row"
+                tabindex={0}
+                data-session-id={row().sessionID}
+                aria-selected={selected()}
+                aria-level={node.depth + 1}
+                aria-expanded={node.hasChildren ? !node.collapsed : undefined}
+                title={`${row().directory} · ${row().agent} · ${row().model} · ${row().stage.state}`}
+                onClick={() => props.onSelect(row().sessionID)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") props.onSelect(row().sessionID)
+                }}
+                class="grid items-center gap-2 px-3 py-1 cursor-pointer hover:bg-surface-base-hover"
+                classList={{ "bg-surface-base-active": selected() }}
+                style={{ "grid-template-columns": gridTemplate() }}
+              >
+                <span class="flex items-center gap-1.5 min-w-0" style={{ "padding-left": `${node.depth * 16}px` }}>
+                  <Show when={node.hasChildren} fallback={<span class="w-4 shrink-0" />}>
+                    <button
+                      type="button"
+                      class="size-4 shrink-0 flex items-center justify-center text-icon-weak-base hover:text-icon-base"
+                      aria-label={node.collapsed ? language.t("agents.tree.expand") : language.t("agents.tree.collapse")}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        props.onToggle(row().sessionID)
+                      }}
+                    >
+                      <Icon name={node.collapsed ? "chevron-right" : "chevron-down"} size="small" />
+                    </button>
+                  </Show>
+                  <Pulse kind={row().kind} />
+                  <span class="truncate" classList={{ "text-text-strong": row().live, "text-text-base": !row().live }}>
+                    <Show when={row().agent}>
+                      <span class="text-text-weak">{row().agent} · </span>
+                    </Show>
+                    {row().title || row().sessionID}
+                  </span>
+                  <Show when={node.collapsed && node.rollup.descendants > 0}>
+                    <span class="shrink-0 px-1 rounded bg-surface-base text-12-regular text-text-weak">
+                      +{node.rollup.descendants}
+                      <Show when={node.rollup.live - (row().live ? 1 : 0) > 0}>
+                        <span style={{ color: SEVERITY_COLOR.green }}> ●{node.rollup.live - (row().live ? 1 : 0)}</span>
+                      </Show>
+                    </span>
+                  </Show>
+                </span>
+                <Show when={has("stage")}>
+                  <span class="text-12-medium truncate" style={{ color: SEVERITY_COLOR[row().stage.severity] }}>
+                    {row().stage.state}
+                  </span>
+                </Show>
+                <Show when={has("in")}>
+                  <span class="text-right text-text-base">{tok(tin())}</span>
+                </Show>
+                <Show when={has("out")}>
+                  <span class="text-right text-text-base">{tok(tout())}</span>
+                </Show>
+                <Show when={has("rate")}>
+                  <span class="text-right" classList={{ "text-text-strong": row().tps > 0, "text-text-weak": row().tps <= 0 }}>
+                    {rateText(row().tps)}
+                  </span>
+                </Show>
+                <Show when={has("cache")}>
+                  <span class="text-right text-text-weak">{row().cachePct > 0 ? pctText(row().cachePct) : "—"}</span>
+                </Show>
+                <Show when={has("cost")}>
+                  <span class="text-right" classList={{ "text-text-strong": cost() > 0, "text-text-weak": cost() <= 0 }}>
+                    {cost() > 0 ? `$${money(cost())}` : "—"}
+                  </span>
+                </Show>
+                <Show when={has("lat")}>
+                  <span class="text-right text-text-weak">{latText(row().lat)}</span>
+                </Show>
+                <Show when={has("spark")}>
+                  <SparkBars data={row().spark} live={row().live} height={14} />
+                </Show>
+              </div>
+            )
+          }}
         </For>
-        <Show when={props.rows.length === 0}>
-          <div style={{ padding: "4px 8px", color: DIM, "font-size": "12px" }}>—</div>
+        <Show when={props.nodes.length === 0}>
+          <div class="px-3 py-6 text-12-regular text-text-weak">{language.t("agents.empty")}</div>
         </Show>
-      </div>
-      <div
-        role="row"
-        style={{
-          display: "flex",
-          "align-items": "center",
-          gap: "8px",
-          padding: "2px 8px",
-          "white-space": "nowrap",
-          "border-top": "1px solid rgba(255,255,255,.08)",
-          color: BRIGHT,
-          "font-weight": 700,
-        }}
-      >
-        <span style={{ flex: "1 1 auto", "min-width": "0", "text-align": "left" }}>{labels().total}</span>
-        <span style={{ width: "96px", "flex-shrink": 0, "text-align": "left", opacity: props.anyLive ? 1 : 0.55 }}>
-          <Spark data={props.totalSpark} live={props.anyLive} title={labels().graph} />
-        </span>
       </div>
     </div>
   )

@@ -1,4 +1,7 @@
+import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2/client"
 import type { WindowKey } from "./lib/bucket"
+import type { CostBreakdown } from "./lib/cost"
+import type { TreeNode } from "./lib/tree"
 
 export type BucketWindow = WindowKey
 
@@ -28,12 +31,23 @@ export type FleetRowData = {
   kind: FleetKind
   sandbox: boolean
   forkChild: boolean
+  updated: number
 }
 
 export type FleetFilter = { kind: FleetFilterKind; project: string | null }
 
+export type AttentionItem =
+  | { kind: "permission"; sessionID: string; directory: string; title: string; request: PermissionRequest }
+  | { kind: "question"; sessionID: string; directory: string; title: string; request: QuestionRequest }
+
 export type FleetData = {
   rows: () => FleetRowData[]
+  nodes: () => TreeNode<FleetRowData>[]
+  attention: () => AttentionItem[]
+  cost: () => CostBreakdown
+  totalCost: () => number
+  projects: () => string[]
+  toggleCollapsed: (sessionID: string) => void
   totalSpark: () => number[]
   out1mAll: () => number
   anyLive: () => boolean

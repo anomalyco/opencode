@@ -12,16 +12,21 @@ then a live walk of `/agents` against a local server.
 - [x] **S-fix** Finish WIP row fields, splitPct key, TTFT part lookup, tok/s unit (`c1025bc`).
 - [x] **S0 Surface** Remove session side-panel Agents tab + badge (`session-side-panel.tsx`,
   `session/helpers.ts`). Keep route, `/agents` redirect, palette command, rail button.
-- [ ] **S1 Theme** Replace inline rgba/hex with theme tokens (Tailwind token classes /
+- [x] **S1 Theme** Replace inline rgba/hex with theme tokens (Tailwind token classes /
   CSS vars). Wire `SparkBars` + resizable split (`splitPct`). Real SSE state or drop it.
-- [ ] **S2 Tree** `lib/tree.ts`: group subagents under parent, rollup tin/tout/cost/live,
+- [x] **S2 Tree** `lib/tree.ts`: group subagents under parent, rollup tin/tout/cost/live,
   collapse state persisted. Table renders indented children; filters match if any
   descendant matches.
-- [ ] **S3 Blocked** Attention strip listing pending permissions/questions across fleet.
+- [x] **S3 Blocked** Attention strip listing pending permissions/questions across fleet.
   Inline allow once / always / reject and question answering in detail pane via
   `api.permission.reply` / `api.question.reply|reject`. Keyboard: `j/k` move, `a/A/r`.
-- [ ] **S4 Cost** `lib/cost.ts`: per provider/model totals and windowed burn ($/h, tok/min)
+- [x] **S4 Cost** `lib/cost.ts`: per provider/model totals and windowed burn ($/h, tok/min)
   from assistant message cost/tokens. Summary bar + breakdown tab.
-- [ ] **S5 Dispatch** New-session form (project, agent, model, prompt) via
+- [x] **S5 Dispatch** New-session form (project, agent, model, prompt) via
   `api.session.create` + `api.session.prompt`; follow-up/steer box and interrupt in detail.
 - [ ] **S6 Docs** Update CONSTANTS/REBASE/FIXTURES to match the code.
+- [x] **S-fit** Responsive fleet: priority column drop, slide-over detail below 1100px, wrapping header;
+  desktop window bounds clamped to display work area.
+
+Open: live-agent check of permission/question/steer/burn in desktop; j/k selection unresponsive in
+web test; rows re-render every tick; S6 docs.

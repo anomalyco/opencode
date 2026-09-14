@@ -1,48 +1,21 @@
-import type { JSX } from "solid-js";
+import type { JSX } from "solid-js"
+import type { FleetKind } from "../fleetTypes"
 
-export type PulseKind = "working" | "permission" | "error" | "unseen" | "idle";
+const COLORS: Record<FleetKind, string> = {
+  working: "var(--icon-success-base)",
+  permission: "var(--icon-warning-base)",
+  error: "var(--icon-critical-base)",
+  unseen: "var(--icon-info-base)",
+  idle: "var(--icon-weak-base)",
+}
 
-const COLORS: Record<Exclude<PulseKind, "idle">, string> = {
-  working: "#4ade80",
-  permission: "#fbbf24",
-  error: "#f87171",
-  unseen: "#4da3ff",
-};
-
-export function Pulse(props: { kind: PulseKind; animate?: boolean }): JSX.Element {
-  if (props.kind === "idle") {
-    return (
-      <span
-        style={{
-          color: "rgba(148,163,184,.55)",
-          "font-size": "14px",
-          "line-height": "1",
-        }}
-      >
-        ·
-      </span>
-    );
-  }
-  const color = COLORS[props.kind];
-  const spinning = props.kind === "working" && props.animate !== false;
-  const dot = (
-    <span
-      style={{
-        display: "inline-block",
-        width: "8px",
-        height: "8px",
-        "border-radius": "9999px",
-        "background-color": color,
-        animation: spinning ? "agents-pulse-blink 1.2s ease-in-out infinite" : undefined,
-      }}
-    />
-  );
+export function Pulse(props: { kind: FleetKind }): JSX.Element {
   return (
-    <>
-      {spinning ? (
-        <style>{`@keyframes agents-pulse-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }`}</style>
-      ) : null}
-      {dot}
-    </>
-  );
+    <span
+      aria-hidden="true"
+      class="inline-block size-2 rounded-full shrink-0"
+      classList={{ "animate-pulse": props.kind === "working", "opacity-50": props.kind === "idle" }}
+      style={{ "background-color": COLORS[props.kind] }}
+    />
+  )
 }
