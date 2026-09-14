@@ -17,7 +17,7 @@ const sourceCommand = packageJson.opencodeSourceBinary ?? command
 const platform = { darwin: "darwin", linux: "linux", win32: "windows" }[os.platform()] ?? os.platform()
 const arch = { x64: "x64", arm64: "arm64", arm: "arm" }[os.arch()] ?? os.arch()
 const sourceBinary = platform === "windows" ? `${sourceCommand}.exe` : sourceCommand
-const targetBinary = path.resolve(directory, packageJson.bin[command])
+const targetBinary = path.resolve(directory, "bin", `.${sourceCommand}`)
 const dependencies = packageJson.optionalDependencies ?? {}
 const base = Object.keys(dependencies).find((name) => name.endsWith(`-${platform}-${arch}`))
 if (!base) throw new Error(`OpenCode does not provide a binary for ${platform}-${arch}`)
@@ -171,6 +171,9 @@ function main() {
 try {
   main()
 } catch (error) {
-  console.error(error instanceof Error ? error.message : String(error))
-  process.exit(1)
+  console.warn(
+    `[opencode] Note: Postinstall pre-caching skipped (${error instanceof Error ? error.message : String(error)}). ` +
+      `The runtime launcher will locate the binary automatically.`,
+  )
+  process.exit(0)
 }
