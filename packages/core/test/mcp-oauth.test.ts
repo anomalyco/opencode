@@ -1,13 +1,61 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import { auth, refreshAuthorization } from "@modelcontextprotocol/client"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
-import { Credential } from "@opencode/schema/credential"
+import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
-import { Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
+import { hostEnvironmentLayer } from "./fixture/environment"
 
 const authServer = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
 afterAll(() => authServer.stop(true))
+
+const integrationID = Integration.ID.make("mcp_test")
+const methodID = Integration.MethodID.make("oauth")
+
+const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: { client_id: "client" } })
+
+const credential = (input: { access: string; refresh: string; expires?: number; url: string }) =>
+  new Credential.Info({
+    id: Credential.ID.make("cred_test"),
+    integrationID,
+    label: "test",
+    value: {
+      type: "oauth",
+      methodID,
+      access: input.access,
+      refresh: input.refresh,
+      expires: input.expires ?? Date.now() - 1000,
+      metadata: { serverUrl: input.url, tokenType: "Bearer" },
+    },
+  })
+
+// Connect-time providers read and write the credential store; this one lives in memory so tests can
+// inspect the row the provider leaves behind.
+const memoryCredentials = (initial: Credential.Info[]) => {
+  const rows = new Map(initial.map((row) => [row.id, row]))
+  const unused = () => Effect.die("unused credential method")
+  const service = Credential.Service.of({
+    all: unused,
+    create: unused,
+    activate: unused,
+    list: (id) => Effect.sync(() => Array.from(rows.values()).filter((row) => row.integrationID === id)),
+    get: (id) => Effect.sync(() => rows.get(id)),
+    update: (id, updates) =>
+      Effect.sync(() => {
+        const row = rows.get(id)
+        if (row) rows.set(id, new Credential.Info({ ...row, ...updates }))
+      }),
+    remove: (id) => Effect.sync(() => void rows.delete(id)),
+  })
+  return { rows, service }
+}
+
+const connectProvider = (config: typeof ConfigMCP.Remote.Type, store: ReturnType<typeof memoryCredentials>) =>
+  Effect.runPromise(
+    McpOAuth.connectProvider({ config, integrationID }).pipe(Effect.provideService(Credential.Service, store.service)),
+  )
 
 const authorize = (redirect_uri?: string) =>
   Effect.runPromise(
@@ -89,39 +137,65 @@ describe("MCP OAuth", () => {
         return Response.json({ access_token: "next", token_type: "Bearer" })
       },
     })
-    const store = McpOAuth.memoryStore()
-    await store.saveTokens(
-      McpOAuth.toTokens(
-        Credential.OAuth.make({
-          type: "oauth",
-          methodID: Integration.MethodID.make("oauth"),
-          access: "expired",
-          refresh: "refresh",
-          expires: Date.now() - 1000,
-          metadata: { serverUrl: server.url.href, tokenType: "Bearer" },
-        }),
-      ),
-    )
-    const oauthProvider = McpOAuth.provider({
-      redirectUrl: "http://127.0.0.1/callback",
-      client: { id: "client" },
-      onRedirect: () => undefined,
-      store,
-    })
+    const store = memoryCredentials([credential({ access: "expired", refresh: "refresh", url: server.url.href })])
+    const oauthProvider = await connectProvider(remote(server.url.href), store)
 
     const result = await auth(oauthProvider, { serverUrl: server.url.href }).finally(() => server.stop(true))
 
     expect(result).toBe("AUTHORIZED")
-    // The SDK stamps the issuer it refreshed against so the credential stays bound to that server.
-    expect(await store.tokens()).toEqual({
-      access_token: "next",
-      token_type: "Bearer",
-      refresh_token: "refresh",
-      issuer: server.url.href,
-    })
     expect(tokenRequests).toHaveLength(1)
     expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
     expect(tokenRequests[0]?.get("refresh_token")).toBe("refresh")
+    // The refreshed tokens land on the same credential row, stamped with the issuer they were minted by.
+    const stored = store.rows.get(Credential.ID.make("cred_test"))?.value
+    expect(stored?.type === "oauth" && stored.access).toBe("next")
+    expect(stored?.type === "oauth" && stored.metadata?.issuer).toBe(server.url.href)
+  })
+
+  test("reports needs_auth for an unauthorized server without registering a client", async () => {
+    let registrations = 0
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url)
+        if (request.method === "POST" && url.pathname === "/register") registrations++
+        if (url.pathname === "/mcp") return new Response(null, { status: 401 })
+        return new Response(null, { status: 404 })
+      },
+    })
+    const config = new ConfigMCP.Remote({ type: "remote", url: `${server.url.origin}/mcp` })
+    const oauthProvider = await connectProvider(config, memoryCredentials([]))
+
+    const exit = await Effect.runPromise(
+      Effect.scoped(McpClient.connect("test", config, import.meta.dir, oauthProvider)).pipe(
+        Effect.provide(hostEnvironmentLayer),
+        Effect.exit,
+      ),
+    ).finally(() => server.stop(true))
+
+    expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBeInstanceOf(McpClient.NeedsAuthError)
+    expect(registrations).toBe(0)
+  })
+
+  test("drops an invalidated credential only while it still holds the presented token", async () => {
+    const url = authServer.url.href
+    const rotated = memoryCredentials([credential({ access: "a", refresh: "r1", url })])
+    const rotatedProvider = await connectProvider(remote(url), rotated)
+    await rotatedProvider.tokens()
+    // Another connection refreshed first; the row now holds a token this provider never presented.
+    await Effect.runPromise(
+      rotated.service.update(Credential.ID.make("cred_test"), {
+        value: credential({ access: "b", refresh: "r2", url }).value,
+      }),
+    )
+    await rotatedProvider.invalidateCredentials?.("tokens")
+    expect(rotated.rows.size).toBe(1)
+
+    const stale = memoryCredentials([credential({ access: "a", refresh: "r1", url })])
+    const staleProvider = await connectProvider(remote(url), stale)
+    await staleProvider.tokens()
+    await staleProvider.invalidateCredentials?.("tokens")
+    expect(stale.rows.size).toBe(0)
   })
 
   test("shares concurrent refreshes for the same token", async () => {

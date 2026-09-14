@@ -204,105 +204,12 @@ export const layer = (options?: Options) =>
         return { name, entry }
       })
 
-      // Connect-time OAuth provider. It never opens a browser, so an auth-gated connect ends in
-      // UnauthorizedError -> needs_auth. Refresh tokens rotate on many servers and the credential row is
-      // shared across locations, so every read goes to the store and invalidation only drops the row
-      // when it still holds the token this provider presented.
       const connectProvider = Effect.fnUntraced(function* (entry: ServerEntry) {
         if (entry.config.type !== "remote" || !entry.integrationID) return undefined
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-        const remote = entry.config
-        const oauth = remote.oauth || undefined
-        const run = Effect.runPromiseWith(yield* Effect.context())
-        const base = {
-          redirectUrl: oauth?.redirect_uri ?? "http://127.0.0.1/callback",
-          scope: oauth?.scope,
-          client: oauth?.client_id ? { id: oauth.client_id, secret: oauth.client_secret } : undefined,
-          onRedirect: () => run(Effect.logInfo("mcp oauth authorization required")),
-        }
-        const found = (yield* credentials.list(entry.integrationID)).at(-1)
-        if (!found || found.value.type !== "oauth") {
-          // An empty store still lets the SDK run its handshake and surface needs_auth rather than a raw HTTP error.
-          yield* Effect.logInfo("mcp oauth credential unavailable", {
-            integrationID: entry.integrationID,
-            reason: found ? "not_oauth" : "missing",
-          })
-          return McpOAuth.provider({ ...base, store: McpOAuth.memoryStore() })
-        }
-        const credentialID = found.id
-        const methodID = found.value.methodID
-        const fields = { credentialID, integrationID: entry.integrationID }
-        yield* Effect.logInfo("mcp oauth credential loaded", {
-          ...fields,
-          hasRefreshToken: Boolean(found.value.refresh),
-          hasClientInformation: Boolean(McpOAuth.clientFromCredential(found.value)),
-          expiresAt: found.value.expires,
-          expired: found.value.expires !== 0 && found.value.expires <= Date.now(),
-        })
-        let presented = found.value.refresh
-        const readOAuthCredential = async () => {
-          const stored = await run(credentials.get(credentialID))
-          return stored?.value.type === "oauth" ? stored.value : undefined
-        }
-        return McpOAuth.provider({
-          ...base,
-          invalidate: async (scope) => {
-            if (scope === "verifier" || scope === "discovery") {
-              await run(
-                Effect.logDebug("mcp oauth invalidation skipped", { ...fields, scope, reason: "not_credentials" }),
-              )
-              return
-            }
-            const oauth = await readOAuthCredential()
-            if (!oauth || oauth.refresh !== presented) {
-              await run(
-                Effect.logInfo("mcp oauth invalidation skipped", {
-                  ...fields,
-                  scope,
-                  reason: oauth ? "token_rotated" : "credential_missing",
-                }),
-              )
-              return
-            }
-            await run(Effect.logWarning("mcp oauth credential invalidation requested", { ...fields, scope }))
-            await run(credentials.remove(credentialID))
-          },
-          store: {
-            tokens: async () => {
-              const oauth = await readOAuthCredential()
-              if (!oauth) return undefined
-              presented = oauth.refresh
-              return McpOAuth.toTokens(oauth)
-            },
-            saveTokens: async (tokens) => {
-              const previous = await readOAuthCredential()
-              const value = McpOAuth.toCredential({
-                methodID,
-                serverUrl: remote.url,
-                tokens,
-                client: previous ? McpOAuth.clientFromCredential(previous) : undefined,
-              })
-              presented = value.refresh
-              await run(
-                Effect.logInfo("mcp oauth tokens received", {
-                  ...fields,
-                  credentialPresent: Boolean(previous),
-                  refreshRotated: Boolean(previous && previous.refresh !== value.refresh),
-                  hasRefreshToken: Boolean(value.refresh),
-                  expiresAt: value.expires,
-                }),
-              )
-              await run(credentials.update(credentialID, { value }))
-            },
-            clientInformation: async () => {
-              const oauth = await readOAuthCredential()
-              return oauth ? McpOAuth.clientFromCredential(oauth) : undefined
-            },
-            saveClientInformation: async () => {},
-            codeVerifier: async () => undefined,
-            saveCodeVerifier: async () => {},
-          },
-        })
+        return yield* McpOAuth.connectProvider({ config: entry.config, integrationID: entry.integrationID }).pipe(
+          Effect.provideService(Credential.Service, credentials),
+        )
       })
 
       const elicitation = {

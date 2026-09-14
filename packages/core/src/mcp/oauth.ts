@@ -4,6 +4,7 @@ import {
   auth,
   discoverOAuthServerInfo,
   parseErrorResponse,
+  UnauthorizedError,
   type FetchLike,
   type OAuthClientProvider,
   type OAuthServerInfo,
@@ -11,21 +12,16 @@ import {
   type StoredOAuthTokens,
 } from "@modelcontextprotocol/client"
 import { Cause, Deferred, Effect } from "effect"
-import { Credential } from "@opencode/schema/credential"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
+import { Credential } from "../credential.js"
 import { OauthCallbackPage } from "../oauth/page.js"
 import type { Integration } from "../integration.js"
 import { ErrorSummary } from "../util/error-summary.js"
 
-/**
- * opencode's OAuth Client ID Metadata Document. Authorization servers that support CIMD accept this URL as the
- * client_id and fetch it to learn our name and redirect URIs, so no per-server dynamic registration is needed.
- */
+/** Client ID Metadata Document: servers that support CIMD accept this URL as the client_id without registration. */
 export const CLIENT_METADATA_URL = "https://opencode.ai/oauth/opencode/client.json"
 
-// Refresh tokens rotate on many servers, so two concurrent refreshes of the same token would make the
-// second fail with invalid_grant. Concurrent refreshes share one in-flight request, process-wide, so
-// separate connections holding the same credential row cannot race each other.
+// Refresh tokens rotate, so concurrent refreshes of the same token share one request or the second gets invalid_grant.
 const refreshes = new Map<string, ReturnType<FetchLike>>()
 
 const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
@@ -33,10 +29,9 @@ const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
   return [String(url), init.body.get("client_id") ?? "", init.body.get("refresh_token") ?? ""].join("\u0000")
 }
 
-// `fetch` is typed against undici's Response while the SDK's FetchLike uses the global one.
-const base = fetch as unknown as FetchLike
-
-// Every waiter gets its own body; `clone()` is typed against the DOM Response, hence the assertion.
+// Bun's and Node's fetch types both apply here and the SDK's FetchLike wants Bun's Response, so the
+// overload is picked by annotation and clone() is pinned to the type it was called on.
+const base: FetchLike = fetch
 const share = (pending: ReturnType<FetchLike>) => pending.then((response) => response.clone() as typeof response)
 
 const send: FetchLike = (url, init) => {
@@ -51,7 +46,6 @@ const send: FetchLike = (url, init) => {
   return share(pending)
 }
 
-/** Observe OAuth failures before the SDK handles them by invalidating credentials or redirecting. */
 export const loggedFetch = (fields: { readonly server: string; readonly directory?: string }) =>
   Effect.gen(function* () {
     const run = Effect.runPromiseWith(yield* Effect.context())
@@ -65,12 +59,14 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
           const response = yield* Effect.tryPromise({ try: () => send(url, init), catch: (error) => error })
           const result = { status: response.status, durationMs: Date.now() - started }
           if (operation && !response.ok) {
-            // Only retain the SDK's standard error code. Descriptions and raw bodies can echo credentials.
             const error = yield* Effect.tryPromise(async () => parseErrorResponse(await response.clone().text())).pipe(
-              Effect.map((error) => error.code),
-              Effect.orElseSucceed(() => "unreadable_response"),
+              Effect.orElseSucceed(() => undefined),
             )
-            yield* Effect.logWarning("mcp oauth request rejected", { ...result, error })
+            yield* Effect.logWarning("mcp oauth request rejected", {
+              ...result,
+              error: error?.code,
+              message: error?.message,
+            })
           }
           if (operation && response.ok) {
             yield* Effect.logInfo("mcp oauth request succeeded", result)
@@ -100,7 +96,6 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
     return request
   })
 
-/** Persists the OAuth artifacts for one MCP server session: DCR client info, PKCE verifier, and tokens. */
 export interface Store {
   readonly tokens: () => Promise<StoredOAuthTokens | undefined>
   readonly saveTokens: (tokens: StoredOAuthTokens) => Promise<void>
@@ -111,60 +106,55 @@ export interface Store {
 }
 
 export interface Options {
-  /** Loopback URL the authorization server redirects back to after the user approves. */
-  readonly redirectUrl: string
-  /** Space-delimited OAuth scopes to request when the server requires specific ones. */
-  readonly scope?: string
-  /** CSRF state embedded in the authorization request; required by the spec and enforced by some servers.
-   * The caller is responsible for validating the value echoed back to the redirect. */
-  readonly state?: string
-  /** Statically pre-registered client credentials from config; when set, the SDK skips dynamic registration. */
-  readonly client?: { readonly id: string; readonly secret?: string }
-  /** Use opencode's Client ID Metadata Document as the client_id instead of registering dynamically. */
-  readonly clientMetadataUrl?: string
-  /** Pre-fetched authorization server discovery so the SDK does not repeat it. */
-  readonly discovery?: OAuthServerInfo
-  /** Invoked by the SDK to drop credentials it has determined are invalid (e.g. a rejected refresh token). */
-  readonly invalidate?: (scope: "all" | "client" | "tokens" | "verifier" | "discovery") => void | Promise<void>
-  /** Receives the authorization URL so the caller can open a browser and capture the eventual code. */
-  readonly onRedirect: (url: URL) => void | Promise<void>
+  readonly config: typeof ConfigMCP.Remote.Type
   readonly store: Store
+  /** Absent on connect: the provider then refuses to register a client or redirect, ending in needs_auth. */
+  readonly redirect?: {
+    readonly url: string
+    readonly state: string
+    readonly open: (url: URL) => void | Promise<void>
+  }
+  readonly clientMetadataUrl?: string
+  readonly discovery?: OAuthServerInfo
+  readonly invalidate?: OAuthClientProvider["invalidateCredentials"]
 }
 
-/**
- * Builds the MCP SDK's OAuthClientProvider. The SDK drives dynamic client registration, PKCE, and
- * token refresh through these callbacks; we only persist whatever it hands back via `store`.
- */
 export const provider = (options: Options): OAuthClientProvider => {
-  const state = options.state
-  const client = options.client
+  const oauth = options.config.oauth || undefined
+  const client = oauth?.client_id ? { client_id: oauth.client_id, client_secret: oauth.client_secret } : undefined
+  const redirect = options.redirect
+  // A missing redirectUrl selects the client-credentials grant in the SDK, so connect still names one.
+  const redirectUrl = redirect?.url ?? oauth?.redirect_uri ?? "http://127.0.0.1/callback"
+  const refuse = (what: string) => new UnauthorizedError(`MCP server "${options.config.url}" requires ${what}`)
   return {
-    redirectUrl: options.redirectUrl,
+    redirectUrl,
     ...(options.clientMetadataUrl ? { clientMetadataUrl: options.clientMetadataUrl } : {}),
     ...(options.discovery ? { discoveryState: () => options.discovery } : {}),
+    ...(redirect ? { state: () => redirect.state } : {}),
     clientMetadata: {
-      redirect_uris: [options.redirectUrl],
+      redirect_uris: [redirectUrl],
       client_name: "opencode",
       client_uri: "https://opencode.ai",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
-      token_endpoint_auth_method: client?.secret ? "client_secret_post" : "none",
-      ...(options.scope ? { scope: options.scope } : {}),
+      token_endpoint_auth_method: client?.client_secret ? "client_secret_post" : "none",
+      ...(oauth?.scope ? { scope: oauth.scope } : {}),
     },
-    // Only advertise state when the caller supplied one (the interactive flow); the connect-time
-    // provider has no redirect to validate, so it omits it.
-    ...(state !== undefined ? { state: () => state } : {}),
-    // Static client config short-circuits dynamic registration; otherwise the SDK registers and we persist.
-    clientInformation: () =>
-      client ? { client_id: client.id, client_secret: client.secret } : options.store.clientInformation(),
+    clientInformation: async () => {
+      if (client) return client
+      const stored = await options.store.clientInformation()
+      if (!stored && !redirect) throw refuse("a login before it can register a client")
+      return stored
+    },
     saveClientInformation: (info) => options.store.saveClientInformation(info),
     tokens: () => options.store.tokens(),
     saveTokens: (tokens) => options.store.saveTokens(tokens),
-    redirectToAuthorization: (url) => options.onRedirect(url),
+    redirectToAuthorization: (url) => {
+      if (!redirect) throw refuse("user authorization")
+      return redirect.open(url)
+    },
     ...(options.invalidate ? { invalidateCredentials: options.invalidate } : {}),
     saveCodeVerifier: (verifier) => options.store.saveCodeVerifier(verifier),
-    // The SDK only reads the verifier back after saving one earlier in the same flow; a miss means
-    // the flow was resumed without its session state, which the SDK surfaces as an auth failure.
     codeVerifier: async () => {
       const verifier = await options.store.codeVerifier()
       if (!verifier) throw new Error("Missing PKCE code verifier for MCP OAuth flow")
@@ -173,7 +163,6 @@ export const provider = (options: Options): OAuthClientProvider => {
   }
 }
 
-/** A Store that keeps OAuth artifacts in memory for the duration of one interactive login attempt. */
 export const memoryStore = (): Store => {
   let tokens: StoredOAuthTokens | undefined
   let client: StoredOAuthClientInformation | undefined
@@ -194,11 +183,9 @@ export const memoryStore = (): Store => {
   }
 }
 
-/** Reads the dynamically-registered client info we stash in a credential's metadata, for token refresh. */
 export const clientFromCredential = (credential: Credential.OAuth) =>
   credential.metadata?.client as StoredOAuthClientInformation | undefined
 
-/** Folds SDK tokens (plus DCR client info and the server URL) into a storable credential. */
 export const toCredential = (input: {
   readonly methodID: Integration.MethodID
   readonly serverUrl: string
@@ -210,20 +197,17 @@ export const toCredential = (input: {
     methodID: input.methodID,
     access: input.tokens.access_token,
     refresh: input.tokens.refresh_token ?? "",
-    // 0 marks an unknown/non-expiring token; toTokens then omits expires_in so the SDK won't force a refresh.
+    // 0 is non-expiring; toTokens then omits expires_in so the SDK does not force a refresh.
     expires: input.tokens.expires_in ? Date.now() + input.tokens.expires_in * 1000 : 0,
     metadata: {
       serverUrl: input.serverUrl,
       tokenType: input.tokens.token_type,
       ...(input.tokens.scope ? { scope: input.tokens.scope } : {}),
-      // The SDK binds credentials to the authorization server that issued them and refuses to present
-      // them elsewhere; the issuer must round-trip through storage for that check to stay active.
       ...(input.tokens.issuer ? { issuer: input.tokens.issuer } : {}),
       ...(input.client ? { client: input.client } : {}),
     },
   })
 
-/** Reconstructs SDK tokens from a stored credential so the connect-time provider can present them. */
 export const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
   const metadata = credential.metadata ?? {}
   return {
@@ -236,11 +220,64 @@ export const toTokens = (credential: Credential.OAuth): StoredOAuthTokens => {
   }
 }
 
-/**
- * Runs the interactive OAuth login for one remote MCP server. Stands up a loopback callback server,
- * lets the SDK drive DCR + PKCE to produce an authorization URL, and returns an attempt whose callback
- * exchanges the redirect code for a storable credential. Scoped: the callback server closes with the scope.
- */
+export const connectProvider = Effect.fnUntraced(function* (input: {
+  readonly config: typeof ConfigMCP.Remote.Type
+  readonly integrationID: Integration.ID
+}) {
+  const credentials = yield* Credential.Service
+  const run = Effect.runPromiseWith(yield* Effect.context())
+  const found = (yield* credentials.list(input.integrationID)).at(-1)
+  if (!found || found.value.type !== "oauth") return provider({ config: input.config, store: memoryStore() })
+  const id = found.id
+  const methodID = found.value.methodID
+  const read = async () => {
+    const stored = await run(credentials.get(id))
+    return stored?.value.type === "oauth" ? stored.value : undefined
+  }
+  // Refresh tokens rotate and the row is shared across connections: only drop it while it still holds ours.
+  let presented = found.value.refresh
+  return provider({
+    config: input.config,
+    invalidate: async (scope) => {
+      if (scope === "verifier" || scope === "discovery") return
+      const oauth = await read()
+      if (!oauth || oauth.refresh !== presented) return
+      await run(Effect.logWarning("mcp oauth credential invalidated", { credentialID: id, scope }))
+      await run(credentials.remove(id))
+    },
+    store: {
+      tokens: async () => {
+        const oauth = await read()
+        if (!oauth) return undefined
+        presented = oauth.refresh
+        return toTokens(oauth)
+      },
+      saveTokens: async (tokens) => {
+        const previous = await read()
+        const value = toCredential({
+          methodID,
+          serverUrl: input.config.url,
+          tokens,
+          client: previous ? clientFromCredential(previous) : undefined,
+        })
+        presented = value.refresh
+        await run(credentials.update(id, { value }))
+      },
+      clientInformation: async () => {
+        const oauth = await read()
+        return oauth ? clientFromCredential(oauth) : undefined
+      },
+      saveClientInformation: async (client) => {
+        const oauth = await read()
+        if (!oauth) return
+        await run(credentials.update(id, { value: { ...oauth, metadata: { ...oauth.metadata, client } } }))
+      },
+      codeVerifier: async () => undefined,
+      saveCodeVerifier: async () => {},
+    },
+  })
+})
+
 export const authorize = (input: {
   readonly name: string
   readonly config: typeof ConfigMCP.Remote.Type
@@ -284,9 +321,7 @@ export const authorize = (input: {
       response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: input.name }))
     })
 
-    // Bind the port the redirect will actually arrive on: an explicit callback_port wins, else the port
-    // pinned by redirect_uri, else an ephemeral port. Binding ephemerally while redirect_uri names a fixed
-    // port would send the browser somewhere nothing is listening, hanging the attempt until it expires.
+    // callback_port, else the port pinned by redirect_uri, else ephemeral; a mismatch strands the browser.
     const redirectPort = Number(redirect?.port) || undefined
     const port = yield* Effect.callback<number, Error>((resume) => {
       server.once("error", (error) => resume(Effect.fail(error)))
@@ -301,10 +336,8 @@ export const authorize = (input: {
     })
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
 
-    // Discover the authorization server up front so we can decide how to identify ourselves. CIMD only works
-    // when the server advertises it, accepts public clients (our document declares no client secret), and the
-    // redirect is our own loopback URL (a user-configured redirect_uri is not in the published document).
-    // A configured client_id is pre-registered and always wins.
+    // CIMD needs the server to advertise it and accept public clients, and our published document only
+    // lists the loopback redirect; a configured client_id always wins.
     const discovery = yield* Effect.tryPromise({
       try: () => discoverOAuthServerInfo(input.config.url, { fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
@@ -321,17 +354,18 @@ export const authorize = (input: {
 
     let authorizationUrl: URL | undefined
     const oauthProvider = provider({
-      redirectUrl: oauth?.redirect_uri ?? `http://127.0.0.1:${port}${redirectPath}`,
-      scope: oauth?.scope,
-      state,
-      client: oauth?.client_id ? { id: oauth.client_id, secret: oauth.client_secret } : undefined,
+      config: input.config,
+      store,
       clientMetadataUrl: cimd ? CLIENT_METADATA_URL : undefined,
       discovery,
-      onRedirect: (url) => {
-        authorizationUrl = url
-        return run(Effect.logInfo("mcp oauth awaiting authorization", fields))
+      redirect: {
+        url: oauth?.redirect_uri ?? `http://127.0.0.1:${port}${redirectPath}`,
+        state,
+        open: (url) => {
+          authorizationUrl = url
+          return run(Effect.logInfo("mcp oauth awaiting authorization", fields))
+        },
       },
-      store,
     })
 
     const finalize = Effect.gen(function* () {
