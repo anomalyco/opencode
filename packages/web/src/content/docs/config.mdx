@@ -879,9 +879,13 @@ The `experimental` key contains options that are under active development.
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "experimental": {}
+  "experimental": {
+    "auto_approve": true
+  }
 }
 ```
+
+- `auto_approve` - Enables the [Auto-approve](/docs/permissions#auto-approve-mode) TUI mode, which has a model review each consequential action before it runs. Disabled by default; while it is off the mode is hidden and no permission is ever sent to a model.
 
 :::caution
 Experimental options are not stable. They may change or be removed without notice.
