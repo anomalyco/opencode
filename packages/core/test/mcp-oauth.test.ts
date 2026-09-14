@@ -57,6 +57,47 @@ const connectProvider = (config: typeof ConfigMCP.Remote.Type, store: ReturnType
     McpOAuth.connectProvider({ config, integrationID }).pipe(Effect.provideService(Credential.Service, store.service)),
   )
 
+// Serves authorization server metadata with the given capabilities and records DCR + token requests.
+const authorizationServer = (metadata: Record<string, unknown>) => {
+  const registrations: unknown[] = []
+  const tokenRequests: URLSearchParams[] = []
+  const server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const url = new URL(request.url)
+      if (url.pathname === "/.well-known/oauth-authorization-server")
+        return Response.json({
+          issuer: url.origin,
+          authorization_endpoint: `${url.origin}/authorize`,
+          token_endpoint: `${url.origin}/token`,
+          registration_endpoint: `${url.origin}/register`,
+          response_types_supported: ["code"],
+          ...metadata,
+        })
+      if (request.method === "POST" && url.pathname === "/register") {
+        registrations.push(await request.json())
+        return Response.json({ client_id: "registered", redirect_uris: [] })
+      }
+      if (request.method === "POST" && url.pathname === "/token") {
+        tokenRequests.push(new URLSearchParams(await request.text()))
+        return Response.json({ access_token: "access", token_type: "Bearer" })
+      }
+      return new Response(null, { status: 404 })
+    },
+  })
+  return { server, registrations, tokenRequests }
+}
+
+const start = (server: ReturnType<typeof Bun.serve>, oauth?: ConfigMCP.OAuth) =>
+  Effect.gen(function* () {
+    const authorization = yield* McpOAuth.authorize({
+      name: "test",
+      config: new ConfigMCP.Remote({ type: "remote", url: server.url.href, ...(oauth ? { oauth } : {}) }),
+      methodID: Integration.MethodID.make("oauth"),
+    })
+    return { authorization, url: new URL(authorization.url) }
+  })
+
 const authorize = (redirect_uri?: string) =>
   Effect.runPromise(
     Effect.scoped(
@@ -124,6 +165,7 @@ describe("MCP OAuth", () => {
     expect(tokenRequests[0]?.get("grant_type")).toBe("authorization_code")
     expect(tokenRequests[0]?.get("code")).toBe("accepted")
     expect(tokenRequests[0]?.get("code_verifier")).not.toBeNull()
+    expect(tokenRequests[0]?.get("resource")).toBe(server.url.href)
   })
 
   test("refreshes tokens loaded from a persisted credential", async () => {
@@ -254,48 +296,58 @@ describe("MCP OAuth", () => {
     await expect(authorize("not a URL")).rejects.toThrow(TypeError)
   })
 
+  test("sends the configured URL as the resource when the server publishes no metadata", async () => {
+    const { server, tokenRequests } = authorizationServer({})
+    const url = `${server.url.origin}/mcp`
+    const oauthProvider = await connectProvider(
+      remote(url),
+      memoryCredentials([credential({ access: "expired", refresh: "refresh", url })]),
+    )
+
+    await auth(oauthProvider, { serverUrl: url }).finally(() => server.stop(true))
+
+    expect(tokenRequests[0]?.get("resource")).toBe(url)
+  })
+
+  test("discovers resource metadata without the query the transport dialed", async () => {
+    const probes: string[] = []
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        probes.push(new URL(request.url).pathname + new URL(request.url).search)
+        return new Response(null, { status: 404 })
+      },
+    })
+    const url = `${server.url.origin}/mcp`
+    const oauthProvider = await connectProvider(remote(url), memoryCredentials([]))
+
+    await auth(oauthProvider, { serverUrl: `${url}?codemode=false` })
+      .catch(() => undefined)
+      .finally(() => server.stop(true))
+
+    expect(probes).toContain("/.well-known/oauth-protected-resource/mcp")
+    expect(probes.some((probe) => probe.includes("codemode"))).toBe(false)
+  })
+
+  test("forwards iss from the redirect so issuer-advertising servers can complete", async () => {
+    const { server } = authorizationServer({ authorization_response_iss_parameter_supported: true })
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { authorization, url } = yield* start(server)
+          const redirect = new URL(url.searchParams.get("redirect_uri")!)
+          redirect.searchParams.set("code", "accepted")
+          redirect.searchParams.set("state", url.searchParams.get("state")!)
+          redirect.searchParams.set("iss", server.url.origin)
+          yield* Effect.promise(() => fetch(redirect))
+          return yield* authorization.callback
+        }),
+      ),
+    ).finally(() => server.stop(true))
+    expect(result.access).toBe("access")
+  })
+
   describe("client registration", () => {
-    // Serves authorization server metadata with the given capabilities and records DCR + token requests.
-    const authorizationServer = (metadata: Record<string, unknown>) => {
-      const registrations: unknown[] = []
-      const tokenRequests: URLSearchParams[] = []
-      const server = Bun.serve({
-        port: 0,
-        async fetch(request) {
-          const url = new URL(request.url)
-          if (url.pathname === "/.well-known/oauth-authorization-server")
-            return Response.json({
-              issuer: url.origin,
-              authorization_endpoint: `${url.origin}/authorize`,
-              token_endpoint: `${url.origin}/token`,
-              registration_endpoint: `${url.origin}/register`,
-              response_types_supported: ["code"],
-              ...metadata,
-            })
-          if (request.method === "POST" && url.pathname === "/register") {
-            registrations.push(await request.json())
-            return Response.json({ client_id: "registered", redirect_uris: [] })
-          }
-          if (request.method === "POST" && url.pathname === "/token") {
-            tokenRequests.push(new URLSearchParams(await request.text()))
-            return Response.json({ access_token: "access", token_type: "Bearer" })
-          }
-          return new Response(null, { status: 404 })
-        },
-      })
-      return { server, registrations, tokenRequests }
-    }
-
-    const start = (server: ReturnType<typeof Bun.serve>, oauth?: ConfigMCP.OAuth) =>
-      Effect.gen(function* () {
-        const authorization = yield* McpOAuth.authorize({
-          name: "test",
-          config: new ConfigMCP.Remote({ type: "remote", url: server.url.href, ...(oauth ? { oauth } : {}) }),
-          methodID: Integration.MethodID.make("oauth"),
-        })
-        return { authorization, url: new URL(authorization.url) }
-      })
-
     const cimd = { client_id_metadata_document_supported: true, token_endpoint_auth_methods_supported: ["none"] }
 
     test("uses the client metadata document when the server supports public CIMD clients", async () => {

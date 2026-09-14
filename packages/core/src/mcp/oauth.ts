@@ -2,6 +2,7 @@ export * as McpOAuth from "./oauth.js"
 
 import {
   auth,
+  checkResourceAllowed,
   discoverOAuthServerInfo,
   parseErrorResponse,
   UnauthorizedError,
@@ -126,8 +127,18 @@ export const provider = (options: Options): OAuthClientProvider => {
   // A missing redirectUrl selects the client-credentials grant in the SDK, so connect still names one.
   const redirectUrl = redirect?.url ?? oauth?.redirect_uri ?? "http://127.0.0.1/callback"
   const refuse = (what: string) => new UnauthorizedError(`MCP server "${options.config.url}" requires ${what}`)
+  const identity = new URL(options.config.url)
+  identity.hash = ""
   return {
     redirectUrl,
+    // The SDK sends no RFC 8707 resource when the server publishes no resource metadata; some
+    // authorization servers require one, so fall back to the configured URL.
+    validateResourceURL: async (_serverUrl, resource) => {
+      if (!resource) return identity
+      if (!checkResourceAllowed({ requestedResource: identity, configuredResource: resource }))
+        throw new Error(`Protected resource ${resource} does not cover ${identity}`)
+      return new URL(resource)
+    },
     ...(options.clientMetadataUrl ? { clientMetadataUrl: options.clientMetadataUrl } : {}),
     ...(options.discovery ? { discoveryState: () => options.discovery } : {}),
     ...(redirect ? { state: () => redirect.state } : {}),
@@ -292,7 +303,7 @@ export const authorize = (input: {
     yield* Effect.logInfo("mcp oauth authorization started", fields)
     const oauth = input.config.oauth || undefined
     const store = memoryStore()
-    const code = yield* Deferred.make<string, Error>()
+    const code = yield* Deferred.make<{ code: string; iss: string | undefined }, Error>()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
@@ -317,7 +328,7 @@ export const authorize = (input: {
       if (url.searchParams.get("state") !== state) return fail("OAuth state mismatch", "state_mismatch")
       const value = url.searchParams.get("code")
       if (!value) return fail("Missing authorization code", "missing_code")
-      Effect.runFork(Deferred.succeed(code, value))
+      Effect.runFork(Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined }))
       response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: input.name }))
     })
 
@@ -398,7 +409,8 @@ export const authorize = (input: {
             try: () =>
               auth(oauthProvider, {
                 serverUrl: input.config.url,
-                authorizationCode: value,
+                authorizationCode: value.code,
+                iss: value.iss,
                 scope: oauth?.scope,
                 fetchFn,
               }),
