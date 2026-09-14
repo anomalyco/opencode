@@ -140,7 +140,7 @@ describe("Composer submission", () => {
         await committed.promise
       },
       command: async (request) => {
-        expect(request).toMatchObject({ command: "review", text: "changes", delivery: "steer" })
+        expect(request).toMatchObject({ name: "review", text: "changes", delivery: "steer" })
         expect(request).not.toHaveProperty("model")
         expect(request).not.toHaveProperty("agent")
         calls.push("command")
