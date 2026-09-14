@@ -1,5 +1,7 @@
 import { onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { sha256 } from "@noble/hashes/sha2.js"
+import { bytesToHex } from "@noble/hashes/utils.js"
 import type { PromptInputV2Attachment, PromptInputV2Prompt } from "./types"
 
 const accepted = [
@@ -221,10 +223,12 @@ export function createPromptInputV2Attachments(
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
+// SubtleCrypto only exists in secure contexts (HTTPS or localhost), so plain HTTP origins need the pure JS fallback.
 async function blobReference(file: File) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
+  const buffer = await file.arrayBuffer()
+  const id = globalThis.crypto?.subtle
+    ? bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", buffer)))
+    : bytesToHex(sha256(new Uint8Array(buffer)))
   return { id, url: URL.createObjectURL(file) }
 }
 const imageExtensions = new Map([

@@ -54,6 +54,7 @@
     "@dnd-kit/helpers": "0.5.0",
     "@dnd-kit/solid": "0.5.0",
     "@kobalte/core": "catalog:",
+    "@noble/hashes": "2.2.0",
     "@opencode-ai/client": "file:vendor/opencode-ai-client-1.17.13-v2.tgz",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
