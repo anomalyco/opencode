@@ -139,3 +139,12 @@ it.effect("disposes instances when an instance's own config inputs changed", () 
     expect(fx.disposals).toBe(1)
   }),
 )
+
+it.effect("reloads when permission key order changes precedence", () =>
+  Effect.gen(function* () {
+    fx.set({ permission: { bash: { "git *": "deny", "*": "allow" } } })
+    fx.changeOnDisk({ permission: { bash: { "*": "allow", "git *": "deny" } } })
+    expect(yield* reloadIfConfigChanged()).toBe(true)
+    expect(fx.disposals).toBe(1)
+  }),
+)

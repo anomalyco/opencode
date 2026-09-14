@@ -49,7 +49,17 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
     const scope = yield* Scope.Scope
     const cache = new Map<string, Entry>()
 
-    const boot = (input: LoadInput & { directory: string }) =>
+    const fingerprint = (ctx: InstanceContext) =>
+      ConfigFingerprint.hashInstanceInputs(ctx.directory, ctx.worktree).pipe(
+        Effect.provideService(FSUtil.Service, fsutil),
+        Effect.catchCause((cause) =>
+          Effect.logWarning("config fingerprint failed", { directory: ctx.directory, cause }).pipe(
+            Effect.as(undefined),
+          ),
+        ),
+      )
+
+    const boot = (input: LoadInput & { directory: string }, entry: Entry) =>
       Effect.gen(function* () {
         const ctx: InstanceContext =
           input.project && input.worktree
@@ -65,6 +75,9 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
                   project: result.project,
                 })),
               )
+        // A later snapshot could adopt an edit made after config was consumed
+        // during bootstrap, leaving stale runtime state undetected on reload.
+        entry.configHash = yield* fingerprint(ctx)
         yield* bootstrap.run.pipe(Effect.provideService(InstanceRef, ctx))
         return ctx
       }).pipe(Effect.withSpan("InstanceStore.boot"))
@@ -78,13 +91,8 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
 
     const completeLoad = (directory: string, input: LoadInput, entry: Entry) =>
       Effect.gen(function* () {
-        const exit = yield* Effect.exit(boot({ ...input, directory }))
+        const exit = yield* Effect.exit(boot({ ...input, directory }, entry))
         if (Exit.isFailure(exit)) yield* removeEntry(directory, entry)
-        else
-          entry.configHash = yield* ConfigFingerprint.hashInstanceInputs(directory, exit.value.worktree).pipe(
-            Effect.provideService(FSUtil.Service, fsutil),
-            Effect.orElseSucceed(() => undefined),
-          )
         yield* Deferred.done(entry.deferred, exit).pipe(Effect.asVoid)
       })
 
@@ -199,14 +207,11 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
     })
 
     const configChanged = Effect.fn("InstanceStore.configChanged")(function* () {
-      for (const [directory, entry] of cache) {
+      for (const entry of cache.values()) {
         const exit = yield* Deferred.await(entry.deferred).pipe(Effect.exit)
         if (Exit.isFailure(exit)) continue
         if (!entry.configHash) return true
-        const fresh = yield* ConfigFingerprint.hashInstanceInputs(directory, exit.value.worktree).pipe(
-          Effect.provideService(FSUtil.Service, fsutil),
-          Effect.orElseSucceed(() => undefined),
-        )
+        const fresh = yield* fingerprint(exit.value)
         if (fresh === undefined || fresh !== entry.configHash) return true
       }
       return false

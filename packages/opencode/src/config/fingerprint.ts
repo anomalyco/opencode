@@ -4,12 +4,13 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
+import { isRecord } from "@/util/record"
 import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
+import { ConfigVariable } from "./variable"
 
-// Order-insensitive structural equality for decoded config values: key order
-// in a JSON object carries no meaning, so reordering keys must not count as a
-// change.
+// Most config objects are unordered, but permission maps use last-match
+// precedence. Preserve their order, including permissions inside agent config.
 export const canonicalEquals = (a: unknown, b: unknown): boolean =>
   JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b))
 
@@ -19,21 +20,24 @@ const canonicalize = (value: unknown): unknown => {
     return Object.fromEntries(
       Object.entries(value)
         .sort(([x], [y]) => x.localeCompare(y))
-        .map(([k, v]) => [k, canonicalize(v)]),
+        .map(([k, v]) => [k, k === "permission" ? v : canonicalize(v)]),
     )
   }
   return value
 }
 
-// JSON/JSONC files are canonicalized so that pure key reorders hash equal;
-// anything unparseable is hashed raw (a malformed file is still a state worth
-// detecting, and fixing it changes the hash).
-const normalize = (file: string, text: string): string => {
+// Normalize expanded config so referenced file changes are visible, while
+// harmless key reorders hash equal. Malformed expanded text is hashed as-is.
+const normalize = async (file: string, text: string): Promise<string> => {
   if (!file.endsWith(".json") && !file.endsWith(".jsonc")) return text
+  const expanded = await ConfigVariable.substitute({ type: "path", path: file, text })
   try {
-    return JSON.stringify(canonicalize(ConfigParse.jsonc(text, file)))
+    const value = ConfigParse.jsonc(expanded, file)
+    // The loader inserts this editor hint itself after the baseline is read.
+    if (isRecord(value)) delete value.$schema
+    return JSON.stringify(canonicalize(value))
   } catch {
-    return text
+    return expanded
   }
 }
 
@@ -61,18 +65,25 @@ export const hashInstanceInputs = Effect.fn("ConfigFingerprint.hashInstanceInput
       "{command,commands}/**/*.md",
       "{plugin,plugins}/*.{ts,js}",
     ]) {
-      files.push(...(yield* Effect.promise(() => Glob.scan(pattern, { cwd: dir, absolute: true, dot: true }))))
+      files.push(
+        ...(yield* Effect.promise(() => Glob.scan(pattern, { cwd: dir, absolute: true, dot: true, symlink: true }))),
+      )
     }
   }
   if (Flag.OPENCODE_CONFIG) files.push(Flag.OPENCODE_CONFIG)
 
   const hash = createHash("sha256")
   for (const file of [...new Set(files)].sort()) {
-    const text = yield* Effect.promise(() => fs.readFile(file, "utf8").catch(() => undefined))
+    const text = yield* Effect.promise(() =>
+      fs.readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return undefined
+        throw error
+      }),
+    )
     if (text === undefined) continue
     hash.update(file)
     hash.update("\0")
-    hash.update(normalize(file, text))
+    hash.update(yield* Effect.promise(() => normalize(file, text)))
     hash.update("\0")
   }
   return hash.digest("hex")

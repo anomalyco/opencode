@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Deferred, Effect, Fiber, Layer } from "effect"
 import fs from "fs/promises"
 import path from "path"
@@ -8,18 +9,34 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
+import { Project } from "../../src/project/project"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 let bootstrapRun: Effect.Effect<void> = Effect.void
+let fingerprintFailure = false
+const fingerprintFS = Layer.effect(
+  FSUtil.Service,
+  Effect.gen(function* () {
+    const fsutil = yield* FSUtil.Service
+    return FSUtil.Service.of({
+      ...fsutil,
+      up: (input) =>
+        Effect.suspend(() =>
+          fingerprintFailure ? Effect.die(new Error("fingerprint filesystem failure")) : fsutil.up(input),
+        ),
+    })
+  }),
+).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 const noopBootstrap = Layer.succeed(
   InstanceBootstrap.Service,
   InstanceBootstrap.Service.of({ run: Effect.suspend(() => bootstrapRun) }),
 )
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([InstanceStore.node, CrossSpawnSpawner.node]), [
+  LayerNode.compile(LayerNode.group([InstanceStore.node, Project.node, CrossSpawnSpawner.node]), [
     [InstanceStore.bootstrapNode, noopBootstrap],
+    [FSUtil.node, fingerprintFS],
   ]),
 )
 
@@ -34,6 +51,16 @@ const setBootstrap = (run: Effect.Effect<void>) =>
       }),
   )
 
+const failFingerprint = Effect.acquireRelease(
+  Effect.sync(() => {
+    fingerprintFailure = true
+  }),
+  () =>
+    Effect.sync(() => {
+      fingerprintFailure = false
+    }),
+)
+
 const registerDisposerScoped = (disposer: (directory: string) => Promise<void>) =>
   Effect.acquireRelease(
     Effect.sync(() => registerDisposer(disposer)),
@@ -41,6 +68,48 @@ const registerDisposerScoped = (disposer: (directory: string) => Promise<void>) 
   )
 
 describe("InstanceStore", () => {
+  it.live("finishes loading when fingerprinting defects and treats the missing baseline as changed", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const project = yield* Project.Service
+      const info = yield* project.fromDirectory(dir)
+      yield* failFingerprint
+      const ctx = yield* store.load({ directory: dir, worktree: info.sandbox, project: info.project })
+      expect(ctx.directory).toBe(dir)
+      expect(yield* store.configChanged()).toBe(true)
+    }),
+  )
+
+  it.live("treats a fingerprint defect during reload checking as changed", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      yield* store.load({ directory: dir })
+      yield* failFingerprint
+      expect(yield* store.configChanged()).toBe(true)
+    }),
+  )
+
+  it.live("detects config edited after bootstrap consumed it", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const file = path.join(dir, "opencode.json")
+      yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ username: "old" })))
+      let consumed = ""
+      yield* setBootstrap(
+        Effect.gen(function* () {
+          consumed = yield* Effect.promise(() => fs.readFile(file, "utf8"))
+          yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ username: "new" })))
+        }),
+      )
+      const store = yield* InstanceStore.Service
+      yield* store.load({ directory: dir })
+      expect(JSON.parse(consumed).username).toBe("old")
+      expect(yield* store.configChanged()).toBe(true)
+    }),
+  )
+
   it.live("loads instance context", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
@@ -65,9 +134,7 @@ describe("InstanceStore", () => {
         expect(yield* store.configChanged()).toBe(false)
 
         yield* Effect.promise(() => fs.mkdir(path.join(dir, ".opencode", "agent"), { recursive: true }))
-        yield* Effect.promise(() =>
-          fs.writeFile(path.join(dir, ".opencode", "agent", "reviewer.md"), "review things"),
-        )
+        yield* Effect.promise(() => fs.writeFile(path.join(dir, ".opencode", "agent", "reviewer.md"), "review things"))
         expect(yield* store.configChanged()).toBe(true)
       } finally {
         if (previousHome === undefined) delete process.env.OPENCODE_TEST_HOME
