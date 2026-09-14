@@ -163,6 +163,17 @@ function info(file: string): Item {
   }
 }
 
+// Windows PowerShell 5.1 encodes its own output with the legacy OEM code page
+// (e.g. CP936 on zh-CN systems) when stdout is redirected, while opencode
+// decodes process output as UTF-8. Force UTF-8 before the user command runs.
+const PS_UTF8_PREAMBLE =
+  "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); $OutputEncoding = [System.Text.UTF8Encoding]::new(); "
+
+export function psCommand(command: string) {
+  if (process.platform !== "win32") return command
+  return PS_UTF8_PREAMBLE + command
+}
+
 export function args(file: string, command: string, cwd: string) {
   const n = name(file)
   if (n === "nu" || n === "fish") return ["-c", command]
@@ -195,7 +206,7 @@ export function args(file: string, command: string, cwd: string) {
     ]
   }
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoProfile", "-Command", command]
+  if (ps(file)) return ["-NoProfile", "-Command", psCommand(command)]
   return ["-c", command]
 }
 
