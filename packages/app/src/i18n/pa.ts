@@ -186,6 +186,10 @@ export const dict = {
   "command.session.unshare.description": "اس سیشن نو شیئر کرنا بند کرو",
   "command.session.export": "سیشن برآمد کرو",
   "command.session.export.description": "سیشن دی پوری نقل JSON دی شکل وچ برآمد کرو",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "فائلاں، کمانڈز، تے سیشنز تلاش کرو",
   "palette.search.placeholder.home": "سرچ کمانڈز تے سیشنز",
