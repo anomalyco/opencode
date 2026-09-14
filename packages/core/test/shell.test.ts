@@ -63,6 +63,23 @@ describe("shell", () => {
     expect(zsh.at(-1)).toBe("/tmp")
   })
 
+  test("psCommand wraps command with UTF-8 preamble on Windows", () => {
+    const result = Shell.psCommand("echo hi")
+    if (process.platform === "win32") {
+      expect(result.startsWith("[Console]::OutputEncoding")).toBe(true)
+      expect(result.endsWith("echo hi")).toBe(true)
+    } else {
+      expect(result).toBe("echo hi")
+    }
+  })
+
+  test("applies psCommand to PowerShell args", () => {
+    const psArgs = Shell.args("powershell", "echo hi", "C:\\tmp")
+    expect(psArgs[0]).toBe("-NoProfile")
+    expect(psArgs[1]).toBe("-Command")
+    expect(String(psArgs.at(-1))).toContain("echo hi")
+  })
+
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {
