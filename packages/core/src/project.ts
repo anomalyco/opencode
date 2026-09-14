@@ -34,8 +34,25 @@ export interface Resolved {
   readonly vcs?: Vcs
 }
 
+export const AssociateInput = Schema.Struct({
+  projectID: ID,
+  directory: AbsolutePath,
+  strategy: Schema.optional(Schema.String),
+}).annotate({ identifier: "Project.AssociateInput" })
+export type AssociateInput = typeof AssociateInput.Type
+
+export const DissociateInput = Schema.Struct({
+  projectID: ID,
+  directory: AbsolutePath,
+}).annotate({ identifier: "Project.DissociateInput" })
+export type DissociateInput = typeof DissociateInput.Type
+
 export interface Interface {
   readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
+  /** Associate a directory with a project, and return the project's directories. */
+  readonly associate: (input: AssociateInput) => Effect.Effect<Directories>
+  /** Remove a directory's association with a project, and return what remains. */
+  readonly dissociate: (input: DissociateInput) => Effect.Effect<Directories>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
   /**
    * Temporary bridge method for writing the resolved project ID to the repo-local cache.
@@ -59,6 +76,21 @@ const layer = Layer.effect(
     const projectDirectories = yield* ProjectDirectories.Service
 
     const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
+      return yield* projectDirectories.list(input.projectID)
+    })
+
+    const associate = Effect.fn("Project.associate")(function* (input: AssociateInput) {
+      yield* projectDirectories.create({
+        projectID: input.projectID,
+        directory: input.directory,
+        strategy: input.strategy,
+        behavior: "replace",
+      })
+      return yield* projectDirectories.list(input.projectID)
+    })
+
+    const dissociate = Effect.fn("Project.dissociate")(function* (input: DissociateInput) {
+      yield* projectDirectories.remove({ projectID: input.projectID, directory: input.directory })
       return yield* projectDirectories.list(input.projectID)
     })
 
@@ -109,7 +141,18 @@ const layer = Layer.effect(
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.repo.discover(input)
-      if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      if (!repo) {
+        // A directory outside any repository still belongs to a project when one has
+        // been explicitly associated with it. Without this, every session run from a
+        // parent directory holding several checkouts is attributed to `global` and is
+        // invisible to any project-scoped view.
+        //
+        // Deliberately a fallback: git discovery still wins where it succeeds, so an
+        // association can never silently re-home a directory that is a worktree.
+        const owner = yield* projectDirectories.ownerOf(input)
+        if (owner) return { id: owner, directory: input, vcs: undefined }
+        return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      }
 
       const previous = yield* cached(repo.commonDirectory)
       const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
@@ -125,7 +168,7 @@ const layer = Layer.effect(
       yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
     })
 
-    return Service.of({ directories, resolve, commit })
+    return Service.of({ directories, associate, dissociate, resolve, commit })
   }),
 )
 

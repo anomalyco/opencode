@@ -51,6 +51,13 @@ export interface Interface {
     directory: AbsolutePath
   }) => Effect.Effect<Directory | undefined>
   readonly contains: (input: { projectID: ProjectSchema.ID; directory: AbsolutePath }) => Effect.Effect<boolean>
+  /**
+   * The project a directory has been explicitly associated with, if any.
+   *
+   * Keyed by directory alone, so it can answer for a directory that is not a git
+   * worktree and therefore resolves to no project of its own.
+   */
+  readonly ownerOf: (directory: AbsolutePath) => Effect.Effect<ProjectSchema.ID | undefined>
   readonly create: (input: CreateInput, tx?: Transaction) => Effect.Effect<boolean>
   readonly remove: (input: RemoveInput, tx?: Transaction) => Effect.Effect<boolean>
 }
@@ -145,10 +152,24 @@ const layer = Layer.effect(
       return row ? { directory: row.directory, strategy: row.strategy ?? undefined } : undefined
     })
 
+    const ownerOf = Effect.fn("ProjectDirectories.ownerOf")(function* (directory: AbsolutePath) {
+      // A directory may in principle be associated with more than one project; the
+      // oldest association wins so that the answer is stable across calls.
+      const row = yield* db
+        .select({ projectID: ProjectDirectoryTable.project_id })
+        .from(ProjectDirectoryTable)
+        .where(eq(ProjectDirectoryTable.directory, directory))
+        .orderBy(asc(ProjectDirectoryTable.time_created), asc(ProjectDirectoryTable.project_id))
+        .get()
+        .pipe(Effect.orDie)
+      return row?.projectID
+    })
+
     return Service.of({
       list,
       get,
       contains,
+      ownerOf,
       create,
       remove,
     })
