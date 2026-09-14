@@ -272,6 +272,51 @@ it.instance(
   },
 )
 
+it.instance(
+  "Bedrock: GovCloud region uses us-gov. profiles for claude/grok/nemotron and leaves nova bare",
+  () =>
+    Effect.gen(function* () {
+      yield* set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
+      const provider = yield* Provider.Service
+      const claude = yield* provider.getLanguage(
+        yield* provider.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
+      )
+      const grok = yield* provider.getLanguage(
+        yield* provider.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("xai.grok-4.6")),
+      )
+      const nemotron = yield* provider.getLanguage(
+        yield* provider.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("nvidia.nemotron-nano-3-30b")),
+      )
+      const nova = yield* provider.getLanguage(
+        yield* provider.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("amazon.nova-lite-v1:0")),
+      )
+      const explicit = yield* provider.getLanguage(
+        yield* provider.getModel(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("us-gov.xai.grok-4.6")),
+      )
+      expect((claude as { modelId: string }).modelId).toBe("us-gov.anthropic.claude-sonnet-4-5")
+      expect((grok as { modelId: string }).modelId).toBe("us-gov.xai.grok-4.6")
+      expect((nemotron as { modelId: string }).modelId).toBe("us-gov.nvidia.nemotron-nano-3-30b")
+      expect((nova as { modelId: string }).modelId).toBe("amazon.nova-lite-v1:0")
+      expect((explicit as { modelId: string }).modelId).toBe("us-gov.xai.grok-4.6")
+    }),
+  {
+    config: {
+      provider: {
+        "amazon-bedrock": {
+          options: { region: "us-gov-east-1" },
+          models: {
+            "anthropic.claude-sonnet-4-5": { name: "Claude Sonnet 4.5" },
+            "xai.grok-4.6": { name: "Grok 4.6" },
+            "nvidia.nemotron-nano-3-30b": { name: "Nemotron Nano 3 30B" },
+            "amazon.nova-lite-v1:0": { name: "Nova Lite" },
+            "us-gov.xai.grok-4.6": { name: "Grok 4.6 (GovCloud)" },
+          },
+        },
+      },
+    },
+  },
+)
+
 // Cross-region inference profile prefix handling.
 // Models from models.dev may come with prefixes already (e.g. us., eu., global.).
 // These should NOT be double-prefixed when passed to the SDK.

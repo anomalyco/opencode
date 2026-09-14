@@ -21,18 +21,12 @@ function resolveModelID(modelID: string, region: string | undefined) {
   const resolvedRegion = region ?? "us-east-1"
   const regionPrefix = resolvedRegion.split("-")[0]
   if (regionPrefix === "us") {
-    const requiresPrefix = [
-      "nova-micro",
-      "nova-lite",
-      "nova-pro",
-      "nova-premier",
-      "nova-2",
-      "claude",
-      "deepseek.r1",
-      "grok",
-      "nemotron",
-    ].some((item) => modelID.includes(item))
     const isGovCloud = resolvedRegion.startsWith("us-gov")
+    const requiresPrefix = isGovCloud
+      ? ["claude", "grok", "nemotron"].some((item) => modelID.includes(item))
+      : ["nova-micro", "nova-lite", "nova-pro", "nova-premier", "nova-2", "claude", "deepseek.r1", "grok"].some(
+          (item) => modelID.includes(item),
+        )
     if (requiresPrefix) return isGovCloud ? `us-gov.${modelID}` : `${regionPrefix}.${modelID}`
     return modelID
   }
