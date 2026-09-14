@@ -1224,8 +1224,9 @@ export function Prompt(props: PromptProps) {
       session = data.session.get(created.id)
       newSession = {
         gate: created.request.then(async (info) => {
-          if (terminalEnvironment.variables !== undefined) {
-            await client.api.session.environment({ sessionID: created.id, variables: terminalEnvironment.variables })
+          const variables = terminalEnvironment.variables()
+          if (variables !== undefined) {
+            await client.api.session.environment({ sessionID: created.id, variables })
           }
         }),
         recover: (error) => {

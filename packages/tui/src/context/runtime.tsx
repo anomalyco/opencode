@@ -17,7 +17,8 @@ export type TuiTerminalEnvironment = Readonly<{
   platform: string
   multiplexer?: "tmux" | "screen"
   displayServer?: "wayland" | "x11"
-  variables?: Readonly<Record<string, string>>
+  variables: () => Readonly<Record<string, string>> | undefined
+  setVariables: (variables: Readonly<Record<string, string>>) => void
 }>
 
 export type TuiStartup = Readonly<{

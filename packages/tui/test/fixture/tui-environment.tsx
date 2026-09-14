@@ -36,7 +36,9 @@ export function TestTuiContexts(
           ...props.paths,
         }}
       >
-        <TuiTerminalEnvironmentProvider value={{ platform: "linux" }}>
+        <TuiTerminalEnvironmentProvider
+          value={{ platform: "linux", variables: () => undefined, setVariables: () => {} }}
+        >
           <TuiStartupProvider value={{ skipInitialLoading: false }}>
             <ClipboardProvider value={props.clipboard ?? clipboard}>{props.children}</ClipboardProvider>
           </TuiStartupProvider>

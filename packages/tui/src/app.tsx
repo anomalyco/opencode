@@ -103,6 +103,7 @@ import { SessionTerminalsProvider } from "./context/session-terminals"
 import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
+import { mergeWindowsEnvironment, readWindowsEnvironment } from "./util/windows-environment"
 
 registerOpencodeSpinner()
 
@@ -289,6 +290,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         if (renderer.isDestroyed) return
 
         await render(() => {
+          const [environment, setEnvironment] = createSignal(input.environment)
           return (
             <LogProvider log={log}>
               <ExitProvider
@@ -333,7 +335,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                   : process.env.DISPLAY
                                     ? "x11"
                                     : undefined,
-                                variables: input.environment,
+                                variables: environment,
+                                setVariables: setEnvironment,
                               }}
                             >
                               <TuiStartupProvider
@@ -506,10 +509,9 @@ function App(props: { pair?: DialogPairCredentials }) {
     const session = data.session.get(route.data.sessionID)
     if (!session) return
     if (data.session.creating(session.id)) return
-    if (terminalEnvironment.variables === undefined) return
-    void client.api.session
-      .environment({ sessionID: session.id, variables: terminalEnvironment.variables })
-      .catch(toast.error)
+    const variables = terminalEnvironment.variables()
+    if (variables === undefined) return
+    void client.api.session.environment({ sessionID: session.id, variables }).catch(toast.error)
   })
   const [layout, updateLayout] = useStorage().store<{ verticalTabsWidth?: number }>("layout", {
     initial: { verticalTabsWidth: SESSION_SIDEBAR_WIDTH },
@@ -997,6 +999,33 @@ function App(props: { pair?: DialogPairCredentials }) {
                 // event stream reattaches through the reconnect loop.
                 await restart()
                   .then(() => toast.show({ variant: "success", message: "Service restarted" }))
+                  .catch(toast.error)
+              },
+              category: "System",
+            },
+          ]
+        : []),
+      ...(terminalEnvironment.platform === "win32" && terminalEnvironment.variables() !== undefined
+        ? [
+            {
+              name: "environment.refresh",
+              title: "Refresh environment variables",
+              slash: { name: "refresh-env" },
+              run: async () => {
+                dialog.clear()
+                await readWindowsEnvironment()
+                  .then((registry) => {
+                    const current = terminalEnvironment.variables()
+                    if (current === undefined) return
+                    const merged = mergeWindowsEnvironment(current, registry)
+                    if (merged.paths === 0 && merged.added === 0)
+                      return toast.show({ variant: "info", message: "Environment variables are already up to date" })
+                    terminalEnvironment.setVariables(merged.variables)
+                    toast.show({
+                      variant: "success",
+                      message: `Added ${merged.paths} PATH ${merged.paths === 1 ? "entry" : "entries"} and ${merged.added} ${merged.added === 1 ? "variable" : "variables"}`,
+                    })
+                  })
                   .catch(toast.error)
               },
               category: "System",
