@@ -1,7 +1,9 @@
 import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
+import { STORAGE_FALLBACK } from "./storage"
 
 export const dict = {
   ...DESKTOP_NATIVE_ENGLISH,
+  ...STORAGE_FALLBACK,
   "command.category.suggested": "Suggested",
   "command.category.view": "View",
   "command.category.project": "Project",
@@ -1072,6 +1074,7 @@ export const dict = {
   "settings.providers.tag.other": "Other",
   "settings.models.title": "Models",
   "settings.models.description": "Model settings will be configurable here.",
+
   "settings.agents.title": "Agents",
   "settings.agents.description": "Agent settings will be configurable here.",
   "settings.commands.title": "Commands",
