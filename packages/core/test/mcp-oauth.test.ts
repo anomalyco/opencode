@@ -88,31 +88,27 @@ const authorizationServer = (metadata: Record<string, unknown>) => {
   return { server, registrations, tokenRequests }
 }
 
-const start = (server: ReturnType<typeof Bun.serve>, oauth?: ConfigMCP.OAuth) =>
+const start = (
+  server: ReturnType<typeof Bun.serve>,
+  oauth?: ConfigMCP.OAuth,
+  store: ReturnType<typeof memoryCredentials> = memoryCredentials([]),
+) =>
   Effect.gen(function* () {
     const authorization = yield* McpOAuth.authorize({
       name: "test",
       config: new ConfigMCP.Remote({ type: "remote", url: server.url.href, ...(oauth ? { oauth } : {}) }),
-      methodID: Integration.MethodID.make("oauth"),
+      integrationID,
+      methodID,
     })
     return { authorization, url: new URL(authorization.url) }
-  })
+  }).pipe(Effect.provideService(Credential.Service, store.service))
 
 const authorize = (redirect_uri?: string) =>
   Effect.runPromise(
     Effect.scoped(
-      Effect.gen(function* () {
-        const authorization = yield* McpOAuth.authorize({
-          name: "test",
-          config: new ConfigMCP.Remote({
-            type: "remote",
-            url: authServer.url.href,
-            oauth: { client_id: "client", ...(redirect_uri ? { redirect_uri } : {}) },
-          }),
-          methodID: Integration.MethodID.make("oauth"),
-        })
-        return new URL(authorization.url).searchParams.get("redirect_uri")
-      }),
+      start(authServer, { client_id: "client", ...(redirect_uri ? { redirect_uri } : {}) }).pipe(
+        Effect.map(({ url }) => url.searchParams.get("redirect_uri")),
+      ),
     ),
   )
 
@@ -137,16 +133,7 @@ describe("MCP OAuth", () => {
     const credential = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const authorization = yield* McpOAuth.authorize({
-            name: "test",
-            config: new ConfigMCP.Remote({
-              type: "remote",
-              url: server.url.href,
-              oauth: { client_id: "client" },
-            }),
-            methodID: Integration.MethodID.make("oauth"),
-          })
-          const authorizationUrl = new URL(authorization.url)
+          const { authorization, url: authorizationUrl } = yield* start(server, { client_id: "client" })
           const redirectValue = authorizationUrl.searchParams.get("redirect_uri")
           const state = authorizationUrl.searchParams.get("state")
           if (!redirectValue || !state) throw new Error("Missing OAuth redirect parameters")
@@ -382,6 +369,20 @@ describe("MCP OAuth", () => {
       const { url } = await Effect.runPromise(Effect.scoped(start(server))).finally(() => server.stop(true))
       expect(url.searchParams.get("client_id")).toBe("registered")
       expect(registrations).toHaveLength(1)
+    })
+
+    test("reuses the client registered by an earlier login", async () => {
+      const { server, registrations } = authorizationServer({})
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const client = { client_id: "registered", issuer: server.url.origin }
+      const store = memoryCredentials([
+        new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } }),
+      ])
+      const { url } = await Effect.runPromise(Effect.scoped(start(server, undefined, store))).finally(() =>
+        server.stop(true),
+      )
+      expect(url.searchParams.get("client_id")).toBe("registered")
+      expect(registrations).toHaveLength(0)
     })
 
     test("registers dynamically when a custom redirect_uri is configured", async () => {

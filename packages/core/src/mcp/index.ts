@@ -191,7 +191,9 @@ export const layer = (options?: Options) =>
               authorize: () =>
                 Effect.gen(function* () {
                   const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-                  return yield* McpOAuth.authorize({ name, config: remote, methodID })
+                  return yield* McpOAuth.authorize({ name, config: remote, integrationID, methodID }).pipe(
+                    Effect.provideService(Credential.Service, credentials),
+                  )
                 }),
             })
           })

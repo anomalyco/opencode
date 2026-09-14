@@ -297,6 +297,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
 export const authorize = (input: {
   readonly name: string
   readonly config: typeof ConfigMCP.Remote.Type
+  readonly integrationID: Integration.ID
   readonly methodID: Integration.MethodID
 }) =>
   Effect.gen(function* () {
@@ -304,10 +305,17 @@ export const authorize = (input: {
     const context = yield* Effect.context()
     const run = Effect.runPromiseWith(context)
     const runFork = Effect.runForkWith(context)
+    const credentials = yield* Credential.Service
     const fetchFn = yield* loggedFetch({ server: input.name }).pipe(Effect.annotateLogs(fields))
     yield* Effect.logInfo("mcp oauth authorization started", fields)
     const oauth = input.config.oauth || undefined
     const store = memoryStore()
+    // Reuse the client registered by an earlier login; the SDK discards it if the issuer changed.
+    const previous = (yield* credentials.list(input.integrationID)).at(-1)?.value
+    if (previous?.type === "oauth") {
+      const client = clientFromCredential(previous)
+      if (client) yield* Effect.promise(() => store.saveClientInformation(client))
+    }
     const code = yield* Deferred.make<{ code: string; iss: string | undefined }, Error>()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
