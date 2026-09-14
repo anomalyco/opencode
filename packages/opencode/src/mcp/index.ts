@@ -271,6 +271,13 @@ const layer = Layer.effect(
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(url, {
             authProvider,
+            fetch: (input, init) =>
+              fetch(input, {
+                ...init,
+                // disable bun's fetch idle timeout so the MCP timeout is the ceiling
+                // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+                timeout: false,
+              }),
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
           }),
         },
@@ -278,6 +285,13 @@ const layer = Layer.effect(
           name: "SSE",
           transport: new SSEClientTransport(url, {
             authProvider,
+            fetch: (input, init) =>
+              fetch(input, {
+                ...init,
+                // disable bun's fetch idle timeout so the MCP timeout is the ceiling
+                // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+                timeout: false,
+              }),
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
           }),
         },
