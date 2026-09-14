@@ -203,6 +203,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: Object.keys(input.models).length > 0,
         options: ok ? {} : { apiKey: "public" },
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>, model?: Model) {
+          if (modelID.includes("muse-spark") && sdk.responses) {
+            return sdk.responses(modelID)
+          }
+          return sdk.languageModel(modelID)
+        },
       }
     }),
     openai: () =>
