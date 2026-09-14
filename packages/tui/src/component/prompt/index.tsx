@@ -1013,7 +1013,8 @@ export function Prompt(props: PromptProps) {
         console.log("Creating a session failed:", res.error)
 
         toast.show({
-          message: "Creating a session failed. Open console for more details.",
+          title: "Creating a session failed",
+          message: errorMessage(res.error),
           variant: "error",
         })
 

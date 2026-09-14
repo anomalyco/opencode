@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { isSessionNotFoundError, isUnauthorizedError, OpenCode } from "../src"
+import { isSessionNotFoundError, isUnauthorizedError, isUnknownError, OpenCode } from "../src"
 
 test("exposes every standard HTTP API group", () => {
   const client = OpenCode.make({ baseUrl: "http://localhost:3000" })
@@ -52,6 +52,25 @@ test("sessions.get returns the wire projection", async () => {
   const result = await client.sessions.get({ sessionID: "ses_test" })
 
   expect(result.time.created).toBe(1_717_171_717_000)
+})
+
+test("sessions.create preserves server errors", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      Response.json(
+        { _tag: "UnknownError", message: "Unexpected server error. Check server logs for details.", ref: "err_test" },
+        { status: 500 },
+      ),
+  })
+
+  try {
+    await client.sessions.create({ location: { directory: "/tmp/project" } })
+    throw new Error("Expected request to fail")
+  } catch (error) {
+    expect(isUnknownError(error)).toBe(true)
+    expect(error).toMatchObject({ ref: "err_test" })
+  }
 })
 
 test("events.subscribe exposes the Promise event stream wire projection", async () => {
