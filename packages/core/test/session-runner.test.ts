@@ -1105,10 +1105,12 @@ describe("SessionRunnerLLM", () => {
         {
           "x-session-affinity": sessionID,
           "X-Session-Id": sessionID,
+          "x-opencode-session": sessionID,
         },
         {
           "x-session-affinity": sessionID,
           "X-Session-Id": sessionID,
+          "x-opencode-session": sessionID,
         },
       ])
       expect(userTexts(requests[0])[0]).toContain("## Objective")
@@ -2530,6 +2532,7 @@ describe("SessionRunnerLLM", () => {
       expect(requests[0]?.http?.headers).toEqual({
         "x-session-affinity": sessionID,
         "X-Session-Id": sessionID,
+        "x-opencode-session": sessionID,
       })
     }),
   )
