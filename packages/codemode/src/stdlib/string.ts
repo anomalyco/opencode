@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { toProgram } from "../data.js"
 import { constructor, type Method, methods } from "../interpreter/native.js"
+import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { invalidData, rangeError, typeError } from "../interpreter/model.js"
 import { ProgramArray, ProgramPromise, ProgramRegExp, record } from "../interpreter/objects.js"
 import { containsOpaqueReference, typeofValue } from "../interpreter/references.js"
@@ -176,8 +177,12 @@ export const stringGlobal = <R>(runner: Runner<R>) => {
       if (args[0] === undefined) {
         return wrap(requestedLimit !== undefined && requestedLimit >>> 0 === 0 ? [] : [value])
       }
-      if (args[0] instanceof ProgramRegExp) return wrap(value.split(args[0].regex, requestedLimit))
-      return wrap(value.split(str("split", args, 0), requestedLimit === undefined ? undefined : requestedLimit >>> 0))
+      const parts =
+        args[0] instanceof ProgramRegExp
+          ? value.split(args[0].regex, requestedLimit)
+          : value.split(str("split", args, 0), requestedLimit === undefined ? undefined : requestedLimit >>> 0)
+      checkArrayLength(parts.length)
+      return wrap(parts)
     }),
     simple("slice", 2, (value, args) => value.slice(optNum("slice", args, 0), optNum("slice", args, 1))),
     simple("includes", 1, (value, args) => {
@@ -213,10 +218,12 @@ export const stringGlobal = <R>(runner: Runner<R>) => {
           `String.matchAll requires a regular expression with the global (g) flag: write /${pattern.source}/${pattern.flags}g, or use String.match for a single match.`,
         )
       }
-      return new ProgramArray(
-        protos.Array,
-        Array.from(value.matchAll(pattern), (match) => matchToValue(protos, match)),
-      )
+      const matches: Array<unknown> = []
+      for (const match of value.matchAll(pattern)) {
+        checkArrayLength(matches.length + 1)
+        matches.push(matchToValue(protos, match))
+      }
+      return new ProgramArray(protos.Array, matches)
     }),
     simple("search", 1, (value, args) => value.search(toHostRegex(args[0], "search"))),
     simple("repeat", 1, (value, args) => {
@@ -224,10 +231,19 @@ export const stringGlobal = <R>(runner: Runner<R>) => {
       if (!Number.isFinite(count) || count < 0) {
         throw rangeError("String.repeat expects a finite non-negative count.")
       }
+      checkStringLength(value.length * count)
       return value.repeat(count)
     }),
-    simple("padStart", 1, (value, args) => value.padStart(num("padStart", args, 0), optStr("padStart", args, 1))),
-    simple("padEnd", 1, (value, args) => value.padEnd(num("padEnd", args, 0), optStr("padEnd", args, 1))),
+    simple("padStart", 1, (value, args) => {
+      const length = num("padStart", args, 0)
+      checkStringLength(length)
+      return value.padStart(length, optStr("padStart", args, 1))
+    }),
+    simple("padEnd", 1, (value, args) => {
+      const length = num("padEnd", args, 0)
+      checkStringLength(length)
+      return value.padEnd(length, optStr("padEnd", args, 1))
+    }),
     simple("charAt", 1, (value, args) => value.charAt(optNum("charAt", args, 0) ?? 0)),
     simple("at", 1, (value, args) => value.at(optNum("at", args, 0) ?? 0)),
     simple("substring", 2, (value, args) =>
@@ -238,7 +254,11 @@ export const stringGlobal = <R>(runner: Runner<R>) => {
     simple("toWellFormed", 0, (value) => value.toWellFormed()),
     simple("charCodeAt", 1, (value, args) => value.charCodeAt(optNum("charCodeAt", args, 0) ?? 0)),
     simple("codePointAt", 1, (value, args) => value.codePointAt(optNum("codePointAt", args, 0) ?? 0)),
-    simple("concat", 1, (value, args) => value.concat(...args.map((_, index) => str("concat", args, index)))),
+    simple("concat", 1, (value, args) => {
+      const joined = value.concat(...args.map((_, index) => str("concat", args, index)))
+      checkStringLength(joined.length)
+      return joined
+    }),
   ])
   return string
 }

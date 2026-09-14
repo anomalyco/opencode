@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { methods } from "../interpreter/native.js"
 import { applyCollectionCallback, type Runner } from "../interpreter/runner.js"
+import { checkStringLength } from "../interpreter/limits.js"
 import { syntaxError, typeError } from "../interpreter/model.js"
 import { typeofValue } from "../interpreter/references.js"
 import { fromData, toData, toProgram } from "../data.js"
@@ -57,7 +58,9 @@ const stringify = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<un
             .map(String)
         : null
     // A string cannot pollute, so __proto__ stays: JSON.stringify includes own __proto__ keys, like JS.
-    return Effect.succeed(JSON.stringify(toData(args[0], "JSON.stringify value", "json", false), properties, indent))
+    const text = JSON.stringify(toData(args[0], "JSON.stringify value", "json", false), properties, indent)
+    if (text !== undefined) checkStringLength(text.length)
+    return Effect.succeed(text)
   }
 
   // Validate up front; the replacer walk below reads the original value.

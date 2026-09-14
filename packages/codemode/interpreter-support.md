@@ -28,6 +28,11 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
       shadowable by program declarations like other globals.
 - [x] Cooperative timeout, an optional total tool-call limit, output bounding, and unrestricted tool-call concurrency.
+- [x] The timeout fires between interpreter steps, so one built-in is bounded in what it may build: strings up to
+      2^24 characters (`repeat`, `pad*`, `concat`, `join`, `+`, template literals, `JSON.stringify`), arrays up to
+      10,000,000 elements (`Array(n)`, `length =`, `Array.from`, `split`, `matchAll`, `concat`, `flat`; below the JS
+      maximum of 2^32 - 1), and 10,000 pending promises at once. Exceeding one throws a `RangeError`. A single regular
+      expression match can still run long on a pathological pattern; the host regex engine has no interrupt hook.
 - [ ] Strict-mode early errors: duplicate parameter names, `yield` as an identifier, and a trailing comma after a
       rest parameter are accepted unless the program itself begins with `"use strict"`.
 - [ ] Valid JavaScript rejected by TypeScript transpilation before interpretation, such as `in` inside a destructuring

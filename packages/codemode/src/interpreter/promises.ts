@@ -1,6 +1,7 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import type { Diagnostic } from "../codemode.js"
-import { CallSite, ProgramThrow, typeError } from "./model.js"
+import { MAX_PENDING_PROMISES } from "./limits.js"
+import { CallSite, ProgramThrow, rangeError, typeError } from "./model.js"
 import {
   Callable,
   define,
@@ -50,6 +51,11 @@ export class PromiseRuntime<R> {
 
   create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<ProgramPromise, never, R> {
     return Effect.flatMap(CallSite, (site) => {
+      if (this.active.size >= MAX_PENDING_PROMISES) {
+        throw rangeError(
+          `Too many pending promises (limit ${MAX_PENDING_PROMISES}); await promises before creating more.`,
+        )
+      }
       // Allocate before forking so reruns get distinct IDs and diagnostics retain creation order.
       const id = this.nextID++
       const body = Effect.catchDefect(effect, (defect) => Effect.die(locate(defect, site.node)))

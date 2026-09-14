@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
+import { checkArrayLength, checkStringLength, MAX_ARRAY_LENGTH } from "../interpreter/limits.js"
 import { invalidData, rangeError, typeError } from "../interpreter/model.js"
 import { get, ProgramArray, ProgramGenerator, ProgramObject } from "../interpreter/objects.js"
 import { describeValue, rejectCircularInsertion } from "../interpreter/references.js"
@@ -7,13 +8,11 @@ import { applyCollectionCallback, preserveConsumerError, type Runner } from "../
 import { compareText } from "../tool-runtime.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
-const MAX_LENGTH = 4_294_967_295
-
 const arrayLikeSource = (source: unknown): { readonly length: number; readonly source: ProgramObject } => {
   if (source instanceof ProgramObject && typeof get(source, "length") === "number") {
     const length = get(source, "length") as number
     const normalized = Number.isNaN(length) || length <= 0 ? 0 : Math.trunc(length)
-    if (normalized > MAX_LENGTH) throw new RangeError("Invalid array length")
+    checkArrayLength(normalized)
     return { length: normalized, source }
   }
   throw invalidData(
@@ -93,7 +92,7 @@ export const arrayGlobal = <R>(runner: Runner<R>) => {
     if (args.length !== 1) return new ProgramArray(into, [...args])
     const first = args[0]
     if (typeof first !== "number") return new ProgramArray(into, [first])
-    if (!Number.isInteger(first) || first < 0 || first > MAX_LENGTH) throw rangeError("Invalid array length.")
+    if (!Number.isInteger(first) || first < 0 || first > MAX_ARRAY_LENGTH) throw rangeError("Invalid array length.")
     // Sparse like JS: Array(3) has holes, and combinator loops already skip them.
     return new ProgramArray(into, new Array(first))
   }
@@ -145,7 +144,11 @@ export const arrayGlobal = <R>(runner: Runner<R>) => {
         if (args.length > 1 || (args.length === 1 && typeof args[0] !== "string")) {
           throw typeError("Array.join expects zero arguments or one string separator.")
         }
-        return target.map((item) => coerceToString(item ?? "")).join(args.length === 0 ? "," : (args[0] as string))
+        const joined = target
+          .map((item) => coerceToString(item ?? ""))
+          .join(args.length === 0 ? "," : (args[0] as string))
+        checkStringLength(joined.length)
+        return joined
       },
     ],
     [
@@ -198,12 +201,13 @@ export const arrayGlobal = <R>(runner: Runner<R>) => {
     [
       "concat",
       1,
-      (thisValue, args) =>
-        wrap(
-          self(thisValue, "concat").items.concat(
-            ...args.map((item) => (item instanceof ProgramArray ? item.items : item)),
-          ),
-        ),
+      (thisValue, args) => {
+        const joined = self(thisValue, "concat").items.concat(
+          ...args.map((item) => (item instanceof ProgramArray ? item.items : item)),
+        )
+        checkArrayLength(joined.length)
+        return wrap(joined)
+      },
     ],
     [
       "flat",
@@ -211,7 +215,9 @@ export const arrayGlobal = <R>(runner: Runner<R>) => {
       (thisValue, args) => {
         const flatten = (items: Array<unknown>, depth: number): Array<unknown> =>
           items.flatMap((item) => (item instanceof ProgramArray && depth > 0 ? flatten(item.items, depth - 1) : [item]))
-        return wrap(flatten(self(thisValue, "flat").items, optNumber("flat", args[0], "depth") ?? 1))
+        const flattened = flatten(self(thisValue, "flat").items, optNumber("flat", args[0], "depth") ?? 1)
+        checkArrayLength(flattened.length)
+        return wrap(flattened)
       },
     ],
     [

@@ -60,6 +60,7 @@ import {
   typeError,
   unsupportedSyntax,
 } from "./model.js"
+import { checkStringLength } from "./limits.js"
 import { locate, materialize } from "./errors.js"
 import type { Prototypes } from "./intrinsics.js"
 import { globals, type Host } from "./globals.js"
@@ -1319,8 +1320,11 @@ class Frame<R> {
     const l = coerceOperand(lhs)
     const r = coerceOperand(rhs)
     switch (operator) {
-      case "+":
-        return (l as string) + (r as string)
+      case "+": {
+        const sum = (l as string) + (r as string)
+        if (typeof sum === "string") checkStringLength(sum.length)
+        return sum
+      }
       case "-":
         return (l as number) - (r as number)
       case "*":
@@ -1990,10 +1994,12 @@ class Frame<R> {
           throw typeError("Invalid template literal quasi.", quasi)
         }
         output += quasi.value.cooked
+        checkStringLength(output.length)
 
         if (index < expressions.length) {
           const raw = yield* self.evaluateExpression(expressions[index])
           output += coerceToString(toProgram(self.runtime.prototypes, raw, "Template interpolation"))
+          checkStringLength(output.length)
         }
       }
 
