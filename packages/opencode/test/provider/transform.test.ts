@@ -2310,6 +2310,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       {},
     )
 
+    // gpt-4 predates GPT-5.6's explicit cache breakpoint support, so no
+    // openai-namespaced marker is added here (see supportsExplicitCacheBreakpoint()).
     expect(result[0].content).toEqual([
       { type: "reasoning", text: "Should not be processed" },
       { type: "text", text: "Answer" },
@@ -3681,6 +3683,328 @@ describe("ProviderTransform.message - cache control on gateway", () => {
         },
       },
     })
+  })
+})
+
+describe("ProviderTransform.message / options - OpenAI explicit cache breakpoint", () => {
+  const buildOpenAIModel = (apiId: string) =>
+    ({
+      id: `openai/${apiId}`,
+      providerID: "openai",
+      api: {
+        id: apiId,
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
+      limit: { context: 128000, output: 4096 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  const openaiModel = buildOpenAIModel("gpt-6-astra")
+
+  const anthropicModel = {
+    ...openaiModel,
+    id: "anthropic/claude-sonnet-4",
+    providerID: "anthropic",
+    api: { id: "claude-sonnet-4", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+  } as any
+
+  const copilotModel = {
+    ...openaiModel,
+    id: "github-copilot/gpt-4",
+    providerID: "github-copilot",
+    api: { id: "gpt-4", url: "https://api.githubcopilot.com", npm: "@ai-sdk/github-copilot" },
+  } as any
+
+  // Real Mantle ids (e.g. "mantle-gpt") carry no "gpt-N" version, so they
+  // never satisfy supportsExplicitCacheBreakpoint() and this path is a no-op
+  // for them regardless of sdkKey() mapping onto "openai".
+  const mantleModel = {
+    ...openaiModel,
+    id: "bedrock/mantle-gpt",
+    providerID: "amazon-bedrock",
+    api: {
+      id: "mantle-gpt",
+      url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      npm: "@ai-sdk/amazon-bedrock/mantle",
+    },
+  } as any
+
+  const buildMessages = (): ModelMessage[] =>
+    [
+      { role: "system", content: "You are a helpful assistant" },
+      { role: "user", content: [{ type: "text", text: "Hello" }] },
+      { role: "assistant", content: [{ type: "text", text: "Hi there" }] },
+    ] as any[]
+
+  for (const testCase of [
+    { apiId: "gpt-6-astra", fires: true },
+    { apiId: "gpt-5.6-sol", fires: true },
+    { apiId: "gpt-5.3-codex-spark", fires: false },
+    { apiId: "gpt-5-pro", fires: false },
+    { apiId: "gpt-4o", fires: false },
+  ]) {
+    const model = buildOpenAIModel(testCase.apiId)
+
+    test(`${testCase.apiId}: places the breakpoint on targeted messages when permitted (fires: ${testCase.fires})`, () => {
+      const result = ProviderTransform.message(buildMessages(), model, {}, true) as any[]
+      for (const msg of result) {
+        if (!Array.isArray(msg.content)) continue
+        const last = msg.content[msg.content.length - 1]
+        if (testCase.fires) {
+          expect(last.providerOptions?.openai?.promptCacheBreakpoint).toEqual({ mode: "explicit" })
+        } else {
+          expect(last.providerOptions?.openai?.promptCacheBreakpoint).toBeUndefined()
+        }
+      }
+    })
+
+    test(`${testCase.apiId}: sets promptCacheOptions in options() when permitted (fires: ${testCase.fires})`, () => {
+      const result = ProviderTransform.options({ model, sessionID: "session-1", allowExplicitCache: true })
+      if (testCase.fires) {
+        expect(result.promptCacheOptions).toEqual({ mode: "explicit" })
+      } else {
+        expect(result.promptCacheOptions).toBeUndefined()
+      }
+    })
+  }
+
+  test("does not set promptCacheOptions when setCacheKey is explicitly disabled, even when permitted", () => {
+    const result = ProviderTransform.options({
+      model: openaiModel,
+      sessionID: "session-1",
+      providerOptions: { setCacheKey: false },
+      allowExplicitCache: true,
+    })
+    expect(result.promptCacheOptions).toBeUndefined()
+  })
+
+  test("@ai-sdk/amazon-bedrock/mantle's version-less id never matches, so no breakpoint or mode is set even when permitted", () => {
+    const result = ProviderTransform.message(buildMessages(), mantleModel, {}, true) as any[]
+    for (const msg of result) {
+      if (!Array.isArray(msg.content)) continue
+      const last = msg.content[msg.content.length - 1]
+      expect(last.providerOptions?.openai?.promptCacheBreakpoint).toBeUndefined()
+    }
+
+    const options = ProviderTransform.options({ model: mantleModel, sessionID: "session-1", allowExplicitCache: true })
+    expect(options.promptCacheOptions).toBeUndefined()
+  })
+
+  test("Anthropic models are unaffected (no openai-namespaced breakpoint or mode), even when permitted", () => {
+    const result = ProviderTransform.message(buildMessages(), anthropicModel, {}, true) as any[]
+    for (const msg of result) {
+      if (!Array.isArray(msg.content)) continue
+      const last = msg.content[msg.content.length - 1]
+      expect(last.providerOptions?.openai).toBeUndefined()
+    }
+
+    const options = ProviderTransform.options({ model: anthropicModel, sessionID: "session-1", allowExplicitCache: true })
+    expect(options.promptCacheOptions).toBeUndefined()
+  })
+
+  test("Copilot models never receive the openai-namespaced breakpoint or mode, even when permitted", () => {
+    const result = ProviderTransform.message(buildMessages(), copilotModel, {}, true) as any[]
+    for (const msg of result) {
+      if (!Array.isArray(msg.content)) continue
+      const last = msg.content[msg.content.length - 1]
+      expect(last.providerOptions?.openai).toBeUndefined()
+    }
+
+    const options = ProviderTransform.options({ model: copilotModel, sessionID: "session-1", allowExplicitCache: true })
+    expect(options.promptCacheOptions).toBeUndefined()
+  })
+
+  test("remap does not clobber a pre-existing breakpoint, for an sdkKey-remapped provider whose id satisfies the version gate", () => {
+    // @ai-sdk/amazon-bedrock/mantle's real ids (e.g. "mantle-gpt") never carry
+    // a version and so never reach applyOpenAICacheBreakpoint(); this id is
+    // synthetic, chosen only to exercise the remap-then-breakpoint ordering
+    // guarantee established when this path was fixed.
+    const versionedMantleModel = {
+      ...mantleModel,
+      api: { ...mantleModel.api, id: "openai.gpt-5.6" },
+    }
+    const messages = [
+      { role: "system", content: "You are a helpful assistant" },
+      { role: "user", content: [{ type: "text", text: "Hello" }] },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Hi there",
+            providerOptions: { "amazon-bedrock": { foo: "bar" } },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(messages, versionedMantleModel, {}, true) as any[]
+    const last = result[result.length - 1]
+    const lastContent = last.content[last.content.length - 1]
+
+    expect(lastContent.providerOptions?.openai?.foo).toBe("bar")
+    expect(lastContent.providerOptions?.openai?.promptCacheBreakpoint).toEqual({ mode: "explicit" })
+  })
+
+  test("a system message (string content) carries the marker at message level", () => {
+    const result = ProviderTransform.message(buildMessages(), openaiModel, {}, true) as any[]
+    const system = result.find((msg: any) => msg.role === "system")
+
+    expect(typeof system.content).toBe("string")
+    expect(system.providerOptions?.openai?.promptCacheBreakpoint).toEqual({ mode: "explicit" })
+  })
+
+  test("a turn whose last two non-system messages have no text part still gets a marker from the system message", () => {
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant" },
+      {
+        role: "user",
+        content: [{ type: "file", mediaType: "image/png", data: "aGVsbG8=" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "1", toolName: "bash", input: {} }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {}, true) as any[]
+    const system = result.find((msg: any) => msg.role === "system")
+    const user = result.find((msg: any) => msg.role === "user")
+    const assistant = result.find((msg: any) => msg.role === "assistant")
+
+    expect(system.providerOptions?.openai?.promptCacheBreakpoint).toEqual({ mode: "explicit" })
+    expect(user.content[0].providerOptions?.openai?.promptCacheBreakpoint).toBeUndefined()
+    expect(assistant.content[0].providerOptions?.openai?.promptCacheBreakpoint).toBeUndefined()
+
+    const markedParts = [system, ...user.content, ...assistant.content].filter(
+      (part: any) => part.providerOptions?.openai?.promptCacheBreakpoint !== undefined,
+    )
+    expect(markedParts).toHaveLength(1)
+  })
+
+  test("an assistant message ending in a tool call gets the marker on its last text part, not the tool-call part", () => {
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me check that" },
+          { type: "tool-call", toolCallId: "1", toolName: "bash", input: {} },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel, {}, true) as any[]
+    const assistant = result.find((msg: any) => msg.role === "assistant")
+    const textPart = assistant.content.find((part: any) => part.type === "text")
+    const toolCallPart = assistant.content.find((part: any) => part.type === "tool-call")
+
+    expect(textPart.providerOptions?.openai?.promptCacheBreakpoint).toEqual({ mode: "explicit" })
+    expect(toolCallPart.providerOptions?.openai?.promptCacheBreakpoint).toBeUndefined()
+  })
+
+  test("setCacheKey: false disables both the breakpoint markers and promptCacheOptions, even when permitted", () => {
+    const result = ProviderTransform.message(buildMessages(), openaiModel, { setCacheKey: false }, true) as any[]
+    for (const msg of result) {
+      if (Array.isArray(msg.content)) {
+        const last = msg.content[msg.content.length - 1]
+        expect(last.providerOptions?.openai?.promptCacheBreakpoint).toBeUndefined()
+      } else {
+        expect(msg.providerOptions?.openai?.promptCacheBreakpoint).toBeUndefined()
+      }
+    }
+
+    const options = ProviderTransform.options({
+      model: openaiModel,
+      sessionID: "session-1",
+      providerOptions: { setCacheKey: false },
+      allowExplicitCache: true,
+    })
+    expect(options.promptCacheOptions).toBeUndefined()
+  })
+
+  // allowExplicitCache defaults to false: an omitted argument must withhold
+  // caching, not grant it. The two failure directions are asymmetric - losing
+  // caching is invisible, but defaulting to "on" at every call site nobody has
+  // vetted is exactly the shape of bug that broke ChatGPT/Codex OAuth here.
+  test("default pin: message() with the argument omitted places no breakpoint, even for an API-key-shaped GPT-5.6+ model", () => {
+    const stock = buildMessages()
+    const result = ProviderTransform.message(buildMessages(), openaiModel, {}) as any[]
+    expect(result).toEqual(stock)
+    for (const msg of result) {
+      if (Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          expect(part.providerOptions).toBeUndefined()
+        }
+      } else {
+        expect(msg.providerOptions).toBeUndefined()
+      }
+    }
+  })
+
+  test("default pin: options() with allowExplicitCache omitted emits no promptCacheOptions", () => {
+    const result = ProviderTransform.options({ model: openaiModel, sessionID: "session-1" })
+    expect(result.promptCacheOptions).toBeUndefined()
+  })
+
+  test("OAuth: a GPT-5.6+ model gets no breakpoint anywhere - message() output is byte-identical to stock", () => {
+    const stock = buildMessages()
+    const result = ProviderTransform.message(buildMessages(), openaiModel, {}, false) as any[]
+    expect(result).toEqual(stock)
+    for (const msg of result) {
+      if (Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          expect(part.providerOptions).toBeUndefined()
+        }
+      } else {
+        expect(msg.providerOptions).toBeUndefined()
+      }
+    }
+  })
+
+  test("OAuth: a GPT-5.6+ model gets no promptCacheOptions - options() output is byte-identical to stock", () => {
+    const oauthResult = ProviderTransform.options({
+      model: openaiModel,
+      sessionID: "session-1",
+      allowExplicitCache: false,
+    })
+    const apiKeyResult = ProviderTransform.options({
+      model: openaiModel,
+      sessionID: "session-1",
+      allowExplicitCache: true,
+    })
+    expect(apiKeyResult.promptCacheOptions).toEqual({ mode: "explicit" })
+    expect(oauthResult.promptCacheOptions).toBeUndefined()
+
+    const { promptCacheOptions: _dropped, ...apiKeyWithoutCacheOptions } = apiKeyResult
+    expect(oauthResult).toEqual(apiKeyWithoutCacheOptions)
+  })
+
+  test("API-key auth (allowExplicitCache: true): the same model still gets both, exactly as today", () => {
+    const result = ProviderTransform.message(buildMessages(), openaiModel, {}, true) as any[]
+    const system = result.find((msg: any) => msg.role === "system")
+    expect(system.providerOptions?.openai?.promptCacheBreakpoint).toEqual({ mode: "explicit" })
+
+    const options = ProviderTransform.options({
+      model: openaiModel,
+      sessionID: "session-1",
+      allowExplicitCache: true,
+    })
+    expect(options.promptCacheOptions).toEqual({ mode: "explicit" })
   })
 })
 
