@@ -208,7 +208,7 @@ describe("MCP OAuth", () => {
 
     const error = Exit.isFailure(exit) && Cause.squash(exit.cause)
     expect(error).toBeInstanceOf(McpClient.NeedsAuthError)
-    expect(error instanceof McpClient.NeedsAuthError && error.reason).toBe(
+    expect(error instanceof McpClient.NeedsAuthError && error.message).toBe(
       `MCP server "${config.url}" requires a login before it can register a client`,
     )
     expect(registrations).toBe(0)

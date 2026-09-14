@@ -14,7 +14,7 @@ import { DialogIntegration } from "./dialog-integration"
 import { useLocation } from "../context/location"
 
 function statusError(status: McpServer["status"]) {
-  if (status.status === "failed") return status.error
+  if (status.status === "failed" || status.status === "needs_auth") return status.error
   return undefined
 }
 
@@ -157,7 +157,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
           <DialogErrorDetails
             title={`MCP server: ${server().name}`}
             error={statusError(server().status) ?? "Unknown MCP connection error"}
-            context={`Status: failed\nConfiguration: mcp.servers.${server().name}${
+            context={`Status: ${server().status.status}\nConfiguration: mcp.servers.${server().name}${
               server().integrationID ? `\nIntegration: ${server().integrationID}` : ""
             }`}
             onBack={() => {
