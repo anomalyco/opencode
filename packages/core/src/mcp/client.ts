@@ -7,6 +7,7 @@ import {
   SdkHttpError,
   StreamableHTTPClientTransport,
   UnauthorizedError,
+  UnsupportedProtocolVersionError,
   type CallToolResult as SdkCallToolResult,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
@@ -303,6 +304,11 @@ export const connect = Effect.fnUntraced(function* (
 
   const error = Cause.squash(exit.cause)
   if (error instanceof UnauthorizedError) return yield* new NeedsAuthError({ server })
+  if (error instanceof UnsupportedProtocolVersionError)
+    return yield* new ConnectError({
+      server,
+      message: `${error.message}; the server supports ${error.supported.join(", ")}. Set "protocol" for this server to one of those or to "legacy".`,
+    })
   return yield* new ConnectError({ server, message: error instanceof Error ? error.message : String(error) })
 })
 
