@@ -7,11 +7,11 @@ import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { usePlatform } from "@/context/platform"
 import { ServerConnection } from "@/context/server"
-import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
+import { closeHomeProject, displayName, errorMessage, homeProjectDirectories } from "@/pages/layout/helpers"
 import { Persist, persisted } from "@/utils/persist"
 import { showToast } from "@/utils/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { createResource } from "solid-js"
+import { batch, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { HomeController } from "./home-controller"
 
@@ -38,6 +38,62 @@ export function createHomeProjectsController(home: HomeController) {
 
   function canRevealProject(conn: ServerConnection.Any) {
     return platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(conn)
+  }
+
+  function confirmForgetClosed(projects: LocalProject[], onConfirm: () => void) {
+    const single = projects.length === 1 ? projects[0] : undefined
+    const title = single
+      ? language.t("home.recentlyClosed.remove.title")
+      : language.t("home.recentlyClosed.remove.titleMany", { count: projects.length })
+    const description = single
+      ? language.t("home.recentlyClosed.remove.confirm", { name: displayName(single) })
+      : language.t("home.recentlyClosed.remove.confirmMany", { count: projects.length })
+    void Promise.all([import("@opencode-ai/ui/v2/dialog-v2"), import("@opencode-ai/ui/v2/button-v2")]).then(
+      ([{ DialogV2, DialogHeader, DialogTitleGroup, DialogFooter }, { ButtonV2 }]) =>
+        dialog.show(() => (
+          <DialogV2 fit>
+            <DialogHeader hideClose>
+              <DialogTitleGroup title={title} description={description} />
+            </DialogHeader>
+            <DialogFooter>
+              <ButtonV2 variant="ghost" onClick={() => dialog.close()}>
+                {language.t("common.cancel")}
+              </ButtonV2>
+              <ButtonV2
+                variant="danger"
+                data-action="recently-closed-confirm-remove"
+                onClick={() => {
+                  dialog.close()
+                  onConfirm()
+                }}
+              >
+                {language.t("home.recentlyClosed.action.remove")}
+              </ButtonV2>
+            </DialogFooter>
+          </DialogV2>
+        )),
+    )
+  }
+
+  // Archiving and hiding take entries out of the default view, so both get a toast with undo.
+  function flagClosed(
+    conn: ServerConnection.Any,
+    directories: string[],
+    apply: "archiveClosed" | "hideClosed",
+    revert: "unarchiveClosed" | "unhideClosed",
+    title: string,
+  ) {
+    const projects = home.server.context(conn).projects
+    batch(() => directories.forEach((directory) => projects[apply](directory)))
+    showToast({
+      title,
+      actions: [
+        {
+          label: language.t("home.recentlyClosed.toast.undo"),
+          onClick: () => batch(() => directories.forEach((directory) => projects[revert](directory))),
+        },
+      ],
+    })
   }
 
   return {
@@ -67,10 +123,61 @@ export function createHomeProjectsController(home: HomeController) {
     project: {
       list: home.project.list,
       recentlyClosed: home.project.recentlyClosed,
+      closedForServer: home.project.closedForServer,
+      isHiddenClosed: (conn: ServerConnection.Any, directory: string) =>
+        home.server.context(conn).projects.isHiddenClosed(directory),
+      isArchivedClosed: (conn: ServerConnection.Any, directory: string) =>
+        home.server.context(conn).projects.isArchivedClosed(directory),
       homedir: home.project.homedir,
       select: home.project.select,
       add: home.project.add,
       openNewSession: home.project.openProjectNewSession,
+      reopenClosed: (conn: ServerConnection.Any, directories: string[]) => {
+        if (home.server.health(conn)?.healthy === false) return
+        home.project.add(conn, directories)
+      },
+      archiveClosed: (conn: ServerConnection.Any, directories: string[]) =>
+        flagClosed(
+          conn,
+          directories,
+          "archiveClosed",
+          "unarchiveClosed",
+          language.t("home.recentlyClosed.toast.archived"),
+        ),
+      unarchiveClosed: (conn: ServerConnection.Any, directories: string[]) => {
+        const projects = home.server.context(conn).projects
+        batch(() => directories.forEach((directory) => projects.unarchiveClosed(directory)))
+      },
+      hideClosed: (conn: ServerConnection.Any, directories: string[]) =>
+        flagClosed(conn, directories, "hideClosed", "unhideClosed", language.t("home.recentlyClosed.toast.hidden")),
+      unhideClosed: (conn: ServerConnection.Any, directories: string[]) => {
+        const projects = home.server.context(conn).projects
+        batch(() => directories.forEach((directory) => projects.unhideClosed(directory)))
+      },
+      removeClosed: (conn: ServerConnection.Any, items: LocalProject[]) => {
+        const projects = home.server.context(conn).projects
+        confirmForgetClosed(items, () => {
+          const directories = items.map((project) => project.worktree)
+          batch(() => directories.forEach((directory) => projects.removeClosed(directory)))
+          showToast({
+            title: language.t("home.recentlyClosed.toast.removed"),
+            actions: [
+              {
+                label: language.t("home.recentlyClosed.toast.undo"),
+                // Re-record oldest first so the entries land on top of history in their original
+                // order. Anything reopened in the meantime is left open.
+                onClick: () =>
+                  batch(() =>
+                    directories.toReversed().forEach((directory) => {
+                      if (projects.list().some((project) => project.worktree === directory)) return
+                      projects.close(directory)
+                    }),
+                  ),
+              },
+            ],
+          })
+        })
+      },
       edit: (conn: ServerConnection.Any, project: LocalProject) => {
         void import("@/components/dialog-edit-project-v2").then(({ DialogEditProjectV2 }) => {
           void dialog.show(() => <DialogEditProjectV2 server={conn} project={project} />)
