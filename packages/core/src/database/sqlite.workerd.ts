@@ -1,5 +1,4 @@
-import { Context, Effect, Exit, Fiber, Layer, Scope, Semaphore, Stream } from "effect"
-import { identity } from "effect/Function"
+import { Context, Effect, Exit, Fiber, Layer, Scope, Semaphore } from "effect"
 import { Reactivity } from "effect/unstable/reactivity"
 import { SqlClient, Statement } from "effect/unstable/sql"
 import type { Connection } from "effect/unstable/sql/SqlConnection"
@@ -9,7 +8,7 @@ import { Sqlite } from "./sqlite.js"
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
 
-const TypeId = "~@opencode-ai/core/database/SqliteWorkerd" as const
+const TypeId = "~@opencode/core/database/SqliteWorkerd" as const
 type TypeId = typeof TypeId
 
 // Durable Object SQLite only allowlists introspection pragmas; journal_mode,
@@ -61,7 +60,7 @@ interface Config {
 // DurableObjectStorage.transaction-backed implementation; this service only
 // tracks the active transaction connection for statements and nesting checks.
 const WorkerdTransaction = Context.Service<SqlClient.TransactionConnection, SqlClient.TransactionConnection.Service>(
-  "@opencode-ai/core/database/SqliteWorkerdTransaction",
+  "@opencode/core/database/SqliteWorkerdTransaction",
 )
 
 const transactionError = (message: string) =>
@@ -167,26 +166,7 @@ const make = (options: Config) =>
           }),
       })
 
-    const connection = identity<Connection>({
-      execute(query, params, transformRows) {
-        return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
-      },
-      executeRaw(query, params) {
-        return run(query, params)
-      },
-      executeValues(query, params) {
-        return runValues(query, params)
-      },
-      executeValuesUnprepared(query, params) {
-        return runValues(query, params)
-      },
-      executeUnprepared(query, params, transformRows) {
-        return this.execute(query, params, transformRows)
-      },
-      executeStream() {
-        return Stream.die("executeStream not implemented")
-      },
-    })
+    const connection = Sqlite.makeConnection(run, runValues, {})
 
     const semaphore = yield* Semaphore.make(1)
     const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
@@ -232,7 +212,7 @@ const nativeLayer = (config: Config) =>
     : Layer.effect(
         Sqlite.Native,
         Effect.die(
-          "workerd sqlite cannot open a database from a path; use Database.layerWith(sqliteLayer({ storage }))",
+          "workerd sqlite cannot open a database from a path; use Database.layerFromClient.pipe(Layer.provide(sqliteLayer({ storage })))",
         ),
       )
 

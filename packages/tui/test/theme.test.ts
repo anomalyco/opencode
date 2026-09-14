@@ -2,51 +2,11 @@ import { expect, test } from "bun:test"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TerminalColors } from "@opentui/core"
-import {
-  DEFAULT_THEMES,
-  addTheme,
-  allThemes,
-  hasTheme,
-  parseTheme,
-  resolveTheme,
-  setCustomThemes,
-  upsertTheme,
-} from "../src/theme"
+import { DEFAULT_THEMES, hasTheme, parseTheme, resolveTheme } from "../src/theme"
 import { discoverThemes } from "../src/theme/discovery"
 import { configDirectories } from "../src/util/config-directories"
 import { terminalMode } from "../src/theme/system"
 import { tmpdir } from "./fixture/fixture"
-
-test("addTheme writes into module theme store", () => {
-  const name = `plugin-theme-${Date.now()}`
-  expect(addTheme(name, DEFAULT_THEMES.opencode)).toBe(true)
-  expect(allThemes()[name]).toBe(DEFAULT_THEMES.opencode)
-})
-
-test("addTheme keeps first theme for duplicate names", () => {
-  const name = `plugin-theme-keep-${Date.now()}`
-  const one = structuredClone(DEFAULT_THEMES.opencode)
-  const two = structuredClone(DEFAULT_THEMES.opencode)
-  one.theme.primary = "#101010"
-  two.theme.primary = "#fefefe"
-
-  expect(addTheme(name, one)).toBe(true)
-  expect(addTheme(name, two)).toBe(false)
-  expect(allThemes()[name]).toBe(one)
-})
-
-test("addTheme ignores values without a V1 theme or version", () => {
-  const name = `plugin-theme-invalid-${Date.now()}`
-  expect(addTheme(name, { defs: { a: "#ffffff" } })).toBe(false)
-  expect(addTheme(name, { light: {} })).toBe(false)
-  expect(allThemes()[name]).toBeUndefined()
-})
-
-test("addTheme defers validation of versioned sources", () => {
-  const name = `plugin-theme-versioned-${Date.now()}`
-  expect(addTheme(name, { version: 2 })).toBe(true)
-  expect(() => parseTheme(allThemes()[name]!, name)).toThrow(`Invalid theme: ${name}`)
-})
 
 test("parseTheme delegates malformed V1 sources and rejects unknown versions", () => {
   expect(() => parseTheme({})).toThrow()
@@ -66,63 +26,41 @@ test("parses unversioned and explicit V1 themes lazily once", () => {
 })
 
 test("decodes native V2 themes lazily once", () => {
-  const name = `plugin-theme-v2-${Date.now()}`
   const source = { version: 2, light: { categorical: ["red"] } } as const
 
-  expect(addTheme(name, source)).toBe(true)
-  expect(allThemes()[name]).toBe(source)
-  const document = parseTheme(allThemes()[name]!, name)
+  const document = parseTheme(source)
   expect(document.light?.categorical).toEqual(["red"])
-  expect(parseTheme(allThemes()[name]!, name)).toBe(document)
+  expect(parseTheme(source)).toBe(document)
 })
 
-test("defers invalid V2 errors until parsing", () => {
-  const name = `plugin-theme-invalid-v2-${Date.now()}`
-  expect(addTheme(name, { version: 2, light: { categorical: [] } })).toBe(true)
-  expect(() => parseTheme(allThemes()[name]!, name)).toThrow(`Invalid theme: ${name}`)
+test("rejects invalid V2 themes when parsing", () => {
+  expect(() => parseTheme({ version: 2, light: { categorical: [] } }, "invalid-v2")).toThrow(
+    "Invalid theme: invalid-v2",
+  )
 })
 
-test("defers invalid V1 errors until parsing", () => {
-  const name = `plugin-theme-invalid-v1-${Date.now()}`
+test("rejects invalid V1 themes when parsing", () => {
   const source = structuredClone(DEFAULT_THEMES.opencode)
   source.defs = { ...source.defs, one: "two", two: "one" }
   source.theme.primary = "one"
 
-  expect(addTheme(name, source)).toBe(true)
-  expect(() => parseTheme(allThemes()[name]!, name)).toThrow("Circular color reference")
+  expect(() => parseTheme(source)).toThrow("Circular color reference")
 })
 
 test("replacement sources receive independent parse caches", () => {
-  const name = `plugin-theme-replace-${Date.now()}`
   const first = structuredClone(DEFAULT_THEMES.opencode)
   const second = structuredClone(DEFAULT_THEMES.opencode)
   second.theme.primary = "#123456"
 
-  expect(addTheme(name, first)).toBe(true)
-  const previous = parseTheme(allThemes()[name]!, name)
-  expect(upsertTheme(name, second)).toBe(true)
-  const next = parseTheme(allThemes()[name]!, name)
+  const previous = parseTheme(first)
+  const next = parseTheme(second)
   expect(next).not.toBe(previous)
-  expect(parseTheme(allThemes()[name]!, name)).toBe(next)
-})
-
-test("custom themes retain precedence over plugin themes", () => {
-  const name = `plugin-theme-precedence-${Date.now()}`
-  const plugin = structuredClone(DEFAULT_THEMES.opencode)
-  const custom = structuredClone(DEFAULT_THEMES.opencode)
-
-  expect(addTheme(name, plugin)).toBe(true)
-  setCustomThemes({ [name]: custom })
-  expect(allThemes()[name]).toBe(custom)
-  setCustomThemes({})
-  expect(allThemes()[name]).toBe(plugin)
+  expect(parseTheme(second)).toBe(next)
 })
 
 test("hasTheme checks theme presence", () => {
-  const name = `plugin-theme-has-${Date.now()}`
-  expect(hasTheme(name)).toBe(false)
-  expect(addTheme(name, DEFAULT_THEMES.opencode)).toBe(true)
-  expect(hasTheme(name)).toBe(true)
+  expect(hasTheme("missing-theme")).toBe(false)
+  expect(hasTheme("opencode")).toBe(true)
 })
 
 test("resolveTheme rejects circular color refs", () => {

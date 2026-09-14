@@ -26,6 +26,38 @@ export function readLocalAttachment(file: string, maxBytes = MAX_LOCAL_ATTACHMEN
   )
 }
 
+export async function resolvePastedAttachments(text: string, platform: string) {
+  const pastedContent = text.trim()
+  const filepath = normalizePastedFilepath(pastedContent, platform)
+  if (/^(https?):\/\//.test(filepath)) return undefined
+
+  const attachment = await readLocalAttachment(filepath)
+  const attachments = attachment ? [{ filepath, attachment }] : []
+  if (!attachment) {
+    const filepaths = parsePastedFilepaths(pastedContent, platform)
+    if (filepaths.length <= 1) return undefined
+    let remaining = MAX_LOCAL_ATTACHMENT_BYTES
+    for (const candidate of filepaths) {
+      const next = await readLocalAttachment(candidate, remaining)
+      if (!next) return undefined
+      remaining -= typeof next.content === "string" ? Buffer.byteLength(next.content) : next.content.byteLength
+      attachments.push({ filepath: candidate, attachment: next })
+    }
+  }
+
+  return attachments.map((item) => {
+    const filename = path.basename(item.filepath)
+    if (item.attachment.type === "text") {
+      return { type: "text" as const, content: item.attachment.content, filename }
+    }
+    return {
+      type: "file" as const,
+      uri: `data:${item.attachment.mime};base64,${Buffer.from(item.attachment.content).toString("base64")}`,
+      filename,
+    }
+  })
+}
+
 const mimeTypes: Record<string, string> = {
   ".avif": "image/avif",
   ".gif": "image/gif",

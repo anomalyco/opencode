@@ -1,4 +1,4 @@
-import { createStore } from "solid-js/store"
+import { createStore, unwrap } from "solid-js/store"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { usePaste, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import {
@@ -11,13 +11,13 @@ import {
 } from "@opentui/core"
 import open from "open"
 import { useTheme, useThemes } from "../../context/theme"
-import type { FormAnswer, FormField, FormValue } from "@opencode-ai/client"
-import type { FormWithLocation } from "../../context/data"
-import { useClient } from "../../context/client"
+import type { FormAnswer, FormField, FormValue } from "@opencode/client"
+import { useData, type FormWithLocation } from "../../context/data"
 import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
+import { useInteractivity } from "../../context/interactivity"
 import { useConfig } from "../../config"
 import { errorMessage } from "../../util/error"
 import {
@@ -41,48 +41,56 @@ function truncate(label: string, max: number) {
   return label.length > max ? label.slice(0, max - 1).trimEnd() + "…" : label
 }
 
-function requestOptions(form: FormWithLocation) {
-  if (form.sessionID !== "global" || !form.location) return undefined
-  return {
-    headers: {
-      "x-opencode-directory": encodeURIComponent(form.location.directory),
-      ...(form.location.workspaceID ? { "x-opencode-workspace": form.location.workspaceID } : {}),
-    },
-  }
+type FormDraft = {
+  tab: number
+  answers: Record<string, FormValue | undefined>
+  custom: Record<string, string | undefined>
+  externalReady: Record<string, boolean>
+  selected: number
+  editing: boolean
+  error: string
 }
 
-export function FormPrompt(props: {
-  form: FormWithLocation
-  onReply?: (answer: FormAnswer) => void | Promise<void>
-  onCancel?: () => void | Promise<void>
-}) {
-  const client = useClient()
+// Holds in-progress answers per form across FormPrompt remounts, since the
+// session route is keyed by sessionID and unmounts on tab switch. Mirrors
+// component/prompt/draft-stash.ts: a draft is consumed on take.
+const drafts = new Map<string, FormDraft>()
+
+export function FormPrompt(props: { form: FormWithLocation }) {
+  const data = useData()
   const themes = useThemes()
   const theme = useTheme("elevated")
   const themeMode = themes.mode
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const keymap = Keymap.use()
+  const enabled = useInteractivity()
+  const active = () => enabled() && keymap.mode.current() === FORM_MODE
   const config = useConfig().data
   const clipboard = useClipboard()
   const toast = useToast()
   const configuredFields = props.form.fields.filter(isFormAnswerField)
   const initial = formInitialValues(props.form.fields)
+  const draft = drafts.get(props.form.id)
+  drafts.delete(props.form.id)
 
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
   const [reviewHeight, setReviewHeight] = createSignal(1)
   const [reviewScrollable, setReviewScrollable] = createSignal(false)
-  const [store, setStore] = createStore({
-    tab: 0,
-    answers: initial.answers,
-    custom: initial.custom,
-    externalReady: {} as Record<string, boolean>,
-    selected: formSelected(configuredFields[0], configuredFields[0]?.default),
-    editing: false,
-    error: "",
-  })
+  const [store, setStore] = createStore<FormDraft>(
+    draft ?? {
+      tab: 0,
+      answers: initial.answers,
+      custom: initial.custom,
+      externalReady: {},
+      selected: formSelected(configuredFields[0], configuredFields[0]?.default),
+      editing: false,
+      error: "",
+    },
+  )
 
   let textarea: TextareaRenderable | undefined
+  const [inputTarget, setInputTarget] = createSignal<TextareaRenderable>()
   let review: ScrollBoxRenderable | undefined
   let measureReview: (() => void) | undefined
 
@@ -229,11 +237,40 @@ export function FormPrompt(props: {
 
   onCleanup(() => {
     if (measureReview) renderer.off(CliRenderEvents.FRAME, measureReview)
+    // A reply or cancel removes the form from data before this unmount runs, so a
+    // form still listed here is only hidden by navigation and worth restoring.
+    const pending = data.session.form
+      .list(props.form.sessionID, props.form.location)
+      ?.some((item) => item.id === props.form.id)
+    if (!pending) return
+    // Textual answers live in the editor until committed, so capture them here.
+    const current = answerField()
+    const snapshot = unwrap(store)
+    drafts.set(props.form.id, {
+      ...snapshot,
+      custom:
+        current && textarea && !textarea.isDestroyed
+          ? { ...snapshot.custom, [current.key]: textarea.plainText }
+          : snapshot.custom,
+    })
+  })
+
+  // Refs publish after initialization so burst typing stays with the interceptor until the editor is ready.
+  createEffect(() => {
+    const target = inputTarget()
+    if (!target || target.isDestroyed) return
+    if (!active()) {
+      target.blur()
+      target.focusable = false
+      return
+    }
+    target.focusable = true
+    target.focus()
   })
 
   onCleanup(
     keymap.intercept("key", ({ event, consume }) => {
-      if (keymap.mode.current() !== FORM_MODE) return
+      if (!active()) return
       if (textual() || !other() || (store.editing && renderer.currentFocusedEditor === textarea)) return
       if (event.ctrl || event.meta || event.option || event.super || event.hyper) return
       if ((!store.editing && event.sequence === " ") || !/^[^\p{C}\p{Zl}\p{Zp}]$/u.test(event.sequence)) return
@@ -258,16 +295,9 @@ export function FormPrompt(props: {
   }
 
   function reply(answer: FormAnswer) {
-    void Promise.resolve()
-      .then(() =>
-        props.onReply
-          ? props.onReply(answer)
-          : client.api.form.reply(
-              { sessionID: props.form.sessionID, formID: props.form.id, answer },
-              requestOptions(props.form),
-            ),
-      )
-      .catch((error: unknown) => setStore("error", errorMessage(error)))
+    void data.session.form
+      .reply({ sessionID: props.form.sessionID, formID: props.form.id, answer }, props.form.location)
+      .catch(showError)
   }
 
   function replySingle(field: FormAnswerField, value: FormValue) {
@@ -340,15 +370,41 @@ export function FormPrompt(props: {
     pick(row.value)
   }
 
-  usePaste((event) => {
-    if (keymap.mode.current() !== FORM_MODE) return
+  function pasteCustom(value: string) {
     const current = answerField()
-    if (!current || textual() || !custom() || confirm()) return
-    event.preventDefault()
+    if (!current || textual() || !custom() || confirm()) return false
     setStore("selected", rows().length)
-    updateCustom(current, input() + stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n"))
+    updateCustom(current, input() + value)
     setStore("editing", true)
+    return true
+  }
+
+  usePaste((event) => {
+    if (!active()) return
+    const value = stripAnsiSequences(decodePasteBytes(event.bytes)).replace(/\r\n?/g, "\n")
+    if (store.editing && renderer.currentFocusedEditor === textarea) {
+      textarea.insertText(value)
+      event.preventDefault()
+      return
+    }
+    if (!pasteCustom(value)) return
+    event.preventDefault()
   })
+
+  function pasteClipboard() {
+    return clipboard
+      .read()
+      .then((content) => {
+        if (!active() || content?.mime !== "text/plain") return
+        const value = stripAnsiSequences(content.data).replace(/\r\n?/g, "\n")
+        if (store.editing || textual()) {
+          textarea?.insertText(value)
+          return
+        }
+        pasteCustom(value)
+      })
+      .catch(toast.error)
+  }
 
   function commitInput(text: string) {
     const current = answerField()
@@ -437,11 +493,13 @@ export function FormPrompt(props: {
   }
 
   function cancel() {
-    if (props.onCancel) {
-      void props.onCancel()
-      return
-    }
-    void client.api.form.cancel({ sessionID: props.form.sessionID, formID: props.form.id }, requestOptions(props.form))
+    void data.session.form
+      .cancel({ sessionID: props.form.sessionID, formID: props.form.id }, props.form.location)
+      .catch(showError)
+  }
+
+  function showError(error: unknown) {
+    setStore("error", errorMessage(error))
   }
 
   function openExternal() {
@@ -507,6 +565,23 @@ export function FormPrompt(props: {
 
   Keymap.createLayer(() => ({
     mode: FORM_MODE,
+    enabled: !confirm() && answerField() !== undefined,
+    commands: [
+      {
+        id: "prompt.paste",
+        title: "Paste from clipboard",
+        group: "Form",
+        run: (_input, event) => {
+          event?.preventDefault()
+          event?.stopPropagation()
+          return pasteClipboard()
+        },
+      },
+    ],
+  }))
+
+  Keymap.createLayer(() => ({
+    mode: FORM_MODE,
     priority: 1,
     enabled: (store.editing || textual()) && !confirm(),
     commands: [
@@ -517,6 +592,10 @@ export function FormPrompt(props: {
         run() {
           const text = textarea?.plainText ?? ""
           if (!text) {
+            if (textual()) {
+              cancel()
+              return
+            }
             setStore("editing", false)
             return
           }
@@ -851,8 +930,9 @@ export function FormPrompt(props: {
                     textarea = val
                     val.traits = { status: "ANSWER" }
                     queueMicrotask(() => {
-                      val.focus()
+                      if (val.isDestroyed) return
                       val.gotoLineEnd()
+                      setInputTarget(val)
                     })
                   }}
                   initialValue={
@@ -880,7 +960,7 @@ export function FormPrompt(props: {
                     }
                     return (
                       <box
-                        onMouseOver={() => setStore("selected", i())}
+                        onMouseMove={() => setStore("selected", i())}
                         onMouseDown={() => setStore("selected", i())}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
@@ -934,7 +1014,7 @@ export function FormPrompt(props: {
                 </For>
                 <Show when={custom()}>
                   <box
-                    onMouseOver={() => setStore("selected", rows().length)}
+                    onMouseMove={() => setStore("selected", rows().length)}
                     onMouseDown={() => setStore("selected", rows().length)}
                     onMouseUp={() => {
                       if (renderer.getSelection()?.getSelectedText()) return
@@ -990,9 +1070,10 @@ export function FormPrompt(props: {
                               textarea = val
                               val.traits = { status: "ANSWER" }
                               queueMicrotask(() => {
+                                if (val.isDestroyed) return
                                 val.setText(input())
-                                val.focus()
                                 val.gotoLineEnd()
+                                setInputTarget(val)
                               })
                             }}
                             initialValue={input()}

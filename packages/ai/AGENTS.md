@@ -13,11 +13,20 @@
 Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `LanguageModel.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, and `LLM.generateObject`. Use `LLMRequest.update(...)` when deriving canonical request data; do not add a duplicate `LLM.updateRequest(...)` path. Two ways to construct the same thing is one too many.
 
 - Keep provider-defined string enums forward-compatible. Expose known values for autocomplete while accepting future values with `Known | (string & {})`; use `Schema.String` at runtime unless rejecting unknown values is required for correctness.
+- Order reasoning-effort values from lowest to highest: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Provider-specific subsets follow the same relative order in types, schemas, option lists, and tests.
 
 ## Tests
 
 - Use `testEffect(...)` from `test/lib/effect.ts` for tests requiring Effect layers.
 - Keep provider tests fixture-first. Live provider calls must stay behind `RECORD=true` and required API-key checks.
+
+## Errors
+
+- `AIError` wraps a union of tagged reason errors. It stores only `reason`, derives `message` from the reason, and exposes the reason as its `cause`.
+- Each reason owns its readable `message`, category-specific fields, and optional `body`, `http`, and underlying exception in `cause`.
+- `reason.body` is the sole original-response or triggering-event payload field. Preserve original text before schema decoding removes fields; do not replace the complete event with only its nested error.
+- `reason.http` describes an observed HTTP response with required `url`, `status`, and response `headers`. Do not invent status codes or derive a separate request ID from headers.
+- Reclassification and transport recovery must preserve the reason's body, HTTP context, and underlying cause. Error `message` and `cause` are non-enumerable: copy them explicitly when constructing an enriched reason with its constructor or `AIErrorReason.make`.
 
 ## Architecture
 
@@ -49,7 +58,7 @@ Filter or narrow `LLMEvent` streams with `LLMEvent.is.*` (camelCase guards, e.g.
 
 ### Routes
 
-A route is the registered, runnable composition of four orthogonal pieces:
+A route is the runnable composition of four orthogonal pieces:
 
 - **`Protocol`** (`src/route/protocol.ts`) — semantic API contract. Owns request body construction (`body.from`), the body schema (`body.schema`), the streaming-event schema (`stream.event`), and the event-to-`LLMEvent` state machine (`stream.step`). `Route.make(...)` validates and JSON-encodes the body from `body.schema` and decodes frames with `stream.event`. Examples: `OpenAIChat.protocol`, `OpenResponses.protocol`, `OpenAIResponses.protocol`, `AnthropicMessages.protocol`, `Gemini.protocol`, `BedrockConverse.protocol`.
 - **`Endpoint`** (`src/route/endpoint.ts`) — URL construction. The host, path, and route query live on the endpoint. `Endpoint.path("/chat/completions", { baseURL })` is the common case; pass a function for paths that embed the model id or a body field (e.g. `Endpoint.path(({ body }) => `/model/${body.modelId}/converse-stream`)`).
@@ -66,20 +75,20 @@ export const route = Route.make({
   endpoint: Endpoint.path("/chat/completions", {
     baseURL: "https://api.openai.com/v1",
   }),
-  auth: Auth.bearer(),
+  auth: Auth.bearer(Auth.config("OPENAI_API_KEY")),
   framing: Framing.sse,
 })
 ```
 
 Route defaults are request-shaping defaults such as `headers`, `limits`, `generation`, `providerOptions`, and `http`. Endpoint host/query belongs on the route endpoint. Selected `LanguageModel` values carry only model id, provider id, and the configured route value. Model capability/catalog metadata lives outside this package; protocol support is enforced by request lowering and typed `AIError`s.
 
-The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
+The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider owns a small `Route.make(...)` composition instead of a protocol clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
 When a provider supports multiple physical transports, selection remains execution policy below its semantic route. `OpenResponsesChannel.transport(...)` owns the provider-neutral Responses WebSocket concept: it prepares one final request, executes HTTP by default, strips WebSocket-disallowed fields, and passes a generic channel exchange to a per-call `WebSocketChannelExecutor` when supplied. Provider-specific Responses routes opt in with handshake and connection-age policy. `Route.streamPrepared` owns decoding and acknowledges channel completion only after successful full consumption.
 
 ### URL Construction
 
-`Endpoint` owns `{ baseURL, path, query }`. Each protocol route includes a canonical endpoint when the provider has one (e.g. `https://api.openai.com/v1`); provider helpers override endpoint fields by configuring the route before selecting a model. Routes that have no canonical URL (OpenAI-compatible Chat, GitHub Copilot) require configuration before execution.
+`Endpoint` owns `{ baseURL, path, query }`. Each protocol route includes a canonical endpoint when the provider has one (e.g. `https://api.openai.com/v1`); provider helpers override endpoint fields by configuring the route before selecting a model. Generic OpenAI-compatible routes have no canonical URL and require configuration before execution.
 
 For providers where the URL is derived from typed inputs (Azure resource name, Bedrock region), the provider helper configures the route endpoint before calling `.model(...)`. Use `AtLeastOne<T>` from `route/auth-options.ts` for inputs that accept either of two derivation paths (Azure: `resourceName` or `baseURL`).
 
@@ -107,72 +116,26 @@ Keep provider facades small and explicit:
 - Prefer `apiKey` as provider-specific sugar and `auth` as the explicit override; keep them mutually exclusive in provider option types with `ProviderAuthOption`.
 - Resolve `apiKey` → `Auth` with `AuthOptions.bearer(options, "<PROVIDER>_API_KEY")` (it honors an explicit `auth` override and falls back to `Auth.config(envVar)` so missing keys surface a typed `Authentication` error rather than a runtime crash).
 - Use separate top-level facades for products with different required setup, such as `CloudflareAIGateway` and `CloudflareWorkersAI`.
+- Give every named provider its own file and top-level export. Keep its endpoint, auth defaults, and route setup in that file. Compose shared protocols directly; do not nest named provider presets under generic compatible facades or keep their endpoints in a shared provider profile registry.
 
 `Provider.make(...)` remains available for simple static provider definitions, but new built-in providers should prefer plain configured facades unless a helper removes real duplication without adding runtime behavior.
 
 ### Provider Package Entrypoints
 
-Catalog-selected native providers use package-like export paths from `@opencode-ai/ai`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are serializable provider configuration plus common `headers`, `body`, and `limits` overlays.
+Catalog-selected native providers use package-like export paths from `@opencode/ai`. They are internal entrypoints in one npm package, not separately published provider packages. Every entrypoint implements `ProviderPackage.Definition` and exposes `model(modelID, settings)`, where settings are one flat serializable object: the connection keys the entrypoint declares (`apiKey`, `baseURL`, `region`, …), the common `headers` and `body` overlays, and the protocol's request options (`reasoningEffort`, `thinking`, …) side by side. Each entrypoint destructures its own connection keys and passes the rest to the route as `providerOptions`; there is no nested `providerOptions` at the entrypoint.
 
 ```ts
-import { model } from "@opencode-ai/ai/providers/openai/responses"
+import { model } from "@opencode/ai/providers/openai/responses"
 
 const selected = model("gpt-5", {
   apiKey,
+  reasoningEffort: "high",
 })
 ```
 
 Keep semantic APIs as separate entrypoints, such as OpenAI `chat` and `responses`. Transport is execution policy: OpenAI Responses uses HTTP by default and may receive a per-call WebSocket channel executor through `StreamOptions` without changing model or route identity.
 
 Do not expose `Route` in provider package settings. Route composition stays an implementation detail behind `model(...)`.
-
-### Folder layout
-
-```
-packages/ai/src/
-  schema/                   canonical Schema model, split by concern
-    ids.ts                  branded IDs, literal types, ProviderMetadata
-    options.ts              Generation/Provider/Http options, Limits, LanguageModel, cache policy
-    messages.ts             content parts, Message, ToolDefinition, LLMRequest
-    events.ts               Usage, individual events, LLMEvent, LLMResponse
-    errors.ts               error reasons, AIError, ToolFailure
-    index.ts                barrel
-  llm.ts                    request constructors and convenience helpers
-  route/
-    index.ts                @opencode-ai/ai/route advanced barrel
-    client.ts               Route.make + LLMClient.stream/generate
-    executor.ts             RequestExecutor service + transport error mapping
-    protocol.ts             Protocol type + Protocol.make
-    endpoint.ts             Endpoint type + Endpoint.path
-    auth.ts                 Auth type + Auth.bearer / Auth.apiKeyHeader / Auth.passthrough
-    auth-options.ts         ProviderAuthOption shape, AuthOptions.bearer, AtLeastOne helper
-    framing.ts              Framing type + Framing.sse
-    transport/              transport implementations
-      index.ts              Transport execution types + HttpTransport / WebSocketTransport namespaces
-      websocket-channel.ts  generic sequential channel executor/driver contract
-      http.ts               HttpTransport.httpJson — POST + framing
-      websocket.ts          direct one-request channel executor + raw socket adapter
-  protocols/
-    shared.ts               ProviderShared toolkit used inside protocol impls
-    openai-chat.ts          protocol + route (compose OpenAIChat.protocol)
-    open-responses.ts         provider-neutral Responses protocol baseline
-    open-responses-channel.ts provider-neutral Responses WebSocket transport factory
-    openai-responses.ts       OpenAI tools/events and channel policy composed over OpenResponses
-    anthropic-messages.ts
-    gemini.ts
-    bedrock-converse.ts
-    bedrock-event-stream.ts framing for AWS event-stream binary frames
-    openai-compatible-chat.ts route that reuses OpenAIChat.protocol, no canonical URL
-    openai-compatible-responses.ts deployment adapter that reuses OpenResponses.protocol, no canonical URL
-    utils/                  per-protocol helpers (auth, cache, media, tool-stream, ...)
-  providers/
-    openai-compatible.ts    generic Chat helper + family model helpers
-    openai-compatible-responses.ts generic Responses helper
-    openai-compatible-profile.ts family defaults (deepseek, togetherai, ...)
-    azure.ts / amazon-bedrock.ts / cloudflare.ts / github-copilot.ts / google.ts / xai.ts / openai.ts / anthropic.ts / openrouter.ts
-  tool.ts                   typed tool() helper
-  tool-runtime.ts           narrow one-call typed tool dispatcher
-```
 
 The dependency arrow points down: `providers/*.ts` files import protocol routes and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata. `OpenAIResponses` composes the provider-neutral `OpenResponses` protocol; the baseline never imports the OpenAI extension.
 
@@ -193,7 +156,7 @@ If you find yourself copying a 3-to-5-line snippet between two protocols, lift i
 
 `LLMRequest.system` is the initial privileged prompt that applies ahead of the conversation. `Message.system(...)` is a separate, provider-neutral chronological operator update inside `LLMRequest.messages`; it applies only from its position in history onward and accepts text content only.
 
-Native chronological system messages are route/model-specific. Anthropic Messages lowers them natively for Claude Opus 4.8 (`claude-opus-4-8`). Other routes and models intentionally lower the update in place into ordinary user-compatible text using this stable escaped representation:
+Native chronological system messages are route/model-specific. Open Responses lowers them to standard `developer` messages, while Anthropic Messages lowers them to native system messages for Claude Opus 4.8 (`claude-opus-4-8`). Other routes and models intentionally lower the update in place into ordinary user-compatible text using this stable escaped representation:
 
 ```text
 <system-update>
@@ -202,6 +165,10 @@ Native chronological system messages are route/model-specific. Anthropic Message
 ```
 
 The wrapped-user fallback preserves ordering while visibly lowering authority. Never silently pass a raw chronological `role: "system"` through a route that might reject it. Do not insert raw retrieved documents, tool output, or web content into privileged chronological system updates; keep untrusted content in ordinary user/tool channels.
+
+### Effort Updates
+
+`Message.effort({ effort, previous })` is a chronological "reasoning effort changed here" marker (`undefined` means the model default). Changing a top-level effort invalidates the whole provider prompt cache, so protocols with a native per-message update (`Protocol.supportsEffortUpdates`) keep the top-level effort at the first marker's `previous` and lower each marker in place: Anthropic Messages emits an empty `role: "system"` message with `output_config.effort` plus the `mid-conversation-output-config-2026-07-01` beta, and OpenAI Responses emits `configuration_update` items. `applyEffortUpdates` runs in `prepareRequest` and strips the markers for every other route, so a protocol without support keeps today's plain top-level behaviour. When the last marker disagrees with the effort the request asks for (reverted or forked history), `resolveEffortUpdates` strips the markers and falls back to a plain top-level change.
 
 ### Tools
 
@@ -221,19 +188,17 @@ Routes lower these into provider-native assistant tool-call messages and tool-re
 
 ### Tool dispatch
 
-`LLM.stream(request)` and `LLM.generate(request)` each run exactly one provider turn. Add tool schemas to `request.tools` with `Tool.toDefinitions(tools)`. When a caller wants the package's typed one-call execution behavior, pass each canonical local `tool-call` event to `ToolRuntime.dispatch(tools, call)`.
+`LLM.stream(request)` and `LLM.generate(request)` each run exactly one model call. Add tool schemas to `request.tools` with `Tool.toDefinitions(tools)`. When a caller wants the package's typed one-call execution behavior, pass each canonical local `tool-call` event to `ToolRuntime.dispatch(tools, call)`.
 
 ```ts
-const get_weather = tool({
+const get_weather = Tool.make({
   description: "Get current weather for a city",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
-  execute: ({ city }) =>
+  execute: (input) =>
     Effect.gen(function* () {
-      // city: string  — typed from parameters Schema
-      const data = yield* WeatherApi.fetch(city)
+      const data = yield* WeatherApi.fetch(input.city)
       return { temperature: data.temp, condition: data.cond }
-      // return type checked against success Schema
     }),
 })
 
@@ -263,7 +228,7 @@ Errors must be expressed as `ToolFailure`. The runtime catches it and emits a `t
 - Input failed the `parameters` Schema.
 - The handler returned a `ToolFailure`.
 
-Provider-defined / hosted tools (Anthropic `web_search` / `code_execution` / `web_fetch`, OpenAI Responses `web_search_call` / `file_search_call` / `code_interpreter_call` / `mcp_call` / `local_shell_call` / `image_generation_call` / `computer_use_call`) pass through the runtime untouched:
+Provider-defined / hosted tools (Anthropic `web_search` / `code_execution` / `web_fetch`, OpenAI Responses `web_search_call` / `file_search_call` / `code_interpreter_call` / `mcp_call` / `image_generation_call` / `computer_use_call`) pass through the runtime untouched:
 
 - Routes surface the model's call as a `tool-call` event with `providerExecuted: true`, and the provider's result as a matching `tool-result` event with `providerExecuted: true`.
 - Callers detect `providerExecuted` on `tool-call` and **skip local dispatch** — no handler is invoked and no `tool-error` is raised for "unknown tool". The provider already executed it.

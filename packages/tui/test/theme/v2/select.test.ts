@@ -7,7 +7,7 @@ import {
   type HueDefinition,
   type ThemeDefinition,
   type ThemeDocument,
-} from "@opencode-ai/theme/tui"
+} from "@opencode/theme/tui"
 
 const hue = {} as HueDefinition
 const light = { hue, categorical: ["blue"], text: { default: "#111111", subdued: "#222222" } } satisfies ThemeDefinition

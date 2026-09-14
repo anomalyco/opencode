@@ -1,9 +1,9 @@
-import { OpenCode, type MigrationV1StatusOutput } from "@opencode-ai/client/promise"
-import { useLanguage } from "@opencode-ai/app"
-import { LoaderV2 } from "@opencode-ai/ui/v2/loader-v2"
-import { showToastV2, toasterV2, ToastV2 } from "@opencode-ai/ui/v2/toast-v2"
+import { OpenCode, type MigrationV1StatusOutput } from "@opencode/client/promise"
+import { useLanguage } from "@opencode/app/desktop"
+import { Loader } from "@opencode/ui/loader"
+import { showToast, toaster, Toast } from "@opencode/ui/toast"
 import { createRoot, createSignal, onCleanup, onMount } from "solid-js"
-import type { ServerReadyData } from "../preload/types"
+import type { ServerReadyData } from "../shared/ipc-contract"
 
 type Progress = Extract<MigrationV1StatusOutput, { status: "running" }>["progress"]
 
@@ -15,7 +15,7 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
   let disposeToast: (() => void) | undefined
 
   const hide = () => {
-    if (toastID !== undefined) toasterV2.dismiss(toastID)
+    if (toastID !== undefined) toaster.dismiss(toastID)
     toastID = undefined
     disposeToast?.()
     disposeToast = undefined
@@ -23,22 +23,22 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
 
   const show = () => {
     if (toastID !== undefined) return
-    toastID = toasterV2.show(
+    toastID = toaster.show(
       ({ toastId }) =>
         createRoot((dispose) => {
           disposeToast?.()
           disposeToast = dispose
           return (
-            <ToastV2 toastId={toastId}>
+            <Toast toastId={toastId}>
               <div data-slot="toast-v2-header" class="col-span-full">
-                <ToastV2.Icon>
-                  <LoaderV2 />
-                </ToastV2.Icon>
-                <ToastV2.Content>
-                  <ToastV2.Title dir="auto">{format(progress())}</ToastV2.Title>
-                </ToastV2.Content>
+                <Toast.Icon>
+                  <Loader />
+                </Toast.Icon>
+                <Toast.Content>
+                  <Toast.Title dir="auto">{format(progress())}</Toast.Title>
+                </Toast.Content>
               </div>
-            </ToastV2>
+            </Toast>
           )
         }),
       { persistent: true },
@@ -49,12 +49,8 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
     await wait(1_000, abort.signal)
     if (abort.signal.aborted) return
 
-    const client = OpenCode.make({
-      baseUrl: props.server.url,
-      headers: props.server.password
-        ? { Authorization: `Basic ${btoa(`${props.server.username ?? "opencode"}:${props.server.password}`)}` }
-        : undefined,
-    })
+    // The main process credentials sidecar requests; see `wireRendererHeaders`.
+    const client = OpenCode.make({ baseUrl: props.server.url })
 
     void (async () => {
       while (true) {
@@ -69,7 +65,7 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
     })().catch((error) => {
       if (abort.signal.aborted) return
       hide()
-      showToastV2({
+      showToast({
         variant: "error",
         title: language.t("toast.migration.failed.title"),
         description: error instanceof Error ? error.message : String(error),

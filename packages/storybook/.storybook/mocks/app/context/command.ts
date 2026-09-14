@@ -6,6 +6,26 @@ const keybinds: Record<string, string> = {
   "agent.cycle": "mod+.",
   "model.choose": "mod+m",
   "model.variant.cycle": "mod+shift+m",
+  "session.background": "ctrl+b",
+}
+
+export const DEFAULT_PALETTE_KEYBIND = "mod+k,mod+shift+p"
+
+export function parseKeybind(config: string) {
+  if (!config || config === "none") return []
+  return config.split(",").map((combo) => {
+    const parts = combo.trim().toLowerCase().split("+")
+    return {
+      key:
+        parts.find(
+          (part) => !["ctrl", "control", "meta", "cmd", "command", "mod", "alt", "option", "shift"].includes(part),
+        ) ?? "",
+      ctrl: parts.includes("ctrl") || parts.includes("control") || parts.includes("mod"),
+      meta: parts.includes("meta") || parts.includes("cmd") || parts.includes("command"),
+      shift: parts.includes("shift"),
+      alt: parts.includes("alt") || parts.includes("option"),
+    }
+  })
 }
 
 export function formatKeybind(config: string) {

@@ -13,7 +13,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { isShallowEqual } from "remeda"
-import type { SlotMap, SlotPath } from "@opencode-ai/plugin/tui/context"
+import type { SlotMap, SlotPath } from "@opencode/plugin/tui/context"
 import type { SlotRender } from "./api"
 import { contains, emptySlotted, type Claim } from "./structure"
 import { useRoute } from "../context/route"

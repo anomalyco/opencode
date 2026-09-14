@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "kimi-k3",
+    "tags": ["prefix:moonshot-responses", "provider:moonshot", "protocol:responses", "tool", "tool-choice", "error"],
+    "name": "moonshot-responses/k3-rejects-unsupported-tool-choice-required",
+    "recordedAt": "2026-09-07T20:38:12.717Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.moonshot.ai/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"kimi-k3\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Use get_weather to look up the current weather in Paris.\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get the current weather in a city\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"enum\":[\"Paris\"]}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}],\"tool_choice\":\"required\",\"reasoning\":{\"effort\":\"low\"},\"max_output_tokens\":4096,\"stream\":true}"
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"error\":{\"message\":\"invalid_request_error: responses: unsupported tool_choice value: \\\"required\\\"\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request_error\"}}\n"
+      }
+    }
+  ]
+}

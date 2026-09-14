@@ -1,7 +1,7 @@
 export * as ConfigV1 from "./config.js"
 
 import { Schema } from "effect"
-import { ConfigReference } from "@opencode-ai/schema/config/reference"
+import { ConfigReference } from "@opencode/schema/config/reference"
 import { NonNegativeInt, PositiveInt, type DeepMutable } from "../../schema.js"
 import { ConfigAgentV1 } from "./agent.js"
 import { ConfigAttachmentV1 } from "./attachment.js"

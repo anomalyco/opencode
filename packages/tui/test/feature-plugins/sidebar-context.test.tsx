@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
-import type { Context } from "@opencode-ai/plugin/tui/context"
+import type { Context } from "@opencode/plugin/tui/context"
 import { SidebarContext } from "../../src/feature-plugins/sidebar/context"
 
 function context(options?: { cost?: number; tokens?: number }) {

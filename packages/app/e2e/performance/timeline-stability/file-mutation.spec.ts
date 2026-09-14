@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { createTwoFilesPatch } from "diff"
 import {
   defineVisualRegions,
   reportVisualStability,
@@ -20,13 +21,13 @@ import {
 test("adds patch files incrementally without resetting outer expansion", async ({ page }, testInfo) => {
   const patchID = "prt_incremental_01_patch"
   const followingID = "prt_incremental_02_following"
-  const first = patchFile("src/a.ts", "update")
+  const first = patchFile("src/a.ts", "modified")
   const timeline = await setupTimeline(page, {
     messages: [
       userMessage(),
       assistantMessage(
         [
-          toolPart(patchID, "apply_patch", "running", { files: [first.filePath] }, { metadata: { files: [first] } }),
+          toolPart(patchID, "patch", "running", { patchText: "Update files" }, { metadata: { files: [first] } }),
           textPart(followingID, "Following incremental patch"),
         ],
         { completed: false },
@@ -55,15 +56,15 @@ test("adds patch files incrementally without resetting outer expansion", async (
     },
   })
   await startVisualProbe(page, regions)
-  const second = patchFile("src/b.ts", "add")
-  const third = patchFile("src/old.ts", "delete")
+  const second = patchFile("src/b.ts", "added")
+  const third = patchFile("src/old.ts", "deleted")
   await timeline.send(
     partUpdated(
       toolPart(
         patchID,
-        "apply_patch",
+        "patch",
         "running",
-        { files: [first.filePath, second.filePath] },
+        { patchText: "Update files" },
         { metadata: { files: [first, second] } },
       ),
     ),
@@ -73,9 +74,9 @@ test("adds patch files incrementally without resetting outer expansion", async (
     partUpdated(
       toolPart(
         patchID,
-        "apply_patch",
+        "patch",
         "completed",
-        { files: [first.filePath, second.filePath, third.filePath] },
+        { patchText: "Update files" },
         { metadata: { files: [first, second, third] } },
       ),
     ),
@@ -106,15 +107,15 @@ test("adds patch files incrementally without resetting outer expansion", async (
   await expect(page.locator('[data-scope="apply-patch"] [data-type="delete"]')).toBeVisible()
 })
 
-function patchFile(filePath: string, type: "add" | "update" | "delete") {
+function patchFile(file: string, status: "added" | "modified" | "deleted") {
+  const before = status === "added" ? "" : source(false)
+  const after = status === "deleted" ? "" : source(true)
   return {
-    filePath,
-    relativePath: filePath,
-    type,
-    additions: type === "delete" ? 0 : 4,
-    deletions: type === "add" ? 0 : 3,
-    before: type === "add" ? undefined : source(false),
-    after: type === "delete" ? undefined : source(true),
+    file,
+    status,
+    patch: createTwoFilesPatch(`a/${file}`, `b/${file}`, before, after),
+    additions: status === "deleted" ? 0 : 4,
+    deletions: status === "added" ? 0 : 3,
   }
 }
 

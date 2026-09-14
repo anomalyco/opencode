@@ -21,9 +21,15 @@ export const textStart = (state: State, events: LLMEvent[], id: string, provider
   return { ...stepped, text: new Set([...stepped.text, id]) }
 }
 
-export const textDelta = (state: State, events: LLMEvent[], id: string, text: string): State => {
+export const textDelta = (
+  state: State,
+  events: LLMEvent[],
+  id: string,
+  text: string,
+  providerMetadata?: ProviderMetadata,
+): State => {
   const started = textStart(state, events, id)
-  events.push(LLMEvent.textDelta({ id, text }))
+  events.push(LLMEvent.textDelta({ id, text, providerMetadata }))
   return started
 }
 
@@ -56,22 +62,31 @@ export const reasoningEnd = (
   events: LLMEvent[],
   id: string,
   providerMetadata?: ProviderMetadata,
+  /** Authoritative complete value; replaces accumulated deltas when present. */
+  text?: string,
 ): State => {
   if (!state.reasoning.has(id)) return state
   const stepped = stepStart(state, events)
-  events.push(LLMEvent.reasoningEnd({ id, providerMetadata }))
+  events.push(LLMEvent.reasoningEnd({ id, text, providerMetadata }))
   const reasoning = new Set(stepped.reasoning)
   reasoning.delete(id)
   return { ...stepped, reasoning }
 }
 
-export const textEnd = (state: State, events: LLMEvent[], id: string, providerMetadata?: ProviderMetadata): State => {
+export const textEnd = (
+  state: State,
+  events: LLMEvent[],
+  id: string,
+  providerMetadata?: ProviderMetadata,
+  /** Authoritative complete value; replaces accumulated deltas when present. */
+  text?: string,
+): State => {
   if (!state.text.has(id)) return state
   const stepped = stepStart(state, events)
-  events.push(LLMEvent.textEnd({ id, providerMetadata }))
-  const text = new Set(stepped.text)
-  text.delete(id)
-  return { ...stepped, text }
+  events.push(LLMEvent.textEnd({ id, text, providerMetadata }))
+  const open = new Set(stepped.text)
+  open.delete(id)
+  return { ...stepped, text: open }
 }
 
 const closeOpenBlocks = (state: State, events: LLMEvent[]): State => {

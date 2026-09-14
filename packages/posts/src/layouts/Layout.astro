@@ -1,0 +1,32 @@
+---
+import "@fontsource/commit-mono/400.css"
+import "@fontsource/commit-mono/500.css"
+import "../styles/global.css"
+
+interface Props {
+  title?: string
+  description?: string
+}
+
+const title = Astro.props.title ? `${Astro.props.title} | OpenCode Posts` : "OpenCode Posts"
+const description = Astro.props.description ?? "Notes from the OpenCode team."
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#131010" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <main>
+      <a class="site-logo" href="https://opencode.ai/" aria-label="OpenCode home">
+        <img src={`${import.meta.env.BASE_URL}/logo-dark.svg`} alt="OpenCode" />
+      </a>
+      <slot />
+    </main>
+  </body>
+</html>

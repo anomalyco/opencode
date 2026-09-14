@@ -14,7 +14,7 @@
 import os from "os"
 import path from "path"
 import stripAnsi from "strip-ansi"
-import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"
+import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { LANGUAGE_EXTENSIONS } from "../util/filetype"
 import { Locale } from "../util/locale"
 import {
@@ -26,6 +26,7 @@ import {
   webSearchProviderLabel,
 } from "../util/tool-display"
 import { formatPath } from "../util/path-format"
+import { isRecord } from "../util/record"
 import type { RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
 
 export { canonicalToolName } from "../util/tool-display"
@@ -138,11 +139,7 @@ type ToolRegistry = Record<ToolName, ToolRule>
 type AnyToolRule = ToolRule
 
 function dict(v: unknown): ToolDict {
-  if (!v || typeof v !== "object" || Array.isArray(v)) {
-    return {}
-  }
-
-  return { ...v }
+  return isRecord(v) ? { ...v } : {}
 }
 
 function props(frame: ToolFrame): ToolProps {
@@ -751,7 +748,7 @@ function scrollPatchFinal(p: ToolProps): string {
   const shown = files.filter((file) => showModified || file.status !== "modified")
   const rows = shown.slice(0, 6).map((file) => patchLine(file, p.frame.directory))
   if (shown.length > 6) {
-    rows.push(`... and ${shown.length - 6} more`)
+    rows.push(`… and ${shown.length - 6} more`)
   }
 
   if (rows.length > 0) {
@@ -822,7 +819,7 @@ function scrollQuestionFinal(p: ToolProps): string {
   }
 
   if (q.length > 4) {
-    rows.push(`... and ${q.length - 4} more`)
+    rows.push(`… and ${q.length - 4} more`)
   }
 
   return rows.join("\n")
@@ -1253,7 +1250,7 @@ function structuredFallback(value: ToolDict): RunEntryBody | undefined {
   if (Object.keys(value).length === 0) return
   const content = JSON.stringify(value, null, 2)
   if (!content) return
-  const suffix = "\n... [truncated]"
+  const suffix = "\n… [truncated]"
   return {
     type: "code",
     content:

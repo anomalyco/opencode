@@ -107,6 +107,29 @@ test("dialog prompt submit wins when return is also input newline", async () => 
   }
 })
 
+test("alt return inserts a newline with default keybinds", async () => {
+  await using tmp = await tmpdir()
+  const confirmed: string[] = []
+  const prompt = await mountPrompt({
+    root: tmp.path,
+    keybinds: {},
+    onConfirm: (value) => confirmed.push(value),
+  })
+
+  try {
+    await wait(() => prompt.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    const textarea = prompt.app.renderer.currentFocusedEditor
+    if (!(textarea instanceof TextareaRenderable)) throw new Error("expected focused dialog textarea")
+
+    prompt.app.mockInput.pressEnter({ meta: true })
+
+    expect(confirmed).toEqual([])
+    expect(textarea.plainText).toBe("draft\n")
+  } finally {
+    await prompt.cleanup()
+  }
+})
+
 test("dialog prompt submit can be rebound separately from input submit", async () => {
   await using tmp = await tmpdir()
   const confirmed: string[] = []

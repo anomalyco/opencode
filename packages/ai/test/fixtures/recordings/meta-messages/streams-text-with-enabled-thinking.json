@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "muse-spark-1.3",
+    "tags": ["prefix:meta-messages", "provider:meta", "protocol:meta-messages", "text", "reasoning", "enabled"],
+    "name": "meta-messages/streams-text-with-enabled-thinking",
+    "recordedAt": "2026-09-07T17:26:20.464Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.meta.ai/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"muse-spark-1.3\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is 173 multiplied by 219? Reply with only the final integer.\"}]}],\"stream\":true,\"max_tokens\":2048,\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":1024,\"display\":\"omitted\"},\"output_config\":{\"effort\":\"low\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"message\":{\"content\":[],\"id\":\"msg_6a9ef3bbb7e691b3ea26427b\",\"model\":\"muse-spark-1.3\",\"role\":\"assistant\",\"stop_reason\":null,\"stop_sequence\":null,\"type\":\"message\",\"usage\":{\"input_tokens\":0,\"output_tokens\":0}},\"type\":\"message_start\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"data\":\"Q-PaDgEpowvGua1C8z2RSICyyeSLruZ1JBUhrhLhgqf_XauiaESRHyHgIPVF0Cfxp7eLB_ESNObq7vJNDLdffE-RaN5nEauXhRxH6fJErC-4H_KELZFGF-qNnGu2DWl-gEojkwwkq1HtTtT3rOEk5isGjdribnDvR7a1zkpG3I0BxE_UyseISDSbkev5tyV7DkiH4xyv2ZmwuO3HHGgmAztEek9vm0ZTElZ8PIPvHG6P38aYGTGKrTjyOhmN3LBa_NFvtQQkUMKRB3n7L_N5KB1NbYkPzLEJ6L5dL9DJZBSsZms0O62QZ2zs2oWZ-ekQWL4oIuiRozWVpmwzjtkJl9WXtyvdL-4MACucXMSN9V7hWzC50g-DgdeFPSslsA9gy619wTNPPIxPymGWeD9LYKR3iwTRLNYzuycHakNqikhiwz9MweMod5GLTdbtypZJcV7ourz58jmK4YKsqleVPVvXM6bIoNuT2yGj23-tAYxQszGXQMHxSTnaLAHl6sUdiwTqX4wbFYfX-ogkIZsrca9mv5E2gkH1wJl19GPCxFaSDCHxh3QAW0RIExKUJly9Ydpoegmojfo0F4Hjt13zDm03fLEQ0eY8GjxIIHDt_zVRQGTW8d4tgZpTt4K9H1TTefG34EerN7jl7L-WNUe_gKorN4aSYBS6S6ma4Vb91NlUQ4cEGBKVQvumYe16p9Xj6Te-tCuiBmTOCq6iDsTH-eMlip_Bc18MD2BCGr2NdF4PB2vqHGSPIvSHDRXBjoPNtm18opAsUnOBu7-tysb8-EKFd5z7JbWgegQWNs11FdX0uFtC-U9ROwbHLJ3IHk4m2UHc2USwi7v4Xe6FtnkJ0VCZTajFUTXW33lwO3UsHuqEbxVnU_Rzuj6Ryjb08bpXpJBjIEGf2wBS3_I78cuXKOChHu-evtnjezc77joRUP8_I8pWsQbQ6bHABD95p8q6ZdQpDr9XQALbVg3ZvD5_QgF59rIxkW9a2L78oQpu0O3UT7-jxNFe38-OXuEr3VTv7RzISu1zjvBZD0k9-2q-T9BAJmsK6oPajJQWKwHBYF3w6vbsQ8tRDdh2uerhlAIWU0YL92gPCmT3mR6HxSGjAx08t-gib_YrzvWn0oTfLNk_BNfAMpG7Mj2GYNbyTkd_tjNZ2fOwVKbygsoFIUEvh2B-xyHOYuhXfxzI8-Gt55FMGDLLKcHfgmOZAUz1xVkIdm6bcuRFuQppgTzYIr66GN6tsr9KxTN2GZ2NHCwexe0hSAGfKVyLr8QBxTDRlzubBqe-osgQJrJtS7uM1MuWK_8grkZrNsn6g3ami0JboEmM_Ct3gVhkXo6lhCCcjn1gnGX-HOLczT3Xty1wYkeayUpi9x326nrSmypxzbzCRS3bOaPvSoBCszri0uTfUnVQK5kTVuRD30fGxauPhA\",\"type\":\"redacted_thinking\"},\"index\":0,\"type\":\"content_block_start\"}\n\nevent: content_block_stop\ndata: {\"index\":0,\"type\":\"content_block_stop\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"text\":\"\",\"type\":\"text\"},\"index\":1,\"type\":\"content_block_start\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\"37887\",\"type\":\"text_delta\"},\"index\":1,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":1,\"type\":\"content_block_stop\"}\n\nevent: message_delta\ndata: {\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"type\":\"message_delta\",\"usage\":{\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"input_tokens\":23,\"output_tokens\":143,\"output_tokens_details\":{\"thinking_tokens\":131}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}

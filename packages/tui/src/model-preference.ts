@@ -29,8 +29,8 @@ function variants(value: unknown) {
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, item]) => {
       if (key.length === 0 || typeof item !== "string" || item.length === 0) return []
-      const variant = normalizeModelVariant(item)
-      return variant === undefined ? [] : ([[key, variant]] as const)
+      // Preserve explicit "default" so it can override an agent's configured variant.
+      return [[key, item]] as const
     }),
   )
 }
@@ -108,17 +108,12 @@ export function createModelPreferenceRepository(filePath: string) {
       return update(() => value)
     },
     async resolveVariant(model: ModelPreferenceModel) {
-      return (await load()).variant[modelPreferenceKey(model)]
+      return normalizeModelVariant((await load()).variant[modelPreferenceKey(model)])
     },
     saveVariant(model: ModelPreferenceModel, value: string | undefined) {
       const key = modelPreferenceKey(model)
-      const next = normalizeModelVariant(value)
-      return update((current) => {
-        const variant = { ...current.variant }
-        if (next === undefined) delete variant[key]
-        if (next !== undefined) variant[key] = next
-        return { variant }
-      })
+      const next = normalizeModelVariant(value) ?? "default"
+      return update((current) => ({ variant: { ...current.variant, [key]: next } }))
     },
   }
 }

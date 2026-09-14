@@ -9,6 +9,12 @@ export type {
   Interface as LLMClientShape,
   Service as LLMClientService,
   StreamOptions,
+  CompactMethod,
+  CompactionOperations,
+  CompactionRequest,
+  CheckpointRequest,
+  EndpointCompactOptions,
+  TriggerCompactOptions,
 } from "./client.js"
 export * from "./executor.js"
 export { Auth } from "./auth.js"

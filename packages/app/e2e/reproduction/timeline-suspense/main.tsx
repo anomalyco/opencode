@@ -1,7 +1,7 @@
 import { createResource, createSignal, For, onMount, Suspense } from "solid-js"
 import { render } from "solid-js/web"
 import { createVirtualizer, observeElementOffset, observeElementRect } from "@tanstack/solid-virtual"
-import { observeElementOffsetReconnectAware } from "../../../src/pages/session/timeline/observe-element-offset"
+import { observeElementOffsetReconnectAware } from "../../../src/session/timeline/observe-element-offset"
 
 const rowCount = 2_000
 const rowHeight = 40

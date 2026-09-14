@@ -1,9 +1,10 @@
-import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Clock, Effect, Option, Schema } from "effect"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
+import { Provider } from "../../provider.js"
 
 const clientID = "b1a00492-073a-47ea-816f-4c329264a828"
 const issuer = "https://auth.x.ai/oauth2"
@@ -12,6 +13,7 @@ const scope = "openid profile email offline_access grok-cli:access api:access"
 const pollingSafetyMargin = 3000
 const browserMethodID = Integration.MethodID.make("browser")
 const deviceMethodID = Integration.MethodID.make("device")
+const providerID = Provider.ID.make("xai")
 
 const Token = Schema.Struct({
   access_token: Schema.String,
@@ -86,12 +88,20 @@ export const XAIPlugin = define({
       { discard: true },
     )
 
-    yield* ctx.integration.transform((draft) => {
-      draft.update("xai", (integration) => {
+    yield* ctx.integration.transform((editor) => {
+      editor.update("xai", (integration) => {
         integration.name = "xAI"
       })
-      draft.method.update(device(ctx.app))
-      draft.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
+      editor.method.update(device(ctx.app))
+      editor.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
+    })
+    yield* ctx.model.transform((models) => {
+      for (const model of models.list(providerID)) {
+        models.update(providerID, model.id, (draft) => {
+          draft.capabilities.responsesWebsockets = true
+          draft.websocket = true
+        })
+      }
     })
   }),
 })
@@ -133,7 +143,7 @@ function poll(device: typeof Device.Type, app: App.Info): Effect.Effect<Token, u
         if (response.ok) return yield* decode(response, Token)
         const error = yield* Effect.promise(() => response.text()).pipe(
           Effect.map((body) => Option.getOrUndefined(decodeDeviceError(body))),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         )
         if (error?.error === "authorization_pending") {
           return yield* Effect.sleep(interval + pollingSafetyMargin).pipe(Effect.andThen(loop(interval)))

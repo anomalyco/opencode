@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": ["prefix:zai-chat", "provider:zai", "protocol:zai-chat", "structured-output"],
+    "name": "zai-chat/glm-5-3-returns-a-json-object",
+    "recordedAt": "2026-09-08T01:00:04.691Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"glm-5.3\",\"messages\":[{\"role\":\"user\",\"content\":\"Return a JSON object with one key \\\"city\\\" set to the capital city of France.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"reasoning_effort\":\"low\",\"max_tokens\":4096,\"response_format\":{\"type\":\"json_object\"}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream;charset=UTF-8"
+        },
+        "body": "data: {\"id\":\"20260908090004d403d46ed31e4758\",\"created\":1788829204,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\\n\"}}]}\n\ndata: {\"id\":\"20260908090004d403d46ed31e4758\",\"created\":1788829204,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"{\\\"\"}}]}\n\ndata: {\"id\":\"20260908090004d403d46ed31e4758\",\"created\":1788829204,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"city\"}}]}\n\ndata: {\"id\":\"20260908090004d403d46ed31e4758\",\"created\":1788829204,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\\\": \\\"Paris\\\"}\\n\"}}]}\n\ndata: {\"id\":\"20260908090004d403d46ed31e4758\",\"created\":1788829204,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.3\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}],\"usage\":{\"prompt_tokens\":91,\"completion_tokens\":12,\"total_tokens\":103,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

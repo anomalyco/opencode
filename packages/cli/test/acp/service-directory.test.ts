@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { McpServer, SessionConfigOption } from "@agentclientprotocol/sdk"
-import { makeACPFixture, makeSession, secondModel } from "./service-fixture"
+import { makeACPFixture, makeSession, secondModel, testModel } from "./service-fixture"
+import { flattenSelectOptions, requireSelectOption } from "./subprocess"
 
 describe("acp service directory behavior", () => {
   test("creates sessions from a catalog shared by concurrent callers in the same cwd", async () => {
@@ -26,13 +27,17 @@ describe("acp service directory behavior", () => {
     expect(currentValue(first[0], "model")).toBe("test/test-model")
     expect(currentValue(first[0], "mode")).toBe("build")
     expect(
-      ["/api/model", "/api/model/default", "/api/agent", "/api/command", "/api/skill"].map((path) =>
+      [
+        "/api/model",
+        "/api/model/default",
+        "/api/agent",
+        "/api/command",
+      ].map((path) =>
         fixture.requests
           .filter((request) => request.path === path)
           .map((request) => request.query["location[directory]"]),
       ),
     ).toEqual([
-      ["/workspace", "/other"],
       ["/workspace", "/other"],
       ["/workspace", "/other"],
       ["/workspace", "/other"],
@@ -66,11 +71,46 @@ describe("acp service directory behavior", () => {
           : [],
       ),
     ).toEqual([
-      ["review", "verify"],
-      ["review", "verify"],
-      ["review", "verify"],
+      ["review"],
+      ["review"],
+      ["review"],
     ])
   })
+
+  test.each(["empty", "missing the default"])(
+    "retries when the model list is %s but the default is ready",
+    async (initial) => {
+      await using fixture = makeACPFixture({
+        fetch(request, context) {
+          if (
+            request.path === "/api/model" &&
+            context.requests.filter((request) => request.path === "/api/model").length === 1
+          ) {
+            return Response.json({
+              location: {
+                directory: "/workspace",
+                project: { id: "global", directory: "/workspace", canonical: "/workspace" },
+              },
+              data: initial === "empty" ? [] : [secondModel],
+            })
+          }
+          if (request.method === "POST" && request.path === "/api/session") {
+            return Response.json({ data: makeSession("ses_ready") })
+          }
+          return undefined
+        },
+      })
+
+      const session = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+      const model = requireSelectOption(session.configOptions, "model")
+      const choices = flattenSelectOptions(model).map((option) => option.value)
+
+      expect(choices).toContain("test/second-model")
+      expect(choices).toContain("test/test-model")
+      expect(model.currentValue).toBe("test/test-model")
+      expect(fixture.requests.filter((request) => request.path === "/api/model")).toHaveLength(2)
+    },
+  )
 
   test("does not cache a failed catalog load", async () => {
     let modelCalls = 0
@@ -137,7 +177,7 @@ describe("acp service directory behavior", () => {
     await fixture.service.setSessionMode({ sessionId: session.sessionId, modeId: "build" })
 
     expect(currentValue(selectedModel, "model")).toBe("test/second-model")
-    expect(currentValue(selectedModel, "effort")).toBe("low")
+    expect(currentValue(selectedModel, "effort")).toBe("default")
     expect(currentValue(selectedEffort, "effort")).toBe("medium")
     expect(currentValue(selectedMode, "mode")).toBe("plan")
     expect(
@@ -196,6 +236,7 @@ describe("acp service directory behavior", () => {
       headers: [{ name: "Authorization", value: "Bearer x" }],
     }
     let created = 0
+    const mcp = "/api/experimental/mcp/"
     await using fixture = makeACPFixture({
       fetch(request) {
         if (request.method === "POST" && request.path === "/api/session") {
@@ -205,7 +246,7 @@ describe("acp service directory behavior", () => {
         if (request.method === "GET" && request.path === "/api/session/ses_1") {
           return Response.json({ data: makeSession("ses_1") })
         }
-        if (request.method === "PUT" && request.path.startsWith("/api/mcp/")) {
+        if (request.method === "PUT" && request.path.startsWith(mcp)) {
           return new Response(null, { status: 204 })
         }
         return undefined
@@ -217,9 +258,9 @@ describe("acp service directory behavior", () => {
     await fixture.service.resumeSession({ cwd: "/workspace", sessionId: "ses_1", mcpServers: [changed] })
     await fixture.service.newSession({ cwd: "/workspace", mcpServers: [local] })
 
-    const adds = fixture.requests.filter((request) => request.method === "PUT" && request.path.startsWith("/api/mcp/"))
+    const adds = fixture.requests.filter((request) => request.method === "PUT" && request.path.startsWith(mcp))
     expect(adds).toHaveLength(4)
-    expect(adds.filter((request) => request.path === "/api/mcp/tools").map((request) => request.body)).toEqual([
+    expect(adds.filter((request) => request.path === `${mcp}tools`).map((request) => request.body)).toEqual([
       {
         config: {
           type: "local",
@@ -242,7 +283,7 @@ describe("acp service directory behavior", () => {
         },
       },
     ])
-    expect(adds.find((request) => request.path === "/api/mcp/docs")?.body).toEqual({
+    expect(adds.find((request) => request.path === `${mcp}docs`)?.body).toEqual({
       config: {
         type: "remote",
         url: "https://example.com/mcp",

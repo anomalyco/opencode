@@ -1,8 +1,8 @@
 export * as EventFeed from "./event-feed"
 
-import { Bus } from "@opencode-ai/core/bus"
-import { Event } from "@opencode-ai/schema/event"
-import { isOpenCodeEvent, type OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
+import { Bus } from "@opencode/core/bus"
+import { Event } from "@opencode/schema/event"
+import { isOpenCodeEvent, type OpenCodeEvent } from "@opencode/protocol/groups/event"
 import { Cause, Context, Effect, Layer, Queue, Schema, Scope, Stream } from "effect"
 
 export const SubscriberCapacity = 4_096

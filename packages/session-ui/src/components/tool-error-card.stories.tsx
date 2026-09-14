@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { For } from "solid-js"
 import { ToolErrorCard } from "./tool-error-card"
 
@@ -6,22 +5,33 @@ const docs = `### Overview
 Tool call failure summary styled like a tool trigger.
 
 ### API
-- Required: \`tool\` (tool id, e.g. apply_patch, bash)
+- Required: \`tool\` (tool id, e.g. patch, shell)
 - Required: \`error\` (error string)
 
 ### Behavior
 - Collapsible; click header to expand/collapse.
 `
 
-const samples = [
+const samples: { tool: string; error: string; subtitle?: string; defaultOpen?: boolean }[] = [
   {
-    tool: "apply_patch",
-    error:
-      "apply_patch verification failed: Failed to find expected lines in /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/session-turn.tsx",
+    tool: "shell",
+    subtitle: "sleep 30",
+    error: "Tool execution interrupted",
   },
   {
-    tool: "bash",
-    error: "bash Command failed: exit code 1: bun test --watch",
+    tool: "shell",
+    subtitle: "sleep 30",
+    error: "Tool execution interrupted",
+    defaultOpen: true,
+  },
+  {
+    tool: "patch",
+    error:
+      "patch verification failed: Failed to find expected lines in packages/session-ui/src/timeline/session-timeline.tsx",
+  },
+  {
+    tool: "shell",
+    error: "shell Command failed: exit code 1: bun test src/timeline",
   },
   {
     tool: "read",
@@ -51,7 +61,7 @@ const samples = [
 ]
 
 export default {
-  title: "UI/ToolErrorCard",
+  title: "OpenCode/Tools/Failure details",
   id: "components-tool-error-card",
   component: ToolErrorCard,
   tags: ["autodocs"],
@@ -63,20 +73,24 @@ export default {
     },
   },
   args: {
-    tool: "apply_patch",
+    tool: samples[0].tool,
     error: samples[0].error,
+    subtitle: samples[0].subtitle,
   },
   argTypes: {
     tool: {
       control: "select",
-      options: ["apply_patch", "bash", "read", "glob", "grep", "webfetch", "websearch", "question"],
+      options: ["patch", "shell", "read", "glob", "grep", "webfetch", "websearch", "question"],
     },
     error: {
       control: "text",
     },
+    subtitle: {
+      control: "text",
+    },
   },
-  render: (props: { tool: string; error: string }) => {
-    return <ToolErrorCard tool={props.tool} error={props.error} />
+  render: (props: { tool: string; error: string; subtitle?: string }) => {
+    return <ToolErrorCard tool={props.tool} error={props.error} subtitle={props.subtitle} />
   },
 }
 
@@ -84,7 +98,16 @@ export const All = {
   render: () => {
     return (
       <div style="display: flex; flex-direction: column; gap: 12px; max-width: 720px;">
-        <For each={samples}>{(item) => <ToolErrorCard tool={item.tool} error={item.error} />}</For>
+        <For each={samples}>
+          {(item) => (
+            <ToolErrorCard
+              tool={item.tool}
+              error={item.error}
+              subtitle={item.subtitle}
+              defaultOpen={item.defaultOpen}
+            />
+          )}
+        </For>
       </div>
     )
   },

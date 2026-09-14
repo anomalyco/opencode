@@ -1,0 +1,119 @@
+---
+import { docsHref, docsSections, getDocsSection } from "../lib/navigation"
+
+interface Props {
+  currentSlug: string
+}
+
+const currentSlug = Astro.props.currentSlug
+const currentSection = getDocsSection(currentSlug)
+const searchEnabled = import.meta.env.PROD
+---
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href={import.meta.env.BASE_URL} aria-label="OpenCode home">
+      <img src={`${import.meta.env.BASE_URL}assets/logo-dark.svg`} alt="OpenCode" />
+    </a>
+    <nav aria-label="Documentation sections">
+      {
+        docsSections.map((section) => (
+          <a href={docsHref(section.landingSlug)} aria-current={currentSection.key === section.key ? "page" : undefined}>
+            {section.title}
+          </a>
+        ))
+      }
+    </nav>
+    <div class="header-spacer"></div>
+    {
+      searchEnabled && (
+        <button class="search-trigger" type="button" data-search-open aria-label="Search documentation">
+          <span>Search</span><kbd>⌘K</kbd>
+        </button>
+      )
+    }
+    <a class="github-link" href="https://github.com/anomalyco/opencode" aria-label="OpenCode on GitHub">GitHub</a>
+  </div>
+</header>
+
+{
+  searchEnabled && (
+    <dialog
+      class="search-dialog"
+      data-search-dialog
+      data-pagefind-path={`${import.meta.env.BASE_URL}docs/pagefind/pagefind.js`}
+      data-base-url={`${import.meta.env.BASE_URL}docs/`}
+      aria-label="Search documentation"
+    >
+      <form method="dialog" class="search-bar">
+        <span aria-hidden="true">&gt;</span>
+        <input data-search-input type="search" placeholder="Search docs" autocomplete="off" />
+        <button type="submit" aria-label="Close search">Esc</button>
+      </form>
+      <div class="search-results" data-search-results>
+        <p>Start typing to search the documentation.</p>
+      </div>
+    </dialog>
+  )
+}
+
+<script is:inline>
+  let pagefind
+
+  document.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault()
+      const dialog = document.querySelector("[data-search-dialog]")
+      dialog?.showModal()
+      dialog?.querySelector("[data-search-input]")?.focus()
+    }
+  })
+
+  const setupSearch = () => {
+    const dialog = document.querySelector("[data-search-dialog]")
+    const input = document.querySelector("[data-search-input]")
+    const results = document.querySelector("[data-search-results]")
+    const trigger = document.querySelector("[data-search-open]")
+    if (trigger && !trigger.dataset.searchReady) {
+      trigger.dataset.searchReady = "true"
+      trigger.addEventListener("click", () => {
+        dialog?.showModal()
+        input?.focus()
+      })
+    }
+
+    if (input && results && !input.dataset.searchReady) input.addEventListener("input", async () => {
+      input.dataset.searchReady = "true"
+      const query = input.value.trim()
+      if (!query) {
+        results.innerHTML = "<p>Start typing to search the documentation.</p>"
+        return
+      }
+
+      const pagefindPath = dialog?.dataset.pagefindPath
+      if (!pagefindPath) return
+      const api = pagefind ?? (pagefind = await import(pagefindPath))
+      const search = await api.search(query)
+      const pages = await Promise.all(search.results.slice(0, 8).map((result) => result.data()))
+      results.replaceChildren(
+        ...pages.map((page) => {
+          const link = document.createElement("a")
+          const base = dialog.dataset.baseUrl ?? "/"
+          link.href = page.url.startsWith(base)
+            ? page.url
+            : `${dialog.dataset.baseUrl?.replace(/\/$/, "")}${page.url}`
+          const title = document.createElement("strong")
+          title.textContent = page.meta.title
+          const excerpt = document.createElement("span")
+          excerpt.innerHTML = page.excerpt
+          link.append(title, excerpt)
+          return link
+        }),
+      )
+      if (!pages.length) results.innerHTML = "<p>No results found.</p>"
+    })
+  }
+
+  setupSearch()
+  document.addEventListener("astro:page-load", setupSearch)
+</script>

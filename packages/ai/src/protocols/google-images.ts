@@ -9,15 +9,7 @@ import {
   type ImageRoute,
 } from "../image.js"
 import { Auth, type Definition as AuthDefinition } from "../route/auth.js"
-import {
-  InvalidProviderOutputReason,
-  AIError,
-  Usage,
-  mergeHttpOptions,
-  mergeJsonRecords,
-  type HttpOptions,
-  type ProviderMetadata,
-} from "../schema/index.js"
+import { AIError, Usage, mergeHttpOptions, mergeJsonRecords, type HttpOptions } from "../schema/index.js"
 import { ProviderShared } from "./shared.js"
 import { ImageInputs } from "./utils/image-input.js"
 
@@ -124,13 +116,6 @@ const nativeOptions = (options: GoogleImageOptions | undefined) => {
   )
 }
 
-const invalidOutput = (message: string, providerMetadata?: ProviderMetadata) =>
-  new AIError({
-    module: ADAPTER,
-    method: "generate",
-    reason: new InvalidProviderOutputReason({ message, route: ADAPTER, providerMetadata }),
-  })
-
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   if (!query) return url
   const next = new URL(url)
@@ -169,11 +154,9 @@ export const model = (input: ModelInput) => {
           HttpClientRequest.bodyText(text, "application/json"),
         ),
       )
-      const payload = yield* response.json.pipe(
-        Effect.mapError(() => invalidOutput("Failed to read the Google Images response")),
-      )
-      const decoded = yield* Schema.decodeUnknownEffect(GoogleImageResponse)(payload).pipe(
-        Effect.mapError(() => invalidOutput("Google Images returned an invalid response")),
+      const output = yield* ProviderShared.imageResponse(ADAPTER, "Google Images", response)
+      const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(GoogleImageResponse))(output.body).pipe(
+        Effect.mapError((cause) => output.invalid("Google Images returned an invalid response", cause)),
       )
       const candidates = decoded.candidates ?? []
       const candidateMetadata = candidates.map((candidate, candidateIndex) => ({
@@ -208,9 +191,10 @@ export const model = (input: ModelInput) => {
       )
       const images = yield* Effect.forEach(encoded, (item) =>
         Effect.fromResult(Encoding.decodeBase64(item.inlineData.data)).pipe(
-          Effect.mapError(() =>
-            invalidOutput(
+          Effect.mapError((cause) =>
+            output.invalid(
               `Google Images candidate ${item.candidateIndex} part ${item.partIndex} contains invalid base64 data`,
+              cause,
             ),
           ),
           Effect.map(
@@ -237,16 +221,10 @@ export const model = (input: ModelInput) => {
         const finishReasons = candidates.flatMap((candidate) =>
           candidate.finishReason === undefined ? [] : [candidate.finishReason],
         )
-        return yield* invalidOutput(
+        return yield* output.invalid(
           `Google Images returned no final images${
             finishReasons.length === 0 ? "" : ` (finish reasons: ${finishReasons.join(", ")})`
-          }; inspect reason.providerMetadata.google for prompt feedback and candidate details`,
-          {
-            google: {
-              promptFeedback: decoded.promptFeedback,
-              candidates: candidateMetadata,
-            },
-          },
+          }; inspect body for prompt feedback and candidate details`,
         )
       }
       const usage = decoded.usageMetadata
@@ -290,12 +268,11 @@ const googleImagePart = (image: ImageInput): Effect.Effect<Record<string, unknow
     return Effect.succeed({ inlineData: { mimeType: image.mediaType, data: Encoding.encodeBase64(image.data) } })
   if (image.type === "file-uri") return Effect.succeed({ fileData: { mimeType: image.mediaType, fileUri: image.uri } })
   if (image.type === "url")
-    return ImageInputs.decodeDataUrl(image.url, ADAPTER).pipe(
+    return ImageInputs.decodeDataUrl(image.url).pipe(
       Effect.flatMap((decoded) => {
         if (decoded === undefined)
           return Effect.fail(
             ImageInputs.invalid(
-              ADAPTER,
               "Google generateContent does not fetch public image URLs; use bytes, a data URL, or a Gemini file URI",
             ),
           )
@@ -305,7 +282,7 @@ const googleImagePart = (image: ImageInput): Effect.Effect<Record<string, unknow
       }),
     )
   return Effect.fail(
-    ImageInputs.invalid(ADAPTER, "Google generateContent requires Gemini file URIs rather than provider file IDs"),
+    ImageInputs.invalid("Google generateContent requires Gemini file URIs rather than provider file IDs"),
   )
 }
 

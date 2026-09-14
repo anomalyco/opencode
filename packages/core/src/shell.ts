@@ -1,32 +1,41 @@
 export * as Shell from "./shell.js"
 
 import path from "path"
-import { Context, Deferred, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Context, Deferred, Duration, Effect, Fiber, Latch, Layer, Schema, Schedule, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
-import { Shell } from "@opencode-ai/schema/shell"
-import { AppProcess } from "@opencode-ai/util/process"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { Config } from "./config.js"
+import { Shell } from "@opencode/schema/shell"
+import { AppProcess } from "@opencode/util/process"
+import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
+import { FileRetention } from "./file-retention.js"
 import { Location } from "./location.js"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { ShellSelect } from "./shell/select.js"
-import type { ShellCreateBefore } from "@opencode-ai/plugin/effect/shell"
+import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionSchema } from "./session/schema.js"
+import { Config } from "./config.js"
+import { ToolOutput } from "./tool-output.js"
+import { ShellResult } from "./shell/result.js"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
 }) {}
 
-// Exited processes stay observable (status, exit code, retained output) until removed explicitly.
-// Cap retention so abandoned commands do not accumulate unbounded state and output files.
+// Keep recent exited processes observable in memory, including their file-backed output.
+// The process-local cap complements the time-based sweep, which also cleans files left by restarts.
 const EXITED_LIMIT = 25
+export const RETENTION = Duration.days(7)
+export const DIRECTORY = "shell"
 
 type Info = Shell.Info
+type CreateInput = Shell.CreateInput & {
+  shell?: string
+}
 
 type Active = {
   // Immutable snapshot; lifecycle updates replace it via immer `produce`.
@@ -49,9 +58,8 @@ type Active = {
  * here; callers (e.g. `ShellTool`) own that association and store the shell ID.
  */
 export interface Interface {
-  readonly name: () => Effect.Effect<string>
   readonly create: <E = never, R = never>(
-    input: Shell.CreateInput,
+    input: CreateInput,
     before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
   ) => Effect.Effect<Shell.Info, E | AppProcess.AppProcessError, R>
   // Currently running commands only; exited shells are retained for get/output but excluded here.
@@ -60,6 +68,8 @@ export interface Interface {
   // Resolves once the command reaches a terminal status, returning its final Info. Fails with
   // NotFoundError if the command is unknown or is removed before it terminates.
   readonly wait: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
+  // A known shell's terminal state and bounded tail. Missing capture remains distinct from its exit status.
+  readonly result: (started: Shell.Info) => Effect.Effect<ShellResult.Result>
   // Replaces the running command's timeout from now; zero clears it.
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
@@ -68,67 +78,104 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Shell") {}
 
-export const layer = (options?: ShellSelect.Options) =>
+export const cleanup = Effect.fn("Shell.cleanup")(function* () {
+  const fs = yield* FSUtil.Service
+  const global = yield* Global.Service
+  const directory = path.join(global.data, DIRECTORY)
+  const projects = yield* fs.readDirectoryEntries(directory).pipe(
+    Effect.map((entries) => entries.filter((entry) => entry.type === "directory")),
+    Effect.orElseSucceed(() => []),
+  )
+  const files = yield* Effect.forEach(
+    projects,
+    (project) =>
+      fs.readDirectoryEntries(path.join(directory, project.name)).pipe(
+        Effect.map((entries) =>
+          entries.flatMap((entry) =>
+            entry.type === "file" && /^sh_[0-9a-f]{12}.*\.out$/.test(entry.name)
+              ? [path.join(directory, project.name, entry.name)]
+              : [],
+          ),
+        ),
+        Effect.orElseSucceed(() => []),
+      ),
+    { concurrency: 8 },
+  )
+  yield* FileRetention.cleanup(fs, files.flat(), RETENTION)
+})
+
+const cleanupLayer = Layer.effectDiscard(
+  cleanup().pipe(Effect.repeat(Schedule.spaced(Duration.hours(1))), Effect.forkScoped),
+)
+
+const cleanupNode = makeGlobalNode({
+  name: "shell-output-cleanup",
+  layer: cleanupLayer,
+  deps: [FSUtil.node, Global.node],
+})
+
+const layer = () =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const location = yield* Location.Service
-      const config = yield* Config.Service
       const global = yield* Global.Service
+      const shell = yield* ShellSelect.Service
       const environment = yield* Environment.Service
       const hooks = yield* PluginHooks.Service
       const environments = yield* SessionEnvironment.Service
+      const config = yield* Config.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
-      const sessions = new Map<string, Active>()
-      const exitOrder: string[] = []
+      const commands = new Map<Shell.ID, Active>()
+      const exitOrder: Shell.ID[] = []
 
-      const outputDir = path.join(global.data, "shell", location.project.id)
+      const outputDir = path.join(global.data, DIRECTORY, location.project.id)
       const { mkdir, unlink } = yield* Effect.promise(() => import("fs/promises"))
       const { createWriteStream, createReadStream } = yield* Effect.promise(() => import("fs"))
       yield* Effect.promise(() => mkdir(outputDir, { recursive: true }))
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
-          for (const session of sessions.values()) {
-            if (session.timeoutFiber) yield* Fiber.interrupt(session.timeoutFiber)
-            // Unblock waiters still pending at teardown; succeed is a no-op once already resolved.
-            yield* Deferred.fail(session.done, new NotFoundError({ id: Shell.ID.make(session.info.id) }))
+          for (const command of commands.values()) {
+            if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
+            // Teardown interrupts pending commands; it is not a terminal command failure.
+            yield* Deferred.interrupt(command.done)
           }
-          sessions.clear()
+          commands.clear()
           exitOrder.length = 0
         }),
       )
 
-      const require = Effect.fn("Shell.require")(function* (id: Shell.ID) {
-        const session = sessions.get(id)
-        if (!session) return yield* new NotFoundError({ id })
-        return session
+      const require = Effect.fnUntraced(function* (id: Shell.ID) {
+        const command = commands.get(id)
+        if (!command) return yield* new NotFoundError({ id })
+        return command
       })
 
-      const removeSession = Effect.fnUntraced(function* (id: Shell.ID) {
-        const session = sessions.get(id)
-        if (!session) return
-        sessions.delete(id)
+      const removeCommand = Effect.fnUntraced(function* (id: Shell.ID) {
+        const command = commands.get(id)
         const index = exitOrder.indexOf(id)
         if (index !== -1) exitOrder.splice(index, 1)
-        if (session.timeoutFiber) yield* Fiber.interrupt(session.timeoutFiber)
+        if (!command) return
+        commands.delete(id)
+        if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
         // Unblock any wait still pending when the command is removed before it terminated.
-        yield* Deferred.fail(session.done, new NotFoundError({ id }))
-        yield* Effect.promise(() => unlink(session.file).catch(() => {}))
+        yield* Deferred.fail(command.done, new NotFoundError({ id }))
+        yield* Effect.promise(() => unlink(command.file).catch(() => {}))
         yield* bus.publish(Shell.Event.Deleted, { id })
       })
 
       const remove = Effect.fn("Shell.remove")(function* (id: Shell.ID) {
         yield* require(id)
-        yield* removeSession(id)
+        yield* removeCommand(id)
       })
 
       const list = Effect.fn("Shell.list")(function* () {
-        return Array.from(sessions.values())
-          .filter((session) => session.info.status === "running")
-          .map((session) => session.info)
+        return Array.from(commands.values())
+          .filter((command) => command.info.status === "running")
+          .map((command) => command.info)
       })
 
       const get = Effect.fn("Shell.get")(function* (id: Shell.ID) {
@@ -140,31 +187,24 @@ export const layer = (options?: ShellSelect.Options) =>
       })
 
       const timeout = Effect.fn("Shell.timeout")(function* (id: Shell.ID, duration: number) {
-        const session = yield* require(id)
-        if (session.info.status !== "running" || !session.timeout) return session.info
-        yield* session.timeout(duration)
-        return session.info
+        const command = yield* require(id)
+        if (command.info.status !== "running" || !command.timeout) return command.info
+        yield* command.timeout(duration)
+        return command.info
       })
 
-      const resolve = () =>
-        config
-          .entries()
-          .pipe(Effect.map((entries) => ShellSelect.preferred(Config.latest(entries, "shell"), options, global.bin)))
-
-      const name = () => resolve().pipe(Effect.map(ShellSelect.name))
-
-      const output = Effect.fn("Shell.output")(function* (id: Shell.ID, input?: Shell.OutputInput) {
-        const session = yield* require(id)
+      const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
+        const command = yield* require(id)
         const cursor = input?.cursor ?? 0
         const limit = input?.limit ?? 65536
-        if (cursor >= session.size) return { output: "", cursor: session.size, size: session.size, truncated: false }
+        if (cursor >= command.size) return { output: "", cursor: command.size, size: command.size, truncated: false }
         const start = Math.max(0, cursor)
-        const length = Math.min(limit, session.size - start)
+        const length = Math.min(limit, command.size - start)
         const buffer = Buffer.alloc(length)
         const bytesRead = yield* Effect.promise(
           () =>
             new Promise<number>((resolve) => {
-              const stream = createReadStream(session.file, { start, end: start + length - 1 })
+              const stream = createReadStream(command.file, { start, end: start + length - 1 })
               let offset = 0
               stream.on("data", (chunk: string | Buffer) => {
                 const bytes = Buffer.from(chunk)
@@ -178,13 +218,35 @@ export const layer = (options?: ShellSelect.Options) =>
         return {
           output: buffer.subarray(0, bytesRead).toString("utf8"),
           cursor: start + bytesRead,
-          size: session.size,
+          size: command.size,
           truncated: false,
         }
       })
 
+      const result = Effect.fn("Shell.result")(function* (started: Shell.Info) {
+        const info = yield* wait(started.id).pipe(
+          Effect.catchTag("Shell.NotFoundError", () =>
+            Effect.succeed({ ...started, status: "killed" as const, time: { ...started.time, completed: Date.now() } }),
+          ),
+        )
+        const capture = yield* Effect.gen(function* () {
+          const limits = Config.latest(yield* config.entries(), "tool_output")
+          const maxLines = limits?.max_lines ?? ToolOutput.MAX_LINES
+          const maxBytes = limits?.max_bytes ?? ToolOutput.MAX_BYTES
+          const latest = yield* output(info.id, { cursor: Number.MAX_SAFE_INTEGER })
+          const page = yield* output(info.id, { cursor: Math.max(0, latest.size - maxBytes), limit: maxBytes })
+          const lines = page.output.split("\n")
+          if (page.output.endsWith("\n")) lines.pop()
+          const truncated = latest.size > maxBytes || lines.length > maxLines
+          const text = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
+          const notice = truncated ? `\n\n[output truncated; full output saved to: ${info.file}]` : ""
+          return { output: `${text || "(no output)"}${notice}`, truncated }
+        }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
+        return { info, capture }
+      })
+
       const create = Effect.fn("Shell.create")(function* <E = never, R = never>(
-        input: Shell.CreateInput,
+        input: CreateInput,
         before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
       ) {
         const sessionID = input.metadata?.sessionID
@@ -196,7 +258,7 @@ export const layer = (options?: ShellSelect.Options) =>
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout,
-          shell: yield* resolve(),
+          shell: input.shell ?? (yield* shell.resolve({ priority: "config" })),
           env: {
             ...(sessionEnvironment ?? process.env),
             TERM: "xterm-256color",
@@ -223,7 +285,7 @@ export const layer = (options?: ShellSelect.Options) =>
 
         // Spawn through the Environment and stream combined output to the file. The handle is scope-bound, so
         // the managing fiber keeps its scope open until the command terminates (it awaits `done` at the
-        // end). `create` returns once `ready` resolves with the registered session.
+        // end). `create` returns once `ready` resolves with the registered command.
         const ready = Deferred.makeUnsafe<Active, AppProcess.AppProcessError>()
         runFork(
           Effect.scoped(
@@ -241,7 +303,7 @@ export const layer = (options?: ShellSelect.Options) =>
                 .pipe(
                   Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })),
                 )
-              const session: Active = {
+              const command: Active = {
                 info: produce(info, (draft) => {
                   draft.pid = handle.pid
                 }),
@@ -249,15 +311,15 @@ export const layer = (options?: ShellSelect.Options) =>
                 size: 0,
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
               }
-              sessions.set(id, session)
+              commands.set(id, command)
 
               const stream = createWriteStream(file)
-              const outputDone = Deferred.makeUnsafe<void>()
+              const outputDone = Latch.makeUnsafe()
               const pump = handle.all.pipe(
                 Stream.runForEach((chunk: Uint8Array) =>
                   Effect.sync(() => {
                     stream.write(chunk)
-                    session.size += chunk.length
+                    command.size += chunk.length
                   }),
                 ),
               )
@@ -270,8 +332,8 @@ export const layer = (options?: ShellSelect.Options) =>
                         stream.end(() => resolve())
                       }),
                   )
-                  yield* Deferred.succeed(outputDone, undefined)
-                }).pipe(Effect.catch(() => Deferred.succeed(outputDone, undefined))),
+                  yield* outputDone.open
+                }),
               )
               yield* Effect.promise(
                 () =>
@@ -283,19 +345,19 @@ export const layer = (options?: ShellSelect.Options) =>
 
               const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void) =>
                 Effect.gen(function* () {
-                  if (session.info.status !== "running") return
-                  session.info = produce(session.info, (draft) => {
+                  if (command.info.status !== "running") return
+                  command.info = produce(command.info, (draft) => {
                     draft.status = status
                     if (exit !== undefined) draft.exit = exit
                     draft.time.completed = Date.now()
                   })
                   yield* beforeWait
-                  yield* Deferred.await(outputDone)
+                  yield* outputDone.await
                   // Resolve waiters with the terminal Info before any retention eviction, so an evicted
-                  // session still reports success rather than the removal NotFoundError. This runs before
+                  // command still reports success rather than the removal NotFoundError. This runs before
                   // the timeout-fiber interrupt below, which on the timeout path would otherwise cancel
                   // this very fiber (finish is invoked by the timeout fiber) before waiters are resolved.
-                  yield* Deferred.succeed(session.done, session.info)
+                  yield* Deferred.succeed(command.done, command.info)
                   yield* bus.publish(Shell.Event.Exited, {
                     id,
                     ...(exit !== undefined ? { exit } : {}),
@@ -305,29 +367,34 @@ export const layer = (options?: ShellSelect.Options) =>
                   while (exitOrder.length > EXITED_LIMIT) {
                     const oldest = exitOrder[0]
                     if (!oldest) break
-                    yield* removeSession(Shell.ID.make(oldest))
+                    yield* removeCommand(oldest)
                   }
-                  // Cancel a pending timeout once the command exits on its own. Interrupting last avoids
-                  // aborting finish when finish itself runs on the timeout fiber.
-                  if (session.timeoutFiber) yield* Fiber.interrupt(session.timeoutFiber)
+                  // Keep exited history data-only. Interrupt last because finish may run on the timeout fiber.
+                  const timeoutFiber = command.timeoutFiber
+                  command.timeout = undefined
+                  command.timeoutFiber = undefined
+                  if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
                 })
 
-              session.timeout = (duration) =>
+              command.timeout = (duration) =>
                 Effect.gen(function* () {
-                  if (session.timeoutFiber) yield* Fiber.interrupt(session.timeoutFiber)
-                  session.timeoutFiber = undefined
-                  if (duration === 0 || session.info.status !== "running") return
-                  session.timeoutFiber = runFork(
+                  if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
+                  command.timeoutFiber = undefined
+                  if (duration === 0 || command.info.status !== "running") return
+                  command.timeoutFiber = runFork(
                     Effect.sleep(Duration.millis(duration)).pipe(
                       Effect.flatMap(() =>
-                        finish("timeout", undefined, handle.kill().pipe(Effect.catch(() => Effect.void))),
+                        finish(
+                          "timeout",
+                          undefined,
+                          handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
+                        ),
                       ),
-                      Effect.catch(() => Effect.void),
                     ),
                   )
                 })
 
-              yield* session.timeout(invocation.timeout)
+              yield* command.timeout(invocation.timeout)
 
               runFork(
                 handle.exitCode.pipe(
@@ -337,36 +404,34 @@ export const layer = (options?: ShellSelect.Options) =>
               )
 
               yield* bus.publish(Shell.Event.Created, { info })
-              yield* Deferred.succeed(ready, session)
+              yield* Deferred.succeed(ready, command)
               // Hold the handle's scope open until the command terminates; closing it earlier would
               // release (kill) the process before its exit is observed.
-              yield* Deferred.await(session.done).pipe(Effect.catch(() => Effect.void))
+              yield* Deferred.await(command.done).pipe(Effect.catch(() => Effect.void))
             }),
           ).pipe(Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error))),
         )
 
-        const session = yield* Deferred.await(ready)
-        return session.info
+        const command = yield* Deferred.await(ready)
+        return command.info
       })
 
-      return Service.of({ name, create, list, get, wait, timeout, output, remove })
+      return Service.of({ create, list, get, wait, result, timeout, output, remove })
     }),
   )
 
-export function configured(options?: ShellSelect.Options) {
-  return makeLocationNode({
-    service: Service,
-    layer: layer(options),
-    deps: [
-      Bus.node,
-      Location.node,
-      Config.node,
-      Global.node,
-      Environment.node,
-      PluginHooks.node,
-      SessionEnvironment.node,
-    ],
-  })
-}
-
-export const node = configured()
+export const node = makeLocationNode({
+  service: Service,
+  layer: layer(),
+  deps: [
+    Bus.node,
+    Location.node,
+    Global.node,
+    ShellSelect.node,
+    Environment.node,
+    PluginHooks.node,
+    SessionEnvironment.node,
+    Config.node,
+    cleanupNode,
+  ],
+})

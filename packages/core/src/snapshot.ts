@@ -1,17 +1,17 @@
 export * as Snapshot from "./snapshot.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
-import { Config } from "./config.js"
 import { File } from "./file.js"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "./git.js"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { Location } from "./location.js"
 import { AbsolutePath, RelativePath } from "./schema.js"
-import { ID } from "@opencode-ai/schema/snapshot"
-import { Hash } from "@opencode-ai/util/hash"
+import { ID } from "@opencode/schema/snapshot"
+import { Hash } from "@opencode/util/hash"
+import { State } from "./state.js"
 
 export { ID }
 
@@ -36,7 +36,11 @@ export interface RestoreInput {
   readonly files: ReadonlyMap<RelativePath, ID>
 }
 
-export interface Interface {
+export type Editor = {
+  configure: (enabled: boolean) => void
+}
+
+export interface Interface extends State.Transformable<Editor> {
   /**
    * Capture the current Location-scoped filesystem state as a content-addressed
    * tree. Returns `undefined` when snapshots are disabled, unsupported, or the
@@ -68,12 +72,20 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sn
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const config = yield* Config.Service
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
     const lifetime = yield* Scope.Scope
+    const state = State.create<{ enabled: boolean }, Editor>({
+      name: "snapshot",
+      initial: () => ({ enabled: true }),
+      editor: (editor) => ({
+        configure: (enabled) => {
+          editor.enabled = enabled
+        },
+      }),
+    })
     // Cache a scope-owned fiber so caller cancellation stops waiting without poisoning shared initialization.
     const repositoryFiber = yield* Effect.cached(
       Effect.gen(function* () {
@@ -100,13 +112,10 @@ const layer = Layer.effect(
       return RelativePath.make(relative.replaceAll("\\", "/") || ".")
     })
 
-    const enabled = Effect.fnUntraced(function* () {
-      if (location.vcs?.type !== "git") return false
-      return Config.latest(yield* config.entries(), "snapshots") !== false
-    })
+    const enabled = () => location.vcs?.type === "git" && state.get().enabled
 
     const capture = Effect.fn("Snapshot.capture")(function* () {
-      if (!(yield* enabled())) return undefined
+      if (!enabled()) return undefined
       return yield* Effect.gen(function* () {
         const repo = yield* repository
         return ID.make(
@@ -122,40 +131,55 @@ const layer = Layer.effect(
       )
     })
 
-    const compare = Effect.fnUntraced(function* (operation: "files" | "diff", input: CompareInput) {
+    const comparison = Effect.fnUntraced(function* (operation: "files" | "diff", input: CompareInput) {
       const repo = yield* repository.pipe(Effect.mapError((cause) => failure(operation, cause)))
       return {
         source: repo.source,
-        input: {
-          repository: repo.snapshotRepository,
-          from: Git.TreeID.make(input.from),
-          to: Git.TreeID.make(input.to),
-        },
+        repository: repo.snapshotRepository,
+        from: Git.TreeID.make(input.from),
+        to: Git.TreeID.make(input.to),
       }
     })
 
+    // Snapshots track every scoped file; the source repository's ignore rules decide what callers see.
+    const ignored = Effect.fnUntraced(function* (
+      operation: "files" | "diff",
+      source: Git.Repository,
+      paths: readonly RelativePath[],
+    ) {
+      return yield* git.index
+        .ignored({ repository: source, paths })
+        .pipe(Effect.mapError((cause) => failure(operation, cause)))
+    })
+
     const files = Effect.fn("Snapshot.files")(function* (input: CompareInput) {
-      const comparison = yield* compare("files", input)
-      const files = yield* git.tree.files(comparison.input).pipe(Effect.mapError((cause) => failure("files", cause)))
-      const ignored = yield* git.index
-        .ignored({ repository: comparison.source, paths: files })
+      const compared = yield* comparison("files", input)
+      const changed = yield* git.tree
+        .files({ repository: compared.repository, from: compared.from, to: compared.to })
         .pipe(Effect.mapError((cause) => failure("files", cause)))
-      return files.filter((file) => !ignored.has(file))
+      const skipped = yield* ignored("files", compared.source, changed)
+      return changed.filter((file) => !skipped.has(file))
     })
 
     const diff = Effect.fn("Snapshot.diff")(function* (input: DiffInput) {
-      const comparison = yield* compare("diff", input)
-      const files = yield* git.tree.files(comparison.input).pipe(Effect.mapError((cause) => failure("diff", cause)))
-      const ignored = yield* git.index
-        .ignored({ repository: comparison.source, paths: files })
-        .pipe(Effect.mapError((cause) => failure("diff", cause)))
-      return yield* git.tree
+      if (input.paths?.length === 0) return []
+      const compared = yield* comparison("diff", input)
+      // Only an explicit selection becomes a pathspec; ignored paths are dropped from the result instead.
+      const diffs = yield* git.tree
         .diff({
-          ...comparison.input,
+          repository: compared.repository,
+          from: compared.from,
+          to: compared.to,
           context: input.context,
-          paths: (input.paths ?? files).filter((file) => !ignored.has(file)),
+          paths: input.paths,
         })
         .pipe(Effect.mapError((cause) => failure("diff", cause)))
+      const skipped = yield* ignored(
+        "diff",
+        compared.source,
+        diffs.map((file) => RelativePath.make(file.file)),
+      )
+      return diffs.filter((file) => !skipped.has(RelativePath.make(file.file)))
     })
 
     const plan = Effect.fnUntraced(function* (worktree: AbsolutePath, input: RestoreInput) {
@@ -170,27 +194,29 @@ const layer = Layer.effect(
     })
 
     const restore = Effect.fn("Snapshot.restore")(function* (input: RestoreInput) {
-      if (!(yield* enabled())) return yield* new Error({ operation: "restore", message: "Snapshots are disabled" })
+      if (!enabled()) return yield* new Error({ operation: "restore", message: "Snapshots are disabled" })
       const repo = yield* repository.pipe(Effect.mapError((cause) => failure("restore", cause)))
       yield* git.tree
         .restore({ repository: repo.snapshotRepository, files: yield* plan(repo.worktree, input) })
         .pipe(Effect.mapError((cause) => failure("restore", cause)))
     })
 
-    return Service.of({ capture, files, diff, restore })
+    return Service.of({ transform: state.transform, reload: state.reload, capture, files, diff, restore })
   }).pipe(Effect.withSpan("Snapshot.boot")),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Config.node, FSUtil.node, Git.node, Global.node, Location.node],
+  deps: [FSUtil.node, Git.node, Global.node, Location.node],
 })
 
 export const noopLayer = Layer.succeed(
   Service,
   Service.of({
-    capture: () => Effect.succeed(undefined),
+    transform: () => Effect.succeed({ dispose: Effect.void }),
+    reload: () => Effect.void,
+    capture: () => Effect.undefined,
     files: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),
     restore: () => Effect.void,

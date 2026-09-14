@@ -47,7 +47,7 @@ export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<string>>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode-ai/http-recorder/Cassette") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/http-recorder/Cassette") {}
 
 const cassettePath = (directory: string, name: string) => {
   if (!name || path.isAbsolute(name) || path.win32.isAbsolute(name) || name.split(/[\\/]/).includes(".."))
@@ -98,12 +98,12 @@ export const fileSystem = (
       const pathFor = (name: string) => cassettePath(directory, name)
       const walk = (current: string): Effect.Effect<ReadonlyArray<string>> =>
         Effect.gen(function* () {
-          const entries = yield* fs.readDirectory(current).pipe(Effect.catch(() => Effect.succeed([] as string[])))
+          const entries = yield* fs.readDirectory(current).pipe(Effect.orElseSucceed(() => [] as string[]))
           const nested = yield* Effect.forEach(entries, (entry) => {
             const full = path.join(current, entry)
             return fs.stat(full).pipe(
               Effect.flatMap((stat) => (stat.type === "Directory" ? walk(full) : Effect.succeed([full]))),
-              Effect.catch(() => Effect.succeed([] as string[])),
+              Effect.orElseSucceed(() => [] as string[]),
             )
           })
           return nested.flat()
@@ -144,11 +144,7 @@ export const fileSystem = (
               recorded.set(name, { interactions, findings: interactionFindings })
             }),
           ),
-        exists: (name) =>
-          fs.access(pathFor(name)).pipe(
-            Effect.as(true),
-            Effect.catch(() => Effect.succeed(false)),
-          ),
+        exists: (name) => fs.exists(pathFor(name)).pipe(Effect.orElseSucceed(() => false)),
         list: () =>
           walk(directory).pipe(
             Effect.map((files) =>

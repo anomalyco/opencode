@@ -111,6 +111,7 @@ export const DEFAULT_THEME = {
       subdued: "$hue.neutral.600",
       action: {
         primary: { default: "$hue.neutral.200", $disabled: "$hue.neutral.500" },
+        secondary: { default: "$text.subdued", $hovered: "$text.default" },
         destructive: { default: "$hue.red.200", $disabled: "$hue.neutral.500" },
       },
       formfield: {
@@ -119,6 +120,12 @@ export const DEFAULT_THEME = {
         $pressed: "$hue.neutral.200",
         $disabled: "$hue.neutral.500",
         $selected: "$hue.interactive.700",
+      },
+      status: {
+        running: "$hue.interactive.800",
+        question: "$text.status.unread",
+        permission: "$text.status.unread",
+        unread: "$hue.accent.800",
       },
       feedback: {
         error: { default: "$hue.red.700", subdued: "$hue.red.600" },
@@ -142,6 +149,7 @@ export const DEFAULT_THEME = {
           $selected: "$hue.interactive.700",
           $disabled: "$hue.neutral.300",
         },
+        secondary: { default: "transparent" },
         destructive: {
           default: "$hue.red.600",
           $hovered: "$hue.red.700",
@@ -324,6 +332,7 @@ export const DEFAULT_THEME = {
       subdued: "$hue.neutral.400",
       action: {
         primary: { default: "$hue.neutral.200", $disabled: "$hue.neutral.500" },
+        secondary: { default: "$text.subdued", $hovered: "$text.default" },
         destructive: { default: "$hue.red.200", $disabled: "$hue.neutral.500" },
       },
       formfield: {
@@ -332,6 +341,12 @@ export const DEFAULT_THEME = {
         $pressed: "$hue.neutral.200",
         $disabled: "$hue.neutral.500",
         $selected: "$hue.interactive.500",
+      },
+      status: {
+        running: "$hue.interactive.200",
+        question: "$text.status.unread",
+        permission: "$text.status.unread",
+        unread: "$hue.accent.200",
       },
       feedback: {
         error: { default: "$hue.red.300", subdued: "$hue.red.400" },
@@ -355,6 +370,7 @@ export const DEFAULT_THEME = {
           $selected: "$hue.interactive.600",
           $disabled: "$hue.neutral.800",
         },
+        secondary: { default: "transparent" },
         destructive: {
           default: "$hue.red.600",
           $hovered: "$hue.red.700",

@@ -9,7 +9,7 @@ import {
   Provider,
   Reference,
   Skill,
-} from "@opencode-ai/plugin"
+} from "@opencode/plugin"
 
 const key = Symbol.for("opencode.plugin.v2.promise")
 ;(globalThis as typeof globalThis & { [key]?: unknown })[key] = {

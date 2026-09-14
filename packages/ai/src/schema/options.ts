@@ -1,7 +1,10 @@
 import { Schema } from "effect"
-import { JsonSchema, ModelID, ProviderID } from "./ids.js"
-import type { AnyRoute } from "../route/client.js"
+import { ModelID, ProviderID } from "./ids.js"
+import type { AnyRoute, CompactionOperations } from "../route/client.js"
 import { isRecord } from "../utils/record.js"
+
+export const JsonSchema = Schema.Record(Schema.String, Schema.Unknown)
+export type JsonSchema = Schema.Schema.Type<typeof JsonSchema>
 
 export const mergeJsonRecords = (
   ...items: ReadonlyArray<Record<string, unknown> | undefined>
@@ -33,22 +36,12 @@ const mergeStringRecords = (
   return Object.keys(result).length === 0 ? undefined : result
 }
 
-export const ProviderOptions = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))
+export const ProviderOptions = Schema.Record(Schema.String, Schema.Unknown)
 export type ProviderOptions = Schema.Schema.Type<typeof ProviderOptions>
 
 export const mergeProviderOptions = (
   ...items: ReadonlyArray<ProviderOptions | undefined>
-): ProviderOptions | undefined => {
-  const result: Record<string, Record<string, unknown>> = {}
-  for (const item of items) {
-    if (!item) continue
-    for (const [provider, options] of Object.entries(item)) {
-      const merged = mergeJsonRecords(result[provider], options)
-      if (merged) result[provider] = merged
-    }
-  }
-  return Object.keys(result).length === 0 ? undefined : result
-}
+): ProviderOptions | undefined => mergeJsonRecords(...items)
 
 export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   body: Schema.optional(JsonSchema),
@@ -121,22 +114,7 @@ export const mergeGenerationOptions = (...items: ReadonlyArray<GenerationOptions
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
-export class LanguageModelLimits extends Schema.Class<LanguageModelLimits>("LLM.LanguageModelLimits")({
-  context: Schema.optional(Schema.Number),
-  input: Schema.optional(Schema.Number),
-  output: Schema.optional(Schema.Number),
-}) {}
-
-export namespace LanguageModelLimits {
-  export type Input = LanguageModelLimits | ConstructorParameters<typeof LanguageModelLimits>[0]
-
-  /** Normalize model limit input into the canonical `LanguageModelLimits` class. */
-  export const make = (input: Input | undefined) =>
-    input instanceof LanguageModelLimits ? input : new LanguageModelLimits(input ?? {})
-}
-
 export class LanguageModelDefaults extends Schema.Class<LanguageModelDefaults>("LLM.LanguageModelDefaults")({
-  limits: Schema.optional(LanguageModelLimits),
   generation: Schema.optional(GenerationOptions),
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
@@ -146,7 +124,6 @@ export namespace LanguageModelDefaults {
   export type Input =
     | LanguageModelDefaults
     | {
-        readonly limits?: LanguageModelLimits.Input
         readonly generation?: GenerationOptions.Input
         readonly providerOptions?: ProviderOptions
         readonly http?: HttpOptions.Input
@@ -156,13 +133,19 @@ export namespace LanguageModelDefaults {
   export const make = (input: Input) => {
     if (input instanceof LanguageModelDefaults) return input
     return new LanguageModelDefaults({
-      limits: input.limits === undefined ? undefined : LanguageModelLimits.make(input.limits),
       generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
       providerOptions: input.providerOptions,
       http: input.http === undefined ? undefined : HttpOptions.make(input.http),
     })
   }
 }
+
+export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
+export type ReasoningEffort = (typeof ReasoningEfforts)[number] | (string & {})
+export const ReasoningEffort = Schema.declare<ReasoningEffort>(
+  (value): value is ReasoningEffort => typeof value === "string",
+  { title: "ReasoningEffort" },
+)
 
 export const LanguageModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot"])
 export type LanguageModelToolSchemaCompatibility = Schema.Schema.Type<typeof LanguageModelToolSchemaCompatibility>
@@ -177,8 +160,20 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
 )({
   toolSchema: Schema.optional(LanguageModelToolSchemaCompatibility),
   reasoningField: Schema.optional(Schema.String),
+  /** Require every assistant message to include its reasoning field, even when empty. */
+  requireReasoning: Schema.optional(Schema.Boolean),
   maxTokensField: Schema.optional(LanguageModelMaxTokensFieldCompatibility),
   requireFinishReason: Schema.optional(Schema.Boolean),
+  requireAssistantAfterTool: Schema.optional(Schema.Boolean),
+  supportsStore: Schema.optional(Schema.Boolean),
+  supportsUsageInStreaming: Schema.optional(Schema.Boolean),
+  supportsStrictMode: Schema.optional(Schema.Boolean),
+  zaiToolStream: Schema.optional(Schema.Boolean),
+  requireSignature: Schema.optional(Schema.Boolean),
+  /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
+  supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
+  /** Supports per-message effort updates. Overrides model-ID detection. */
+  supportsEffortUpdates: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace LanguageModelCompatibility {
@@ -189,15 +184,18 @@ export namespace LanguageModelCompatibility {
     input instanceof LanguageModelCompatibility ? input : new LanguageModelCompatibility(input)
 }
 
-export class LanguageModel<Options extends ProviderOptions = ProviderOptions> {
+export class LanguageModel<
+  Options extends ProviderOptions = ProviderOptions,
+  Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
+> {
   declare protected readonly _ProviderOptions: Options
   readonly id: ModelID
   readonly provider: ProviderID
-  readonly route: AnyRoute
+  readonly route: AnyRoute<Compact>
   readonly defaults?: LanguageModelDefaults
   readonly compatibility?: LanguageModelCompatibility
 
-  constructor(input: LanguageModel.ConstructorInput) {
+  constructor(input: LanguageModel.ConstructorInput<Compact>) {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
@@ -205,8 +203,11 @@ export class LanguageModel<Options extends ProviderOptions = ProviderOptions> {
     this.compatibility = input.compatibility
   }
 
-  static make<Options extends ProviderOptions = ProviderOptions>(input: LanguageModel.Input) {
-    return new LanguageModel<Options>({
+  static make<
+    Options extends ProviderOptions = ProviderOptions,
+    Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
+  >(input: LanguageModel.Input<Compact>) {
+    return new LanguageModel<Options, Compact>({
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
@@ -216,7 +217,9 @@ export class LanguageModel<Options extends ProviderOptions = ProviderOptions> {
     })
   }
 
-  static input<Options extends ProviderOptions>(model: LanguageModel<Options>): LanguageModel.ConstructorInput {
+  static input<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
+    model: LanguageModel<Options, Compact>,
+  ): LanguageModel.ConstructorInput<Compact> {
     return {
       id: model.id,
       provider: model.provider,
@@ -226,25 +229,41 @@ export class LanguageModel<Options extends ProviderOptions = ProviderOptions> {
     }
   }
 
+  static update<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
+    model: LanguageModel<Options>,
+    patch: Partial<LanguageModel.Input<Compact>> & { readonly route: AnyRoute<Compact> },
+  ): LanguageModel<Options, Compact>
+  static update<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
+    model: LanguageModel<Options, Compact>,
+    patch: Partial<Omit<LanguageModel.Input, "route">> & { readonly route?: undefined },
+  ): LanguageModel<Options, Compact>
+  static update<Options extends ProviderOptions>(
+    model: LanguageModel<Options>,
+    patch: Partial<LanguageModel.Input>,
+  ): LanguageModel<Options>
   static update<Options extends ProviderOptions>(model: LanguageModel<Options>, patch: Partial<LanguageModel.Input>) {
     if (Object.keys(patch).length === 0) return model
     return LanguageModel.make<Options>({
       ...LanguageModel.input(model),
       ...patch,
+      route: patch.route ?? model.route,
     })
   }
 }
 
 export namespace LanguageModel {
-  export type ConstructorInput = {
+  export type ConstructorInput<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = {
     readonly id: ModelID
     readonly provider: ProviderID
-    readonly route: AnyRoute
+    readonly route: AnyRoute<Compact>
     readonly defaults?: LanguageModelDefaults
     readonly compatibility?: LanguageModelCompatibility
   }
 
-  export type Input = Omit<ConstructorInput, "id" | "provider" | "defaults" | "compatibility"> & {
+  export type Input<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = Omit<
+    ConstructorInput<Compact>,
+    "id" | "provider" | "defaults" | "compatibility"
+  > & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
     readonly defaults?: LanguageModelDefaults.Input
@@ -269,10 +288,9 @@ export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
 // Auto-placement policy for prompt caching. The protocol-neutral lowering step
 // reads this and injects `CacheHint`s at the configured boundaries; the
 // per-protocol body builders then translate those hints into wire markers as
-// usual. `"auto"` is the recommended default for agent loops — it places
+// usual. `"auto"` is the default for agent loops — it places
 // breakpoints at the last tool definition, the first and last distinct system
-// parts, and the conversation tail. The rolling message breakpoint keeps a
-// prior cache entry within Anthropic/Bedrock's 20-block lookback during long
+// parts, and the conversation tail so recent prefixes remain reusable during
 // tool loops.
 //
 // Pass `"none"` to opt out entirely (the legacy behavior). Pass the granular
@@ -284,7 +302,7 @@ export const CachePolicyObject = Schema.Struct({
     Schema.Union([
       Schema.Literal("latest-user-message"),
       Schema.Literal("latest-assistant"),
-      Schema.Struct({ tail: Schema.Number }),
+      Schema.Struct({ tail: Schema.Natural }),
     ]),
   ),
   ttlSeconds: Schema.optional(Schema.Number),

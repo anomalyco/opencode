@@ -9,7 +9,6 @@ import { Skill } from "../../skill.js"
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
-  slash: Schema.Boolean.pipe(Schema.optional),
   metadata: Schema.Unknown.pipe(Schema.optional),
 })
 const decodeFrontmatter = SchemaParser.decodeUnknownResult(Frontmatter)
@@ -23,7 +22,7 @@ const metadataBoolean = (metadata: unknown, key: string) => {
   if (metadata === undefined || metadata === null || typeof metadata !== "object" || Array.isArray(metadata)) {
     return undefined
   }
-  const value = Reflect.get(metadata, key)
+  const value = (metadata as Record<string, unknown>)[key]
   if (typeof value === "boolean") return value
   if (typeof value !== "string") return undefined
   const normalized = value.trim().toLowerCase()
@@ -39,8 +38,9 @@ export function parse(directory: string, filepath: string, content: string): Par
   if (Result.isFailure(decoded)) return { _tag: "Skipped", reason: "frontmatter", issue: decoded.failure }
   const frontmatter = decoded.success
   const id =
-    path.dirname(filepath) === directory ? path.basename(filepath, ".md") : path.basename(path.dirname(filepath))
-  const slash = metadataBoolean(frontmatter.metadata, "opencode/slash") ?? frontmatter.slash
+    path.dirname(filepath) === directory && path.basename(filepath) !== "SKILL.md"
+      ? path.basename(filepath, ".md")
+      : path.basename(path.dirname(filepath))
   const autoinvoke = metadataBoolean(frontmatter.metadata, "opencode/autoinvoke")
   return {
     _tag: "Parsed",
@@ -48,9 +48,8 @@ export function parse(directory: string, filepath: string, content: string): Par
       id: Skill.ID.make(id),
       name: Skill.Name.make(frontmatter.name ?? id),
       ...(frontmatter.description === undefined ? {} : { description: frontmatter.description }),
-      ...(slash === undefined ? {} : { slash }),
       ...(autoinvoke === undefined ? {} : { autoinvoke }),
-      location: AbsolutePath.make(filepath),
+      path: AbsolutePath.make(filepath),
       content: markdown.content,
     },
   }

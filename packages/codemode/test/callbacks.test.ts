@@ -63,8 +63,10 @@ describe("built-in method references as callbacks", () => {
     expect(logs[1]).toContain("b")
   })
 
-  test("intrinsic method references keep their receiver, unlike detached JS methods", async () => {
-    expect(await value(`return ["a", "z"].filter("abc".includes)`)).toEqual(["a"])
+  test("detached method references lose their receiver, like JS", async () => {
+    expect((await error(`return ["a", "z"].filter("abc".includes)`)).message).toContain(
+      "String.prototype.includes called on null or undefined",
+    )
   })
 
   test("promise reactions accept built-in references", async () => {
@@ -124,9 +126,9 @@ describe("constructors callable without new, like JS", () => {
     expect(await value(`return [7].map(Array)`)).toEqual([[7, 0, [7]]])
   })
 
-  test("array length boundaries match JS", async () => {
-    expect(await value(`return Array(4294967295).length`)).toBe(4294967295)
-    const diagnostic = await error(`return Array(4294967296)`)
+  test("array length is bounded below the JS maximum, so one call cannot materialize an unbounded array", async () => {
+    expect(await value(`return Array(10000000).length`)).toBe(10_000_000)
+    const diagnostic = await error(`return Array(10000001)`)
     expect(diagnostic.message).toContain("Invalid array length")
     expect((await error(`try { Array(-1) } catch (e) { throw Error(e.name) }`)).message).toContain("RangeError")
   })

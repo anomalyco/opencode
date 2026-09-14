@@ -19,7 +19,15 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "InstructionEntry.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
-export const MaxValueBytes = 8 * 1024
+export const Snapshot = Schema.Array(
+  Schema.Struct({
+    ...Info.fields,
+    removed: Schema.Boolean,
+  }),
+).annotate({ identifier: "InstructionEntry.Snapshot" })
+export type Snapshot = typeof Snapshot.Type
+
+export const MaxValueBytes = 256 * 1024
 
 export class ValueTooLargeError extends Schema.TaggedError<ValueTooLargeError>()(
   "InstructionEntryValueTooLargeError",

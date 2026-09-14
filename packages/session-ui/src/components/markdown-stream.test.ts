@@ -8,6 +8,16 @@ describe("markdown stream", () => {
     expect(stream("say `code", true)).toEqual([{ raw: "say `code", src: "say `code`", mode: "live" }])
   })
 
+  test.each([
+    ["*foo*bar", "*foo*bar"],
+    ["foo*bar", "foo*bar"],
+    ["*foo*bar*baz", "*foo*bar*baz*"],
+    ["\\(P(x_{t+1})\\)", "\\(P(x_{t+1})\\)"],
+    ["\\(w^{*}\\) and *next", "\\(w^{*}\\) and *next*"],
+  ])("preserves math and intraword emphasis in %s", (raw, src) => {
+    expect(stream(raw, true)).toEqual([{ raw, src, mode: "live" }])
+  })
+
   test("keeps incomplete links non-clickable until they finish", () => {
     expect(stream("see [docs](https://example.com/gu", true)).toEqual([
       { raw: "see [docs](https://example.com/gu", src: "see docs", mode: "live" },

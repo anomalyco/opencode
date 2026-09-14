@@ -1,13 +1,13 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { ModelsDev } from "@opencode-ai/schema/models-dev"
-import { Money } from "@opencode-ai/schema/money"
+import { ModelsDev } from "@opencode/schema/models-dev"
+import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
-import { Hash } from "@opencode-ai/util/hash"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Hash } from "@opencode/util/hash"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "./bus.js"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
 import { KV } from "./kv.js"
@@ -519,7 +519,7 @@ function modelInfo(
   }
 }
 
-export { Event } from "@opencode-ai/schema/models-dev"
+export { Event } from "@opencode/schema/models-dev"
 
 export interface Interface {
   readonly get: () => Effect.Effect<readonly Snapshot[]>
@@ -541,6 +541,9 @@ const decodeCatalog = (text: string) =>
   Schema.decodeUnknownEffect(CatalogJson)(text).pipe(Effect.map((catalog) => catalog as Record<string, SourceProvider>))
 const Cache = Schema.Struct({
   updatedAt: Schema.Number,
+  // Digest of the raw body, persisted so refresh() can skip republishing a
+  // byte-identical catalog. Optional for entries written before it existed.
+  digest: Schema.optional(Schema.String),
   body: CatalogJson,
 })
 const defaultSource = "https://models.opencode.ai"
@@ -566,6 +569,10 @@ const bundledSnapshot = Effect.suspend(() =>
 function cacheKey(source: string) {
   if (source === defaultSource) return "models-dev:catalog"
   return `models-dev:catalog:${Hash.fast(source)}`
+}
+
+export function bodyDigest(text: string) {
+  return Hash.sha256(text)
 }
 
 export const layer = (options?: Options) =>
@@ -600,14 +607,9 @@ export const layer = (options?: Options) =>
           return {
             catalog: cached.value.body as Record<string, SourceProvider>,
             updatedAt: cached.value.updatedAt,
+            digest: cached.value.digest,
           }
         if (value !== undefined) yield* kv.remove(key)
-      })
-
-      const fresh = Effect.fnUntraced(function* () {
-        const cached = yield* loadFromCache()
-        if (!cached) return false
-        return Date.now() - cached.updatedAt < Duration.toMillis(ttl)
       })
 
       const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
@@ -622,27 +624,31 @@ export const layer = (options?: Options) =>
       const loadFromFile = options?.file
         ? fs.readJson(options.file).pipe(
             Effect.map((input) => input as Record<string, SourceProvider>),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.orElseSucceed(() => undefined),
           )
-        : Effect.succeed(undefined)
+        : Effect.undefined
 
       // The bundled snapshot is the boot-time floor for the catalog; the
       // periodic fetch below still refreshes on top.
-      const loadSnapshot = options?.snapshot === false ? Effect.succeed(undefined) : bundledSnapshot
+      const loadSnapshot = options?.snapshot === false ? Effect.undefined : bundledSnapshot
 
-      const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
-        const text = yield* fetchApi()
-        const catalog = yield* decodeCatalog(text)
-        // Best-effort: a cache-write failure must never kill catalog
-        // population. The payload has outgrown some KV backends' per-value
-        // limits (Durable Object SQLite caps values at 2 MB and api.json
-        // passed it in Aug 2026); a boot without a cache hit just refetches.
-        yield* kv.set(key, { updatedAt: Date.now(), body: text }).pipe(
+      // Best-effort: a cache-write failure must never kill catalog
+      // population. The payload has outgrown some KV backends' per-value
+      // limits (Durable Object SQLite caps values at 2 MB and api.json
+      // passed it in Aug 2026); a boot without a cache hit just refetches.
+      const writeCache = Effect.fn("ModelsDev.writeCache")(function* (text: string, digest = bodyDigest(text)) {
+        yield* kv.set(key, { updatedAt: Date.now(), digest, body: text }).pipe(
           Effect.catchCauseIf(
             (cause) => !Cause.hasInterruptsOnly(cause),
             (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
           ),
         )
+      })
+
+      const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
+        const text = yield* fetchApi()
+        const catalog = yield* decodeCatalog(text)
+        yield* writeCache(text)
         return catalog
       })
 
@@ -672,8 +678,16 @@ export const layer = (options?: Options) =>
         yield* lock
           .withPermit(
             Effect.gen(function* () {
-              if (!force && (yield* fresh())) return
-              yield* fetchAndWrite()
+              const stored = yield* loadFromCache()
+              if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
+              const text = yield* fetchApi()
+              const digest = bodyDigest(text)
+              // models.dev rarely changes between polls; skip the cache write,
+              // invalidation, and Refreshed event for a byte-identical body so
+              // downstream provider/model update listeners stay quiet.
+              if (!force && stored?.digest === digest) return
+              yield* decodeCatalog(text)
+              yield* writeCache(text, digest)
               yield* invalidate
               yield* bus.publish(ModelsDev.Event.Refreshed, {})
             }),

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { readFile, rm } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
@@ -10,7 +10,7 @@ import {
 } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
-import type { ServiceHealth, ServiceStopResponse } from "./generated/types.js"
+import { PtyHandoff } from "../pty-handoff.js"
 
 export * from "../service.js"
 
@@ -22,14 +22,11 @@ export * from "../service.js"
 
 /** Discover a healthy, compatible local service without starting one. */
 export async function discover(options: DiscoverOptions = {}) {
-  return (await discoverLocal(options))?.endpoint
-}
-
-async function discoverLocal(options: DiscoverOptions) {
   const found = (await registered(options.file)).service
   if (found?.state !== "ready") return undefined
+  if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
-  return found
+  return found.endpoint
 }
 
 /** Ensure a healthy, compatible local service is running. */
@@ -47,11 +44,11 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     announced = true
     options.onStart?.(reason, previousVersion)
   }
-  const spawnContender = () => {
+  const spawnContender = async () => {
     const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
     if (command === undefined) throw new Error("Missing service command")
     try {
-      return spawnServiceContender(command, args)
+      return spawnServiceContender(command, args, await PtyHandoff.environment(options.file ?? fallback(), options.env))
     } catch (cause) {
       throw new Error("Failed to start server", { cause })
     }
@@ -60,7 +57,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   try {
     while (true) {
       if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
-      const registration = await registered(options.file, true, timing.requestTimeout)
+      const registration = await registered(options.file, timing.requestTimeout)
       if (registration.timedOut && registration.info !== undefined) {
         timeouts = {
           info: registration.info,
@@ -68,7 +65,9 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         }
         if (timeouts.count >= 3) {
           announce("missing")
-          await evict(registration.info, options, timing)
+          console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
+          await PtyHandoff.clear(options.file ?? fallback())
+          await terminate(registration.info, options, timing)
           timeouts = undefined
           lastSpawn = Date.now() - spawnDelay
         }
@@ -77,12 +76,20 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (registration.service !== undefined) {
         spawnDelay = timing.spawnDelay
         const service = registration.service
-        const compatible = !service.legacy && matchesVersion(service.version, options)
-        if (compatible && service.state === "ready") return service.endpoint
+        const compatible = service.compatible && matchesVersion(service.version, options)
+        if (compatible && service.state === "ready") {
+          await PtyHandoff.complete(options.file ?? fallback(), service.info)
+          return service.endpoint
+        }
         if (compatible && service.state === "failed") throw new Error("Background service failed to start")
         if (!compatible) {
           announce("version-mismatch", service.version)
-          await kill(service, options, timing).catch(() => undefined)
+          if (service.state !== "ready")
+            console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
+          await stop({
+            file: options.file,
+            pty: service.state === "ready" ? "handoff" : "clear",
+          }).catch(() => undefined)
           lastSpawn = 0
         }
       } else {
@@ -97,7 +104,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
         if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
           announce("missing")
-          contenders.add(spawnContender())
+          contenders.add(await spawnContender())
           lastSpawn = Date.now()
         }
       }
@@ -110,8 +117,11 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
-  const existing = await find(options)
-  if (existing !== undefined) await kill(existing, options, defaultEnsureTiming)
+  const info = await read(options.file)
+  if (options.pty === "handoff" && info !== undefined)
+    await PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
+  else await PtyHandoff.clear(options.file ?? fallback())
+  if (info !== undefined) await terminate(info, options, defaultEnsureTiming)
 }
 
 function fallback() {
@@ -141,14 +151,10 @@ type LocalService = {
   readonly endpoint: Endpoint
   readonly version?: string
   readonly state: "ready" | "waiting" | "failed"
-  readonly legacy: boolean
+  readonly compatible: boolean
 }
 
-async function probe(info: Info, allowLegacy = false): Promise<LocalService | undefined> {
-  return (await probeResult(info, allowLegacy)).service
-}
-
-async function probeResult(info: Info, allowLegacy = false, timeout = defaultEnsureTiming.requestTimeout) {
+async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
     url: info.url,
     auth:
@@ -157,13 +163,10 @@ async function probeResult(info: Info, allowLegacy = false, timeout = defaultEns
         : { type: "basic" as const, username: "opencode", password: info.password },
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
-  const result = await fetch(new URL("/api/health", info.url), {
-    headers: headers(endpoint),
-    signal,
-  })
+  const result = await fetch(new URL("/api/status", info.url), { headers: headers(endpoint), signal })
     .then(async (response) => ({
       response,
-      body: (await response.json()) as ServiceHealth | { readonly healthy: true },
+      body: response.status === 404 ? undefined : ((await response.json()) as unknown),
     }))
     .then(
       (value) => ({ value }),
@@ -171,36 +174,48 @@ async function probeResult(info: Info, allowLegacy = false, timeout = defaultEns
     )
   if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
   const response = result.value.response
-  const body = result.value.body
-  if (body !== undefined && "version" in body && "pid" in body) {
-    if (body.pid !== info.pid) return { service: undefined, timedOut: false }
-    if (info.version !== undefined && body.version !== info.version) return { service: undefined, timedOut: false }
+  // The previous V2 service exposes /api/health instead. Its authenticated 404 is enough
+  // to recognize the registered daemon as incompatible and route it through replacement.
+  if (response.status === 404)
     return {
       service: {
         info,
         endpoint,
-        version: body.version,
+        version: info.version,
+        state: "ready" as const,
+        compatible: false,
+      } satisfies LocalService,
+      timedOut: false,
+    }
+  const status = decodeStatus(result.value.body)
+  if (status !== undefined) {
+    if (status.pid !== info.pid) return { service: undefined, timedOut: false }
+    if (info.version !== undefined && status.version !== info.version) return { service: undefined, timedOut: false }
+    return {
+      service: {
+        info,
+        endpoint,
+        version: status.version,
         state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
-        legacy: false,
+        compatible: true,
       } satisfies LocalService,
       timedOut: false,
     }
   }
-  if (!allowLegacy || body?.healthy !== true) return { service: undefined, timedOut: false }
-  return {
-    service: { info, endpoint, state: "ready", legacy: true } satisfies LocalService,
-    timedOut: false,
-  }
+  return { service: undefined, timedOut: false }
 }
 
-async function registered(file?: string, allowLegacy = false, timeout?: number) {
+function decodeStatus(input: unknown) {
+  if (typeof input !== "object" || input === null) return
+  if (!("version" in input) || typeof input.version !== "string") return
+  if (!("pid" in input) || typeof input.pid !== "number" || !Number.isInteger(input.pid) || input.pid < 0) return
+  return { version: input.version, pid: input.pid }
+}
+
+async function registered(file?: string, timeout?: number) {
   const info = await read(file)
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
-  return { info, ...(await probeResult(info, allowLegacy, timeout)) }
-}
-
-async function find(options: { readonly file?: string }) {
-  return (await registered(options.file, true)).service
+  return { info, ...(await probeResult(info, timeout)) }
 }
 
 function signal(pid: number, name: NodeJS.Signals) {
@@ -230,47 +245,19 @@ function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
-async function evict(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
+async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = await read(options.file)
   if (current === undefined || !same(current, info)) return
   signal(info.pid, "SIGTERM")
-  if (await waitUntilStopped(info.pid, timing)) return
-
+  if (!(await waitUntilStopped(info.pid, timing))) {
+    const latest = await read(options.file)
+    if (latest === undefined || !same(latest, info)) return
+    signal(info.pid, "SIGKILL")
+    if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
+  }
   const latest = await read(options.file)
   if (latest === undefined || !same(latest, info)) return
-  signal(info.pid, "SIGKILL")
-  if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
-}
-
-async function kill(service: LocalService, options: { readonly file?: string }, timing: EnsureTiming) {
-  const requested = await requestStop(service, timing.requestTimeout)
-  if (requested === "rejected") return
-  if (requested === "unsupported") {
-    const current = await find(options)
-    if (current === undefined || !same(current.info, service.info)) return
-    signal(service.info.pid, "SIGTERM")
-  }
-  if (await waitUntilStopped(service.info.pid, timing)) return
-
-  const latest = await find(options)
-  if (latest === undefined || !same(latest.info, service.info)) return
-  signal(service.info.pid, "SIGKILL")
-  if (!(await waitUntilStopped(service.info.pid, timing)))
-    throw new Error(`Server process ${service.info.pid} is still running`)
-}
-
-async function requestStop(service: LocalService, timeout = defaultEnsureTiming.requestTimeout) {
-  if (service.info.id === undefined || service.legacy) return "unsupported" as const
-  const response = await fetch(new URL("/api/service/stop", service.info.url), {
-    method: "POST",
-    headers: { ...headers(service.endpoint), "content-type": "application/json" },
-    body: JSON.stringify({ instanceID: service.info.id }),
-    signal: AbortSignal.timeout(timeout),
-  }).catch(() => undefined)
-  if (response === undefined || response.status === 404 || response.status === 405) return "unsupported" as const
-  const body = (await response.json().catch(() => undefined)) as ServiceStopResponse | undefined
-  if (!response.ok || body?.accepted !== true) return "rejected" as const
-  return "accepted" as const
+  await rm(options.file ?? fallback(), { force: true })
 }
 
 function delay(milliseconds: number) {

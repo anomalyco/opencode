@@ -574,7 +574,7 @@ function permissionReplies(fixture: Fixture) {
   return fixture.requests.flatMap((request): Array<[string, string]> => {
     const match = /^\/api\/session\/[^/]+\/permission\/([^/]+)\/reply$/.exec(request.path)
     if (!match?.[1] || !request.body || typeof request.body !== "object") return []
-    const reply = Reflect.get(request.body, "reply")
+    const reply = "reply" in request.body ? request.body.reply : undefined
     return typeof reply === "string" ? [[decodeURIComponent(match[1]), reply]] : []
   })
 }

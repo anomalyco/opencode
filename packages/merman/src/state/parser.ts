@@ -16,14 +16,14 @@ const STATE_RE = /^state\s+"([^"]+)"\s+as\s+(\S+)$/i
 const COMPOSITE_STATE_RE = /^state\s+(?:"([^"]+)"\s+as\s+)?(\S+)\s*\{$/i
 const CHOICE_STATE_RE = /^state\s+(\S+)\s+<<choice>>$/i
 const TRANSITION_RE = /^(\[\*\]|[^\s:]+)\s*-->\s*(\[\*\]|[^\s:]+)(?:\s*:\s*(.*))?$/
-const DIRECTION_RE = /^direction\s+(TB|TD|LR|RL)$/i
+const DIRECTION_RE = /^direction\s+(TB|TD|BT|LR|RL)$/i
 const NOTE_INLINE_RE = /^note\s+(left|right)\s+of\s+(\S+)\s*:\s*(.*)$/i
 const NOTE_START_RE = /^note\s+(left|right)\s+of\s+(\S+)\s*$/i
 const NOTE_END_RE = /^end\s+note$/i
 
 function normalizeDirection(value?: string): StateDiagramDirection {
   const upper = value?.toUpperCase()
-  if (upper === "TB" || upper === "TD" || upper === "LR" || upper === "RL") return upper
+  if (upper === "TB" || upper === "TD" || upper === "BT" || upper === "LR" || upper === "RL") return upper
   return DEFAULT_DIRECTION
 }
 

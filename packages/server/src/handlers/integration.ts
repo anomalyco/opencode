@@ -1,17 +1,23 @@
-import { Integration } from "@opencode-ai/core/integration"
+import { Integration } from "@opencode/core/integration"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { InvalidRequestError } from "@opencode-ai/protocol/errors"
+import {
+  IntegrationAttemptNotFoundError,
+  IntegrationMethodNotFoundError,
+  IntegrationNotFoundError,
+  InvalidRequestError,
+} from "@opencode/protocol/errors"
 import { response } from "../location"
-import { WellKnown } from "@opencode-ai/core/wellknown"
+import { WellKnown } from "@opencode/core/wellknown"
 
 const authorize = <A, R>(effect: Effect.Effect<A, Integration.AuthorizationError, R>) =>
   effect.pipe(
     Effect.mapError(
-      () =>
+      (error) =>
         new InvalidRequestError({
-          message: "Authentication failed",
+          message:
+            error.cause instanceof Error && error.cause.message.trim() ? error.cause.message : "Authentication failed",
           kind: "integration_authorization",
         }),
     ),
@@ -31,7 +37,13 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         "integration.get",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
-          return yield* response(service.get(ctx.params.integrationID))
+          const integration = yield* service.get(ctx.params.integrationID)
+          if (!integration)
+            return yield* new IntegrationNotFoundError({
+              integrationID: ctx.params.integrationID,
+              message: `Integration not found: ${ctx.params.integrationID}`,
+            })
+          return yield* response(Effect.succeed(integration))
         }),
       )
       .handle(
@@ -54,6 +66,11 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         "integration.connect.key",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
+          if (!(yield* service.get(ctx.params.integrationID)))
+            return yield* new IntegrationNotFoundError({
+              integrationID: ctx.params.integrationID,
+              message: `Integration not found: ${ctx.params.integrationID}`,
+            })
           yield* authorize(
             service.connection.key({
               integrationID: ctx.params.integrationID,
@@ -85,11 +102,27 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         "integration.oauth.status",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
-          return yield* response(
-            service.oauth.status({
+          if (!(yield* service.get(ctx.params.integrationID)))
+            return yield* new IntegrationNotFoundError({
               integrationID: ctx.params.integrationID,
-              attemptID: ctx.params.attemptID,
-            }),
+              message: `Integration not found: ${ctx.params.integrationID}`,
+            })
+          return yield* response(
+            service.oauth
+              .status({
+                integrationID: ctx.params.integrationID,
+                attemptID: ctx.params.attemptID,
+              })
+              .pipe(
+                Effect.mapError(
+                  (error) =>
+                    new IntegrationAttemptNotFoundError({
+                      integrationID: error.integrationID,
+                      attemptID: error.attemptID,
+                      message: `OAuth attempt not found: ${error.attemptID}`,
+                    }),
+                ),
+              ),
           )
         }),
       )
@@ -97,6 +130,11 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         "integration.oauth.complete",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
+          if (!(yield* service.get(ctx.params.integrationID)))
+            return yield* new IntegrationNotFoundError({
+              integrationID: ctx.params.integrationID,
+              message: `Integration not found: ${ctx.params.integrationID}`,
+            })
           yield* service.oauth
             .complete({
               integrationID: ctx.params.integrationID,
@@ -104,19 +142,24 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
               code: ctx.payload.code,
             })
             .pipe(
-              Effect.mapError(
-                (error) =>
-                  new InvalidRequestError({
-                    message:
-                      error._tag === "Integration.CodeRequired"
-                        ? "Authorization code is required"
-                        : "Authentication failed",
-                    kind:
-                      error._tag === "Integration.CodeRequired"
-                        ? "integration_code_required"
-                        : "integration_authorization",
-                  }),
-              ),
+              Effect.mapError((error) => {
+                if (error._tag === "Integration.AttemptNotFound")
+                  return new IntegrationAttemptNotFoundError({
+                    integrationID: error.integrationID,
+                    attemptID: error.attemptID,
+                    message: `OAuth attempt not found: ${error.attemptID}`,
+                  })
+                return new InvalidRequestError({
+                  message:
+                    error._tag === "Integration.CodeRequired"
+                      ? "Authorization code is required"
+                      : "Authentication failed",
+                  kind:
+                    error._tag === "Integration.CodeRequired"
+                      ? "integration_code_required"
+                      : "integration_authorization",
+                })
+              }),
             )
           return HttpApiSchema.NoContent.make()
         }),
@@ -136,6 +179,18 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         "integration.command.connect",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
+          const integration = yield* service.get(ctx.params.integrationID)
+          if (!integration)
+            return yield* new IntegrationNotFoundError({
+              integrationID: ctx.params.integrationID,
+              message: `Integration not found: ${ctx.params.integrationID}`,
+            })
+          if (!integration.methods.some((method) => method.type === "command" && method.id === ctx.payload.methodID))
+            return yield* new IntegrationMethodNotFoundError({
+              integrationID: ctx.params.integrationID,
+              methodID: ctx.payload.methodID,
+              message: `Integration method not found: ${ctx.payload.methodID}`,
+            })
           return yield* response(
             authorize(
               service.command.connect({
@@ -151,11 +206,27 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         "integration.command.status",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
-          return yield* response(
-            service.command.status({
+          if (!(yield* service.get(ctx.params.integrationID)))
+            return yield* new IntegrationNotFoundError({
               integrationID: ctx.params.integrationID,
-              attemptID: ctx.params.attemptID,
-            }),
+              message: `Integration not found: ${ctx.params.integrationID}`,
+            })
+          return yield* response(
+            service.command
+              .status({
+                integrationID: ctx.params.integrationID,
+                attemptID: ctx.params.attemptID,
+              })
+              .pipe(
+                Effect.mapError(
+                  (error) =>
+                    new IntegrationAttemptNotFoundError({
+                      integrationID: error.integrationID,
+                      attemptID: error.attemptID,
+                      message: `Command attempt not found: ${error.attemptID}`,
+                    }),
+                ),
+              ),
           )
         }),
       )

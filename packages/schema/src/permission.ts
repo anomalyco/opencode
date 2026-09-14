@@ -29,6 +29,7 @@ const RequestFields = {
   save: Schema.Array(Schema.String).pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   source: Source.pipe(optional),
+  message: Schema.String.pipe(optional),
 }
 
 export const Request = Schema.Struct({

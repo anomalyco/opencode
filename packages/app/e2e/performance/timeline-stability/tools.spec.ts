@@ -21,24 +21,30 @@ import {
 } from "./fixture"
 
 test.describe("timeline tool state stability", () => {
-  test("moves lightweight tools through pending, running, and completed without replacing rows", async ({
+  test("moves lightweight tools through streaming, running, and completed without replacing rows", async ({
     page,
   }, testInfo) => {
-    const ids = ["webfetch", "websearch", "task", "skill", "custom"] as const
+    const ids = ["webfetch", "websearch", "subagent", "skill", "custom"] as const
     const inputs = {
       webfetch: { url: "https://example.com/docs" },
       websearch: { query: "timeline stability" },
-      task: { description: "Inspect timeline", subagent_type: "explore" },
+      subagent: { description: "Inspect timeline", agent: "explore", prompt: "Inspect the timeline." },
       skill: { name: "stability" },
       custom: { target: "timeline", depth: 2 },
     }
-    const names = { webfetch: "webfetch", websearch: "websearch", task: "task", skill: "skill", custom: "mcp_probe" }
+    const names = {
+      webfetch: "webfetch",
+      websearch: "websearch",
+      subagent: "subagent",
+      skill: "skill",
+      custom: "mcp_probe",
+    }
     const questionID = "prt_state_question"
     const todoID = "prt_state_todo"
     const initial = [
-      ...ids.map((id) => toolPart(`prt_state_${id}`, names[id], "pending", inputs[id])),
-      toolPart(questionID, "question", "pending", questionInput()),
-      toolPart(todoID, "todowrite", "pending", { todos: [{ content: "Hidden", status: "pending" }] }),
+      ...ids.map((id) => toolPart(`prt_state_${id}`, names[id], "streaming", inputs[id])),
+      toolPart(questionID, "question", "streaming", questionInput()),
+      toolPart(todoID, "todowrite", "streaming", { todos: [{ content: "Hidden", status: "pending" }] }),
       textPart("prt_state_following", "Following lightweight tools"),
     ]
     const childID = "ses_timeline_child"
@@ -55,14 +61,14 @@ test.describe("timeline tool state stability", () => {
     const regionIDs = [
       "prt_state_webfetch",
       "prt_state_websearch",
-      "prt_state_task",
+      "prt_state_subagent",
       "prt_state_skill",
       "prt_state_custom",
     ] as const
     const regions = defineVisualRegions({
       prt_state_webfetch: toolRegion(regionIDs[0]),
       prt_state_websearch: toolRegion(regionIDs[1]),
-      prt_state_task: toolRegion(regionIDs[2]),
+      prt_state_subagent: toolRegion(regionIDs[2]),
       prt_state_skill: toolRegion(regionIDs[3]),
       prt_state_custom: toolRegion(regionIDs[4]),
     })
@@ -73,9 +79,9 @@ test.describe("timeline tool state stability", () => {
         [80, 240, 100, 360, 140][index],
       )
     }
-    for (const [index, id] of ["skill", "webfetch", "custom", "task", "websearch"].entries()) {
+    for (const [index, id] of ["skill", "webfetch", "custom", "subagent", "websearch"].entries()) {
       const key = id as (typeof ids)[number]
-      const metadata = key === "task" ? { sessionId: childID } : key === "websearch" ? { provider: "exa" } : {}
+      const metadata = key === "subagent" ? { sessionID: childID } : key === "websearch" ? { provider: "exa" } : {}
       const output = key === "websearch" ? "Result https://example.com/result" : "Completed"
       await timeline.send(
         partUpdated(toolPart(`prt_state_${key}`, names[key], "completed", inputs[key], { metadata, output })),
@@ -121,12 +127,12 @@ test.describe("timeline tool state stability", () => {
     const ids = ["prt_ctx_01_read", "prt_ctx_02_glob", "prt_ctx_03_grep", "prt_ctx_04_list"]
     const tools = ["read", "glob", "grep", "list"]
     const inputs = [
-      { filePath: "src/a.ts", offset: 0, limit: 120 },
+      { path: "src/a.ts", offset: 0, limit: 120 },
       { path: directory, pattern: "**/*.ts" },
       { path: directory, pattern: "stability", include: "*.ts" },
       { path: "src" },
     ]
-    const context = ids.map((id, index) => toolPart(id, tools[index]!, "pending", inputs[index]!))
+    const context = ids.map((id, index) => toolPart(id, tools[index]!, "streaming", inputs[index]!))
     const timeline = await setupTimeline(page, {
       messages: [
         userMessage(),

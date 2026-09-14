@@ -147,7 +147,7 @@ describe("run permission shared", () => {
         }),
       ),
     ).toMatchObject({
-      title: 'Parallel Web Search "current releases"',
+      title: 'Web Search via Parallel "current releases"',
       lines: ["Query: current releases"],
     })
   })

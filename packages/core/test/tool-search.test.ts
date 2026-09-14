@@ -2,35 +2,35 @@ import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Environment } from "@opencode-ai/core/environment/index"
-import { FileSystem } from "@opencode-ai/core/filesystem"
-import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
-import { Permission } from "@opencode-ai/core/permission"
-import { Ripgrep } from "@opencode-ai/core/ripgrep"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { GlobTool } from "@opencode-ai/core/tool/plugin/glob"
-import { GrepTool } from "@opencode-ai/core/tool/plugin/grep"
-import { Tool } from "@opencode-ai/core/tool"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Environment } from "@opencode/core/environment/index"
+import { FileSystem } from "@opencode/core/filesystem"
+import { Location } from "@opencode/core/location"
+import { FileAccess } from "@opencode/core/file-access"
+import { Permission } from "@opencode/core/permission"
+import { Ripgrep } from "@opencode/core/ripgrep"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { GlobTool } from "@opencode/core/tool/plugin/glob"
+import { GrepTool } from "@opencode/core/tool/plugin/grep"
+import { Tool } from "@opencode/core/tool"
 import { location } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
-import { testEffect } from "./lib/effect"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
+import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const globToolNode = makeLocationNode({
   name: "test/glob-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(GlobTool.Plugin)),
-  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, LocationMutation.node, Permission.node],
+  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, FileAccess.node, Permission.node],
 })
 const grepToolNode = makeLocationNode({
   name: "test/grep-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(GrepTool.Plugin)),
-  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, LocationMutation.node, Permission.node],
+  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, FileAccess.node, Permission.node],
 })
 const sessionID = Session.ID.make("ses_search_tool_test")
 
@@ -40,23 +40,22 @@ const withTools = <A, E, R>(
   assertions?: Permission.AssertInput[],
 ) =>
   Effect.gen(function* () {
-    return yield* body(yield* Tool.Service)
+    const registry = yield* Tool.Service
+    return yield* body(registry)
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, globToolNode, grepToolNode]), [
-        [
-          Location.node,
+        Location.node.replace(
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-        ],
-        [
-          Permission.node,
+        ),
+        Permission.node.replace(
           permissionLayer({
             assert: (input) =>
               Effect.sync(() => {
                 assertions?.push(input)
               }),
           }),
-        ],
+        ),
       ]),
     ),
   )
@@ -67,9 +66,46 @@ const call = (name: "glob" | "grep", input: unknown) => ({
   call: { type: "tool-call" as const, id: `call-${name}`, name, input },
 })
 
-const it = testEffect(Layer.empty)
-
 describe("search tools", () => {
+  for (const hidden of [undefined, false, true]) {
+    for (const limit of hidden ? [10] : [1, 10]) {
+      it.live(`glob honors hidden=${hidden} before limit=${limit}`, () =>
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* Effect.promise(() =>
+            Promise.all(
+              ["src/visible.ts", ".hidden.ts", "src/.hidden.ts", ".hidden/nested.ts", ".git/config.ts"].map((file) =>
+                Bun.write(path.join(tmp.path, file), "needle\n"),
+              ),
+            ),
+          )
+          yield* withTools(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const result = yield* executeTool(
+                registry,
+                call("glob", { pattern: "**/*.ts", limit, ...(hidden === undefined ? {} : { hidden }) }),
+              )
+              const expected = hidden
+                ? [".hidden.ts", ".hidden/nested.ts", "src/.hidden.ts", "src/visible.ts"]
+                : ["src/visible.ts"]
+
+              expect(result.status).toBe("completed")
+              expect(result.output).toHaveLength(expected.length)
+              expect(result.output).toEqual(
+                expect.arrayContaining(expected.map((file) => ({ path: path.normalize(file), type: "file" }))),
+              )
+              expect(result.metadata).toEqual({ count: expected.length, truncated: false })
+              expect(result.content).toHaveLength(1)
+              expect(result.content?.[0]?.type === "text" ? result.content[0].text.split("\n").sort() : []).toEqual(
+                expected.map((file) => path.join(tmp.path, file)).sort(),
+              )
+            }),
+          )
+        }),
+      )
+    }
+  }
+
   it.live("bounds omitted glob and grep limits", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -118,7 +154,8 @@ describe("search tools", () => {
               status: "error",
               error: {
                 type: "tool.execution",
-                message: 'Invalid tool input: Pattern must not be empty\n  at ["pattern"]',
+                message:
+                  'Invalid arguments for tool "grep":\n- pattern: Pattern must not be empty\n\nArguments provided:\n{\n  "pattern": ""\n}\n\nUpdate the arguments and call the tool again.',
               },
             })
           }),

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Share } from "../../src/core/share"
 import { Storage } from "../../src/core/storage"
-import { Identifier } from "@opencode-ai/core/util/identifier"
+import { Identifier } from "@opencode/core/util/identifier"
 
 describe.concurrent("core.share", () => {
   test("should create a share", async () => {
@@ -286,6 +286,54 @@ describe.concurrent("core.share", () => {
     expect(result.some((d) => d.type === "session")).toBe(true)
     expect(result.some((d) => d.type === "message")).toBe(true)
     expect(result.some((d) => d.type === "part")).toBe(true)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+  })
+
+  test("should sync all legacy data variants to their canonical paths", async () => {
+    const sessionID = Identifier.descending()
+    const share = await Share.create({ sessionID })
+    const data: Share.Data[] = [
+      {
+        type: "session",
+        data: {
+          id: sessionID,
+          slug: "session",
+          projectID: "project",
+          directory: "/",
+          title: "Session",
+          version: "1",
+          time: { created: 1, updated: 1 },
+        },
+      },
+      {
+        type: "message",
+        data: {
+          id: "msg1",
+          sessionID,
+          role: "user",
+          time: { created: 1 },
+          agent: "build",
+          model: { providerID: "provider", modelID: "model" },
+        },
+      },
+      { type: "messages", data: { sessionID, messages: [] } },
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Hello" },
+      },
+      { type: "session_diff", data: [] },
+      { type: "model", data: [] },
+    ]
+
+    await Share.syncOld({
+      share: { id: share.id, secret: share.secret },
+      data,
+    })
+
+    const paths = ["session", "message/msg1", `messages/${sessionID}`, "part/msg1/part1", "session_diff", "model"]
+    const stored = await Promise.all(paths.map((path) => Storage.read(["share_data", share.id, ...path.split("/")])))
+    expect(stored).toEqual(data.map((item) => item.data))
 
     await Share.remove({ id: share.id, secret: share.secret })
   })

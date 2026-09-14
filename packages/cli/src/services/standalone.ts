@@ -1,6 +1,6 @@
-import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { Service, type Endpoint } from "@opencode/client/effect/service"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Deferred, Effect, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { randomBytes } from "node:crypto"
@@ -27,7 +27,7 @@ function command(password: string, options: Options) {
     // The server treats EOF on this pipe as the end of its ownership lease.
     // The OS closes it even when the TUI is killed before Effect finalizers run.
     stdin: "pipe",
-    stderr: "ignore",
+    stderr: process.env.OPENCODE_PRINT_LOGS === "1" ? "inherit" : "ignore",
     killSignal: "SIGTERM",
     forceKillAfter: "3 seconds",
   })

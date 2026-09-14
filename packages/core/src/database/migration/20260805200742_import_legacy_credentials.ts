@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { sql } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
-import { Credential } from "@opencode-ai/schema/credential"
-import { Integration } from "@opencode-ai/schema/integration"
-import { NonNegativeInt } from "@opencode-ai/schema/schema"
-import { Global } from "@opencode-ai/util/global"
+import { Credential } from "@opencode/schema/credential"
+import { Integration } from "@opencode/schema/integration"
+import { NonNegativeInt } from "@opencode/schema/schema"
+import { Global } from "@opencode/util/global"
 import type { DatabaseMigration } from "../migration.js"
 
 const LegacyOAuth = Schema.Struct({
@@ -80,10 +80,11 @@ export function importLegacyCredentials(tx: Parameters<DatabaseMigration.Migrati
                       }
                     : undefined,
               })
+      const label = credential.type === "oauth" ? "OAuth" : "API key"
       const now = Date.now()
       yield* tx.run(sql`
         INSERT INTO credential (id, integration_id, label, value, time_created, time_updated)
-        VALUES (${Credential.ID.create()}, ${integrationID}, 'default', ${JSON.stringify(credential)}, ${now}, ${now})
+        VALUES (${Credential.ID.create()}, ${integrationID}, ${label}, ${JSON.stringify(credential)}, ${now}, ${now})
       `)
     }
 

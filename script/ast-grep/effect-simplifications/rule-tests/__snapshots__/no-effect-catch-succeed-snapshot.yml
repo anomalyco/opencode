@@ -1,0 +1,95 @@
+id: no-effect-catch-succeed
+snapshots:
+  'Effect.catch(effect, () => Effect.succeed({ reason: "fallback" }))':
+    labels:
+      - source: 'Effect.catch(effect, () => Effect.succeed({ reason: "fallback" }))'
+        style: primary
+        start: 0
+        end: 66
+  ? |
+    effect.pipe(
+      Effect.catch(() => Effect.succeed([] as string[])),
+    )
+  : labels:
+      - source: Effect.catch(() => Effect.succeed([] as string[]))
+        style: primary
+        start: 15
+        end: 65
+  effect.pipe(Effect.catch(() => Effect.succeed(fallback))):
+    labels:
+      - source: Effect.catch(() => Effect.succeed(fallback))
+        style: primary
+        start: 12
+        end: 56
+  effect.pipe(Effect.catch(() => { return Effect.succeed(fallback) })):
+    labels:
+      - source: Effect.catch(() => { return Effect.succeed(fallback) })
+        style: primary
+        start: 12
+        end: 67
+  effect.pipe(Effect.catch((_) => Effect.succeed(fallback))):
+    labels:
+      - source: Effect.catch((_) => Effect.succeed(fallback))
+        style: primary
+        start: 12
+        end: 57
+  "effect.pipe(Effect.catch((_cause: Cause) => Effect.succeed(fallback)))":
+    labels:
+      - source: "Effect.catch((_cause: Cause) => Effect.succeed(fallback))"
+        style: primary
+        start: 12
+        end: 69
+  effect.pipe(Effect.catch((_error) => Effect.succeed(fallback))):
+    labels:
+      - source: Effect.catch((_error) => Effect.succeed(fallback))
+        style: primary
+        start: 12
+        end: 62
+  "effect.pipe(Effect.catch((_error: Error) => { return Effect.succeed(fallback) }))":
+    labels:
+      - source: "Effect.catch((_error: Error) => { return Effect.succeed(fallback) })"
+        style: primary
+        start: 12
+        end: 80
+  effect.pipe(Effect.catch(_ => Effect.succeed(fallback))):
+    labels:
+      - source: Effect.catch(_ => Effect.succeed(fallback))
+        style: primary
+        start: 12
+        end: 55
+  effect.pipe(Effect.catch(_ => { return Effect.succeed(fallback) })):
+    labels:
+      - source: Effect.catch(_ => { return Effect.succeed(fallback) })
+        style: primary
+        start: 12
+        end: 66
+  effect.pipe(Effect.catch(_error => { return Effect.succeed(fallback) })):
+    labels:
+      - source: Effect.catch(_error => { return Effect.succeed(fallback) })
+        style: primary
+        start: 12
+        end: 71
+  effect.pipe(Effect.catch(function () { return Effect.succeed(fallback) })):
+    labels:
+      - source: Effect.catch(function () { return Effect.succeed(fallback) })
+        style: primary
+        start: 12
+        end: 73
+  effect.pipe(Effect.catch(function (_) { return Effect.succeed(fallback) })):
+    labels:
+      - source: Effect.catch(function (_) { return Effect.succeed(fallback) })
+        style: primary
+        start: 12
+        end: 74
+  effect.pipe(Effect.catch(function (_error) { return Effect.succeed(fallback) })):
+    labels:
+      - source: Effect.catch(function (_error) { return Effect.succeed(fallback) })
+        style: primary
+        start: 12
+        end: 79
+  "effect.pipe(Effect.catch(function (_error: Error) { return Effect.succeed(fallback) }))":
+    labels:
+      - source: "Effect.catch(function (_error: Error) { return Effect.succeed(fallback) })"
+        style: primary
+        start: 12
+        end: 86

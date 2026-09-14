@@ -1,8 +1,13 @@
 import { OpenApi } from "effect/unstable/httpapi"
+import { format } from "prettier"
 import { fileURLToPath } from "url"
 import { ClientApi } from "../src/client.js"
+import { stabilizeOpenApi } from "./openapi-stabilize.js"
 
-const document = JSON.stringify(OpenApi.fromApi(ClientApi), null, 2) + "\n"
+const document = await format(JSON.stringify(stabilizeOpenApi(OpenApi.fromApi(ClientApi)), null, 2), {
+  parser: "json",
+  printWidth: 120,
+})
 const target = fileURLToPath(new URL("../openapi.json", import.meta.url))
 
 if (process.argv.includes("--check")) {

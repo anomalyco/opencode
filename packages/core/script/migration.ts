@@ -48,7 +48,7 @@ async function generate() {
           renderMigration(name, await Bun.file(path.join(incremental, name, "migration.sql")).text()),
         ),
       )
-      await fs.copyFile(path.join(incremental, name, "snapshot.json"), snapshot)
+      await Bun.write(snapshot, await formatJson(await Bun.file(path.join(incremental, name, "snapshot.json")).text()))
     }
 
     await fs.mkdir(full)
@@ -188,6 +188,19 @@ async function formatTypescript(input: string) {
     parser: "typescript",
     plugins: [typescript.default, estree.default],
     semi: false,
+    printWidth: 120,
+  })
+}
+
+// Drizzle emits every array multi-line; format the snapshot so regeneration
+// diffs stay minimal against the prettier-styled checked-in copy.
+async function formatJson(input: string) {
+  const prettier = await import("prettier")
+  const babel = await import("prettier/plugins/babel")
+  const estree = await import("prettier/plugins/estree")
+  return prettier.format(input, {
+    parser: "json",
+    plugins: [babel.default, estree.default],
     printWidth: 120,
   })
 }

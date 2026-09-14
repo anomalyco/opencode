@@ -4,19 +4,20 @@ import { directoryColumn, pathColumn } from "../database/path.js"
 import { ProjectTable } from "../project/sql.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionInbox } from "./inbox.js"
-import type { FileDiff } from "@opencode-ai/schema/file-diff"
-import { PermissionV1 } from "../v1/permission.js"
-import { Project } from "../project.js"
+import type { FileDiff } from "@opencode/schema/file-diff"
+import type { Permission } from "@opencode/schema/permission"
+import type { Project } from "@opencode/schema/project"
 import type { SessionSchema } from "./schema.js"
-import { Workspace } from "../workspace.js"
+import type { Workspace } from "@opencode/schema/workspace"
 import { Timestamps } from "../database/schema.sql.js"
-import type { Instruction } from "@opencode-ai/schema/instruction"
-import type { Session } from "@opencode-ai/schema/session"
-import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode-ai/schema/session-inbox"
-import type { RevertV1 } from "@opencode-ai/schema/session-revert"
+import type { Instruction } from "@opencode/schema/instruction"
+import type { Session } from "@opencode/schema/session"
+import type { CompactionPayload, MovePayload, SyntheticPayload, UserPayload } from "@opencode/schema/session-inbox"
+import type { RevertV1 } from "@opencode/schema/session-revert"
 import type { Schema } from "effect"
 
-type SessionMessageData = Omit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+type SessionMessageData = DistributiveOmit<(typeof SessionMessage.Info)["Encoded"], "type" | "id">
 
 export const SessionTable = sqliteTable(
   "session_v2",
@@ -40,7 +41,7 @@ export const SessionTable = sqliteTable(
     summary_deletions: integer(),
     summary_files: integer(),
     summary_diffs: text({ mode: "json" }).$type<FileDiff.LegacyInfo[]>(),
-    metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
+    metadata: text({ mode: "json" }).$type<Session.Metadata>(),
     cost: real().notNull().default(0),
     tokens_input: integer().notNull().default(0),
     tokens_output: integer().notNull().default(0),
@@ -48,7 +49,7 @@ export const SessionTable = sqliteTable(
     tokens_cache_read: integer().notNull().default(0),
     tokens_cache_write: integer().notNull().default(0),
     revert: text({ mode: "json" }).$type<Session.Revert | RevertV1>(),
-    permission: text({ mode: "json" }).$type<PermissionV1.Ruleset>(),
+    permission: text({ mode: "json" }).$type<Permission.Ruleset>(),
     agent: text(),
     model: text({ mode: "json" }).$type<{
       id: string
@@ -56,6 +57,9 @@ export const SessionTable = sqliteTable(
       variant?: string
     }>(),
     ...Timestamps,
+    time_idle: integer(),
+    time_viewed: integer(),
+    idle_outcome: text().$type<NonNullable<Session.Info["outcome"]>>(),
     time_compacting: integer(),
     time_archived: integer(),
     /** The execution claim timestamp (historical column name; see SessionStore.claim). */

@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { ProcessLock } from "@opencode-ai/core/util/process-lock"
+import { ProcessLock } from "@opencode/core/util/process-lock"
 import { Effect } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"

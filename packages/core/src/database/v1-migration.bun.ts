@@ -3,17 +3,17 @@ export * as V1Migration from "./v1-migration.js"
 import { Cause, Effect, Layer, Option, Schema, Semaphore } from "effect"
 import { Database } from "./database.js"
 import { SessionMessageTable, SessionTable } from "../session/sql.js"
-import { SessionV1 } from "@opencode-ai/schema/session-v1"
+import { SessionV1 } from "@opencode/schema/session-v1"
 import { SessionMessage } from "../session/message.js"
 import { SessionSchema } from "../session/schema.js"
 import { KVTable } from "../kv/sql.js"
 import { EventSequenceTable } from "../event/sql.js"
 import { eq, sql } from "drizzle-orm"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import type { Database as SQLiteDatabase } from "bun:sqlite"
-import { Project } from "@opencode-ai/schema/project"
+import { Project } from "@opencode/schema/project"
 
 export type SourceMessage = {
   readonly id: string
@@ -114,6 +114,23 @@ type NextProject = {
   readonly commands: string | null
 }
 
+type NextColumns<A> = Record<keyof A, "required" | "nullable" | { readonly fallback: keyof A & string }>
+
+const NEXT_PROJECT_COLUMNS = {
+  id: "required",
+  worktree: "required",
+  vcs: "nullable",
+  name: "nullable",
+  icon_url: "nullable",
+  icon_url_override: { fallback: "icon_url" },
+  icon_color: "nullable",
+  time_created: "required",
+  time_updated: "required",
+  time_initialized: "nullable",
+  sandboxes: "required",
+  commands: "nullable",
+} satisfies NextColumns<NextProject>
+
 type NextSession = {
   readonly id: string
   readonly project_id: string
@@ -148,6 +165,41 @@ type NextSession = {
   readonly time_archived: number | null
   readonly time_suspended: number | null
 }
+
+const NEXT_SESSION_COLUMNS = {
+  id: "required",
+  project_id: "required",
+  workspace_id: "nullable",
+  parent_id: "nullable",
+  fork_session_id: "nullable",
+  fork_boundary: "nullable",
+  slug: "required",
+  directory: "required",
+  path: "nullable",
+  title: "nullable",
+  version: "required",
+  share_url: "nullable",
+  summary_additions: "nullable",
+  summary_deletions: "nullable",
+  summary_files: "nullable",
+  summary_diffs: "nullable",
+  metadata: "nullable",
+  cost: "required",
+  tokens_input: "required",
+  tokens_output: "required",
+  tokens_reasoning: "required",
+  tokens_cache_read: "required",
+  tokens_cache_write: "required",
+  revert: "nullable",
+  permission: "nullable",
+  agent: "nullable",
+  model: "nullable",
+  time_created: "required",
+  time_updated: "required",
+  time_compacting: "nullable",
+  time_archived: "nullable",
+  time_suspended: "nullable",
+} satisfies NextColumns<NextSession>
 
 type NextMessage = {
   readonly id: string
@@ -223,22 +275,22 @@ export function transformSession(input: TransformInput): TransformResult {
       if (paired.has(item.row.id)) return []
       const owned = byMessage.get(item.row.id)?.map((part) => part.value) ?? []
       if (item.value.role === "user") {
-        const compaction = owned.find((part) => part.type === "compaction")
-        if (compaction?.type === "compaction") {
+        const compaction = owned.find((part): part is SessionV1.CompactionPart => part.type === "compaction")
+        if (compaction) {
           const pairedSummary = messages.find(
-            (candidate) =>
+            (candidate): candidate is (typeof messages)[number] & { value: SessionV1.Assistant } =>
               candidate.value.role === "assistant" &&
               candidate.value.parentID === item.row.id &&
-              candidate.value.summary,
+              candidate.value.summary === true,
           )
-          if (!pairedSummary || pairedSummary.value.role !== "assistant") return []
+          if (!pairedSummary) return []
           paired.add(pairedSummary.row.id)
           if (pairedSummary.value.error || pairedSummary.value.time.completed === undefined) return []
           const summary = pairedSummary
           const summaryText = (byMessage.get(summary.row.id) ?? [])
             .map((part) => part.value)
-            .filter((part) => part.type === "text" && part.text.length > 0)
-            .map((part) => (part.type === "text" ? part.text : ""))
+            .filter((part): part is SessionV1.TextPart => part.type === "text" && part.text.length > 0)
+            .map((part) => part.text)
             .join("\n\n")
           const tailIndex = compaction.tail_start_id
             ? messages.findIndex((candidate) => candidate.row.id === compaction.tail_start_id)
@@ -261,16 +313,14 @@ export function transformSession(input: TransformInput): TransformResult {
           ]
         }
         const subtasks = owned.filter((part) => part.type === "subtask")
-        const visible = owned.filter((part) => part.type === "text" && !part.ignored)
-        const files = owned.filter((part) => part.type === "file")
-        const agents = owned.filter((part) => part.type === "agent")
+        const visible = owned.filter((part): part is SessionV1.TextPart => part.type === "text" && !part.ignored)
+        const files = owned.filter((part): part is SessionV1.FilePart => part.type === "file")
+        const agents = owned.filter((part): part is SessionV1.AgentPart => part.type === "agent")
         if (subtasks.length > 0 && visible.length === 0 && files.length === 0 && agents.length === 0) return []
-        const ordinary = visible.filter((part) => part.type === "text" && !part.synthetic)
-        const synthetic = visible.filter((part) => part.type === "text" && part.synthetic)
-        const attachments = files.flatMap((part) => (part.type === "file" ? migrateFile(part) : []))
-        const unavailable = files.flatMap((part) =>
-          part.type === "file" && !part.url.startsWith("data:") ? [unavailableFile(part)] : [],
-        )
+        const ordinary = visible.filter((part) => !part.synthetic)
+        const synthetic = visible.filter((part) => part.synthetic)
+        const attachments = files.flatMap((part) => migrateFile(part))
+        const unavailable = files.flatMap((part) => (!part.url.startsWith("data:") ? [unavailableFile(part)] : []))
         const text = owned
           .flatMap((part) => {
             if (part.type === "text" && !part.ignored && !part.synthetic) return [part.text]
@@ -278,16 +328,12 @@ export function transformSession(input: TransformInput): TransformResult {
             return []
           })
           .join("\n\n")
-        const agentAttachments = agents.map((part) =>
-          part.type === "agent"
-            ? {
-                name: part.name,
-                ...(part.source
-                  ? { mention: { text: part.source.value, start: part.source.start, end: part.source.end } }
-                  : {}),
-              }
-            : { name: "" },
-        )
+        const agentAttachments = agents.map((part) => ({
+          name: part.name,
+          ...(part.source
+            ? { mention: { text: part.source.value, start: part.source.start, end: part.source.end } }
+            : {}),
+        }))
         if (
           ordinary.length === 0 &&
           unavailable.length === 0 &&
@@ -299,7 +345,7 @@ export function transformSession(input: TransformInput): TransformResult {
             row(item.row, {
               id: item.row.id,
               type: "synthetic",
-              text: synthetic.map((part) => (part.type === "text" ? part.text : "")).join("\n\n"),
+              text: synthetic.map((part) => part.text).join("\n\n"),
               time: { created: item.row.time_created },
             }),
           ]
@@ -317,7 +363,7 @@ export function transformSession(input: TransformInput): TransformResult {
           row(item.row, {
             id: syntheticID(item.row.id, used),
             type: "synthetic",
-            text: synthetic.map((part) => (part.type === "text" ? part.text : "")).join("\n\n"),
+            text: synthetic.map((part) => part.text).join("\n\n"),
             time: { created: item.row.time_created },
           }),
         ]
@@ -391,7 +437,6 @@ export function transformSession(input: TransformInput): TransformResult {
     })
     .map((item, seq) => ({ ...item, seq }))
   const assistants = messages
-    .filter((item) => item.value.role === "assistant")
     .map((item) => item.value)
     .filter((item): item is SessionV1.Assistant => item.role === "assistant")
   const latestUser = messages.findLast((item) => {
@@ -429,14 +474,14 @@ export function transformSession(input: TransformInput): TransformResult {
 
 export function status(): Effect.Effect<Status, never, Database.Service> {
   return Effect.gen(function* () {
-    const { db } = yield* Database.Service
+    const db = (yield* Database.Service).db
     if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
     const state = yield* readState(db)
     if (runtimeState.status === "running") return runtimeState
     if (runtimeState.status === "error") return runtimeState
     if (state?.phase === "completed") return { status: "completed" as const }
     return { status: "required" as const }
-  }).pipe(Effect.orDie)
+  })
 }
 
 export const layer = Layer.effectDiscard(
@@ -471,81 +516,80 @@ function updateProgress(progress: Progress) {
 export function run(options: Options = {}): Effect.Effect<RunResult, never, Database.Service | Global.Service> {
   return lock.withPermit(
     Effect.gen(function* () {
-      const { db } = yield* Database.Service
+      const db = (yield* Database.Service).db
       const global = yield* Global.Service
       const state = yield* readState(db)
       if (state?.phase === "completed") return { status: "completed" as const }
       if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
-      const migrate = Effect.gen(function* () {
-        const now = Date.now()
-        yield* db.run(sql`
+      const now = Date.now()
+      yield* db.run(sql`
           INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, sandboxes)
           VALUES (${Project.ID.global}, ${path.parse(global.data).root}, ${now}, ${now}, '[]')
         `)
-        if (state === undefined)
-          yield* db
-            .transaction((tx) =>
-              Effect.gen(function* () {
-                while (true) {
-                  yield* tx.run(sql`
+      if (state === undefined)
+        yield* db
+          .transaction((tx) =>
+            Effect.gen(function* () {
+              while (true) {
+                yield* tx.run(sql`
                     DELETE FROM event
                     WHERE rowid IN (SELECT rowid FROM event LIMIT ${EVENT_DELETE_BATCH_SIZE})
                   `)
-                  const deleted = (yield* tx.get<{ value: number }>(sql`SELECT changes() AS value`))?.value ?? 0
-                  if (deleted < EVENT_DELETE_BATCH_SIZE) break
-                  yield* Effect.yieldNow
-                }
-                yield* tx
-                  .insert(KVTable)
-                  .values({ key: MIGRATION_STATE_KEY, value: { phase: "sessions" } })
-                  .run()
-              }),
-            )
-            .pipe(Effect.orDie)
-        const sourceTotal = yield* countNextSessions(nextPath(options, global.data))
-        const legacyTotal = (yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session`))?.value ?? 0
-        const cursor = state?.phase === "sessions" ? state.cursor : undefined
-        const migrated =
-          cursor !== undefined
-            ? ((yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session WHERE id >= ${cursor}`))
-                ?.value ?? 0)
-            : 0
-        const denominator = sourceTotal + legacyTotal
-        updateProgress({ label: "Migrating sessions", numerator: migrated, denominator })
-        yield* importNextDatabase(db, nextPath(options, global.data), (completed) => {
-          updateProgress({ label: "Migrating sessions", numerator: migrated + completed, denominator })
-        })
-        updateProgress({ label: "Migrating sessions", numerator: migrated + sourceTotal, denominator })
-        const projects = new Set(
-          (yield* db.all<{ id: string }>(sql`SELECT id FROM project`)).map((project) => project.id),
-        )
-        while (true) {
-          const state = yield* readState(db)
-          const cursorValue = state?.phase === "sessions" ? state.cursor : undefined
-          const nextID = yield* db.get<{ id: string; project_id: string }>(
-            cursorValue === undefined
-              ? sql`SELECT id, project_id FROM session ORDER BY id DESC LIMIT 1`
-              : sql`SELECT id, project_id FROM session WHERE id < ${cursorValue} ORDER BY id DESC LIMIT 1`,
+                const deleted = (yield* tx.get<{ value: number }>(sql`SELECT changes() AS value`))?.value ?? 0
+                if (deleted < EVENT_DELETE_BATCH_SIZE) break
+                yield* Effect.yieldNow
+              }
+              yield* tx
+                .insert(KVTable)
+                .values({ key: MIGRATION_STATE_KEY, value: { phase: "sessions" } })
+                .run()
+            }),
           )
-          if (!nextID) break
-          yield* db
-            .transaction((tx) =>
-              Effect.gen(function* () {
-                yield* tx
-                  .insert(KVTable)
-                  .values({ key: MIGRATION_STATE_KEY, value: { phase: "sessions", cursor: nextID.id } })
-                  .onConflictDoUpdate({
-                    target: KVTable.key,
-                    set: { value: { phase: "sessions", cursor: nextID.id }, time_updated: Date.now() },
-                  })
-                  .run()
-                const projectID = projects.has(nextID.project_id) ? nextID.project_id : Project.ID.global
-                if (projectID !== nextID.project_id)
-                  yield* Effect.logWarning("Reassigned V1 session with missing project", {
-                    sessionID: nextID.id,
-                    projectID: nextID.project_id,
-                  })
-                yield* tx.run(sql`
+          .pipe(Effect.orDie)
+      const sourceTotal = yield* countNextSessions(nextPath(options, global.data))
+      const legacyTotal = (yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session`))?.value ?? 0
+      const cursor = state?.phase === "sessions" ? state.cursor : undefined
+      const migrated =
+        cursor !== undefined
+          ? ((yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session WHERE id >= ${cursor}`))
+              ?.value ?? 0)
+          : 0
+      const denominator = sourceTotal + legacyTotal
+      updateProgress({ label: "Migrating sessions", numerator: migrated, denominator })
+      yield* importNextDatabase(db, nextPath(options, global.data), (completed) => {
+        updateProgress({ label: "Migrating sessions", numerator: migrated + completed, denominator })
+      })
+      updateProgress({ label: "Migrating sessions", numerator: migrated + sourceTotal, denominator })
+      const projects = new Set(
+        (yield* db.all<{ id: string }>(sql`SELECT id FROM project`)).map((project) => project.id),
+      )
+      while (true) {
+        const state = yield* readState(db)
+        const cursorValue = state?.phase === "sessions" ? state.cursor : undefined
+        const nextID = yield* db.get<{ id: string; project_id: string }>(
+          cursorValue === undefined
+            ? sql`SELECT id, project_id FROM session ORDER BY id DESC LIMIT 1`
+            : sql`SELECT id, project_id FROM session WHERE id < ${cursorValue} ORDER BY id DESC LIMIT 1`,
+        )
+        if (!nextID) break
+        yield* db
+          .transaction((tx) =>
+            Effect.gen(function* () {
+              yield* tx
+                .insert(KVTable)
+                .values({ key: MIGRATION_STATE_KEY, value: { phase: "sessions", cursor: nextID.id } })
+                .onConflictDoUpdate({
+                  target: KVTable.key,
+                  set: { value: { phase: "sessions", cursor: nextID.id }, time_updated: Date.now() },
+                })
+                .run()
+              const projectID = projects.has(nextID.project_id) ? nextID.project_id : Project.ID.global
+              if (projectID !== nextID.project_id)
+                yield* Effect.logWarning("Reassigned V1 session with missing project", {
+                  sessionID: nextID.id,
+                  projectID: nextID.project_id,
+                })
+              yield* tx.run(sql`
                   INSERT OR IGNORE INTO session_v2 (
                     id, project_id, workspace_id, parent_id, slug, directory, path, title, version, share_url,
                     summary_additions, summary_deletions, summary_files, summary_diffs, metadata, cost,
@@ -556,85 +600,83 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                     id, ${projectID}, workspace_id, parent_id, slug, directory, path, title, version, share_url,
                     summary_additions, summary_deletions, summary_files, summary_diffs, metadata, cost,
                     tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
-                    revert, permission, agent, model, time_created, time_updated, time_compacting, time_archived
+                    revert, NULL, agent, model, time_created, time_updated, time_compacting, time_archived
                   FROM session
                   WHERE id = ${nextID.id}
                 `)
-                const next = yield* tx
-                  .select()
-                  .from(SessionTable)
-                  .where(eq(SessionTable.id, SessionSchema.ID.make(nextID.id)))
-                  .get()
-                if (!next) return yield* Effect.die(new Error(`Failed to copy V1 session ${nextID.id}`))
-                const sourceMessages = yield* tx.all<SourceMessage>(
-                  sql`SELECT id, session_id, time_created, time_updated, data FROM message WHERE session_id = ${next.id}`,
-                )
-                const sourceParts = yield* tx.all<SourcePart>(
-                  sql`SELECT id, message_id, session_id, time_created, time_updated, data FROM part WHERE session_id = ${next.id}`,
-                )
-                const transformed = transformSession({ session: next, messages: sourceMessages, parts: sourceParts })
-                yield* Effect.forEach(transformed.warnings, (warning) =>
-                  Effect.logWarning("Skipped V1 migration row", warning),
-                )
-                yield* tx.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, next.id)).run()
-                yield* Effect.forEach(transformed.messages, (message) =>
-                  tx
-                    .insert(SessionMessageTable)
-                    .values({
-                      id: SessionMessage.ID.make(message.id),
-                      session_id: SessionSchema.ID.make(message.session_id),
-                      type: message.type,
-                      seq: message.seq,
-                      time_created: message.time_created,
-                      time_updated: message.time_updated,
-                      data: sql`${JSON.stringify(message.data)}`,
-                    })
-                    .run(),
-                )
-                yield* tx
-                  .update(SessionTable)
-                  .set({ ...transformed.session, time_updated: next.time_updated })
-                  .where(eq(SessionTable.id, next.id))
-                  .run()
-                yield* tx
-                  .insert(EventSequenceTable)
-                  .values({ aggregate_id: next.id, seq: transformed.watermark })
-                  .onConflictDoUpdate({
-                    target: EventSequenceTable.aggregate_id,
-                    set: { seq: transformed.watermark, owner_id: null },
+              const next = yield* tx
+                .select()
+                .from(SessionTable)
+                .where(eq(SessionTable.id, SessionSchema.ID.make(nextID.id)))
+                .get()
+              if (!next) return yield* Effect.die(new Error(`Failed to copy V1 session ${nextID.id}`))
+              const sourceMessages = yield* tx.all<SourceMessage>(
+                sql`SELECT id, session_id, time_created, time_updated, data FROM message WHERE session_id = ${next.id}`,
+              )
+              const sourceParts = yield* tx.all<SourcePart>(
+                sql`SELECT id, message_id, session_id, time_created, time_updated, data FROM part WHERE session_id = ${next.id}`,
+              )
+              const transformed = transformSession({ session: next, messages: sourceMessages, parts: sourceParts })
+              yield* Effect.forEach(transformed.warnings, (warning) =>
+                Effect.logWarning("Skipped V1 migration row", warning),
+              )
+              yield* tx.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, next.id)).run()
+              yield* Effect.forEach(transformed.messages, (message) =>
+                tx
+                  .insert(SessionMessageTable)
+                  .values({
+                    id: SessionMessage.ID.make(message.id),
+                    session_id: SessionSchema.ID.make(message.session_id),
+                    type: message.type,
+                    seq: message.seq,
+                    time_created: message.time_created,
+                    time_updated: message.time_updated,
+                    data: sql`${JSON.stringify(message.data)}`,
                   })
-                  .run()
-              }),
-            )
-            .pipe(Effect.orDie)
-          if (runtimeState.status === "running")
-            runtimeState = {
-              status: "running",
-              progress: {
-                label: "Migrating sessions",
-                numerator: (runtimeState.progress.numerator ?? 0) + 1,
-                denominator,
-              },
-            }
-          yield* Effect.yieldNow
-        }
-        yield* db
-          .transaction((tx) =>
-            Effect.gen(function* () {
+                  .run(),
+              )
               yield* tx
-                .insert(KVTable)
-                .values({ key: MIGRATION_STATE_KEY, value: { phase: "completed" } })
+                .update(SessionTable)
+                .set({ ...transformed.session, time_updated: next.time_updated })
+                .where(eq(SessionTable.id, next.id))
+                .run()
+              yield* tx
+                .insert(EventSequenceTable)
+                .values({ aggregate_id: next.id, seq: transformed.watermark })
                 .onConflictDoUpdate({
-                  target: KVTable.key,
-                  set: { value: { phase: "completed" }, time_updated: Date.now() },
+                  target: EventSequenceTable.aggregate_id,
+                  set: { seq: transformed.watermark, owner_id: null },
                 })
                 .run()
             }),
           )
           .pipe(Effect.orDie)
-        return { status: "completed" as const }
-      })
-      return yield* migrate
+        if (runtimeState.status === "running")
+          runtimeState = {
+            status: "running",
+            progress: {
+              label: "Migrating sessions",
+              numerator: (runtimeState.progress.numerator ?? 0) + 1,
+              denominator,
+            },
+          }
+        yield* Effect.yieldNow
+      }
+      yield* db
+        .transaction((tx) =>
+          Effect.gen(function* () {
+            yield* tx
+              .insert(KVTable)
+              .values({ key: MIGRATION_STATE_KEY, value: { phase: "completed" } })
+              .onConflictDoUpdate({
+                target: KVTable.key,
+                set: { value: { phase: "completed" }, time_updated: Date.now() },
+              })
+              .run()
+          }),
+        )
+        .pipe(Effect.orDie)
+      return { status: "completed" as const }
     }).pipe(Effect.orDie),
   )
 }
@@ -663,7 +705,7 @@ function countNextSessions(sourcePath: string | undefined) {
       if (!isNextDatabase(source)) return 0
       return source.query<{ value: number }, []>("SELECT COUNT(*) AS value FROM session").get()?.value ?? 0
     }),
-  ).pipe(Effect.orElseSucceed(() => 0))
+  )
 }
 
 function importNextDatabase(
@@ -686,12 +728,9 @@ function importNextDatabase(
         }),
       )
       const projects = new Map(
-        source
-          .query<NextProject, []>("SELECT * FROM project")
-          .all()
-          .map((project) => [project.id, project]),
+        selectNextRows<NextProject>(source, "project", NEXT_PROJECT_COLUMNS).map((project) => [project.id, project]),
       )
-      const sessions = source.query<NextSession, []>("SELECT * FROM session ORDER BY id DESC").all()
+      const sessions = selectNextRows<NextSession>(source, "session", NEXT_SESSION_COLUMNS)
       for (const [index, session] of sessions.entries()) {
         const project = projects.get(session.project_id)
         const projectID = project ? session.project_id : Project.ID.global
@@ -787,6 +826,35 @@ function isNextDatabase(source: SQLiteDatabase) {
       .map((table) => table.name),
   )
   return tables.has("project") && tables.has("session") && tables.has("session_message")
+}
+
+function selectNextRows<A>(source: SQLiteDatabase, table: "project" | "session", definition: NextColumns<A>) {
+  const columns = new Set(
+    source
+      .query<{ name: string }, [string]>("SELECT name FROM pragma_table_info(?)")
+      .all(table)
+      .map((column) => column.name),
+  )
+  const missing = Object.entries(definition)
+    .filter(([column, strategy]) => strategy === "required" && !columns.has(column))
+    .map(([column]) => column)
+  if (missing.length)
+    throw new Error(`Incompatible opencode-next.db: ${table} is missing required columns: ${missing.join(", ")}`)
+  const projection = Object.entries(definition).map(([column, strategy]) => {
+    if (columns.has(column)) return `"${column}"`
+    if (
+      typeof strategy === "object" &&
+      strategy !== null &&
+      "fallback" in strategy &&
+      typeof strategy.fallback === "string" &&
+      columns.has(strategy.fallback)
+    )
+      return `"${strategy.fallback}" AS "${column}"`
+    return `NULL AS "${column}"`
+  })
+  return source
+    .query<A, []>(`SELECT ${projection.join(", ")} FROM "${table}"${table === "session" ? ' ORDER BY "id" DESC' : ""}`)
+    .all()
 }
 
 function row(

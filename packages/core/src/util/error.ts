@@ -5,9 +5,7 @@ export abstract class NamedError extends Error {
   abstract toObject(): { name: string; data: unknown }
 
   static hasName(error: unknown, name: string): boolean {
-    return (
-      typeof error === "object" && error !== null && "name" in error && (error as Record<string, unknown>).name === name
-    )
+    return typeof error === "object" && error !== null && "name" in error && error.name === name
   }
 
   static create<Name extends string, Fields extends Schema.Struct.Fields>(

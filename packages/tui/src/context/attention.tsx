@@ -1,4 +1,4 @@
-import type { Attention } from "@opencode-ai/plugin/tui/context"
+import type { Attention } from "@opencode/plugin/tui/context"
 import { useRenderer } from "@opentui/solid"
 import { createContext, onCleanup, useContext, type ParentProps } from "solid-js"
 import { createTuiAttention } from "../attention"
@@ -11,7 +11,6 @@ export function AttentionProvider(props: ParentProps) {
   const attention = createTuiAttention({
     renderer: useRenderer(),
     config: config.data,
-    update: config.update,
   })
   onCleanup(() => attention.dispose())
   return <AttentionContext.Provider value={attention}>{props.children}</AttentionContext.Provider>

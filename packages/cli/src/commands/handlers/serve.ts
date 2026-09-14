@@ -11,6 +11,7 @@ export default Runtime.handler(
       mode: input.service ? "service" : input.stdio ? "stdio" : "default",
       hostname: Option.getOrUndefined(input.hostname),
       port: Option.getOrUndefined(input.port),
+      cors: input.cors.length > 0 ? input.cors : undefined,
     })
   }),
 )

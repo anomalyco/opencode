@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { ServerConnection } from "@/context/servers"
-import { selectPromptTab } from "@/context/prompt"
-import type { Tab } from "@/context/tabs"
+import { ServerConnection } from "@/runtime/server/registry"
+import { selectPromptTab } from "@/composer/persistence"
+import type { Tab } from "@/shell/tabs/tabs"
 
 test("selects the explicitly scoped session tab instead of the active tab", () => {
   const server = ServerConnection.Key.make("local")

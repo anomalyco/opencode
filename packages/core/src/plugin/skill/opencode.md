@@ -11,6 +11,9 @@ truth. Follow links from that page when the question needs more detail. Fetch
 <https://opencode.ai/v2/docs/> first when you need to discover the relevant
 documentation page.
 
+A machine-readable documentation index is available at
+<https://opencode.ai/v2/llms.txt>.
+
 ## Version policy
 
 Always answer for OpenCode V2 unless the user explicitly asks about V1,
@@ -76,11 +79,13 @@ to every project for that user. Project configuration can live in any directory
 as `opencode.json(c)` or `.opencode/opencode.json(c)`, including nested packages
 in a monorepo.
 
-When OpenCode starts, it searches from the current directory up to the project
-root. It merges direct `opencode.json(c)` files from root to current directory,
+During ordinary project discovery, OpenCode searches the current Location
+directory and every ancestor through the filesystem root, including directories
+above the detected project or repository root. It merges direct
+`opencode.json(c)` files from the farthest ancestor to the current directory,
 then does the same for `.opencode/opencode.json(c)` files. This means every
-`.opencode` config overrides every direct config. Global configuration has the
-lowest precedence.
+discovered `.opencode` config overrides every discovered direct config. Global
+filesystem configuration has lower precedence than these discovered documents.
 
 Common configuration fields include `model`, `default_agent`, `permissions`,
 `agents`, `commands`, `plugins`, `providers`, `mcp`, `skills`, `instructions`,
@@ -106,20 +111,20 @@ for themselves without limiting it to the current project; omit it when they
 explicitly want project-local configuration.
 
 ```sh
-opencode2 mcp add <name> --global --url <remote-url>
-opencode2 mcp list
+opencode mcp add <name> --global --url <remote-url>
+opencode mcp list
 ```
 
 Remote servers use OAuth by default. If `mcp list` reports that a server needs
-authentication, run the OAuth flow and then verify the connection:
+authentication, tell the user to run `/mcps`, select the server, and sign in.
+Do not run `opencode mcp auth` through the shell tool: it starts an interactive
+flow whose authorization link can be hidden in background process output.
+Use the user-facing MCP interface instead.
 
-```sh
-opencode2 mcp auth <name>
-opencode2 mcp list
-```
+Report the server as configured but awaiting sign-in until its connection
+status confirms it is connected.
 
-The auth command prints an authorization URL, waits for the browser redirect,
-and stores credentials outside the OpenCode configuration. Do not ask for or
+OAuth credentials are stored outside the OpenCode configuration. Do not ask for or
 store an API key when the server supports OAuth. Use header-based credentials
 only when OAuth is unavailable or the user explicitly requires them, and use an
 environment substitution such as `{env:MCP_API_KEY}` instead of writing a
@@ -130,7 +135,7 @@ secret into configuration.
 For any request to migrate OpenCode configuration, agents, commands, skills,
 plugins, integrations, or other behavior from V1 to V2, read the full
 [migration guide](https://opencode.ai/v2/docs/migrate-v1) before acting. In
-the repository, its source is `packages/www/content/docs/migrate-v1.mdx`.
+the repository, its source is `services/www/src/docs/content/migrate-v1.mdx`.
 
 V1 config files and `.opencode/` definitions are intended to remain compatible.
 The only intentional breaking changes are the server API and plugin API. Native
@@ -146,8 +151,12 @@ bug.
 
 For questions about creating, configuring, loading, publishing, or migrating
 plugins, fetch the full [plugins guide](https://opencode.ai/v2/docs/build/plugins)
-before answering. This includes questions about the Effect plugin API, hooks,
-transforms, tools, plugin context capabilities, and package entrypoints.
+before answering. Refer to this guide when the user wants to build a plugin. It
+covers hooks, transforms, tools, plugin context capabilities, and package
+entrypoints. Plugins can also extend the TUI; for those, fetch the
+[CLI plugin guide](https://opencode.ai/v2/docs/build/plugins/cli).
+For custom methods and events shared with other plugins or clients, fetch the
+[RPC guide](https://opencode.ai/v2/docs/build/plugins/rpc).
 
 ## [Service](https://opencode.ai/v2/docs/troubleshooting#check-the-background-service)
 
@@ -159,13 +168,13 @@ OpenCode normally discovers or starts the shared background service
 automatically. If the service is stuck or unhealthy, restart it:
 
 ```sh
-opencode2 service restart
+opencode service restart
 ```
 
 Check its status after restarting:
 
 ```sh
-opencode2 service status
+opencode service status
 ```
 
 ## [API](https://opencode.ai/v2/docs/api)
@@ -181,15 +190,15 @@ HTTP method and path or an OpenAPI operation ID.
 Call an endpoint with an HTTP method and path:
 
 ```sh
-opencode2 api get /api/health
+opencode api get /api/status
 ```
 
 Pass a request body with `--data` or `-d`, and additional headers with
 `--header` or `-H`:
 
 ```sh
-opencode2 api post /api/example --data '{"key":"value"}'
-opencode2 api get /api/example --header 'X-Example:value'
+opencode api post /api/example --data '{"key":"value"}'
+opencode api get /api/example --header 'X-Example:value'
 ```
 
 Request bodies default to `Content-Type: application/json`. When OpenCode is
@@ -208,22 +217,32 @@ For questions about connecting an application to OpenCode over the network,
 fetch the full [client guide](https://opencode.ai/v2/docs/build/client) before
 answering.
 
-`@opencode-ai/client` is the generated TypeScript client for the OpenCode HTTP
+`@opencode/client` is the generated TypeScript client for the OpenCode HTTP
 API. Its methods and types come from the same contract as the API reference.
 The default entrypoint exposes Promise-based resource clients and async
-iterables for streaming endpoints. The `@opencode-ai/client/effect` entrypoint
+iterables for streaming endpoints. The `@opencode/client/effect` entrypoint
 exposes typed Effects, Streams, and decoded OpenCode schema values. Its
 `Service` API can discover, start, stop, and authenticate with the local
 background service from a Node application.
+
+## [SDK](https://opencode.ai/v2/docs/build/sdk)
+
+For questions about embedding OpenCode directly in an application, fetch the
+full [SDK guide](https://opencode.ai/v2/docs/build/sdk) before answering. The SDK
+hosts OpenCode in the application without opening an HTTP listener.
+
+Use the [Effect SDK guide](https://opencode.ai/v2/docs/build/sdk/effect) for
+Effect applications. For Cloudflare Durable Objects, use the
+[Cloudflare SDK guide](https://opencode.ai/v2/docs/build/sdk/cloudflare).
 
 ## [Troubleshooting](https://opencode.ai/v2/docs/troubleshooting)
 
 OpenCode runs a client and a background server. Start by determining whether a
 problem belongs to the client, the shared server, or one project.
 
-- Check the service with `opencode2 service status` and verify the API with
-  `opencode2 api get /api/health`.
-- Compare with `opencode2 --standalone`, which runs the TUI with a private
+- Check the service with `opencode service status` and verify the API with
+  `opencode api get /api/status`.
+- Compare with `opencode --standalone`, which runs the TUI with a private
   server, to isolate shared-service issues.
 - Inspect `~/.local/share/opencode/log/opencode.log`. Filter `role=cli` for
   client startup and `role=server` for sessions, providers, plugins,

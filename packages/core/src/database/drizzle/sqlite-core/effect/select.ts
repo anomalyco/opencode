@@ -15,7 +15,7 @@ import { SQL } from "drizzle-orm/sql/sql"
 import type { ColumnsSelection, SQLWrapper } from "drizzle-orm/sql/sql"
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core/columns"
 import type { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
-import { SQLiteSelectQueryBuilderBase } from "drizzle-orm/sqlite-core/query-builders/select"
+import { SQLiteSelectBase } from "drizzle-orm/sqlite-core/query-builders/select"
 import type {
   CreateSQLiteSelectFromBuilderMode,
   SelectedFields,
@@ -97,8 +97,8 @@ export class SQLiteEffectSelectBuilder<
       >
     : CreateSQLiteSelectFromBuilderMode<
         TBuilderMode,
+        SQLiteEffectSelectHKT<TEffectHKT>,
         GetSelectTableName<TFrom>,
-        "async",
         TRunResult,
         TSelection extends undefined ? GetSelectTableSelection<TFrom> : TSelection,
         TSelection extends undefined ? "single" : "partial"
@@ -164,10 +164,9 @@ export interface SQLiteEffectSelectBase<
   out TResult extends any[] = SelectResult<TSelection, TSelectMode, TNullabilityMap>[],
   out TSelectedFields extends ColumnsSelection = BuildSubquerySelection<TSelection, TNullabilityMap>,
   out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
-> extends SQLiteSelectQueryBuilderBase<
+> extends SQLiteSelectBase<
       SQLiteEffectSelectHKT<TEffectHKT>,
       TTableName,
-      "async",
       TRunResult,
       TSelection,
       TSelectMode,
@@ -193,10 +192,9 @@ export class SQLiteEffectSelectBase<
     out TSelectedFields extends ColumnsSelection = BuildSubquerySelection<TSelection, TNullabilityMap>,
     out TEffectHKT extends QueryEffectHKTBase = QueryEffectHKTBase,
   >
-  extends SQLiteSelectQueryBuilderBase<
+  extends SQLiteSelectBase<
     SQLiteEffectSelectHKT<TEffectHKT>,
     TTableName,
-    "async",
     TRunResult,
     TSelection,
     TSelectMode,
@@ -215,7 +213,7 @@ export class SQLiteEffectSelectBase<
   }
 
   /** @internal */
-  getSQL(): SQL {
+  override getSQL(): SQL {
     return this.dialect.buildSelectQuery(this.effectConfig)
   }
 
@@ -240,7 +238,7 @@ export class SQLiteEffectSelectBase<
     return query as ReturnType<this["prepare"]>
   }
 
-  $withCache(config?: { config?: CacheConfig; tag?: string; autoInvalidate?: boolean } | false) {
+  override $withCache(config?: { config?: CacheConfig; tag?: string; autoInvalidate?: boolean } | false) {
     this.cacheConfig =
       config === undefined
         ? { config: {}, enabled: true, autoInvalidate: true }

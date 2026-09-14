@@ -1,5 +1,5 @@
-import { Form } from "@opencode-ai/schema/form"
-import { Location } from "@opencode-ai/schema/location"
+import { Form } from "@opencode/schema/form"
+import { Location } from "@opencode/schema/location"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
@@ -43,7 +43,7 @@ export const makeFormGroup = <
         .annotateMerge(locationQueryOpenApi)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.form.request.list",
+            identifier: "form.request.list",
             summary: "List pending form requests",
             description: "Retrieve pending forms for a location.",
           }),
@@ -55,15 +55,13 @@ export const makeFormGroup = <
         params: { sessionID: Schema.String },
         success: Schema.Struct({ data: Schema.Array(Form.Info) }),
         error: SessionNotFoundError,
-      })
-        .middleware(formLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.form.list",
-            summary: "List session forms",
-            description: "Retrieve pending forms for a session.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.form.list",
+          summary: "List session forms",
+          description: "Retrieve pending forms for a session.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.form.create", "/api/session/:sessionID/form", {
@@ -75,7 +73,7 @@ export const makeFormGroup = <
         .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.form.create",
+            identifier: "session.form.create",
             summary: "Create session form",
             description: "Create a form for a session.",
           }),
@@ -90,7 +88,7 @@ export const makeFormGroup = <
         .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.form.get",
+            identifier: "session.form.get",
             summary: "Get session form",
             description: "Retrieve a form for a session.",
           }),
@@ -105,7 +103,7 @@ export const makeFormGroup = <
         .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.form.state",
+            identifier: "session.form.state",
             summary: "Get form state",
             description: "Retrieve the current state for a form.",
           }),
@@ -121,7 +119,7 @@ export const makeFormGroup = <
         .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.form.reply",
+            identifier: "session.form.reply",
             summary: "Reply to form",
             description: "Submit an answer to a pending form.",
           }),
@@ -136,7 +134,7 @@ export const makeFormGroup = <
         .middleware(formLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.form.cancel",
+            identifier: "session.form.cancel",
             summary: "Cancel form",
             description: "Cancel a pending form.",
           }),

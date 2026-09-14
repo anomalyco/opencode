@@ -1,0 +1,43 @@
+[data-component="new-session-wordmark"] {
+  --wordmark-shimmer-opacity: 0.45;
+
+  .wordmark-shimmer {
+    /* Blend above the base logo's opacity so the sweep only adds light in either theme. */
+    color: white;
+    mix-blend-mode: screen;
+    opacity: 0;
+    mask-image: linear-gradient(to right, transparent 40%, black 50%, transparent 60%);
+    mask-size: 300% 100%;
+    mask-repeat: no-repeat;
+    animation: new-session-wordmark-shimmer 800ms linear both;
+  }
+}
+
+[data-color-scheme="dark"] [data-component="new-session-wordmark"] {
+  /* Preserve the previous dark highlight strength: 0.16 × 0.7 × 0.6. */
+  --wordmark-shimmer-opacity: 0.0672;
+}
+
+/* Oversizing the mask moves its highlight physically left to right, including in RTL. */
+@keyframes new-session-wordmark-shimmer {
+  0% {
+    mask-position: 100% 0;
+    opacity: 0;
+  }
+  20%,
+  80% {
+    opacity: var(--wordmark-shimmer-opacity);
+  }
+  100% {
+    mask-position: 0% 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="new-session-wordmark"] {
+    .wordmark-shimmer {
+      animation: none;
+    }
+  }
+}

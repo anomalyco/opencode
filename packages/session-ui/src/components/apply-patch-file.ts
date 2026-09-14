@@ -1,85 +1,98 @@
-import { normalize, type ViewDiff } from "./session-diff"
+import type { FileDiffInfo } from "@opencode/client/promise"
+import { completePatchContents, normalize, type ViewDiff } from "./session-diff"
 
-type Kind = "add" | "update" | "delete" | "move"
-
-type Raw = {
-  file?: string
-  filePath?: string
-  relativePath?: string
-  type?: Kind
-  status?: "added" | "deleted" | "modified"
-  patch?: string
-  diff?: string
-  before?: string
-  after?: string
-  additions?: number
-  deletions?: number
-  movePath?: string
-}
+type Kind = "add" | "update" | "delete"
 
 export type ApplyPatchFile = {
-  filePath: string
-  relativePath: string
+  path: string
   type: Kind
   additions: number
   deletions: number
-  movePath?: string
   view: ViewDiff
+  contents?: { before: string; after: string }
 }
 
-function kind(value: unknown) {
-  if (value === "add" || value === "update" || value === "delete" || value === "move") return value
-  if (value === "added") return "add"
-  if (value === "deleted") return "delete"
-  if (value === "modified") return "update"
-  return undefined
+export type ApplyPatchFileGroup = Omit<ApplyPatchFile, "view" | "contents"> & { views: ViewDiff[] }
+
+export function changedFileDiff(value: unknown): value is FileDiffInfo {
+  if (!value || typeof value !== "object") return false
+  if (!("file" in value) || typeof value.file !== "string") return false
+  if (!("patch" in value) || typeof value.patch !== "string") return false
+  if (!("additions" in value) || typeof value.additions !== "number") return false
+  if (!("deletions" in value) || typeof value.deletions !== "number") return false
+  if (!("status" in value)) return false
+  if (value.status !== "added" && value.status !== "deleted" && value.status !== "modified") return false
+  return value.additions > 0 || value.deletions > 0
 }
 
-function status(type: Kind): "added" | "deleted" | "modified" {
-  if (type === "add") return "added"
-  if (type === "delete") return "deleted"
-  return "modified"
-}
-
-export function patchFile(raw: unknown): ApplyPatchFile | undefined {
-  if (!raw || typeof raw !== "object") return undefined
-
-  const value = raw as Raw
-  const type = kind(value.type) ?? kind(value.status)
-  const filePath =
-    typeof value.filePath === "string" ? value.filePath : typeof value.file === "string" ? value.file : undefined
-  const relativePath = typeof value.relativePath === "string" ? value.relativePath : filePath
-  const patch = typeof value.patch === "string" ? value.patch : typeof value.diff === "string" ? value.diff : undefined
-  const before = typeof value.before === "string" ? value.before : undefined
-  const after = typeof value.after === "string" ? value.after : undefined
-
-  if (!type || !filePath || !relativePath) return undefined
-  if (!patch && before === undefined && after === undefined) return undefined
-
-  const additions = typeof value.additions === "number" ? value.additions : 0
-  const deletions = typeof value.deletions === "number" ? value.deletions : 0
-  const movePath = typeof value.movePath === "string" ? value.movePath : undefined
-
+export function patchFile(value: unknown): ApplyPatchFile | undefined {
+  if (!changedFileDiff(value)) return
+  let view: ViewDiff | undefined
   return {
-    filePath,
-    relativePath,
-    type,
-    additions,
-    deletions,
-    movePath,
-    view: normalize({
-      file: relativePath,
-      patch,
-      before,
-      after,
-      additions,
-      deletions,
-      status: status(type),
-    }),
+    path: value.file,
+    type: value.status === "added" ? "add" : value.status === "deleted" ? "delete" : "update",
+    additions: value.additions,
+    deletions: value.deletions,
+    get view() {
+      return (view ??= normalize(value))
+    },
+    contents: completePatchContents(value.patch),
   }
 }
 
-export function patchFiles(raw: unknown) {
-  if (!Array.isArray(raw)) return []
-  return raw.map(patchFile).filter((file): file is ApplyPatchFile => !!file)
+export function patchFiles(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.map(patchFile).filter((file): file is ApplyPatchFile => !!file)
+}
+
+export function patchFileGroups(value: unknown): ApplyPatchFileGroup[] {
+  const groups = patchFiles(value).reduce((result, file) => {
+    const files = result.get(file.path)
+    if (files) files.push(file)
+    if (!files) result.set(file.path, [file])
+    return result
+  }, new Map<string, ApplyPatchFile[]>())
+  return [...groups].map(([path, files]) => {
+    const first = files[0]!
+    const last = files.at(-1)!
+    const type = last.type === "delete" ? "delete" : first.type === "add" ? "add" : "update"
+    const chained = files.every(
+      (file, index) => !!file.contents && (index === 0 || files[index - 1]?.contents?.after === file.contents.before),
+    )
+    if (!chained) {
+      return {
+        path,
+        type,
+        additions: files.reduce((total, file) => total + file.additions, 0),
+        deletions: files.reduce((total, file) => total + file.deletions, 0),
+        views: files.map((file) => file.view),
+      }
+    }
+
+    const view =
+      files.length === 1
+        ? first.view
+        : normalize({
+            file: path,
+            before: first.contents!.before,
+            after: last.contents!.after,
+            status: type === "add" ? "added" : type === "delete" ? "deleted" : "modified",
+            additions: 0,
+            deletions: 0,
+          })
+    // Parsed hunks already contain net change counts, excluding unchanged context.
+    const counts = view.fileDiff.hunks.reduce(
+      (result, hunk) => ({
+        additions: result.additions + hunk.additionLines,
+        deletions: result.deletions + hunk.deletionLines,
+      }),
+      { additions: 0, deletions: 0 },
+    )
+    return {
+      path,
+      type,
+      ...counts,
+      views: [{ ...view, ...counts }],
+    }
+  })
 }

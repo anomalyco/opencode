@@ -401,4 +401,9 @@ input:where([type="button"], [type="reset"], [type="submit"]),
   [contenteditable="true"] {
     font-size: 16px !important;
   }
+
+  input::placeholder,
+  textarea::placeholder {
+    font-size: 13px;
+  }
 }

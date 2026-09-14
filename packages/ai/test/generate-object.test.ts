@@ -44,21 +44,23 @@ describe("Tool.make (dynamic JSON Schema)", () => {
     expect(definition?.inputSchema).toEqual(jsonSchema)
   })
 
-  test("execute receives the raw input untouched", async () => {
-    const seen: unknown[] = []
-    const tool = Tool.make({
-      description: "echo",
-      jsonSchema: { type: "object" },
-      execute: (params) =>
-        Effect.sync(() => {
-          seen.push(params)
-          return { ok: true }
-        }),
-    })
-    const result = await Effect.runPromise(tool.execute({ hello: "world" }))
-    expect(seen).toEqual([{ hello: "world" }])
-    expect(result).toEqual({ ok: true })
-  })
+  it.effect("execute receives the raw input untouched", () =>
+    Effect.gen(function* () {
+      const seen: unknown[] = []
+      const tool = Tool.make({
+        description: "echo",
+        jsonSchema: { type: "object" },
+        execute: (params) =>
+          Effect.sync(() => {
+            seen.push(params)
+            return { ok: true }
+          }),
+      })
+      const result = yield* tool.execute({ hello: "world" })
+      expect(seen).toEqual([{ hello: "world" }])
+      expect(result).toEqual({ ok: true })
+    }),
+  )
 })
 
 describe("LLM.generateObject", () => {

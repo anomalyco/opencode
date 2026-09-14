@@ -1,0 +1,34 @@
+[data-slot="mobile-panel"] {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+[data-slot="mobile-panel-header"] {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-inline-start: 8px;
+  padding-block-end: 8px;
+}
+
+[data-slot="mobile-panel-header"] h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 530;
+  line-height: var(--line-height-base);
+}
+
+[data-slot="mobile-panel-close"][data-component="button-v2"] {
+  height: 44px;
+  flex-shrink: 0;
+}
+
+[data-slot="mobile-panel-content"] {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}

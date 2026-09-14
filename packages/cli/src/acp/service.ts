@@ -6,9 +6,8 @@ import {
   type OpenCodeClient,
   type SessionInfo,
   type SessionMessageInfo,
-  type SkillInfo,
-} from "@opencode-ai/client/promise"
-import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+} from "@opencode/client/promise"
+import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import type {
   AgentSideConnection,
   AuthenticateRequest,
@@ -40,8 +39,13 @@ import type {
   SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
 import { OPENCODE_VERSION } from "../version"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { buildConfigOptions, parseModelSelection, type ConfigOptionProvider } from "./config-option"
+import { SessionMessage } from "@opencode/schema/session-message"
+import {
+  buildConfigOptions,
+  DEFAULT_VARIANT_VALUE,
+  parseModelSelection,
+  type ConfigOptionProvider,
+} from "./config-option"
 import { promptContentToParts } from "./content"
 import {
   ChildSessionUpdateMethod,
@@ -66,7 +70,6 @@ type Catalog = {
   readonly modes: Array<{ id: string; name: string; description?: string }>
   readonly defaultModeID: string
   readonly commands: CommandInfo[]
-  readonly skills: SkillInfo[]
 }
 
 type Attached = {
@@ -85,7 +88,6 @@ type PreparedPrompt = {
   readonly synthetic: ReadonlyArray<string>
   readonly slash?: { readonly name: string; readonly args: string }
   readonly command?: CommandInfo
-  readonly skill?: SkillInfo
 }
 
 export interface Interface {
@@ -152,11 +154,8 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       update: {
         sessionUpdate: "available_commands_update",
         availableCommands: [
-          ...state.catalog.commands,
-          ...state.catalog.skills.filter(
-            (skill) => !state.catalog.commands.some((command) => command.name === skill.name),
-          ),
-        ].map((command) => ({ name: command.name, description: command.description ?? "" })),
+          ...state.catalog.commands.map((command) => ({ name: command.name, description: command.description ?? "" })),
+        ],
       },
     })
     return state
@@ -264,7 +263,6 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
     forkSession: async (params) => {
       const forked = await input.client.session.fork({
         sessionID: params.sessionId,
-        boundary: { type: "through" },
       })
       const state = await attach(forked, forked.location.directory, params.mcpServers ?? [])
       await replay(state)
@@ -275,7 +273,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       if (typeof params.value !== "string") throw new ACPError.InvalidConfigOptionError({ configId: params.configId })
       switch (params.configId) {
         case "model": {
-          const selected = requireModel(state.catalog, params.value)
+          const selected = requireModel(state.catalog, params.value, state.model)
           state.model = selected
           await input.client.session.switchModel({ sessionID: state.id, model: selected })
           break
@@ -284,7 +282,10 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
           const model = state.catalog.models.find(
             (item) => item.providerID === state.model.providerID && item.id === state.model.id,
           )
-          if (!model?.variants.some((variant) => variant.id === params.value))
+          if (
+            !model ||
+            (params.value !== DEFAULT_VARIANT_VALUE && !model.variants.some((variant) => variant.id === params.value))
+          )
             throw new ACPError.InvalidEffortError({ effort: params.value })
           state.model = { ...state.model, variant: params.value }
           await input.client.session.switchModel({ sessionID: state.id, model: state.model })
@@ -326,6 +327,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         cwd: state.cwd,
         start: prepared.start,
         writeTextFile: capabilities.writeTextFile,
+        action: prepared.command !== undefined,
         control,
         connectionSignal: input.connection.signal,
         sessionSignal: state.abort.signal,
@@ -356,9 +358,8 @@ function preparePrompt(catalog: Catalog, prompt: PromptRequest["prompt"], messag
   const files = visible.flatMap((part) => (part.type === "file" ? [{ uri: part.url, name: part.filename }] : []))
   const slash = detectSlashCommand(text)
   const command = slash ? catalog.commands.find((item) => item.name === slash.name) : undefined
-  const skill = slash ? catalog.skills.find((item) => item.name === slash.name) : undefined
-  const start = turnStart(messageID, slash, skill)
-  return { start, text, files, synthetic, slash, command, skill }
+  const start = turnStart(messageID, slash)
+  return { start, text, files, synthetic, slash, command }
 }
 
 async function submitPrompt(client: OpenCodeClient, session: Attached, prompt: PreparedPrompt, signal: AbortSignal) {
@@ -372,14 +373,12 @@ async function submitPrompt(client: OpenCodeClient, session: Attached, prompt: P
     })
   }
   if (prompt.start.type === "compaction") return client.session.compact({ sessionID: session.id, id: prompt.start.id })
-  if (prompt.skill) return client.session.skill({ sessionID: session.id, id: prompt.start.id, skill: prompt.skill.id })
   if (prompt.command) {
     return client.session.command(
       {
         sessionID: session.id,
-        id: prompt.start.id,
-        command: prompt.command.name,
-        arguments: prompt.slash?.args,
+        name: prompt.command.name,
+        text: prompt.slash?.args ?? "",
         files: prompt.files,
         delivery: "steer",
       },
@@ -392,27 +391,29 @@ async function submitPrompt(client: OpenCodeClient, session: Attached, prompt: P
   )
 }
 
-function turnStart(messageID: string, slash: PreparedPrompt["slash"], skill: SkillInfo | undefined): TurnStart {
+function turnStart(messageID: string, slash: PreparedPrompt["slash"]): TurnStart {
   if (slash?.name === "compact") return { type: "compaction", id: messageID }
-  if (skill) return { type: "skill", id: messageID }
   return { type: "input", id: messageID }
 }
 
 async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog> {
   const location = { directory: cwd }
-  // Location plugins initialize asynchronously, so the first ACP request may observe an empty catalog.
+  // Some providers discover models in the background after plugin startup begins.
   const deadline = Date.now() + 5_000
   let missing = "No models are available"
   while (Date.now() < deadline) {
-    const [modelResult, defaultResult, agentResult, commandResult, skillResult] = await Promise.all([
+    const [modelResult, defaultResult, agentResult, commandResult] = await Promise.all([
       client.model.list({ location }),
       client.model.default({ location }),
       client.agent.list({ location }),
       client.command.list({ location }),
-      client.skill.list({ location }),
     ])
     const models = modelResult.data.filter((model) => model.enabled)
-    const defaultModel = defaultResult.data ?? models[0]
+    const preferred = defaultResult.data
+    // Parallel reads can straddle initialization; select only from this model list.
+    const defaultModel = preferred
+      ? models.find((model) => model.providerID === preferred.providerID && model.id === preferred.id)
+      : models[0]
     const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
     const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
     if (defaultModel && defaultAgent) {
@@ -427,7 +428,6 @@ async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog
         modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
         defaultModeID: defaultAgent.id,
         commands: commandResult.data,
-        skills: skillResult.data.filter((skill) => skill.slash !== false),
       }
     }
     missing = defaultModel ? "No primary agents are available" : "No models are available"
@@ -448,7 +448,7 @@ function providers(models: readonly ModelInfo[]): ConfigOptionProvider[] {
     }))
 }
 
-function requireModel(catalog: Catalog, modelID: string): ModelRef {
+function requireModel(catalog: Catalog, modelID: string, current: ModelRef): ModelRef {
   const selected = parseModelSelection(modelID, catalog.providers)
   const model = catalog.models.find(
     (item) => item.providerID === selected.model.providerID && item.id === selected.model.modelID,
@@ -456,7 +456,14 @@ function requireModel(catalog: Catalog, modelID: string): ModelRef {
   if (!model) throw new ACPError.InvalidModelError({ providerId: selected.model.providerID, modelId: modelID })
   if (selected.variant && !model.variants.some((variant) => variant.id === selected.variant))
     throw new ACPError.InvalidEffortError({ effort: selected.variant })
-  return { providerID: model.providerID, id: model.id, variant: selected.variant }
+  const variant =
+    selected.variant ??
+    (current.providerID === model.providerID &&
+    current.id === model.id &&
+    (current.variant === DEFAULT_VARIANT_VALUE || model.variants.some((variant) => variant.id === current.variant))
+      ? current.variant
+      : undefined)
+  return { providerID: model.providerID, id: model.id, variant }
 }
 
 async function selectMode(client: OpenCodeClient, state: Attached, modeID: string) {

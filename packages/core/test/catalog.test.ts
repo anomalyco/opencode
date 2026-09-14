@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test"
-import { Money } from "@opencode-ai/schema/money"
+import { LanguageModel } from "@opencode/ai"
+import { OpenAIChat } from "@opencode/ai/protocols"
 import { Effect, Fiber, Layer, Stream } from "effect"
-import { TestClock } from "effect/testing"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Integration } from "@opencode-ai/core/integration"
-import { Credential } from "@opencode-ai/core/credential"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { Location } from "@opencode-ai/core/location"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Integration } from "@opencode/core/integration"
+import { Credential } from "@opencode/core/credential"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { Location } from "@opencode/core/location"
+import { Model } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
+import { Provider } from "@opencode/core/provider"
+import { AbsolutePath } from "@opencode/core/schema"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
@@ -24,111 +24,188 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("test") })),
 )
-const catalogLayer = AppNodeBuilder.build(
-  LayerNode.group([Catalog.node, Bus.node, Credential.node, Integration.node]),
-  [[Location.node, locationLayer]],
+const modelLayer = AppNodeBuilder.build(
+  LayerNode.group([Provider.node, Model.node, Bus.node, Credential.node, Integration.node]),
+  [Location.node.replace(locationLayer)],
 )
-const it = testEffect(catalogLayer)
+const it = testEffect(modelLayer)
 
-describe("Catalog", () => {
-  it.effect("publishes an updated event after catalog changes", () =>
+describe("Provider and Model", () => {
+  ;["variant", "empty-key", "metadata", "aisdk"].forEach((path) =>
+    it.effect(`keeps nested model values editable after ${path} model resolution`, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const models = yield* Model.Service
+        const providerID = Provider.ID.make("resolve-fixture")
+        const modelID = Model.ID.make("fixture-model")
+        yield* providers.transform((editor) => editor.update(providerID, () => {}))
+        yield* models.transform((editor) =>
+          editor.update(providerID, modelID, (model) => {
+            model.package = path === "aisdk" ? Provider.aisdk("@ai-sdk/fixture") : "@opencode/ai/providers/openai"
+            model.settings = {
+              apiKey: path === "empty-key" ? "" : "fixture-key",
+              baseURL: "https://fixture.example/v1",
+            }
+            model.variants = [{ id: Model.VariantID.make("high"), body: { reasoning: { effort: "high" } } }]
+          }),
+        )
+        const selected = required(yield* models.get(providerID, modelID))
+        if (path === "variant") yield* ModelResolver.withVariant(selected, Model.VariantID.make("high"))
+        if (path !== "variant")
+          yield* ModelResolver.fromCatalogModel(
+            selected,
+            path === "metadata"
+              ? Credential.Key.make({ type: "key", key: "fixture-key", metadata: { tenant: "fixture" } })
+              : undefined,
+            {
+              loadAISDK: () =>
+                Effect.succeed(LanguageModel.make({ id: modelID, provider: providerID, route: OpenAIChat.route })),
+            },
+          )
+
+        yield* models.transform((editor) =>
+          editor.update(providerID, modelID, (model) => {
+            model.limit.context = 100_000
+            model.capabilities.tools = false
+            model.variants.push({ id: Model.VariantID.make("other") })
+          }),
+        )
+        expect(required(yield* models.get(providerID, modelID))).toMatchObject({
+          limit: { context: 100_000 },
+          capabilities: { tools: false },
+          variants: [{ id: "high" }, { id: "other" }],
+        })
+      }),
+    ),
+  )
+
+  it.effect("publishes an updated event after provider changes", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
       const bus = yield* Bus.Service
       const updated = yield* bus
-        .subscribe(Catalog.Event.Updated)
+        .subscribe(Provider.Event.Updated)
         .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
-      yield* catalog.transform((editor) => editor.provider.update(Provider.ID.make("test"), () => {}))
+      yield* providers.transform((editor) => editor.update(Provider.ID.make("test"), () => {}))
 
       expect((yield* Fiber.join(updated)).length).toBe(1)
     }),
   )
 
+  it.effect("preserves provider identity when updating new and existing providers", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const providerID = Provider.ID.make("original")
+      const renamed = Provider.ID.make("renamed")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.id = renamed
+          provider.name = "Created"
+        })
+        expect(editor.get(providerID)?.provider.id).toBe(providerID)
+        editor.update(providerID, (provider) => {
+          provider.id = renamed
+          provider.name = "Updated"
+        })
+      })
+
+      expect(yield* providers.get(providerID)).toMatchObject({ id: providerID, name: "Updated" })
+      expect(yield* providers.get(renamed)).toBeUndefined()
+      expect((yield* providers.all()).map((provider) => provider.id)).toEqual([providerID])
+
+      yield* providers.reload()
+      expect(yield* providers.get(providerID)).toMatchObject({ id: providerID, name: "Updated" })
+    }),
+  )
+
   it.effect("derives availability from active credentials without changing provider state", () => {
     const integrationID = Integration.ID.make("test")
-    const localCatalogLayer = Layer.fresh(
-      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node]), [[Location.node, locationLayer]]),
+    const localProviderLayer = Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Provider.node, Credential.node]), [Location.node.replace(locationLayer)]),
     )
 
     return Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
       const credentials = yield* Credential.Service
-      yield* catalog.transform((editor) => editor.provider.update(Provider.ID.make("test"), () => {}))
+      yield* providers.transform((editor) => editor.update(Provider.ID.make("test"), () => {}))
       yield* credentials.create({
         integrationID,
         label: "First",
         value: Credential.Key.make({ type: "key", key: "first", metadata: { tenant: "one" } }),
       })
 
-      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([Provider.ID.make("test")])
-      expect(required(yield* catalog.provider.get(Provider.ID.make("test"))).body).toBeUndefined()
+      expect((yield* providers.available()).map((provider) => provider.id)).toEqual([Provider.ID.make("test")])
+      expect(required(yield* providers.get(Provider.ID.make("test"))).body).toBeUndefined()
       yield* credentials.create({
         integrationID,
         label: "Second",
         value: Credential.Key.make({ type: "key", key: "second", metadata: { tenant: "two" } }),
       })
-      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([Provider.ID.make("test")])
-      expect(required(yield* catalog.provider.get(Provider.ID.make("test"))).body).toBeUndefined()
-    }).pipe(Effect.provide(localCatalogLayer))
+      expect((yield* providers.available()).map((provider) => provider.id)).toEqual([Provider.ID.make("test")])
+      expect(required(yield* providers.get(Provider.ID.make("test"))).body).toBeUndefined()
+    }).pipe(Effect.scoped, Effect.provide(localProviderLayer))
   })
 
   it.effect("derives availability from a provider's integration", () => {
     const integrationID = Integration.ID.make("gateway")
     const providerID = Provider.ID.make("remote")
-    const localCatalogLayer = Layer.fresh(
-      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
-        [Location.node, locationLayer],
+    const localProviderLayer = Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Provider.node, Credential.node, Integration.node]), [
+        Location.node.replace(locationLayer),
       ]),
     )
 
     return Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
-      yield* catalog.transform((editor) =>
-        editor.provider.update(providerID, (provider) => {
+      const providers = yield* Provider.Service
+      const integrations = yield* Integration.Service
+      yield* integrations.transform((editor) => editor.update(integrationID, () => {}))
+      yield* providers.transform((editor) =>
+        editor.update(providerID, (provider) => {
           provider.integrationID = integrationID
         }),
       )
-      expect(yield* catalog.provider.available()).toEqual([])
+      expect(yield* providers.available()).toEqual([])
 
-      yield* (yield* Credential.Service).create({
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
         integrationID,
         value: Credential.Key.make({ type: "key", key: "secret" }),
       })
 
-      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
-    }).pipe(Effect.provide(localCatalogLayer))
+      expect((yield* providers.available()).map((provider) => provider.id)).toEqual([providerID])
+    }).pipe(Effect.scoped, Effect.provide(localProviderLayer))
   })
 
   it.effect("makes an explicitly enabled provider available without a connection", () => {
     const integrationID = Integration.ID.make("gateway")
     const providerID = Provider.ID.make("remote")
-    const localCatalogLayer = Layer.fresh(
-      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
-        [Location.node, locationLayer],
+    const localProviderLayer = Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Provider.node, Credential.node, Integration.node]), [
+        Location.node.replace(locationLayer),
       ]),
     )
 
     return Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
-      yield* catalog.transform((editor) =>
-        editor.provider.update(providerID, (provider) => {
+      const providers = yield* Provider.Service
+      const integrations = yield* Integration.Service
+      yield* integrations.transform((editor) => editor.update(integrationID, () => {}))
+      yield* providers.transform((editor) =>
+        editor.update(providerID, (provider) => {
           provider.integrationID = integrationID
           provider.settings = { baseURL: "https://gateway.example.com/v1" }
         }),
       )
-      expect(yield* catalog.provider.available()).toEqual([])
+      expect(yield* providers.available()).toEqual([])
 
-      yield* catalog.transform((editor) =>
-        editor.provider.update(providerID, (provider) => {
+      yield* providers.transform((editor) =>
+        editor.update(providerID, (provider) => {
           provider.activation = "enabled"
         }),
       )
-      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
-    }).pipe(Effect.provide(localCatalogLayer))
+      expect((yield* providers.available()).map((provider) => provider.id)).toEqual([providerID])
+    }).pipe(Effect.scoped, Effect.provide(localProviderLayer))
   })
 
   it.effect("projects environment connections without a catalog plugin", () =>
@@ -140,7 +217,7 @@ describe("Catalog", () => {
       }),
       () =>
         Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
+          const providers = yield* Provider.Service
           const integrations = yield* Integration.Service
           const providerID = Provider.ID.make("test")
           yield* integrations.transform((editor) =>
@@ -149,9 +226,9 @@ describe("Catalog", () => {
               method: { type: "env", names: ["CATALOG_TEST_API_KEY"] },
             }),
           )
-          yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
+          yield* providers.transform((editor) => editor.update(providerID, () => {}))
 
-          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
+          expect((yield* providers.available()).map((provider) => provider.id)).toContain(providerID)
         }),
       (previous) =>
         Effect.sync(() => {
@@ -163,16 +240,16 @@ describe("Catalog", () => {
 
   it.effect("stores provider package settings", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
       const providerID = Provider.ID.make("test")
-      yield* catalog.transform((catalog) =>
-        catalog.provider.update(providerID, (provider) => {
+      yield* providers.transform((editor) =>
+        editor.update(providerID, (provider) => {
           provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
           provider.settings = { baseURL: "https://override.example.com" }
         }),
       )
 
-      expect(required(yield* catalog.provider.get(providerID))).toMatchObject({
+      expect(required(yield* providers.get(providerID))).toMatchObject({
         package: Provider.aisdk("@ai-sdk/openai-compatible"),
         settings: { baseURL: "https://override.example.com" },
       })
@@ -181,22 +258,25 @@ describe("Catalog", () => {
 
   it.effect("uses model package settings over provider settings", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
       const providerID = Provider.ID.make("test")
       const modelID = Model.ID.make("model")
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(providerID, (provider) => {
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
           provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
           provider.settings = { baseURL: "https://provider.example.com" }
         })
-        catalog.model.update(providerID, modelID, (model) => {
+      })
+      yield* models.transform((editor) => {
+        editor.update(providerID, modelID, (model) => {
           model.modelID = Model.ID.make("upstream-model")
           model.package = Provider.aisdk("@ai-sdk/openai-compatible")
           model.settings = { baseURL: "https://override.example.com" }
         })
       })
 
-      expect(required(yield* catalog.model.get(providerID, modelID))).toMatchObject({
+      expect(required(yield* models.get(providerID, modelID))).toMatchObject({
         modelID: Model.ID.make("upstream-model"),
         package: Provider.aisdk("@ai-sdk/openai-compatible"),
         settings: { baseURL: "https://override.example.com" },
@@ -206,18 +286,19 @@ describe("Catalog", () => {
 
   it.effect("resolves default model package settings from the provider", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
       const providerID = Provider.ID.make("test")
       const modelID = Model.ID.make("model")
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(providerID, (provider) => {
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
           provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
           provider.settings = { baseURL: "https://provider.example.com" }
         })
-        catalog.model.update(providerID, modelID, () => {})
+        editor.models.update(providerID, modelID, () => {})
       })
 
-      expect(required(yield* catalog.model.get(providerID, modelID))).toMatchObject({
+      expect(required(yield* models.get(providerID, modelID))).toMatchObject({
         package: Provider.aisdk("@ai-sdk/openai-compatible"),
         settings: { baseURL: "https://provider.example.com" },
       })
@@ -226,23 +307,26 @@ describe("Catalog", () => {
 
   it.effect("resolves provider and model overlay merges", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
       const providerID = Provider.ID.make("test")
       const modelID = Model.ID.make("model")
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(providerID, (provider) => {
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
           provider.settings = { provider: true, shared: "provider" }
           provider.headers = { provider: "provider", shared: "provider" }
           provider.body = { provider: true, shared: "provider" }
         })
-        catalog.model.update(providerID, modelID, (model) => {
+      })
+      yield* models.transform((editor) => {
+        editor.update(providerID, modelID, (model) => {
           model.settings = { model: true, shared: "model" }
           model.headers = { model: "model", shared: "model" }
           model.body = { model: true, shared: "model" }
         })
       })
 
-      const model = required(yield* catalog.model.get(providerID, modelID))
+      const model = required(yield* models.get(providerID, modelID))
       expect(model.settings).toEqual({ provider: true, shared: "model", model: true })
       expect(model.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
       expect(model.body).toEqual({ provider: true, shared: "model", model: true })
@@ -251,116 +335,123 @@ describe("Catalog", () => {
 
   it.effect("falls back to newest available model when no default is configured", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
       const providerID = Provider.ID.make("test")
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(providerID, () => {})
-        catalog.model.update(providerID, Model.ID.make("old"), (model) => {
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        editor.models.update(providerID, Model.ID.make("old"), (model) => {
           model.time.released = 1000
         })
-        catalog.model.update(providerID, Model.ID.make("new"), (model) => {
+        editor.models.update(providerID, Model.ID.make("new"), (model) => {
           model.time.released = 2000
         })
       })
 
-      expect((yield* catalog.model.default())?.id).toMatch("new")
+      expect((yield* models.default())?.id).toMatch("new")
     }),
   )
 
   it.effect("uses a transform-provided default model until that transform is replaced", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
       const providerID = Provider.ID.make("test")
       const old = Model.ID.make("old")
       const newest = Model.ID.make("new")
-      const models = (catalog: Catalog.Draft) => {
-        catalog.provider.update(providerID, () => {})
-        catalog.model.update(providerID, old, (model) => {
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        editor.models.update(providerID, old, (model) => {
           model.time.released = 1000
         })
-        catalog.model.update(providerID, newest, (model) => {
+        editor.models.update(providerID, newest, (model) => {
           model.time.released = 2000
         })
-      }
+      })
 
       let configured = true
-      yield* catalog.transform((catalog) => {
-        models(catalog)
-        if (configured) catalog.model.default.set(providerID, old)
+      yield* models.transform((editor) => {
+        if (configured) editor.default.set(providerID, old)
       })
-      expect((yield* catalog.model.default())?.id).toBe(old)
+      expect((yield* models.default())?.id).toBe(old)
 
       configured = false
-      const reload = yield* catalog.reload().pipe(Effect.forkChild({ startImmediately: true }))
-      yield* TestClock.adjust("500 millis")
-      yield* Fiber.join(reload)
-      expect((yield* catalog.model.default())?.id).toBe(newest)
+      yield* models.reload()
+      expect((yield* models.default())?.id).toBe(newest)
     }),
   )
 
   it.effect("ignores a configured default on a disabled provider", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
       const disabledProvider = Provider.ID.make("disabled")
       const enabledProvider = Provider.ID.make("enabled")
       const disabledModel = Model.ID.make("configured")
       const fallbackModel = Model.ID.make("fallback")
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(disabledProvider, (provider) => {
+      yield* providers.transform((editor) => {
+        editor.update(disabledProvider, (provider) => {
           provider.activation = "disabled"
         })
-        catalog.model.update(disabledProvider, disabledModel, () => {})
-        catalog.provider.update(enabledProvider, () => {})
-        catalog.model.update(enabledProvider, fallbackModel, () => {})
-        catalog.model.default.set(disabledProvider, disabledModel)
+        editor.models.update(disabledProvider, disabledModel, () => {})
+        editor.update(enabledProvider, () => {})
+        editor.models.update(enabledProvider, fallbackModel, () => {})
       })
+      yield* models.transform((editor) => editor.default.set(disabledProvider, disabledModel))
 
-      expect(yield* catalog.model.default()).toMatchObject({
+      expect(yield* models.default()).toMatchObject({
         providerID: enabledProvider,
         id: fallbackModel,
       })
     }),
   )
 
-  it.effect("small model prefers small keyword candidates before cost scoring", () =>
+  it.effect("small model uses the newest release in the first matching family", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
       const providerID = Provider.ID.make("test")
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(providerID, () => {})
-        catalog.model.update(providerID, Model.ID.make("cheap-large"), (model) => {
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        editor.models.update(providerID, Model.ID.make("newer-flash"), (model) => {
+          model.family = Model.Family.make("gemini-flash")
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
-          model.cost = [
-            {
-              input: Money.USDPerMillionTokens.make(1),
-              output: Money.USDPerMillionTokens.make(1),
-              cache: {
-                read: Money.USDPerMillionTokens.zero,
-                write: Money.USDPerMillionTokens.zero,
-              },
-            },
-          ]
-          model.time.released = Date.now()
+          model.time.released = 3000
         })
-        catalog.model.update(providerID, Model.ID.make("expensive-mini"), (model) => {
+        editor.models.update(providerID, Model.ID.make("older-luna"), (model) => {
+          model.family = Model.Family.make("gpt-luna")
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
-          model.cost = [
-            {
-              input: Money.USDPerMillionTokens.make(10),
-              output: Money.USDPerMillionTokens.make(10),
-              cache: {
-                read: Money.USDPerMillionTokens.zero,
-                write: Money.USDPerMillionTokens.zero,
-              },
-            },
-          ]
-          model.time.released = Date.now()
+          model.time.released = 1000
+        })
+        editor.models.update(providerID, Model.ID.make("newer-luna"), (model) => {
+          model.family = Model.Family.make("gpt-luna")
+          model.capabilities.input = ["text"]
+          model.capabilities.output = ["text"]
+          model.time.released = 2000
         })
       })
 
-      expect((yield* catalog.model.small(providerID))?.id).toMatch("expensive-mini")
+      expect((yield* models.small(providerID))?.id).toBe(Model.ID.make("newer-luna"))
+    }),
+  )
+
+  it.effect("small model returns undefined without a matching family", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("test")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        editor.models.update(providerID, Model.ID.make("large"), (model) => {
+          model.family = Model.Family.make("gpt")
+          model.capabilities.input = ["text"]
+          model.capabilities.output = ["text"]
+        })
+      })
+
+      expect(yield* models.small(providerID)).toBeUndefined()
     }),
   )
 })

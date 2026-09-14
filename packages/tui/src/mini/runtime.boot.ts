@@ -4,7 +4,7 @@
 // needs before the first frame: TUI keymap config, model catalog, and session history for the prompt
 // history ring. All are async because they read config or hit the SDK, but
 // none block each other.
-import type { LocationRef } from "@opencode-ai/client/promise"
+import type { LocationRef } from "@opencode/client/promise"
 import { resolve } from "../config"
 import { loadRunProviders } from "./catalog.shared"
 import { resolveCurrentSession, sessionHistory } from "./session.shared"
@@ -86,11 +86,13 @@ export async function resolveRunTuiConfig(
 
 export function resolveMiniSettings(config?: { mini?: Partial<MiniSettings> }): MiniSettings {
   return {
-    thinking: config?.mini?.thinking ?? "hide",
+    thinking: config?.mini?.thinking ?? "show",
+    tools: config?.mini?.tools ?? "hide",
     shell_output: config?.mini?.shell_output ?? "hide",
     turn_summary: config?.mini?.turn_summary ?? "show",
     footer: config?.mini?.footer ?? "show",
     splash: config?.mini?.splash ?? "show",
+    work_spinner: config?.mini?.work_spinner ?? "block-soft-slide",
     mono: config?.mini?.mono ?? false,
   }
 }

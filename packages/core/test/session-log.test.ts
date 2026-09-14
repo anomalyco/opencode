@@ -1,30 +1,30 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Schema, Stream } from "effect"
-import { Database } from "@opencode-ai/core/database/database"
-import { Agent } from "@opencode-ai/core/agent"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { Event } from "@opencode-ai/schema/event"
-import { Location } from "@opencode-ai/core/location"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { Database } from "@opencode/core/database/database"
+import { Agent } from "@opencode/core/agent"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { Event } from "@opencode/schema/event"
+import { Location } from "@opencode/core/location"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionStore } from "@opencode/core/session/store"
+import { SessionTable } from "@opencode/core/session/sql"
 import { testEffect } from "./lib/effect"
-import { globalProjectLayer } from "./lib/project"
+import { globalProjectNode } from "./lib/project"
 
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [Project.node, globalProjectLayer],
-      [SessionExecution.node, SessionExecution.noopLayer],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Project.node.replace(globalProjectNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
     ],
   ),
 )

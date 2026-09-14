@@ -12,3 +12,7 @@ export const Info = Schema.Struct({
     write: Schema.Finite,
   }),
 }).annotate({ identifier: "TokenUsage.Info" })
+
+export function total(tokens: Info) {
+  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+}

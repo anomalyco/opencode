@@ -1,4 +1,4 @@
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Effect, Option, RcMap } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"

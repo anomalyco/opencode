@@ -50,7 +50,9 @@ function all(renderable: Renderable): Renderable[] {
 }
 
 function mouseListeners(renderable: Renderable) {
+  // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose listener state through its public API.
   const general = Reflect.get(renderable, "_mouseListener")
+  // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose listener state through its public API.
   const specific = Reflect.get(renderable, "_mouseListeners")
   return Boolean(general) || (specific && typeof specific === "object" && Object.keys(specific).length > 0)
 }
@@ -87,6 +89,7 @@ export function createHarness(renderer: CliRenderer): Harness {
     // captureCharFrame follows the test renderer's output sink. Recording
     // redirects that sink to the timeline, so read the live render buffer
     // instead; it is also the source used by screenshots.
+    // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose the live render buffer publicly.
     screen: () => decoder.decode((Reflect.get(renderer, "currentRenderBuffer") as RenderBuffer).getRealCharBytes()),
   }
 }
@@ -184,6 +187,32 @@ export const execute = Effect.fn("SimulationActions.execute")(function* (harness
         .find((item) => item.num === action.target)
         ?.focus()
       break
+    case "ui.mouse": {
+      const params = action.params
+      if (params.x >= harness.renderer.width || params.y >= harness.renderer.height)
+        return yield* Effect.fail(new Error("mouse position must be within the terminal viewport"))
+      const options = { modifiers: params.modifiers }
+      SimulationRenderer.recordPointer(harness.renderer, params.action, params.x, params.y)
+      switch (params.action) {
+        case "move":
+          yield* Effect.tryPromise(() => harness.mockMouse.moveTo(params.x, params.y, options))
+          break
+        case "down":
+          yield* Effect.tryPromise(() =>
+            harness.mockMouse.pressDown(params.x, params.y, mouseButton(params.button), options),
+          )
+          break
+        case "up":
+          yield* Effect.tryPromise(() =>
+            harness.mockMouse.release(params.x, params.y, mouseButton(params.button), options),
+          )
+          break
+        case "scroll":
+          yield* Effect.tryPromise(() => harness.mockMouse.scroll(params.x, params.y, params.direction, options))
+          break
+      }
+      break
+    }
     case "ui.click": {
       const target = all(harness.renderer.root).find((item) => item.num === action.target)
       if (!target || !target.visible || target.isDestroyed)
@@ -206,6 +235,7 @@ export const execute = Effect.fn("SimulationActions.execute")(function* (harness
         action.y >= target.height
       )
         return yield* Effect.fail(new Error("click position must be within the target element"))
+      SimulationRenderer.recordPointer(harness.renderer, "click", target.screenX + action.x, target.screenY + action.y)
       yield* Effect.tryPromise(() => harness.mockMouse.click(target.screenX + action.x, target.screenY + action.y))
       break
     }
@@ -227,3 +257,7 @@ export const execute = Effect.fn("SimulationActions.execute")(function* (harness
 })
 
 export * as SimulationActions from "./actions"
+
+function mouseButton(button: "left" | "middle" | "right" = "left") {
+  return ({ left: 0, middle: 1, right: 2 } as const)[button]
+}

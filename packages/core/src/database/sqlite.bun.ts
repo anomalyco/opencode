@@ -5,7 +5,7 @@ import { SqlClient } from "effect/unstable/sql"
 import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError"
 import { Sqlite } from "./sqlite.js"
 
-const TypeId = "~@opencode-ai/core/database/SqliteBun" as const
+const TypeId = "~@opencode/core/database/SqliteBun" as const
 
 export const supportsTuningPragmas = true
 

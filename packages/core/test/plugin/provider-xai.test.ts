@@ -1,10 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Credential } from "@opencode-ai/core/credential"
-import { Integration } from "@opencode-ai/core/integration"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { XAIPlugin } from "@opencode-ai/core/plugin/provider/xai"
+import { Credential } from "@opencode/core/credential"
+import { Integration } from "@opencode/core/integration"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { XAIPlugin } from "@opencode/core/plugin/provider/xai"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -63,6 +65,27 @@ describe("XAIPlugin", () => {
           metadata: { account: "account" },
         }),
       })
+    }),
+  )
+
+  it.effect("enables xAI Responses WebSockets", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("xai")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.package = Provider.aisdk("@ai-sdk/xai")
+          provider.activation = "enabled"
+        })
+        editor.models.update(providerID, Model.ID.make("grok-4.6"), () => {})
+      })
+
+      yield* addPlugin()
+
+      const model = yield* models.get(providerID, Model.ID.make("grok-4.6"))
+      expect(model?.capabilities.responsesWebsockets).toBe(true)
+      expect(model?.websocket).toBe(true)
     }),
   )
 })

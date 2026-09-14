@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { Agent } from "@opencode-ai/core/agent"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { MCP } from "@opencode-ai/core/mcp/index"
-import { McpInstructions } from "@opencode-ai/core/mcp/instructions"
-import { Permission } from "@opencode-ai/core/permission"
-import { McpTool } from "@opencode-ai/core/tool/mcp"
+import { Agent } from "@opencode/core/agent"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Mcp } from "@opencode/core/mcp/index"
+import { McpInstructions } from "@opencode/core/mcp/instructions"
+import { Permission } from "@opencode/core/permission"
+import { McpTool } from "@opencode/core/tool/mcp"
 import { it } from "./lib/effect"
 import { readInitial, readUpdate } from "./lib/instructions"
 
@@ -17,19 +17,20 @@ const selection = (permissions: Permission.Ruleset = []) => {
 }
 
 const instructions = (server: string, text: string) =>
-  new MCP.ServerInstructions({ server: MCP.ServerName.make(server), instructions: text })
+  ({ server: Mcp.ServerName.make(server), instructions: text } satisfies Mcp.ServerInstructions)
 
-const tool = (server: string, name = "search") => new MCP.Tool({ server: MCP.ServerName.make(server), name })
+const schema = { type: "object" as const }
+const tool = (server: string, name = "search") =>
+  ({ server: Mcp.ServerName.make(server), name, inputSchema: schema }) satisfies Mcp.Tool
 
-const layer = (catalog: () => MCP.ServerInstructions[], tools: () => MCP.Tool[]) =>
+const layer = (catalog: () => Mcp.ServerInstructions[], tools: () => Mcp.Tool[]) =>
   AppNodeBuilder.build(McpInstructions.node, [
-    [
-      MCP.node,
-      Layer.mock(MCP.Service, {
+    Mcp.node.replace(
+      Layer.mock(Mcp.Service, {
         instructions: () => Effect.succeed(catalog()),
         tools: () => Effect.succeed(tools()),
       }),
-    ],
+    ),
   ])
 
 describe("McpInstructions", () => {
@@ -113,19 +114,19 @@ describe("McpInstructions", () => {
       Effect.provide(
         layer(
           () => [instructions("alpha", "Alpha instructions")],
-          () => [new MCP.Tool({ server: MCP.ServerName.make("alpha"), name: "search", codemode: false })],
+          () => [({ server: Mcp.ServerName.make("alpha"), name: "search", inputSchema: schema, codemode: false }) satisfies Mcp.Tool],
         ),
       ),
     ),
   )
 
   it.effect("restates guidance when Code Mode is disabled for a server", () => {
-    let tools = [tool("alpha")]
+    let tools: Mcp.Tool[] = [tool("alpha")]
     return Effect.gen(function* () {
       const service = yield* McpInstructions.Service
       const initialized = yield* service.load(selection()).pipe(Effect.flatMap(readInitial))
 
-      tools = [new MCP.Tool({ server: MCP.ServerName.make("alpha"), name: "search", codemode: false })]
+      tools = [{ ...tool("alpha"), codemode: false }]
       const changed = yield* readUpdate(yield* service.load(selection()), initialized)
       expect(changed.text).toBe(
         [

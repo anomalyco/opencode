@@ -39,7 +39,7 @@ describe("SessionError", () => {
   })
 })
 
-test("FinishReason is the closed browser-safe provider set", () => {
+test("FinishReason is the closed normalized provider set", () => {
   const reasons = ["stop", "length", "tool-calls", "content-filter", "error", "unknown"] as const
   expect(reasons.map((reason) => Schema.decodeUnknownSync(LLM.FinishReason)(reason))).toEqual([...reasons])
   expect(() => Schema.decodeUnknownSync(LLM.FinishReason)("other")).toThrow()

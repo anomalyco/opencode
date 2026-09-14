@@ -2,7 +2,8 @@ export * as Provider from "./provider.js"
 
 import { Effect, Schema } from "effect"
 import { Integration } from "./integration.js"
-import { optional, statics } from "./schema.js"
+import { optional, PositiveInt, statics } from "./schema.js"
+import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Provider.ID"),
@@ -22,11 +23,20 @@ export const ID = Schema.String.pipe(
 )
 export type ID = typeof ID.Type
 
+const Updated = ephemeral({ type: "provider.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
+
 export const Package = Schema.String
 export type Package = typeof Package.Type
 
 export const Activation = Schema.Literals(["auto", "enabled", "disabled"])
 export type Activation = typeof Activation.Type
+
+export type Compaction = typeof Compaction.Type
+export const Compaction = Schema.Union([
+  Schema.Struct({ mode: Schema.Literal("local") }),
+  Schema.Struct({ mode: Schema.Literal("provider"), threshold: PositiveInt.pipe(optional) }),
+]).annotate({ identifier: "Provider.Compaction" })
 
 export const Overlays = {
   settings: Schema.Record(Schema.String, Schema.Any).pipe(optional),
@@ -47,10 +57,14 @@ export const Request = Schema.Struct({
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
+  canonical: ID.pipe(optional),
   integrationID: Integration.ID.pipe(optional),
   name: Schema.String,
   activation: Activation,
   package: Package,
+  compaction: Compaction.pipe(optional),
+  /** Session WebSocket policy for routes that support it; omitted means disabled. */
+  websocket: Schema.Boolean.pipe(optional),
   ...Overlays,
 })
   .annotate({ identifier: "Provider.Info" })

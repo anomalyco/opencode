@@ -1,0 +1,37 @@
+name: deploy-posts
+
+on:
+  push:
+    branches:
+      - v2
+    paths:
+      - packages/posts/**
+      - bun.lock
+      - .github/workflows/deploy-posts.yml
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-posts-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.repository == 'anomalyco/opencode' && github.ref_name == 'v2'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build
+        working-directory: packages/posts
+        run: bun run build
+
+      - name: Deploy
+        working-directory: packages/posts
+        run: bun run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

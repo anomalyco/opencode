@@ -1,0 +1,38 @@
+id: no-effect-flat-map-suspend-tsx
+snapshots:
+  const view = <Widget value={Effect.flatMap(effect, () => Effect.suspend(() => next))} />:
+    labels:
+      - source: Effect.flatMap(effect, () => Effect.suspend(() => next))
+        style: primary
+        start: 28
+        end: 84
+  const view = <Widget value={effect.pipe(Effect.flatMap(() => Effect.suspend(() => next)))} />:
+    labels:
+      - source: Effect.flatMap(() => Effect.suspend(() => next))
+        style: primary
+        start: 40
+        end: 88
+  const view = <Widget value={effect.pipe(Effect.flatMap((_value) => Effect.suspend(() => next)))} />:
+    labels:
+      - source: Effect.flatMap((_value) => Effect.suspend(() => next))
+        style: primary
+        start: 40
+        end: 94
+  "const view = <Widget value={effect.pipe(Effect.flatMap((_value: Value) => Effect.suspend(() => next)))} />":
+    labels:
+      - source: "Effect.flatMap((_value: Value) => Effect.suspend(() => next))"
+        style: primary
+        start: 40
+        end: 101
+  const view = <Widget value={effect.pipe(Effect.flatMap(_value => { return Effect.suspend(() => next) }))} />:
+    labels:
+      - source: Effect.flatMap(_value => { return Effect.suspend(() => next) })
+        style: primary
+        start: 40
+        end: 103
+  const view = <Widget value={effect.pipe(Effect.flatMap(function (_value) { return Effect.suspend(() => next) }))} />:
+    labels:
+      - source: Effect.flatMap(function (_value) { return Effect.suspend(() => next) })
+        style: primary
+        start: 40
+        end: 111

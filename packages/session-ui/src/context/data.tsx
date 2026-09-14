@@ -1,12 +1,17 @@
-import type { Message, Part, SnapshotFileDiff, SessionStatus, Provider } from "@opencode-ai/sdk/v2"
-import type { FileDiffInfo, SessionInfo } from "@opencode-ai/client/promise"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import type {
+  FileDiffInfo,
+  SessionInfo,
+  SessionStatus,
+  ShellOutputInput,
+  ShellOutputOutput,
+} from "@opencode/client/promise"
+import { createSimpleContext } from "@opencode/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
 export type SessionSummary = Pick<SessionInfo, "id" | "parentID" | "title" | "time">
 
-export type NormalizedProviderListResponse = {
-  all: Map<string, Provider>
+type ProviderCatalog = {
+  all: Map<string, { models: Record<string, { name: string }> }>
   default: {
     [key: string]: string
   }
@@ -18,25 +23,16 @@ type Data = {
     name: string
     color?: string
   }[]
-  provider?: NormalizedProviderListResponse
+  provider?: ProviderCatalog
   session: SessionSummary[]
   session_status: {
     [sessionID: string]: SessionStatus
   }
   session_diff: {
-    [sessionID: string]: (SnapshotFileDiff | FileDiffInfo)[]
+    [sessionID: string]: FileDiffInfo[]
   }
   session_diff_preload?: {
-    [sessionID: string]: PreloadMultiFileDiffResult<any>[]
-  }
-  message: {
-    [sessionID: string]: Message[]
-  }
-  part: {
-    [messageID: string]: Part[]
-  }
-  part_text_accum_delta?: {
-    [partID: string]: string
+    [sessionID: string]: PreloadMultiFileDiffResult<unknown>[]
   }
 }
 
@@ -50,6 +46,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     data: Data
     directory: string
     sessionID?: string
+    shellRunning?: (id: string) => boolean
+    shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
   }) => {
@@ -65,6 +63,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
+      shellRunning: props.shellRunning,
+      shellOutput: props.shellOutput,
     }
   },
 })

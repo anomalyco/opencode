@@ -1,7 +1,8 @@
-import { Plugin } from "@opencode-ai/plugin/tui"
+import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { usePlugin } from "../../plugin/context"
+import { Slot } from "../../plugin/render"
 
 export function homeFooterVisibility(width: number) {
   return {
@@ -52,7 +53,11 @@ function Plugins(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
   const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
   const plugins = usePlugin()
-  const failed = createMemo(() => plugins.list().filter((item) => item.status === "failed").length)
+  const failed = createMemo(
+    () =>
+      plugins.list().filter((item) => item.status === "failed").length +
+      plugins.server().filter((item) => item.state.status === "failed").length,
+  )
 
   return (
     <Show when={failed()}>
@@ -87,6 +92,7 @@ function View(props: { context: Plugin.Context }) {
       >
         <Mcp context={props.context} />
         <Plugins context={props.context} />
+        <Slot path="home.footer.status" />
         <box flexGrow={1} />
         <Show when={visibility().version}>
           <box flexShrink={0}>
@@ -99,7 +105,7 @@ function View(props: { context: Plugin.Context }) {
 }
 
 export default Plugin.define({
-  id: "opencode.home-footer",
+  id: "opencode.home.footer",
   setup(context) {
     // Root takeover: an external plugin replacing home.footer wins (last-
     // enabled) and this builtin shows as suppressed, not silently gone.

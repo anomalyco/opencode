@@ -18,6 +18,13 @@ export function revealSelectionOffset(offset: number, input: { count: number; li
   return Math.max(0, Math.min(max, offset))
 }
 
+export function reconcileSelectionWindow(selected: number, input: { count: number; limit: number; offset: number }) {
+  if (input.count <= 0) return 0
+  const first = reconcileSelection(input.offset, input.count)
+  const last = Math.min(input.count - 1, first + Math.max(1, input.limit) - 1)
+  return Math.max(first, Math.min(last, selected))
+}
+
 export function moveSelectionOffset(
   offset: number,
   input: { count: number; limit: number; selected: number; direction: -1 | 1 },

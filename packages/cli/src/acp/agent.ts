@@ -16,7 +16,7 @@ import {
   type SetSessionConfigOptionRequest,
   type SetSessionModeRequest,
 } from "@agentclientprotocol/sdk"
-import type { OpenCodeClient } from "@opencode-ai/client/promise"
+import type { OpenCodeClient } from "@opencode/client/promise"
 import { ACPError } from "./error"
 import { ACPService } from "./service"
 

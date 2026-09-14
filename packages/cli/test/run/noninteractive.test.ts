@@ -4,7 +4,7 @@ import {
   type EventSubscribeOutput,
   type SessionMessageAssistantTool,
   type SessionMessageInfo,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import { runNonInteractivePrompt } from "../../src/run/noninteractive"
 
 type V2Event = EventSubscribeOutput
@@ -424,14 +424,13 @@ describe("runNonInteractivePrompt", () => {
     const globalOptions = {
       headers: {
         "x-opencode-directory": "%2Fwork%20tree",
-        "x-opencode-workspace": "wrk_1",
       },
     }
     expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, globalOptions)
     expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
     expect(sdk.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" }, globalOptions)
     expect(sdk.form.request.list).toHaveBeenCalledWith({
-      location: { directory: "/work tree", workspace: "wrk_1" },
+      location: { directory: "/work tree" },
     })
   })
 

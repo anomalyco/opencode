@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Patch } from "@opencode-ai/util/patch"
+import { Patch } from "@opencode/util/patch"
 import { Result } from "effect"
 
 const parse = (input: string) => Result.getOrThrow(Patch.parse(input))
@@ -246,6 +246,16 @@ describe("Patch", () => {
     expect(
       Patch.derive("update.txt", [{ oldLines: [], newLines: ["added 1", "added 2"] }], "line 1\nline 2\n").content,
     ).toBe("line 1\nline 2\nadded 1\nadded 2\n")
+  })
+
+  test.each(["", "original\n"])("preserves equal-offset insertion order and frozen chunks for %j", (original) => {
+    const chunks = Object.freeze([
+      Object.freeze({ oldLines: Object.freeze([]), newLines: Object.freeze(["first"]) }),
+      Object.freeze({ oldLines: Object.freeze([]), newLines: Object.freeze(["second", "third"]) }),
+    ])
+    const expected = { content: original + "first\nsecond\nthird\n", bom: false }
+    expect(Patch.derive("update.txt", chunks, original)).toEqual(expected)
+    expect(Patch.derive("update.txt", chunks, original)).toEqual(expected)
   })
 
   test("applies a pure-addition chunk after an earlier replacement", () => {

@@ -1,6 +1,6 @@
 export * as SkillInstructions from "./instructions.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { Skill } from "../skill.js"
@@ -71,8 +71,7 @@ const layer = Layer.effect(
       load: Effect.fn("SkillInstructions.load")(function* (selection) {
         const agent = selection.info
         if (!agent) return Instructions.empty
-        const permitted = Skill.available(yield* skills.list(), agent)
-        const available = permitted
+        const available = Skill.available(yield* skills.list(), agent)
           .flatMap((skill) =>
             skill.description === undefined || skill.autoinvoke === false
               ? []

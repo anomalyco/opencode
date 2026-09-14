@@ -2,9 +2,9 @@ export * as InstructionEntry from "./instruction-entry.js"
 
 import { and, asc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
-import { InstructionEntry } from "@opencode-ai/schema/instruction-entry"
+import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Database } from "../database/database.js"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Instructions } from "../instructions/index.js"
 import { SessionSchema } from "./schema.js"
 import { InstructionEntryTable } from "./sql.js"
@@ -13,8 +13,58 @@ export const Key = InstructionEntry.Key
 export type Key = typeof Key.Type
 export const Info = InstructionEntry.Info
 export type Info = typeof Info.Type
+export const Snapshot = InstructionEntry.Snapshot
+export type Snapshot = typeof Snapshot.Type
 export const MaxValueBytes = InstructionEntry.MaxValueBytes
 export const ValueTooLargeError = InstructionEntry.ValueTooLargeError
+
+type DatabaseService = Database.Interface["db"]
+const InsertBatchSize = 10
+
+export const snapshot = Effect.fn("InstructionEntry.snapshot")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  return yield* db
+    .select({
+      key: InstructionEntryTable.key,
+      value: InstructionEntryTable.value,
+      removed: InstructionEntryTable.removed,
+    })
+    .from(InstructionEntryTable)
+    .where(eq(InstructionEntryTable.session_id, sessionID))
+    .orderBy(asc(InstructionEntryTable.key))
+    .all()
+    .pipe(Effect.orDie)
+})
+
+export const initialize = Effect.fn("InstructionEntry.initialize")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  entries: Snapshot,
+  created: number,
+) {
+  const batches = Array.from({ length: Math.ceil(entries.length / InsertBatchSize) }, (_, index) =>
+    entries.slice(index * InsertBatchSize, (index + 1) * InsertBatchSize),
+  )
+  yield* Effect.forEach(
+    batches,
+    (batch) =>
+      db
+        .insert(InstructionEntryTable)
+        .values(
+          batch.map((entry) => ({
+            ...entry,
+            session_id: sessionID,
+            time_created: created,
+            time_updated: created,
+          })),
+        )
+        .run()
+        .pipe(Effect.orDie),
+    { discard: true },
+  )
+})
 
 export interface Interface {
   readonly list: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Info>>
@@ -81,11 +131,7 @@ const layer = Layer.effect(
       return (yield* rows(sessionID, false)).map((row) => ({ key: row.key, value: row.value }))
     })
 
-    const put = Effect.fn("InstructionEntry.put")(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly key: Key
-      readonly value: Schema.Json
-    }) {
+    const put = Effect.fn("InstructionEntry.put")(function* (input: Parameters<Interface["put"]>[0]) {
       const actualBytes = Buffer.byteLength(JSON.stringify(input.value), "utf8")
       if (actualBytes > MaxValueBytes)
         yield* new ValueTooLargeError({
@@ -109,10 +155,7 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
     })
 
-    const remove = Effect.fn("InstructionEntry.remove")(function* (input: {
-      readonly sessionID: SessionSchema.ID
-      readonly key: Key
-    }) {
+    const remove = Effect.fn("InstructionEntry.remove")(function* (input: Parameters<Interface["remove"]>[0]) {
       yield* db
         .update(InstructionEntryTable)
         .set({ value: null, removed: true, time_updated: Date.now() })

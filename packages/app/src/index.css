@@ -1,6 +1,6 @@
-@import "@opencode-ai/ui/styles/tailwind";
-@import "@opencode-ai/session-ui/styles";
-@import "@opencode-ai/ui/v2/styles/tailwind.css";
+@import "@opencode/ui/styles/tailwind";
+@import "@opencode/session-ui/styles";
+@import "@opencode/ui/styles/tokens";
 @import "tw-animate-css";
 
 @font-face {
@@ -17,6 +17,14 @@
   font-style: normal;
 }
 
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("@ibm/plex/IBM-Plex-Mono/fonts/complete/woff2/IBMPlexMono-Text.woff2") format("woff2");
+  font-weight: 440;
+  font-style: normal;
+  font-display: swap;
+}
+
 @media (display-mode: standalone) {
   /* WebKit excludes safe-area insets from dvh in installed apps. */
   #root {
@@ -24,29 +32,255 @@
   }
 }
 
+/* iOS can report navigator.standalone without matching display-mode. */
+#root[data-standalone="true"] {
+  height: 100vh;
+}
+
 @layer components {
+  [data-slot="session-chat-panel"] {
+    container-name: session-chat;
+  }
+
+  [data-slot="session-chat-panel"]
+    :is([data-timeline-virtual-content], [data-component="session-composer-dock"] > div) {
+    translate: var(--session-summary-resize-translate, var(--session-summary-translate, none));
+    transition: translate 240ms cubic-bezier(0.4, 0, 0.2, 1);
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
+
+  [data-slot="session-chat-panel"][data-summary-resizing="true"]
+    :is([data-timeline-virtual-content], [data-component="session-composer-dock"] > div) {
+    transition: none;
+  }
+
+  /* Keep the 1000px conversation intact, with 320px for the summary and its gutters.
+     Move only as far as needed; wider panels already have enough space in the margin. */
+  @container session-chat (min-width: 1320px) {
+    [data-slot="session-chat-panel"][data-summary-open="true"]
+      :is([data-timeline-virtual-content], [data-component="session-composer-dock"] > div) {
+      --session-summary-translate: min(0px, calc(50cqi - 820px));
+
+      &:dir(rtl) {
+        --session-summary-translate: max(0px, calc(820px - 50cqi));
+      }
+    }
+  }
+
+  [data-slot="session-chat-panel"][data-scrollbar-hidden="true"]
+    [data-slot="session-timeline-scroll"]
+    > .scroll-view__thumb {
+    visibility: hidden;
+  }
+
+  [data-slot="session-side-panel-presence"][data-opened="true"] {
+    animation: side-region-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="session-side-panel-presence"][data-opened="false"] {
+    animation: side-region-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  #review-panel {
+    container-type: inline-size;
+  }
+
+  /* Like the composer toolbar, fade only clipped content without reserving layout space.
+     The fade contracts as overflow clears; the second mask preserves the header divider. */
+  #review-panel .session-review-v2-tabs-bar {
+    --session-review-header-fade: clamp(0px, calc(100% - 100cqi), 24px);
+    mask-image:
+      linear-gradient(
+        to right,
+        #000 calc(100cqi - 40px - var(--session-review-header-fade)),
+        transparent calc(100cqi - 40px)
+      ),
+      linear-gradient(to top, #000 1px, transparent 1px);
+
+    &:dir(rtl) {
+      mask-image:
+        linear-gradient(
+          to left,
+          #000 calc(100cqi - 40px - var(--session-review-header-fade)),
+          transparent calc(100cqi - 40px)
+        ),
+        linear-gradient(to top, #000 1px, transparent 1px);
+    }
+  }
+
+  /* The panel's width animation supplies the slide; only fade its fixed-width contents. */
+  [data-slot="session-side-region-presence"][data-opened] [data-slot="session-review-content"] {
+    transition: opacity 200ms ease-out 40ms;
+  }
+
+  /* Cached contents must stay transparent even after the presence animation finishes. */
+  #review-panel[aria-hidden="true"] > [data-slot="session-review-content"] {
+    opacity: 0;
+  }
+
+  [data-slot="session-side-region-presence"][data-opened="false"] [data-slot="session-review-content"] {
+    transition: opacity 160ms ease-out;
+  }
+
+  @starting-style {
+    [data-slot="session-side-region-presence"][data-opened="true"] [data-slot="session-review-content"] {
+      opacity: 0;
+    }
+  }
+
+  [data-slot="session-side-region-presence"][data-opened="true"] {
+    animation: side-region-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="session-side-region-presence"][data-opened="false"] {
+    animation: side-region-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="terminal-panel-presence"][data-opened="true"] {
+    animation: terminal-panel-presence-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="terminal-panel-presence"][data-opened="false"] {
+    animation: terminal-panel-presence-out 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  [data-slot="side-terminal-panel-presence"][data-opened="true"] {
+    animation: side-terminal-panel-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-slot="side-terminal-panel-presence"][data-opened="false"] {
+    animation: side-terminal-panel-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  [data-component="terminal-panel"][data-size-animated="true"][data-opened="true"] {
+    animation: terminal-panel-size-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  [data-component="terminal-panel"][data-size-animated="true"][data-opened="false"] {
+    animation: terminal-panel-size-out 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="terminal-panel-presence"],
+    [data-slot="side-terminal-panel-presence"],
+    [data-slot="session-side-panel-presence"],
+    [data-slot="session-review-content"],
+    [data-slot="session-side-region-presence"],
+    [data-component="terminal-panel"] {
+      animation: none !important;
+    }
+
+    [data-slot="session-review-content"] {
+      transition: none !important;
+    }
+  }
+
+  @keyframes terminal-panel-presence-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes terminal-panel-presence-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes side-terminal-panel-presence-in {
+    from {
+      opacity: 0.999999;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes side-terminal-panel-presence-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.999999;
+      visibility: hidden;
+    }
+  }
+
+  /* Presence needs an animation lifetime, but the panel frame must never fade. */
+  @keyframes side-region-presence-in {
+    from,
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes side-region-presence-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 1;
+      visibility: hidden;
+    }
+  }
+
+  @keyframes terminal-panel-size-in {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--terminal-panel-height);
+    }
+  }
+
+  @keyframes terminal-panel-size-out {
+    from {
+      height: var(--terminal-panel-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  ::highlight(timeline-search-hit) {
+    background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+  }
+
+  ::highlight(timeline-search-hit-active) {
+    background-color: var(--v2-icon-icon-accent);
+    color: var(--v2-background-bg-deep);
+  }
+
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;
   }
 
-  [data-component="dropdown-menu-content"].desktop-app-menu,
-  [data-component="dropdown-menu-sub-content"].desktop-app-menu {
+  [data-component="menu-v2-content"].desktop-app-menu {
     min-width: 160px;
     padding: 2px;
   }
 
-  [data-component="dropdown-menu-content"].desktop-app-menu {
+  [data-component="menu-v2-content"].desktop-app-menu:not(.desktop-app-menu-sub) {
     width: 160px;
   }
 
-  [data-component="dropdown-menu-sub-content"].desktop-app-menu {
+  [data-component="menu-v2-content"].desktop-app-menu-sub {
     width: max-content;
     min-width: 240px;
     max-width: min(320px, calc(100vw - 24px));
   }
 
-  [data-component="dropdown-menu-content"].desktop-app-menu [data-slot="dropdown-menu-group-label"] {
+  [data-component="menu-v2-content"].desktop-app-menu [data-slot="menu-v2-group-label"] {
     display: flex;
     align-items: center;
     height: 28px;
@@ -57,10 +291,7 @@
     color: var(--text-weak);
   }
 
-  [data-component="dropdown-menu-content"].desktop-app-menu [data-slot="dropdown-menu-item"],
-  [data-component="dropdown-menu-content"].desktop-app-menu [data-slot="dropdown-menu-sub-trigger"],
-  [data-component="dropdown-menu-sub-content"].desktop-app-menu [data-slot="dropdown-menu-item"],
-  [data-component="dropdown-menu-sub-content"].desktop-app-menu [data-slot="dropdown-menu-sub-trigger"] {
+  [data-component="menu-v2-content"].desktop-app-menu [data-component="menu-v2-item"] {
     min-height: 28px;
     padding: 0 12px;
     gap: 8px;
@@ -68,23 +299,16 @@
     line-height: 1;
   }
 
-  [data-component="dropdown-menu-content"].desktop-app-menu [data-slot="dropdown-menu-item-label"],
-  [data-component="dropdown-menu-sub-content"].desktop-app-menu [data-slot="dropdown-menu-item-label"] {
+  [data-component="menu-v2-content"].desktop-app-menu [data-slot="menu-v2-item-content"] {
     white-space: nowrap;
   }
 
-  [data-slot="desktop-app-menu-keybind"] {
+  [data-component="menu-v2-content"].desktop-app-menu [data-slot="menu-v2-item-shortcut"] {
     margin-left: auto;
     color: var(--text-weak);
     font-size: var(--font-size-x-small);
     font-weight: var(--font-weight-regular);
     white-space: nowrap;
-  }
-
-  [data-slot="desktop-app-menu-chevron"] {
-    display: flex;
-    margin-left: auto;
-    color: var(--icon-base);
   }
 
   [data-component="getting-started-actions"] {
@@ -93,7 +317,7 @@
     gap: 0.75rem; /* gap-3 */
   }
 
-  [data-component="getting-started-actions"] > [data-component="button"] {
+  [data-component="getting-started-actions"] > [data-component="button-v2"] {
     width: 100%;
   }
 
@@ -103,7 +327,7 @@
       align-items: center;
     }
 
-    [data-component="getting-started-actions"] > [data-component="button"] {
+    [data-component="getting-started-actions"] > [data-component="button-v2"] {
       width: auto;
     }
   }
@@ -187,6 +411,69 @@
     }
     to {
       visibility: hidden;
+    }
+  }
+
+  @keyframes session-dropzone-enter {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes session-dropzone-content-enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.96);
+    }
+  }
+
+  @keyframes session-dropzone-upload-enter {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.92);
+    }
+  }
+
+  @keyframes session-dropzone-stripes-drift {
+    to {
+      background-position: 33.941px 0;
+    }
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] {
+    animation: session-dropzone-enter 200ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-content"] {
+    animation: session-dropzone-content-enter 200ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-upload"] {
+    animation: session-dropzone-upload-enter 240ms cubic-bezier(0.215, 0.61, 0.355, 1);
+  }
+
+  [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-stripes"] {
+    animation: session-dropzone-stripes-drift 3s linear infinite;
+  }
+
+  [data-component="session-dropzone"] {
+    --session-dropzone-wash: 4%;
+    --session-dropzone-stripe: 7%;
+    --session-dropzone-card: var(--v2-background-bg-base);
+  }
+
+  [data-color-scheme="dark"] [data-component="session-dropzone"] {
+    --session-dropzone-wash: 6%;
+    --session-dropzone-stripe: 14%;
+    --session-dropzone-card: var(--v2-background-bg-layer-01);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-component="session-dropzone"][data-visible="true"],
+    [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-content"],
+    [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-upload"],
+    [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-stripes"] {
+      animation: none;
     }
   }
 
@@ -317,7 +604,7 @@
   }
 
   @supports (animation-timeline: --manage-models-scroll) and (timeline-scope: --manage-models-scroll) {
-    [data-slot="manage-models-scroll"] .settings-v2-panel {
+    [data-slot="manage-models-scroll"] .settings-panel {
       scroll-timeline: --manage-models-scroll y;
     }
 
