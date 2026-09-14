@@ -18,6 +18,8 @@ import * as Azure from "../../src/providers/azure.js"
 import * as OpenAI from "../../src/providers/openai.js"
 import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import * as XAI from "../../src/providers/xai.js"
+import { DeepSeek } from "../../src/providers/deepseek.js"
+import { ZAI } from "../../src/providers/zai.js"
 import * as OpenAIChat from "../../src/protocols/openai-chat.js"
 import { ProviderShared } from "../../src/protocols/shared.js"
 import { Auth, LLMClient } from "../../src/route.js"
@@ -248,7 +250,49 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("maps the request prompt cache key", () =>
+  it.effect("sends prompt cache key for native OpenAI endpoints", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+        }),
+      )
+
+      expect(prepared.body.prompt_cache_key).toBe("session_123")
+    }),
+  )
+
+  it.effect("sends prompt cache key for DeepSeek endpoints", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: DeepSeek.configure({ apiKey: "test" }).model("deepseek-chat"),
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+        }),
+      )
+
+      expect(prepared.body.prompt_cache_key).toBe("session_123")
+    }),
+  )
+
+  it.effect("sends prompt cache key for Zai endpoints", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: ZAI.configure({ apiKey: "test" }).chat("glm-4.5"),
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+        }),
+      )
+
+      expect(prepared.body.prompt_cache_key).toBe("session_123")
+    }),
+  )
+
+  it.effect("omits the prompt cache key for generic OpenAI-compatible endpoints", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -261,7 +305,56 @@ describe("OpenAI Chat route", () => {
         }),
       )
 
+      expect(prepared.body).not.toHaveProperty("prompt_cache_key")
+    }),
+  )
+
+  it.effect("omits the prompt cache key for NVIDIA endpoints", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAICompatible.configure({
+            baseURL: "https://integrate.api.nvidia.com/v1",
+            apiKey: "test",
+          }).model("z-ai/glm-5.3-flash"),
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+        }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("prompt_cache_key")
+    }),
+  )
+
+  it.effect("includes the prompt cache key on generic endpoints when compatibility opt-in is enabled", () =>
+    Effect.gen(function* () {
+      const generic = OpenAICompatible.configure({
+        baseURL: "https://api.compatible.test/v1",
+        apiKey: "test",
+      }).model("compatible-model")
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(generic, { compatibility: { supportsPromptCacheKey: true } }),
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+        }),
+      )
+
       expect(prepared.body.prompt_cache_key).toBe("session_123")
+    }),
+  )
+
+  it.effect("omits the prompt cache key when compatibility.supportsPromptCacheKey is false", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(model, { compatibility: { supportsPromptCacheKey: false } }),
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+        }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("prompt_cache_key")
     }),
   )
 
