@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.deepseek": "DeepSeek V4.1 Flash sınırlı bir süre için 4x kullanım limiti sunuyor",
+  "go.graph.bonus": "{{count}}× kullanım",
   "nav.github": "GitHub",
   "nav.docs": "Dokümantasyon",
   "nav.changelog": "Değişiklik günlüğü",
@@ -275,6 +277,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickle ve ücretsiz modeller",
   "go.graph.go": "Go",
   "go.graph.label": "5 saat başına istekler",
+  "go.graph.period": "Kullanım",
+  "go.graph.model": "Model",
+  "go.graph.requests": "Tahmini istek / 5 saat",
+  "go.graph.allowance": "Aylık kullanım",
+  "go.graph.new": "Yeni",
+  "go.graph.scale": "Doğrusal olmayan istek ölçeği",
+  "go.graph.showAll": "{{count}} modelin tümünü göster",
+  "go.graph.showLess": "Daha az model göster",
   "go.graph.limitedRegions": "sınırlı bölgeler",
   "go.graph.limitedTime": "sınırlı süre",
   "go.graph.usageLimits": "Kullanım limitleri",

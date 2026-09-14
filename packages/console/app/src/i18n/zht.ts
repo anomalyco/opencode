@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.deepseek": "DeepSeek V4.1 Flash 限時享有 4 倍使用額度",
+  "go.graph.bonus": "{{count}} 倍用量",
   "nav.github": "GitHub",
   "nav.docs": "文件",
   "nav.changelog": "更新日誌",
@@ -261,6 +263,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickle 與免費模型",
   "go.graph.go": "Go",
   "go.graph.label": "每 5 小時請求數",
+  "go.graph.period": "使用額度",
+  "go.graph.model": "模型",
+  "go.graph.requests": "預估請求次數 / 5 小時",
+  "go.graph.allowance": "每月使用額度",
+  "go.graph.new": "新",
+  "go.graph.scale": "請求數採用非線性刻度",
+  "go.graph.showAll": "查看全部 {{count}} 個模型",
+  "go.graph.showLess": "收起模型",
   "go.graph.limitedRegions": "僅限部分地區",
   "go.graph.limitedTime": "限時",
   "go.graph.usageLimits": "使用限制",

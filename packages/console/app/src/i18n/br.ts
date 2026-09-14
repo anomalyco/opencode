@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.deepseek": "DeepSeek V4.1 Flash tem limites de uso 4x maiores por tempo limitado",
+  "go.graph.bonus": "{{count}}× mais uso",
   "nav.github": "GitHub",
   "nav.docs": "Documentação",
   "nav.changelog": "Changelog",
@@ -276,6 +278,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickle e modelos gratuitos",
   "go.graph.go": "Go",
   "go.graph.label": "Requisições por 5 horas",
+  "go.graph.period": "Uso",
+  "go.graph.model": "Modelo",
+  "go.graph.requests": "Requisições estimadas / 5 h",
+  "go.graph.allowance": "Uso mensal",
+  "go.graph.new": "Novo",
+  "go.graph.scale": "Escala não linear de requisições",
+  "go.graph.showAll": "Ver todos os {{count}} modelos",
+  "go.graph.showLess": "Mostrar menos modelos",
   "go.graph.limitedRegions": "regiões limitadas",
   "go.graph.limitedTime": "tempo limitado",
   "go.graph.usageLimits": "Limites de uso",
