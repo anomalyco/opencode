@@ -1,6 +1,5 @@
 import { describe, expect } from "bun:test"
 import { Agent } from "@opencode/schema/agent"
-import { Event } from "@opencode/schema/event"
 import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
 import { Project } from "@opencode/schema/project"
@@ -9,16 +8,22 @@ import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { AbsolutePath } from "@opencode/core/schema"
+import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
-import { EventSequenceTable, EventTable } from "@opencode/core/event/sql"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStats } from "@opencode/core/session/stats"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime, Effect, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(Database.node))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+    Bus.node.replace(Bus.configured({ persist: true })),
+  ]),
+)
 const projectID = Project.ID.make("stats-project")
 const otherProjectID = Project.ID.make("stats-other-project")
 const sessionID = Session.ID.make("ses_stats_root")
@@ -27,7 +32,6 @@ const forkID = Session.ID.make("ses_stats_fork")
 const usageOnlyID = Session.ID.make("ses_stats_usage_only")
 const otherSessionID = Session.ID.make("ses_stats_other")
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
-const encodeUsage = Schema.encodeSync(SessionEvent.UsageRecorded.data)
 
 describe("SessionStats", () => {
   it.effect("aggregates activity and tool reliability without reading message payloads outside the range", () =>
@@ -160,47 +164,22 @@ describe("SessionStats", () => {
         ])
         .run()
         .pipe(Effect.orDie)
-      yield* db
-        .insert(EventSequenceTable)
-        .values([
-          { aggregate_id: sessionID, seq: 0 },
-          { aggregate_id: childID, seq: 0 },
-          { aggregate_id: usageOnlyID, seq: 0 },
-        ])
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(EventTable)
-        .values([
-          {
-            id: Event.ID.make("evt_stats_usage"),
-            aggregate_id: sessionID,
-            seq: 0,
-            created: Date.UTC(2026, 0, 2, 10, 0, 3),
-            type: SessionEvent.UsageRecorded.type,
-            data: encodeUsage({
-              sessionID,
-              source: "title",
-              cost: Money.USD.make(0.5),
-              tokens: { input: 1, output: 1, reasoning: 1, cache: { read: 1, write: 1 } },
-            }),
-          },
-          {
-            id: Event.ID.make("evt_stats_usage_boundary"),
-            aggregate_id: usageOnlyID,
-            seq: 0,
-            created: Date.UTC(2026, 0, 2, 10, 0, 3),
-            type: SessionEvent.UsageRecorded.type,
-            data: encodeUsage({
-              sessionID: usageOnlyID,
-              source: "compaction",
-              cost: Money.USD.make(0.25),
-              tokens: { input: 2, output: 2, reasoning: 2, cache: { read: 2, write: 2 } },
-            }),
-          },
-        ])
-        .run()
-        .pipe(Effect.orDie)
+      // Publish through the real Bus so the stored event type is whatever the
+      // writer persists rather than a string the test assumes.
+      const bus = yield* Bus.Service
+      yield* TestClock.setTime(Date.UTC(2026, 0, 2, 10, 0, 3))
+      yield* bus.publish(SessionEvent.UsageRecorded, {
+        sessionID,
+        source: "title",
+        cost: Money.USD.make(0.5),
+        tokens: { input: 1, output: 1, reasoning: 1, cache: { read: 1, write: 1 } },
+      })
+      yield* bus.publish(SessionEvent.UsageRecorded, {
+        sessionID: usageOnlyID,
+        source: "compaction",
+        cost: Money.USD.make(0.25),
+        tokens: { input: 2, output: 2, reasoning: 2, cache: { read: 2, write: 2 } },
+      })
 
       const stats = yield* SessionStats.get({
         from: Date.UTC(2026, 0, 1),
