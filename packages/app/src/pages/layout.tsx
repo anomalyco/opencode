@@ -2241,7 +2241,7 @@ export default function LegacyLayout(props: ParentProps) {
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
       agentsLabel={() => language.t("agents.title")}
-      agentsActive={() => location.pathname === "/agents"}
+      agentsActive={() => location.pathname.endsWith("/agents")}
       onOpenAgents={() => navigateWithSidebarReset("/agents")}
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />

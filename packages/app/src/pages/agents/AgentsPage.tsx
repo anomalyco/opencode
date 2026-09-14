@@ -2,7 +2,7 @@ import { createMemo, createSignal, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useFleet } from "./useFleet"
-import { isEnabled, loadSplitOpen } from "./lib/persist"
+import { loadSplitOpen } from "./lib/persist"
 import type { FleetFilterKind } from "./fleetTypes"
 import FleetTable from "./components/FleetTable"
 import SplitPane from "./components/SplitPane"
@@ -17,10 +17,9 @@ const FILTERS: { key: FleetFilterKind; key_i18n: string }[] = [
   { key: "error", key_i18n: "agents.filter.error" },
 ]
 
-export default function AgentsPage(props?: { force?: boolean }): JSX.Element {
+export default function AgentsPage(): JSX.Element {
   const language = useLanguage()
   const fleet = useFleet()
-  const [enabled] = createSignal(isEnabled() || !!props?.force)
   const [splitOpen, setSplitOpen] = createSignal(loadSplitOpen())
   const [selectedID, setSelectedID] = createSignal<string | null>(null)
 
@@ -95,14 +94,7 @@ export default function AgentsPage(props?: { force?: boolean }): JSX.Element {
   )
 
   return (
-    <Show
-      when={enabled()}
-      fallback={
-        <div style={{ display: "flex", height: "100%", "align-items": "center", "justify-content": "center", color: "rgba(255,255,255,.42)", "font-family": "ui-monospace,Menlo,monospace" }}>
-          {language.t("agents.disabled")}
-        </div>
-      }
-    >
+    <>
       <div style={{ display: "flex", "flex-direction": "column", height: "100%", "min-height": "0" }}>
         {header()}
         {filters()}
@@ -119,6 +111,6 @@ export default function AgentsPage(props?: { force?: boolean }): JSX.Element {
           </Show>
         </div>
       </div>
-    </Show>
+    </>
   )
 }

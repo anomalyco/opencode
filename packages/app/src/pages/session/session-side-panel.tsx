@@ -1,4 +1,4 @@
-import { For, Match, Show, Suspense, Switch, createEffect, createMemo, createSignal, lazy, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { DragDropProvider as DndKitProvider, PointerSensor } from "@dnd-kit/solid"
@@ -41,7 +41,6 @@ import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { useServerSync } from "@/context/server-sync"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
@@ -183,31 +182,11 @@ export function SessionSidePanel(props: {
     fileBrowser: () => !!props.fileBrowserState,
   })
   const contextOpen = tabState.contextOpen
-  const agentsOpen = tabState.agentsOpen
   const openFileOpen = tabState.openFileOpen
   const panelTabs = tabState.panelTabs
   const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
-
-  const AgentsFleet = lazy(() => import("@/pages/agents/AgentsPage"))
-  const fleetSync = useServerSync()
-  const activeAgents = createMemo(() => {
-    let count = 0
-    for (const project of layout.projects.list()) {
-      for (const directory of [project.worktree, ...(project.sandboxes ?? [])]) {
-        const [store] = fleetSync().child(directory, { bootstrap: false })
-        for (const status of Object.values(store.session_status)) {
-          if (status && status.type !== "idle") count++
-        }
-      }
-    }
-    return count
-  })
-  const openAgents = () => {
-    tabs().open("agents")
-    tabs().setActive("agents")
-  }
 
   const fileTreeTab = () => layout.fileTree.tab()
 
@@ -412,37 +391,6 @@ export function SessionSidePanel(props: {
                                   </div>
                                 </Tabs.Trigger>
                               </Show>
-                              <Show when={agentsOpen()}>
-                                <Tabs.Trigger
-                                  value="agents"
-                                  closeButton={
-                                    <TooltipKeybind
-                                      title={language.t("common.closeTab")}
-                                      keybind={command.keybind("tab.close")}
-                                      placement="bottom"
-                                      gutter={10}
-                                    >
-                                      <IconButton
-                                        icon="close-small"
-                                        variant="ghost"
-                                        class="h-5 w-5"
-                                        onClick={() => tabs().close("agents")}
-                                        aria-label={language.t("common.closeTab")}
-                                      />
-                                    </TooltipKeybind>
-                                  }
-                                  hideCloseButton
-                                  onMiddleClick={() => tabs().close("agents")}
-                                >
-                                  <div class="flex items-center gap-1.5">
-                                    <Icon name="subagent" size="small" />
-                                    <div>{language.t("agents.title")}</div>
-                                    <Show when={activeAgents() > 0}>
-                                      <div class="min-w-4 h-4 px-1 rounded-full text-[10px] leading-4 text-center font-medium text-black bg-[rgba(107,230,140,.95)]">{activeAgents()}</div>
-                                    </Show>
-                                  </div>
-                                </Tabs.Trigger>
-                              </Show>
                               <SortableProvider ids={openedTabs()}>
                                 <For each={panelTabs()}>
                                   {(tab) => (
@@ -494,17 +442,6 @@ export function SessionSidePanel(props: {
                                   "bg-background-stronger": !settings.general.newLayoutDesigns(),
                                 }}
                               >
-                                <IconButton
-                                  icon="subagent"
-                                  variant="ghost"
-                                  iconSize="large"
-                                  class="!rounded-md"
-                                  onClick={openAgents}
-                                  aria-label={language.t("agents.title")}
-                                />
-                                <Show when={activeAgents() > 0}>
-                                  <span class="pointer-events-none absolute -top-0.5 right-2 min-w-3.5 h-3.5 px-1 rounded-full text-[9px] leading-3.5 text-center font-semibold text-black bg-[rgba(107,230,140,.95)]">{activeAgents()}</span>
-                                </Show>
                                 <TooltipKeybind
                                   title={language.t("command.file.open")}
                                   keybind={command.keybind("file.open")}
@@ -557,16 +494,6 @@ export function SessionSidePanel(props: {
                             <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                               <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                                 <SessionContextTab />
-                              </div>
-                            </Tabs.Content>
-                          </Show>
-
-                          <Show when={activeTab() === "agents"}>
-                            <Tabs.Content value="agents" class="flex flex-col h-full overflow-hidden contain-strict">
-                              <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                                <Suspense fallback={<div class="text-12-regular text-text-weak">…</div>}>
-                                  <AgentsFleet force />
-                                </Suspense>
                               </div>
                             </Tabs.Content>
                           </Show>
@@ -678,43 +605,6 @@ export function SessionSidePanel(props: {
                                 </div>
                               </Tabs.Trigger>
                             </Show>
-                            <Show when={agentsOpen()}>
-                              <Tabs.Trigger
-                                value="agents"
-                                closeButton={
-                                  <TooltipV2
-                                    value={
-                                      <>
-                                        {language.t("common.closeTab")}
-                                        <Show when={closeTabKeybind().length > 0}>
-                                          <KeybindV2 keys={closeTabKeybind()} variant="neutral" />
-                                        </Show>
-                                      </>
-                                    }
-                                    placement="bottom"
-                                    gutter={10}
-                                  >
-                                    <IconButton
-                                      icon="close-small"
-                                      variant="ghost"
-                                      class="h-5 w-5"
-                                      onClick={() => tabs().close("agents")}
-                                      aria-label={language.t("common.closeTab")}
-                                    />
-                                  </TooltipV2>
-                                }
-                                hideCloseButton
-                                onMiddleClick={() => tabs().close("agents")}
-                              >
-                                <div class="flex items-center gap-1.5">
-                                  <Icon name="subagent" size="small" />
-                                  <div>{language.t("agents.title")}</div>
-                                  <Show when={activeAgents() > 0}>
-                                    <div class="min-w-4 h-4 px-1 rounded-full text-[10px] leading-4 text-center font-medium text-black bg-[rgba(107,230,140,.95)]">{activeAgents()}</div>
-                                  </Show>
-                                </div>
-                              </Tabs.Trigger>
-                            </Show>
                             <For each={panelTabs()}>
                               {(tab) => (
                                 <Show
@@ -771,18 +661,6 @@ export function SessionSidePanel(props: {
                                 "bg-background-stronger": !settings.general.newLayoutDesigns(),
                               }}
                             >
-                              <div class="relative flex items-center">
-                                <IconButtonV2
-                                  icon={<Icon name="subagent" />}
-                                  variant="ghost-muted"
-                                  size="large"
-                                  onClick={() => openAgents()}
-                                  aria-label={language.t("agents.title")}
-                                />
-                                <Show when={activeAgents() > 0}>
-                                  <span class="pointer-events-none absolute -top-0.5 right-0 min-w-3.5 h-3.5 px-1 rounded-full text-[9px] leading-3.5 text-center font-semibold text-black bg-[rgba(107,230,140,.95)]">{activeAgents()}</span>
-                                </Show>
-                              </div>
                               <TooltipV2
                                 value={
                                   <>
@@ -844,16 +722,6 @@ export function SessionSidePanel(props: {
                           <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                             <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                               <SessionContextTab />
-                            </div>
-                          </Tabs.Content>
-                        </Show>
-
-                        <Show when={activeTab() === "agents"}>
-                          <Tabs.Content value="agents" class="flex flex-col h-full overflow-hidden contain-strict">
-                            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                              <Suspense fallback={<div class="text-12-regular text-text-weak">…</div>}>
-                                <AgentsFleet force />
-                              </Suspense>
                             </div>
                           </Tabs.Content>
                         </Show>

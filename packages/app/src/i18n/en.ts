@@ -1153,7 +1153,6 @@ export const dict = {
   "agents.total": "Total",
   "agents.project.all": "All projects",
   "agents.more": "+{{count}} more",
-  "agents.disabled": "Agents fleet is disabled",
   "agents.filter.all": "All",
   "agents.filter.working": "Working",
   "agents.filter.input": "Needs input",

@@ -10,7 +10,6 @@ export const KEYS = {
   project: "agents.project",
   splitOpen: "agents.splitOpen",
   splitPct: "agents.splitPct",
-  enabled: "agents.enabled",
 } as const;
 
 export type WindowKey = "5m" | "1h" | "24h";
@@ -189,22 +188,6 @@ export function saveSplitPct(pct: number, store?: PersistStore): void {
   try {
     if (!Number.isFinite(pct)) return;
     setOf(store, KEYS.splitPct, String(Math.round(Math.min(75, Math.max(25, pct)))));
-  } catch {
-    // never throw
-  }
-}
-
-export function isEnabled(store?: PersistStore): boolean {
-  try {
-    return getOf(store, KEYS.enabled) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function setEnabled(on: boolean, store?: PersistStore): void {
-  try {
-    setOf(store, KEYS.enabled, on ? "1" : "0");
   } catch {
     // never throw
   }
