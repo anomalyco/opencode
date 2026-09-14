@@ -96,7 +96,7 @@ test("single-server settings expose scoped pages without a server picker", async
     (request) => request.method() === "PATCH" && new URL(request.url()).pathname === "/api/experimental/config",
   )
   await page.getByRole("option", { name: "bash", exact: true }).click()
-  expect((await updated).postDataJSON()).toEqual({ shell: "/bin/bash" })
+  expect((await updated).postDataJSON()).toEqual({ shell: "bash" })
 })
 
 test("project settings open as a nested autosaving view", async ({ page }) => {

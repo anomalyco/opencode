@@ -113,7 +113,7 @@ test("passes through non-event fetches", async ({ page }) => {
     return response.json()
   })
 
-  expect(health).toEqual({ version: "2.0.0", pid: 1, urls: ["http://localhost"] })
+  expect(health).toEqual({ version: "2.0.0", pid: 1, urls: [] })
   await expect.poll(async () => (await timeline.transport.connections()).length).toBe(1)
 })
 
