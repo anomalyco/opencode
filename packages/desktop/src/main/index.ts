@@ -41,6 +41,7 @@ import {
   setBackgroundColor,
   setDockIcon,
   restoreMainWindows,
+  wireDisplayBoundsRecovery,
 } from "./windows"
 import { createWslServersController } from "./wsl/servers"
 import { registerWslIpcHandlers } from "./wsl/ipc"
@@ -271,6 +272,7 @@ const main = Effect.gen(function* () {
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()
+  wireDisplayBoundsRecovery()
   const updater = setupAutoUpdater(stopSidecars)
   const menuDeps = {
     trigger: (id: string) => {

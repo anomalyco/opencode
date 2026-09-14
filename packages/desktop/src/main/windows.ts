@@ -4,7 +4,7 @@ import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { randomUUID } from "node:crypto"
 import { rmSync } from "node:fs"
-import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol, shell } from "electron"
+import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol, screen, shell } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
@@ -14,6 +14,7 @@ import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
+import { boundsOutsideWorkArea, clampBoundsToWorkArea } from "./window-bounds"
 import { safeWindowURL } from "./window-state"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
 
@@ -165,19 +166,48 @@ export function setDockIcon() {
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
+// Restored bounds can point at a display that's since been unplugged or resized (a
+// laptop undocked from an ultrawide, say); clamp to the nearest display's work area so
+// the window always reopens fully on-screen.
+function clampedBoundsFor(state: { x?: number; y?: number; width: number; height: number }) {
+  const display = screen.getDisplayMatching({ x: state.x ?? 0, y: state.y ?? 0, width: state.width, height: state.height })
+  return clampBoundsToWorkArea(state, display.workArea)
+}
+
+function reclampIfNeeded(win: BrowserWindow) {
+  if (win.isDestroyed()) return
+  const bounds = win.getBounds()
+  const display = screen.getDisplayMatching(bounds)
+  if (!boundsOutsideWorkArea(bounds, display.workArea)) return
+  const clamped = clampBoundsToWorkArea(bounds, display.workArea)
+  win.setBounds({ x: clamped.x ?? bounds.x, y: clamped.y ?? bounds.y, width: clamped.width, height: clamped.height })
+}
+
+let displayRecoveryWired = false
+
+/** Re-clamps every open main window whenever a display goes away or changes shape. */
+export function wireDisplayBoundsRecovery() {
+  if (displayRecoveryWired) return
+  displayRecoveryWired = true
+  const reclampAll = () => BrowserWindow.getAllWindows().forEach(reclampIfNeeded)
+  screen.on("display-removed", reclampAll)
+  screen.on("display-metrics-changed", reclampAll)
+}
+
 export function createMainWindow(id: string = randomUUID()) {
   const state = windowState({
     file: windowStateFile(id),
     defaultWidth: 1280,
     defaultHeight: 800,
   })
+  const bounds = clampedBoundsFor(state)
 
   const mode = tone()
   const win = new BrowserWindow({
-    x: state.x,
-    y: state.y,
-    width: state.width,
-    height: state.height,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
     show: false,
     autoHideMenuBar: true,
     title: "OpenCode",
