@@ -13,6 +13,7 @@ import {
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
@@ -321,6 +322,12 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 keybind: "mod+b",
                 hidden: true,
                 onSelect: toggleHome,
+              },
+              {
+                id: "agents.open",
+                title: language.t("agents.title"),
+                category: language.t("command.category.view"),
+                onSelect: () => navigate(`/server/${base64Encode(server.key)}/agents`),
               },
             ])
 

@@ -12,7 +12,7 @@ import {
   type Accessor,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useServerSync } from "@/context/server-sync"
 import { Persist, persisted } from "@/utils/persist"
@@ -116,6 +116,7 @@ export default function LegacyLayout(props: ParentProps) {
   const notification = useNotification()
   const permission = usePermission()
   const navigate = useNavigate()
+  const location = useLocation()
   const providers = useProviders(() => undefined)
   const dialog = useDialog()
   const command = useCommand()
@@ -2239,6 +2240,9 @@ export default function LegacyLayout(props: ParentProps) {
       onOpenSettings={openSettings}
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
+      agentsLabel={() => language.t("agents.title")}
+      agentsActive={() => location.pathname === "/agents"}
+      onOpenAgents={() => navigateWithSidebarReset("/agents")}
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }

@@ -70,6 +70,7 @@ import { NewHome } from "@/pages/home"
 import { LegacyHome } from "@/pages/home/legacy-home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
+const AgentsPage = lazy(() => import("@/pages/agents/AgentsPage"))
 
 const SessionRoute = () => {
   const settings = useSettings()
@@ -639,9 +640,27 @@ function Routes(props: { serverScoped?: JSX.Element }) {
         <Route path="/" component={NewHome} />
         <Route path="/:dir/session/:id" component={NewLayoutLegacySessionRedirect} />
         <Route path="/server/:serverKey/session/:id" component={TargetSessionRoute} />
+        <Route
+          path="/server/:serverKey/agents"
+          component={() => (
+            <TargetServerRoute>
+              <AgentsPage />
+            </TargetServerRoute>
+          )}
+        />
       </Show>
       <Route path="/new-session" component={DraftRoute} />
+      <Route path="/agents" component={AgentsRedirect} />
     </>
+  )
+}
+
+function AgentsRedirect() {
+  const server = useServer()
+  return (
+    <Show when={server.key} keyed>
+      {(key) => <Navigate href={`/server/${base64Encode(key)}/agents`} />}
+    </Show>
   )
 }
 
@@ -649,7 +668,6 @@ function NewLayoutLegacySessionRedirect() {
   const server = useServer()
   const tabs = useTabs()
   const params = useParams<{ id: string }>()
-
   return (
     <Show when={tabs.ready()}>
       <Navigate
