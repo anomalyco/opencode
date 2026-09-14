@@ -277,8 +277,6 @@ export const authorize = (input: {
       }
       const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
       if (error) return fail(error, "authorization_error")
-      // Reject a redirect whose state does not match what we issued: this is the CSRF defense the
-      // state parameter exists for, so an attacker can't inject their own authorization code.
       if (url.searchParams.get("state") !== state) return fail("OAuth state mismatch", "state_mismatch")
       const value = url.searchParams.get("code")
       if (!value) return fail("Missing authorization code", "missing_code")

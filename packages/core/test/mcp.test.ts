@@ -156,7 +156,7 @@ function resourceServer(
             state.toolCalls.push({
               name: request.params.name,
               arguments: request.params.arguments,
-              sessionID: request.params._meta?.sessionID,
+              sessionID: request.params._meta?.["ai.opencode/sessionID"],
               progressToken: request.params._meta?.progressToken,
             })
             return Promise.resolve({ content: [] })
@@ -307,10 +307,18 @@ function resourceMcpLayer(
 const connect = (server: string, config: typeof ConfigMCP.Server.Type, directory: string) =>
   McpClient.connect(server, config, directory).pipe(Effect.provide(hostEnvironmentLayer))
 
+// Reads no longer wait for startup, so tests that assert on a connected server settle it first.
+const settled = (service: Mcp.Interface, name = "resources") =>
+  Effect.gen(function* () {
+    const status = (yield* service.servers()).find((server) => server.name === name)?.status
+    if (status?.status === "pending") return yield* Effect.fail(status)
+    return status
+  }).pipe(Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }))
+
 const mcp = Layer.mock(Mcp.Service, {
   tools: () =>
     Effect.succeed([
-      new Mcp.Tool({
+      ({
         server: Mcp.ServerName.make("demo"),
         name: "search",
         description: "Search",
@@ -320,74 +328,74 @@ const mcp = Layer.mock(Mcp.Service, {
           properties: { ok: { type: "boolean" } },
           required: ["ok"],
         },
-      }),
-      new Mcp.Tool({
+      } satisfies Mcp.Tool),
+      ({
         server: Mcp.ServerName.make("demo"),
         name: "status",
         description: "Status",
         inputSchema: { type: "object", properties: {} },
-      }),
-      new Mcp.Tool({
+      } satisfies Mcp.Tool),
+      ({
         server: Mcp.ServerName.make("demo"),
         name: "issues",
         description: "Returns JSON as text",
         inputSchema: { type: "object", properties: {} },
-      }),
-      new Mcp.Tool({
+      } satisfies Mcp.Tool),
+      ({
         server: Mcp.ServerName.make("demo"),
         name: "count",
         description: "Returns a number as text",
         inputSchema: { type: "object", properties: {} },
-      }),
-      new Mcp.Tool({
+      } satisfies Mcp.Tool),
+      ({
         server: Mcp.ServerName.make("demo"),
         name: "typed",
         description: "Declares a string output and returns JSON as text",
         inputSchema: { type: "object", properties: {} },
         outputSchema: { type: "string" },
-      }),
-      new Mcp.Tool({
+      } satisfies Mcp.Tool),
+      ({
         server: Mcp.ServerName.make("direct"),
         name: "issues",
         codemode: false,
         description: "Returns JSON as text",
         inputSchema: { type: "object", properties: {} },
-      }),
-      new Mcp.Tool({
+      } satisfies Mcp.Tool),
+      ({
         server: Mcp.ServerName.make("direct"),
         name: "lookup",
         codemode: false,
         description: "Lookup",
         inputSchema: { type: "object", properties: {} },
-      }),
-      new Mcp.Tool({
+      } satisfies Mcp.Tool),
+      ({
         server: Mcp.ServerName.make("direct"),
         name: "fail",
         codemode: false,
         description: "Always fails",
         inputSchema: { type: "object", properties: {} },
-      }),
-      new Mcp.Tool({
+      } satisfies Mcp.Tool),
+      ({
         server: Mcp.ServerName.make("direct"),
         name: "media",
         codemode: false,
         description: "Returns text and an image",
         inputSchema: { type: "object", properties: {} },
-      }),
+      } satisfies Mcp.Tool),
     ]),
   callTool: (input) =>
     Effect.sync(() => {
       calls += 1
       invocations.push(input)
       if (input.name === "fail")
-        return new Mcp.ToolResult({
+        return ({
           server: Mcp.ServerName.make(input.server),
           tool: input.name,
           isError: true,
           content: [{ type: "text", text: "search index unavailable" }],
-        })
+        } satisfies Mcp.ToolResult)
       if (input.name === "media")
-        return new Mcp.ToolResult({
+        return ({
           server: Mcp.ServerName.make(input.server),
           tool: input.name,
           isError: false,
@@ -395,35 +403,35 @@ const mcp = Layer.mock(Mcp.Service, {
             { type: "text", text: "rendered chart" },
             { type: "media", data: "aGVsbG8=", mimeType: "image/png" },
           ],
-        })
+        } satisfies Mcp.ToolResult)
       if (input.name === "status")
-        return new Mcp.ToolResult({
+        return ({
           server: Mcp.ServerName.make(input.server),
           tool: input.name,
           isError: false,
           content: [{ type: "text", text: "hello" }],
-        })
+        } satisfies Mcp.ToolResult)
       if (input.name === "issues" || input.name === "typed")
-        return new Mcp.ToolResult({
+        return ({
           server: Mcp.ServerName.make(input.server),
           tool: input.name,
           isError: false,
           content: [{ type: "text", text: '{"issues":[{"id":1}]}' }],
-        })
+        } satisfies Mcp.ToolResult)
       if (input.name === "count")
-        return new Mcp.ToolResult({
+        return ({
           server: Mcp.ServerName.make(input.server),
           tool: input.name,
           isError: false,
           content: [{ type: "text", text: "42" }],
-        })
-      return new Mcp.ToolResult({
+        } satisfies Mcp.ToolResult)
+      return ({
         server: Mcp.ServerName.make(input.server),
         tool: input.name,
         isError: false,
         structured: { ok: true },
         content: [],
-      })
+      } satisfies Mcp.ToolResult)
     }),
 })
 const permissions = Layer.mock(Permission.Service, {
@@ -665,8 +673,7 @@ test("reports a local MCP server as failed when the location has no execution pl
   await Effect.runPromise(
     Effect.gen(function* () {
       const service = yield* Mcp.Service
-      yield* service.tools()
-      const status = (yield* service.servers()).find((server) => server.name === "resources")?.status
+      const status = yield* settled(service)
       expect(status).toEqual({
         status: "failed",
         error: expect.stringContaining("location has no execution plane"),
@@ -1109,8 +1116,8 @@ test("lists, reads, and reports MCP resource changes", async () => {
         ])
         expect(yield* connection.readResource({ uri: "docs://readme" })).toEqual({
           contents: [
-            { type: "text", uri: "docs://readme", text: "hello", mimeType: "text/plain" },
-            { type: "blob", uri: "docs://logo", blob: "aGVsbG8=", mimeType: "image/png" },
+            { uri: "docs://readme", text: "hello", mimeType: "text/plain" },
+            { uri: "docs://logo", blob: "aGVsbG8=", mimeType: "image/png" },
           ],
         })
 
@@ -1238,6 +1245,7 @@ test("loads and reads MCP resources", async () => {
 
         yield* Effect.gen(function* () {
           const service = yield* Mcp.Service
+          yield* settled(service)
           expect(yield* service.resourceCatalog()).toEqual({
             resources: [
               {
@@ -1603,7 +1611,7 @@ test("reconciles only changed MCP server config", async () => {
 
         yield* Effect.gen(function* () {
           const service = yield* Mcp.Service
-          yield* service.tools()
+          yield* settled(service)
           expect(server.state.toolLists).toBe(1)
           expect(server.state.initializations).toBe(1)
 
@@ -1831,13 +1839,13 @@ test("serializes concurrent MCP lifecycle operations", async () => {
 testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin transforms through catalog updates", () =>
   Effect.gen(function* () {
     const tool = (server: string, name: string, description = name) =>
-      new Mcp.Tool({
+      ({
         server: Mcp.ServerName.make(server),
         name,
         description,
         codemode: false,
         inputSchema: { type: "object", properties: {} },
-      })
+      } satisfies Mcp.Tool)
     const healthy = [tool("demo", "search"), tool("other", "lookup")]
     const namespace = tool("x".repeat(65), "lookup")
     const catalog = yield* Ref.make([tool("demo", "x".repeat(65)), ...healthy, namespace])
@@ -1960,12 +1968,12 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
                 tools: () => Ref.get(catalog),
                 callTool: (input) =>
                   Effect.succeed(
-                    new Mcp.ToolResult({
+                    ({
                       server: Mcp.ServerName.make(input.server),
                       tool: input.name,
                       isError: false,
                       content: [{ type: "text", text: "healthy" }],
-                    }),
+                    } satisfies Mcp.ToolResult),
                   ),
               }),
             ),
@@ -2003,12 +2011,12 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
           Layer.mock(Mcp.Service, {
             tools: () =>
               Effect.sync(() => [
-                new Mcp.Tool({
+                ({
                   server: Mcp.ServerName.make("demo"),
                   name: `read_${++reads}`,
                   codemode: false,
                   inputSchema: { type: "object", properties: {} },
-                }),
+                } satisfies Mcp.Tool),
               ]),
           }),
         ),

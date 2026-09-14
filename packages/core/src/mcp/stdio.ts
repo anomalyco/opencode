@@ -148,7 +148,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
             }),
           ),
           Effect.ignore,
-          // stdout ending means the server is gone; the SDK transport reports that the same way.
+          // stdout ending means the server is gone.
           Effect.ensuring(
             Effect.gen(function* () {
               const unexpected = state.phase !== "closed"
@@ -159,8 +159,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
         ),
       )
 
-      // StdioClientTransport pipes stderr into a stream nobody reads. Drain chunks into the debug
-      // log so chatty servers cannot stall and newline-free output is not buffered without bound.
+      // Drain stderr into the debug log so chatty servers cannot stall on a full pipe.
       yield* Effect.forkScoped(
         handle.stderr.pipe(
           Stream.decodeText(),
