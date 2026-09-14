@@ -398,7 +398,7 @@ describe("EditTool", () => {
             Effect.gen(function* () {
               expect(result).toEqual({
                 type: "error",
-                value: "File changed after permission approval. Read it again before editing.",
+                value: "File changed since it was read. Read it again before editing.",
               })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("newer\n")
               expect(writes).toEqual([])

@@ -112,7 +112,7 @@ const layer = Layer.effectDiscard(
                   Effect.mapError((error) =>
                     error instanceof FileMutation.StaleContentError
                       ? new ToolFailure({
-                          message: "File changed after permission approval. Read it again before editing.",
+                          message: "File changed since it was read. Read it again before editing.",
                         })
                       : new ToolFailure({ message: `Unable to edit ${input.path}` }),
                   ),
