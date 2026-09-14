@@ -2,10 +2,9 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
-import type { Permission } from "../../src/permission"
 import type { Tool } from "@/tool/tool"
 import { SkillTool } from "../../src/tool/skill"
 import { ToolRegistry } from "@/tool/registry"
@@ -129,6 +128,103 @@ Use this skill.
         expect(error).toBeInstanceOf(Error)
         if (error instanceof Error) expect(error.message).toContain('Skill "missing-skill" not found.')
       }
+    }),
+  )
+
+  it.instance("execute expands shell directives in skill content", () =>
+    Effect.gen(function* () {
+      const dir = (yield* TestInstance).directory
+      const skill = path.join(dir, ".opencode", "skill", "shell-skill")
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(skill, "SKILL.md"),
+          `---
+name: shell-skill
+description: Skill with shell expansion.
+---
+
+# Shell Skill
+
+Output: !\`printf expanded-ok\`
+`,
+        ),
+      )
+
+      const home = process.env.OPENCODE_TEST_HOME
+      process.env.OPENCODE_TEST_HOME = dir
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          process.env.OPENCODE_TEST_HOME = home
+        }),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
+      const tool = (yield* registry.tools({
+        providerID: "opencode" as any,
+        modelID: "gpt-5" as any,
+        agent,
+      })).find((tool) => tool.id === SkillTool.id)
+      if (!tool) throw new Error("Skill tool not found")
+
+      const result = yield* tool.execute(
+        { name: "shell-skill" },
+        {
+          ...baseCtx,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain("Output: expanded-ok")
+      expect(result.output).not.toContain("!`printf expanded-ok`")
+    }),
+  )
+
+  it.instance("execute runs shell directives from the skill directory", () =>
+    Effect.gen(function* () {
+      const dir = (yield* TestInstance).directory
+      const skill = path.join(dir, ".opencode", "skill", "shell-cwd")
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(skill, "SKILL.md"),
+          `---
+name: shell-cwd
+description: Skill that inspects current directory.
+---
+
+# Shell Cwd
+
+Current directory: !\`pwd\`
+`,
+        ),
+      )
+
+      const home = process.env.OPENCODE_TEST_HOME
+      process.env.OPENCODE_TEST_HOME = dir
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          process.env.OPENCODE_TEST_HOME = home
+        }),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
+      const tool = (yield* registry.tools({
+        providerID: "opencode" as any,
+        modelID: "gpt-5" as any,
+        agent,
+      })).find((tool) => tool.id === SkillTool.id)
+      if (!tool) throw new Error("Skill tool not found")
+
+      const result = yield* tool.execute(
+        { name: "shell-cwd" },
+        {
+          ...baseCtx,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain(`Current directory: ${skill}`)
     }),
   )
 })

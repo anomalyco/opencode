@@ -1,7 +1,11 @@
 import path from "path"
 import { Effect, Schema } from "effect"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { Shell } from "@opencode-ai/core/shell"
 import { Skill } from "../skill"
+import { Config } from "@/config/config"
+import { ConfigMarkdown } from "@/config/markdown"
+import { Process } from "@/util/process"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
 
@@ -14,6 +18,7 @@ export const SkillTool = Tool.define(
   Effect.gen(function* () {
     const skill = yield* Skill.Service
     const ripgrep = yield* Ripgrep.Service
+    const config = yield* Config.Service
 
     return {
       description: DESCRIPTION,
@@ -32,6 +37,19 @@ export const SkillTool = Tool.define(
           })
 
           const dir = path.dirname(info.location)
+          const shellMatches = ConfigMarkdown.shell(info.content)
+          const rendered = yield* Effect.gen(function* () {
+            if (shellMatches.length === 0) return info.content.trim()
+            const cfg = yield* config.get()
+            const sh = Shell.preferred(cfg.shell)
+            const results = yield* Effect.promise(() =>
+              Promise.all(
+                shellMatches.map(async ([, cmd]) => (await Process.text([cmd], { cwd: dir, shell: sh, nothrow: true })).text),
+              ),
+            )
+            let index = 0
+            return info.content.replace(ConfigMarkdown.SHELL_REGEX, () => results[index++] ?? "").trim()
+          })
           const base = dir
           const files = yield* ripgrep.find({
             cwd: dir,
@@ -48,7 +66,7 @@ export const SkillTool = Tool.define(
               `<skill_content name="${info.name}">`,
               `# Skill: ${info.name}`,
               "",
-              info.content.trim(),
+              rendered,
               "",
               `Base directory for this skill: ${base}`,
               "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
