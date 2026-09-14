@@ -259,17 +259,13 @@ function agentColor(value: string | undefined, themeColors: Record<string, strin
 
 function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI18n>) {
   const name =
-    provider === "parallel"
-      ? "Parallel"
-      : provider === "exa"
-        ? "Exa"
-        : provider === "firecrawl"
-          ? "Firecrawl"
-          : provider === "tavily"
-            ? "Tavily"
-            : provider === "tinyfish"
-              ? "TinyFish"
-              : undefined
+    typeof provider !== "string" || !provider
+      ? undefined
+      : provider === "tinyfish"
+        ? "TinyFish"
+        : provider === "opencode"
+          ? "OpenCode"
+          : `${provider[0].toUpperCase()}${provider.slice(1)}`
   if (name) return i18n.t("ui.tool.websearch.provider", { provider: name })
   return i18n.t("ui.tool.websearch")
 }
