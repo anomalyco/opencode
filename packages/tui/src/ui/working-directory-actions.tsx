@@ -5,8 +5,10 @@ import { useClipboard } from "../context/clipboard"
 import { useDialog } from "./dialog"
 import { DialogSelect } from "./dialog-select"
 import { useToast } from "./toast"
+import { useLanguage } from "../context/language"
 
 export function useWorkingDirectoryActions(input: { directory: () => string | undefined; onMove?: () => void }) {
+  const language = useLanguage()
   const clipboard = useClipboard()
   const dialog = useDialog()
   const renderer = useRenderer()
@@ -19,24 +21,24 @@ export function useWorkingDirectoryActions(input: { directory: () => string | un
     if (!directory) return
     dialog.replace(() => (
       <DialogSelect
-        title="Working directory"
+        title={language.t("tui.dialogs.workingDirectory")}
         renderFilter={false}
         options={[
           {
-            title: "Copy path",
+            title: language.t("tui.dialogs.copyPath"),
             value: "location.copy",
             description: directory,
             onSelect: (dialog) => {
               void clipboard.write(directory).then(() => {
                 dialog.clear()
-                toast.show({ message: "Path copied to clipboard", variant: "info" })
+                toast.show({ message: language.t("tui.dialogs.pathCopied"), variant: "info" })
               }, toast.error)
             },
           },
           {
-            title: "Open folder",
+            title: language.t("tui.dialogs.openFolder"),
             value: "location.open",
-            description: "in system file manager",
+            description: language.t("tui.dialogs.systemFileManager"),
             onSelect: (dialog) => {
               dialog.clear()
               void open(directory).catch(toast.error)
@@ -45,9 +47,9 @@ export function useWorkingDirectoryActions(input: { directory: () => string | un
           ...(input.onMove
             ? [
                 {
-                  title: "Workspaces",
+                  title: language.t("tui.dialogs.workspaces"),
                   value: "session.move",
-                  description: "to another working directory",
+                  description: language.t("tui.dialogs.anotherDirectory"),
                   onSelect: () => void input.onMove?.(),
                 },
               ]

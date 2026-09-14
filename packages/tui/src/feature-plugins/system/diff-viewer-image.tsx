@@ -5,6 +5,7 @@ import { createResource, createSignal, Match, onCleanup, Show, Switch } from "so
 import { DialogImagePreview } from "../../component/dialog-image-preview"
 import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
+import { useLanguage } from "../../context/language"
 
 export function isDiffImageFile(file: string) {
   return /\.(png|jpe?g|webp|gif)$/i.test(file)
@@ -15,6 +16,7 @@ export function DiffViewerImage(props: {
   load: (file: string, signal: AbortSignal) => Promise<Uint8Array>
   label?: string
 }) {
+  const language = useLanguage()
   const theme = useTheme()
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
@@ -30,14 +32,14 @@ export function DiffViewerImage(props: {
 
   return (
     <box width="100%" flexShrink={0} gap={1} paddingLeft={1} paddingRight={1} paddingBottom={1}>
-      <text fg={theme.text.subdued}>{props.label ?? "Working tree preview"}</text>
+      <text fg={theme.text.subdued}>{props.label ?? language.t("tui.diff.workingTreePreview")}</text>
       <box height={height() + 2} flexShrink={0} gap={1}>
         <Switch>
           <Match when={image.error}>
-            <text fg={theme.text.feedback.error.default}>Could not load image</text>
+            <text fg={theme.text.feedback.error.default}>{language.t("tui.diff.loadImageFailed")}</text>
           </Match>
           <Match when={image.loading}>
-            <text fg={theme.text.subdued}>Loading image…</text>
+            <text fg={theme.text.subdued}>{language.t("tui.diff.loadingImage")}</text>
           </Match>
           <Match when={!image.error && image()} keyed>
             {(bytes) => {
@@ -61,7 +63,9 @@ export function DiffViewerImage(props: {
               return (
                 <Show
                   when={!failed()}
-                  fallback={<text fg={theme.text.feedback.error.default}>Could not decode image</text>}
+                  fallback={
+                    <text fg={theme.text.feedback.error.default}>{language.t("tui.diff.decodeImageFailed")}</text>
+                  }
                 >
                   <box width="100%" height={height()} onMouseUp={open}>
                     <image
@@ -80,7 +84,7 @@ export function DiffViewerImage(props: {
                       <box flexDirection="row" justifyContent="space-between">
                         <text fg={theme.text.subdued}>{value()}</text>
                         <text fg={theme.text.action.secondary.default} onMouseUp={open}>
-                          Click to enlarge
+                          {language.t("tui.diff.enlargeImage")}
                         </text>
                       </box>
                     )}

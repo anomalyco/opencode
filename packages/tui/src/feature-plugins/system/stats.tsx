@@ -7,7 +7,9 @@ import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { Logo } from "../../component/logo"
 import { useTheme, useThemes } from "../../context/theme"
 import { tint } from "../../theme/color"
-import { statsMetrics, statsNumber } from "./stats-data"
+import { statsMetrics } from "./stats-data"
+import { useLanguage } from "../../context/language"
+import { stringWidth } from "../../util/string-width"
 
 const digits: Record<string, string[]> = {
   "0": ["111", "101", "101", "101", "111"],
@@ -28,15 +30,16 @@ const digits: Record<string, string[]> = {
 }
 
 export function StatsPoster(props: { stats: SessionStatsInfo }) {
+  const language = useLanguage()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const themes = useThemes()
   const width = () => Math.max(12, Math.min(110, dimensions().width - 8))
   const compact = () => dimensions().height < 38
   const metrics = createMemo(() => statsMetrics(props.stats))
-  const number = () => statsNumber(metrics()[0].value)
+  const number = () => language.number(metrics()[0].value, { notation: "compact", maximumFractionDigits: 1 })
   const dates = createMemo(() =>
-    new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).formatRange(
+    new Intl.DateTimeFormat(language.intl(), { month: "short", year: "numeric" }).formatRange(
       new Date(props.stats.range.from),
       new Date(Math.max(props.stats.range.from, props.stats.range.to - 1)),
     ),
@@ -58,12 +61,30 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
       tint(theme.background.default, theme.categorical[0][themes.mode() === "light" ? 800 : 200], alpha),
     ),
   ])
+  const weekdays = createMemo(() =>
+    Array.from({ length: 7 }, (_, day) =>
+      language.date(Date.UTC(2024, 0, day + 1), { weekday: "narrow", timeZone: "UTC" }),
+    ),
+  )
+  const months = createMemo(() =>
+    calendar()
+      .months.map((month) => {
+        const date = new Date(`${calendar().weeks[month.week][3].date}T12:00:00`).getTime()
+        const label = language.date(Math.min(props.stats.range.to - 1, Math.max(props.stats.range.from, date)), {
+          month: "short",
+        })
+        return stringWidth(label) <= month.span * 2
+          ? label + " ".repeat(month.span * 2 - stringWidth(label))
+          : " ".repeat(month.span * 2)
+      })
+      .join(""),
+  )
 
   return (
     <box width={width()} flexDirection="column" alignItems="center" flexShrink={0} gap={compact() ? 1 : 2}>
       <box width="100%" flexDirection={width() < 44 ? "column" : "row"} justifyContent="space-between">
         <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-          opencode / stats
+          opencode / {language.t("tui.stats.heading")}
         </text>
         <text fg={theme.text.subdued}>{dates()}</text>
       </box>
@@ -91,19 +112,14 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
             </For>
           </box>
         </Show>
-        <text fg={theme.text.subdued}>TOKENS</text>
+        <text fg={theme.text.subdued}>{language.t("tui.stats.tokens")}</text>
       </box>
       <box alignItems="center">
-        <text fg={theme.text.subdued}>
-          {"    " +
-            calendar()
-              .months.map((month) => (month.label.length <= month.span * 2 ? month.label : "").padEnd(month.span * 2))
-              .join("")}
-        </text>
-        <For each={["M", "T", "W", "T", "F", "S", "S"]}>
+        <text fg={theme.text.subdued}>{"    " + months()}</text>
+        <For each={weekdays()}>
           {(day, index) => (
             <box flexDirection="row" height={1}>
-              <text fg={theme.text.subdued}>{day + "   "}</text>
+              <text fg={theme.text.subdued}>{day + " ".repeat(Math.max(0, 4 - stringWidth(day)))}</text>
               <For each={calendar().weeks}>
                 {(week) => (
                   <text fg={shades()[Math.max(0, week[index()].level)]} selectable={false}>
@@ -115,7 +131,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
           )}
         </For>
         <Show when={calendar().clipped}>
-          <text fg={theme.text.subdued}>Your last {calendar().weeks.length} weeks</text>
+          <text fg={theme.text.subdued}>{language.plural("tui.stats.lastWeeks", calendar().weeks.length)}</text>
         </Show>
       </box>
       <box width="100%" flexDirection="row" justifyContent="space-around">
@@ -123,10 +139,19 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
           {(metric) => (
             <box alignItems="center">
               <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-                {statsNumber(metric.value)}
-                {metric.label === "best streak" ? " days" : ""}
+                {metric.label === "best streak"
+                  ? language.plural("tui.stats.days", metric.value)
+                  : language.number(metric.value, { notation: "compact", maximumFractionDigits: 1 })}
               </text>
-              <text fg={theme.text.subdued}>{metric.label}</text>
+              <text fg={theme.text.subdued}>
+                {language.t(
+                  metric.label === "best streak"
+                    ? "tui.stats.bestStreak"
+                    : metric.label === "active days"
+                      ? "tui.stats.activeDays"
+                      : "tui.stats.sessions",
+                )}
+              </text>
             </box>
           )}
         </For>
@@ -139,6 +164,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
 }
 
 function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
+  const language = useLanguage()
   const [result] = createResource(() => {
     const now = new Date()
     return props.context.client.session.stats({
@@ -150,7 +176,7 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
   const theme = useTheme()
 
   props.context.keymap.layer(() => ({
-    commands: [{ bind: "escape", title: "back", run: props.onClose }],
+    commands: [{ bind: "escape", title: language.t("tui.stats.back"), run: props.onClose }],
   }))
 
   return (
@@ -167,11 +193,9 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
       >
         <Show
           when={!result.error}
-          fallback={
-            <text fg={theme.text.feedback.error.default}>Could not load stats. Reopen /stats to try again.</text>
-          }
+          fallback={<text fg={theme.text.feedback.error.default}>{language.t("tui.stats.loadFailed")}</text>}
         >
-          <Show when={result()} fallback={<text fg={theme.text.subdued}>Gathering your stats…</text>}>
+          <Show when={result()} fallback={<text fg={theme.text.subdued}>{language.t("tui.stats.loading")}</text>}>
             {(value) => <StatsPoster stats={value()} />}
           </Show>
         </Show>
@@ -191,13 +215,14 @@ export default Plugin.define({
     context.ui.slot({
       append: "app",
       render() {
+        const language = useLanguage()
         context.keymap.layer(() => ({
           mode: "global",
           commands: [
             {
               id: "stats.open",
-              title: "Usage statistics",
-              group: "System",
+              title: language.t("tui.stats.open"),
+              group: language.t("tui.plugins.system"),
               slash: { name: "stats" },
               palette: true,
               run() {

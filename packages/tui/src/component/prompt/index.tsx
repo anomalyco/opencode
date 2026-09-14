@@ -1,3 +1,4 @@
+import { useLanguage } from "../../context/language"
 import {
   BoxRenderable,
   RGBA,
@@ -183,6 +184,7 @@ function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
 }
 
 export function Prompt(props: PromptProps) {
+  const language = useLanguage()
   let input: TextareaRenderable
   let anchor: BoxRenderable
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable | undefined>()
@@ -264,11 +266,11 @@ export function Prompt(props: PromptProps) {
     commands: [
       {
         id: "session.cd",
-        title: "Change working directory",
+        title: language.t("tui.changeWorkingDirectory"),
         slash: { name: "cd", arguments: true },
         run: async (input) => {
           if (!input?.trim()) {
-            toast.show({ message: "Directory is required", variant: "error" })
+            toast.show({ message: language.t("tui.directoryIsRequired"), variant: "error" })
             return
           }
           const sessionID = props.sessionID
@@ -284,7 +286,11 @@ export function Prompt(props: PromptProps) {
           if (!sessionID) {
             setPendingDirectory(directory)
             const location = await client.api.location.get({ location: { directory } }).catch((error) => {
-              toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" })
+              toast.show({
+                title: language.t("tui.failedToChangeDirectory"),
+                message: errorMessage(error),
+                variant: "error",
+              })
               return undefined
             })
             if (!location) {
@@ -301,7 +307,11 @@ export function Prompt(props: PromptProps) {
             (error) => error,
           )
           if (error) {
-            toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" })
+            toast.show({
+              title: language.t("tui.failedToChangeDirectory"),
+              message: errorMessage(error),
+              variant: "error",
+            })
             return
           }
           if (sourceProjectID) directoryRecents.touch(sourceProjectID, directory)
@@ -316,7 +326,7 @@ export function Prompt(props: PromptProps) {
   function promptModelWarning() {
     toast.show({
       variant: "warning",
-      message: "Connect an integration to send prompts",
+      message: language.t("tui.connectAnIntegrationToSendPrompts"),
       duration: 3000,
     })
     if (!connected()) {
@@ -417,9 +427,9 @@ export function Prompt(props: PromptProps) {
   const promptCommands = createMemo(() =>
     [
       {
-        title: "Clear prompt",
+        title: language.t("tui.clearPrompt"),
         name: "prompt.clear",
-        category: "Prompt",
+        category: language.t("command.prompt.mode.normal"),
         palette: undefined,
         run: () => {
           clearPrompt()
@@ -427,9 +437,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Submit prompt",
+        title: language.t("tui.submitPrompt"),
         name: "prompt.submit",
-        category: "Prompt",
+        category: language.t("command.prompt.mode.normal"),
         palette: undefined,
         run: async (_input: string | undefined, event?: KeyEvent) => {
           event?.preventDefault()
@@ -442,9 +452,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Queue prompt",
+        title: language.t("tui.queuePrompt"),
         name: "prompt.queue",
-        category: "Prompt",
+        category: language.t("command.prompt.mode.normal"),
         run: async (_input: string | undefined, event?: KeyEvent) => {
           event?.preventDefault()
           event?.stopPropagation()
@@ -456,9 +466,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Remove editor context",
+        title: language.t("tui.removeEditorContext"),
         name: "prompt.editor_context.clear",
-        category: "Prompt",
+        category: language.t("command.prompt.mode.normal"),
         enabled: Boolean(editorContext()),
         run: () => {
           dismissEditorContext()
@@ -466,9 +476,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Paste",
+        title: language.t("tui.paste"),
         name: "prompt.paste",
-        category: "Prompt",
+        category: language.t("command.prompt.mode.normal"),
         palette: undefined,
         run: (_input: string | undefined, event?: KeyEvent) => {
           event?.preventDefault()
@@ -490,16 +500,16 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "View image attachments",
+        title: language.t("tui.viewImageAttachments"),
         name: "prompt.images.view",
-        category: "Prompt",
+        category: language.t("command.prompt.mode.normal"),
         enabled: imageAttachments().length > 0,
         run: () => openImagePreview(0),
       },
       {
-        title: "Interrupt session",
+        title: language.t("tui.interruptSession"),
         name: "session.interrupt",
-        category: "Session",
+        category: language.t("command.category.session"),
         palette: undefined,
         enabled: status() === "running",
         run: () => {
@@ -529,9 +539,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Background blocking tools",
+        title: language.t("tui.backgroundBlockingTools"),
         name: "session.background",
-        category: "Session",
+        category: language.t("command.category.session"),
         palette: undefined,
         enabled: status() === "running",
         run: () => {
@@ -546,8 +556,8 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Open editor",
-        category: "Session",
+        title: language.t("tui.openEditor"),
+        category: language.t("command.category.session"),
         name: "prompt.editor",
         slash: { name: "editor" },
         run: async () => {
@@ -577,9 +587,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Skills",
+        title: language.t("settings.extensions.tab.skills"),
         name: "prompt.skills",
-        category: "Prompt",
+        category: language.t("command.prompt.mode.normal"),
         slash: { name: "skills" },
         run: () => {
           dialog.replace(() => (
@@ -615,10 +625,10 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Manage workspaces",
+        title: language.t("tui.manageWorkspaces"),
         desc: "Manage workspaces",
         name: "session.move",
-        category: "Session",
+        category: language.t("command.category.session"),
         slash: { name: "worktrees" },
         run: () => {
           move.open()
@@ -870,9 +880,9 @@ export function Prompt(props: PromptProps) {
   const stashCommands = createMemo(() =>
     [
       {
-        title: "Stash prompt",
+        title: language.t("tui.stashPrompt"),
         name: "prompt.stash",
-        category: "Prompt",
+        category: language.t("command.prompt.mode.normal"),
         enabled: !!store.prompt.text,
         run: () => {
           if (!store.prompt.text) return
@@ -882,9 +892,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Stash pop",
+        title: language.t("tui.stashPop"),
         name: "prompt.stash.pop",
-        category: "Prompt",
+        category: language.t("command.prompt.mode.normal"),
         enabled: stash.list().length > 0,
         run: () => {
           const entry = stash.pop()
@@ -898,9 +908,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Stash list",
+        title: language.t("tui.stashList"),
         name: "prompt.stash.list",
-        category: "Prompt",
+        category: language.t("command.prompt.mode.normal"),
         enabled: stash.list().length > 0,
         run: () => {
           dialog.replace(() => (
@@ -965,8 +975,8 @@ export function Prompt(props: PromptProps) {
       commands: [
         {
           bind: "!",
-          title: "Shell mode",
-          group: "Prompt",
+          title: language.t("tui.shellMode"),
+          group: language.t("command.prompt.mode.normal"),
           run: () => {
             setStore("placeholder", randomIndex(shell().length))
             setStore("mode", "shell")
@@ -982,11 +992,16 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !disabled() && store.mode === "shell",
       commands: [
-        { bind: "escape", title: "Exit shell mode", group: "Prompt", run: () => setStore("mode", "normal") },
+        {
+          bind: "escape",
+          title: language.t("tui.exitShellMode"),
+          group: language.t("command.prompt.mode.normal"),
+          run: () => setStore("mode", "normal"),
+        },
         {
           bind: "ctrl+c",
-          title: "Exit shell mode",
-          group: "Prompt",
+          title: language.t("tui.exitShellMode"),
+          group: language.t("command.prompt.mode.normal"),
           enabled: () => store.prompt.text === "",
           run: () => setStore("mode", "normal"),
         },
@@ -1002,7 +1017,12 @@ export function Prompt(props: PromptProps) {
         return inputTarget() !== undefined && !disabled() && store.mode === "shell" && input?.visualCursor.offset === 0
       })(),
       commands: [
-        { bind: "backspace", title: "Exit shell mode", group: "Prompt", run: () => setStore("mode", "normal") },
+        {
+          bind: "backspace",
+          title: language.t("tui.exitShellMode"),
+          group: language.t("command.prompt.mode.normal"),
+          run: () => setStore("mode", "normal"),
+        },
       ],
     }
   })
@@ -1018,8 +1038,8 @@ export function Prompt(props: PromptProps) {
       commands: [
         {
           id: "prompt.history.previous",
-          title: "Previous prompt history",
-          group: "Prompt",
+          title: language.t("tui.previousPromptHistory"),
+          group: language.t("command.prompt.mode.normal"),
           run() {
             if (input.cursorOffset !== 0) {
               if (input.scrollY + input.visualCursor.visualRow === 0) {
@@ -1054,8 +1074,8 @@ export function Prompt(props: PromptProps) {
       commands: [
         {
           id: "prompt.history.next",
-          title: "Next prompt history",
-          group: "Prompt",
+          title: language.t("tui.nextPromptHistory"),
+          group: language.t("command.prompt.mode.normal"),
           run() {
             if (input.cursorOffset !== input.plainText.length) {
               if (
@@ -1116,7 +1136,7 @@ export function Prompt(props: PromptProps) {
       delivery === "queue" &&
       (store.mode === "shell" || trimmed === "exit" || trimmed === "quit" || trimmed === ":q")
     ) {
-      toast.show({ message: "This prompt cannot be queued", variant: "warning" })
+      toast.show({ message: language.t("tui.thisPromptCannotBeQueued"), variant: "warning" })
       return false
     }
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
@@ -1126,7 +1146,7 @@ export function Prompt(props: PromptProps) {
     const slash = argumentSlash(store.prompt.text, keymapCommands())
     if (slash) {
       if (delivery === "queue") {
-        toast.show({ message: "This prompt cannot be queued", variant: "warning" })
+        toast.show({ message: language.t("tui.thisPromptCannotBeQueued"), variant: "warning" })
         return false
       }
       clearPrompt()
@@ -1150,7 +1170,7 @@ export function Prompt(props: PromptProps) {
     const editorSelection = editorContext()
     const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
     if (delivery === "queue" && pendingEditorSelection) {
-      toast.show({ message: "Editor context cannot be queued", variant: "warning" })
+      toast.show({ message: language.t("tui.editorContextCannotBeQueued"), variant: "warning" })
       return false
     }
     const agent = local.agent.current()
@@ -1163,8 +1183,8 @@ export function Prompt(props: PromptProps) {
     const usesModel = !props.sessionID || store.mode !== "shell"
     if (usesModel && !local.model.available(selection)) {
       toast.show({
-        title: "Model unavailable",
-        message: `${selection.providerID}/${selection.modelID} is not available in this session's location`,
+        title: language.t("tui.modelUnavailable"),
+        message: language.t("tui.promptUi.modelUnavailable", { model: `${selection.providerID}/${selection.modelID}` }),
         variant: "warning",
       })
       return false
@@ -1230,7 +1250,9 @@ export function Prompt(props: PromptProps) {
         }),
         recover: (error) => {
           toast.show({
-            title: data.session.get(created.id) ? "Failed to set up session" : "Creating a session failed",
+            title: data.session.get(created.id)
+              ? language.t("tui.failedToSetUpSession")
+              : language.t("tui.creatingASessionFailed"),
             message: errorMessage(error),
             variant: "error",
           })
@@ -1298,7 +1320,7 @@ export function Prompt(props: PromptProps) {
       const setup = newSession
       void (setup ? setup.gate.then(send) : send()).catch((error) => {
         if (setup) return setup.recover(error)
-        toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
+        toast.show({ title: language.t("tui.failedToRunCommand"), message: errorMessage(error), variant: "error" })
         restoreEntry()
       })
     } else {
@@ -1306,7 +1328,7 @@ export function Prompt(props: PromptProps) {
       try {
         await prepareAgent()
       } catch (error) {
-        toast.show({ title: "Failed to prepare session", message: errorMessage(error), variant: "error" })
+        toast.show({ title: language.t("tui.failedToPrepareSession"), message: errorMessage(error), variant: "error" })
         restoreEntry()
         return true
       }
@@ -1316,7 +1338,7 @@ export function Prompt(props: PromptProps) {
           (error) => error,
         )
         if (error) {
-          toast.show({ title: "Failed to commit revert", message: errorMessage(error), variant: "error" })
+          toast.show({ title: language.t("tui.failedToCommitRevert"), message: errorMessage(error), variant: "error" })
           restoreEntry()
           return false
         }
@@ -1339,7 +1361,11 @@ export function Prompt(props: PromptProps) {
             (error) => error,
           )
           if (error) {
-            toast.show({ title: "Failed to send editor context", message: errorMessage(error), variant: "error" })
+            toast.show({
+              title: language.t("tui.failedToSendEditorContext"),
+              message: errorMessage(error),
+              variant: "error",
+            })
             restoreEntry()
             return false
           }
@@ -1365,7 +1391,11 @@ export function Prompt(props: PromptProps) {
         })
         .catch((error) => {
           if (newSession) return newSession.recover(error)
-          toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
+          toast.show({
+            title: language.t("prompt.toast.promptSendFailed.title"),
+            message: errorMessage(error),
+            variant: "error",
+          })
           restoreEntry()
         })
       if (pendingEditorSelection) editor.markSelectionSent()
@@ -1594,10 +1624,10 @@ export function Prompt(props: PromptProps) {
     const value = (() => {
       if (store.mode === "shell") {
         if (!shell().length) return undefined
-        return `Run a command… "${shell()[store.placeholder % shell().length]}"`
+        return language.t("tui.runACommandExample", { example: shell()[store.placeholder % shell().length] })
       }
       if (!list().length) return undefined
-      return `Ask anything… "${list()[store.placeholder % list().length]}"`
+      return language.t("tui.askAnythingExample", { example: list()[store.placeholder % list().length] })
     })()
     if (!value) return undefined
     const width = dimensions().width < 44 ? dimensions().width - 5 : Math.min(75, dimensions().width - 4) - 5
@@ -1703,7 +1733,7 @@ export function Prompt(props: PromptProps) {
                           when={!failed()}
                           fallback={
                             <box width="100%" height="100%" alignItems="center" justifyContent="center">
-                              <text fg={theme.text.subdued}>No preview</text>
+                              <text fg={theme.text.subdued}>{language.t("tui.noPreview")}</text>
                             </box>
                           }
                         >
@@ -1978,7 +2008,7 @@ export function Prompt(props: PromptProps) {
             return {
               display: value,
               value,
-              description: "recent",
+              description: language.t("tui.promptUi.recent"),
               isDirectory: true,
               path: value,
               absolute: item.directory,

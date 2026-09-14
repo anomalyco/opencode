@@ -1,3 +1,4 @@
+import { useLanguage } from "../../context/language"
 import { createMemo } from "solid-js"
 import { useTuiPaths } from "../../context/runtime"
 import { useTheme } from "../../context/theme"
@@ -12,6 +13,7 @@ export function SessionLocationMissing(props: { directory: string; projectID: st
 }
 
 export function SessionLocationUnavailable(props: { directory: string; onMove: () => void }) {
+  const language = useLanguage()
   const paths = useTuiPaths()
   const theme = useTheme("elevated")
   const directory = createMemo(() => Locale.truncateMiddle(abbreviateHome(props.directory, paths.home), 72))
@@ -19,17 +21,17 @@ export function SessionLocationUnavailable(props: { directory: string; onMove: (
   return (
     <SessionQuestion
       id="session.location-missing"
-      group="Session recovery"
-      choicesLabel="Recovery actions"
+      group={language.t("tui.details.sessionRecovery")}
+      choicesLabel={language.t("tui.details.recoveryActions")}
       instance={props.directory}
-      title="Session location unavailable"
+      title={language.t("tui.details.sessionLocationUnavailable")}
       body={
         <box paddingLeft={1} gap={1}>
           <text fg={theme.text.subdued}>{directory()}</text>
-          <text fg={theme.text.default}>Choose another directory to continue this session.</text>
+          <text fg={theme.text.default}>{language.t("tui.details.chooseAnotherDirectoryToContinueThisSession")}</text>
         </box>
       }
-      options={{ move: "Choose directory" }}
+      options={{ move: language.t("tui.details.chooseDirectory") }}
       onSelect={props.onMove}
     />
   )

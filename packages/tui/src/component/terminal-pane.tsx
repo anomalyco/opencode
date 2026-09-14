@@ -6,6 +6,7 @@ import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
 import { useTheme, useThemes } from "../context/theme"
 import { errorMessage } from "../util/error"
+import { useLanguage } from "../context/language"
 
 declare module "@opentui/solid" {
   interface OpenTUIComponents {
@@ -30,6 +31,7 @@ export function TerminalPane(props: {
   onDisconnect?: () => void
 }) {
   const client = useClient()
+  const language = useLanguage()
   const keymap = Keymap.use()
   const leader = Keymap.useLeaderActive()
   const theme = useTheme("elevated")
@@ -240,7 +242,7 @@ export function TerminalPane(props: {
       }
       if (message.type !== "attached") return
       if (!("inputProtocol" in message) || message.inputProtocol !== 1) {
-        setFailure("Persistent terminal server is out of date; restart OpenCode")
+        setFailure(language.t("tui.dialogs.terminalServerOutdated"))
         next.close()
         return
       }
@@ -264,7 +266,7 @@ export function TerminalPane(props: {
       if (disposed) return
       const focused = terminal?.focused
       terminal = undefined
-      setFailure("Terminal connection failed")
+      setFailure(language.t("tui.dialogs.terminalConnectionFailed"))
       if (focused) props.onDisconnect?.()
     })
     next.addEventListener("close", () => {
@@ -272,7 +274,7 @@ export function TerminalPane(props: {
       const focused = terminal?.focused
       terminal = undefined
       // The removal event arrives separately; keep the terminal visible until then.
-      if (!exited) setFailure("Terminal disconnected")
+      if (!exited) setFailure(language.t("tui.dialogs.terminalDisconnected"))
       if (focused) props.onDisconnect?.()
     })
     socket = next

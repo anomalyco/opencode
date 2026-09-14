@@ -3,6 +3,8 @@ import type { Plugin } from "@opencode/plugin/tui"
 import { BoxRenderable, MouseButton } from "@opentui/core"
 import { Portal, useTerminalDimensions } from "@opentui/solid"
 import { createSignal, onCleanup } from "solid-js"
+import { useLanguage } from "../../context/language"
+import { stringWidth } from "../../util/string-width"
 
 export function DiffFileMenu(props: {
   context: Plugin.Context
@@ -11,11 +13,12 @@ export function DiffFileMenu(props: {
   onToggle: () => void
   onClose: () => void
 }) {
+  const language = useLanguage()
   const dimensions = useTerminalDimensions()
   const theme = props.context.theme.contextual.overlay
   const [hovered, setHovered] = createSignal(false)
-  const label = () => (props.reviewed ? "Mark incomplete" : "Mark complete")
-  const width = () => Math.min(19, dimensions().width)
+  const label = () => language.t(props.reviewed ? "tui.diff.markIncomplete" : "tui.diff.markComplete")
+  const width = () => Math.min(stringWidth(label()) + 2, dimensions().width)
   const run = () => {
     props.onClose()
     props.onToggle()
@@ -24,8 +27,13 @@ export function DiffFileMenu(props: {
   props.context.keymap.layer(() => ({
     mode: "menu",
     commands: [
-      { bind: "escape,ctrl+c", title: "Close file menu", group: "Diff", run: props.onClose },
-      { bind: "return", title: label(), group: "Diff", run },
+      {
+        bind: "escape,ctrl+c",
+        title: language.t("tui.diff.closeFileMenu"),
+        group: language.t("tui.diff.group"),
+        run: props.onClose,
+      },
+      { bind: "return", title: label(), group: language.t("tui.diff.group"), run },
     ],
   }))
 

@@ -8,6 +8,7 @@ import { useTheme } from "../context/theme"
 import { useConfig } from "../config"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { getScrollAcceleration } from "../util/scroll"
+import { useLanguage } from "../context/language"
 
 const options = ["no", "yes"] as const
 
@@ -31,6 +32,7 @@ export function DialogWorkspaceFileChanges(props: {
   message?: string
 }) {
   const dialog = useDialog()
+  const language = useLanguage()
   const theme = useTheme("elevated")
   const overlayTheme = useTheme("overlay")
   const config = useConfig().data
@@ -73,7 +75,7 @@ export function DialogWorkspaceFileChanges(props: {
     <box gap={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-          {props.title ?? "File Changes Found"}
+          {props.title ?? language.t("tui.dialogs.fileChangesFound")}
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
@@ -81,7 +83,7 @@ export function DialogWorkspaceFileChanges(props: {
       </box>
       <box paddingLeft={2} paddingRight={2}>
         <text fg={theme.text.subdued} wrapMode="word">
-          {props.message ?? "Do you want to move these changes with the session?"}
+          {props.message ?? language.t("tui.dialogs.moveChanges")}
         </text>
       </box>
       <scrollbox
@@ -125,7 +127,9 @@ export function DialogWorkspaceFileChanges(props: {
                 dialog.clear()
               }}
             >
-              <text fg={item === store.active ? theme.text.action.primary.focused : theme.text.subdued}>{item}</text>
+              <text fg={item === store.active ? theme.text.action.primary.focused : theme.text.subdued}>
+                {language.t(item === "yes" ? "tui.form.yes" : "tui.form.no")}
+              </text>
             </box>
           )}
         </For>

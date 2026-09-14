@@ -1,5 +1,6 @@
 import type { SelectionBehavior } from "@opentui/core"
 import type { ClipboardService } from "../context/clipboard"
+import { createLanguage } from "../i18n/translate"
 
 type Toast = {
   show: (input: { message: string; variant: "info" | "success" | "warning" | "error" }) => void
@@ -36,12 +37,18 @@ export function copyOnSelectRelease(
   renderer: Renderer,
   toast: Toast,
   clipboard: ClipboardService,
+  t = createLanguage(() => "en").t,
 ): boolean {
   if (!event.isDragging) return false
-  return copy(renderer, toast, clipboard)
+  return copy(renderer, toast, clipboard, t)
 }
 
-export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
+export function copy(
+  renderer: Renderer,
+  toast: Toast,
+  clipboard: ClipboardService,
+  t = createLanguage(() => "en").t,
+): boolean {
   const selection = renderer.getSelection()
   if (!selection) return false
   if (selection.isStart && selection.behavior === "cell") return false
@@ -55,7 +62,7 @@ export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardServi
 
   clipboard
     .write(clipboardText)
-    .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+    .then(() => toast.show({ message: t("tui.session.copiedToClipboard"), variant: "info" }))
     .catch(toast.error)
 
   // Copy never clears selection, including empty releases: clearing also resets multi-click history.
@@ -68,6 +75,7 @@ export function handleSelectionKey(
   event: SelectionKeyEvent,
   clipboard: ClipboardService,
   copyOnSelect: boolean,
+  t = createLanguage(() => "en").t,
 ) {
   const selection = renderer.getSelection()
   if (!selection) return
@@ -76,7 +84,7 @@ export function handleSelectionKey(
 
   // Kitty can report a non-Latin key name with a Latin base-layout C.
   if (event.ctrl && (event.name === "c" || event.baseCode === 99 || event.baseCode === 67)) {
-    if ((copyOnSelect && !editing) || !copy(renderer, toast, clipboard)) {
+    if ((copyOnSelect && !editing) || !copy(renderer, toast, clipboard, t)) {
       renderer.clearSelection()
       return
     }

@@ -4,6 +4,7 @@ import { createMemo, createSignal } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
+import { useLanguage } from "../context/language"
 
 type ImagePreviewItem = Readonly<{
   uri: string
@@ -11,6 +12,7 @@ type ImagePreviewItem = Readonly<{
 }>
 
 export function DialogImagePreview(props: { images: readonly ImagePreviewItem[]; initial: number }) {
+  const language = useLanguage()
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
   const theme = useTheme("elevated")
@@ -31,8 +33,18 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "left", title: "Previous image", group: "Dialog", run: () => move(-1) },
-      { bind: "right", title: "Next image", group: "Dialog", run: () => move(1) },
+      {
+        bind: "left",
+        title: language.t("tui.dialogs.previousImage"),
+        group: language.t("tui.dialog"),
+        run: () => move(-1),
+      },
+      {
+        bind: "right",
+        title: language.t("tui.dialogs.nextImage"),
+        group: language.t("tui.dialog"),
+        run: () => move(1),
+      },
     ],
   }))
 
@@ -40,7 +52,7 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
     <box id="prompt-image-viewer" paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-          Image {index() + 1} of {props.images.length}
+          {language.t("tui.dialogs.imagePosition", { current: index() + 1, total: props.images.length })}
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
@@ -57,13 +69,15 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
       />
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text.subdued} onMouseUp={() => move(-1)}>
-          {props.images.length > 1 ? "← previous" : ""}
+          {props.images.length > 1 ? language.t("tui.dialogs.previousImageHint") : ""}
         </text>
         <text fg={failed() ? theme.text.feedback.error.default : theme.text.subdued} wrapMode="none" truncate>
-          {failed() ? "No preview" : (current().mention?.text ?? `Image ${index() + 1}`)}
+          {failed()
+            ? language.t("tui.noPreview")
+            : (current().mention?.text ?? language.t("tui.dialogs.image", { number: index() + 1 }))}
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => move(1)}>
-          {props.images.length > 1 ? "next →" : ""}
+          {props.images.length > 1 ? language.t("tui.dialogs.nextImageHint") : ""}
         </text>
       </box>
     </box>

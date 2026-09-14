@@ -9,8 +9,10 @@ import { useConnected } from "./use-connected"
 import { useData } from "../context/data"
 import { modelPreferenceKey } from "../model-preference"
 import { useLocation } from "../context/location"
+import { useLanguage } from "../context/language"
 
 export function DialogModel(props: { providerID?: string }) {
+  const language = useLanguage()
   const local = useLocal()
   const data = useData()
   const dialog = useDialog()
@@ -46,7 +48,7 @@ export function DialogModel(props: { providerID?: string }) {
             releaseDate: model.time.released,
             description: provider?.name ?? model.providerID,
             category,
-            footer: free(model) ? "Free" : undefined,
+            footer: free(model) ? language.t("tui.dialogs.free") : undefined,
             onSelect: () => {
               onSelect(model.providerID, model.id)
             },
@@ -55,12 +57,12 @@ export function DialogModel(props: { providerID?: string }) {
       })
     }
 
-    const favoriteOptions = toOptions(favorites, "Favorites")
+    const favoriteOptions = toOptions(favorites, language.t("tui.dialogs.favorites"))
     const recentOptions = toOptions(
       recents.filter(
         (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
       ),
-      "Recent",
+      language.t("tui.dialogs.recent"),
     )
 
     const modelOptions = sortModelOptions(
@@ -77,9 +79,10 @@ export function DialogModel(props: { providerID?: string }) {
             providerName: provider?.name ?? model.providerID,
             title: model.name,
             releaseDate: model.time.released,
-            description: favorite ? "(Favorite)" : undefined,
+            description: favorite ? language.t("tui.dialogs.favoriteDescription") : undefined,
             category: connected() ? (provider?.name ?? model.providerID) : undefined,
-            footer: free(model) ? "Free" : undefined,
+            free: free(model),
+            footer: free(model) ? language.t("tui.dialogs.free") : undefined,
             onSelect() {
               onSelect(model.providerID, model.id)
             },
@@ -119,7 +122,7 @@ export function DialogModel(props: { providerID?: string }) {
 
   const title = createMemo(() => {
     const value = provider()
-    if (!value) return "Select model"
+    if (!value) return language.t("tui.dialogs.selectModel")
     return value.name
   })
 
@@ -144,7 +147,7 @@ export function DialogModel(props: { providerID?: string }) {
       actions={[
         {
           command: "model.dialog.provider",
-          title: connected() ? "Connect an integration" : "View all integrations",
+          title: language.t(connected() ? "tui.connectAnIntegration" : "tui.dialogs.viewIntegrations"),
           selection: "none",
           onTrigger() {
             dialog.replace(() => (
@@ -156,7 +159,7 @@ export function DialogModel(props: { providerID?: string }) {
         },
         {
           command: "model.dialog.favorite",
-          title: "Favorite",
+          title: language.t("tui.dialogs.favorite"),
           hidden: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
@@ -189,6 +192,7 @@ export function sortModelOptions<
     releaseDate: string | number
     title: string
     footer?: string
+    free?: boolean
   },
 >(options: T[], grouped = true) {
   return options.toSorted((a, b) => {
@@ -201,7 +205,7 @@ export function sortModelOptions<
     const name = grouped ? (a.providerName ?? "").localeCompare(b.providerName ?? "") : 0
     if (name !== 0) return name
 
-    const free = Number(b.footer === "Free") - Number(a.footer === "Free")
+    const free = Number(b.free ?? b.footer === "Free") - Number(a.free ?? a.footer === "Free")
     if (free !== 0) return free
 
     const release = Number(b.releaseDate) - Number(a.releaseDate)

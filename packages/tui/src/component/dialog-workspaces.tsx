@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { createMemo, createResource, createSignal, onMount, Show } from "solid-js"
@@ -40,6 +41,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
   const dialog = useDialog()
   const client = useClient()
   const dimensions = useTerminalDimensions()
+  const language = useLanguage()
   const theme = useTheme("elevated")
   const sessionData = useData()
   const route = useRoute()
@@ -164,10 +166,12 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
       return {
         title,
         titleView: isRemoving ? (
-          <span style={{ fg: theme.text.feedback.error.default }}>Deleting {item.location}</span>
+          <span style={{ fg: theme.text.feedback.error.default }}>
+            {language.t("tui.dialogs.deleting", { name: item.location })}
+          </span>
         ) : deleting ? (
           <span style={{ fg: theme.text.action.destructive.default }}>
-            Press {shortcuts.get("dialog.move_session.delete")} again to confirm
+            {language.t("tui.pressKeyAgainToConfirm", { key: shortcuts.get("dialog.move_session.delete") ?? "" })}
           </span>
         ) : suffix ? (
           <>
@@ -181,7 +185,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
           directory: item.location,
           subdirectory: item.location !== item.root.directory,
         } as const,
-        category: item.root.directory === current ? "Current" : "Other",
+        category: language.t(item.root.directory === current ? "tui.dialogs.current" : "tui.dialogs.other"),
         titleWidth,
         truncateTitle: "left" as const,
       }
@@ -247,8 +251,8 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
           .status({ location: { directory: selected.directory } })
           .catch(() => undefined)
         const choice = await DialogWorkspaceFileChanges.show(dialog, status?.data ?? [], {
-          title: "Delete worktree?",
-          message: "This worktree has file changes. Do you want to delete it anyway?",
+          title: language.t("tui.projects.deleteWorktree"),
+          message: language.t("tui.projects.thisWorktreeHasFileChangesDoYouWantToDeleteItAnyway"),
         })
         if (choice !== "yes") {
           reopen()
@@ -267,7 +271,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
         if (forcedError) {
           toast.show({
             variant: "error",
-            title: "Failed to delete worktree",
+            title: language.t("tui.projects.failedToDeleteWorktree"),
             message: errorMessage(forcedError),
           })
           reopen()
@@ -281,7 +285,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
       }
       toast.show({
         variant: "error",
-        title: "Failed to delete worktree",
+        title: language.t("tui.projects.failedToDeleteWorktree"),
         message: errorMessage(error),
       })
       return
@@ -313,11 +317,11 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
   return (
     <box minHeight={showError() ? 5 : fullHeight()}>
       <DialogSelect
-        title="Worktrees"
+        title={language.t("tui.projects.worktrees")}
         titleView={
           <box flexDirection="row" gap={1}>
             <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
-              Worktrees
+              {language.t("tui.projects.worktrees")}
             </text>
             <Show when={working() || directories.loading || loadedProject.loading}>
               <Spinner />
@@ -331,24 +335,24 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
           showError() ? (
             <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.feedback.error.default} attributes={TextAttributes.BOLD}>
-                Could not load worktrees
+                {language.t("tui.dialogs.worktreesLoadFailed")}
               </text>
               <text fg={theme.text.subdued}>{errorMessage(loadError())}</text>
-              <text fg={theme.text.subdued}>Close and reopen Worktrees to try again.</text>
+              <text fg={theme.text.subdued}>{language.t("tui.projects.closeAndReopenWorktreesToTryAgain")}</text>
             </box>
           ) : directories.loading || loadedProject.loading ? (
             <box paddingLeft={4} paddingRight={4}>
-              <text fg={theme.text.subdued}>Loading worktrees…</text>
+              <text fg={theme.text.subdued}>{language.t("tui.projects.loadingWorktrees")}</text>
             </box>
           ) : (
             <box paddingLeft={4} paddingRight={4}>
-              <text fg={theme.text.subdued}>No worktrees available</text>
+              <text fg={theme.text.subdued}>{language.t("tui.projects.noWorktreesAvailable")}</text>
             </box>
           )
         }
         noMatchView={
           <box paddingLeft={4} paddingRight={4}>
-            <text fg={theme.text.subdued}>No worktrees found</text>
+            <text fg={theme.text.subdued}>{language.t("tui.projects.noWorktreesFound")}</text>
           </box>
         }
         locked={showError() || directories.loading || loadedProject.loading || Boolean(removing())}
@@ -362,17 +366,17 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
             ? []
             : [
                 ...(route.data.type === "session"
-                  ? [{ command: "dialog.move_session.move", title: "move", onTrigger: move }]
+                  ? [{ command: "dialog.move_session.move", title: language.t("tui.projects.move"), onTrigger: move }]
                   : []),
                 {
                   command: "dialog.move_session.new",
-                  title: "new",
+                  title: language.t("tui.projects.new"),
                   selection: "none",
                   onTrigger: () => void create(),
                 },
                 {
                   command: "dialog.move_session.delete",
-                  title: "delete",
+                  title: language.t("tui.delete"),
                   disabled: (option) => {
                     const value = option?.value
                     if (!value || value.type !== "directory" || value.subdirectory) return true
@@ -382,7 +386,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
                 },
                 {
                   command: "dialog.move_session.refresh",
-                  title: "refresh",
+                  title: language.t("tui.projects.refresh"),
                   selection: "none",
                   onTrigger: () => void refetch(),
                 },

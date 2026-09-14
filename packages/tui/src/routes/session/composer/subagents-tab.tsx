@@ -1,4 +1,5 @@
-import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
+import { useLanguage } from "../../../context/language"
+import { createMemo, For, Show, createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
 import type { SessionInfo } from "@opencode/client"
@@ -9,7 +10,6 @@ import { useTheme } from "../../../context/theme"
 import { Locale } from "../../../util/locale"
 import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./index"
-import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { sessionFamily } from "../../../util/session"
 
 interface SubagentEntry {
@@ -25,6 +25,7 @@ export function SubagentsTab(props: { sessionID: string }) {
   const route = useRouteData("session")
   const data = useData()
   const client = useClient()
+  const language = useLanguage()
   const theme = useTheme()
   const navigate = useRoute().navigate
   const composer = useComposerTab()
@@ -39,7 +40,11 @@ export function SubagentsTab(props: { sessionID: string }) {
 
     const result = sessionFamily<SessionInfo>(data.session.list(), current.id).map(
       ({ session, prefix }): SubagentEntry => {
-        const title = withTimestampedFallback(session)
+        const title =
+          session.title ??
+          language.t(session.parentID ? "tui.transcript.childSessionTitle" : "tui.transcript.newSessionTitle", {
+            date: new Date(session.time.created).toISOString(),
+          })
         const agentMatch = title.match(/@(\w+) subagent/)
         return {
           sessionID: session.id,
@@ -47,7 +52,7 @@ export function SubagentsTab(props: { sessionID: string }) {
             ? Locale.titlecase(session.agent)
             : agentMatch
               ? Locale.titlecase(agentMatch[1])
-              : "Subagent",
+              : language.t("tui.transcript.subagent"),
           title: agentMatch ? title.replace(agentMatch[0], "").trim() || title : title,
           status: data.session.status(session.id),
           current: session.id === route.sessionID,
@@ -110,25 +115,35 @@ export function SubagentsTab(props: { sessionID: string }) {
     }
   }
 
-  onMount(() => {
-    const cleanup = composer.register({
-      id: "subagents",
-      label: "Subagents",
-      hints: () => {
-        const entry = selectedEntry()
-        return [
-          ...(entry?.status === "running"
-            ? [{ label: "interrupt", shortcut: shortcuts.get("composer.subagent.interrupt") ?? "" }]
-            : []),
-          {
-            label: `show ${store.active ? "inactive" : "active"}`,
-            shortcut: shortcuts.get("composer.subagent.toggle-activity") ?? "",
+  createEffect(
+    on(
+      () => language.t("tui.transcript.subagents"),
+      (label) => {
+        const cleanup = composer.register({
+          id: "subagents",
+          label,
+          hints: () => {
+            const entry = selectedEntry()
+            return [
+              ...(entry?.status === "running"
+                ? [
+                    {
+                      label: language.t("tui.transcript.interrupt"),
+                      shortcut: shortcuts.get("composer.subagent.interrupt") ?? "",
+                    },
+                  ]
+                : []),
+              {
+                label: language.t(store.active ? "tui.transcript.showInactive" : "tui.transcript.showActive"),
+                shortcut: shortcuts.get("composer.subagent.toggle-activity") ?? "",
+              },
+            ]
           },
-        ]
+        })
+        onCleanup(cleanup)
       },
-    })
-    onCleanup(cleanup)
-  })
+    ),
+  )
 
   Keymap.createLayer(() => ({
     mode: "composer",
@@ -137,8 +152,8 @@ export function SubagentsTab(props: { sessionID: string }) {
     commands: [
       {
         id: "composer.subagent.up",
-        title: "Previous subagent",
-        group: "Composer",
+        title: language.t("tui.session.previousSubagent"),
+        group: language.t("tui.session.composer"),
         run() {
           if (store.selected === 0) {
             composer.close()
@@ -149,8 +164,8 @@ export function SubagentsTab(props: { sessionID: string }) {
       },
       {
         id: "composer.subagent.down",
-        title: "Next subagent",
-        group: "Composer",
+        title: language.t("tui.session.nextSubagent"),
+        group: language.t("tui.session.composer"),
         run() {
           const list = entries()
           if (list.length === 0) return
@@ -159,8 +174,8 @@ export function SubagentsTab(props: { sessionID: string }) {
       },
       {
         id: "composer.subagent.select",
-        title: "Navigate to subagent",
-        group: "Composer",
+        title: language.t("tui.transcript.navigateSubagent"),
+        group: language.t("tui.session.composer"),
         run() {
           const entry = entries()[store.selected]
           if (entry) navigate({ type: "session", sessionID: entry.sessionID })
@@ -168,8 +183,8 @@ export function SubagentsTab(props: { sessionID: string }) {
       },
       {
         id: "composer.subagent.toggle-activity",
-        title: "Toggle active subagents",
-        group: "Composer",
+        title: language.t("tui.transcript.toggleActiveSubagents"),
+        group: language.t("tui.session.composer"),
         bind: "ctrl+a",
         run() {
           setStore({ selected: 0, active: !store.active })
@@ -178,8 +193,8 @@ export function SubagentsTab(props: { sessionID: string }) {
       },
       {
         id: "composer.subagent.interrupt",
-        title: "Interrupt subagent",
-        group: "Composer",
+        title: language.t("tui.session.interruptSubagent"),
+        group: language.t("tui.session.composer"),
         run() {
           const entry = selectedEntry()
           if (!entry || entry.status !== "running") return
@@ -194,13 +209,18 @@ export function SubagentsTab(props: { sessionID: string }) {
       <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
         <Show
           when={entries().length > 0}
-          fallback={<text fg={theme.text.subdued}> No {store.active ? "active" : "inactive"} subagents</text>}
+          fallback={
+            <text fg={theme.text.subdued}>
+              {" "}
+              {language.t(store.active ? "tui.transcript.noActiveSubagents" : "tui.transcript.noInactiveSubagents")}
+            </text>
+          }
         >
           <For each={entries()}>
             {(entry, index) => {
               const active = createMemo(() => index() === store.selected)
               const status = createMemo(() => {
-                if (entry.status === "running") return "Running"
+                if (entry.status === "running") return language.t("tui.transcript.running")
                 return ""
               })
               return (

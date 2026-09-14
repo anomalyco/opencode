@@ -13,6 +13,7 @@ import { dialogWidth, useDialog } from "../ui/dialog"
 import { FilePath } from "../ui/file-path"
 import { useToast } from "../ui/toast"
 import { errorDetails } from "../util/error-details"
+import { useLanguage } from "../context/language"
 
 export function DialogErrorDetails(props: {
   title: string
@@ -23,6 +24,7 @@ export function DialogErrorDetails(props: {
   onBack: () => void
 }) {
   const clipboard = useClipboard()
+  const language = useLanguage()
   const dialog = useDialog()
   const location = useLocation()
   const route = useRoute()
@@ -79,9 +81,14 @@ export function DialogErrorDetails(props: {
   Keymap.createLayer(() => ({
     mode: "modal",
     commands: [
-      { bind: "escape", title: "Back", group: "Dialog", run: props.onBack },
-      { bind: "c", title: "Copy details", group: "Dialog", run: copy },
-      { bind: "i", title: "Investigate error", group: "Dialog", run: investigate },
+      { bind: "escape", title: language.t("ui.common.back"), group: language.t("tui.dialog"), run: props.onBack },
+      { bind: "c", title: language.t("tui.dialogs.copyDetails"), group: language.t("tui.dialog"), run: copy },
+      {
+        bind: "i",
+        title: language.t("tui.dialogs.investigateError"),
+        group: language.t("tui.dialog"),
+        run: investigate,
+      },
     ],
   }))
 
@@ -135,7 +142,9 @@ export function DialogErrorDetails(props: {
           </text>
         </scrollbox>
         <Show when={props.diagnosticRef}>
-          <text fg={theme.text.subdued}>Reference: {props.diagnosticRef}</text>
+          <text fg={theme.text.subdued}>
+            {language.t("tui.dialogs.reference", { reference: props.diagnosticRef! })}
+          </text>
         </Show>
       </box>
       <box flexDirection="row" gap={3} flexWrap="wrap">
@@ -143,16 +152,18 @@ export function DialogErrorDetails(props: {
           <span style={{ fg: theme.text.default }}>
             <b>i</b>
           </span>
-          <span style={{ fg: theme.text.subdued }}> investigate</span>
+          <span style={{ fg: theme.text.subdued }}> {language.t("tui.dialogs.investigate")}</span>
         </text>
         <text onMouseUp={copy}>
           <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
-            <b>{copied() ? "✓ copied" : "c"}</b>
+            <b>{copied() ? language.t("tui.dialogs.copied") : "c"}</b>
           </span>
-          <span style={{ fg: theme.text.subdued }}>{copied() ? "" : " copy details"}</span>
+          <span style={{ fg: theme.text.subdued }}>
+            {copied() ? "" : ` ${language.t("tui.dialogs.copyDetailsHint")}`}
+          </span>
         </text>
         <Show when={scrollable()}>
-          <text fg={theme.text.subdued}>↑/↓ scroll</text>
+          <text fg={theme.text.subdued}>{language.t("tui.details.scroll")}</text>
         </Show>
       </box>
     </box>

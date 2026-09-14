@@ -2,12 +2,18 @@ import { describe, expect, test } from "bun:test"
 import Notifications from "../../../../src/feature-plugins/system/notifications"
 import type { OpenCodeEvent, PermissionAsked } from "@opencode/client"
 import type { AttentionNotifyOptions, Context, Route, ToastOptions } from "@opencode/plugin/tui/context"
+import { createComponent, createRoot, type JSX } from "solid-js"
+import { ConfigProvider } from "../../../../src/config"
+import { createTuiResolvedConfig } from "../../../fixture/tui-runtime"
+import { loadDictionary, type Locale } from "../../../../src/i18n/translate"
 
 type Session = { id: string; title: string; parentID?: string }
 
-async function setup(route: Route = { type: "session", sessionID: "session" }) {
+async function setup(route: Route = { type: "session", sessionID: "session" }, language: Locale = "en") {
+  await loadDictionary(language)
   const notifications: AttentionNotifyOptions[] = []
   const toasts: ToastOptions[] = []
+  const disposers: (() => void)[] = []
   const handlers = new Map<OpenCodeEvent["type"], ((event: OpenCodeEvent) => void)[]>()
   const session = (id: string, title: string, parentID?: string): Session => ({
     id,
@@ -23,6 +29,16 @@ async function setup(route: Route = { type: "session", sessionID: "session" }) {
 
   await Notifications.setup({
     ui: {
+      slot: (slot: { render: () => JSX.Element }) =>
+        createRoot((dispose) => {
+          disposers.push(dispose)
+          return createComponent(ConfigProvider, {
+            config: createTuiResolvedConfig({ language }),
+            get children() {
+              return slot.render()
+            },
+          })
+        }),
       router: { current: () => route },
       toast: { show: (toast: ToastOptions) => toasts.push(toast) },
     },
@@ -56,6 +72,9 @@ async function setup(route: Route = { type: "session", sessionID: "session" }) {
   } as unknown as Context)
 
   return {
+    [Symbol.dispose]() {
+      disposers.forEach((dispose) => dispose())
+    },
     notifications,
     toasts,
     emit(event: OpenCodeEvent) {
@@ -146,8 +165,16 @@ const permissionNotification: AttentionNotifyOptions = {
 }
 
 describe("internal notifications TUI plugin", () => {
+  test("notifications use the selected language while retaining session titles", async () => {
+    using harness = await setup({ type: "session", sessionID: "session" }, "de")
+    harness.emit(executionSucceeded("localized"))
+    expect(harness.notifications[0].title).toBe("Demo session")
+    expect(harness.notifications[0].message).toBe((await loadDictionary("de"))["tui.plugins.sessionDone"])
+    expect(harness.notifications[0].message).not.toBe("Session done")
+  })
+
   test("shows execution failures in the viewed session without needing an assistant message", async () => {
-    const harness = await setup()
+    using harness = await setup()
     harness.emit(executionStarted("started"))
     harness.emit(executionFailed("failed"))
     harness.emit(executionFailed("duplicate"))
@@ -160,7 +187,7 @@ describe("internal notifications TUI plugin", () => {
   test.each<Route>([{ type: "home" }, { type: "session", sessionID: "other" }])(
     "keeps other sessions' failures out of the current composer (%j)",
     async (route) => {
-      const harness = await setup(route)
+      using harness = await setup(route)
       harness.emit(executionFailed("failed"))
       expect(harness.toasts).toEqual([])
       expect(harness.notifications).toHaveLength(1)
@@ -168,7 +195,7 @@ describe("internal notifications TUI plugin", () => {
   )
 
   test("notifies for form and permission requests with blurred notifications and always-on sounds", async () => {
-    const harness = await setup()
+    using harness = await setup()
 
     harness.emit({
       id: "event-1",
@@ -182,7 +209,7 @@ describe("internal notifications TUI plugin", () => {
   })
 
   test("notifies for global forms once the TUI can render them", async () => {
-    const harness = await setup()
+    using harness = await setup()
 
     harness.emit({
       id: "event-1",
@@ -195,7 +222,7 @@ describe("internal notifications TUI plugin", () => {
   })
 
   test("dedupes pending forms and permissions until they are resolved", async () => {
-    const harness = await setup()
+    using harness = await setup()
 
     harness.emit({ id: "event-1", created: 0, type: "form.created", data: { form: form("form-1") } })
     harness.emit({ id: "event-2", created: 0, type: "form.created", data: { form: form("form-1") } })
@@ -226,7 +253,7 @@ describe("internal notifications TUI plugin", () => {
   })
 
   test("notifies for terminal lifecycle events even when attached after execution started", async () => {
-    const harness = await setup()
+    using harness = await setup()
 
     harness.emit(executionSucceeded("event-1"))
     harness.emit(executionStarted("event-2"))
@@ -249,7 +276,7 @@ describe("internal notifications TUI plugin", () => {
   })
 
   test("uses sound-only notifications and subagent_done sound for subagent sessions", async () => {
-    const harness = await setup()
+    using harness = await setup()
 
     harness.emit({
       id: "event-1",
@@ -277,7 +304,7 @@ describe("internal notifications TUI plugin", () => {
   })
 
   test("notifies session errors once and suppresses the following idle done notification", async () => {
-    const harness = await setup()
+    using harness = await setup()
 
     harness.emit(executionStarted("event-1"))
     harness.emit(executionFailed("event-2"))

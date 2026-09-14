@@ -5,8 +5,10 @@ import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { useConfig } from "../config"
+import { useLanguage } from "../context/language"
 
 export function DialogWorktreeName(props: { onConfirm: (name: string) => void }) {
+  const language = useLanguage()
   const dialog = useDialog()
   const theme = useTheme("elevated")
   const shortcuts = Keymap.useShortcuts()
@@ -31,8 +33,8 @@ export function DialogWorktreeName(props: { onConfirm: (name: string) => void })
     commands: [
       {
         id: "dialog.worktree.generate",
-        title: "Generate worktree name",
-        group: "Dialog",
+        title: language.t("tui.dialogs.generateWorktree"),
+        group: language.t("tui.dialog"),
         run: generate,
       },
     ],
@@ -50,7 +52,7 @@ export function DialogWorktreeName(props: { onConfirm: (name: string) => void })
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-          Name worktree
+          {language.t("tui.dialogs.nameWorktree")}
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
@@ -63,7 +65,7 @@ export function DialogWorktreeName(props: { onConfirm: (name: string) => void })
           setInputTarget(value)
         }}
         onSubmit={confirm}
-        placeholder="Worktree name"
+        placeholder={language.t("tui.dialogs.worktreeName")}
         placeholderColor={theme.text.subdued}
         textColor={theme.text.formfield.default}
         focusedTextColor={theme.text.formfield.default}
@@ -71,10 +73,11 @@ export function DialogWorktreeName(props: { onConfirm: (name: string) => void })
       />
       <box paddingBottom={1} flexDirection="row" gap={2}>
         <text fg={theme.text.default}>
-          enter <span style={{ fg: theme.text.subdued }}>submit</span>
+          enter <span style={{ fg: theme.text.subdued }}>{language.t("tui.submit")}</span>
         </text>
         <text fg={theme.text.default}>
-          {shortcuts.get("dialog.worktree.generate")} <span style={{ fg: theme.text.subdued }}>generate one</span>
+          {shortcuts.get("dialog.worktree.generate")}{" "}
+          <span style={{ fg: theme.text.subdued }}>{language.t("tui.dialogs.generateOne")}</span>
         </text>
       </box>
     </box>

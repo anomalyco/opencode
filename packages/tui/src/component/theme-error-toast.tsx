@@ -1,8 +1,10 @@
 import { onCleanup } from "solid-js"
 import { useThemes } from "../context/theme"
 import { useToast } from "../ui/toast"
+import { useLanguage } from "../context/language"
 
 export function ThemeErrorToast() {
+  const language = useLanguage()
   const themes = useThemes()
   const toast = useToast()
 
@@ -10,7 +12,7 @@ export function ThemeErrorToast() {
     themes.onError(({ name, error }) =>
       toast.show({
         variant: "error",
-        title: `Failed to load theme: ${name}`,
+        title: language.t("tui.dialogs.themeLoadFailed", { name }),
         message: error.message,
       }),
     ),

@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { Prompt, type PromptRef } from "../component/prompt"
 import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "solid-js"
 import { Logo } from "../component/logo"
@@ -18,11 +19,12 @@ import { FadeInText } from "../component/fade-in-text"
 
 let once = false
 const placeholder = {
-  normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
+  normal: ["prompt.example.1", "prompt.example.2", "prompt.example.3"] as const,
   shell: ["ls -la", "git status", "pwd"],
 }
 
 export function Home() {
+  const language = useLanguage()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
@@ -98,7 +100,11 @@ export function Home() {
         <box height={1} flexShrink={0} />
         <UpdateNotification width={logoWidth()} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0} position="relative">
-          <Prompt ref={bind} placeholders={placeholder} disabled={forms().length > 0} />
+          <Prompt
+            ref={bind}
+            placeholders={{ normal: placeholder.normal.map((text) => language.t(text)), shell: placeholder.shell }}
+            disabled={forms().length > 0}
+          />
         </box>
         <box flexGrow={1} minHeight={0} />
       </box>
@@ -122,6 +128,7 @@ export function Home() {
 }
 
 function UpdateNotification(props: { width: number }) {
+  const language = useLanguage()
   const update = useUpdateNotification()
   const exit = useExit()
   const theme = useTheme()
@@ -161,10 +168,10 @@ function UpdateNotification(props: { width: number }) {
                   </span>
                 </Show>
                 {remote
-                  ? "remote server update available"
+                  ? language.t("tui.remoteServerUpdateAvailable")
                   : state.type === "installed"
-                    ? ` restart to use v${state.version}`
-                    : ` to install v${state.version}`}
+                    ? language.t("tui.restartToUseVVersion", { version: state.version })
+                    : language.t("tui.toInstallVVersion", { version: state.version })}
               </FadeInText>
             </box>
           </Show>

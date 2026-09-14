@@ -4,6 +4,9 @@ import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import type { Context } from "@opencode/plugin/tui/context"
 import { SidebarContext } from "../../src/feature-plugins/sidebar/context"
+import { ConfigProvider } from "../../src/config"
+import { createTuiResolvedConfig } from "../fixture/tui-runtime"
+import { loadDictionary } from "../../src/i18n/translate"
 
 function context(options?: { cost?: number; tokens?: number }) {
   const color = RGBA.fromInts(200, 200, 200)
@@ -40,10 +43,17 @@ function context(options?: { cost?: number; tokens?: number }) {
 }
 
 test("sidebar omits context before usage is available", async () => {
-  const app = await testRender(() => <SidebarContext context={context()} sessionID="session" />, {
-    width: 42,
-    height: 8,
-  })
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig()}>
+        <SidebarContext context={context()} sessionID="session" />
+      </ConfigProvider>
+    ),
+    {
+      width: 42,
+      height: 8,
+    },
+  )
 
   try {
     await app.renderOnce()
@@ -55,15 +65,45 @@ test("sidebar omits context before usage is available", async () => {
 })
 
 test("sidebar shows available context usage", async () => {
-  const app = await testRender(() => <SidebarContext context={context({ tokens: 1234 })} sessionID="session" />, {
-    width: 42,
-    height: 8,
-  })
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig()}>
+        <SidebarContext context={context({ tokens: 1234 })} sessionID="session" />
+      </ConfigProvider>
+    ),
+    {
+      width: 42,
+      height: 8,
+    },
+  )
 
   try {
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Context")
     expect(app.captureCharFrame()).toContain("1,234 tokens")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("sidebar formats usage and cost with the selected TUI language", async () => {
+  await loadDictionary("de")
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig({ language: "de" })}>
+        <SidebarContext context={context({ tokens: 1234, cost: 1.25 })} sessionID="session" />
+      </ConfigProvider>
+    ),
+    { width: 42, height: 8 },
+  )
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("1.234")
+    expect(frame).toContain("1,25")
+    expect(frame).not.toContain("1,234")
+    expect(frame).not.toContain("$1.25")
   } finally {
     app.renderer.destroy()
   }

@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { TextAttributes } from "@opentui/core"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { createResource, createMemo, createSignal, Match, Switch } from "solid-js"
@@ -15,6 +16,7 @@ export type DialogSkillProps = {
 export function DialogSkill(props: DialogSkillProps) {
   const dialog = useDialog()
   const data = useData()
+  const language = useLanguage()
   const theme = useTheme()
   dialog.setSize("large")
 
@@ -55,7 +57,7 @@ export function DialogSkill(props: DialogSkillProps) {
 
   return (
     <DialogSelect
-      title="Skills"
+      title={language.t("settings.extensions.tab.skills")}
       options={options()}
       renderFilter={!showError() && !skills.loading}
       locked={showError() || skills.loading}
@@ -63,29 +65,29 @@ export function DialogSkill(props: DialogSkillProps) {
         <Switch
           fallback={
             <box paddingLeft={4} paddingRight={4}>
-              <text fg={theme.text.subdued}>No skills available</text>
+              <text fg={theme.text.subdued}>{language.t("tui.details.noSkillsAvailable")}</text>
             </box>
           }
         >
           <Match when={showError()}>
             <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.text.feedback.error.default} attributes={TextAttributes.BOLD}>
-                Could not load skills
+                {language.t("tui.dialogs.skillsLoadFailed")}
               </text>
               <text fg={theme.text.subdued}>{errorMessage(loadError())}</text>
-              <text fg={theme.text.subdued}>Close and reopen Skills to try again.</text>
+              <text fg={theme.text.subdued}>{language.t("tui.details.closeAndReopenSkillsToTryAgain")}</text>
             </box>
           </Match>
           <Match when={skills.loading}>
             <box paddingLeft={4} paddingRight={4}>
-              <text fg={theme.text.subdued}>Loading skills…</text>
+              <text fg={theme.text.subdued}>{language.t("tui.details.loadingSkills")}</text>
             </box>
           </Match>
         </Switch>
       }
       noMatchView={
         <box paddingLeft={4} paddingRight={4}>
-          <text fg={theme.text.subdued}>No skills found</text>
+          <text fg={theme.text.subdued}>{language.t("tui.details.noSkillsFound")}</text>
         </box>
       }
     />

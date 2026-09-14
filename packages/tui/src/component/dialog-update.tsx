@@ -6,6 +6,7 @@ import type { UpdateState } from "../context/update-notification"
 import { useDialog } from "../ui/dialog"
 import { errorMessage } from "../util/error"
 import { Spinner } from "./spinner"
+import { useLanguage } from "../context/language"
 
 export function DialogUpdate(props: {
   check?: (signal: AbortSignal) => Promise<string | undefined>
@@ -15,6 +16,7 @@ export function DialogUpdate(props: {
   restart: () => void
 }) {
   const dialog = useDialog()
+  const language = useLanguage()
   const theme = useTheme("elevated")
   const [error, setError] = createSignal<string>()
   const [active, setActive] = createSignal(0)
@@ -44,13 +46,13 @@ export function DialogUpdate(props: {
     if (type === "installing") return []
     const confirm =
       type === "available"
-        ? { label: "Update", run: props.install }
+        ? { label: language.t("tui.dialogs.update"), run: props.install }
         : type === "installed"
-          ? { label: "Restart", run: props.restart }
+          ? { label: language.t("tui.dialogs.restart"), run: props.restart }
           : undefined
     return [
       {
-        label: "Skip",
+        label: language.t("tui.dialogs.skip"),
         run: () => {
           props.skip()
           dialog.clear()
@@ -67,14 +69,16 @@ export function DialogUpdate(props: {
     commands: [
       {
         bind: "return",
-        title: "Confirm update action",
-        group: "Dialog",
+        title: language.t("tui.dialogs.confirmUpdate"),
+        group: language.t("tui.dialog"),
         run: () => void buttons()[active()]?.run(),
       },
       ...["left", "right", "tab", "shift+tab"].map((bind) => ({
         bind,
-        title: bind === "left" || bind === "shift+tab" ? "Previous update action" : "Next update action",
-        group: "Dialog",
+        title: language.t(
+          bind === "left" || bind === "shift+tab" ? "tui.dialogs.previousUpdate" : "tui.dialogs.nextUpdate",
+        ),
+        group: language.t("tui.dialog"),
         run: () => {
           const count = buttons().length
           if (count) setActive((value) => (value + 1) % count)
@@ -88,8 +92,8 @@ export function DialogUpdate(props: {
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
           {state().type === "available" || state().type === "installing" || state().type === "failed"
-            ? "Update available"
-            : "Update"}
+            ? language.t("tui.dialogs.updateAvailable")
+            : language.t("tui.dialogs.update")}
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
@@ -100,25 +104,25 @@ export function DialogUpdate(props: {
           {(current) => (
             <Switch>
               <Match when={current.type === "checking"}>
-                <Spinner shimmer={theme.text.default}>Checking for updates…</Spinner>
+                <Spinner shimmer={theme.text.default}>{language.t("tui.dialogs.checkingUpdates")}</Spinner>
               </Match>
               <Match when={current.type === "available"}>
-                <text fg={theme.text.subdued}>
-                  An update is available. After installing, you'll be prompted to restart OpenCode.
-                </text>
+                <text fg={theme.text.subdued}>{language.t("tui.dialogs.updateDescription")}</text>
               </Match>
               <Match when={current.type === "installing"}>
                 <Spinner shimmer={theme.text.default}>
-                  {current.type === "installing" ? `Installing OpenCode ${current.version}…` : ""}
+                  {current.type === "installing"
+                    ? language.t("tui.dialogs.installing", { version: current.version })
+                    : ""}
                 </Spinner>
               </Match>
               <Match when={current.type === "installed"}>
                 <text fg={theme.text.subdued} wrapMode="word">
-                  Update successful! A restart is required. Any active sessions will be resumed automatically.
+                  {language.t("tui.dialogs.updateSuccess")}
                 </text>
               </Match>
               <Match when={current.type === "current"}>
-                <text fg={theme.text.subdued}>OpenCode is already up to date.</text>
+                <text fg={theme.text.subdued}>{language.t("tui.dialogs.upToDate")}</text>
               </Match>
               <Match when={current.type === "unavailable"}>
                 <text fg={theme.text.subdued} wrapMode="word">
