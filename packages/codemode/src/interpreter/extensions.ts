@@ -4,7 +4,7 @@ import type { Extension } from "../extension.js"
 import { coerceToString } from "../stdlib/value.js"
 import type { Host } from "./globals.js"
 import { createErrorValue, isErrorType } from "./intrinsics.js"
-import { typeError } from "./model.js"
+import { ProgramThrow, typeError } from "./model.js"
 import { constructor, fn } from "./native.js"
 import {
   Callable,
@@ -126,7 +126,7 @@ export const extensionGlobals = <R>(
         for (const item of value) wrapped.set.add(next(item))
         return wrapped
       }
-      if (seen.has(value)) throw typeError(`${label} returned a circular value.`)
+      if (seen.has(value)) throw typeError(`${label} produced a circular value.`)
       seen.add(value)
       if (Array.isArray(value)) {
         const copied = new ProgramArray(protos.Array, value.map(next))
@@ -141,7 +141,7 @@ export const extensionGlobals = <R>(
         return copied
       }
     }
-    throw typeError(`${label} returned ${describeHost(value)}, which the program cannot hold.`)
+    throw typeError(`${label} produced ${describeHost(value)}, which the program cannot hold.`)
   }
 
   const handlePrototype = (instance: object): ProgramObject | undefined => {
@@ -152,16 +152,21 @@ export const extensionGlobals = <R>(
     return undefined
   }
 
-  // A settled Promise converts like any other return; a rejection reaches the program through `locate`.
-  const out = (value: unknown, label: string): unknown =>
-    value instanceof Promise
-      ? host.promises.create(
-          Effect.map(
-            Effect.promise(() => value),
-            (settled) => fromHost(settled, label),
-          ),
-        )
-      : fromHost(value, label)
+  // Runs host code with already-converted inputs. Whatever it returns, resolves, throws, or rejects with crosses
+  // the same way, so the program catches what the author threw.
+  const invoke = (run: () => unknown, label: string): Effect.Effect<unknown, unknown, R> => {
+    const thrown = (reason: unknown) => new ProgramThrow(fromHost(reason, label))
+    let result: unknown
+    try {
+      result = run()
+    } catch (reason) {
+      return Effect.fail(thrown(reason))
+    }
+    if (!(result instanceof Promise)) return Effect.succeed(fromHost(result, label))
+    return host.promises.create(
+      Effect.map(Effect.tryPromise({ try: () => result, catch: thrown }), (settled) => fromHost(settled, label)),
+    )
+  }
 
   const args = (values: Array<unknown>, label: string): Array<unknown> =>
     values.map((value, index) => toHost(value, `Argument ${index + 1} to ${label}`))
@@ -181,8 +186,11 @@ export const extensionGlobals = <R>(
         const name = `${label}.${key}`
         if (typeof descriptor.value === "function") {
           const method: Function = descriptor.value
-          const impl = (thisValue: unknown, values: Array<unknown>) =>
-            out(method.apply(receiver(thisValue, name), args(values, name)), name)
+          const impl = (thisValue: unknown, values: Array<unknown>) => {
+            const self = receiver(thisValue, name)
+            const converted = args(values, name)
+            return invoke(() => method.apply(self, converted), name)
+          }
           define(target, key, fn<R>(protos, key, method.length, impl), hidden)
           continue
         }
@@ -222,11 +230,15 @@ export const extensionGlobals = <R>(
     const ctor = constructor<R>(protos, proto, {
       name,
       length: cls.length,
-      call: (_, values) => Effect.sync(() => out(cls.apply(undefined, args(values, name)), name)),
+      call: (_, values) => {
+        const converted = args(values, name)
+        return invoke(() => cls.apply(undefined, converted), name)
+      },
       construct: (values) => {
         const label = `new ${name}`
         const construct = cls as new (...values: Array<unknown>) => object
-        return Effect.sync(() => fromHost(new construct(...args(values, label)), label))
+        const converted = args(values, label)
+        return invoke(() => new construct(...converted), label)
       },
     })
     if (base !== undefined) ctor.proto = base.ctor
@@ -262,7 +274,10 @@ export const extensionGlobals = <R>(
   return extensions.flatMap((extension) =>
     Object.entries(extension.globals).map(([name, value]) => {
       if (isClass(value)) return [name, expose(value).ctor] as const
-      const impl = (_: unknown, values: Array<unknown>) => out(value.apply(undefined, args(values, name)), name)
+      const impl = (_: unknown, values: Array<unknown>) => {
+        const converted = args(values, name)
+        return invoke(() => value.apply(undefined, converted), name)
+      }
       return [name, fn<R>(protos, name, value.length, impl)] as const
     }),
   )

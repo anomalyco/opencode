@@ -192,7 +192,7 @@ describe("values are converted at the boundary, never shared", () => {
   })
 
   test("an instance of an unexposed class cannot come out", async () => {
-    expect((await failure(`new Bag().detached()`)).message).toContain("returned a Other, which the program cannot hold")
+    expect((await failure(`new Bag().detached()`)).message).toContain("produced a Other, which the program cannot hold")
   })
 
   test("a getter must be synchronous", async () => {
@@ -254,15 +254,34 @@ describe("host errors", () => {
     ])
   })
 
-  test("a rejection becomes a program rejection without exposing the reason object", async () => {
+  test("a thrown or rejected value crosses like a return, so the program catches what was thrown", async () => {
     expect(
       await value(
         `try { await new Bag().reject(new TypeError("bad")) } catch (e) { return [e instanceof TypeError, e.message] }`,
       ),
     ).toEqual([true, "bad"])
-    expect(
-      await value(`try { await new Bag().reject("plain") } catch (e) { return [e instanceof Error, e.message] }`),
-    ).toEqual([true, "plain"])
+    expect(await value(`try { await new Bag().reject("plain") } catch (e) { return e }`)).toBe("plain")
+    const reason = { status: 404, nested: { a: 1 } }
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "api",
+          globals: {
+            get: async () => Promise.reject(reason),
+            boom: () => {
+              throw reason
+            },
+          },
+        }),
+      ],
+    })
+    expect(await value(`try { await get() } catch (e) { e.status = 0; return e }`, target)).toEqual({
+      status: 0,
+      nested: { a: 1 },
+    })
+    expect(await value(`try { boom() } catch (e) { return e.status }`, target)).toBe(404)
+    expect(reason.status).toBe(404)
+    expect((await failure(`await get()`, target)).message).toBe('Uncaught: {"status":404,"nested":{"a":1}}')
   })
 })
 

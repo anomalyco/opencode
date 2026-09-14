@@ -438,8 +438,9 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       `Date`, `RegExp`, `URL`, `URLSearchParams`, `Map`, and `Set` become fresh copies with their contents converted,
       errors cross as errors with their name and message, and a `__proto__` key is dropped. Functions, generators,
       and un-awaited promises cannot be passed in; an instance of an unexposed class cannot come out.
-- [x] A host `Promise` becomes a program promise; its settlement converts like a return and a rejection is caught
-      like any error. A getter must be synchronous.
+- [x] A host `Promise` becomes a program promise. Whatever host code returns, resolves, throws, or rejects with
+      crosses the same way, so `catch (e)` receives a copy of the thrown value (an `Error` of the matching type, or
+      plain data). A getter must be synchronous.
 - [x] A prototype member runs only with a handle of its own class as `this`; a detached call, a plain object, or a
       handle of another class throws `TypeError: Illegal invocation`. Program edits to an exposed prototype affect
       that run only. Data properties on a class or prototype are not exposed, since a program write would change the
