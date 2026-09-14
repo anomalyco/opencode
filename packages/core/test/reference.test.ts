@@ -75,4 +75,23 @@ describe("Reference", () => {
       ])
     }).pipe(Effect.scoped, Effect.provide(referenceLayer)),
   )
+
+  it.effect("rejects sources added with a missing or blank name instead of storing an unusable entry", () =>
+    Effect.gen(function* () {
+      const references = yield* Reference.Service
+      const source = Reference.LocalSource.make({
+        type: "local",
+        path: AbsolutePath.make("/docs"),
+      })
+
+      // A plugin (see plugin/host.ts) can call `add` with any runtime value for `name` —
+      // TypeScript's `string` type isn't enforced there. Previously this stored the entry
+      // anyway, and it only surfaced later as a crash sorting references by `.name` in
+      // SystemPrompt.environment.
+      yield* references.transform((editor) => editor.add(undefined as unknown as string, source))
+      yield* references.transform((editor) => editor.add("", source))
+
+      expect(yield* references.list()).toEqual([])
+    }).pipe(Effect.scoped, Effect.provide(referenceLayer)),
+  )
 })

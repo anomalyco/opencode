@@ -51,7 +51,14 @@ const layer = Layer.effect(
     const state = State.create<Data, Draft>({
       initial: () => ({ sources: new Map() }),
       draft: (draft) => ({
-        add: (name, source) => draft.sources.set(name, source as Types.DeepMutable<Source>),
+        add: (name, source) => {
+          // `name` is typed as `string`, but this is also reachable from the plugin API
+          // (see plugin/host.ts) where callers are not type-checked. A missing/blank name
+          // here would otherwise surface much later as a cryptic crash deep in prompt
+          // building (SystemPrompt.environment sorting references by `.name`).
+          if (typeof name !== "string" || name.length === 0) return
+          draft.sources.set(name, source as Types.DeepMutable<Source>)
+        },
         remove: (name) => draft.sources.delete(name),
         list: () => Array.from(draft.sources.entries()) as [string, Source][],
       }),
