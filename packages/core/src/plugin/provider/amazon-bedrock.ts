@@ -15,7 +15,7 @@ type MantleSDK = {
 function resolveModelID(modelID: string, region: string | undefined) {
   if (modelID.startsWith("arn:")) return modelID
 
-  const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
+  const crossRegionPrefixes = ["global.", "us.", "us-gov.", "eu.", "jp.", "apac.", "au."]
   if (crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))) return modelID
 
   const resolvedRegion = region ?? "us-east-1"
@@ -29,8 +29,11 @@ function resolveModelID(modelID: string, region: string | undefined) {
       "nova-2",
       "claude",
       "deepseek.r1",
+      "grok",
+      "nemotron",
     ].some((item) => modelID.includes(item))
-    if (requiresPrefix && !resolvedRegion.startsWith("us-gov")) return `${regionPrefix}.${modelID}`
+    const isGovCloud = resolvedRegion.startsWith("us-gov")
+    if (requiresPrefix) return isGovCloud ? `us-gov.${modelID}` : `${regionPrefix}.${modelID}`
     return modelID
   }
   if (regionPrefix === "eu") {

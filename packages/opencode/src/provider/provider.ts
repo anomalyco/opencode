@@ -403,10 +403,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
                 "nova-2",
                 "claude",
                 "deepseek.r1",
+                "grok",
+                "nemotron",
               ].some((m) => modelID.includes(m))
               const isGovCloud = region.startsWith("us-gov")
-              if (modelRequiresPrefix && !isGovCloud) {
-                modelID = `${regionPrefix}.${modelID}`
+              if (modelRequiresPrefix) {
+                modelID = isGovCloud ? `us-gov.${modelID}` : `${regionPrefix}.${modelID}`
               }
               break
             }
