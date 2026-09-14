@@ -1,8 +1,8 @@
 export * as PermissionV1 from "./permission.js"
 
 import { Schema } from "effect"
-export * from "@opencode-ai/schema/permission-v1"
-import { ID } from "@opencode-ai/schema/permission-v1"
+export * from "@opencode/schema/permission-v1"
+import { ID } from "@opencode/schema/permission-v1"
 
 export class RejectedError extends Schema.TaggedError<RejectedError>()("PermissionRejectedError", {}) {
   override get message() {

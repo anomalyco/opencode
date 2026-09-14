@@ -5,16 +5,20 @@ type BenchmarkFixtures = {
   report: (metrics: Record<string, unknown>, context?: Record<string, unknown>) => void
   reportState: { payload?: { metrics: Record<string, unknown>; context: Record<string, unknown> } }
   benchmarkResult: void
+  traceScope: "page" | "interaction"
 }
 
 export type PerformancePageDiagnostics = {
   navigations: string[]
+  traceScope: "page" | "interaction"
+  startTrace: () => Promise<void>
   stop: () => Promise<string | undefined>
 }
 
 const pages = new WeakMap<Page, PerformancePageDiagnostics>()
 
 export const benchmark = base.extend<BenchmarkFixtures>({
+  traceScope: ["page", { option: true }],
   reportState: async ({}, use) => use({}),
   report: async ({ reportState }, use) => {
     await use((metrics, context = {}) => {
@@ -49,9 +53,9 @@ export const benchmark = base.extend<BenchmarkFixtures>({
     },
     { auto: true },
   ],
-  page: async ({ page }, use, testInfo) => {
+  page: async ({ page, traceScope }, use, testInfo) => {
     const name = benchmarkName(testInfo)
-    const diagnostics = await observePerformancePage(page, name)
+    const diagnostics = await observePerformancePage(page, name, traceScope)
     try {
       await use(page)
     } finally {
@@ -75,25 +79,30 @@ function benchmarkName(testInfo: TestInfo) {
 
 export { expect }
 
-async function observePerformancePage(page: Page, name: string) {
+async function observePerformancePage(page: Page, name: string, traceScope: "page" | "interaction" = "page") {
   const navigations: string[] = []
   const onNavigation = (frame: ReturnType<Page["mainFrame"]>) => {
     if (frame === page.mainFrame()) navigations.push(frame.url())
   }
   page.on("framenavigated", onNavigation)
-  const stopTrace = await startChromeTrace(page, name).catch((error) => {
-    page.off("framenavigated", onNavigation)
-    throw error
-  })
+  let stopTrace: Awaited<ReturnType<typeof startChromeTrace>>
   let stopping: Promise<string | undefined> | undefined
   const diagnostics: PerformancePageDiagnostics = {
     navigations,
+    traceScope,
+    async startTrace() {
+      stopTrace ??= await startChromeTrace(page, name).catch((error) => {
+        page.off("framenavigated", onNavigation)
+        throw error
+      })
+    },
     stop() {
       page.off("framenavigated", onNavigation)
       return (stopping ??= stopTrace?.() ?? Promise.resolve(undefined))
     },
   }
   pages.set(page, diagnostics)
+  if (traceScope === "page") await diagnostics.startTrace()
   return diagnostics
 }
 
@@ -130,6 +139,7 @@ async function reportPerformancePage(name: string, diagnostics: PerformancePageD
       context: {
         platform: process.platform,
         trace,
+        traceScope: diagnostics.traceScope,
         selectorTrace: process.env.OPENCODE_PERFORMANCE_SELECTOR_TRACE === "1",
       },
       navigations: diagnostics.navigations,

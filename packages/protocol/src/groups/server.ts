@@ -1,15 +1,23 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 
+export const ServerStatus = Schema.Struct({
+  version: Schema.String,
+  // 0 means the runtime has no OS process identity (e.g. workerd).
+  pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  urls: Schema.Array(Schema.String),
+}).annotate({ identifier: "ServerStatus" })
+export type ServerStatus = typeof ServerStatus.Type
+
 export const ServerGroup = HttpApiGroup.make("server.server")
   .add(
-    HttpApiEndpoint.get("server.get", "/api/server", {
-      success: Schema.Struct({ urls: Schema.Array(Schema.String) }),
+    HttpApiEndpoint.get("server.status", "/api/status", {
+      success: ServerStatus,
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "v2.server.get",
-        summary: "Get server information",
-        description: "Return the URLs that can be used to connect to this server.",
+        identifier: "server.status",
+        summary: "Get server status",
+        description: "Return the server identity, connection URLs, and readiness status.",
       }),
     ),
   )

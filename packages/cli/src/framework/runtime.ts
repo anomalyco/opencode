@@ -1,13 +1,11 @@
-import { Effect, FileSystem, Option, Scope } from "effect"
+import { Effect, FileSystem, Scope } from "effect"
 import { Command } from "effect/unstable/cli"
+import { PrintLogs } from "../commands/commands"
 import { Spec } from "./spec"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { Updater } from "../services/updater"
 import { Config } from "../config"
-import { Npm } from "@opencode-ai/util/npm"
-import { GlobalFlags } from "../commands/global-flags"
-import { CpuProfile } from "../cpu-profile"
-import path from "node:path"
+import { Npm } from "@opencode/util/npm"
 
 export type Input<Value> =
   Value extends Spec.Node<infer _Name, infer Command, infer _Commands>
@@ -69,9 +67,13 @@ export function handlers<const Root extends Spec.Any>(root: Root, handlers: Hand
   function add(node: Spec.Any, value: RuntimeHandlers) {
     if (typeof value === "function") {
       result.push({ spec: node.spec, load: value as () => Promise<{ default: RuntimeHandler }> })
+      for (const alias of node.aliases) result.push({ spec: alias.spec, load: value as () => Promise<{ default: RuntimeHandler }> })
       return
     }
-    if (value.$) result.push({ spec: node.spec, load: value.$ as () => Promise<{ default: RuntimeHandler }> })
+    if (value.$) {
+      result.push({ spec: node.spec, load: value.$ as () => Promise<{ default: RuntimeHandler }> })
+      for (const alias of node.aliases) result.push({ spec: alias.spec, load: value.$ as () => Promise<{ default: RuntimeHandler }> })
+    }
     for (const [name, child] of Object.entries(node.commands)) add(child, value[name] as RuntimeHandlers)
   }
 
@@ -80,7 +82,11 @@ export function handlers<const Root extends Spec.Any>(root: Root, handlers: Hand
 }
 
 export function run(commands: Spec.Any, handlers: ReadonlyArray<LazyHandler>, options: { readonly version: string }) {
-  return Command.run(provide(commands, handlers), options) as Effect.Effect<void, unknown, Command.Environment>
+  return Command.run(provide(commands, handlers).pipe(Command.withGlobalFlags([PrintLogs])), options) as Effect.Effect<
+    void,
+    unknown,
+    Command.Environment
+  >
 }
 
 function provide(node: Spec.Any, handlers: ReadonlyArray<LazyHandler>): ProvidedCommand {
@@ -89,29 +95,20 @@ function provide(node: Spec.Any, handlers: ReadonlyArray<LazyHandler>): Provided
     ? node.spec.pipe(
         Command.withHandler((input) =>
           Effect.gen(function* () {
+            if (yield* PrintLogs) process.env.OPENCODE_PRINT_LOGS = "1"
             const module = yield* Effect.promise(handler.load)
-            const cpuProfile = Option.getOrUndefined(yield* GlobalFlags.CpuProfile)
-            if (!cpuProfile) return yield* module.default(input)
-            const target = path.resolve(cpuProfile)
-            const previous = process.env.OPENCODE_CPU_PROFILE
-            process.env.OPENCODE_CPU_PROFILE = target
-            return yield* (
-              node.name === "serve" ? CpuProfile.run(target, module.default(input)) : module.default(input)
-            ).pipe(
-              Effect.ensuring(
-                Effect.sync(() => {
-                  if (previous === undefined) delete process.env.OPENCODE_CPU_PROFILE
-                  else process.env.OPENCODE_CPU_PROFILE = previous
-                }),
-              ),
-            )
+            return yield* module.default(input)
           }),
         ),
       )
     : node.spec
   if (!Object.keys(node.commands).length) return spec as ProvidedCommand
+  const children = Object.values(node.commands)
   return spec.pipe(
-    Command.withSubcommands(Object.values(node.commands).map((child) => provide(child, handlers))),
+    Command.withSubcommands([
+      ...children.map((child) => provide(child, handlers)),
+      ...children.flatMap((child) => child.aliases.map((alias) => provide(alias, handlers))),
+    ]),
   ) as ProvidedCommand
 }
 

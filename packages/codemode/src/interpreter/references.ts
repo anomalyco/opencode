@@ -1,59 +1,45 @@
-import {
-  type AstNode,
-  CodeModeFunction,
-  CodeModeGenerator,
-  CoercionFunction,
-  ErrorConstructorReference,
-  GlobalMethodReference,
-  GlobalNamespace,
-  GeneratorMethodReference,
-  InterpreterRuntimeError,
-  IntrinsicReference,
-  JsonMethodReference,
-  PromiseCapabilityFunction,
-  PromiseInstanceMethodReference,
-  PromiseMethodReference,
-  PromiseNamespace,
-  SearchFunction,
-  SymbolNamespace,
-  UriFunction,
-} from "./model.js"
 import { ToolReference } from "../tool-runtime.js"
-import { isCodeModeValue, CodeModePromise } from "../values.js"
+import { invalidData } from "./model.js"
+import {
+  Callable,
+  getOwn,
+  isWrapper,
+  ownKeys,
+  ProgramArray,
+  ProgramDate,
+  ProgramGenerator,
+  ProgramHandle,
+  ProgramMap,
+  ProgramObject,
+  ProgramPromise,
+  ProgramRegExp,
+  ProgramSet,
+  ProgramURL,
+  ProgramURLSearchParams,
+} from "./objects.js"
 
+/** Values that cannot cross the data boundary. */
 export const isRuntimeReference = (value: unknown): boolean =>
-  value instanceof CodeModeFunction ||
-  value instanceof CodeModeGenerator ||
-  value instanceof GeneratorMethodReference ||
+  value instanceof Callable ||
+  value instanceof ProgramGenerator ||
+  value instanceof ProgramHandle ||
   value instanceof ToolReference ||
-  value instanceof IntrinsicReference ||
-  value instanceof GlobalNamespace ||
-  value instanceof GlobalMethodReference ||
-  value instanceof JsonMethodReference ||
-  value instanceof PromiseNamespace ||
-  value instanceof PromiseMethodReference ||
-  value instanceof PromiseInstanceMethodReference ||
-  value instanceof CodeModePromise ||
-  value instanceof CoercionFunction ||
-  value instanceof UriFunction ||
-  value instanceof SearchFunction ||
-  value instanceof PromiseCapabilityFunction ||
-  value instanceof ErrorConstructorReference ||
-  value instanceof SymbolNamespace ||
-  isCodeModeValue(value)
+  value instanceof ProgramPromise ||
+  isWrapper(value)
 
-function* childValues(value: object): Generator<unknown> {
-  if (Array.isArray(value)) {
-    const length = value.length
-    for (let index = 0; index < length; index++) yield value[index]
-    return
-  }
-  yield* Object.values(value)
+function* childValues(value: object): Generator {
+  if (!(value instanceof ProgramObject)) return
+  for (const key of ownKeys(value)) yield getOwn(value, key)
 }
 
-export const containsRuntimeReference = (value: unknown): boolean => {
+// Depth-first search over a value tree. `match` stops the walk; `skip` prunes a subtree without matching it.
+const find = (
+  value: unknown,
+  match: (current: unknown) => boolean,
+  skip: (current: unknown) => boolean,
+  seen: Set<object>,
+): boolean => {
   const pending: Array<Iterator<unknown>> = [[value].values()]
-  const seen = new Set<object>()
   while (pending.length > 0) {
     const next = pending.at(-1)!.next()
     if (next.done) {
@@ -61,73 +47,54 @@ export const containsRuntimeReference = (value: unknown): boolean => {
       continue
     }
     const current = next.value
-    if (isRuntimeReference(current)) return true
-    if (current === null || typeof current !== "object" || seen.has(current)) continue
+    if (match(current)) return true
+    if (current === null || typeof current !== "object" || skip(current) || seen.has(current)) continue
     seen.add(current)
     pending.push(childValues(current))
   }
   return false
 }
 
-// CodeMode values are data here, not opaque interpreter references.
-export const containsOpaqueReference = (value: unknown): boolean => {
-  const pending: Array<Iterator<unknown>> = [[value].values()]
-  const seen = new Set<object>()
-  while (pending.length > 0) {
-    const next = pending.at(-1)!.next()
-    if (next.done) {
-      pending.pop()
-      continue
-    }
-    const current = next.value
-    if (isCodeModeValue(current)) continue
-    if (isRuntimeReference(current)) return true
-    if (current === null || typeof current !== "object" || seen.has(current)) continue
-    seen.add(current)
-    pending.push(childValues(current))
-  }
-  return false
-}
+const never = () => false
+
+export const containsRuntimeReference = (value: unknown): boolean => find(value, isRuntimeReference, never, new Set())
+
+// Wrapper values are data here, not opaque interpreter references.
+export const containsOpaqueReference = (value: unknown): boolean =>
+  find(value, (current) => !isWrapper(current) && isRuntimeReference(current), isWrapper, new Set())
 
 // Reject cycles before mutation so later boundary walks remain safe.
-export const rejectCircularInsertion = (container: object, value: unknown, label: string, node: AstNode): void => {
-  const pending: Array<Iterator<unknown>> = [[value].values()]
-  const seen = new Set<object>()
-  while (pending.length > 0) {
-    const next = pending.at(-1)!.next()
-    if (next.done) {
-      pending.pop()
-      continue
-    }
-    const current = next.value
-    if (current === container)
-      throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
-    if (current === null || typeof current !== "object" || isRuntimeReference(current) || seen.has(current)) continue
-    seen.add(current)
-    pending.push(Array.isArray(current) ? current[Symbol.iterator]() : childValues(current))
+export const rejectCircularInsertion = (
+  container: object,
+  value: unknown,
+  label: string,
+  seen = new Set<object>(),
+): void => {
+  if (find(value, (current) => current === container, isRuntimeReference, seen)) {
+    throw invalidData(`${label} contains a circular value.`)
   }
+}
+
+export const describeValue = (value: unknown): string => {
+  if (value === null || value === undefined) return String(value)
+  if (value instanceof ProgramArray) return "an array"
+  if (value instanceof ProgramPromise) return "an un-awaited Promise"
+  if (value instanceof ToolReference) return "a tool reference"
+  if (value instanceof ProgramDate) return "a Date"
+  if (value instanceof ProgramRegExp) return "a RegExp"
+  if (value instanceof ProgramMap) return "a Map"
+  if (value instanceof ProgramSet) return "a Set"
+  if (value instanceof ProgramURL) return "a URL"
+  if (value instanceof ProgramURLSearchParams) return "a URLSearchParams"
+  if (value instanceof ProgramGenerator) return "a generator"
+  if (value instanceof ProgramHandle) return `a ${value.instance.constructor.name}`
+  if (isRuntimeReference(value)) return "a function"
+  if (typeof value === "object") return "a data object"
+  return `a ${typeof value}`
 }
 
 export const typeofValue = (value: unknown): string => {
-  if (
-    value instanceof CodeModeFunction ||
-    value instanceof GeneratorMethodReference ||
-    value instanceof CoercionFunction ||
-    value instanceof IntrinsicReference ||
-    value instanceof GlobalMethodReference ||
-    value instanceof JsonMethodReference ||
-    value instanceof PromiseMethodReference ||
-    value instanceof PromiseInstanceMethodReference ||
-    value instanceof PromiseNamespace ||
-    value instanceof PromiseCapabilityFunction ||
-    value instanceof ErrorConstructorReference ||
-    value instanceof SymbolNamespace
-  )
-    return "function"
-  if (value instanceof UriFunction || value instanceof SearchFunction) return "function"
+  if (value instanceof Callable) return "function"
   if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
-  if (value instanceof GlobalNamespace) {
-    return value.name === "Math" || value.name === "JSON" || value.name === "console" ? "object" : "function"
-  }
   return typeof value
 }

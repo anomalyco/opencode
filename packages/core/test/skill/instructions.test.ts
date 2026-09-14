@@ -1,11 +1,11 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { Agent } from "@opencode-ai/core/agent"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Skill } from "@opencode-ai/core/skill"
-import { SkillInstructions } from "@opencode-ai/core/skill/instructions"
+import { Agent } from "@opencode/core/agent"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Skill } from "@opencode/core/skill"
+import { SkillInstructions } from "@opencode/core/skill/instructions"
 import { it } from "../lib/effect"
 import { readInitial, readUpdate } from "../lib/instructions"
 
@@ -14,20 +14,20 @@ const effect = Skill.Info.make({
   id: Skill.ID.make("effect"),
   name: Skill.Name.make("Effect"),
   description: "Build applications with Effect",
-  location: AbsolutePath.make(path.resolve("/skills/effect/SKILL.md")),
+  path: AbsolutePath.make(path.resolve("/skills/effect/SKILL.md")),
   content: "Effect guidance",
 })
 const hidden = Skill.Info.make({
   id: Skill.ID.make("hidden"),
   name: Skill.Name.make("Hidden"),
-  location: AbsolutePath.make(path.resolve("/skills/hidden/SKILL.md")),
+  path: AbsolutePath.make(path.resolve("/skills/hidden/SKILL.md")),
   content: "Undescribed guidance",
 })
 const denied = Skill.Info.make({
   id: Skill.ID.make("denied"),
   name: Skill.Name.make("Denied"),
   description: "Must not be advertised",
-  location: AbsolutePath.make(path.resolve("/skills/denied/SKILL.md")),
+  path: AbsolutePath.make(path.resolve("/skills/denied/SKILL.md")),
   content: "Denied guidance",
 })
 const manual = Skill.Info.make({
@@ -35,13 +35,13 @@ const manual = Skill.Info.make({
   name: Skill.Name.make("Manual"),
   description: "Load only when explicitly selected",
   autoinvoke: false,
-  location: AbsolutePath.make(path.resolve("/skills/manual/SKILL.md")),
+  path: AbsolutePath.make(path.resolve("/skills/manual/SKILL.md")),
   content: "Manual guidance",
 })
 
 const layer = (list: () => Skill.Info[]) =>
   AppNodeBuilder.build(SkillInstructions.node, [
-    [Skill.node, Layer.mock(Skill.Service, { list: () => Effect.succeed(list()) })],
+    Skill.node.replace(Layer.mock(Skill.Service, { list: () => Effect.succeed(list()) })),
   ])
 
 describe("SkillInstructions", () => {
@@ -85,7 +85,7 @@ describe("SkillInstructions", () => {
       id: Skill.ID.make("debugging"),
       name: Skill.Name.make("Debugging"),
       description: "Diagnose hard bugs",
-      location: AbsolutePath.make(path.resolve("/skills/debugging/SKILL.md")),
+      path: AbsolutePath.make(path.resolve("/skills/debugging/SKILL.md")),
       content: "Debugging guidance",
     })
     let skills = [effect]

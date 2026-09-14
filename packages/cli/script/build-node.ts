@@ -6,7 +6,7 @@ import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, 
 import os from "node:os"
 import path from "node:path"
 import { build } from "vite"
-import { Script } from "@opencode-ai/script"
+import { Script } from "@opencode/script"
 import pkg from "../package.json"
 import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "./node-assets"
 import { mainConfig } from "../vite.node.config"
@@ -27,6 +27,9 @@ if (outdir === path.join(dir, "dist-node")) {
 const bundleOnly = process.argv.includes("--bundle-only")
 const single = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
+const appArchiveOnly = process.argv.includes("--app-archive-only")
+const requestedArchive = process.argv.find((arg) => arg.startsWith("--app-archive="))?.slice("--app-archive=".length)
+const archivePath = requestedArchive ? path.resolve(dir, requestedArchive) : undefined
 const requested = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
 const allTargets = [
   nodeTarget("linux", "arm64"),
@@ -41,6 +44,14 @@ const targets = requested
     ? [nodeTarget(process.platform, process.arch)]
     : allTargets
 
+process.chdir(dir)
+if (!skipInstall) run(process.execPath, ["install", "--os=*", "--cpu=*"])
+if (appArchiveOnly) {
+  if (!archivePath) throw new Error("--app-archive-only requires --app-archive=<path>")
+  await mkdir(path.dirname(archivePath), { recursive: true })
+  await writeFile(archivePath, await buildAppArchive(Script.channel))
+  process.exit(0)
+}
 if (targets.length === 0) {
   if (requested === "darwin-x64") throw new Error("Node 26.4 SEA does not support macOS x64")
   throw new Error(`Unknown Node target: ${requested}`)
@@ -48,15 +59,12 @@ if (targets.length === 0) {
 if (!bundleOnly && targets.some((target) => target.platform === "darwin" && target.arch === "x64")) {
   throw new Error("Node 26.4 SEA does not support macOS x64")
 }
-
-process.chdir(dir)
-if (!skipInstall) run(process.execPath, ["install", "--os=*", "--cpu=*"])
+const appArchive = archivePath ? (await Bun.file(archivePath).text()).trim() : await buildAppArchive(Script.channel)
 if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
 const builder =
   !bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch)
     ? await resolveHostNode()
     : undefined
-const appArchive = await buildAppArchive(Script.channel)
 
 // Vite silently rewrites text imports of known asset types (.txt) to asset
 // URL strings when the raw-text plugin doesn't intercept them first — the
@@ -130,7 +138,7 @@ for (const target of targets) {
     path.join(outdir, name, "package.json"),
     `${JSON.stringify(
       {
-        name: `@opencode-ai/${name}`,
+        name: `@opencode/${name}`,
         version: Script.version,
         license: pkg.license,
         repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },

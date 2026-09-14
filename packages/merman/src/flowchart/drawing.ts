@@ -1,7 +1,7 @@
 import { BorderChars, TextAttributes, type BorderCharacters, type BorderStyle } from "@opentui/core"
-import { walkOrthogonalSegment } from "../core/geometry.js"
+import { walkOrthogonalSegment, type DiagramDirection } from "../core/geometry.js"
 import { DiagramCanvas, type DiagramCanvasCell } from "../core/canvas.js"
-import { parseDiagramTextLines } from "../core/text.js"
+import { DIAGRAM_LABEL_PADDING_X, parseDiagramTextLines } from "../core/text.js"
 import type { DiagramTextRun } from "../core/text-lines.js"
 import {
   DIAGRAM_ARROW_HEADS,
@@ -15,7 +15,7 @@ import {
   mergeDiagramLineGlyph,
 } from "../core/drawing.js"
 import { layoutFlowchartDiagram, visualLength } from "./layout.js"
-import { flowchartEdgeLabelLayout } from "./labels.js"
+import { flowchartRouteLabelLayout } from "./labels.js"
 import type { FlowchartDiagramRenderOptions } from "./options.js"
 import { flowchartDirectionBetween, flowchartSourceConnector } from "./routing.js"
 import {
@@ -44,7 +44,8 @@ function mergeFlowchartCell(
   if (existing.style === "label") return existing
   if (incoming.char === " ") return existing
   if (existing.style !== "edge" || existing.char === " ") return incoming
-  if (DIAGRAM_ARROW_HEADS.has(existing.char) || DIAGRAM_ARROW_HEADS.has(incoming.char)) return incoming
+  if (DIAGRAM_ARROW_HEADS.has(existing.char)) return existing
+  if (DIAGRAM_ARROW_HEADS.has(incoming.char)) return incoming
 
   return {
     ...incoming,
@@ -75,22 +76,23 @@ function drawNode(
 ): void {
   const chars = BorderChars[borderStyle]
   const style: FlowchartCellStyle = node.shape === "database" ? "database" : "node"
+  const border: FlowchartCellStyle = node.shape === "database" ? "databaseBorder" : "nodeBorder"
 
   if (node.shape === "decision") {
     drawDiagramDiamond(
       bounds,
-      (x, y, char) => grid.setCell(x, y, char, style),
+      (x, y, char) => grid.setCell(x, y, char, border),
       diagramDiamondCharactersFromBorder(chars),
     )
   } else if (node.shape === "subroutine") {
     fillDiagramFrameInterior(bounds, (x, y) => grid.setCell(x, y, " ", style))
-    drawSubroutineNode(grid, bounds, chars, style)
+    drawSubroutineNode(grid, bounds, chars, border)
   } else if (node.shape === "database") {
     fillDiagramFrameInterior(bounds, (x, y) => grid.setCell(x, y, " ", style))
-    drawDatabaseNode(grid, bounds, chars, style)
+    drawDatabaseNode(grid, bounds, chars, border)
   } else {
     fillDiagramFrameInterior(bounds, (x, y) => grid.setCell(x, y, " ", style))
-    drawDiagramFrame(bounds, chars, (x, y, char) => grid.setCell(x, y, char, style))
+    drawDiagramFrame(bounds, chars, (x, y, char) => grid.setCell(x, y, char, border))
   }
 
   const textTop =
@@ -156,19 +158,20 @@ function drawSubgraphLabel(grid: FlowchartGrid, bounds: FlowchartSubgraphBounds)
     const lines = parseDiagramTextLines(bounds.label)
     const labelY = bounds.labelSide === "top" ? bounds.top : bounds.top + bounds.height - lines.length
     for (const [index, line] of lines.entries()) {
-      grid.setText(bounds.left + 2, labelY + index, " ", "group")
-      const width = setRichText(grid, bounds.left + 3, labelY + index, line.runs, "group")
-      grid.setText(bounds.left + width + 3, labelY + index, " ", "group")
+      grid.setText(bounds.left + 2, labelY + index, " ", "groupLabel")
+      const width = setRichText(grid, bounds.left + 3, labelY + index, line.runs, "groupLabel")
+      grid.setText(bounds.left + width + 3, labelY + index, " ", "groupLabel")
     }
   }
 }
 
 function drawEdgeLabel(grid: FlowchartGrid, route: FlowchartEdgeRoute, style: FlowchartCellStyle): void {
-  const label = flowchartEdgeLabelLayout(route.points, route.edge.label, visualLength, route.labelAxis)
+  const label = flowchartRouteLabelLayout(route, visualLength)
+  const padding = " ".repeat(DIAGRAM_LABEL_PADDING_X)
   for (const [index, line] of parseDiagramTextLines(route.edge.label).entries()) {
-    grid.setText(label.point.x, label.point.y + index, " ", style)
-    const width = setRichText(grid, label.point.x + 1, label.point.y + index, line.runs, style)
-    grid.setText(label.point.x + width + 1, label.point.y + index, " ", style)
+    grid.setText(label.point.x, label.point.y + index, padding, style)
+    const width = setRichText(grid, label.point.x + DIAGRAM_LABEL_PADDING_X, label.point.y + index, line.runs, style)
+    grid.setText(label.point.x + width + DIAGRAM_LABEL_PADDING_X, label.point.y + index, padding, style)
   }
 }
 
@@ -185,6 +188,10 @@ function drawRoutedEdge(grid: FlowchartGrid, route: FlowchartEdgeRoute): void {
     const end = points[points.length - 1]!
     const arrowFrom = points[points.length - 2]!
     grid.setCell(end.x, end.y, diagramArrowHeadBetween(arrowFrom, end), style)
+  } else {
+    const end = points[points.length - 1]!
+    const endDirection = flowchartDirectionBetween(points[points.length - 2]!, end)
+    if (endDirection) grid.setCell(end.x, end.y, diagramLineGlyph(new Set([endDirection])), style)
   }
   if (edge.label) {
     drawEdgeLabel(grid, route, "label")
@@ -254,6 +261,18 @@ function drawSourceConnectors(
 ): void {
   const nodesById = new Map(diagram.nodes.map((node) => [node.id, node]))
   const occupancy = routeCellOccupancy(routes)
+  const sourceJunctions = new Map<string, { directions: Set<DiagramDirection>; heavy: boolean }>()
+  for (const route of routes) {
+    const sourcePoint = route.points[0]
+    const next = route.points[1]
+    if (!sourcePoint || !next) continue
+    const key = `${route.edge.from}:${sourcePoint.x}:${sourcePoint.y}`
+    const direction = flowchartDirectionBetween(sourcePoint, next)
+    const junction = sourceJunctions.get(key) ?? { directions: new Set<DiagramDirection>(), heavy: true }
+    if (direction) junction.directions.add(direction)
+    junction.heavy &&= route.edge.style === "thick"
+    sourceJunctions.set(key, junction)
+  }
 
   for (const route of routes) {
     const from = bounds.get(route.edge.from)
@@ -262,18 +281,21 @@ function drawSourceConnectors(
     const styles = sourceFadeStyles(flowchartNodeStyle(nodesById.get(route.edge.from)))
     const connector = flowchartSourceConnector(from, sourcePoint)
     grid.setCell(connector.x, connector.y, connector.char, "edge")
-    const routeDirection = route.points[1] ? flowchartDirectionBetween(sourcePoint, route.points[1]!) : undefined
     const connectorDirection = flowchartDirectionBetween(sourcePoint, connector)
-    if (routeDirection && connectorDirection) {
+    if (connectorDirection) {
       const cell = grid.getCell(sourcePoint.x, sourcePoint.y)
-      if (cell) {
+      if (cell && cell.style !== "label" && !DIAGRAM_ARROW_HEADS.has(cell.char)) {
+        const key = `${route.edge.from}:${sourcePoint.x}:${sourcePoint.y}`
+        const junction = sourceJunctions.get(key)
+        const directions = new Set(junction?.directions)
+        directions.add(connectorDirection)
         grid.replaceCell(
           sourcePoint.x,
           sourcePoint.y,
           diagramLineGlyph(
-            new Set([routeDirection, connectorDirection]),
+            directions,
             "rounded",
-            route.edge.style === "thick" ? "heavy" : "single",
+            (junction?.heavy ?? route.edge.style === "thick") ? "heavy" : "single",
           ),
           "edge",
         )

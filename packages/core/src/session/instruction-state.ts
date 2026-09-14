@@ -42,8 +42,8 @@ export const commit = Effect.fn("InstructionState.commit")(function* (
   observation: Observation,
 ) {
   if (!observation.initial && Object.keys(observation.delta).length === 0) return
-  // The rendered text is frozen into the durable event: replaying it later would
-  // require the Location-scoped registry that produced it.
+  // The rendered text is frozen into the durable event because re-rendering it
+  // later would require the original Location-scoped instruction sources.
   const text = observation.initial ? "" : yield* renderUpdateText(db, instructions, observation)
   yield* bus.publish(
     SessionEvent.InstructionsUpdated,
@@ -202,7 +202,7 @@ export const preview = Effect.fn("InstructionState.preview")(function* (
     update: Instructions.renderUpdate(
       instructions,
       dereference(state.current_values, stored),
-      dereferenceDelta(result.delta, new Map([...stored, ...observedBlobs])),
+      dereferenceDelta(result.delta, observedBlobs),
     ),
   }
 })
@@ -248,19 +248,23 @@ const loadBlobs = Effect.fnUntraced(function* (db: DatabaseService, values: Read
   return blobs
 })
 
-function dereference(values: Instructions.Values, blobs: ReadonlyMap<Instructions.Hash, Schema.Json>) {
-  return Object.fromEntries(Object.entries(values).map(([key, hash]) => [key, requireBlob(blobs, hash)])) as Readonly<
-    Record<string, Schema.Json>
-  >
+function dereference(
+  values: Instructions.Values,
+  blobs: ReadonlyMap<Instructions.Hash, Schema.Json>,
+): Readonly<Record<string, Schema.Json>> {
+  return Object.fromEntries(Object.entries(values).map(([key, hash]) => [key, requireBlob(blobs, hash)]))
 }
 
-function dereferenceDelta(delta: Instructions.Delta, blobs: ReadonlyMap<Instructions.Hash, Schema.Json>) {
+function dereferenceDelta(
+  delta: Instructions.Delta,
+  blobs: ReadonlyMap<Instructions.Hash, Schema.Json>,
+): Readonly<Record<string, Option.Option<Schema.Json>>> {
   return Object.fromEntries(
     Object.entries(delta).map(([key, hash]) => [
       key,
       hash === "removed" ? Option.none() : Option.some(requireBlob(blobs, hash)),
     ]),
-  ) as Readonly<Record<string, Option.Option<Schema.Json>>>
+  )
 }
 
 function requireBlob(blobs: ReadonlyMap<Instructions.Hash, Schema.Json>, hash: Instructions.Hash) {

@@ -1,4 +1,4 @@
-import type { PromptInput } from "@opencode-ai/schema"
+import type { PromptInput } from "@opencode/schema"
 
 type PromptFile = PromptInput.FileAttachment
 type PromptFileIdentity = Pick<PromptFile, "uri" | "name" | "description">

@@ -1,10 +1,9 @@
 import { spawn } from "node:child_process"
-import { existsSync } from "node:fs"
-import { join } from "node:path"
 import * as pty from "@lydell/node-pty"
-import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "../../preload/types"
-import { parseCliVersion } from "../cli-version"
-import { nativeT } from "../native-translations"
+import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "@opencode/app/wsl/types"
+import { Effect, FileSystem, Path } from "effect"
+import { nativeT } from "../native/translations"
+import { RemoteCli } from "../remote/cli"
 
 export type WslCommandLine = {
   stream: "stdout" | "stderr"
@@ -261,30 +260,41 @@ export async function installWslRuntimeElevated(opts?: RunWslOptions) {
   requireSuccess(result, nativeT("desktop.wsl.error.installWsl"))
 }
 
-export async function installWslDistro(distro: string, opts?: RunWslOptions) {
-  const result = await runInteractiveCommand(
-    resolveSystem32Command("wsl.exe"),
-    ["--install", "-d", distro, "--web-download", "--no-launch"],
-    withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
-    DEFAULT_WSL_INSTALL_TIMEOUT_MS,
+export const installWslDistro = Effect.fn("Wsl.installDistro")(function* (distro: string, opts?: RunWslOptions) {
+  const command = yield* resolveSystem32Command("wsl.exe")
+  const result = yield* Effect.tryPromise(() =>
+    runInteractiveCommand(
+      command,
+      ["--install", "-d", distro, "--web-download", "--no-launch"],
+      withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
+      DEFAULT_WSL_INSTALL_TIMEOUT_MS,
+    ),
   )
   requireSuccess(result, nativeT("desktop.wsl.error.installDistro", { distro }))
-}
+})
 
-export async function installWslCli(distro: string, cli: WslCliBuild, opts?: RunWslOptions) {
-  const result = await runInteractiveCommand(
-    resolveSystem32Command("wsl.exe"),
-    wslArgs(["bash", "-lc", wslCliInstallCommand(cli)], distro),
-    withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
-    DEFAULT_WSL_INSTALL_TIMEOUT_MS,
+export const installWslCli = Effect.fn("Wsl.installCli")(function* (
+  distro: string,
+  cli: WslCliBuild,
+  opts?: RunWslOptions,
+) {
+  const command = yield* resolveSystem32Command("wsl.exe")
+  const result = yield* Effect.tryPromise(() =>
+    runInteractiveCommand(
+      command,
+      wslArgs(["bash", "-lc", wslCliInstallCommand(cli)], distro),
+      withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
+      DEFAULT_WSL_INSTALL_TIMEOUT_MS,
+    ),
   )
   requireSuccess(result, nativeT("desktop.wsl.error.installOpencode"))
-}
+})
 
 export function wslCliInstallCommand(cli: WslCliBuild) {
-  const installer = "curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s --"
-  if (!cli.binary) return `${installer} --version ${shellEscape(cli.version)}`
-  return `${installer} --binary "$(wslpath -a ${shellEscape(cli.binary)})"`
+  return RemoteCli.installScript({
+    version: cli.version,
+    source: { type: "installer", binary: cli.binary ? `"$(wslpath -a ${shellEscape(cli.binary)})"` : undefined },
+  })
 }
 
 export async function probeWslDistro(name: string, opts?: RunWslOptions): Promise<WslDistroProbe> {
@@ -319,21 +329,12 @@ export async function probeWslDistro(name: string, opts?: RunWslOptions): Promis
 }
 
 export async function resolveWslCli(distro: string, opts?: RunWslOptions) {
-  return firstLine(
-    (
-      await runWslSh(
-        'if [ -x "$HOME/.opencode/bin/opencode2" ]; then printf "%s\\n" "$HOME/.opencode/bin/opencode2"; fi',
-        distro,
-        opts,
-      )
-    ).stdout,
-  )
+  return firstLine((await runWslSh(RemoteCli.discoverScript(), distro, opts)).stdout)
 }
 
 export async function readWslCliVersion(command: string, distro: string, opts?: RunWslOptions) {
-  const result = await runWslSh(`${shellEscape(command)} --version 2>/dev/null || true`, distro, opts)
-  const output = firstLine(result.stdout)
-  return output ? parseCliVersion(output) : null
+  const result = await runWslSh(RemoteCli.versionScript(shellEscape(command)), distro, opts)
+  return RemoteCli.parseVersion(result.stdout)
 }
 
 export function openWslTerminal(distro?: string | null) {
@@ -407,12 +408,14 @@ export function shellEscape(value: string) {
   return `'${value.replace(/'/g, `'"'"'`)}'`
 }
 
-function resolveSystem32Command(command: string) {
+const resolveSystem32Command = Effect.fn("Wsl.resolveSystem32Command")(function* (command: string) {
   const root = process.env.SystemRoot ?? process.env.windir
   if (!root) return command
-  const resolved = join(root, "System32", command)
-  return existsSync(resolved) ? resolved : command
-}
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const resolved = path.join(root, "System32", command)
+  return (yield* fs.exists(resolved).pipe(Effect.orElseSucceed(() => false))) ? resolved : command
+})
 
 function withTimeout(opts: RunWslOptions | undefined, timeoutMs: number): RunWslOptions {
   return {

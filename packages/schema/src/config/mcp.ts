@@ -13,6 +13,8 @@ export type OAuth = Mcp.OAuthConfig
 export const Remote = Mcp.RemoteConfig
 export type Remote = Mcp.RemoteConfig
 export const Server = Mcp.ServerConfig
+export const Protocol = Mcp.Protocol
+export type Protocol = Mcp.Protocol
 
 export class Info extends Schema.Class<Info>("Config.MCP")({
   timeout: Timeout.pipe(optional),

@@ -1,7 +1,7 @@
 export * as WorktreeDirectory from "./directory.js"
 
 import { Effect, Schema } from "effect"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 import { AbsolutePath } from "../schema.js"
 
 export class DirectoryUnavailableError extends Schema.TaggedError<DirectoryUnavailableError>()(

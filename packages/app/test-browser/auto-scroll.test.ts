@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { createAutoScroll } from "@opencode-ai/ui/hooks"
+import { createAutoScroll } from "@opencode/ui/hooks"
 import { createRoot } from "solid-js"
 
 test("restores bottom anchoring when Suspense reattaches the scroll viewport", async () => {

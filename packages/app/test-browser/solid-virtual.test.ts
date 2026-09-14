@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createVirtualizer, defaultRangeExtractor, Virtualizer } from "@tanstack/solid-virtual"
 import { createRoot, createSignal } from "solid-js"
-import { filterVirtualIndexes } from "@/pages/session/timeline/virtual-items"
+import { filterVirtualIndexes } from "@/session/timeline/virtual-items"
 
 test("end anchoring survives consecutive resizes when the first scroll write is clamped", () => {
   const writes: { offset: number; adjustments?: number }[] = []
@@ -27,6 +27,68 @@ test("end anchoring survives consecutive resizes when the first scroll write is 
   expect(writes).toEqual([{ offset: 120, adjustments: 80 }])
 })
 
+test("start anchoring preserves a stable visible item across prepends", () => {
+  const root = document.createElement("div")
+  const writes: number[] = []
+  const options = (keys: string[]) => ({
+    count: keys.length,
+    estimateSize: () => 50,
+    initialOffset: 50,
+    initialRect: { width: 400, height: 100 },
+    anchorTo: "start" as const,
+    getItemKey: (index: number) => keys[index]!,
+    getScrollElement: () => root,
+    scrollToFn: (offset: number) => writes.push(offset),
+    observeElementRect: () => {},
+    observeElementOffset: (_element: HTMLDivElement, callback: (offset: number, isScrolling: boolean) => void) => {
+      callback(50, false)
+    },
+  })
+  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options(["c", "d", "e"]))
+  virtualizer._willUpdate()
+  virtualizer.getVirtualItems()
+
+  virtualizer.setOptions(options(["a", "b", "c", "d", "e"]))
+  virtualizer._willUpdate()
+
+  expect(virtualizer.getScrollOffset()).toBe(150)
+  expect(writes.at(-1)).toBe(150)
+})
+
+// A pagination boundary can re-key the row at the viewport top when the truncated
+// leading turn regroups under its freshly loaded user message. The anchor must fall
+// back to the next surviving key instead of leaving the offset on the new content.
+test("prepend anchoring survives when the nearest keys are re-keyed", () => {
+  const root = document.createElement("div")
+  const writes: number[] = []
+  const options = (keys: string[]) => ({
+    count: keys.length,
+    estimateSize: () => 50,
+    initialOffset: 50,
+    initialRect: { width: 400, height: 100 },
+    anchorTo: "start" as const,
+    getItemKey: (index: number) => keys[index]!,
+    getScrollElement: () => root,
+    scrollToFn: (offset: number) => writes.push(offset),
+    observeElementRect: () => {},
+    observeElementOffset: (_element: HTMLDivElement, callback: (offset: number, isScrolling: boolean) => void) => {
+      callback(50, false)
+    },
+  })
+  // Viewport sits at offset 50: rows "orphan-c" (anchor) and "d" visible.
+  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options(["orphan-c", "d", "e"]))
+  virtualizer._willUpdate()
+  virtualizer.getVirtualItems()
+
+  // Prepend re-keys the boundary row ("orphan-c" -> "c") while "d" and "e" survive.
+  virtualizer.setOptions(options(["a", "b", "c", "d", "e"]))
+  virtualizer._willUpdate()
+
+  // "d" was 50px below the anchor at old start 50; restored at new start 150 => offset 150.
+  expect(virtualizer.getScrollOffset()).toBe(150)
+  expect(writes.at(-1)).toBe(150)
+})
+
 test("reactive count updates preserve measured row sizes", () => {
   createRoot((dispose) => {
     const [count, setCount] = createSignal(2)
@@ -49,6 +111,32 @@ test("reactive count updates preserve measured row sizes", () => {
     expect(virtualizer.getTotalSize()).toBe(220)
     dispose()
   })
+})
+
+test("explicit measurement refreshes a cached row size with a custom measurer", () => {
+  const root = document.createElement("div")
+  const element = document.createElement("div")
+  element.dataset.index = "0"
+  Object.defineProperty(element, "offsetHeight", { value: 120 })
+
+  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>({
+    count: 1,
+    estimateSize: () => 60,
+    initialRect: { width: 400, height: 200 },
+    getScrollElement: () => root,
+    scrollToFn: () => {},
+    observeElementRect: () => {},
+    observeElementOffset: () => {},
+    measureElement: (node) => node.offsetHeight,
+  })
+
+  virtualizer.getTotalSize()
+  virtualizer.resizeItem(0, 60)
+  virtualizer._willUpdate()
+  virtualizer.measureElement(element)
+
+  expect(virtualizer.itemSizeCache.get(0)).toBe(120)
+  expect(virtualizer.getTotalSize()).toBe(120)
 })
 
 test("initial rect projects rows before a scroll element connects", () => {
@@ -109,4 +197,43 @@ test("stale pinned indexes do not produce missing virtual items after count shri
     expect(() => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item]))).not.toThrow()
     dispose()
   })
+})
+
+test("snapshots materialize only measured rows and restore their current geometry", () => {
+  const options = {
+    count: 100,
+    getItemKey: (index: number) => `row-${index}`,
+    estimateSize: () => 60,
+    getScrollElement: () => null,
+    scrollToFn: () => {},
+    observeElementRect: () => {},
+    observeElementOffset: () => {},
+  }
+  const virtualizer = new Virtualizer<HTMLDivElement, HTMLDivElement>(options)
+  expect(virtualizer.getTotalSize()).toBe(6000)
+  virtualizer.resizeItem(4, 100)
+  virtualizer.resizeItem(99, 140)
+  const measurements = virtualizer.getMeasurements()
+  const reads: number[] = []
+  virtualizer.getMeasurements = () =>
+    new Proxy(measurements, {
+      get(target, key, receiver) {
+        if (typeof key === "string" && /^\d+$/.test(key)) reads.push(Number(key))
+        // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property access.
+        return Reflect.get(target, key, receiver)
+      },
+    })
+
+  const snapshot = virtualizer.takeSnapshot()
+  expect(reads).toEqual([4, 99])
+  expect(snapshot).toEqual([
+    { index: 4, key: "row-4", start: 240, size: 100, end: 340, lane: 0 },
+    { index: 99, key: "row-99", start: 5980, size: 140, end: 6120, lane: 0 },
+  ])
+  const restored = new Virtualizer<HTMLDivElement, HTMLDivElement>({ ...options, initialMeasurementsCache: snapshot })
+  expect(restored.getTotalSize()).toBe(6120)
+  expect(restored.takeSnapshot()).toEqual(snapshot)
+  restored.setOptions({ ...options, count: 10 })
+  restored.resizeItem(4, 80)
+  expect(restored.takeSnapshot()).toEqual([{ index: 4, key: "row-4", start: 240, size: 80, end: 320, lane: 0 }])
 })

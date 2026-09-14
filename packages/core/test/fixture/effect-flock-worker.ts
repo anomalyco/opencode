@@ -1,9 +1,9 @@
 import fs from "fs/promises"
 import os from "os"
 import { Effect } from "effect"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { EffectFlock } from "@opencode-ai/util/effect-flock"
-import { Global } from "@opencode-ai/util/global"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
+import { Global } from "@opencode/util/global"
 
 type Msg = {
   key: string
@@ -30,7 +30,7 @@ const testGlobal = Global.layerWith({
   log: os.tmpdir(),
 })
 
-const testLayer = LayerNode.compile(EffectFlock.node, [[Global.node, testGlobal]])
+const testLayer = LayerNode.compile(EffectFlock.node, { replacements: [Global.node.replace(testGlobal)] })
 
 async function job() {
   if (msg.ready) await fs.writeFile(msg.ready, String(process.pid))

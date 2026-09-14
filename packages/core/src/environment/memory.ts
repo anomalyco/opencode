@@ -61,21 +61,23 @@ export const makeMemoryDriver = (): MemoryDriver => {
   }
   const failed = (value: string, cause: unknown) => new Failed({ path: value, cause })
   const overrides: FilesImpl = {
-    stat: (value) => {
-      const node = lookup(value)
-      return node ? Effect.succeed(info(node)) : Effect.fail(new NotFound({ path: value }))
-    },
-    read: (value, range) => {
-      const original = lookup(value)
-      if (!original) return Effect.fail(new NotFound({ path: value }))
-      if (original.type === "directory") return Effect.fail(new WrongKind({ path: value, actual: "directory" }))
-      const resolved = resolveKey(value, true)
-      const node = resolved === undefined ? undefined : nodes.get(resolved)
-      if (!node) return Effect.fail(new NotFound({ path: value }))
-      if (node.type !== "file") return Effect.fail(new WrongKind({ path: value, actual: node.type }))
-      const bytes = range === undefined ? node.bytes : node.bytes.subarray(range.offset, range.offset + range.length)
-      return Effect.succeed({ info: info(node), bytes: bytes.slice() })
-    },
+    stat: (value) =>
+      Effect.suspend(() => {
+        const node = lookup(value)
+        return node ? Effect.succeed(info(node)) : Effect.fail(new NotFound({ path: value }))
+      }),
+    read: (value, range) =>
+      Effect.gen(function* () {
+        const original = lookup(value)
+        if (!original) return yield* new NotFound({ path: value })
+        if (original.type === "directory") return yield* new WrongKind({ path: value, actual: "directory" })
+        const resolved = resolveKey(value, true)
+        const node = resolved === undefined ? undefined : nodes.get(resolved)
+        if (!node) return yield* new NotFound({ path: value })
+        if (node.type !== "file") return yield* new WrongKind({ path: value, actual: node.type })
+        const bytes = range === undefined ? node.bytes : node.bytes.subarray(range.offset, range.offset + range.length)
+        return { info: info(node), bytes: bytes.slice() }
+      }),
     write: (value, bytes) =>
       Effect.try({
         try: () => {
@@ -89,17 +91,17 @@ export const makeMemoryDriver = (): MemoryDriver => {
         },
         catch: (cause) => failed(value, cause),
       }),
-    list: (value) => {
-      const target = resolveKey(value, true) ?? key(value)
-      const node = nodes.get(target)
-      if (!node) return Effect.fail(new NotFound({ path: value }))
-      if (node.type !== "directory") return Effect.fail(new WrongKind({ path: value, actual: node.type }))
-      const entries = [...nodes.entries()]
-        .filter(([entry]) => entry !== target && path.posix.dirname(entry) === target)
-        .map(([entry, child]) => ({ name: path.posix.basename(entry), type: child.type satisfies FileType }))
-        .sort((a, b) => a.name.localeCompare(b.name))
-      return Effect.succeed(entries)
-    },
+    list: (value) =>
+      Effect.gen(function* () {
+        const target = resolveKey(value, true) ?? key(value)
+        const node = nodes.get(target)
+        if (!node) return yield* new NotFound({ path: value })
+        if (node.type !== "directory") return yield* new WrongKind({ path: value, actual: node.type })
+        return [...nodes.entries()]
+          .filter(([entry]) => entry !== target && path.posix.dirname(entry) === target)
+          .map(([entry, child]) => ({ name: path.posix.basename(entry), type: child.type satisfies FileType }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      }),
     remove: (value) =>
       Effect.sync(() => {
         const target = resolveKey(value, false) ?? key(value)
@@ -107,32 +109,33 @@ export const makeMemoryDriver = (): MemoryDriver => {
           if (entry === target || entry.startsWith(`${target}/`)) nodes.delete(entry)
         }
       }),
-    move: (from, to) => {
-      const source = resolveKey(from, false) ?? key(from)
-      const node = nodes.get(source)
-      if (!node) return Effect.fail(new NotFound({ path: from }))
-      return Effect.try({
-        try: () => {
-          const requested = resolveKey(to, false) ?? key(to)
-          const destination =
-            nodes.get(requested)?.type === "directory"
-              ? path.posix.join(requested, path.posix.basename(source))
-              : requested
-          if (node.type === "directory" && destination.startsWith(`${source}/`)) {
-            throw new Error(`Cannot move a directory into itself: ${from}`)
-          }
-          const existing = nodes.get(destination)
-          if (node.type === "directory" && existing && existing.type !== "directory") {
-            throw new Error(`Cannot overwrite a non-directory with a directory: ${to}`)
-          }
-          requireParent(destination)
-          const moved = [...nodes.entries()].filter(([entry]) => entry === source || entry.startsWith(`${source}/`))
-          for (const [entry] of moved) nodes.delete(entry)
-          for (const [entry, child] of moved) nodes.set(`${destination}${entry.slice(source.length)}`, child)
-        },
-        catch: (cause) => failed(from, cause),
-      })
-    },
+    move: (from, to) =>
+      Effect.gen(function* () {
+        const source = resolveKey(from, false) ?? key(from)
+        const node = nodes.get(source)
+        if (!node) return yield* new NotFound({ path: from })
+        yield* Effect.try({
+          try: () => {
+            const requested = resolveKey(to, false) ?? key(to)
+            const destination =
+              nodes.get(requested)?.type === "directory"
+                ? path.posix.join(requested, path.posix.basename(source))
+                : requested
+            if (node.type === "directory" && destination.startsWith(`${source}/`)) {
+              throw new Error(`Cannot move a directory into itself: ${from}`)
+            }
+            const existing = nodes.get(destination)
+            if (node.type === "directory" && existing && existing.type !== "directory") {
+              throw new Error(`Cannot overwrite a non-directory with a directory: ${to}`)
+            }
+            requireParent(destination)
+            const moved = [...nodes.entries()].filter(([entry]) => entry === source || entry.startsWith(`${source}/`))
+            for (const [entry] of moved) nodes.delete(entry)
+            for (const [entry, child] of moved) nodes.set(`${destination}${entry.slice(source.length)}`, child)
+          },
+          catch: (cause) => failed(from, cause),
+        })
+      }),
     mkdir: (value) => Effect.try({ try: () => mkdirSync(value), catch: (cause) => failed(value, cause) }),
   }
 

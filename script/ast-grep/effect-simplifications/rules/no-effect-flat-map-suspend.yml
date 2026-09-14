@@ -1,0 +1,54 @@
+id: no-effect-flat-map-suspend
+language: TypeScript
+message: Use effect-form Effect.andThen when the previous value is ignored.
+severity: error
+rule:
+  all:
+    - any:
+        - pattern: Effect.flatMap($$$SELF, () => Effect.suspend($THUNK))
+        - pattern: Effect.flatMap($$$SELF, () => { return Effect.suspend($THUNK) })
+        - pattern: Effect.flatMap($$$SELF, ($IGNORED) => Effect.suspend($IGNORED_THUNK))
+        - pattern: Effect.flatMap($$$SELF, ($IGNORED) => { return Effect.suspend($IGNORED_THUNK) })
+        - pattern: Effect.flatMap($$$SELF, $IGNORED => Effect.suspend($IGNORED_THUNK))
+        - pattern: Effect.flatMap($$$SELF, $IGNORED => { return Effect.suspend($IGNORED_THUNK) })
+        - pattern: "Effect.flatMap($$$SELF, ($IGNORED: $_TYPE) => Effect.suspend($IGNORED_THUNK))"
+        - pattern: "Effect.flatMap($$$SELF, ($IGNORED: $_TYPE) => { return Effect.suspend($IGNORED_THUNK) })"
+        - pattern: Effect.flatMap($$$SELF, function () { return Effect.suspend($FUNCTION_THUNK) })
+        - pattern: Effect.flatMap($$$SELF, function ($FUNCTION_IGNORED) { return Effect.suspend($FUNCTION_IGNORED_THUNK) })
+        - pattern: "Effect.flatMap($$$SELF, function ($FUNCTION_IGNORED: $_TYPE) { return Effect.suspend($FUNCTION_IGNORED_THUNK) })"
+    - not:
+        pattern: Effect.flatMap($_FIRST, $_SECOND, $$$REST)
+constraints:
+  THUNK:
+    kind: arrow_function
+  IGNORED:
+    regex: ^_[A-Za-z0-9_$]*(?:\s*:\s*.+)?$
+  IGNORED_THUNK:
+    all:
+      - kind: arrow_function
+      - not:
+          has:
+            regex: ^_[A-Za-z0-9_$]*$
+            stopBy: end
+  FUNCTION_THUNK:
+    all:
+      - kind: arrow_function
+      - not:
+          has:
+            any:
+              - regex: ^arguments$
+              - kind: this
+              - kind: meta_property
+            stopBy: end
+  FUNCTION_IGNORED:
+    regex: ^_[A-Za-z0-9_$]*(?:\s*:\s*.+)?$
+  FUNCTION_IGNORED_THUNK:
+    all:
+      - kind: arrow_function
+      - not:
+          has:
+            any:
+              - regex: ^(_[A-Za-z0-9_$]*|arguments)$
+              - kind: this
+              - kind: meta_property
+            stopBy: end

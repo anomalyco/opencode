@@ -1,4 +1,4 @@
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { OpenCodeClient, OpenCodeEvent } from "../promise"
 
@@ -18,6 +18,11 @@ export type ClientConnectionOptions = {
   readonly onEvent: (event: OpenCodeEvent) => void
   readonly flushInterval?: number
   readonly pageLifecycle?: boolean
+  /**
+   * Abort and reconnect a stream that receives no bytes for this long. The server writes a keepalive
+   * comment every 15 seconds, so a quiet but healthy stream never trips this.
+   */
+  readonly idleTimeout?: number
   readonly log?: {
     readonly debug?: (message: string, data?: Readonly<Record<string, unknown>>) => void
     readonly info?: (message: string, data?: Readonly<Record<string, unknown>>) => void
@@ -27,10 +32,15 @@ export type ClientConnectionOptions = {
 const connectTimeout = 2_000
 const reconnectDelay = 1_000
 const connectionHistoryLimit = 50
+export const defaultIdleTimeout = 45_000
+// Longer than one server keepalive interval: a stream that is silent this long when the page
+// returns to the foreground is probably half-open after the device slept.
+export const foregroundIdleThreshold = 20_000
 
 export function createClientConnection(initialApi: OpenCodeClient, options: ClientConnectionOptions) {
   const abort = new AbortController()
   const history: ClientConnectionEvent[] = []
+  const idleTimeout = options.idleTimeout ?? defaultIdleTimeout
   const [connection, setConnection] = createStore<{
     status: ClientConnectionStatus
     attempt: number
@@ -40,9 +50,12 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
   let pending: OpenCodeEvent[] = []
   let flushTimer: ReturnType<typeof setTimeout> | undefined
   let stream: AbortController | undefined
+  let current: AbortController | undefined
   let run: Promise<void> | undefined
   let started = false
   let generation = 0
+  let lastActivity = 0
+  let forced = false
 
   function record(status: ClientConnectionEvent["data"]["status"], attempt: number, error?: string) {
     history.push({ type: "client.connection", created: Date.now(), data: { status, attempt, error } })
@@ -63,14 +76,25 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
   async function connect(signal: AbortSignal, attempt: number) {
     let connectedAt: number | undefined
     const request = new AbortController()
+    current = request
     const cancel = () => request.abort(signal.reason)
     const timeout = setTimeout(() => request.abort(new Error("Timed out connecting to server")), connectTimeout)
     signal.addEventListener("abort", cancel, { once: true })
 
+    // Any received bytes, including keepalive comments, push the stall deadline out. A timer whose
+    // deadline passed while the page was suspended fires as soon as the page resumes.
+    let watchdog: ReturnType<typeof setTimeout> | undefined
+    const touch = () => {
+      lastActivity = Date.now()
+      if (connectedAt === undefined) return
+      clearTimeout(watchdog)
+      watchdog = setTimeout(() => request.abort(new Error("Event stream stalled")), idleTimeout)
+    }
+
     try {
       record(attempt === 0 ? "connecting" : "reconnecting", attempt)
       options.log?.info?.("event stream connecting", { attempt })
-      const iterator = api.event.subscribe({ signal: request.signal })[Symbol.asyncIterator]()
+      const iterator = api.event.subscribe({ signal: request.signal, onActivity: touch })[Symbol.asyncIterator]()
       const first = await iterator.next()
       if (signal.aborted) return { error: undefined, connectedAt }
       if (first.done)
@@ -85,6 +109,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
       clearTimeout(timeout)
       record("connected", attempt)
       connectedAt = Date.now()
+      touch()
       options.log?.info?.("event stream connected")
       publish(first.value)
       setConnection({ status: "connected", attempt: 0, error: undefined })
@@ -92,8 +117,14 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
       while (!signal.aborted) {
         const event = await iterator.next()
         if (signal.aborted) return { error: undefined, connectedAt }
-        if (event.done) return { error: new Error("Event stream disconnected"), connectedAt }
-        if ("durable" in event.value)
+        if (event.done)
+          return {
+            error:
+              request.signal.reason instanceof Error ? request.signal.reason : new Error("Event stream disconnected"),
+            connectedAt,
+          }
+        touch()
+        if ("durable" in event.value && event.value.durable)
           options.log?.debug?.("event", {
             type: event.value.type,
             aggregateID: event.value.durable.aggregateID,
@@ -106,7 +137,9 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
       return { error, connectedAt }
     } finally {
       request.abort()
+      if (current === request) current = undefined
       clearTimeout(timeout)
+      clearTimeout(watchdog)
       signal.removeEventListener("abort", cancel)
     }
   }
@@ -140,6 +173,11 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
           if (attempt === 1) continue
         }
       }
+      // A deliberate resync already knows the old socket is gone; reconnect without backing off.
+      if (forced) {
+        forced = false
+        continue
+      }
       await wait(reconnectDelay, controller.signal)
     }
   }
@@ -147,6 +185,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
   function start() {
     if (started) return run
     started = true
+    forced = false
     const active = ++generation
     const previous = run
     const current = (async () => {
@@ -161,26 +200,45 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
   }
 
   function stop() {
+    if (!started) return
     started = false
     generation += 1
     stream?.abort()
+    // Nothing is listening once stopped, so consumers must treat their data as stale until start() reconnects.
+    setConnection({ status: "connecting", attempt: 0, error: undefined })
   }
 
-  onMount(() => {
-    if (options.pageLifecycle) {
-      const pagehide = () => stop()
-      const pageshow = (event: PageTransitionEvent) => {
-        if (event.persisted) void start()
-      }
-      window.addEventListener("pagehide", pagehide)
-      window.addEventListener("pageshow", pageshow)
-      onCleanup(() => {
-        window.removeEventListener("pagehide", pagehide)
-        window.removeEventListener("pageshow", pageshow)
-      })
+  // Drop the live request so the reconnect loop replaces it now instead of waiting for the idle watchdog.
+  function resync(reason: string) {
+    if (!started || connection.status !== "connected") return
+    options.log?.info?.("event stream resync", { reason, idle: Date.now() - lastActivity })
+    forced = true
+    current?.abort(new Error(reason))
+  }
+
+  if (options.pageLifecycle) {
+    const pagehide = () => stop()
+    const pageshow = () => void start()
+    // Locking a phone or switching apps hides the document without a pagehide; the socket usually
+    // dies while the page is suspended, and the browser may never report that on the hung read.
+    const visibility = () => {
+      if (document.visibilityState !== "visible") return
+      if (Date.now() - lastActivity < foregroundIdleThreshold) return
+      resync("Page returned to the foreground after the event stream went quiet")
     }
-    void start()
-  })
+    const online = () => resync("Network connection restored")
+    window.addEventListener("pagehide", pagehide)
+    window.addEventListener("pageshow", pageshow)
+    window.addEventListener("online", online)
+    document.addEventListener("visibilitychange", visibility)
+    onCleanup(() => {
+      window.removeEventListener("pagehide", pagehide)
+      window.removeEventListener("pageshow", pageshow)
+      window.removeEventListener("online", online)
+      document.removeEventListener("visibilitychange", visibility)
+    })
+  }
+  void start()
 
   onCleanup(() => {
     stop()
@@ -195,6 +253,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
     error: () => connection.error,
     internal: {
       history: () => history.slice(),
+      resync,
     },
   }
 }

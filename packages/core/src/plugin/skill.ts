@@ -2,11 +2,12 @@
 
 export * as SkillPlugin from "./skill.js"
 
-import { define, type Context } from "@opencode-ai/plugin/effect/plugin"
+import { define, type Context } from "@opencode/plugin/effect/plugin"
+import { Document } from "@opencode/schema/config"
 import { Effect } from "effect"
 import { AbsolutePath } from "../schema.js"
 import { Skill } from "../skill.js"
-import { ConfigPluginSource } from "../config/plugin/source.js"
+import { Config } from "../config.js"
 import os from "os"
 import opencodeContent from "./skill/opencode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }
@@ -23,23 +24,22 @@ export const Plugin = define({
   id: "opencode.skill",
   effect: Effect.fn(function* (ctx) {
     const reportContent = yield* reportContentWithDiagnostics(ctx.app)
-    yield* ctx.skill.transform((draft) => {
-      draft.add(
+    yield* ctx.skill.transform((editor) => {
+      editor.add(
         Skill.Info.make({
           id: Skill.ID.make("opencode"),
           name: Skill.Name.make("OpenCode"),
           description: OpencodeDescription,
-          location: AbsolutePath.make("/builtin/opencode.md"),
+          path: AbsolutePath.make("/builtin/opencode.md"),
           content: OpencodeContent,
         }),
       )
-      draft.add(
+      editor.add(
         Skill.Info.make({
           id: Skill.ID.make("report"),
           name: Skill.Name.make("Report"),
           description: REPORT_DESCRIPTION,
-          slash: true,
-          location: AbsolutePath.make("/builtin/report.md"),
+          path: AbsolutePath.make("/builtin/report.md"),
           content: reportContent,
         }),
       )
@@ -50,7 +50,7 @@ export const Plugin = define({
 const reportContentWithDiagnostics = Effect.fn("SkillPlugin.reportContentWithDiagnostics")(function* (
   app: Context["app"],
 ) {
-  const plugins = yield* configuredPlugins().pipe(Effect.orElseSucceed(() => ["Unavailable: failed to inspect config"]))
+  const plugins = yield* configuredPlugins()
   return [
     ReportContent,
     "",
@@ -68,9 +68,11 @@ const reportContentWithDiagnostics = Effect.fn("SkillPlugin.reportContentWithDia
 })
 
 const configuredPlugins = Effect.fn("SkillPlugin.configuredPlugins")(function* () {
-  const sources = yield* ConfigPluginSource.Service
-  return (yield* sources.operations())
-    .map((operation) => (operation.type === "remove" ? `-${operation.target}` : operation.target))
+  const config = yield* Config.Service
+  return (yield* config.entries())
+    .filter((entry): entry is Document => entry.type === "document")
+    .flatMap((entry) => entry.info.plugins ?? [])
+    .map((entry) => (typeof entry === "string" ? entry : entry.package))
     .toSorted()
 })
 

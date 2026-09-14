@@ -34,12 +34,13 @@ const IS_PREVIEW = CHANNEL !== "latest"
 const VERSION = await (async () => {
   if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${previewBuildNumber()}`
-  const version = await fetch("https://registry.npmjs.org/@opencode-ai%2fcli/latest")
+  const version = await fetch("https://registry.npmjs.org/@opencode%2fcli/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
     })
     .then((data: any) => data.version)
+  if (semver.lt(version, "2.0.0")) return "2.0.0"
   const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
   const t = env.OPENCODE_BUMP?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`

@@ -1,7 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import type { JsonValue, OpenCodeEvent, SessionMessageAssistant, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { JsonValue, OpenCodeEvent, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
+import { createTwoFilesPatch } from "diff"
 
 const directory = "C:/OpenCode/TimelineStateRegression"
 const projectID = "proj_timeline_state_regression"
@@ -40,18 +41,28 @@ const editPart = {
   tool: "edit",
   state: {
     status: "completed",
-    input: { filePath: "src/regression.ts" },
+    input: {
+      path: "src/regression.ts",
+      oldString: "export const value = 'before'",
+      newString: "export const value = 'after'",
+    },
     output: "Edited src/regression.ts",
     title: "src/regression.ts",
     metadata: {
-      filediff: {
-        file: "src/regression.ts",
-        additions: 1,
-        deletions: 1,
-        before: "export const value = 'before'\n",
-        after: "export const value = 'after'\n",
-      },
-      diff: "diff --git a/src/regression.ts b/src/regression.ts\n-export const value = 'before'\n+export const value = 'after'\n",
+      files: [
+        {
+          file: "src/regression.ts",
+          patch: createTwoFilesPatch(
+            "a/src/regression.ts",
+            "b/src/regression.ts",
+            "export const value = 'before'\n",
+            "export const value = 'after'\n",
+          ),
+          additions: 1,
+          deletions: 1,
+          status: "modified",
+        },
+      ],
     },
     time: { start: 1700000001000, end: 1700000002000 },
   },
@@ -73,6 +84,41 @@ const assistantMessage = {
 } satisfies SessionMessageInfo
 
 test.describe("regression: session timeline local row state", () => {
+  test("preserves a patch file choice as new calls join its Used group", async ({ page }) => {
+    const events: EventPayload[] = []
+    const part = { ...editPart, tool: "patch" }
+    await mockServer(page, events, [userMessage, { ...assistantMessage, content: [toolContent(part)] }])
+    await configurePage(page, false)
+    await page.goto(sessionHref())
+    await expectSessionTitle(page, title)
+
+    const group = page.locator('[data-component="collapsed-tool-group"]')
+    const summary = group.getByRole("button", { name: /^Used \d+ Patch$/ })
+    await expect(summary).toHaveAccessibleName("Used 1 Patch")
+    await summary.click()
+    await group.locator(`[data-timeline-part-id="${editPartID}"]`).evaluate((element) => {
+      element.setAttribute("data-disclosure-probe", "existing")
+    })
+    const wrapper = group.locator('[data-disclosure-probe="existing"]')
+    const trigger = wrapper.locator('[data-scope="apply-patch"] button')
+    await expect(trigger).toHaveAttribute("aria-expanded", "false")
+    await trigger.click()
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    const original = await wrapper.elementHandle()
+
+    for (const count of [2, 3]) {
+      if (count === 3) await trigger.click()
+      const id = `prt_patch_${count}`
+      events.push(...toolEvents({ ...part, id, callID: id }))
+      await expect(summary).toHaveAccessibleName(`Used ${count} Patch`)
+      await expect(summary.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("Patch")
+      await expect(group).toHaveAttribute("data-timeline-part-ids", new RegExp(`${id}$`))
+      await expect(trigger).toHaveAttribute("aria-expanded", String(count === 2))
+      await expect(summary).toHaveAttribute("aria-expanded", "true")
+      expect(await original!.evaluate((node) => node.isConnected)).toBe(true)
+    }
+  })
+
   test("keeps a manually collapsed tool collapsed when later assistant content streams", async ({ page }) => {
     const events: EventPayload[] = []
     await mockServer(page, events)
@@ -88,12 +134,14 @@ test.describe("regression: session timeline local row state", () => {
     await wrapper.evaluate((element) => {
       ;(element as HTMLElement).dataset.regressionMarker = "before-stream"
     })
-    await wrapper.locator('[data-slot="collapsible-trigger"]').first().click()
+    await wrapper.locator('[data-scope="apply-patch"] button').click()
     await expectExpanded(wrapper, false)
 
     events.push(...textEvents())
 
-    await expect(page.locator(`[data-timeline-part-id="${textPartID}"]`).first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator(`[data-timeline-part-id="${assistantMessageID}:text:0"]`).first()).toBeVisible({
+      timeout: 10_000,
+    })
 
     expect(await readToolState(page)).toEqual({
       expanded: false,
@@ -119,12 +167,14 @@ test.describe("regression: session timeline local row state", () => {
 
     events.push(...textEvents())
 
-    await expect(page.locator(`[data-timeline-part-id="${textPartID}"]`).first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator(`[data-timeline-part-id="${assistantMessageID}:text:0"]`).first()).toBeVisible({
+      timeout: 10_000,
+    })
     const siblingProbe = await readDiffProbe(page)
     expect(siblingProbe).toEqual({
       fileMarker: "before",
       frameMarker: "before",
-      rowKey: `assistant-part:${userMessageID}:part:${assistantMessageID}:${editPartID}`,
+      rowKey: `assistant-part:file:part:${assistantMessageID}:${editPartID}`,
       rowMarker: "before",
       shadowRoots: 0,
       toolMarker: "before",
@@ -145,13 +195,15 @@ test.describe("regression: session timeline local row state", () => {
         ...editPart.state,
         metadata: {
           ...editPart.state.metadata,
-          filediff: {
-            file: "src/regression.ts",
-            additions: 1,
-            deletions: 1,
-            before: lines,
-            after,
-          },
+          files: [
+            {
+              file: "src/regression.ts",
+              patch: createTwoFilesPatch("a/src/regression.ts", "b/src/regression.ts", lines, after),
+              additions: 5,
+              deletions: 5,
+              status: "modified",
+            },
+          ],
         },
       },
     }
@@ -162,8 +214,8 @@ test.describe("regression: session timeline local row state", () => {
     await expectSessionTitle(page, title)
 
     const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
-    const trigger = wrapper.locator('[data-slot="collapsible-trigger"]').first()
-    const diff = wrapper.locator('[data-component="edit-content"]').first()
+    const trigger = wrapper.locator('[data-component="sticky-accordion-header"]')
+    const diff = wrapper.locator('[data-component="apply-patch-file-diff"]').first()
     await expectAppVisible(diff)
     await expect.poll(() => wrapper.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(500)
     const samples = await wrapper.evaluate(async (element) => {
@@ -173,8 +225,8 @@ test.describe("regression: session timeline local row state", () => {
       for (const offset of [0, 120, 240, 360, 480]) {
         root.scrollBy(0, offset - (result.at(-1)?.offset ?? 0))
         await new Promise(requestAnimationFrame)
-        const trigger = element.querySelector<HTMLElement>('[data-slot="collapsible-trigger"]')!
-        const diff = element.querySelector<HTMLElement>('[data-component="edit-content"]')!
+        const trigger = element.querySelector<HTMLElement>('[data-component="sticky-accordion-header"]')!
+        const diff = element.querySelector<HTMLElement>('[data-component="apply-patch-file-diff"]')!
         result.push({
           offset,
           trigger: trigger.getBoundingClientRect().y,
@@ -185,25 +237,25 @@ test.describe("regression: session timeline local row state", () => {
       return result
     })
 
-    expect(samples[0]!.trigger).toBeLessThan(samples[0]!.diff)
+    expect(samples[0]!.trigger).toBeGreaterThanOrEqual(samples[0]!.diff)
     expect(samples.every((sample) => Math.abs(sample.trigger - samples[0]!.trigger) <= 1)).toBe(true)
     expect(samples.every((sample) => sample.trigger < sample.bottom)).toBe(true)
   })
 })
 
-async function configurePage(page: Page) {
-  await page.addInitScript(() => {
+async function configurePage(page: Page, expanded = true) {
+  await page.addInitScript((expanded) => {
     localStorage.setItem(
       "settings.v3",
       JSON.stringify({
         general: {
-          editToolPartsExpanded: true,
-          shellToolPartsExpanded: true,
+          editToolPartsExpanded: expanded,
+          shellToolPartsExpanded: expanded,
           showReasoningSummaries: true,
         },
       }),
     )
-  })
+  }, expanded)
 }
 
 async function expectExpanded(locator: Locator, expected: boolean) {
@@ -217,7 +269,9 @@ async function readToolState(page: Page) {
     .evaluate(
       (element, textPartID) => ({
         expanded: (() => {
-          const trigger = element.querySelector('[data-slot="collapsible-trigger"]')
+          const trigger =
+            element.querySelector('[data-scope="apply-patch"] button') ??
+            element.querySelector('[data-slot="collapsible-trigger"]')
           const aria = trigger?.getAttribute("aria-expanded")
           if (aria === "true") return true
           if (aria === "false") return false
@@ -232,7 +286,7 @@ async function readToolState(page: Page) {
         row: element.closest("[data-timeline-row]")?.getAttribute("data-timeline-row"),
         streamedTextVisible: !!document.querySelector(`[data-timeline-part-id="${textPartID}"]`),
       }),
-      textPartID,
+      `${assistantMessageID}:text:0`,
     )
 }
 
@@ -309,7 +363,7 @@ function toolContent(part: typeof editPart): SessionMessageAssistant["content"][
   }
 }
 
-let eventSequence = 0
+let eventSequence = -1
 
 function textEvents(): OpenCodeEvent[] {
   return [
@@ -392,7 +446,9 @@ function eventValue<Type extends OpenCodeEvent["type"]>(
 }
 
 function readExpanded(element: Element) {
-  const trigger = element.querySelector('[data-slot="collapsible-trigger"]')
+  const trigger =
+    element.querySelector('[data-scope="apply-patch"] button') ??
+    element.querySelector('[data-slot="collapsible-trigger"]')
   const aria = trigger?.getAttribute("aria-expanded")
   if (aria === "true") return true
   if (aria === "false") return false
@@ -410,6 +466,7 @@ async function mockServer(
   events: EventPayload[],
   messages: SessionMessageInfo[] = [userMessage, assistantMessage],
 ) {
+  eventSequence = -1
   await mockOpenCodeServer(page, {
     directory,
     project: project(),

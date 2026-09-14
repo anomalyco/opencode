@@ -1,9 +1,9 @@
 import { EOL } from "node:os"
 import { Effect } from "effect"
-import { OpenCode } from "@opencode-ai/client"
+import { OpenCode } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
-import { Service } from "@opencode-ai/client/effect/service"
+import { Service } from "@opencode/client/effect/service"
 import { ServiceConfig } from "../../../services/service-config"
 import { resolveIntegration } from "./resolve"
 
@@ -12,9 +12,7 @@ const location = { directory: process.cwd() }
 export default Runtime.handler(
   Commands.commands.mcp.commands.logout,
   Effect.fn("cli.mcp.logout")(function* (input) {
-    const options = yield* ServiceConfig.options()
-    const found = yield* Service.discover(options)
-    const endpoint = found ?? (yield* Service.ensure(options))
+    const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
 
     const integration = yield* resolveIntegration(client, input.name, location)
@@ -31,7 +29,7 @@ export default Runtime.handler(
 
     yield* Effect.forEach(
       credentials,
-      (connection) => Effect.promise(() => client.credential.remove({ credentialID: connection.id, location })),
+      (connection) => Effect.promise(() => client.credential.remove({ credentialID: connection.id })),
       { discard: true },
     )
     process.stdout.write(`Removed OAuth credentials for ${input.name}` + EOL)

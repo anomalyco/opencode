@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 
 function resolveProject(options: Record<string, any>) {
@@ -55,10 +55,10 @@ function authFetch(fetchWithRuntimeOptions?: unknown) {
 }
 
 export const GoogleVertexPlugin = define({
-  id: "opencode.provider.google-vertex",
+  id: "opencode.provider.google.vertex",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform((evt) => {
-      for (const item of evt.provider.list()) {
+    yield* ctx.provider.transform((evt) => {
+      for (const item of evt.list()) {
         if (!Provider.isAISDK(item.provider.package)) continue
         if (
           Provider.packageName(item.provider.package) !== "@ai-sdk/google-vertex" &&
@@ -70,16 +70,16 @@ export const GoogleVertexPlugin = define({
           continue
         const project = resolveProject(item.provider.settings ?? {})
         const location = String(resolveLocation(item.provider.settings ?? {}))
-        evt.provider.update(item.provider.id, (provider) => {
+        evt.update(item.provider.id, (provider) => {
+          // Vertex authenticates through ADC rather than a key credential, so a
+          // resolvable project is what makes the provider usable.
+          if (project && provider.activation === "auto") provider.activation = "enabled"
           provider.settings = {
             ...provider.settings,
             ...(project ? { project } : {}),
             location,
             ...(typeof provider.settings?.baseURL === "string"
               ? { baseURL: replaceVertexVars(provider.settings.baseURL, project, location) }
-              : {}),
-            ...(Provider.packageName(provider.package)?.includes("@ai-sdk/openai-compatible")
-              ? { fetch: authFetch(provider.settings?.fetch) }
               : {}),
           }
         })
@@ -92,33 +92,6 @@ export const GoogleVertexPlugin = define({
           evt.options.fetch = authFetch(evt.options.fetch)
           return
         }
-        if (evt.package === "@ai-sdk/google-vertex/anthropic") {
-          const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex/anthropic"))
-          const project = resolveProject(evt.options)
-          const location = String(resolveLocation(evt.options))
-          const regionalBaseURL =
-            (location === "eu" || location === "us") && project && !evt.options.baseURL
-              ? `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`
-              : undefined
-          evt.sdk = mod.createVertexAnthropic({
-            ...evt.options,
-            project,
-            location,
-            ...(regionalBaseURL ? { baseURL: regionalBaseURL } : {}),
-          })
-          return
-        }
-        if (evt.package !== "@ai-sdk/google-vertex") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex"))
-        const project = resolveProject(evt.options)
-        const location = resolveLocation(evt.options)
-        const options = { ...evt.options }
-        delete options.fetch
-        evt.sdk = mod.createVertex({
-          ...options,
-          project,
-          location,
-        })
       }),
     )
     yield* ctx.aisdk.hook(

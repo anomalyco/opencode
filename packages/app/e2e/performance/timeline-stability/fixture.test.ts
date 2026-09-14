@@ -35,7 +35,7 @@ describe("timeline fixture validation", () => {
         userMessage(),
         {
           ...assistantMessage(),
-          content: [{ type: "tool", id: "call_invalid", name: "bash", state: { status: "completed" } }],
+          content: [{ type: "tool", id: "call_invalid", name: "shell", state: { status: "completed" } }],
         } as never,
       ]),
     ).toThrow()
@@ -60,12 +60,11 @@ if (false) {
   const userSeed = { id: "prt_type_user", type: "text", text: "typed" } satisfies PartSeed<"user">
   userMessage([userSeed])
 
-  // @ts-expect-error Tool completion fields are not valid while pending.
-  toolPart("prt_invalid_pending", "bash", "pending", {}, { output: "impossible" })
-  // @ts-expect-error Tool completion fields are not valid while running.
-  toolPart("prt_invalid_running", "bash", "running", {}, { output: "impossible" })
+  // @ts-expect-error Tool completion fields are not valid while streaming.
+  toolPart("prt_invalid_streaming", "shell", "streaming", {}, { output: "impossible" })
+  toolPart("prt_valid_running", "shell", "running", {}, { output: "progressive output" })
   // @ts-expect-error Tool error fields are not valid after completion.
-  toolPart("prt_invalid_completed", "bash", "completed", {}, { error: "impossible" })
+  toolPart("prt_invalid_completed", "shell", "completed", {}, { error: "impossible" })
 
   assistantMessage([
     // @ts-expect-error Agent references belong to user messages, not assistant messages.

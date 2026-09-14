@@ -52,7 +52,7 @@ export type Item = typeof Item.Type
 const Enqueued = {
   id: SessionMessage.ID,
   sessionID: SessionID,
-  timeCreated: DateTimeUtcFromMillis,
+  time: Schema.Struct({ created: DateTimeUtcFromMillis }),
 }
 
 export interface User extends Schema.Schema.Type<typeof User> {}

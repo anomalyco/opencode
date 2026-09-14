@@ -6,7 +6,7 @@ import { SqlClient, Statement } from "effect/unstable/sql"
 import type { Connection } from "effect/unstable/sql/SqlConnection"
 import type { SqlError } from "effect/unstable/sql/SqlError"
 
-export class Native extends Context.Service<Native, unknown>()("@opencode-ai/core/database/SqliteNative") {}
+export class Native extends Context.Service<Native, unknown>()("@opencode/core/database/SqliteNative") {}
 
 export interface ClientConfig {
   readonly spanAttributes?: Record<string, unknown>

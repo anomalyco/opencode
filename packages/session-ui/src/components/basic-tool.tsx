@@ -1,10 +1,22 @@
-import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  For,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+  type Accessor,
+  type JSX,
+} from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
-import { useI18n } from "@opencode-ai/ui/context/i18n"
+import { useI18n } from "@opencode/ui/context/i18n"
 import { createStore } from "solid-js/store"
-import { Collapsible } from "@opencode-ai/ui/collapsible"
-import type { IconProps } from "@opencode-ai/ui/icon"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { Collapsible } from "@opencode/ui/collapsible"
+import type { IconProps } from "@opencode/ui/icon"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
 
 export type TriggerTitle = {
   title: string
@@ -16,16 +28,18 @@ export type TriggerTitle = {
   action?: JSX.Element
 }
 
-const isTriggerTitle = (val: any): val is TriggerTitle => {
-  return (
-    typeof val === "object" && val !== null && "title" in val && (typeof Node === "undefined" || !(val instanceof Node))
-  )
+const isTriggerTitle = (val: unknown): val is TriggerTitle => {
+  if (typeof val !== "object" || val === null) return false
+  if (typeof Node !== "undefined" && val instanceof Node) return false
+  return "title" in val && typeof val.title === "string"
 }
 
 export interface BasicToolProps {
   icon: IconProps["name"]
   trigger: TriggerTitle | JSX.Element | ((open: Accessor<boolean>) => JSX.Element)
   children?: JSX.Element
+  /** Declare known content without constructing lazy JSX to test its presence. */
+  hasContent?: boolean
   status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
@@ -36,12 +50,14 @@ export interface BasicToolProps {
   defer?: boolean
   locked?: boolean
   animated?: boolean
+  rail?: boolean
   onSubtitleClick?: () => void
   onTriggerClick?: JSX.EventHandlerUnion<HTMLElement, MouseEvent>
   onTriggerKeyDown?: JSX.EventHandlerUnion<HTMLElement, KeyboardEvent>
   triggerHref?: string
   triggerAsLink?: boolean
   clickable?: boolean
+  compact?: boolean
 }
 
 const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
@@ -90,9 +106,16 @@ export function BasicTool(props: BasicToolProps) {
   })
   const open = () => props.open ?? state.open
   const ready = () => state.ready
-  const pending = () => props.status === "pending" || props.status === "running"
-  const hasChildren = () => (props.defer ? "children" in props : props.children)
-  const dynamicTrigger = typeof props.trigger === "function" ? props.trigger(open) : undefined
+  const pending = () => props.status === "streaming" || props.status === "running"
+  const hasChildren = () => props.hasContent ?? (props.defer ? "children" in props : props.children)
+  const triggerContent = createMemo(() => {
+    const value = props.trigger
+    return typeof value === "function" ? value(open) : value
+  })
+  const triggerTitle = createMemo(() => {
+    const value = triggerContent()
+    return isTriggerTitle(value) ? value : undefined
+  })
 
   let cancelReady: (() => void) | undefined
 
@@ -191,8 +214,7 @@ export function BasicTool(props: BasicToolProps) {
       <div data-slot="basic-tool-tool-trigger-content">
         <div data-slot="basic-tool-tool-info">
           <Switch>
-            <Match when={dynamicTrigger !== undefined}>{dynamicTrigger}</Match>
-            <Match when={isTriggerTitle(props.trigger) && props.trigger}>
+            <Match when={triggerTitle()}>
               {(title) => (
                 <div data-slot="basic-tool-tool-info-structured">
                   <div data-slot="basic-tool-tool-info-main">
@@ -244,7 +266,7 @@ export function BasicTool(props: BasicToolProps) {
                 </div>
               )}
             </Match>
-            <Match when={true}>{props.trigger as JSX.Element}</Match>
+            <Match when={true}>{triggerContent() as JSX.Element}</Match>
           </Switch>
         </div>
       </div>
@@ -255,16 +277,35 @@ export function BasicTool(props: BasicToolProps) {
   )
 
   return (
-    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
+    <Collapsible
+      open={open()}
+      onOpenChange={props.locked ? undefined : handleOpenChange}
+      class="tool-collapsible"
+      data-compact={props.compact ? "true" : undefined}
+      data-rail={props.rail === false ? "false" : undefined}
+    >
       <Show
-        when={props.triggerAsLink || props.triggerHref}
+        when={!props.locked && (props.triggerAsLink || props.triggerHref)}
         fallback={
-          <Collapsible.Trigger
-            data-hide-details={props.hideDetails ? "true" : undefined}
-            onClick={props.onTriggerClick}
+          <Show
+            when={!props.locked}
+            fallback={
+              <div
+                data-slot="collapsible-trigger"
+                data-locked
+                data-hide-details={props.hideDetails ? "true" : undefined}
+              >
+                {trigger()}
+              </div>
+            }
           >
-            {trigger()}
-          </Collapsible.Trigger>
+            <Collapsible.Trigger
+              data-hide-details={props.hideDetails ? "true" : undefined}
+              onClick={props.onTriggerClick}
+            >
+              {trigger()}
+            </Collapsible.Trigger>
+          </Show>
         }
       >
         <Collapsible.Trigger
@@ -293,22 +334,31 @@ export function BasicTool(props: BasicToolProps) {
         </div>
       </Show>
       <Show when={!props.animated && hasChildren() && !props.hideDetails}>
-        <Collapsible.Content>
-          <Show when={!props.defer || ready()}>{props.children}</Show>
-        </Collapsible.Content>
+        <Show
+          when={props.locked && open() && !props.defer}
+          fallback={
+            <Collapsible.Content>
+              <Show when={!props.defer || ready()}>{props.children}</Show>
+            </Collapsible.Content>
+          }
+        >
+          <div data-slot="collapsible-content" data-expanded="">
+            {props.children}
+          </div>
+        </Show>
       </Show>
     </Collapsible>
   )
 }
 
 function label(input: Record<string, unknown> | undefined) {
-  const keys = ["description", "query", "url", "filePath", "path", "pattern", "name"]
+  const keys = ["description", "query", "url", "path", "pattern", "name"]
   return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
 }
 
 function args(input: Record<string, unknown> | undefined) {
   if (!input) return []
-  const skip = new Set(["description", "query", "url", "filePath", "path", "pattern", "name"])
+  const skip = new Set(["description", "query", "url", "path", "pattern", "name"])
   return Object.entries(input)
     .filter(([key]) => !skip.has(key))
     .flatMap(([key, value]) => {

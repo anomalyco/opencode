@@ -1,6 +1,6 @@
 import type { AgentSideConnection, PermissionOption, ToolCallContent, ToolCallLocation } from "@agentclientprotocol/sdk"
-import type { EventSubscribeOutput, OpenCodeClient } from "@opencode-ai/client/promise"
-import { Patch } from "@opencode-ai/util/patch"
+import type { EventSubscribeOutput, OpenCodeClient } from "@opencode/client/promise"
+import { Patch } from "@opencode/util/patch"
 import { Result } from "effect"
 import { isAbsolute, resolve } from "node:path"
 import { pendingToolCall, stringValue, toLocations, toToolKind, type ToolInput } from "./tool"
@@ -78,7 +78,7 @@ export async function syncEditedFiles(input: {
   const files = Array.isArray(input.metadata.files)
     ? input.metadata.files.flatMap((file): string[] => {
         if (!file || typeof file !== "object") return []
-        const path = Reflect.get(file, "file")
+        const path = "file" in file ? file.file : undefined
         return typeof path === "string" ? [path] : []
       })
     : []

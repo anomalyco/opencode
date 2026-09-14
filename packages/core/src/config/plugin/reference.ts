@@ -1,15 +1,16 @@
 export * as ConfigReferencePlugin from "./reference.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Document } from "@opencode-ai/schema/config"
-import { ConfigReference } from "@opencode-ai/schema/config/reference"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Document } from "@opencode/schema/config"
+import { ConfigReference } from "@opencode/schema/config/reference"
 import path from "path"
-import { Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Reference } from "../../reference.js"
 import { AbsolutePath } from "../../schema.js"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { Location } from "../../location.js"
+import { ConfigEntryObserver } from "./entry-observer.js"
 
 export const Plugin = define({
   id: "opencode.config.reference",
@@ -17,16 +18,15 @@ export const Plugin = define({
     const config = yield* Config.Service
     const location = yield* Location.Service
     const global = yield* Global.Service
-    const loaded = { entries: yield* config.entries() }
-    yield* ctx.reference.transform((draft) => {
-      const entries = new Map<string, Reference.Source>()
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.reference.reload())
+    yield* ctx.reference.transform((editor) => {
       for (const doc of loaded.entries.filter((entry): entry is Document => entry.type === "document")) {
         const directory = doc.path ? path.dirname(doc.path) : location.directory
         for (const [name, entry] of Object.entries(doc.info.references ?? {})) {
           if (!validAlias(name)) continue
           const description = typeof entry === "string" ? undefined : entry.description
           const hidden = typeof entry === "string" ? undefined : entry.hidden
-          entries.set(
+          editor.add(
             name,
             local(entry)
               ? Reference.LocalSource.make({
@@ -47,18 +47,7 @@ export const Plugin = define({
           )
         }
       }
-      for (const [name, source] of entries) draft.add(name, source)
     })
-    yield* ctx.event.subscribe().pipe(
-      Stream.filter((event) => event.type === "config.updated"),
-      Stream.runForEach(() =>
-        config.entries().pipe(
-          Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
-          Effect.andThen(ctx.reference.reload()),
-        ),
-      ),
-      Effect.forkScoped({ startImmediately: true }),
-    )
   }),
 })
 

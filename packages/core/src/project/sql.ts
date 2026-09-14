@@ -12,7 +12,7 @@ type Transaction = Parameters<Parameters<DatabaseClient["transaction"]>[0]>[0]
 export const ProjectTable = sqliteTable("project", {
   id: text().$type<ProjectSchema.ID>().primaryKey(),
   worktree: absoluteColumn().notNull(),
-  vcs: text().$type<"git" | "hg">(),
+  vcs: text().$type<ProjectSchema.Vcs["type"]>(),
   name: text(),
   icon_url: text(),
   icon_url_override: text(),
@@ -51,11 +51,8 @@ export function upsertProject(
     .values({ id: project.id, worktree: project.canonical, vcs, sandboxes: [] })
     .onConflictDoUpdate({
       target: ProjectTable.id,
-      set: { worktree: project.canonical, vcs: vcs ?? null },
-      setWhere: or(
-        ne(ProjectTable.worktree, project.canonical),
-        vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
-      ),
+      set: { vcs: vcs ?? null },
+      setWhere: vcs ? or(isNull(ProjectTable.vcs), ne(ProjectTable.vcs, vcs)) : isNotNull(ProjectTable.vcs),
     })
     .run()
 }

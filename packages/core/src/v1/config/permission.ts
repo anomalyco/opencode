@@ -25,7 +25,7 @@ const InputObject = Schema.StructWithRest(
     task: Schema.optional(Rule),
     external_directory: Schema.optional(Rule),
     question: Schema.optional(Action),
-    webfetch: Schema.optional(Action),
+    webfetch: Schema.optional(Rule),
     websearch: Schema.optional(Action),
     lsp: Schema.optional(Rule),
     doom_loop: Schema.optional(Action),

@@ -1,0 +1,49 @@
+id: no-effect-catch-succeed
+valid:
+  - effect.pipe(Effect.orElseSucceed(() => fallback))
+  - Effect.orElseSucceed(effect, () => fallback)
+  - effect.pipe(Effect.catch((error) => Effect.succeed(error)))
+  - effect.pipe(Effect.catch((error) => Effect.succeed(fallback)))
+  - effect.pipe(Effect.catch((_) => Effect.succeed(_)))
+  - effect.pipe(Effect.catch((_) => Effect.succeed(use(_))))
+  - effect.pipe(Effect.catch((_) => { return Effect.succeed(_) }))
+  - effect.pipe(Effect.catch((_error) => Effect.succeed(_error)))
+  - effect.pipe(Effect.catch((_error) => Effect.succeed({ _error })))
+  - "effect.pipe(Effect.catch((_error: Error) => Effect.succeed(use(_error))))"
+  - effect.pipe(Effect.catch((_error) => Effect.succeed(values.map((_error) => _error))))
+  - effect.pipe(Effect.catch(({ message }) => Effect.succeed(fallback)))
+  - effect.pipe(Effect.catch((_error = fallbackError) => Effect.succeed(fallback)))
+  - effect.pipe(Effect.catch((..._errors) => Effect.succeed(fallback)))
+  - "effect.pipe(Effect.catch((_error?: Error) => Effect.succeed(fallback)))"
+  - effect.pipe(Effect.catch(() => Effect.void))
+  - effect.pipe(Effect.catch(() => Effect.sync(fallback)))
+  - effect.pipe(Other.catch(() => Effect.succeed(fallback)))
+  - Effect.catch(effect, options, () => Effect.succeed(fallback))
+  - Effect.catch(first, second, third, () => Effect.succeed(fallback))
+  - effect.pipe(Effect.catch(() => { log(); return Effect.succeed(fallback) }))
+  - effect.pipe(Effect.catch(function () { return Effect.succeed(this.fallback) }))
+  - effect.pipe(Effect.catch(function () { return Effect.succeed(arguments[0]) }))
+  - effect.pipe(Effect.catch(function () { return Effect.succeed(new.target) }))
+  - effect.pipe(Effect.catch(function () { return Effect.succeed(import.meta) }))
+  - effect.pipe(Effect.catch(function (_) { return Effect.succeed(_) }))
+  - "effect.pipe(Effect.catch(function (_error: Error) { return Effect.succeed(_error) }))"
+  - effect.pipe(Effect.catch(function (_error) { return Effect.succeed(new.target) }))
+invalid:
+  - effect.pipe(Effect.catch(() => Effect.succeed(fallback)))
+  - 'Effect.catch(effect, () => Effect.succeed({ reason: "fallback" }))'
+  - effect.pipe(Effect.catch((_) => Effect.succeed(fallback)))
+  - effect.pipe(Effect.catch(_ => Effect.succeed(fallback)))
+  - effect.pipe(Effect.catch(_ => { return Effect.succeed(fallback) }))
+  - effect.pipe(Effect.catch(() => { return Effect.succeed(fallback) }))
+  - effect.pipe(Effect.catch(function () { return Effect.succeed(fallback) }))
+  - effect.pipe(Effect.catch(function (_) { return Effect.succeed(fallback) }))
+  - effect.pipe(Effect.catch((_error) => Effect.succeed(fallback)))
+  - effect.pipe(Effect.catch(_error => { return Effect.succeed(fallback) }))
+  - "effect.pipe(Effect.catch((_cause: Cause) => Effect.succeed(fallback)))"
+  - "effect.pipe(Effect.catch((_error: Error) => { return Effect.succeed(fallback) }))"
+  - effect.pipe(Effect.catch(function (_error) { return Effect.succeed(fallback) }))
+  - "effect.pipe(Effect.catch(function (_error: Error) { return Effect.succeed(fallback) }))"
+  - |
+    effect.pipe(
+      Effect.catch(() => Effect.succeed([] as string[])),
+    )

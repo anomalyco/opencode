@@ -1,8 +1,8 @@
 export * as Form from "./form.js"
 
-import { Form } from "@opencode-ai/schema/form"
+import { Form } from "@opencode/schema/form"
 import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 
 const RETENTION = Duration.minutes(10)
@@ -32,7 +32,7 @@ export type Answer = typeof Answer.Type
 export const Reply = Form.Reply
 export type Reply = typeof Reply.Type
 
-export { Event } from "@opencode-ai/schema/form"
+export { Event } from "@opencode/schema/form"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Form.NotFoundError", {
   id: ID,
@@ -109,16 +109,11 @@ export const layer = Layer.effect(
       },
     )
 
-    const find = Effect.fn("Form.find")(function* (id: ID) {
-      return yield* Cache.getSuccess(forms, id).pipe(
-        Effect.flatMap((entry) =>
-          Option.match(entry, {
-            onNone: () => Effect.fail(new NotFoundError({ id })),
-            onSome: Effect.succeed,
-          }),
-        ),
-      )
-    })
+    const requireEntry = Effect.fn("Form.requireEntry")((id: ID) =>
+      Cache.getSuccess(forms, id).pipe(
+        Effect.flatMap((entry) => Effect.fromOption(entry, () => new NotFoundError({ id }))),
+      ),
+    )
 
     const create = Effect.fn("Form.create")((input: CreateInput) =>
       Effect.uninterruptible(
@@ -151,7 +146,7 @@ export const layer = Layer.effect(
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const form = yield* create(input)
-          const entry = yield* find(form.id).pipe(Effect.orDie)
+          const entry = yield* requireEntry(form.id).pipe(Effect.orDie)
           return yield* restore(Deferred.await(entry.deferred)).pipe(
             Effect.onInterrupt(() => Effect.ignore(cancel(form.id))),
           )
@@ -160,7 +155,7 @@ export const layer = Layer.effect(
     )
 
     const get = Effect.fn("Form.get")(function* (id: ID) {
-      return (yield* find(id)).form
+      return (yield* requireEntry(id)).form
     })
 
     const list = Effect.fn("Form.list")(function* (input?: ListInput) {
@@ -172,13 +167,13 @@ export const layer = Layer.effect(
     })
 
     const state = Effect.fn("Form.state")(function* (id: ID) {
-      return (yield* find(id)).state
+      return (yield* requireEntry(id)).state
     })
 
     const reply = Effect.fn("Form.reply")((input: ReplyInput) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          const entry = yield* find(input.id)
+          const entry = yield* requireEntry(input.id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
           const invalid = validateAnswer(entry.form.fields, input.answer)
           if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
@@ -197,7 +192,7 @@ export const layer = Layer.effect(
     const cancel = Effect.fn("Form.cancel")((id: ID) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          const entry = yield* find(id)
+          const entry = yield* requireEntry(id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id })
           const next: TerminalState = { status: "cancelled" }
           yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
@@ -316,7 +311,7 @@ function validateField(field: InputField, value: Form.Value): string | undefined
     }
     if (field.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
       return `Expected email for form field: ${field.key}`
-    if (field.format === "uri" && !isUri(value)) return `Expected URI for form field: ${field.key}`
+    if (field.format === "uri" && !URL.canParse(value)) return `Expected URI for form field: ${field.key}`
     if (field.format === "date" && !isDate(value)) return `Expected date for form field: ${field.key}`
     if (field.format === "date-time" && !isDateTime(value)) return `Expected date-time for form field: ${field.key}`
     if (field.options && !field.custom && !field.options.some((option) => option.value === value)) {
@@ -350,15 +345,6 @@ function validateField(field: InputField, value: Form.Value): string | undefined
 
 function isStringArray(value: Form.Value): value is ReadonlyArray<string> {
   return Array.isArray(value) && value.every((item): item is string => typeof item === "string")
-}
-
-function isUri(value: string) {
-  try {
-    new URL(value)
-    return true
-  } catch {
-    return false
-  }
 }
 
 function isDate(value: string) {

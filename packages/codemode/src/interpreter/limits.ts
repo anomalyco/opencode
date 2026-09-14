@@ -1,0 +1,19 @@
+import { rangeError } from "./model.js"
+
+// The timeout only fires between interpreter steps, so a single built-in must not be able to materialize an
+// unbounded value. These bound what one call may build; programs cannot reach such sizes any other way.
+
+/** Longest string a built-in or operator may produce. */
+export const MAX_STRING_LENGTH = 1 << 24
+/** Longest array a built-in may create or grow to. */
+export const MAX_ARRAY_LENGTH = 10_000_000
+/** Most promises that may be pending at once. */
+export const MAX_PENDING_PROMISES = 10_000
+
+export const checkStringLength = (length: number): void => {
+  if (length > MAX_STRING_LENGTH) throw rangeError("Invalid string length")
+}
+
+export const checkArrayLength = (length: number): void => {
+  if (length > MAX_ARRAY_LENGTH) throw rangeError("Invalid array length")
+}

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { diagramTextWidth } from "../core/text.js"
 import type { StateDiagramBoxBounds } from "./layout.js"
 import { createStateDiagramLayout } from "./layout.js"
 import { parseMermaidStateDiagram } from "./parser.js"
@@ -89,6 +90,28 @@ describe("createStateTransitionRoutePlans", () => {
     expect(createStateTransitionRoutePlans(vertical, verticalPlacements, 22).map((plan) => plan.kind)).toEqual([
       "vertical",
       "side-parallel",
+    ])
+  })
+
+  test("uses a bottom lane for same-rank parallel transitions in vertical diagrams", () => {
+    const diagram: StateVisibleDiagram = {
+      direction: "TB",
+      states: ["A", "B"].map((id) => ({ id, label: id, kind: "state" })),
+      transitions: [
+        { from: "A", to: "B", label: "first" },
+        { from: "A", to: "B", label: "second" },
+      ],
+      composites: [],
+      notes: [],
+    }
+    const placements = new Map([
+      ["A", bounds("A", 4, 4)],
+      ["B", bounds("B", 18, 4)],
+    ])
+
+    expect(createStateTransitionRoutePlans(diagram, placements, 12).map((plan) => plan.kind)).toEqual([
+      "horizontal-forward",
+      "bottom-parallel",
     ])
   })
 
@@ -211,6 +234,91 @@ describe("createStateTransitionRenderPlans", () => {
     ])
   })
 
+  test("anchors choice labels to their distinct outgoing branches", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  [*] --> Pending
+  Pending --> Decision: review
+  state Decision <<choice>>
+  Decision --> Approved: accept
+  Decision --> Rejected: reject
+  Rejected --> Pending: retry
+  Approved --> [*]: complete`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+    const accepted = plans.find((plan) => plan.route.transition.label === "accept")!
+    const rejected = plans.find((plan) => plan.route.transition.label === "reject")!
+
+    expect(rejected.label!.x).toBeGreaterThanOrEqual(accepted.label!.x + diagramTextWidth("accept") + 1)
+    expect(rejected.label!.x + diagramTextWidth("reject")).toBeLessThanOrEqual(rejected.route.to.centerX)
+  })
+
+  test("keeps crowded loop and forward labels below their source state", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  [*] --> Listening
+  Listening --> Listening: heartbeat
+  Listening --> Listening: refresh token
+  Listening --> Connected: client connected
+  Connected --> Connected: received message
+  Connected --> Listening: disconnected
+  Connected --> [*]: shutdown`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+
+    for (const label of ["heartbeat", "refresh token", "client connected", "received message", "shutdown"]) {
+      const plan = plans.find((candidate) => candidate.route.transition.label === label)!
+      expect(plan.label!.y, label).toBeGreaterThanOrEqual(plan.route.from.top + plan.route.from.height)
+      expect(plan.label!.y, label).toBeLessThanOrEqual(Math.max(...plan.path.map(([, y]) => y)))
+    }
+
+    const crowded = plans.filter((plan) =>
+      ["heartbeat", "refresh token", "client connected", "disconnected"].includes(plan.route.transition.label),
+    )
+    for (const [index, plan] of crowded.entries()) {
+      for (const other of crowded.slice(index + 1)) {
+        expect(Math.abs(plan.label!.y - other.label!.y)).toBeGreaterThan(1)
+      }
+    }
+  })
+
+  test("separates nested feedback labels without moving them outside their routes", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  state Session {
+    [*] --> Open
+    state Open {
+      [*] --> Clean
+      Clean --> Dirty: edit
+      Dirty --> Clean: save
+      Dirty --> [*]
+    }
+    Open --> Closing: request close
+    Closing --> Open: cancel
+    Closing --> [*]: closed
+    note right of Dirty: unsaved changes
+  }
+  [*] --> Session: hydrate
+  Session --> [*]: release`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30, { noteBounds: layout.noteBounds })
+    const crowded = plans.filter((plan) => ["edit", "save", "cancel"].includes(plan.route.transition.label))
+
+    for (const [index, plan] of crowded.entries()) {
+      expect(plan.label!.y).toBeGreaterThanOrEqual(Math.min(...plan.path.map(([, y]) => y)))
+      expect(plan.label!.y).toBeLessThanOrEqual(Math.max(...plan.path.map(([, y]) => y)))
+      for (const other of crowded.slice(index + 1)) {
+        expect(Math.abs(plan.label!.y - other.label!.y)).toBeGreaterThan(1)
+      }
+    }
+  })
+
   test("keeps vertical branch routes out of unrelated state bounds", () => {
     const diagram = prepareVisibleStateDiagram(
       parseMermaidStateDiagram(`stateDiagram-v2
@@ -226,6 +334,64 @@ describe("createStateTransitionRenderPlans", () => {
   Merge --> Root: branch-feedback`),
     )
     const layout = createStateDiagramLayout(diagram, { minStateGap: 4 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+
+    for (const plan of plans) {
+      const unrelated = diagram.states
+        .filter((state) => state.id !== plan.route.transition.from && state.id !== plan.route.transition.to)
+        .map((state) => layout.bounds.get(state.id)!)
+      expect(
+        plan.path.some(([x, y]) =>
+          unrelated.some(
+            (bound) =>
+              x >= bound.left && x < bound.left + bound.width && y >= bound.top && y < bound.top + bound.height,
+          ),
+        ),
+        `${plan.route.transition.from} -> ${plan.route.transition.to}`,
+      ).toBe(false)
+    }
+  })
+
+  test("keeps vertical feedback routes out of compact sibling state bounds", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  [*] --> Root
+  Root --> A
+  Root --> B
+  A --> Merge
+  B --> Merge
+  Merge --> A: retry`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 12 })
+    const plan = createStateTransitionRenderPlans(diagram, layout.bounds, 30).find(
+      (plan) => plan.route.transition.label === "retry",
+    )!
+    const sibling = layout.bounds.get("B")!
+
+    expect(
+      plan.path.some(
+        ([x, y]) =>
+          x >= sibling.left && x < sibling.left + sibling.width && y >= sibling.top && y < sibling.top + sibling.height,
+      ),
+    ).toBe(false)
+  })
+
+  test("keeps every dense vertical fan route out of unrelated state bounds", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  state "Alpha" as A
+  state "Beta" as B
+  state "Gamma store" as C
+  state "Delta notifier" as D
+  A --> B
+  A --> C
+  A --> D
+  B --> A: back
+  B --> D: across`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
     const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
 
     for (const plan of plans) {
@@ -264,6 +430,158 @@ describe("createStateTransitionRenderPlans", () => {
         return Math.abs(x - previous[0]) + Math.abs(y - previous[1]) === 1
       }),
     ).toBe(true)
+  })
+
+  test.each(["LR", "RL", "TB", "TD"] as const)(
+    "keeps endpoint-disjoint %s transitions on separate cells when a detour exists",
+    (direction) => {
+      const diagram = prepareVisibleStateDiagram(
+        parseMermaidStateDiagram(`stateDiagram-v2
+  direction ${direction}
+  state "A" as A
+  state "B" as B
+  state "C" as C
+  state "D" as D
+  B --> D: e0
+  C --> A: e1`),
+      )
+      const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+      const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+      const first = new Set(plans[0]!.path.map(([x, y]) => `${x}:${y}`))
+
+      expect(plans[1]!.path.every(([x, y]) => !first.has(`${x}:${y}`))).toBe(true)
+    },
+  )
+
+  test("anchors labels to final repaired transition geometry", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  state "A" as A
+  state "B" as B
+  state "C" as C
+  A --> B: e0
+  A --> C: e1
+  B --> A: e2`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plan = createStateTransitionRenderPlans(diagram, layout.bounds, 30).find(
+      (candidate) => candidate.route.transition.label === "e2",
+    )!
+    const width = Math.max(...plan.label!.lines.map(diagramTextWidth))
+    const distance = Math.min(
+      ...plan.path.map(([pathX, pathY]) => {
+        const dx =
+          pathX < plan.label!.x
+            ? plan.label!.x - pathX
+            : pathX >= plan.label!.x + width
+              ? pathX - (plan.label!.x + width - 1)
+              : 0
+        const dy =
+          pathY < plan.label!.y
+            ? plan.label!.y - pathY
+            : pathY >= plan.label!.y + plan.label!.lines.length
+              ? pathY - (plan.label!.y + plan.label!.lines.length - 1)
+              : 0
+        return dx + dy
+      }),
+    )
+
+    expect(plan.pathRepaired).toBe(true)
+    expect(distance).toBeLessThanOrEqual(4)
+  })
+
+  test.each(["LR", "RL", "TB", "TD"] as const)(
+    "allocates distinct connected self-transition lanes in %s diagrams",
+    (direction) => {
+      for (const count of [2, 3, 4]) {
+        const diagram = prepareVisibleStateDiagram(
+          parseMermaidStateDiagram(`stateDiagram-v2
+  direction ${direction}
+${Array.from({ length: count }, (_, index) => `  A --> A: loop-${index}`).join("\n")}`),
+        )
+        const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+        const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+
+        expect(new Set(plans.map((plan) => plan.path.map(([x, y]) => `${x}:${y}`).join("|"))).size).toBe(count)
+        for (const plan of plans) {
+          expect(
+            plan.path.slice(1).every(([x, y], index) => {
+              const previous = plan.path[index]!
+              return Math.abs(x - previous[0]) + Math.abs(y - previous[1]) === 1
+            }),
+          ).toBe(true)
+        }
+      }
+    },
+  )
+
+  test("uses fixed-width side lanes for long parallel vertical labels", () => {
+    const diagram = prepareVisibleStateDiagram(
+      parseMermaidStateDiagram(`stateDiagram-v2
+  direction TB
+  A --> B: alpha route label that is deliberately long
+  A --> B: beta route label that is deliberately long
+  A --> B: gamma route label that is deliberately long`),
+    )
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const rails = createStateTransitionRoutePlans(diagram, layout.bounds, 30)
+      .filter((plan) => plan.kind === "side-parallel")
+      .map((plan) => plan.railX)
+
+    expect(rails).toHaveLength(2)
+    expect(rails[1]! - rails[0]!).toBe(3)
+  })
+
+  test.each([
+    [
+      "parallel",
+      `stateDiagram-v2
+  direction TB
+  A --> B: alpha route label that is deliberately long
+  A --> B: beta route label that is deliberately long
+  A --> B: gamma route label that is deliberately long`,
+      3,
+    ],
+    [
+      "self",
+      `stateDiagram-v2
+  direction LR
+  A --> A: one
+  A --> A: two
+  A --> A: three`,
+      3,
+    ],
+  ] as const)("keeps %s labels one column clear of frames and route rails", (_, source, count) => {
+    const diagram = prepareVisibleStateDiagram(parseMermaidStateDiagram(source))
+    const layout = createStateDiagramLayout(diagram, { minStateGap: 5 })
+    const plans = createStateTransitionRenderPlans(diagram, layout.bounds, 30)
+    const routeCells = plans.flatMap((plan) => plan.path)
+
+    expect(plans).toHaveLength(count)
+    for (const plan of plans) {
+      const width = Math.max(...plan.label!.lines.map(diagramTextWidth))
+      for (const [row, line] of plan.label!.lines.entries()) {
+        const lineWidth = diagramTextWidth(line)
+        const y = plan.label!.y + row
+        expect(
+          routeCells
+            .filter(([, routeY]) => routeY === y)
+            .every(([routeX]) => routeX < plan.label!.x - 1 || routeX > plan.label!.x + lineWidth),
+        ).toBe(true)
+        for (const bound of layout.bounds.values()) {
+          if (y < bound.top || y >= bound.top + bound.height) continue
+          expect(bound.left + bound.width <= plan.label!.x - 1 || bound.left >= plan.label!.x + width + 1).toBe(true)
+        }
+      }
+    }
+
+    if (source.includes("A --> A")) {
+      const arrowXs = plans
+        .flatMap((plan) => plan.cells.filter((cell) => cell.arrowDirection).map((cell) => cell.x))
+        .sort((left, right) => left - right)
+      expect(arrowXs.slice(1).every((x, index) => x - arrowXs[index]! >= 4)).toBe(true)
+    }
   })
 })
 

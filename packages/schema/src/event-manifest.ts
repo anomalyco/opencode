@@ -2,9 +2,9 @@ export * as EventManifest from "./event-manifest.js"
 
 import { Schema } from "effect"
 import { Agent } from "./agent.js"
-import { Catalog } from "./catalog.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
+import { Credential } from "./credential.js"
 import { Durable } from "./durable-event-manifest.js"
 import { Event } from "./event.js"
 import { FileSystem } from "./filesystem.js"
@@ -15,10 +15,13 @@ import { Integration } from "./integration.js"
 import { LegacyEventV1 } from "./legacy-event.js"
 import { LspEvent } from "./lsp-event.js"
 import { McpEvent } from "./mcp-event.js"
+import { Model } from "./model.js"
 import { ModelsDev } from "./models-dev.js"
 import { Permission } from "./permission.js"
+import { PersistentPty } from "./persistent-pty.js"
 import { Plugin } from "./plugin.js"
 import { Project } from "./project.js"
+import { Provider } from "./provider.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
 import { Reference } from "./reference.js"
@@ -38,8 +41,10 @@ const coreDefinitions = Event.inventory(...SessionEvent.Definitions)
 
 const foundationDefinitions = Event.inventory(
   ...ModelsDev.Event.Definitions,
+  ...Credential.Event.Definitions,
   ...Integration.Event.Definitions,
-  ...Catalog.Event.Definitions,
+  ...Provider.Event.Definitions,
+  ...Model.Event.Definitions,
   ...Agent.Event.Definitions,
   ...coreDefinitions,
 )
@@ -49,11 +54,13 @@ const featureDefinitions = Event.inventory(
   ...Reference.Event.Definitions,
   ...Permission.Event.Definitions,
   ...Plugin.Event.Definitions,
+  ...Project.Event.Definitions,
   ...Worktree.Event.Definitions,
   ...Command.Event.Definitions,
   ...Config.Event.Definitions,
   ...Skill.Event.Definitions,
   ...Pty.Event.Definitions,
+  ...PersistentPty.Event.Definitions,
   ...Shell.Event.Definitions,
   ...Form.Event.Definitions,
   ...WebSearch.Event.Definitions,
@@ -83,7 +90,6 @@ export const Definitions = Event.inventory(
   ...McpEvent.Definitions,
   ...LegacyEventV1.Definitions,
   ...FileSystemV1.Event.Definitions,
-  ...Project.Event.Definitions,
   ...SessionStatusEvent.Definitions,
   ...SessionCompactionEvent.Definitions,
   ...VcsEvent.Definitions,

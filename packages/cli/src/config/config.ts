@@ -1,13 +1,13 @@
 export * as Config from "./config"
 
-import { Global } from "@opencode-ai/util/global"
-import { Flock } from "@opencode-ai/util/flock"
+import { Global } from "@opencode/util/global"
+import { Flock } from "@opencode/util/flock"
 import { Context, Effect, FileSystem, Layer, Option, Schema } from "effect"
 import { produce, type Draft } from "immer"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import path from "path"
 import { ConfigMigration } from "./migrate"
-import { Info } from "./schema"
+import { Info, SchemaURL } from "./schema"
 
 export * from "./schema"
 
@@ -31,7 +31,7 @@ export const layer = Layer.effect(
     const file = path.join(global.config, "cli.json")
 
     const readJson = Effect.fnUntraced(function* () {
-      const text = yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
       if (text === undefined) return undefined
       const errors: ParseError[] = []
       const value: any = parse(text, errors, { allowTrailingComma: true })
@@ -87,7 +87,9 @@ export const layer = Layer.effect(
           const next = produce(current, update)
           const edits = changes(current, next)
           if (!edits.length) return current
-          const text = yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("{}")))
+          const text = yield* fs
+            .readFileString(file)
+            .pipe(Effect.orElseSucceed(() => JSON.stringify({ $schema: SchemaURL }, null, 2)))
           const updated = edits.reduce(
             (text, edit) =>
               applyEdits(

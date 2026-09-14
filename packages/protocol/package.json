@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/protocol",
-  "version": "1.17.11",
+  "name": "@opencode/protocol",
+  "version": "2.0.3",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -26,13 +26,14 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/schema": "workspace:*",
+    "@opencode/schema": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "prettier": "3.6.2",
     "typescript": "catalog:"
   }
 }

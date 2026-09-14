@@ -1,7 +1,7 @@
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
-import { Hash } from "@opencode-ai/util/hash"
-import { Service } from "@opencode-ai/client/effect/service"
+import { Hash } from "@opencode/util/hash"
+import { Service } from "@opencode/client/effect/service"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
@@ -15,10 +15,12 @@ export const Info = Schema.Struct({
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
+  cors: Schema.optional(Schema.Array(Schema.String)),
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 })
 export type Info = typeof Info.Type
 
-const keys = ["hostname", "port", "password"] as const
+const keys = ["hostname", "port", "password", "cors", "env"] as const
 type Key = (typeof keys)[number]
 
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
@@ -76,7 +78,7 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
 })
 
 function configKey(key: string): Key {
-  if (key === "hostname" || key === "port" || key === "password") return key
+  if (key === "hostname" || key === "port" || key === "password" || key === "cors" || key === "env") return key
   throw new Error(`Unknown service config key: ${key}`)
 }
 
@@ -104,11 +106,11 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
   return {
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
+    env: (yield* read()).env,
     command: [
       ...selfCommand(),
       "serve",
       "--service",
-      ...(process.env.OPENCODE_CPU_PROFILE ? ["--cpu-profile", process.env.OPENCODE_CPU_PROFILE] : []),
     ],
   }
 })
@@ -118,7 +120,7 @@ export const read = Effect.fn("cli.service-config.read")(function* () {
   if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
   return yield* fs.readFileString(configFile).pipe(
     Effect.flatMap(decodeInfo),
-    Effect.catch(() => Effect.succeed({} as Info)),
+    Effect.orElseSucceed(() => ({}) as Info),
   )
 })
 
@@ -141,12 +143,14 @@ export const password = Effect.fn("cli.service-config.password")(function* (valu
   return next
 })
 
-export const get = Effect.fn("cli.service-config.get")(function* (key?: string) {
+export const get = Effect.fn("cli.service-config.get")(function* (key?: string, name?: string) {
   if (key === undefined) {
     const { password: _password, ...safe } = yield* read()
     return JSON.stringify(safe, null, 2)
   }
-  switch (configKey(key)) {
+  const selected = configKey(key)
+  if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service get ${selected}`)
+  switch (selected) {
     case "hostname": {
       return (yield* read()).hostname ?? ""
     }
@@ -157,12 +161,22 @@ export const get = Effect.fn("cli.service-config.get")(function* (key?: string) 
     case "password": {
       return yield* password()
     }
+    case "cors": {
+      return JSON.stringify((yield* read()).cors ?? [], null, 2)
+    }
+    case "env": {
+      const env = (yield* read()).env ?? {}
+      return name === undefined ? JSON.stringify(env, null, 2) : (env[name] ?? "")
+    }
   }
   throw new Error(`Unknown service config key: ${key}`)
 })
 
-export const set = Effect.fn("cli.service-config.set")(function* (key: string, value: string) {
-  switch (configKey(key)) {
+export const set = Effect.fn("cli.service-config.set")(function* (key: string, value: string, nestedValue?: string) {
+  const selected = configKey(key)
+  if (selected !== "env" && nestedValue !== undefined)
+    throw new Error(`Usage: opencode service set ${selected} <value>`)
+  switch (selected) {
     case "hostname": {
       yield* Service.stop(yield* options())
       yield* write({ ...(yield* read()), hostname: value })
@@ -180,11 +194,33 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
       yield* password(value)
       return
     }
+    case "env": {
+      if (nestedValue === undefined) throw new Error("Usage: opencode service set env <key> <value>")
+      yield* Service.stop(yield* options())
+      const existing = yield* read()
+      yield* write({ ...existing, env: { ...existing.env, [value]: nestedValue } })
+      return
+    }
+    case "cors": {
+      const cors = value.split(",").map((origin) => origin.trim())
+      if (
+        cors.some((origin) => {
+          const url = URL.parse(origin)
+          return !url || (url.protocol !== "http:" && url.protocol !== "https:") || url.origin !== origin
+        })
+      )
+        throw new Error("CORS must be a comma-separated list of HTTP(S) origins without paths or trailing slashes")
+      yield* Service.stop(yield* options())
+      yield* write({ ...(yield* read()), cors })
+      return
+    }
   }
 })
 
-export const unset = Effect.fn("cli.service-config.unset")(function* (key: string) {
-  switch (configKey(key)) {
+export const unset = Effect.fn("cli.service-config.unset")(function* (key: string, name?: string) {
+  const selected = configKey(key)
+  if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service unset ${selected}`)
+  switch (selected) {
     case "hostname": {
       yield* Service.stop(yield* options())
       const { hostname: _hostname, ...next } = yield* read()
@@ -200,6 +236,21 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
     case "password": {
       yield* Service.stop(yield* options())
       const { password: _password, ...next } = yield* read()
+      yield* write(next)
+      return
+    }
+    case "env": {
+      if (name === undefined) throw new Error("Usage: opencode service unset env <key>")
+      yield* Service.stop(yield* options())
+      const existing = yield* read()
+      const { [name]: _removed, ...env } = existing.env ?? {}
+      const { env: _existingEnv, ...rest } = existing
+      yield* write(Object.keys(env).length === 0 ? rest : { ...rest, env })
+      return
+    }
+    case "cors": {
+      yield* Service.stop(yield* options())
+      const { cors: _cors, ...next } = yield* read()
       yield* write(next)
       return
     }

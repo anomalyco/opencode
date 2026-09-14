@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "MiniMax-M3",
+    "tags": [
+      "prefix:minimax-chat",
+      "provider:minimax",
+      "protocol:minimax-chat",
+      "text",
+      "usage",
+      "thinking-off"
+    ],
+    "name": "minimax-chat/m3-streams-text-with-thinking-disabled",
+    "recordedAt": "2026-09-07T16:53:20.976Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.minimax.io/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"MiniMax-M3\",\"messages\":[{\"role\":\"user\",\"content\":\"What is 173 multiplied by 219? Reply with only the final integer.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_completion_tokens\":1536,\"thinking\":{\"type\":\"disabled\"},\"reasoning_split\":true}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"d8d409a572a67df400527c6592b480df\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}],\"created\":1788800000,\"model\":\"MiniMax-M3\",\"object\":\"chat.completion.chunk\",\"usage\":null,\"service_tier\":\"standard\"}\n\ndata: {\"id\":\"d8d409a572a67df400527c6592b480df\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"378\",\"role\":\"assistant\"}}],\"created\":1788800000,\"model\":\"MiniMax-M3\",\"object\":\"chat.completion.chunk\",\"usage\":null,\"service_tier\":\"standard\"}\n\ndata: {\"id\":\"d8d409a572a67df400527c6592b480df\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"87\",\"role\":\"assistant\"}}],\"created\":1788800000,\"model\":\"MiniMax-M3\",\"object\":\"chat.completion.chunk\",\"usage\":null,\"service_tier\":\"standard\"}\n\ndata: {\"id\":\"d8d409a572a67df400527c6592b480df\",\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"delta\":{\"role\":\"assistant\"}}],\"created\":1788800000,\"model\":\"MiniMax-M3\",\"object\":\"chat.completion.chunk\",\"usage\":null,\"service_tier\":\"standard\"}\n\ndata: {\"id\":\"d8d409a572a67df400527c6592b480df\",\"choices\":[],\"created\":1788800000,\"model\":\"MiniMax-M3\",\"object\":\"chat.completion.chunk\",\"usage\":{\"total_tokens\":182,\"total_characters\":0,\"prompt_tokens\":179,\"completion_tokens\":3,\"prompt_tokens_details\":{\"cached_tokens\":128}},\"service_tier\":\"standard\",\"base_resp\":{\"status_code\":0,\"status_msg\":\"\"}}\n\n"
+      }
+    }
+  ]
+}

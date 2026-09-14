@@ -10,7 +10,7 @@ export const parseResponse = <F extends Schema.Struct.Fields>(body: string, resu
   const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ result })))
   const parse = (payload: string) => {
     const trimmed = payload.trim()
-    if (!trimmed.startsWith("{")) return Effect.succeed(undefined)
+    if (!trimmed.startsWith("{")) return Effect.undefined
     return decode(trimmed).pipe(Effect.map((response) => response.result))
   }
   return Effect.gen(function* () {
@@ -45,14 +45,14 @@ export const call = <F extends Schema.Struct.Fields, R extends Schema.Struct.Fie
           params: Schema.Struct({ name: Schema.String, arguments: schema.input }),
         }),
       )({
-        jsonrpc: "2.0" as const,
-        id: 1 as const,
-        method: "tools/call" as const,
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
         params: { name: tool, arguments: value },
       }),
     )
     return yield* Effect.gen(function* () {
-      const response = yield* HttpClient.filterStatusOk(http).execute(request)
+      const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http)).execute(request)
       const body = yield* collectBoundedResponseBody(
         response,
         MAX_RESPONSE_BYTES,
@@ -60,6 +60,7 @@ export const call = <F extends Schema.Struct.Fields, R extends Schema.Struct.Fie
       )
       return yield* parseResponse(body.toString("utf8"), schema.output)
     }).pipe(
+      Effect.scoped,
       Effect.timeoutOrElse({
         duration: Duration.seconds(25),
         orElse: () => Effect.fail(new Error(`${tool} request timed out`)),

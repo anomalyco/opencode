@@ -33,13 +33,15 @@ describe("debug config command", () => {
       },
     ]
     let requested: URL | undefined
+    let healthProbes = 0
     const authorization: Array<string | null> = []
     const server = Bun.serve({
       port: 0,
       fetch(request) {
         const url = new URL(request.url)
-        if (url.pathname === "/api/health") {
-          return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
+        if (url.pathname === "/api/status") {
+          healthProbes += 1
+          return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
         }
         requested = url
         authorization.push(request.headers.get("authorization"))
@@ -60,6 +62,7 @@ describe("debug config command", () => {
       expect(requested?.pathname).toBe("/api/config")
       expect(requested?.searchParams.get("location[directory]")).toBe(project)
       expect(authorization).toEqual([`Basic ${btoa("opencode:secret")}`])
+      expect(healthProbes).toBe(1)
     } finally {
       server.stop(true)
       await fs.rm(root, { recursive: true, force: true })

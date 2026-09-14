@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { migrateV1, resolveThemeDocument, ThemeDocument, themeDecodeError } from "@opencode-ai/theme/tui"
+import { migrateV1, resolveThemeDocument, ThemeDocument, themeDecodeError } from "@opencode/theme/tui"
 import { resolveThemeColors } from "./resolve"
 import { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
 
@@ -15,17 +15,16 @@ const listeners = new Set<(themes: Record<string, ThemeDocumentSource>) => void>
 const parsed = new WeakMap<object, ThemeDocument>()
 const decodeThemeDocument = Schema.decodeUnknownSync(ThemeDocument, { reportInput: true })
 
-function listThemes() {
+function listThemes(): Record<string, ThemeDocumentSource> {
   // Priority: defaults < plugin installs < custom files < generated system.
   const themes: Record<string, ThemeDocumentSource> = {
     ...DEFAULT_THEMES,
     ...pluginThemes,
     ...customThemes,
   }
-  if (!systemTheme) return themes
   return {
     ...themes,
-    system: systemTheme,
+    system: systemTheme ?? themes.system ?? themes.opencode,
   }
 }
 

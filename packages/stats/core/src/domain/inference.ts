@@ -5,6 +5,7 @@ import type { ModelStatAggregate } from "./model"
 import {
   EXCLUDED_MODELS,
   MODEL_AUTHOR_RULES,
+  MODEL_NAME_ALIASES,
   RETIRED_STAT_PROVIDERS,
   statModel,
   statProvider,
@@ -253,6 +254,9 @@ function sqlString(value: string) {
 function statModelSql(model: string, providerModel: string) {
   return `COALESCE(NULLIF(regexp_replace(CASE
       WHEN lower(${model}) = 'big-pickle' THEN NULLIF(${providerModel}, '')
+${Object.entries(MODEL_NAME_ALIASES)
+  .map(([from, to]) => `      WHEN lower(${model}) = ${sqlString(from)} THEN ${sqlString(to)}`)
+  .join("\n")}
       ELSE ${model}
     END, '(-free|:global)+$', ''), ''), 'unknown')`
 }

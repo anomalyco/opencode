@@ -1,0 +1,55 @@
+/* Informational tooltips must not block menu items. Kobalte sets pointer events inline. */
+[data-popper-positioner]:has(.session-project-info-tooltip),
+.session-project-info-tooltip {
+  pointer-events: none !important;
+}
+
+.session-options-menu [data-component="menu-v2-item"] {
+  padding-inline-end: 30px;
+}
+
+.session-project-link {
+  --session-project-fade-direction: to right;
+  position: relative;
+
+  &:dir(rtl) {
+    --session-project-fade-direction: to left;
+  }
+
+  &[aria-disabled="true"] {
+    opacity: 0.5;
+  }
+}
+
+.session-project-link-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-project-link-open {
+  position: absolute;
+  inset-inline-end: 12px;
+  inset-block: 0;
+  display: flex;
+  align-items: center;
+  color: var(--v2-icon-icon-muted);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.session-project-link:is(:hover, [data-highlighted]):not([aria-disabled="true"]) {
+  .session-project-link-content {
+    mask-image: linear-gradient(
+      var(--session-project-fade-direction),
+      #000 calc(100% - 40px),
+      transparent calc(100% - 24px)
+    );
+  }
+
+  .session-project-link-open {
+    opacity: 1;
+  }
+}

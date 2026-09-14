@@ -1,5 +1,5 @@
-import type { WebSearch } from "@opencode-ai/schema/websearch"
-import type { WebSearchApi } from "@opencode-ai/client/promise/api"
+import type { WebSearch } from "@opencode/schema/websearch"
+import type { WebSearchApi } from "@opencode/client/promise/api"
 import type { Transform } from "./registration.js"
 
 export interface WebSearchDefinition {
@@ -12,11 +12,11 @@ export interface WebSearchDefinition {
 }
 
 export interface WebSearchDomain extends WebSearchApi {
-  readonly transform: Transform<WebSearchDraft>
+  readonly transform: Transform<WebSearchEditor>
   readonly reload: () => Promise<void>
 }
 
-export interface WebSearchDraft {
+export interface WebSearchEditor {
   add(definition: WebSearchDefinition): void
   readonly default: {
     get(): string | false | undefined

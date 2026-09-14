@@ -19,12 +19,14 @@ export function primitiveInputSummary(input: Record<string, unknown>, omit: read
   return `[${entries.map(([key, value]) => `${key}=${String(value)}`).join(", ")}]`
 }
 
+export function webSearchProviderName(provider: unknown) {
+  if (typeof provider !== "string" || !provider) return ""
+  return `${provider[0].toUpperCase()}${provider.slice(1)}`
+}
+
 export function webSearchProviderLabel(provider: unknown) {
-  if (provider === "parallel") return "Parallel Web Search"
-  if (provider === "exa") return "Exa Web Search"
-  if (provider === "firecrawl") return "Firecrawl Web Search"
-  if (provider === "tavily") return "Tavily Web Search"
-  return "Web Search"
+  const name = webSearchProviderName(provider)
+  return name ? `Web Search via ${name}` : "Web Search"
 }
 
 export function toolDisplayMetadata(state: unknown): Record<string, unknown> {
@@ -45,4 +47,4 @@ export function nonEmptyToolContent<T>(content: ReadonlyArray<T> | undefined): [
   const [first, ...rest] = content
   return first === undefined ? undefined : [first, ...rest]
 }
-import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"
+import type { SessionMessageAssistantTool } from "@opencode/client/promise"

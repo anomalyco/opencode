@@ -1,8 +1,6 @@
-export * as MCPStdio from "./stdio.js"
+export * as McpStdio from "./stdio.js"
 
-import { ReadBuffer, serializeMessage } from "@modelcontextprotocol/sdk/shared/stdio.js"
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
-import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js"
+import { ReadBuffer, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
 import { Cause, Duration, Effect, Queue, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
@@ -53,13 +51,12 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   let closing: Promise<void> | undefined
   let trailingBytes = 0
 
-  const stop = (handle: ChildProcessHandle) =>
-    Effect.gen(function* () {
-      const exit = yield* Effect.timeoutOption(handle.exitCode, CLOSE_GRACE)
-      if (exit._tag === "Some") return
-      const terminated = yield* Effect.timeoutOption(handle.kill({ killSignal: "SIGTERM" }), FORCE_KILL_AFTER)
-      if (terminated._tag === "None") yield* handle.kill({ killSignal: "SIGKILL" })
-    }).pipe(Effect.ignore)
+  const stop = Effect.fnUntraced(function* (handle: ChildProcessHandle) {
+    // Exit completion can precede descendant cleanup after the capture deadline.
+    yield* Effect.timeoutOption(handle.exitCode, CLOSE_GRACE).pipe(Effect.ignore)
+    const terminated = yield* Effect.timeoutOption(handle.kill({ killSignal: "SIGTERM" }), FORCE_KILL_AFTER)
+    if (terminated._tag === "None") yield* handle.kill({ killSignal: "SIGKILL" })
+  }, Effect.ignore())
 
   const close = () =>
     (closing ??= Effect.runPromise(
@@ -151,7 +148,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
             }),
           ),
           Effect.ignore,
-          // stdout ending means the server is gone; the SDK transport reports that the same way.
+          // stdout ending means the server is gone.
           Effect.ensuring(
             Effect.gen(function* () {
               const unexpected = state.phase !== "closed"
@@ -162,8 +159,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
         ),
       )
 
-      // StdioClientTransport pipes stderr into a stream nobody reads. Drain chunks into the debug
-      // log so chatty servers cannot stall and newline-free output is not buffered without bound.
+      // Drain stderr into the debug log so chatty servers cannot stall on a full pipe.
       yield* Effect.forkScoped(
         handle.stderr.pipe(
           Stream.decodeText(),

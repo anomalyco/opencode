@@ -1,4 +1,4 @@
-import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import type { Page } from "@playwright/test"
 import { expectSessionTitle } from "../../utils/waits"
 import { mockOpenCodeServer } from "../../utils/mock-server"

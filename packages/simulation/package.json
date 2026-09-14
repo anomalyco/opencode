@@ -1,10 +1,20 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/simulation",
-  "version": "1.17.13",
-  "private": true,
+  "name": "@opencode/simulation",
+  "version": "2.0.3",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/simulation"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": {
     "./backend": "./src/backend/index.ts",
     "./backend/*": "./src/backend/*.ts",
@@ -14,15 +24,16 @@
     "./recording": "./src/recording.ts"
   },
   "scripts": {
+    "build": "bun run script/build.ts",
     "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "tsgo -b"
   },
   "dependencies": {
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/ai": "workspace:*",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
+    "@opencode/core": "workspace:*",
+    "@opencode/ai": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode/protocol": "workspace:*",
+    "@opencode/util": "workspace:*",
     "@opentui/core": "catalog:",
     "effect": "catalog:",
     "ws": "8.21.0"

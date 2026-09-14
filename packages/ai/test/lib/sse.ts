@@ -10,6 +10,9 @@ export const sseEvents = (...chunks: ReadonlyArray<unknown>): string =>
 
 const formatChunk = (chunk: unknown) => `data: ${typeof chunk === "string" ? chunk : JSON.stringify(chunk)}\n\n`
 
+export const sseNamedEvent = (event: string, data: unknown): string =>
+  `event: ${event}\ndata: ${typeof data === "string" ? data : JSON.stringify(data)}`
+
 /**
  * Build an SSE body from already-serialized strings (used when the chunk shape
  * itself is part of what's being tested, e.g. malformed chunks).

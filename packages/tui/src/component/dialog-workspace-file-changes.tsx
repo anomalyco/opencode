@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import type { VcsFileStatus } from "@opencode-ai/client"
+import type { VcsFileStatus } from "@opencode/client"
 import { createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FilePath } from "../ui/file-path"

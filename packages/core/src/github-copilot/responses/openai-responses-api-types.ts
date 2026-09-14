@@ -9,8 +9,6 @@ export type OpenAIResponsesInputItem =
   | OpenAIResponsesFunctionCall
   | OpenAIResponsesFunctionCallOutput
   | OpenAIResponsesComputerCall
-  | OpenAIResponsesLocalShellCall
-  | OpenAIResponsesLocalShellCallOutput
   | OpenAIResponsesReasoning
   | OpenAIResponsesItemReference
   | OpenAIResponsesMcpApprovalResponse
@@ -67,26 +65,6 @@ export type OpenAIResponsesComputerCall = {
   type: "computer_call"
   id: string
   status?: string
-}
-
-export type OpenAIResponsesLocalShellCall = {
-  type: "local_shell_call"
-  id?: string
-  call_id: string
-  action: {
-    type: "exec"
-    command: string[]
-    timeout_ms?: number
-    user?: string
-    working_directory?: string
-    env?: Record<string, string>
-  }
-}
-
-export type OpenAIResponsesLocalShellCallOutput = {
-  type: "local_shell_call_output"
-  call_id: string
-  output: string
 }
 
 export type OpenAIResponsesItemReference = {
@@ -198,9 +176,6 @@ export type OpenAIResponsesTool =
       partial_images: number | undefined
       quality: "auto" | "low" | "medium" | "high" | undefined
       size: "auto" | "1024x1024" | "1024x1536" | "1536x1024" | undefined
-    }
-  | {
-      type: "local_shell"
     }
 
 export type OpenAIResponsesReasoning = {

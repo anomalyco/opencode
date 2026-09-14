@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { SessionProgressIndicatorV2 } from "./session-progress-indicator-v2"
 import { createSignal, onCleanup, onMount } from "solid-js"
 
@@ -22,7 +21,7 @@ Derived from Figma \`_sessionProgressIndicator\` with 8-frame rotation.
 `
 
 export default {
-  title: "UI V2/SessionProgressIndicator",
+  title: "OpenCode/Status/Session progress",
   id: "components-session-progress-indicator-v2",
   component: SessionProgressIndicatorV2,
   tags: ["autodocs"],
@@ -87,18 +86,6 @@ function StressGrid() {
 }
 
 export const OnDark = {
-  render: () => (
-    <div
-      style={{
-        display: "flex",
-        gap: "16px",
-        "align-items": "center",
-        padding: "16px",
-        "background-color": "#171717",
-        color: "#c7c7c7",
-      }}
-    >
-      <SessionProgressIndicatorV2 />
-    </div>
-  ),
+  globals: { theme: "dark" },
+  render: () => <SessionProgressIndicatorV2 />,
 }

@@ -1,4 +1,3 @@
-import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -11,6 +10,7 @@ import {
 } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
+import { PtyHandoff } from "../pty-handoff.js"
 
 export * from "../service.js"
 /** Contents of the local service registration file. */
@@ -28,7 +28,11 @@ export type Info = import("../service.js").Info
 // Never spawns; escalation to ensure() is the caller's policy.
 /** Discover a healthy, compatible local service without starting one. */
 export const discover = Effect.fn("service.discover")(function* (options: DiscoverOptions = {}) {
-  return (yield* discoverLocal(options))?.endpoint
+  const found = (yield* registered(options.file)).service
+  if (found?.state !== "ready") return undefined
+  if (!found.compatible) return undefined
+  if (!matchesVersion(found.version, options)) return undefined
+  return found.endpoint
 })
 
 /** Recognize an authenticated compatible service bound to an expected URL, including while it starts or fails. */
@@ -37,16 +41,10 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 ) {
   const info = yield* read(options.file)
   const found = info === undefined ? undefined : yield* probe({ ...info, url: options.url })
-  if (found === undefined || found.legacy) return undefined
+  if (found === undefined) return undefined
+  if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
   return { endpoint: found.endpoint, state: found.state }
-})
-
-const discoverLocal = Effect.fnUntraced(function* (options: DiscoverOptions) {
-  const found = (yield* registered(options.file)).service
-  if (found?.state !== "ready") return undefined
-  if (!matchesVersion(found.version, options)) return undefined
-  return found
 })
 
 // Idempotent ensure-running: reuses a healthy compatible server, replaces a
@@ -75,15 +73,16 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   const spawnContender = Effect.gen(function* () {
     const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
     if (command === undefined) return yield* Effect.fail(new Error("Missing service command"))
+    const env = yield* Effect.tryPromise(() => PtyHandoff.environment(options.file ?? fallback(), options.env))
     return yield* Effect.try({
       try: () => {
-        return spawnServiceContender(command, args)
+        return spawnServiceContender(command, args, env)
       },
       catch: (cause) => new Error("Failed to start server", { cause }),
     })
   })
   const found = yield* Effect.gen(function* () {
-    const registration = yield* registered(options.file, true, timing.requestTimeout)
+    const registration = yield* registered(options.file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
     if (registration.timedOut && info !== undefined) {
@@ -93,20 +92,30 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       }
       if (timeouts.count >= 3) {
         yield* announce("missing")
-        yield* evict(info, options, timing)
+        yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
+        yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
+        yield* terminate(info, options, timing)
         timeouts = undefined
         lastSpawn = Date.now() - spawnDelay
       }
     } else timeouts = undefined
     if (service !== undefined) {
       spawnDelay = timing.spawnDelay
-      const compatible = !service.legacy && matchesVersion(service.version, options)
-      if (compatible && service.state === "ready") return Option.some(service)
+      const compatible = service.compatible && matchesVersion(service.version, options)
+      if (compatible && service.state === "ready") {
+        yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
+        return Option.some(service)
+      }
       if (compatible && service.state === "failed")
         return yield* Effect.fail(new Error("Background service failed to start"))
       if (compatible) return Option.none<LocalService>()
       yield* announce("version-mismatch", service.version)
-      yield* kill(service, options, timing).pipe(Effect.ignore)
+      if (service.state !== "ready")
+        yield* Effect.logWarning("Background service is not ready; replacement cannot preserve persistent terminals")
+      yield* stop({
+        file: options.file,
+        pty: service.state === "ready" ? "handoff" : "clear",
+      }).pipe(Effect.ignore)
       lastSpawn = 0
       return Option.none<LocalService>()
     } else if (lastSpawn === 0 && info !== undefined) lastSpawn = Date.now()
@@ -142,8 +151,13 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
-  const existing = yield* find(options)
-  if (existing !== undefined) yield* kill(existing, options, defaultEnsureTiming)
+  const info = yield* read(options.file)
+  if (options.pty === "handoff" && info !== undefined)
+    yield* Effect.tryPromise(() =>
+      PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout),
+    )
+  else yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
+  if (info !== undefined) yield* terminate(info, options, defaultEnsureTiming)
 })
 
 function fallback() {
@@ -167,8 +181,12 @@ export const Info = Schema.Struct({
 })
 
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
-const decodeHealth = Schema.decodeUnknownOption(ServiceStatus.Health)
-const decodeLegacyHealth = Schema.decodeUnknownOption(Schema.Struct({ healthy: Schema.Literal(true) }))
+const decodeStatus = Schema.decodeUnknownOption(
+  Schema.Struct({
+    version: Schema.String,
+    pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  }),
+)
 
 // A missing or corrupt file means no valid info; callers treat both
 // the same (the registering server self-evicts, clients rediscover).
@@ -184,16 +202,15 @@ type LocalService = {
   readonly endpoint: Endpoint
   readonly version?: string
   readonly state: "ready" | "waiting" | "failed"
-  readonly legacy: boolean
+  readonly compatible: boolean
 }
 
-const probe = Effect.fnUntraced(function* (info: Info, allowLegacy = false) {
-  return (yield* probeResult(info, allowLegacy)).service
+const probe = Effect.fnUntraced(function* (info: Info) {
+  return (yield* probeResult(info)).service
 })
 
 const probeResult = Effect.fnUntraced(function* (
   info: Info,
-  allowLegacy = false,
   timeout = defaultEnsureTiming.requestTimeout,
 ) {
   const endpoint = {
@@ -205,11 +222,11 @@ const probeResult = Effect.fnUntraced(function* (
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
   const result = yield* Effect.promise(() =>
-    fetch(new URL("/api/health", info.url), {
-      headers: headers(endpoint),
-      signal,
-    })
-      .then(async (response) => ({ response, body: (await response.json()) as unknown }))
+    fetch(new URL("/api/status", info.url), { headers: headers(endpoint), signal })
+      .then(async (response) => ({
+        response,
+        body: response.status === 404 ? undefined : ((await response.json()) as unknown),
+      }))
       .then(
         (value) => ({ value }),
         (cause: unknown) => ({ cause }),
@@ -217,45 +234,43 @@ const probeResult = Effect.fnUntraced(function* (
   )
   if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
   const response = result.value.response
+  // The previous V2 service exposes /api/health instead. Its authenticated 404 is enough
+  // to recognize the registered daemon as incompatible and route it through replacement.
+  if (response.status === 404)
+    return {
+      service: {
+        info,
+        endpoint,
+        version: info.version,
+        state: "ready" as const,
+        compatible: false,
+      } satisfies LocalService,
+      timedOut: false,
+    }
   const body = result.value.body
-  const health = decodeHealth(body)
-  if (Option.isSome(health)) {
-    if (health.value.pid !== info.pid) return { service: undefined, timedOut: false }
-    if (info.version !== undefined && health.value.version !== info.version)
+  const status = decodeStatus(body)
+  if (Option.isSome(status)) {
+    if (status.value.pid !== info.pid) return { service: undefined, timedOut: false }
+    if (info.version !== undefined && status.value.version !== info.version)
       return { service: undefined, timedOut: false }
     return {
       service: {
         info,
         endpoint,
-        version: health.value.version,
+        version: status.value.version,
         state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
-        legacy: false,
+        compatible: true,
       } satisfies LocalService,
       timedOut: false,
     }
   }
-  if (
-    !allowLegacy ||
-    Option.isNone(decodeLegacyHealth(body)) ||
-    (typeof body === "object" && body !== null && ("version" in body || "pid" in body))
-  )
-    return { service: undefined, timedOut: false }
-  return {
-    service: { info, endpoint, state: "ready", legacy: true } satisfies LocalService,
-    timedOut: false,
-  }
+  return { service: undefined, timedOut: false }
 })
 
-const registered = Effect.fnUntraced(function* (file?: string, allowLegacy = false, timeout?: number) {
+const registered = Effect.fnUntraced(function* (file?: string, timeout?: number) {
   const info = yield* read(file)
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
-  return { info, ...(yield* probeResult(info, allowLegacy, timeout)) }
-})
-
-// Health-checked lookup without the version gate: lifecycle operations must be
-// able to see (and replace or stop) a server from a different version.
-const find = Effect.fnUntraced(function* (options: { readonly file?: string }) {
-  return (yield* registered(options.file, true)).service
+  return { info, ...(yield* probeResult(info, timeout)) }
 })
 
 // 50ms cadence bounded at ~5s, shared by stop escalation and each ensure
@@ -278,59 +293,21 @@ function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
-const evict = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
+const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = yield* read(options.file)
   if (current === undefined || !same(current, info)) return
   yield* signal(info.pid, "SIGTERM")
   const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
-  if (Option.isSome(done)) return
-
+  if (Option.isNone(done)) {
+    const latest = yield* read(options.file)
+    if (latest === undefined || !same(latest, info)) return
+    yield* signal(info.pid, "SIGKILL")
+    yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
+  }
   const latest = yield* read(options.file)
   if (latest === undefined || !same(latest, info)) return
-  yield* signal(info.pid, "SIGKILL")
-  yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
-})
-
-const kill = Effect.fnUntraced(function* (
-  service: LocalService,
-  options: { readonly file?: string },
-  timing: EnsureTiming,
-) {
-  const requested = yield* requestStop(service, timing.requestTimeout)
-  if (requested === "rejected") return
-  if (requested === "unsupported") {
-    // A stale registration may point at a reused PID. Authenticate again
-    // immediately before the legacy signal fallback.
-    const current = yield* find(options)
-    if (current === undefined || !same(current.info, service.info)) return
-    yield* signal(service.info.pid, "SIGTERM")
-  }
-  const done = yield* stopped(service.info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
-  if (Option.isSome(done)) return
-
-  const latest = yield* find(options)
-  if (latest === undefined || !same(latest.info, service.info)) return
-  yield* signal(service.info.pid, "SIGKILL")
-  yield* stopped(service.info.pid).pipe(Effect.retry(poll(timing)))
-})
-
-const decodeStopResponse = Schema.decodeUnknownOption(ServiceStatus.StopResponse)
-
-const requestStop = Effect.fnUntraced(function* (service: LocalService, timeout = defaultEnsureTiming.requestTimeout) {
-  if (service.info.id === undefined || service.legacy) return "unsupported" as const
-  const response = yield* Effect.tryPromise(() =>
-    fetch(new URL("/api/service/stop", service.info.url), {
-      method: "POST",
-      headers: { ...headers(service.endpoint), "content-type": "application/json" },
-      body: JSON.stringify({ instanceID: service.info.id }),
-      signal: AbortSignal.timeout(timeout),
-    }),
-  ).pipe(Effect.option, Effect.map(Option.getOrUndefined))
-  if (response === undefined || response.status === 404 || response.status === 405) return "unsupported" as const
-  const body = yield* Effect.tryPromise(() => response.json()).pipe(Effect.option, Effect.map(Option.getOrUndefined))
-  const decoded = decodeStopResponse(body)
-  if (!response.ok || Option.isNone(decoded) || !decoded.value.accepted) return "rejected" as const
-  return "accepted" as const
+  const fs = yield* FileSystem.FileSystem
+  yield* fs.remove(options.file ?? fallback()).pipe(Effect.ignore)
 })
 
 /** Effect-based local service lifecycle operations. */

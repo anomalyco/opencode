@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
-import { EffectDrizzleSqlite } from "@opencode-ai/core/database/drizzle"
-import { Database } from "@opencode-ai/core/database/database"
-import { DatabaseMigration } from "@opencode-ai/core/database/migration"
-import { V1Migration } from "@opencode-ai/core/database/v1-migration"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionSchema } from "@opencode-ai/core/session/schema"
-import { SessionTable } from "@opencode-ai/core/session/sql"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Global } from "@opencode-ai/util/global"
+import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
+import { Database } from "@opencode/core/database/database"
+import { DatabaseMigration } from "@opencode/core/database/migration"
+import { V1Migration } from "@opencode/core/database/v1-migration"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionSchema } from "@opencode/core/session/schema"
+import { SessionTable } from "@opencode/core/session/sql"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Global } from "@opencode/util/global"
 import { Effect, Fiber, Layer, Logger, Schedule, Schema, Scope } from "effect"
 import { eq, sql } from "drizzle-orm"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
@@ -60,6 +60,9 @@ const session = (
   model: null,
   time_created: 1,
   time_updated: 2,
+  time_idle: null,
+  time_viewed: null,
+  idle_outcome: null,
   time_compacting: 3,
   time_archived: null,
   time_suspended: null,
@@ -941,6 +944,61 @@ describe("V1Migration database workflow", () => {
         })
         expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
           value: '{"phase":"completed"}',
+        })
+      }),
+    )
+  })
+
+  test("imports previous V2 databases missing newer nullable columns", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "opencode-next.db")
+    const sqlite = await import("bun:sqlite")
+    const source = new sqlite.Database(filename)
+    source.run(`
+      CREATE TABLE project (
+        id text PRIMARY KEY, worktree text NOT NULL, vcs text, name text, icon_url text,
+        time_created integer NOT NULL, time_updated integer NOT NULL, time_initialized integer,
+        sandboxes text NOT NULL
+      );
+      CREATE TABLE session (
+        id text PRIMARY KEY, project_id text NOT NULL, workspace_id text, parent_id text, fork_session_id text,
+        slug text NOT NULL, directory text NOT NULL, path text, title text, version text NOT NULL,
+        share_url text, summary_additions integer, summary_deletions integer, summary_files integer, summary_diffs text,
+        metadata text, cost real DEFAULT 0 NOT NULL, tokens_input integer DEFAULT 0 NOT NULL,
+        tokens_output integer DEFAULT 0 NOT NULL, tokens_reasoning integer DEFAULT 0 NOT NULL,
+        tokens_cache_read integer DEFAULT 0 NOT NULL, tokens_cache_write integer DEFAULT 0 NOT NULL, revert text,
+        permission text, agent text, model text, time_created integer NOT NULL, time_updated integer NOT NULL,
+        time_compacting integer, time_archived integer
+      );
+      CREATE TABLE session_message (
+        id text PRIMARY KEY, session_id text NOT NULL, type text NOT NULL, seq integer NOT NULL,
+        time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL
+      );
+      INSERT INTO project VALUES (
+        'next-project', '/tmp/next', 'git', 'Source project', 'https://example.com/icon.png', 1, 2, NULL, '[]'
+      );
+      INSERT INTO session (
+        id, project_id, slug, directory, title, version, time_created, time_updated
+      ) VALUES ('ses_next', 'next-project', 'next', '/tmp/next', 'Imported', '2', 10, 20);
+    `)
+    source.close()
+
+    await database(
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        expect(yield* V1Migration.run({ nextDatabasePath: filename })).toEqual({ status: "completed" })
+        expect(
+          yield* database.db.get(sql`SELECT fork_boundary, time_suspended FROM session_v2 WHERE id = 'ses_next'`),
+        ).toEqual({ fork_boundary: null, time_suspended: null })
+        expect(
+          yield* database.db.get(
+            sql`SELECT icon_url, icon_url_override, icon_color, commands FROM project WHERE id = 'next-project'`,
+          ),
+        ).toEqual({
+          icon_url: "https://example.com/icon.png",
+          icon_url_override: "https://example.com/icon.png",
+          icon_color: null,
+          commands: null,
         })
       }),
     )

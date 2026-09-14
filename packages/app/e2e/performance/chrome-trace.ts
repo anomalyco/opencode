@@ -14,13 +14,12 @@ const categories = [
   "blink.console",
   "blink.user_timing",
   "latencyInfo",
-  "disabled-by-default-devtools.timeline.stack",
   "disabled-by-default-v8.cpu_profiler",
 ]
 
-export async function startChromeTrace(page: Page, name: string) {
+export async function startChromeTrace(page: Page, name: string): Promise<undefined | (() => Promise<string>)> {
   const directory = process.env.OPENCODE_PERFORMANCE_TRACE_DIR
-  if (!directory) return
+  if (!directory) return undefined
 
   const selectors = process.env.OPENCODE_PERFORMANCE_SELECTOR_TRACE === "1"
   const file = await prepareChromeTrace(directory, name, selectors)
@@ -34,6 +33,9 @@ export async function startChromeTrace(page: Page, name: string) {
           .map((category) => category.slice(1)),
         includedCategories: [
           ...categories.filter((category) => !category.startsWith("-")),
+          ...(process.env.OPENCODE_PERFORMANCE_STACK_TRACE === "1"
+            ? ["disabled-by-default-devtools.timeline.stack"]
+            : []),
           ...(selectors
             ? ["disabled-by-default-blink.debug", "disabled-by-default-devtools.timeline.invalidationTracking"]
             : []),

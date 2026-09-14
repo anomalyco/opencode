@@ -1,0 +1,58 @@
+[data-component="session-websearch-dock"] {
+  width: 100%;
+  border: 0.5px solid var(--v2-border-border-base);
+  border-radius: 12px;
+
+  .websearch-body {
+    box-shadow: var(--v2-elevation-raised);
+  }
+
+  .websearch-setting {
+    padding: 16px;
+  }
+
+  .websearch-setting [data-component="settings-row"] {
+    column-gap: 24px;
+    padding-block: 0;
+    border: 0;
+  }
+
+  .websearch-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+    padding: 24px 16px 12px;
+    border: 0;
+  }
+
+  .websearch-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-inline-end: auto;
+    color: var(--v2-text-text-base);
+    font-size: 13px;
+    line-height: var(--line-height-compact);
+  }
+
+  .websearch-status:empty {
+    display: none;
+  }
+
+  .websearch-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+  }
+}
+
+[data-component="menu-v2-content"][data-slot="select-v2-content"].websearch-provider-menu {
+  width: max-content;
+  min-width: 0;
+
+  [data-component="menu-v2-item"] {
+    gap: 24px;
+  }
+}

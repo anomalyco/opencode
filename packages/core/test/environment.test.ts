@@ -2,8 +2,8 @@ import fs from "node:fs/promises"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { CrossSpawnSpawner } from "@opencode-ai/util/cross-spawn-spawner"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { EnvironmentUnavailable } from "../src/environment/unavailable"
 import {
   execDefaults,

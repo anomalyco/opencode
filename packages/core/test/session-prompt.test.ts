@@ -1,32 +1,37 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
-import { mkdtemp, rm } from "fs/promises"
-import { tmpdir } from "os"
 import path from "path"
 import { pathToFileURL } from "url"
 import { eq } from "drizzle-orm"
-import { Database } from "@opencode-ai/core/database/database"
-import { Agent } from "@opencode-ai/core/agent"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { EventTable } from "@opencode-ai/core/event/sql"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session } from "@opencode-ai/core/session"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionInbox } from "@opencode-ai/core/session/inbox"
-import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
-import type { LocationServices } from "@opencode-ai/core/location-services"
-import { Image } from "@opencode-ai/core/image"
+import { Database } from "@opencode/core/database/database"
+import { Agent } from "@opencode/core/agent"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Bus } from "@opencode/core/bus"
+import { EventTable } from "@opencode/core/event/sql"
+import { Location } from "@opencode/schema/location"
+import { SessionEvent } from "@opencode/core/session/event"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { AbsolutePath } from "@opencode/core/schema"
+import { Session } from "@opencode/core/session"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionInbox } from "@opencode/core/session/inbox"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionStore } from "@opencode/core/session/store"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
+import type { LocationServices } from "@opencode/core/location-services"
+import { Image } from "@opencode/core/image"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { Snapshot } from "@opencode/core/snapshot"
+import { Skill } from "@opencode/core/skill"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const executionCalls: Session.ID[] = []
@@ -38,6 +43,7 @@ const execution = Layer.succeed(
   SessionExecution.Service,
   SessionExecution.Service.of({
     active: Effect.sync(() => new Set(activeSessions)),
+    isActive: (sessionID) => Effect.sync(() => activeSessions.has(sessionID)),
     resume: (sessionID) =>
       Effect.sync(() => {
         executionCalls.push(sessionID)
@@ -45,35 +51,51 @@ const execution = Layer.succeed(
     interrupt: (sessionID, options) =>
       Effect.sync(() => {
         interruptCalls.push(sessionID)
-        interruptContinuations.push(options?.continue)
+        interruptContinuations.push(options?.resume)
+        return activeSessions.delete(sessionID)
       }),
     wake: (sessionID) =>
       Effect.sync(() => {
         wakeCalls.push(sessionID)
       }),
-    wakeActive: () => Effect.void,
     awaitIdle: () => Effect.void,
   }),
 )
-const locations = Layer.effect(
-  LocationServiceMap.Service,
-  LayerMap.make(
-    () =>
-      // Attachment admission only needs the location-scoped Image service.
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      Layer.mock(Image.Service, {
-        normalize: (_resource, content) =>
-          Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
-      }) as unknown as Layer.Layer<LocationServices>,
+const locations = makeGlobalNode({
+  service: LocationServiceMap.Service,
+  layer: Layer.effect(
+    LocationServiceMap.Service,
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      return yield* LayerMap.make(
+        (_ref: Location.Ref) =>
+          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+          Layer.mergeAll(
+            LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
+              replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
+            }),
+            Layer.mock(Image.Service, {
+              normalize: (_resource, content) =>
+                Effect.succeed(content.content.length > 5 * 1024 * 1024 ? { ...content, content: "AA==" } : content),
+            }),
+            Layer.mock(Snapshot.Service, {
+              capture: () => Effect.undefined,
+              restore: () => Effect.void,
+            }),
+            Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
+          ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices>,
+      )
+    }),
   ),
-)
+  deps: [Bus.node],
+})
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
-      [Bus.node, Bus.configured({ persist: true })],
-      [SessionExecution.node, execution],
-      [LocationServiceMap.node, locations],
+      Bus.node.replace(Bus.configured({ persist: true })),
+      SessionExecution.node.replace(execution),
+      LocationServiceMap.node.replace(locations),
     ],
   ),
 )
@@ -149,8 +171,9 @@ const assistantRow = (id: SessionMessage.ID, seq: number) => {
 describe("Session.prompt", () => {
   it.effect("exposes the execution registry", () =>
     Effect.gen(function* () {
+      const session = yield* Session.Service
       activeSessions.add(sessionID)
-      expect(Array.from(yield* (yield* Session.Service).active)).toEqual([sessionID])
+      expect(Array.from(yield* session.active)).toEqual([sessionID])
     }).pipe(Effect.ensuring(Effect.sync(() => activeSessions.clear()))),
   )
 
@@ -173,7 +196,7 @@ describe("Session.prompt", () => {
       interruptCalls.length = 0
       wakeCalls.length = 0
 
-      yield* session.interrupt(sessionID)
+      expect(yield* session.interrupt(sessionID)).toBeFalse()
       expect(interruptCalls).toEqual([sessionID])
       expect(wakeCalls).toEqual([])
       expect(yield* session.messages({ sessionID })).toEqual([])
@@ -188,7 +211,7 @@ describe("Session.prompt", () => {
       interruptContinuations.length = 0
       wakeCalls.length = 0
 
-      yield* session.interrupt(sessionID, { continue: true })
+      yield* session.interrupt(sessionID, { resume: true })
 
       expect(interruptCalls).toEqual([sessionID])
       expect(interruptContinuations).toEqual([true])
@@ -380,11 +403,8 @@ describe("Session.prompt", () => {
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
-      const directory = yield* Effect.acquireRelease(
-        Effect.promise(() => mkdtemp(path.join(tmpdir(), "opencode-session-prompt-"))),
-        (directory) => Effect.promise(() => rm(directory, { recursive: true, force: true })),
-      )
-      const source = path.join(directory, "image.png")
+      const directory = yield* tmpdirScoped("opencode-session-prompt-")
+      const source = path.join(directory.path, "image.png")
       const bytes = Buffer.from(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
         "base64",
@@ -534,7 +554,7 @@ describe("Session.prompt", () => {
       yield* session.resume(sessionID)
 
       expect(yield* session.messages({ sessionID })).toEqual([])
-      expect(yield* admitted(message.id)).not.toHaveProperty("promotedSeq")
+      expect((yield* session.inbox(sessionID)).map((item) => item.id)).toEqual([message.id])
       expect(executionCalls).toEqual([sessionID])
       expect(wakeCalls).toEqual([])
     }),
@@ -632,53 +652,52 @@ describe("Session.prompt", () => {
     }),
   )
 
-  it.effect("rejects reuse of one ID with a different prompt", () =>
+  it.effect("keeps the first admission when one ID is reused with a different prompt", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
 
-      yield* session.prompt({
+      const first = yield* session.prompt({
         sessionID,
         id: messageID,
         text: "Fix the failing tests",
       })
-      const failure = yield* session
-        .prompt({
-          sessionID,
-          id: messageID,
-          text: "Delete the failing tests",
-          resume: false,
-        })
-        .pipe(Effect.flip)
+      const retried = yield* session.prompt({
+        sessionID,
+        id: messageID,
+        text: "Delete the failing tests",
+        resume: false,
+      })
 
-      expect(failure._tag).toBe("Session.PromptConflictError")
+      expect(retried).toEqual(first)
+      expect(retried.payload.text).toBe("Fix the failing tests")
       expect(yield* session.messages({ sessionID })).toHaveLength(0)
       expect(yield* admittedCount).toBe(1)
     }),
   )
 
-  it.effect("rejects reuse of one ID with a different delivery mode", () =>
+  it.effect("keeps the first admission's delivery mode when one ID is reused with another", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
 
-      yield* session.prompt({
+      const first = yield* session.prompt({
         id: messageID,
         sessionID,
         text: "Fix the failing tests",
         resume: false,
       })
-      const failure = yield* session
-        .prompt({
-          id: messageID,
-          sessionID,
-          text: "Fix the failing tests",
-          delivery: "queue",
-          resume: false,
-        })
-        .pipe(Effect.flip)
+      const retried = yield* session.prompt({
+        id: messageID,
+        sessionID,
+        text: "Fix the failing tests",
+        delivery: "queue",
+        resume: false,
+      })
 
-      expect(failure._tag).toBe("Session.PromptConflictError")
+      expect(retried).toEqual(first)
+      expect(retried.delivery).toBe("steer")
+      expect(yield* admittedCount).toBe(1)
     }),
   )
 
@@ -894,7 +913,7 @@ describe("Session.prompt", () => {
     }),
   )
 
-  it.effect("treats prompt metadata as durable retry identity", () =>
+  it.effect("keeps the first admission's metadata when one ID is reused with other metadata", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
@@ -908,11 +927,12 @@ describe("Session.prompt", () => {
 
       const first = yield* session.prompt(input)
       const retried = yield* session.prompt(input)
-      const failure = yield* session.prompt({ ...input, metadata: { source: "plugin" } }).pipe(Effect.flip)
+      const differing = yield* session.prompt({ ...input, metadata: { source: "plugin" } })
 
       expect(retried).toEqual(first)
+      expect(differing).toEqual(first)
       expect(first.payload.metadata).toEqual({ source: "api" })
-      expect(failure._tag).toBe("Session.PromptConflictError")
+      expect(yield* admittedCount).toBe(1)
     }),
   )
 
@@ -958,7 +978,7 @@ describe("Session.prompt", () => {
     }),
   )
 
-  it.effect("reconciles exact synthetic retries and rejects conflicting reuse", () =>
+  it.effect("reconciles synthetic retries from the promoted message regardless of payload", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* Session.Service
@@ -971,11 +991,11 @@ describe("Session.prompt", () => {
       })
       yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
       const promotedRetry = yield* session.synthetic(input)
-      const failure = yield* session.synthetic({ ...input, text: "Different completion" }).pipe(Effect.flip)
+      const differing = yield* session.synthetic({ ...input, text: "Different completion" })
 
       expect(entries[1]).toEqual(entries[0])
       expect(promotedRetry).toMatchObject({ id: messageID, type: "synthetic", payload: { text: "Completed" } })
-      expect(failure).toMatchObject({ _tag: "Session.SyntheticConflictError", sessionID, inputID: messageID })
+      expect(differing).toMatchObject({ id: messageID, type: "synthetic", payload: { text: "Completed" } })
       expect(yield* admittedCount).toBe(0)
       expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxEnqueued.type, 1))).toBe(1)
     }),
@@ -1084,12 +1104,11 @@ describe("Session.inbox", () => {
       const { db } = yield* Database.Service
 
       const barrier = yield* session.compact({ sessionID })
-      expect(yield* SessionInbox.has(db, sessionID, "any")).toBe(true)
       expect(yield* SessionInbox.has(db, sessionID, "input")).toBe(true)
       expect(yield* session.inbox(sessionID)).toMatchObject([{ id: barrier.id, type: "compaction" }])
 
       yield* session.cancelInbox({ sessionID, inboxID: barrier.id })
-      expect(yield* SessionInbox.has(db, sessionID, "any")).toBe(false)
+      expect(yield* SessionInbox.has(db, sessionID, "input")).toBe(false)
       expect(yield* session.inbox(sessionID)).toEqual([])
     }),
   )

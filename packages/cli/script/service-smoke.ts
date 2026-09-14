@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 
-import { Service } from "@opencode-ai/client/effect/service"
-import { ServiceStatus } from "@opencode-ai/protocol/groups/health"
-import { Schema } from "effect"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Service } from "@opencode/client/effect/service"
+import { ServerStatus } from "@opencode/protocol/groups/server"
+import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -10,7 +11,10 @@ import path from "node:path"
 const nodeBuild = process.argv.includes("--node")
 const target = `cli${nodeBuild ? "-node" : ""}-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`
 const directory = path.join(import.meta.dir, "..", "dist", ...(nodeBuild ? ["node"] : []), target, "bin")
-const binary = path.join(directory, `opencode2${nodeBuild ? "-node" : ""}${process.platform === "win32" ? ".exe" : ""}`)
+const binary = path.join(
+  directory,
+  `${nodeBuild ? "opencode2-node" : "opencode"}${process.platform === "win32" ? ".exe" : ""}`,
+)
 if (!(await Bun.file(binary).exists())) throw new Error(`Missing compiled CLI in ${directory}`)
 
 const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-smoke-")))
@@ -38,12 +42,12 @@ try {
   const credential = btoa(`opencode:${info.password}`)
   const headers = { authorization: "Basic " + credential }
   const token = encodeURIComponent(credential)
-  const health = await waitForReady(info.url, headers)
-  if (health.pid !== info.pid) throw new Error("Health process does not match registration")
-  const tokenHealth = await fetch(new URL(`/api/health?auth_token=${token}`, info.url), {
+  const status = await waitForReady(info.url, headers)
+  if (status.pid !== info.pid) throw new Error("Status process does not match registration")
+  const tokenStatus = await fetch(new URL(`/api/status?auth_token=${token}`, info.url), {
     signal: AbortSignal.timeout(5_000),
   })
-  if (tokenHealth.status !== 200) throw new Error("Compiled service rejected query authentication")
+  if (tokenStatus.status !== 200) throw new Error("Compiled service rejected query authentication")
   const tokenOpenApi = await fetch(new URL(`/openapi.json?auth_token=${token}`, info.url), {
     signal: AbortSignal.timeout(5_000),
   })
@@ -54,37 +58,31 @@ try {
   await fs.writeFile(plugin, pluginSource())
   await waitForPlugin(info.url, headers)
 
-  const unauthorizedHealth = await fetch(new URL("/api/health", info.url), {
+  const unauthorizedStatus = await fetch(new URL("/api/status", info.url), {
     signal: AbortSignal.timeout(5_000),
   })
-  if (unauthorizedHealth.status !== 401) throw new Error("Compiled service exposed health without authentication")
+  if (unauthorizedStatus.status !== 401) throw new Error("Compiled service exposed status without authentication")
   const unauthorizedOpenApi = await fetch(new URL("/openapi.json", info.url), {
     signal: AbortSignal.timeout(5_000),
   })
   if (unauthorizedOpenApi.status !== 401)
     throw new Error("Compiled service exposed application routes without authentication")
-  const unauthorizedStop = await fetch(new URL("/api/service/stop", info.url), {
+  const stopRoute = await fetch(new URL("/api/service/stop", info.url), {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...headers, "content-type": "application/json" },
     body: JSON.stringify({ instanceID: info.id }),
     signal: AbortSignal.timeout(5_000),
   })
-  if (unauthorizedStop.status !== 401) throw new Error("Compiled service accepted unauthenticated stop")
+  if (stopRoute.status !== 404) throw new Error("Compiled service exposed the removed HTTP stop route")
 
   const winner = processes.find((process) => process.pid === info.pid)
   const loser = processes.find((process) => process.pid !== info.pid)
   if (!winner || !loser) throw new Error("Compiled contenders did not elect one registered owner")
   if (!(await exitsWithin(loser, 10_000))) throw new Error("Losing compiled contender did not exit")
 
-  const stopped = await Schema.decodeUnknownPromise(ServiceStatus.StopResponse)(
-    await fetch(new URL("/api/service/stop", info.url), {
-      method: "POST",
-      headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ instanceID: info.id }),
-      signal: AbortSignal.timeout(5_000),
-    }).then((response) => response.json()),
+  await Effect.runPromise(
+    Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)),
   )
-  if (!stopped.accepted) throw new Error("Compiled service rejected exact-instance stop")
   if (!(await exitsWithin(winner, 10_000))) throw new Error("Compiled service did not stop")
   for (let attempt = 0; attempt < 200 && (await Bun.file(registration).exists()); attempt++) await Bun.sleep(25)
   if (await Bun.file(registration).exists()) throw new Error("Compiled service registration was not removed")
@@ -98,7 +96,11 @@ try {
 }
 
 const output = await Promise.all(errors)
-await fs.rm(root, { recursive: true, force: true })
+// Windows can retain directory handles briefly after the service processes exit.
+await fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch((cause: unknown) => {
+  console.error("Failed to remove service smoke-test directory", cause)
+  failure ??= cause
+})
 if (failure)
   throw new Error(output.filter(Boolean).join("\n") || "Compiled service lifecycle smoke test failed", {
     cause: failure,
@@ -127,11 +129,11 @@ async function waitForRegistration() {
 async function waitForReady(url: string, headers: HeadersInit) {
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
-    const response = await fetch(new URL("/api/health", url), {
+    const response = await fetch(new URL("/api/status", url), {
       headers,
       signal: AbortSignal.timeout(1_000),
     }).catch(() => undefined)
-    if (response?.ok) return Schema.decodeUnknownPromise(ServiceStatus.Health)(await response.json())
+    if (response?.ok) return Schema.decodeUnknownPromise(ServerStatus)(await response.json())
     await Bun.sleep(25)
   }
   throw new Error("Compiled service did not become ready")

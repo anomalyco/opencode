@@ -1,10 +1,11 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import type { OpenCodeEvent } from "@opencode-ai/client"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { Bus } from "@opencode-ai/core/bus"
-import { Event } from "@opencode-ai/schema/event"
+import type { OpenCodeEvent } from "@opencode/client"
+import { SessionMessage } from "@opencode/core/session/message"
+import { Bus } from "@opencode/core/bus"
+import { Event } from "@opencode/schema/event"
+import { Expected } from "../../../../core/test/lib/session-message"
 import { createEffect, onMount, type ParentProps } from "solid-js"
 import { ConfigProvider } from "../../../src/config"
 import { ClientProvider, useClient } from "../../../src/context/client"
@@ -14,6 +15,8 @@ import { LocationProvider, useLocation } from "../../../src/context/location"
 import { RouteProvider } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Composer } from "../../../src/routes/session/composer"
+import { DialogProvider } from "../../../src/ui/dialog"
+import { ToastProvider } from "../../../src/ui/toast"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
 import { createApi, createEventStream, createFetch, directory, json, worktree } from "../../fixture/tui-client"
 import { emptyThemeSource } from "../../fixture/fixture"
@@ -40,12 +43,12 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCode
   events.emit({ ...event, location: { directory } })
 }
 
-const config = createTuiResolvedConfig()
+const config = createTuiResolvedConfig({}, { terminal: false })
 
 function DataProvider(props: ParentProps) {
   return (
     <ConfigProvider config={config}>
-      <DataProviderBase>
+      <DataProviderBase directory={process.cwd()}>
         <LocationProvider>
           <SyncLocation />
           {props.children}
@@ -1128,6 +1131,10 @@ test("removes committed revert messages from local state", async () => {
     expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_001"])
     expect(data.session.message.get(sessionID, "msg_002")).toBeUndefined()
     expect(data.session.message.get(sessionID, "msg_003")).toBeUndefined()
+    // The projector also drops inbox items enqueued at or after the boundary, without a cancel event.
+    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["msg_001"])
+    expect(data.session.input.list(sessionID)).toEqual(["msg_001"])
+    expect(data.session.input.has(sessionID, "msg_002")).toBe(false)
   } finally {
     app.renderer.destroy()
   }
@@ -1572,6 +1579,89 @@ test("tracks session status from active sessions and execution events", async ()
   }
 })
 
+test.each(["before", "between", "after"])("shows compaction admitted %s steers in execution order", async (order) => {
+  const events = createEventStream()
+  const sessionID = "session-compaction-priority"
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    return undefined
+  }, events)
+  let rows: SessionRow[] = []
+  let client: ReturnType<typeof useClient> | undefined
+  function Probe() {
+    client = useClient()
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+  const admissions =
+    order === "before" ? ["compact", "a", "b"] : order === "between" ? ["a", "compact", "b"] : ["a", "b", "compact"]
+  try {
+    await wait(() => client?.connection.status() === "connected")
+    admissions.forEach((id, index) =>
+      emitEvent(events, {
+        id: `evt_admit_${id}`,
+        created: index + 1,
+        type: "session.inbox.enqueued",
+        durable: durable(sessionID, index + 1),
+        data: {
+          sessionID,
+          inboxID: id,
+          item:
+            id === "compact"
+              ? { type: "compaction", payload: {}, delivery: "steer" }
+              : { type: "user", payload: { text: `STEER_${id.toUpperCase()}` }, delivery: "steer" },
+        },
+      }),
+    )
+    await wait(() => rows.length === 3)
+    expect(rows).toEqual([
+      { type: "compaction-queued", inboxID: "compact" },
+      { type: "message", messageID: "a" },
+      { type: "message", messageID: "b" },
+    ])
+    emitEvent(events, {
+      id: "evt_compaction_started",
+      created: 4,
+      type: "session.compaction.started",
+      durable: durable(sessionID, 4),
+      data: { sessionID, reason: "manual", recent: "", inputID: "compact" },
+    })
+    await wait(() => rows[0]?.type === "message")
+    expect(rows).toEqual(["compact", "a", "b"].map((messageID) => ({ type: "message", messageID })))
+    emitEvent(events, {
+      id: "evt_compaction_ended",
+      created: 5,
+      type: "session.compaction.ended",
+      durable: durable(sessionID, 5),
+      data: { sessionID, reason: "manual", text: "## Objective\n- Checkpoint", recent: "" },
+    })
+    for (const [index, id] of ["a", "b"].entries()) {
+      emitEvent(events, {
+        id: `evt_deliver_${id}`,
+        created: index + 6,
+        type: "session.inbox.delivered",
+        durable: durable(sessionID, index + 6),
+        data: { sessionID, inboxID: id },
+      })
+    }
+    await app.renderOnce()
+    expect(rows).toEqual(["compact", "a", "b"].map((messageID) => ({ type: "message", messageID })))
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("restores queued compaction from durable pending input", async () => {
   const events = createEventStream()
   const sessionID = "session-compaction-queued"
@@ -1579,7 +1669,7 @@ test("restores queued compaction from durable pending input", async () => {
     {
       id: "message-compaction-queued",
       sessionID,
-      timeCreated: 1,
+      time: { created: 1 },
       type: "compaction" as const,
       payload: {},
       delivery: "queue" as const,
@@ -1587,7 +1677,7 @@ test("restores queued compaction from durable pending input", async () => {
     {
       id: "message-compaction-later",
       sessionID,
-      timeCreated: 2,
+      time: { created: 2 },
       type: "compaction" as const,
       payload: {},
       delivery: "queue" as const,
@@ -1728,6 +1818,7 @@ test("refreshes integrations after integration updates", async () => {
                 id: "openai",
                 name: "OpenAI",
                 methods: [{ type: "key" }],
+                connections: [{ type: "credential", id: "cred_openai", label: "OpenAI" }],
               },
             ],
     })
@@ -1766,6 +1857,16 @@ test("refreshes integrations after integration updates", async () => {
     await wait(() => data.location.integration.list()?.length === 1)
     await wait(() => requests.model > before.model && requests.provider > before.provider)
     expect(data.location.integration.list()?.[0]).toMatchObject({ id: "openai", name: "OpenAI" })
+
+    const previous = { ...requests }
+    events.emit({
+      id: "evt_credential",
+      created: 0,
+      type: "credential.switched",
+      data: { credentialID: "cred_openai", integrationID: "openai" },
+    })
+    await wait(() => requests.model > previous.model && requests.provider > previous.provider)
+    expect(requests.integration).toBe(previous.integration)
   } finally {
     app.renderer.destroy()
   }
@@ -1835,7 +1936,7 @@ test("refreshes MCP resources after catalog updates", async () => {
   }
 })
 
-test("refreshes effective catalog data after catalog updates", async () => {
+test("refreshes provider and model data independently after domain updates", async () => {
   const events = createEventStream()
   const requests = { model: 0, provider: 0 }
   const calls = createFetch((url) => {
@@ -1864,8 +1965,13 @@ test("refreshes effective catalog data after catalog updates", async () => {
   try {
     await wait(() => requests.model > 0 && requests.provider > 0)
     const before = { ...requests }
-    emitEvent(events, { id: "evt_catalog", created: 0, type: "catalog.updated", data: {} })
-    await wait(() => requests.model > before.model && requests.provider > before.provider)
+    emitEvent(events, { id: "evt_provider", created: 0, type: "provider.updated", data: {} })
+    await wait(() => requests.provider > before.provider)
+    expect(requests).toEqual({ model: before.model, provider: before.provider + 1 })
+
+    emitEvent(events, { id: "evt_model", created: 0, type: "model.updated", data: {} })
+    await wait(() => requests.model > before.model)
+    expect(requests).toEqual({ model: before.model + 1, provider: before.provider + 1 })
   } finally {
     app.renderer.destroy()
   }
@@ -1967,7 +2073,6 @@ test("refreshes references after updates", async () => {
 test("keeps shell state scoped to location", async () => {
   const events = createEventStream()
   const other = "/tmp/opencode/other"
-  const workspace = "ws_other"
   let removed: URL | undefined
   const calls = createFetch((url, request) => {
     if (url.pathname === "/api/shell/sh_other" && request.method === "DELETE") {
@@ -1979,7 +2084,6 @@ test("keeps shell state scoped to location", async () => {
     return json({
       location: {
         directory: requestDirectory ?? directory,
-        workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
         project: { id: "proj_test", directory: requestDirectory ?? directory },
       },
       data: [
@@ -2004,7 +2108,11 @@ test("keeps shell state scoped to location", async () => {
       <RouteProvider initialRoute={{ type: "session", sessionID: "ses_shared" }}>
         <Keymap.Provider>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+            <ToastProvider>
+              <DialogProvider>
+                <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+              </DialogProvider>
+            </ToastProvider>
           </ThemeProvider>
         </Keymap.Provider>
       </RouteProvider>
@@ -2026,10 +2134,10 @@ test("keeps shell state scoped to location", async () => {
 
   try {
     await wait(() => data.shell.list().some((shell) => shell.id === "sh_default"))
-    await data.shell.sync({ directory: other, workspaceID: workspace })
+    await data.shell.sync({ directory: other })
 
     expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
-    expect(data.shell.list({ directory: other, workspaceID: workspace }).map((shell) => shell.id)).toEqual(["sh_other"])
+    expect(data.shell.list({ directory: other }).map((shell) => shell.id)).toEqual(["sh_other"])
     expect(data.shell.listBySession("ses_shared").map((shell) => [shell.id, shell.location.directory])).toEqual([
       ["sh_default", directory],
       ["sh_other", other],
@@ -2040,13 +2148,13 @@ test("keeps shell state scoped to location", async () => {
     app.mockInput.pressKey("d", { ctrl: true })
     await wait(() => removed !== undefined)
     expect(removed?.searchParams.get("location[directory]")).toBe(other)
-    expect(removed?.searchParams.get("location[workspace]")).toBe(workspace)
+    expect(removed?.searchParams.has("location[workspace]")).toBe(false)
 
     events.emit({
       id: "evt_shell_created",
       created: 0,
       type: "shell.created",
-      location: { directory: other, workspaceID: workspace },
+      location: { directory: other },
       data: {
         info: {
           id: "sh_live_other",
@@ -2061,7 +2169,7 @@ test("keeps shell state scoped to location", async () => {
       },
     })
     await wait(() =>
-      data.shell.list({ directory: other, workspaceID: workspace }).some((shell) => shell.id === "sh_live_other"),
+      data.shell.list({ directory: other }).some((shell) => shell.id === "sh_live_other"),
     )
     expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
     expect(
@@ -2326,7 +2434,7 @@ test("adds, dismisses, and refreshes form requests", async () => {
 test("tracks global forms by location", async () => {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
-  const other = { directory: "/tmp/opencode-other", workspaceID: "wrk_other" }
+  const other = { directory: "/tmp/opencode-other" }
   let data!: ReturnType<typeof useData>
   let client!: ReturnType<typeof useClient>
 
@@ -2391,16 +2499,14 @@ test("tracks global forms by location", async () => {
 test("syncs global forms once for each requested location", async () => {
   const events = createEventStream()
   const requests: URL[] = []
-  const other = { directory: "/tmp/opencode-other", workspaceID: "wrk_other" }
+  const other = { directory: "/tmp/opencode-other" }
   const calls = createFetch((url) => {
     if (url.pathname !== "/api/form/request") return
     requests.push(url)
     const requestedDirectory = url.searchParams.get("location[directory]") ?? directory
-    const requestedWorkspace = url.searchParams.get("location[workspace]") ?? undefined
     return json({
       location: {
         directory: requestedDirectory,
-        workspaceID: requestedWorkspace,
         project: { id: "proj_test", directory: requestedDirectory },
       },
       data: [
@@ -2443,7 +2549,7 @@ test("syncs global forms once for each requested location", async () => {
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.searchParams.get("location[directory]")).toBe(other.directory)
-    expect(requests[0]?.searchParams.get("location[workspace]")).toBe(other.workspaceID)
+    expect(requests[0]?.searchParams.has("location[workspace]")).toBe(false)
     expect(data.session.form.list("global", other)?.map((form) => form.id)).toEqual(["frm_other"])
     expect(data.session.form.list("global", { directory })?.map((form) => form.id)).toEqual(["frm_default"])
 
@@ -2460,7 +2566,7 @@ test("resyncs global forms only for the active location after reconnect", async 
   const requests: URL[] = []
   const counts = new Map<string, number>()
   const home = { directory: process.cwd() }
-  const other = { directory: "/tmp/opencode-other", workspaceID: "wrk_other" }
+  const other = { directory: "/tmp/opencode-other" }
   const calls = createFetch((url) => {
     if (url.pathname === "/api/location")
       return json({ ...home, project: { id: "proj_test", directory: home.directory } })
@@ -2476,13 +2582,11 @@ test("resyncs global forms only for the active location after reconnect", async 
     if (url.pathname !== "/api/form/request") return
     requests.push(url)
     const requestedDirectory = url.searchParams.get("location[directory]") ?? home.directory
-    const requestedWorkspace = url.searchParams.get("location[workspace]") ?? undefined
     const count = (counts.get(requestedDirectory) ?? 0) + 1
     counts.set(requestedDirectory, count)
     return json({
       location: {
         directory: requestedDirectory,
-        workspaceID: requestedWorkspace,
         project: { id: "proj_test", directory: requestedDirectory },
       },
       data: [
@@ -2526,12 +2630,9 @@ test("resyncs global forms only for the active location after reconnect", async 
     await wait(() => data.session.form.list("global", home)?.[0]?.id === "frm_default_2", 4000)
     expect(data.session.form.list("global", other)?.[0]?.id).toBe("frm_other_1")
     expect(requests).toHaveLength(1)
-    expect(
-      requests.map((url) => [
-        url.searchParams.get("location[directory]") ?? directory,
-        url.searchParams.get("location[workspace]") ?? undefined,
-      ]),
-    ).toEqual([[home.directory, undefined]])
+    expect(requests.map((url) => url.searchParams.get("location[directory]") ?? directory)).toEqual([
+      home.directory,
+    ])
   } finally {
     app.renderer.destroy()
   }
@@ -2814,13 +2915,13 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     })
     await wait(() => sync.session.message.list(sessionID)?.length === 1)
     const admitted = sync.session.message.list(sessionID)?.[0]
-    expect(admitted).toMatchObject({ id: messageID, type: "user", text: "hello" })
+    expect(admitted).toMatchObject({ id: messageID, ...Expected.user("hello") })
     expect(admitted?.metadata).toBeUndefined()
     expect(sync.session.pending.list(sessionID)).toEqual([
       {
         id: messageID,
         sessionID,
-        timeCreated: 0,
+        time: { created: 0 },
         type: "user",
         payload: { text: "hello" },
         delivery: "steer",
@@ -3090,6 +3191,346 @@ test("stops at the last non-repeating ancestor on a parent cycle", async () => {
     // Does not hang; walking up from "y" stops before re-entering "x".
     expect(data.session.root("y")).toBe("x")
     expect(data.session.family("y")).toEqual(["x", "y"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("admits prompts optimistically and reconciles with the durable echo", async () => {
+  const events = createEventStream()
+  const sessionID = "session-1"
+  let release!: (response: Response) => void
+  const deferred = new Promise<Response>((resolve) => {
+    release = resolve
+  })
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/prompt`) return deferred
+    // The server does not know about the in-flight admission yet.
+    if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [] })
+  }, events)
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    const promise = sync.session.prompt({ sessionID, text: "hello" })
+    const settled = promise.then(
+      () => undefined,
+      (error) => error,
+    )
+
+    // Optimistic: the row renders before the server responds.
+    const optimistic = sync.session.pending.list(sessionID)[0]
+    expect(optimistic).toMatchObject({ sessionID, type: "user", payload: { text: "hello" }, delivery: "steer" })
+    const messageID = optimistic!.id
+    expect(messageID.startsWith("msg_")).toBe(true)
+    expect(sync.session.input.list(sessionID)).toEqual([messageID])
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
+
+    // A pending re-fetch racing the in-flight admission cannot wipe the row.
+    await sync.session.pending.sync(sessionID)
+    expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
+    expect(sync.session.input.list(sessionID)).toEqual([messageID])
+
+    // The durable echo upserts by ID instead of duplicating: server-loaded
+    // payload (files) and durable times replace the optimistic placeholder.
+    const received: string[] = []
+    const unsubscribe = sync.listen((event) => received.push(event.name))
+    const echoFile = { data: "aGVsbG8=", mime: "text/plain", source: { type: "uri" as const, uri: "file:///a.txt" } }
+    emitEvent(events, {
+      id: "evt_echo_1",
+      created: 5,
+      type: "session.inbox.enqueued",
+      durable: durable(sessionID),
+      data: {
+        sessionID,
+        inboxID: messageID,
+        item: { type: "user", payload: { text: "hello", files: [echoFile] }, delivery: "steer" },
+      },
+    })
+    await wait(() => received.includes("session.inbox.enqueued"))
+    unsubscribe()
+    expect(sync.session.pending.list(sessionID)).toEqual([
+      {
+        id: messageID,
+        sessionID,
+        time: { created: 5 },
+        type: "user",
+        payload: { text: "hello", files: [echoFile] },
+        delivery: "steer",
+      },
+    ])
+    const echoed = sync.session.message.list(sessionID)[0]
+    expect(echoed?.type).toBe("user")
+    if (echoed?.type !== "user") return
+    expect(echoed.time.created).toBe(5)
+    expect(echoed.files).toEqual([echoFile])
+
+    // A late transport failure after the echo must not delete acknowledged state.
+    release(json({ _tag: "UnknownError", message: "response lost" }, { status: 500 }))
+    expect(await settled).toBeDefined()
+    expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
+  } finally {
+    release(json({ _tag: "UnknownError", message: "cleanup" }, { status: 500 }))
+    app.renderer.destroy()
+  }
+})
+
+test("hydrates durable pending prompts into the visible transcript", async () => {
+  const sessionID = "session-1"
+  const item = {
+    id: "msg_pending_1",
+    sessionID,
+    time: { created: 5 },
+    type: "user" as const,
+    payload: { text: "waiting" },
+    delivery: "steer" as const,
+  }
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [item] })
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+  })
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    await sync.session.pending.sync(sessionID)
+    expect(sync.session.message.list(sessionID)).toEqual([
+      { id: item.id, ...Expected.user("waiting"), time: { created: 5 } },
+    ])
+
+    await sync.session.message.sync(sessionID)
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([item.id])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("keeps the row when the response lands before the echo", async () => {
+  const events = createEventStream()
+  const sessionID = "session-1"
+  const messageID = "msg_early_1"
+  const admission = {
+    id: messageID,
+    sessionID,
+    time: { created: 1 },
+    type: "user",
+    payload: { text: "hello" },
+    delivery: "steer",
+  }
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/prompt`) return json({ data: admission })
+    // The server's listings still miss the admission (projection lag).
+    if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [] })
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+  }, events)
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+
+    // POST resolved but the echo has not arrived: racing pending and message
+    // re-fetches still cannot wipe the row.
+    await sync.session.pending.sync(sessionID)
+    sync.session.pending.invalidate(sessionID)
+    await sync.session.pending.sync(sessionID)
+    await sync.session.message.sync(sessionID)
+    sync.session.message.invalidate(sessionID)
+    await sync.session.message.sync(sessionID)
+    expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
+    expect(sync.session.input.list(sessionID)).toEqual([messageID])
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("rolls back an optimistic prompt the server rejected", async () => {
+  const events = createEventStream()
+  const sessionID = "session-1"
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/prompt`)
+      return json({ _tag: "InvalidRequestError", message: "invalid" }, { status: 400 })
+  }, events)
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    const promise = sync.session.prompt({ sessionID, text: "rejected" })
+    expect(sync.session.message.list(sessionID)).toHaveLength(1)
+
+    await expect(promise).rejects.toThrow()
+    expect(sync.session.pending.list(sessionID)).toEqual([])
+    expect(sync.session.input.list(sessionID)).toEqual([])
+    expect(sync.session.message.list(sessionID)).toEqual([])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("a retry under the same client-minted ID cannot duplicate rows", async () => {
+  const events = createEventStream()
+  const sessionID = "session-1"
+  const messageID = "msg_retry_1"
+  const admission = {
+    id: messageID,
+    sessionID,
+    time: { created: 1 },
+    type: "user",
+    payload: { text: "hello" },
+    delivery: "steer",
+  }
+  const posts: string[] = []
+  let fail = false
+  const calls = createFetch(async (url, request) => {
+    if (url.pathname === `/api/session/${sessionID}/prompt`) {
+      posts.push(((await request.json()) as { id: string }).id)
+      if (fail) return json({ _tag: "UnknownError", message: "transient" }, { status: 500 })
+      return json({ data: admission })
+    }
+  }, events)
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+    // Retry with the identical payload: server admission is idempotent per ID,
+    // and the local dedupe keeps a single row.
+    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+
+    expect(posts).toEqual([messageID, messageID])
+    expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
+    expect(sync.session.input.list(sessionID)).toEqual([messageID])
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
+
+    // The row is acknowledged (echo applied): a FAILED retry under the same
+    // ID must not roll back acknowledged state.
+    const received: string[] = []
+    const unsubscribe = sync.listen((event) => received.push(event.name))
+    emitEvent(events, {
+      id: "evt_ack_1",
+      created: 2,
+      type: "session.inbox.enqueued",
+      durable: durable(sessionID),
+      data: { sessionID, inboxID: messageID, item: { type: "user", payload: { text: "hello" }, delivery: "steer" } },
+    })
+    await wait(() => received.includes("session.inbox.enqueued"))
+    unsubscribe()
+    fail = true
+    await expect(sync.session.prompt({ sessionID, id: messageID, text: "hello" })).rejects.toThrow()
+    expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
+    expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
   } finally {
     app.renderer.destroy()
   }

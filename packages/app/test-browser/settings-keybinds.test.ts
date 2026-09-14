@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { createKeybindSettingsController } from "../src/components/settings-keybinds"
+import { createKeybindSettingsController } from "../src/settings/keybinds/keybinds"
 
 function setup(overrides: Record<string, string> = {}) {
   const changes: [string, string][] = []

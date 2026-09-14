@@ -1,0 +1,5 @@
+.astro/
+.wrangler/
+dist/
+node_modules/
+public/cli.json

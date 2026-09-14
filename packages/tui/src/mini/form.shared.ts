@@ -1,4 +1,4 @@
-import type { FormAnswer, FormField, FormInfo, FormValue } from "@opencode-ai/client/promise"
+import type { FormAnswer, FormField, FormInfo, FormValue } from "@opencode/client/promise"
 import {
   formCustom,
   formDisplayValue,
@@ -232,9 +232,9 @@ export function formDisplay(field: FormAnswerField, value: FormValue | undefined
 export function formErrorMessage(error: unknown) {
   if (typeof error === "string" && error.trim()) return error
   if (error && typeof error === "object") {
-    const message = Reflect.get(error, "message")
+    const message = "message" in error ? error.message : undefined
     if (typeof message === "string" && message.trim()) return message
-    const tag = Reflect.get(error, "_tag")
+    const tag = "_tag" in error ? error._tag : undefined
     if (typeof tag === "string" && tag.trim()) return tag
   }
   return "Form request failed"

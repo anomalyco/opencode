@@ -1,0 +1,112 @@
+---
+import type { MarkdownHeading } from "astro"
+import { ClientRouter } from "astro:transitions"
+import DocsHeader from "../components/DocsHeader.astro"
+import DocsSidebar from "../components/DocsSidebar.astro"
+import DocsTableOfContents from "../components/DocsTableOfContents.astro"
+import { getDocsSection } from "../lib/navigation"
+import "../styles/global.css"
+
+interface Props {
+  title: string
+  description?: string
+  currentSlug: string
+  headings: MarkdownHeading[]
+  showTableOfContents?: boolean
+  fullWidth?: boolean
+}
+
+const section = getDocsSection(Astro.props.currentSlug)
+const fullWidth = Astro.props.fullWidth ?? false
+const description = Astro.props.description ?? `${Astro.props.title} documentation for OpenCode.`
+const canonical = new URL(Astro.url.pathname, "https://opencode.ai").href
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#000000" />
+    <ClientRouter fallback="swap" />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL}favicon.svg`} />
+    <title>{Astro.props.title} | OpenCode</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#docs-content">Skip to content</a>
+    <DocsHeader currentSlug={Astro.props.currentSlug} />
+    {
+      fullWidth ? (
+        <main id="docs-content" class="full-width-content">
+          <slot />
+        </main>
+      ) : (
+        <>
+          <details class="mobile-navigation">
+            <summary>{section.title} navigation</summary>
+            <DocsSidebar groups={section.groups} currentSlug={Astro.props.currentSlug} />
+          </details>
+          <div class="docs-frame">
+            <aside class="sidebar-column">
+              <DocsSidebar groups={section.groups} currentSlug={Astro.props.currentSlug} />
+            </aside>
+            <main id="docs-content">
+              <article class="prose" data-pagefind-body data-pagefind-meta={`title:${Astro.props.title}`}>
+                <h1>
+                  {Astro.props.title}
+                  <button type="button" aria-label="Copy page as Markdown" data-copy-markdown data-pagefind-ignore>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                      <rect x="8" y="8" width="13" height="13" rx="2" />
+                      <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+                    </svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                      <path d="m5 12 4 4L19 6" />
+                    </svg>
+                  </button>
+                </h1>
+                <slot />
+              </article>
+            </main>
+            <aside class="toc-column">
+              {Astro.props.showTableOfContents !== false && <DocsTableOfContents headings={Astro.props.headings} />}
+            </aside>
+          </div>
+        </>
+      )
+    }
+    <script is:inline>
+      const addHeadingAnchors = () => {
+        for (const heading of document.querySelectorAll(".prose :is(h2, h3)[id]")) {
+          if (heading.querySelector(".heading-anchor")) continue
+          const anchor = document.createElement("a")
+          anchor.className = "heading-anchor"
+          anchor.href = `#${heading.id}`
+          anchor.setAttribute("aria-label", `Link to ${heading.textContent ?? "section"}`)
+          anchor.textContent = "#"
+          heading.append(anchor)
+        }
+      }
+
+      addHeadingAnchors()
+      document.addEventListener("astro:page-load", addHeadingAnchors)
+    </script>
+    <script>
+      document.addEventListener("click", async (event) => {
+        if (!(event.target instanceof Element)) return
+        const button = event.target.closest<HTMLButtonElement>("[data-copy-markdown]")
+        if (!button) return
+        button.dataset.copied = "true"
+        button.setAttribute("aria-label", "Copied")
+        window.setTimeout(() => {
+          delete button.dataset.copied
+          button.setAttribute("aria-label", "Copy page as Markdown")
+        }, 1500)
+        const response = await fetch(window.location.href, { headers: { Accept: "text/markdown" } })
+        if (!response.ok) return
+        await navigator.clipboard.writeText(await response.text())
+      })
+    </script>
+  </body>
+</html>

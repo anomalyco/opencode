@@ -1,5 +1,5 @@
-import { Mcp } from "@opencode-ai/schema/mcp"
-import { Location } from "@opencode-ai/schema/location"
+import { Mcp } from "@opencode/schema/mcp"
+import { Location } from "@opencode/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { McpServerNotFoundError } from "../errors.js"
@@ -14,14 +14,14 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.mcp.list",
+          identifier: "mcp.list",
           summary: "List MCP servers",
           description: "Retrieve configured MCP servers and their connection status.",
         }),
       ),
   )
   .add(
-    HttpApiEndpoint.put("mcp.add", "/api/mcp/:server", {
+    HttpApiEndpoint.put("mcp.add", "/api/experimental/mcp/:server", {
       params: { server: Schema.String },
       query: LocationQuery,
       // Wrapped in a struct because the client codegen flattens payload fields and cannot
@@ -32,14 +32,14 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.mcp.add",
+          identifier: "experimental.mcp.add",
           summary: "Add MCP server",
           description: "Add an MCP server at runtime or replace an existing one, connecting it immediately.",
         }),
       ),
   )
   .add(
-    HttpApiEndpoint.delete("mcp.remove", "/api/mcp/:server", {
+    HttpApiEndpoint.delete("mcp.remove", "/api/experimental/mcp/:server", {
       params: { server: Schema.String },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
@@ -48,14 +48,14 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.mcp.remove",
+          identifier: "experimental.mcp.remove",
           summary: "Remove MCP server",
           description: "Stop an MCP server and remove it from the runtime set until restart.",
         }),
       ),
   )
   .add(
-    HttpApiEndpoint.post("mcp.connect", "/api/mcp/:server/connect", {
+    HttpApiEndpoint.post("mcp.connect", "/api/experimental/mcp/:server/connect", {
       params: { server: Schema.String },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
@@ -64,14 +64,14 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.mcp.connect",
+          identifier: "experimental.mcp.connect",
           summary: "Connect MCP server",
           description: "Connect an MCP server at runtime, overriding a disabled configuration until restart.",
         }),
       ),
   )
   .add(
-    HttpApiEndpoint.post("mcp.disconnect", "/api/mcp/:server/disconnect", {
+    HttpApiEndpoint.post("mcp.disconnect", "/api/experimental/mcp/:server/disconnect", {
       params: { server: Schema.String },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
@@ -80,7 +80,7 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.mcp.disconnect",
+          identifier: "experimental.mcp.disconnect",
           summary: "Disconnect MCP server",
           description: "Disconnect an MCP server at runtime, removing its tools until reconnected.",
         }),
@@ -94,7 +94,7 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.mcp.resource.catalog",
+          identifier: "mcp.resource.catalog",
           summary: "List MCP resources",
           description: "Retrieve resources and resource templates from connected MCP servers.",
         }),

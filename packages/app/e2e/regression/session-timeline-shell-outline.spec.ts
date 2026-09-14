@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
+import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import {
   assistantMessage,
   setupTimeline,
@@ -67,29 +68,36 @@ for (const deviceScaleFactor of [1.25, 1.5]) {
 test("keeps the patch card inside a fractionally short virtual row", async ({ page }) => {
   const patchID = "prt_patch_outline"
   const file = {
-    filePath: "src/outline.ts",
-    relativePath: "src/outline.ts",
-    type: "update",
+    file: "src/outline.ts",
+    status: "modified",
+    patch:
+      "diff --git a/src/outline.ts b/src/outline.ts\n--- a/src/outline.ts\n+++ b/src/outline.ts\n@@ -1 +1 @@\n-const outline = false\n+const outline = true\n",
     additions: 1,
     deletions: 1,
-    before: "const outline = false\n",
-    after: "const outline = true\n",
   }
-  const timeline = await setupTimeline(page, {
+  await setupTimeline(page, {
     messages: [
       userMessage(),
       assistantMessage([
-        toolPart(patchID, "apply_patch", "completed", { files: [file.filePath] }, { metadata: { files: [file] } }),
+        toolPart(
+          patchID,
+          "patch",
+          "completed",
+          { patchText: "Update src/outline.ts" },
+          { metadata: { files: [file] } },
+        ),
       ]),
     ],
-    settings: { editToolPartsExpanded: true },
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
+    },
     reducedMotion: true,
   })
   const part = page.locator(`[data-timeline-part-id="${patchID}"]`)
   const card = part.locator('[data-component="accordion"][data-scope="apply-patch"]')
   const row = page.locator("[data-timeline-key]", { has: part })
   await expect(card).toBeVisible()
-  await timeline.settle()
+  await expect(card.getByRole("button")).toHaveAttribute("aria-expanded", "false")
 
   const geometry = await row.evaluate((element) => {
     const card = element.querySelector<HTMLElement>('[data-component="accordion"][data-scope="apply-patch"]')
@@ -107,8 +115,6 @@ test("keeps the patch card inside a fractionally short virtual row", async ({ pa
       cardHeight: cardRect.height,
     }
   })
-  await timeline.settle()
-
   expect(geometry.overflow).toBeCloseTo(0.49, 1)
   expect(geometry.paintOverflow).toBeLessThanOrEqual(0)
   const edges = await captureCardEdges(page, card)

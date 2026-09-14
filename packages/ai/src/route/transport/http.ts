@@ -88,8 +88,13 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
       }
     }),
   execute: (prepared, _request, runtime) =>
-    Effect.succeed({
-      frames: prepared.framing.frame(RequestExecutor.stream(runtime.http, prepared.request, prepared.middleware)),
+    Effect.gen(function* () {
+      const response = yield* runtime.http.execute(prepared.request, prepared.middleware)
+      return {
+        frames: prepared.framing.frame(RequestExecutor.responseStream(response)),
+        http: RequestExecutor.responseHttp(response),
+        body: prepared.framing.body,
+      }
     }),
 })
 

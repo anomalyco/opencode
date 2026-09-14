@@ -21,7 +21,12 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "package.json"],
-  "exclude": ["dist", "ts-dist"],
-  "references": [{ "path": "../core" }]
+  "include": [
+    "src",
+    "component-tests",
+    "playwright.components.config.ts",
+    "../storybook/playwright/*.ts",
+    "package.json"
+  ],
+  "exclude": ["dist", "ts-dist"]
 }

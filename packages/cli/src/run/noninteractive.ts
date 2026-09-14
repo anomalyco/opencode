@@ -6,11 +6,11 @@ import type {
   SessionMessageAssistantTool,
   SessionMessageInfo,
   ToolContent,
-} from "@opencode-ai/client/promise"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
+} from "@opencode/client/promise"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { EOL } from "node:os"
 import { readFile } from "node:fs/promises"
-import { nonEmptyToolContent, toolOutputText, type MiniToolPart } from "@opencode-ai/tui/mini/tool"
+import { nonEmptyToolContent, toolOutputText, type MiniToolPart } from "@opencode/tui/mini/tool"
 import { UI } from "./ui"
 
 type Model = {
@@ -700,7 +700,7 @@ export async function runNonInteractivePrompt(input: Input) {
         ? Promise.resolve(undefined)
         : input.client.form.request
             .list({
-              location: { directory: input.location.directory, workspace: input.location.workspaceID },
+              location: { directory: input.location.directory },
             })
             .catch(() => undefined),
     ])
@@ -745,7 +745,7 @@ export async function runNonInteractivePrompt(input: Input) {
 }
 
 function sameLocation(left: LocationRef | undefined, right: LocationRef) {
-  return !!left && left.directory === right.directory && left.workspaceID === right.workspaceID
+  return !!left && left.directory === right.directory
 }
 
 function formRequestOptions(location: LocationRef | undefined): [] | [{ headers: Record<string, string> }] {
@@ -754,14 +754,13 @@ function formRequestOptions(location: LocationRef | undefined): [] | [{ headers:
     {
       headers: {
         "x-opencode-directory": encodeURIComponent(location.directory),
-        ...(location.workspaceID ? { "x-opencode-workspace": location.workspaceID } : {}),
       },
     },
   ]
 }
 
 function formAlreadySettled(error: unknown) {
-  return !!error && typeof error === "object" && Reflect.get(error, "_tag") === "FormAlreadySettledError"
+  return !!error && typeof error === "object" && "_tag" in error && error._tag === "FormAlreadySettledError"
 }
 
 function partID(eventID: string) {

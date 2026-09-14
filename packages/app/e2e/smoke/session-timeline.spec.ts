@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { fixture, pageMessages } from "./session-timeline.fixture"
 import { trackPageErrors, expectNoSmokeErrors } from "../utils/errors"
 import { mockOpenCodeServer } from "../utils/mock-server"
@@ -355,10 +355,19 @@ test.describe("smoke: session timeline", () => {
     await expectCanScrollToStart(page, expectedPartIDs, expectedMessageIDs, errors)
 
     const shell = page.locator(`[data-timeline-part-id="${fixture.expected.expandedShellPartID}"]`)
+    // The shell is below a long diff; reveal it rather than depending on offscreen overscan.
+    while ((await shell.count()) === 0) {
+      const before = await timelineState(page)
+      await timelineScroller(page).press("PageDown")
+      await expect.poll(async () => (await timelineState(page)).signature).not.toBe(before.signature)
+    }
+    await shell.scrollIntoViewIfNeeded()
+    await expect(shell).toBeInViewport()
     const shellTrigger = shell.locator('[data-slot="collapsible-trigger"]')
     const shellSubtitle = shell.locator('[data-slot="basic-tool-tool-subtitle"]')
     await expect(shellSubtitle).toHaveCount(0)
-    await expect(shell.locator('[data-slot="bash-pre"]')).toContainText("$ bun typecheck")
+    await expect(shell.locator('[data-slot="bash-command"]')).toHaveText("bun typecheck")
+    await expect(shell.locator('[data-slot="bash-result"]')).not.toContainText("bun typecheck")
     await shellTrigger.click()
     await expect(shellTrigger).toHaveAttribute("aria-expanded", "false")
     await expect(shellSubtitle).toHaveText("bun typecheck")
@@ -477,7 +486,7 @@ async function configureSmokePage(page: Page, directory: string) {
     }
     let recordFrame: number | undefined
     const record = () => {
-      for (const toast of document.querySelectorAll<HTMLElement>('[data-component="toast"][data-variant="error"]')) {
+      for (const toast of document.querySelectorAll<HTMLElement>(".toast-v2--error")) {
         const text = toast.textContent?.trim()
         if (text && !smoke.__timelineSmokeErrorToasts!.includes(text)) smoke.__timelineSmokeErrorToasts!.push(text)
       }
@@ -518,7 +527,7 @@ async function expectCanScrollToStart(
   let current = await timelineState(page)
   let unchangedAtTop = 0
 
-  for (let attempt = 0; attempt < 600; attempt++) {
+  for (let attempt = 0; attempt < 800; attempt++) {
     collectSeen(current, seenParts, seenMessages)
     samples.push(sampleTraversal(current, seenParts.size, seenMessages.size))
     expectNoSmokeErrors(errors, current.errorToasts, current.forbiddenText)
@@ -693,6 +702,7 @@ async function expectSessionTimelineReady(
   expectedMessageIDs: string[],
   errors: string[],
 ) {
+  await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
   await waitForTimelineStable(page)
   for (const text of forbiddenText) await expect(page.getByText(text)).toHaveCount(0)
   const currentState = await timelineState(page)

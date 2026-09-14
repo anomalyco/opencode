@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": ["prefix:zai-chat", "provider:zai", "protocol:zai-chat", "text", "thinking", "usage"],
+    "name": "zai-chat/glm-5-2-streams-thinking-disabled",
+    "recordedAt": "2026-09-08T00:59:35.300Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"glm-5.2\",\"messages\":[{\"role\":\"user\",\"content\":\"What is 173 multiplied by 219? Reply with only the final integer.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":4096,\"thinking\":{\"type\":\"disabled\",\"clear_thinking\":true}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream;charset=UTF-8"
+        },
+        "body": "data: {\"id\":\"20260908085934bc85f3b6601c42e1\",\"created\":1788829174,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"3\"}}]}\n\ndata: {\"id\":\"20260908085934bc85f3b6601c42e1\",\"created\":1788829174,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"7887\"}}]}\n\ndata: {\"id\":\"20260908085934bc85f3b6601c42e1\",\"created\":1788829174,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}]}\n\ndata: {\"id\":\"20260908085934bc85f3b6601c42e1\",\"created\":1788829174,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}],\"usage\":{\"prompt_tokens\":23,\"completion_tokens\":3,\"total_tokens\":26,\"prompt_tokens_details\":{\"cached_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

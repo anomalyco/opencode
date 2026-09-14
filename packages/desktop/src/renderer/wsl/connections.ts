@@ -1,4 +1,4 @@
-import type { WslServersState } from "@opencode-ai/app/wsl/types"
+import type { WslServersState } from "@opencode/app/wsl/types"
 
 export function readyWslConnections(state?: WslServersState, label = "WSL") {
   return (state?.servers ?? []).flatMap((item) => {
@@ -12,7 +12,6 @@ export function readyWslConnections(state?: WslServersState, label = "WSL") {
         distro: item.config.distro,
         http: {
           url: item.runtime.url,
-          username: item.runtime.username ?? undefined,
           password: item.runtime.password ?? undefined,
         },
       },

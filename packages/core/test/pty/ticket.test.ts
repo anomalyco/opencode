@@ -1,14 +1,16 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { PtyID } from "@opencode-ai/core/pty/schema"
-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
-import { Workspace } from "@opencode-ai/core/workspace"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { PtyID } from "@opencode/core/pty/schema"
+import { PtyTicket } from "@opencode/core/pty/ticket"
+import { Workspace } from "@opencode/core/workspace"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(PtyTicket.node))
 const itExpiring = testEffect(
-  LayerNode.compile(PtyTicket.node, [[PtyTicket.node, Layer.effect(PtyTicket.Service, PtyTicket.make(5))]]),
+  LayerNode.compile(PtyTicket.node, {
+    replacements: [PtyTicket.node.replace(Layer.effect(PtyTicket.Service, PtyTicket.make(5)))],
+  }),
 )
 
 describe("PTY websocket tickets", () => {

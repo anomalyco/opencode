@@ -1,9 +1,9 @@
 export * as WebFetchTool from "./webfetch.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
-import { ToolFailure } from "@opencode-ai/ai"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import { ToolFailure } from "@opencode/ai"
 import { Duration, Effect, Schema } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, type HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import { Permission } from "../../permission.js"
 import { convertHTMLToMarkdown, MAX_MARKDOWN_BYTES } from "../html-markdown.js"
@@ -47,7 +47,6 @@ const acceptHeader = (format: Format) => {
     case "html":
       return "text/html;q=1.0, application/xhtml+xml;q=0.9, text/plain;q=0.8, text/markdown;q=0.7, */*;q=0.1"
   }
-  return "*/*"
 }
 
 const headers = (format: Format, userAgent: string) => ({
@@ -56,32 +55,23 @@ const headers = (format: Format, userAgent: string) => ({
   "Accept-Language": "en-US,en;q=0.9",
 })
 
-const browserUserAgent =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+const openCodeUserAgent =
+  "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OpenCode-User/1.0; +https://opencode.ai"
 
-const isCloudflareChallenge = (error: unknown) => {
-  if (!error || typeof error !== "object" || !("reason" in error)) return false
-  const reason = error.reason
-  if (
-    !reason ||
-    typeof reason !== "object" ||
-    !("_tag" in reason) ||
-    reason._tag !== "StatusCodeError" ||
-    !("response" in reason)
-  )
-    return false
-  const response = reason.response as HttpClientResponse.HttpClientResponse
+const isCloudflareChallenge = (error: HttpClientError.HttpClientError) => {
+  if (error.reason._tag !== "StatusCodeError") return false
+  const response = error.reason.response
   return response.status === 403 && response.headers["cf-mitigated"] === "challenge"
 }
 
-const request = (url: string, format: Format, userAgent = browserUserAgent) =>
+const request = (url: string, format: Format, userAgent = openCodeUserAgent) =>
   HttpClientRequest.get(url).pipe(HttpClientRequest.setHeaders(headers(format, userAgent)))
 
 const assertHttpUrl = (url: URL) => {
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("URL must use http:// or https://")
 }
 
-const execute = (http: HttpClient.HttpClient, url: string, format: Format, userAgent = browserUserAgent) =>
+const execute = (http: HttpClient.HttpClient, url: string, format: Format, userAgent = openCodeUserAgent) =>
   http.execute(request(url, format, userAgent)).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
 
 const collectBody = (response: HttpClientResponse.HttpClientResponse) =>
@@ -112,13 +102,13 @@ const convert = (content: string, contentType: string, format: Format) => {
 
 export const Plugin = {
   id: "opencode.tool.webfetch",
-  effect: Effect.fn("WebFetchTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("WebFetchTool.Plugin")(function* (ctx: Context) {
     const http = yield* HttpClient.HttpClient
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description,

@@ -1,7 +1,7 @@
 import { deflateSync } from "node:zlib"
 
 const size = 16
-const frameRate = 90
+const frameRate = 30
 const duration = 1.2
 const frameCount = frameRate * duration
 const opacity = [0.2, 0.5, 0.75, 1]
@@ -41,8 +41,8 @@ function apng(scale: number) {
     control.writeUInt32BE(sequence.value++, 0)
     control.writeUInt32BE(frameSize, 4)
     control.writeUInt32BE(frameSize, 8)
-    control.writeUInt16BE(frame % 9 === 0 ? 12 : 11, 20)
-    control.writeUInt16BE(1000, 22)
+    control.writeUInt16BE(1, 20)
+    control.writeUInt16BE(frameRate, 22)
     chunks.push(chunk("fcTL", control))
 
     const data = deflateSync(pixels(scale, frame), { level: 9 })

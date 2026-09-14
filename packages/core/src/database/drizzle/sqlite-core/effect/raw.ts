@@ -5,7 +5,7 @@ import { entityKind } from "drizzle-orm/entity"
 import type { RunnableQuery } from "drizzle-orm/runnable-query"
 import type { PreparedQuery } from "drizzle-orm/session"
 import type { Query, SQL, SQLWrapper } from "drizzle-orm/sql/sql"
-import type { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
+import type { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
 
 type SQLiteEffectRawAction = "all" | "get" | "values" | "run"
 
@@ -29,7 +29,7 @@ export class SQLiteEffectRaw<TResult, TEffectHKT extends QueryEffectHKTBase = Qu
     /** @internal */
     public getSQL: () => SQL,
     private action: SQLiteEffectRawAction,
-    private dialect: SQLiteAsyncDialect,
+    private dialect: SQLiteDialect,
     private mapBatchResult: (result: unknown) => unknown,
   ) {}
 

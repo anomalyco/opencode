@@ -6,11 +6,12 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    branches: [dev, beta]
+    branches: [dev, beta, v2]
     paths:
       - "bun.lock"
       - "package.json"
       - "packages/*/package.json"
+      - "services/*/package.json"
       - "flake.lock"
       - "nix/node_modules.nix"
       - "nix/scripts/**"

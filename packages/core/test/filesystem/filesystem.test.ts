@@ -1,8 +1,8 @@
 import { describe, test, expect } from "bun:test"
 import { Effect, FileSystem, Layer } from "effect"
-import { LayerNodePlatform } from "@opencode-ai/util/effect/app-node-platform"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { testEffect } from "../lib/effect"
 import path from "path"
 
@@ -361,29 +361,29 @@ describe("FSUtil", () => {
     it(
       "exists works",
       Effect.gen(function* () {
-        yield* FSUtil.Service
+        const fs = yield* FSUtil.Service
         const filesys = yield* FileSystem.FileSystem
         const tmp = yield* filesys.makeTempDirectoryScoped()
         const file = path.join(tmp, "exists.txt")
         yield* filesys.writeFileString(file, "yes")
 
-        expect(yield* filesys.exists(file)).toBe(true)
-        expect(yield* filesys.exists(file + ".nope")).toBe(false)
+        expect(yield* fs.exists(file)).toBe(true)
+        expect(yield* fs.exists(file + ".nope")).toBe(false)
       }),
     )
 
     it(
       "remove works",
       Effect.gen(function* () {
-        yield* FSUtil.Service
+        const fs = yield* FSUtil.Service
         const filesys = yield* FileSystem.FileSystem
         const tmp = yield* filesys.makeTempDirectoryScoped()
         const file = path.join(tmp, "delete-me.txt")
         yield* filesys.writeFileString(file, "bye")
 
-        yield* filesys.remove(file)
+        yield* fs.remove(file)
 
-        expect(yield* filesys.exists(file)).toBe(false)
+        expect(yield* fs.exists(file)).toBe(false)
       }),
     )
   })

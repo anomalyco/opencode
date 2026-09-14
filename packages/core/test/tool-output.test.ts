@@ -1,32 +1,31 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
-import { Config } from "@opencode-ai/core/config"
-import { Document, Info } from "@opencode-ai/schema/config"
-import { ConfigToolOutput } from "@opencode-ai/schema/config/tool-output"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { ToolOutput } from "@opencode-ai/core/tool-output"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
-import { Identifier } from "@opencode-ai/core/id/id"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { ToolOutput } from "@opencode/core/tool-output"
+import type { Tool } from "@opencode/core/tool"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Identifier } from "@opencode/core/id/id"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
 const withStore = <A, E, R>(
   body: (output: ToolOutput.Interface, fs: FSUtil.Interface, root: string) => Effect.Effect<A, E, R>,
-  info = new Info(),
+  limits?: { maxLines?: number; maxBytes?: number },
 ) =>
   Effect.acquireUseRelease(
     Effect.promise(() => tmpdir()),
     (tmp) => {
-      const config = Config.testLayer([new Document({ type: "document", info })])
       const layer = AppNodeBuilder.build(LayerNode.group([ToolOutput.node, FSUtil.node]), [
-        [Config.node, config],
-        [Global.node, Global.layerWith({ data: tmp.path })],
+        Global.node.replace(Global.layerWith({ data: tmp.path })),
       ])
       return Effect.gen(function* () {
-        return yield* body(yield* ToolOutput.Service, yield* FSUtil.Service, tmp.path)
+        const output = yield* ToolOutput.Service
+        const fs = yield* FSUtil.Service
+        if (limits) yield* output.transform((editor) => editor.configure(limits))
+        return yield* body(output, fs, tmp.path)
       }).pipe(Effect.provide(layer))
     },
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -38,7 +37,7 @@ describe("ToolOutput", () => {
       (service, fs) =>
         Effect.gen(function* () {
           const output = { items: [1, 2, 3] }
-          const result = yield* service.truncate({ output, content: "one\ntwo\nthree" })
+          const result = yield* service.truncate({ output, content: [{ type: "text", text: "one\ntwo\nthree" }] })
           expect(result.output).toBe(output)
           expect(result.metadata).toMatchObject({ truncated: true })
           const outputPath = result.metadata?.outputPath
@@ -50,7 +49,7 @@ describe("ToolOutput", () => {
             { type: "text", text: `... 1 line truncated; full content saved to ${outputPath} ...` },
           ])
         }),
-      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
+      { maxLines: 2, maxBytes: 1_000 },
     ),
   )
 
@@ -58,7 +57,7 @@ describe("ToolOutput", () => {
     withStore(
       (output) =>
         Effect.gen(function* () {
-          const result = yield* output.truncate({ content: "one\ntwo" })
+          const result = yield* output.truncate({ content: [{ type: "text", text: "one\ntwo" }] })
           expect(result.content).toEqual([
             { type: "text", text: "one" },
             {
@@ -67,7 +66,7 @@ describe("ToolOutput", () => {
             },
           ])
         }),
-      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 100, max_bytes: 5 }) }),
+      { maxLines: 100, maxBytes: 5 },
     ),
   )
 
@@ -86,15 +85,16 @@ describe("ToolOutput", () => {
             { type: "text", text: expect.stringMatching(/^\.\.\. 1 line truncated; full content saved to /) },
           ])
         }),
-      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
+      { maxLines: 2, maxBytes: 1_000 },
     ),
   )
 
   it.live("skips results that report a truncation state", () =>
     withStore((output) =>
       Effect.gen(function* () {
-        const truncated = { content: "one\ntwo", metadata: { truncated: true, source: "tool" } }
-        const retained = { content: "one\ntwo", metadata: { truncated: false, source: "tool" } }
+        const content: Tool.NormalizedResult["content"] = [{ type: "text", text: "one\ntwo" }]
+        const truncated = { content, metadata: { truncated: true, source: "tool" } }
+        const retained = { content, metadata: { truncated: false, source: "tool" } }
         expect(yield* output.truncate(truncated)).toBe(truncated)
         expect(yield* output.truncate(retained)).toBe(retained)
       }),
@@ -114,12 +114,12 @@ describe("ToolOutput", () => {
     withStore(
       (output) =>
         Effect.gen(function* () {
-          expect(yield* output.truncate({ content: "one\ntwo\n" })).toEqual({
-            content: "one\ntwo\n",
+          expect(yield* output.truncate({ content: [{ type: "text", text: "one\ntwo\n" }] })).toEqual({
+            content: [{ type: "text", text: "one\ntwo\n" }],
             metadata: { truncated: false },
           })
         }),
-      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 1_000 }) }),
+      { maxLines: 2, maxBytes: 1_000 },
     ),
   )
 
@@ -127,13 +127,13 @@ describe("ToolOutput", () => {
     withStore(
       (output) =>
         Effect.gen(function* () {
-          const result = yield* output.truncate({ content: "one\n" })
+          const result = yield* output.truncate({ content: [{ type: "text", text: "one\n" }] })
           expect(result.content).toEqual([
             { type: "text", text: "one" },
             { type: "text", text: expect.stringMatching(/^\.\.\. 1 byte truncated; full content saved to /) },
           ])
         }),
-      new Info({ tool_output: new ConfigToolOutput.Info({ max_lines: 2, max_bytes: 3 }) }),
+      { maxLines: 2, maxBytes: 3 },
     ),
   )
 

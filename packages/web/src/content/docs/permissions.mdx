@@ -83,6 +83,10 @@ For most permissions, you can use an object to apply different actions based on 
     "edit": {
       "*": "deny",
       "packages/web/src/content/docs/*.mdx": "allow"
+    },
+    "webfetch": {
+      "*": "ask",
+      "https://en.wikipedia.org/*": "allow"
     }
   }
 }
@@ -159,7 +163,7 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 - `lsp` — running LSP queries (currently non-granular)
 - `question` — asking the user questions during execution
 - `webfetch` — fetching a URL (matches the URL)
-- `websearch` — web search (matches the query)
+- `websearch` — web search
 - `external_directory` — triggered when a tool touches paths outside the project working directory
 - `doom_loop` — triggered when the same tool call repeats 3 times with identical input
 

@@ -1,8 +1,8 @@
 import os from "os"
 import { App } from "../../app.js"
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Form } from "@opencode-ai/schema/form"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Form } from "@opencode/schema/form"
 import { Provider } from "../../provider.js"
 import { iife } from "../../util/iife.js"
 import { configuredSettings } from "./configured.js"
@@ -10,7 +10,7 @@ import { configuredSettings } from "./configured.js"
 const providerID = Provider.ID.make("cloudflare-workers-ai")
 
 export const CloudflareWorkersAIPlugin = define({
-  id: "opencode.provider.cloudflare-workers-ai",
+  id: "opencode.provider.cloudflare.workers.ai",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
     const form = iife(() => {
@@ -25,8 +25,8 @@ export const CloudflareWorkersAIPlugin = define({
         },
       ])
     })
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update({
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update({
         integrationID: providerID,
         method: {
           type: "key",
@@ -35,10 +35,10 @@ export const CloudflareWorkersAIPlugin = define({
         },
       })
     })
-    yield* ctx.catalog.transform((evt) => {
-      const item = evt.provider.get(providerID)
+    yield* ctx.provider.transform((evt) => {
+      const item = evt.get(providerID)
       if (!item) return
-      evt.provider.update(item.provider.id, (provider) => {
+      evt.update(item.provider.id, (provider) => {
         if (!Provider.isAISDK(provider.package)) return
         if (typeof provider.settings?.baseURL === "string") return
         const accountId = resolveAccountId(provider.settings ?? {})

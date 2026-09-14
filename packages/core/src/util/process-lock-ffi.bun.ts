@@ -44,7 +44,7 @@ export function lockLinux(fd: number): LockResult {
   }
 }
 
-function errorCode(pointer: Pointer | null) {
+function errorCode(pointer: Pointer | bigint | null) {
   if (pointer === null) throw new Error("Failed to read process lock error code")
   return read.i32(pointer, 0)
 }

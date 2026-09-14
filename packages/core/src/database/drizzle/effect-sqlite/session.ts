@@ -14,7 +14,7 @@ import { entityKind } from "drizzle-orm/entity"
 import type { AnyRelations } from "drizzle-orm/relations"
 import type { RelationalQueryMapperConfig } from "drizzle-orm/relations"
 import type { Query } from "drizzle-orm/sql/sql"
-import type { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
+import type { SQLiteDialect } from "drizzle-orm/sqlite-core/dialect"
 import {
   SQLiteEffectPreparedQuery,
   SQLiteEffectSession,
@@ -59,7 +59,7 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
 
   constructor(
     private client: SqlClient,
-    dialect: SQLiteAsyncDialect,
+    dialect: SQLiteDialect,
     protected relations: TRelations,
     private options: EffectSQLiteSessionOptions,
   ) {
@@ -120,9 +120,13 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
 
   private execute(query: Query, params: unknown[], method: SQLiteExecuteMethod | "values") {
     const statement = this.client.unsafe(query.sql, params)
-    if (method === "values") return statement.values
-    if (method === "get") return statement.withoutTransform.pipe(Effect.map((rows) => rows[0]))
-    return statement.withoutTransform
+    if (method === "values") return statement.values.pipe(Effect.withTracerEnabled(false))
+    if (method === "get")
+      return statement.withoutTransform.pipe(
+        Effect.map((rows) => rows[0]),
+        Effect.withTracerEnabled(false),
+      )
+    return statement.withoutTransform.pipe(Effect.withTracerEnabled(false))
   }
 
   private isInTransaction() {

@@ -179,7 +179,7 @@ test.describe("timeline adverse visual stability", () => {
         userMessage(),
         assistantMessage([
           shell(shellID, "completed", wideLines(15)),
-          toolPart(contextIDs[0]!, "read", "completed", { filePath: "src/a.ts" }),
+          toolPart(contextIDs[0]!, "read", "completed", { path: "src/a.ts" }),
           toolPart(contextIDs[1]!, "glob", "completed", { path: ".", pattern: "**/*.ts" }),
           textPart(followingID, "Following responsive timeline content that wraps on narrow screens."),
         ]),

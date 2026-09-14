@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": ["prefix:zai-chat", "provider:zai", "protocol:zai-chat", "thinking", "model-specific", "error"],
+    "name": "zai-chat/glm-5-3-rejects-disabled-thinking",
+    "recordedAt": "2026-09-08T01:15:19.148Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"glm-5.3\",\"messages\":[{\"role\":\"user\",\"content\":\"What is 173 multiplied by 219? Reply with only the final integer.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":4096,\"thinking\":{\"type\":\"disabled\"}}"
+      },
+      "response": {
+        "status": 400,
+        "headers": {},
+        "body": "eyJlcnJvciI6eyJjb2RlIjoiMTIxMCIsIm1lc3NhZ2UiOiJUaGlzIG1vZGVsIGFsd2F5cyBlbmdhZ2VzIGluIHRoaW5raW5nIGFuZCBjYW5ub3QgYmUgZGlzYWJsZWQ7IHBsZWFzZSB1c2UgbG93LCBoaWdoLCBvciBtYXgifX0=",
+        "bodyEncoding": "base64"
+      }
+    }
+  ]
+}

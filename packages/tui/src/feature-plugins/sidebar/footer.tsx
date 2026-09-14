@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode-ai/plugin/tui"
+import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, Show } from "solid-js"
 import { FilePath } from "../../ui/file-path"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
@@ -40,7 +40,7 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
 }
 
 export default Plugin.define({
-  id: "opencode.sidebar-footer",
+  id: "opencode.sidebar.footer",
   setup(context) {
     // Append keeps the path open to additive plugin claims; an external
     // replace still takes the boundary over.

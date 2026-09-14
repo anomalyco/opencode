@@ -47,6 +47,8 @@ function handle(harness: Harness, request: SimulationProtocol.Frontend.Request, 
         y: request.params.y,
         semantic: request.params.semantic,
       })
+    case "ui.mouse":
+      return SimulationActions.execute(harness, { type: "ui.mouse", params: request.params })
     case "ui.resize":
       return SimulationActions.execute(harness, {
         type: "ui.resize",

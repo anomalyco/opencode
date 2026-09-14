@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { CacheHint, LLM, LLMResponse } from "../src/index.js"
+import { Schema } from "effect"
+import { CacheHint, LLM, LLMResponse, ToolEntry, ToolNamespace } from "../src/index.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
@@ -17,6 +18,52 @@ const chatRoute = OpenAIChat.route
 const responsesRoute = OpenAIResponses.route
 
 describe("llm constructors", () => {
+  test("normalizes recursive tool namespaces", () => {
+    const request = LLM.request({
+      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: responsesRoute }),
+      tools: [
+        {
+          type: "namespace",
+          name: "crm",
+          description: "Customer management",
+          tools: [
+            { name: "lookup", description: "Look up a customer", inputSchema: { type: "object" } },
+            {
+              type: "namespace",
+              name: "orders",
+              tools: [{ name: "list", description: "List orders", inputSchema: { type: "object" } }],
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(request.tools[0]).toEqual({
+      type: "namespace",
+      name: "crm",
+      description: "Customer management",
+      tools: [
+        expect.objectContaining({ type: "tool", name: "lookup" }),
+        {
+          type: "namespace",
+          name: "orders",
+          description: undefined,
+          tools: [expect.objectContaining({ type: "tool", name: "list" })],
+        },
+      ],
+    })
+    expect(request.tools[0]).toEqual(
+      ToolNamespace.make({
+        name: "crm",
+        description: "Customer management",
+        tools: request.tools[0]!.type === "namespace" ? request.tools[0].tools : [],
+      }),
+    )
+    expect(Schema.decodeUnknownSync(ToolEntry)(Schema.encodeUnknownSync(ToolEntry)(request.tools[0]))).toEqual(
+      request.tools[0],
+    )
+  })
+
   test("builds canonical schema classes from ergonomic input", () => {
     const request = LLM.request({
       id: "req_1",
@@ -59,18 +106,18 @@ describe("llm constructors", () => {
         provider: "fake",
         route: chatRoute.with({
           generation: { maxTokens: 100, temperature: 1 },
-          providerOptions: { openai: { store: false, metadata: { model: true } } },
+          providerOptions: { store: false, metadata: { model: true } },
           http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
         }),
       }),
       prompt: "Say hello.",
       generation: { temperature: 0 },
-      providerOptions: { openai: { store: true, metadata: { request: true } } },
+      providerOptions: { store: true, metadata: { request: true } },
       http: { body: { metadata: { request: true } }, headers: { "x-shared": "request" }, query: { request: "1" } },
     })
 
     expect(request.generation).toEqual({ temperature: 0 })
-    expect(request.providerOptions).toEqual({ openai: { store: true, metadata: { request: true } } })
+    expect(request.providerOptions).toEqual({ store: true, metadata: { request: true } })
     expect(request.http).toEqual({
       body: { metadata: { request: true } },
       headers: { "x-shared": "request" },
@@ -121,18 +168,16 @@ describe("llm constructors", () => {
     const model = chatRoute.model({
       id: "kimi-k2",
       defaults: {
-        limits: { context: 128_000, output: 8_192 },
         generation: { maxTokens: 1_024, stop: ["END"] },
-        providerOptions: { openai: { parallelToolCalls: false } },
+        providerOptions: { parallelToolCalls: false },
         http: { body: { extra_body: true } },
       },
       compatibility: { toolSchema: "moonshot" },
     })
     const request = LLM.request({ model, prompt: "Say hello." })
 
-    expect(request.model.defaults?.limits).toEqual({ context: 128_000, output: 8_192 })
     expect(request.model.defaults?.generation).toEqual({ maxTokens: 1_024, stop: ["END"] })
-    expect(request.model.defaults?.providerOptions).toEqual({ openai: { parallelToolCalls: false } })
+    expect(request.model.defaults?.providerOptions).toEqual({ parallelToolCalls: false })
     expect(request.model.defaults?.http).toEqual({ body: { extra_body: true } })
     expect(request.model.compatibility).toEqual({ toolSchema: "moonshot" })
     expect(request.generation).toBeUndefined()

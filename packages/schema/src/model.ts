@@ -4,9 +4,13 @@ import { Schema } from "effect"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Money } from "./money.js"
+import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
 export type ID = typeof ID.Type
+
+const Updated = ephemeral({ type: "model.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
 
 export const VariantID = Schema.String.pipe(Schema.brand("Model.VariantID"))
 export type VariantID = typeof VariantID.Type
@@ -55,8 +59,11 @@ export type MaxTokensField = typeof MaxTokensField.Type
 export interface Compatibility extends Schema.Schema.Type<typeof Compatibility> {}
 export const Compatibility = Schema.Struct({
   reasoningField: ReasoningField.pipe(optional),
+  /** Require every assistant message to include its reasoning field, even when empty. */
+  requireReasoning: Schema.Boolean.pipe(optional),
   maxTokensField: MaxTokensField.pipe(optional),
   requireFinishReason: Schema.Boolean.pipe(optional),
+  requireAssistantAfterTool: Schema.Boolean.pipe(optional),
 }).annotate({ identifier: "Model.Compatibility" })
 
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
@@ -64,7 +71,14 @@ export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
-}).annotate({ identifier: "Model.Capabilities" })
+  responsesWebsockets: Schema.Boolean.pipe(optional),
+})
+  .annotate({ identifier: "Model.Capabilities" })
+  .pipe(
+    statics(() => ({
+      default: () => ({ tools: true, input: ["text", "image"], output: ["text"] }) satisfies Capabilities,
+    })),
+  )
 
 export interface Cost extends Schema.Schema.Type<typeof Cost> {}
 export const Cost = Schema.Struct({
@@ -91,10 +105,14 @@ export const Info = Schema.Struct({
   id: ID,
   modelID: ID,
   providerID: Provider.ID,
+  canonical: Provider.ID.pipe(optional),
   family: Family.pipe(optional),
   name: Schema.String,
   compatibility: Compatibility.pipe(optional),
   package: Provider.Package.pipe(optional),
+  compaction: Provider.Compaction.pipe(optional),
+  /** Session WebSocket policy; omitted inherits the provider policy, then defaults to disabled. */
+  websocket: Schema.Boolean.pipe(optional),
   ...Provider.Overlays,
   capabilities: Capabilities,
   variants: Schema.Array(Variant),
@@ -119,13 +137,13 @@ export const Info = Schema.Struct({
           modelID: id,
           providerID,
           name: id,
-          capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+          capabilities: Capabilities.default(),
           variants: [],
           time: { released: 0 },
           cost: [],
           status: "active",
           enabled: true,
-          limit: { context: 0, output: 0 },
+          limit: { context: 200_000, output: 32_000 },
         }) satisfies Info,
     })),
   )

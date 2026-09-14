@@ -53,7 +53,9 @@ describe("Number and Math", () => {
   })
 
   test("Number valueOf does not enable boxed numbers", async () => {
-    expect((await error(`return new Number(42)`)).kind).toBe("UnsupportedSyntax")
+    const failure = await error(`return new Number(42)`)
+    expect(failure.kind).toBe("ExecutionFailure")
+    expect(failure.message).toContain("new Number(...) is not supported; call Number(...) without new instead.")
   })
 })
 
@@ -243,9 +245,10 @@ describe("RegExp", () => {
         const stored = [pattern.lastIndex, typeof pattern.lastIndex]
         const match = pattern.exec("aacd2233ab12nm444ab42")
         pattern.lastIndex = 0
-        return [stored, match[0], match.index, pattern.lastIndex, delete pattern.lastIndex]
+        return [stored, match[0], match.index, pattern.lastIndex]
       `),
-    ).toEqual([["12", "string"], "ab4", 17, 0, false])
+    ).toEqual([["12", "string"], "ab4", 17, 0])
+    expect((await error(`delete /a/.lastIndex`)).message).toContain("Cannot delete property 'lastIndex'")
   })
 
   test("exec coerces CodeMode data objects assigned to lastIndex", async () => {
@@ -391,8 +394,8 @@ describe("RegExp", () => {
     })
   })
 
-  test("regexes serialize to {} at the boundary, like JSON", async () => {
-    expect(await value(`return /a/`)).toEqual({})
+  test("regexes cross the boundary as their literal form; JSON.stringify keeps {} like JS", async () => {
+    expect(await value(`return [/a/, { r: /b/gi }]`)).toEqual(["/a/", { r: "/b/gi" }])
     expect(await value(`return JSON.stringify({ r: /a/g })`)).toBe('{"r":{}}')
   })
 
@@ -518,7 +521,7 @@ describe("URL and URI helpers", () => {
       cannotParse: false,
       parsed: "https://example.test/users",
       invalidIsTypeError: true,
-      boundary: ["https://example.test/a", {}],
+      boundary: ["https://example.test/a", "q=one"],
       json: '{"url":"https://example.test/a","params":{}}',
     })
   })
@@ -712,12 +715,34 @@ describe("Set", () => {
     ).toBe(6)
   })
 
-  test("sets serialize to {} at the boundary, like JSON", async () => {
-    expect(await value(`return { s: new Set([1]) }`)).toEqual({ s: {} })
+  test("sets cross the boundary as arrays; JSON.stringify keeps {} like JS", async () => {
+    expect(await value(`return { s: new Set([1, "a", { n: 1 }, undefined]) }`)).toEqual({ s: [1, "a", { n: 1 }, null] })
+    expect(await value(`return JSON.stringify(new Set([1]))`)).toBe("{}")
   })
 })
 
 describe("stdlib integration", () => {
+  test("constructor follows own keys, shadowing, writes, and new", async () => {
+    expect(
+      await value(`return [JSON.parse('{"constructor":"Foo"}').constructor, ({ constructor: 1 }).constructor]`),
+    ).toEqual(["Foo", 1])
+    expect(await value(`const Array = 5; return [].constructor.isArray([])`)).toBe(true)
+    expect(await value(`const o = {}; o.constructor = 7; return o.constructor`)).toBe(7)
+    expect(await value(`return new ([].constructor)(3).length`)).toBe(3)
+    expect(await value(`return typeof ({}).constructor`)).toBe("function")
+    expect(await value(`return ({}).constructor.constructor === Function`)).toBe(true)
+  })
+
+  test("new dispatches on the constructor value, not its name", async () => {
+    expect(await value(`const D = Date; return new D(0) instanceof Date`)).toBe(true)
+    expect(await value(`const make = (C) => new C([["a", 1]]); return make(Map).get("a")`)).toBe(1)
+    expect(await value(`const t = { M: Map }; return new t.M() instanceof Map`)).toBe(true)
+    const shadowed = await error(`const Date = 5; return new Date()`)
+    expect(shadowed.message).toStartWith("TypeError: Date is not a constructor.")
+    const fn = await error(`const f = () => 1; return new f()`)
+    expect(fn.message).toStartWith("TypeError: f cannot be constructed")
+  })
+
   test("Object.is uses SameValue semantics", async () => {
     expect(
       await value(`
@@ -745,13 +770,18 @@ describe("stdlib integration", () => {
       ],
     ])
     expect(await value(`const match = /a/.exec("ba"); return [Object.values(match), Object.entries(match)]`)).toEqual([
-      ["a", 1],
+      ["a", 1, "ba"],
       [
         ["0", "a"],
         ["index", 1],
+        ["input", "ba"],
       ],
     ])
-    expect(await value(`return Object.keys(Object.values({ match: /a/.exec("ba") })[0])`)).toEqual(["0", "index"])
+    expect(await value(`return Object.keys(Object.values({ match: /a/.exec("ba") })[0])`)).toEqual([
+      "0",
+      "index",
+      "input",
+    ])
   })
 
   test("Object.fromEntries accepts every supported entry collection", async () => {
@@ -822,6 +852,77 @@ describe("stdlib integration", () => {
       `),
     ).toEqual({ target: { a: 1, b: 2 }, result: { a: 1, b: 2 }, same: true })
     expect(await value(`try { Object.assign(null, { a: 1 }); return false } catch { return true }`)).toBe(true)
+  })
+
+  test("Object.assign rejects direct and nested cycles", async () => {
+    expect(
+      await value(`
+        const target = { kept: true }
+        try { Object.assign(target, { self: target }) } catch { return target }
+        return null
+      `),
+    ).toEqual({ kept: true })
+    expect(
+      await value(`
+        const target = { kept: true }
+        const nested = { target }
+        try { Object.assign(target, { nested }) } catch { return target }
+        return null
+      `),
+    ).toEqual({ kept: true })
+    expect(
+      await value(`
+        const target = {}
+        const source = {}
+        source[Symbol.iterator] = target
+        try { Object.assign(target, source) } catch { return Object.hasOwn(target, Symbol.iterator) }
+        return true
+      `),
+    ).toBe(false)
+    expect(
+      await value(`
+        const target = {}
+        const nested = {}
+        nested[Symbol.iterator] = target
+        try { Object.assign(target, { nested }) } catch { return Object.hasOwn(target, "nested") }
+        return true
+      `),
+    ).toBe(false)
+  })
+
+  test("Object.assign preserves mutations before a circular field", async () => {
+    expect(
+      await value(`
+        const target = {}
+        try { Object.assign(target, { before: 1, cycle: { target }, after: 2 }) } catch { return target }
+        return null
+      `),
+    ).toEqual({ before: 1 })
+    expect(
+      await value(`
+        const target = {}
+        const marker = {}
+        const source = {}
+        source[Symbol.iterator] = marker
+        source[Symbol.asyncIterator] = target
+        try { Object.assign(target, source) } catch {
+          return [target[Symbol.iterator] === marker, Object.hasOwn(target, Symbol.asyncIterator)]
+        }
+        return null
+      `),
+    ).toEqual([true, false])
+  })
+
+  test("Object.assign preserves target identity and acyclic shared aliases", async () => {
+    expect(
+      await value(`
+        const shared = { count: 1 }
+        const target = {}
+        const result = Object.assign(target, { left: shared, right: shared })
+        result.left.count = 2
+        return [result === target, result.left === shared, result.left === result.right, shared.count]
+      `),
+    ).toEqual([true, true, true, 2])
   })
 
   test("assignment resolves and reads its left side before evaluating the right side", async () => {
@@ -933,7 +1034,7 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     const diagnostic = await error(`return Object.keys(Promise.resolve({ a: 1 }))`)
     expect(diagnostic.kind).toBe("InvalidDataValue")
     expect(diagnostic.message).toContain("await")
-    expect((await error(`return Object.keys(Math)`)).kind).toBe("InvalidDataValue")
+    expect(await value(`return Object.keys(Math)`)).toEqual([])
   })
 
   test("Object.assign keeps Maps usable", async () => {
@@ -1002,7 +1103,7 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     const diagnostic = await error(`return Array.from(Promise.resolve([1]))`)
     expect(diagnostic.kind).toBe("InvalidDataValue")
     expect(diagnostic.message).toContain("await")
-    expect((await error(`return Array.from(() => 1)`)).kind).toBe("InvalidDataValue")
+    expect(await value(`return Array.from((a, b) => 1)`)).toEqual([null, null])
   })
 
   test("regexes stay callable through Object.values", async () => {

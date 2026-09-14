@@ -54,10 +54,10 @@ export function DevToolsBar() {
   )
   const groups = createMemo(() => DevTools.data().filter((group) => group.id !== "theme-performance"))
   const [server] = createResource(connected, async () => {
-    const [health, info] = await Promise.all([client.api.health.get(), client.api.server.get()])
+    const status = await client.api.server.status()
     return {
-      health,
-      address: info.urls[0] ? new URL(info.urls[0]).host : "Unknown",
+      health: status,
+      address: status.urls[0] ? new URL(status.urls[0]).host : "Unknown",
     }
   })
   const close = () => {
@@ -86,7 +86,15 @@ export function DevToolsBar() {
   const offEscape = keymap.intercept(
     "key",
     ({ event }) => {
-      if (!panel() || event.name !== "escape") return
+      if (!panel() || keymap.mode.current() !== "base") return
+      if (event.name !== "escape" && !(event.ctrl && event.name === "c")) return
+      if (renderer.getSelection()?.getSelectedText()) {
+        if ((config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) !== "select") return
+        renderer.clearSelection()
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
       event.preventDefault()
       event.stopPropagation()
       close()
@@ -142,7 +150,7 @@ export function DevToolsBar() {
     const sessionLocation =
       info?.location ??
       (location.current
-        ? { directory: location.current.directory, workspaceID: location.current.workspaceID }
+        ? { directory: location.current.directory }
         : undefined)
     const details = server()
     const backend = {
@@ -352,7 +360,7 @@ export function DevToolsBar() {
           <PanelBox>
             <PanelTitle>Tools</PanelTitle>
             <Action onClick={() => void dump()} disabled={dumping()} hoverBackground>
-              {dumping() ? "Writing debug snapshot..." : "Write debug snapshot"}
+              {dumping() ? "Writing debug snapshot…" : "Write debug snapshot"}
             </Action>
             <Show when={dumpPath()}>
               {(file) => (
