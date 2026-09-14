@@ -56,6 +56,7 @@ const stderrLogger = Logger.make((options) => process.stderr.write(formatter().l
 export function minimumLogLevel() {
   const value = process.env.OPENCODE_LOG_LEVEL?.toUpperCase()
   const levels = {
+    TRACE: "Trace",
     DEBUG: "Debug",
     INFO: "Info",
     WARN: "Warn",
