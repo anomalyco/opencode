@@ -6,7 +6,7 @@ test("every MCP row hit area toggles exactly once and keeps the submenu open", a
   await mockStressTimeline(page)
   const state = { enabled: true }
   const writes: string[] = []
-  await page.route("**/api/mcp**", (route) => {
+  await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, (route) => {
     if (route.request().method() === "OPTIONS") return route.fallback()
     const url = new URL(route.request().url())
     const directory = url.searchParams.get("location[directory]")
@@ -72,7 +72,7 @@ test("MCP authentication starts before a slow resource catalog finishes", async 
   const attempts: string[] = []
   const resources = Promise.withResolvers<void>()
   await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
-  await page.route("**/api/mcp**", async (route) => {
+  await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, async (route) => {
     if (route.request().method() === "OPTIONS") return route.fallback()
     const url = new URL(route.request().url())
     if (url.pathname.endsWith("/connect")) {

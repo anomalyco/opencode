@@ -24,7 +24,8 @@ describe("acp service", () => {
         if (url.pathname === "/api/command")
           return Response.json({ location, data: [{ name: "review", template: "" }] })
         if (url.pathname === "/api/session" && request.method === "POST") return Response.json({ data: session })
-        if (url.pathname === "/api/mcp/docs" && request.method === "PUT") return new Response(null, { status: 204 })
+        if (url.pathname === "/api/experimental/mcp/docs" && request.method === "PUT")
+          return new Response(null, { status: 204 })
         return new Response(null, { status: 404 })
       },
     })
@@ -53,7 +54,7 @@ describe("acp service", () => {
       expect(result.configOptions?.map((option) => option.id)).toEqual(["model", "effort", "mode"])
       expect(requests).toContainEqual({
         method: "PUT",
-        path: "/api/mcp/docs",
+        path: "/api/experimental/mcp/docs",
         body: {
           config: { type: "local", command: ["bun", "docs.ts"], environment: { TOKEN: "x" } },
         },

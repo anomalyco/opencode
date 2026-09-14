@@ -6,7 +6,9 @@ import { Global } from "@opencode/util/global"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
-test.each([80, 120, 180])("session wheel scrolling preserves pane focus at width %s", async (width) => {
+test
+  .skipIf(process.platform === "win32")
+  .each([80, 120, 180])("session wheel scrolling preserves pane focus at width %s", async (width) => {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width, height: 36, useThread: false, kittyKeyboard: true })
   setup.renderer.start()

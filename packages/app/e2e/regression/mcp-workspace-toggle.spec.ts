@@ -30,7 +30,7 @@ for (const shared of [true, false]) {
       sessions: [{ id: sessionID, projectID, directory: workspace, title }],
       pageMessages: () => ({ items: [] }),
     })
-    await page.route("**/api/mcp**", async (route) => {
+    await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, async (route) => {
       if (route.request().method() === "OPTIONS") return route.fallback()
       const url = new URL(route.request().url())
       const target = url.searchParams.get("location[directory]") ?? directory
@@ -109,7 +109,7 @@ for (const surface of ["popover", "dialog"] as const) {
       sessions: [{ id: sessionID, projectID, directory: workspace, title }],
       pageMessages: () => ({ items: [] }),
     })
-    await page.route("**/api/mcp**", async (route) => {
+    await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, async (route) => {
       if (route.request().method() === "OPTIONS") return route.fallback()
       const url = new URL(route.request().url())
       const target = url.searchParams.get("location[directory]") ?? directory
