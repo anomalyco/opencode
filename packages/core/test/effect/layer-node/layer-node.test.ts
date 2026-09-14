@@ -63,6 +63,73 @@ describe("layer node", () => {
     expect(await Effect.runPromise(program)).toEqual(["first", "second"])
   })
 
+  test("rejects an undefined dependency", () => {
+    // a circular import leaves the dependency undefined at module-evaluation time
+    // @ts-expect-error A dependency must be a node
+    expect(() => make({ service: Greeting, layer: greetingLayer, deps: [undefined] })).toThrow(
+      'Layer node "test/LayerNodeGreeting" has an undefined dependency at index 0',
+    )
+  })
+
+  test("reports the position of an undefined dependency", () => {
+    // @ts-expect-error A dependency must be a node
+    expect(() => make({ service: Greeting, layer: greetingLayer, deps: [value, undefined] })).toThrow(
+      "undefined dependency at index 1",
+    )
+  })
+
+  test("rejects an undefined dependency in a group", () => {
+    // @ts-expect-error A dependency must be a node
+    expect(() => LayerNode.group([value, undefined])).toThrow(
+      'Layer node "group" has an undefined dependency at index 1',
+    )
+  })
+
+  test("rejects an undefined dependency on a node that bypassed make", () => {
+    // `Node` is structural, so a node built by hand never passes through `make`
+    // @ts-expect-error A dependency must be a node
+    const handBuilt: LayerNode.Node<Greeting> = { ...greeting, dependencies: [undefined] }
+    expect(() => LayerNode.compile(handBuilt)).toThrow(
+      'Layer node "test/LayerNodeGreeting" has an undefined dependency at index 0',
+    )
+  })
+
+  // groups are expanded by `flatten` before a node is visited, so they need their own coverage
+  const handBuiltGroup = (): LayerNode.Node<Value> => ({
+    kind: "group",
+    name: "external-group",
+    // @ts-expect-error A dependency must be a node
+    dependencies: [undefined],
+  })
+
+  test("rejects an undefined dependency in a hand-built group at the root", () => {
+    expect(() => LayerNode.compile(handBuiltGroup())).toThrow(
+      'Layer node "external-group" has an undefined dependency at index 0',
+    )
+  })
+
+  test("rejects an undefined dependency in a nested hand-built group", () => {
+    const parent = make({ service: Greeting, layer: greetingLayer, deps: [handBuiltGroup()] })
+    expect(() => LayerNode.compile(parent)).toThrow(
+      'Layer node "external-group" has an undefined dependency at index 0',
+    )
+  })
+
+  test("rejects an undefined dependency while hoisting", () => {
+    expect(() => LayerNode.hoist(handBuiltGroup(), tags.values.app)).toThrow(
+      'Layer node "external-group" has an undefined dependency at index 0',
+    )
+  })
+
+  test("rejects an undefined dependency while rewriting replacements", () => {
+    // a hoisted tagged node is rewritten rather than visited, so it reaches a separate recursion
+    const parent = make({ service: Greeting, layer: greetingLayer, deps: [handBuiltGroup()] })
+    const replacement = Layer.succeed(Value, Value.of({ value: "simulation" }))
+    expect(() => LayerNode.hoist(parent, tags.values.app, [[value, replacement]])).toThrow(
+      'Layer node "external-group" has an undefined dependency at index 0',
+    )
+  })
+
   test("requires unbound nodes to be replaced before compilation", async () => {
     const unbound = LayerNode.unbound(Value, tags.values.app)
     const greeting = make({ service: Greeting, layer: greetingLayer, deps: [unbound] })
