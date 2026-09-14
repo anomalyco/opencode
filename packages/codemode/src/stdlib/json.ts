@@ -57,7 +57,7 @@ const stringify = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<un
             .filter((item): item is string | number => typeof item === "string" || typeof item === "number")
             .map(String)
         : null
-    // A string cannot pollute, so __proto__ stays: JSON.stringify includes own __proto__ keys, like JS.
+    // Not a host boundary: __proto__ stays and Set/RegExp/URLSearchParams serialize as {}, like JS.
     const text = JSON.stringify(toData(args[0], "JSON.stringify value", "json", false), properties, indent)
     if (text !== undefined) checkStringLength(text.length)
     return Effect.succeed(text)

@@ -312,3 +312,28 @@ describe("tool argument prototype safety", () => {
     expect(await value(runtime, `return [{ __proto__: 1 }]`)).toEqual([{}])
   })
 })
+
+describe("tool arguments cross in a useful form where JSON.stringify would give {}", () => {
+  test("Set, RegExp, and URLSearchParams; Map stays {} like JSON", async () => {
+    let seen: unknown
+    const runtime = CodeMode.make({
+      tools: {
+        inspect: Tool.make({
+          description: "Inspect",
+          input: Schema.Struct({ v: Schema.Unknown }),
+          output: Schema.Unknown,
+          execute: (input) =>
+            Effect.sync(() => {
+              seen = input.v
+              return null
+            }),
+        }),
+      },
+    })
+    await value(
+      runtime,
+      `return await tools.inspect({ v: { s: new Set([1, 2]), r: /x/g, p: new URLSearchParams("a=1&b=2"), m: new Map([["k", 1]]) } })`,
+    )
+    expect(seen).toEqual({ s: [1, 2], r: "/x/g", p: "a=1&b=2", m: {} })
+  })
+})

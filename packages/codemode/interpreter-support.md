@@ -23,6 +23,10 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       arguments follow JSON serialization semantics before their schema applies (see the tools section). Own
       `__proto__` keys are dropped wherever a host object crosses to the host, so merging tool inputs or results
       cannot replace a prototype; `JSON.stringify` still emits the key, like JS, since a string cannot pollute.
+- [x] Values `JSON.stringify` would flatten to `{}` cross the host boundary in a useful form instead: a Set as an
+      array, a RegExp as `"/source/flags"`, a URLSearchParams as its query string. A Map still crosses as `{}`.
+      Functions, generators, promises, and extension handles are rejected with a hint. In-program `JSON.stringify`
+      keeps JS behavior for all of these.
 - [x] Live Date, RegExp, Map, Set, URL, and URLSearchParams values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
