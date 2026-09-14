@@ -25,6 +25,7 @@ import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
+import { formatUnknownRunAgentError, resolveRequestedRunAgent } from "./run/agent-flag"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
@@ -165,11 +166,11 @@ export const RunCommand = effectCmd({
       .option("model", {
         type: "string",
         alias: ["m"],
-        describe: "model to use in the format of provider/model",
+        describe: "model to use in the format of provider/model (pins the session model and skips plugin fallback chains)",
       })
       .option("agent", {
         type: "string",
-        describe: "agent to use",
+        describe: "agent to use (exact or case-insensitive registered name; unknown names exit instead of falling back)",
       })
       .option("format", {
         type: "string",
@@ -596,26 +597,15 @@ export const RunCommand = effectCmd({
         if (!args.agent) return undefined
         const name = args.agent
 
-        const entry = await Effect.runPromise(
-          agentSvc.get(name).pipe(Effect.provideService(InstanceRef, localInstance)),
+        const listed = await Effect.runPromise(
+          agentSvc.list().pipe(Effect.provideService(InstanceRef, localInstance)),
         )
-        if (!entry) {
-          UI.println(
-            UI.Style.TEXT_WARNING_BOLD + "!",
-            UI.Style.TEXT_NORMAL,
-            `agent "${name}" not found. Falling back to default agent`,
-          )
-          return undefined
+        const resolved = resolveRequestedRunAgent(name, listed)
+        if (!resolved.ok) {
+          UI.error(formatUnknownRunAgentError(name, resolved))
+          process.exit(1)
         }
-        if (entry.mode === "subagent") {
-          UI.println(
-            UI.Style.TEXT_WARNING_BOLD + "!",
-            UI.Style.TEXT_NORMAL,
-            `agent "${name}" is a subagent, not a primary agent. Falling back to default agent`,
-          )
-          return undefined
-        }
-        return name
+        return resolved.name
       }
 
       async function attachAgent(sdk: OpencodeClient) {
@@ -636,26 +626,12 @@ export const RunCommand = effectCmd({
           return undefined
         }
 
-        const agent = modes.find((a) => a.name === name)
-        if (!agent) {
-          UI.println(
-            UI.Style.TEXT_WARNING_BOLD + "!",
-            UI.Style.TEXT_NORMAL,
-            `agent "${name}" not found. Falling back to default agent`,
-          )
-          return undefined
+        const resolved = resolveRequestedRunAgent(name, modes)
+        if (!resolved.ok) {
+          UI.error(formatUnknownRunAgentError(name, resolved))
+          process.exit(1)
         }
-
-        if (agent.mode === "subagent") {
-          UI.println(
-            UI.Style.TEXT_WARNING_BOLD + "!",
-            UI.Style.TEXT_NORMAL,
-            `agent "${name}" is a subagent, not a primary agent. Falling back to default agent`,
-          )
-          return undefined
-        }
-
-        return name
+        return resolved.name
       }
 
       async function pickAgent(sdk: OpencodeClient) {
