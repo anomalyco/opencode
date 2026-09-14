@@ -713,7 +713,29 @@ const detectZaiToolStream = (provider: string, baseURL: string | undefined, mode
   return true
 }
 
-const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
+const detectSupportsPromptCacheKey = (provider: string, baseURL: string | undefined): boolean => {
+  const p = provider.toLowerCase()
+  const url = (baseURL ?? "").toLowerCase()
+  const isAllowlistedProvider =
+    p === "openai" ||
+    p === "deepseek" ||
+    p === "zai" ||
+    p === "zai-coding-plan" ||
+    p === "zhipuai" ||
+    p === "zhipuai-coding-plan" ||
+    p === "openrouter" ||
+    p === "xai"
+  const isAllowlistedBaseURL =
+    url.includes("api.openai.com") ||
+    url.includes("api.deepseek.com") ||
+    url.includes("api.z.ai") ||
+    url.includes("open.bigmodel.cn") ||
+    url.includes("openrouter.ai") ||
+    url.includes("api.x.ai")
+  return isAllowlistedProvider || isAllowlistedBaseURL
+}
+
+const lowerOptions = (request: LLMRequest, supportsStore: boolean, supportsPromptCacheKey: boolean) => {
   const options = OpenAIOptions.resolve(request)
   const cacheKey = ProviderShared.promptCacheKey(request)
   return {
@@ -722,7 +744,7 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
     // even when no explicit `providerOptions.store` was supplied, mirroring the
     // native OpenAI Chat default. Non-standard providers omit `store` entirely.
     ...(supportsStore && options.store === undefined ? { store: false } : {}),
-    ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
+    ...(supportsPromptCacheKey && cacheKey ? { prompt_cache_key: cacheKey } : {}),
     ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
   }
 }
@@ -750,6 +772,8 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     request.model.compatibility?.supportsUsageInStreaming ?? detectSupportsUsageInStreaming()
   const supportsStrictMode =
     request.model.compatibility?.supportsStrictMode ?? detectSupportsStrictMode(provider, baseURL)
+  const supportsPromptCacheKey =
+    request.model.compatibility?.supportsPromptCacheKey ?? detectSupportsPromptCacheKey(provider, baseURL)
   const zaiToolStream =
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
@@ -783,7 +807,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     presence_penalty: generation?.presencePenalty,
     seed: generation?.seed,
     stop: generation?.stop,
-    ...lowerOptions(request, supportsStore),
+    ...lowerOptions(request, supportsStore, supportsPromptCacheKey),
   }
 })
 
