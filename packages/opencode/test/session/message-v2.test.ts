@@ -1488,6 +1488,26 @@ describe("session.message-v2.fromError", () => {
     expect(SessionV1.ContextOverflowError.isInstance(result)).toBe(true)
   })
 
+  test("serializes stale encrypted reasoning as a non-retryable APIError", () => {
+    const error = new APICallError({
+      message:
+        "Error from provider (Console): Upstream request failed: [invalid_request_error] reasoning `encrypted_content` was not issued to this caller",
+      url: "https://opencode.ai/zen/v1/responses",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID })
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    expect(result).toMatchObject({
+      name: "APIError",
+      data: {
+        isRetryable: false,
+      },
+    })
+  })
+
   test("does not classify 429 no body as context overflow", () => {
     const result = MessageV2.fromError(
       new APICallError({
