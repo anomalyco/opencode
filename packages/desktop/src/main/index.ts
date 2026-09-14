@@ -32,14 +32,17 @@ import {
   type SidecarListener,
 } from "./server"
 import { setupAutoUpdater, showUpdaterDialog } from "./updater"
+import { createTray } from "./tray"
 import { safeWebContentsURL } from "./window-state"
 import {
   getLastFocusedWindow,
+  iconPath,
   registerRendererProtocol,
   setRelaunchHandler,
   setAppQuitting,
   setBackgroundColor,
   setDockIcon,
+  showMainWindow,
   restoreMainWindows,
 } from "./windows"
 import { createWslServersController } from "./wsl/servers"
@@ -409,13 +412,17 @@ const main = Effect.gen(function* () {
   yield* Fiber.await(loadingTask)
 
   app.on("window-all-closed", () => {
-    if (process.platform === "darwin") return
-    app.quit()
+    // Tray mode: the app stays alive in the system tray (Windows/Linux) or
+    // the Dock (macOS) when every window is closed/hidden, so background
+    // agent work keeps running. A real quit goes through `before-quit`
+    // (sets the quitting flag) and exits normally.
   })
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length > 0) return
     restoreMainWindows()
   })
+
+  createTray(iconPath(), () => showMainWindow())
 
   const windows = restoreMainWindows()
   if (windows.length) createMenu(menuDeps)
