@@ -2,14 +2,12 @@ import { Server } from "@/server/server"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
-import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { ServerAuth } from "@/server/auth"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Effect } from "effect"
-import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { reloadIfGlobalConfigChanged } from "@/server/global-lifecycle"
 
 Heap.start()
 
@@ -61,13 +59,7 @@ export const rpc = {
     await upgrade().catch(() => {})
   },
   async reload() {
-    await AppRuntime.runPromise(
-      Effect.gen(function* () {
-        const cfg = yield* Config.Service
-        yield* cfg.invalidate()
-        yield* disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true })
-      }),
-    )
+    await AppRuntime.runPromise(reloadIfGlobalConfigChanged())
   },
   async shutdown() {
     await InstanceRuntime.disposeAllInstances()
