@@ -186,21 +186,8 @@ export const extensionGlobals = <R>(
           define(target, key, fn<R>(protos, key, method.length, impl), hidden)
           continue
         }
-        // A data property reads and writes live, like JS, with each value converted.
-        if ("value" in descriptor) {
-          const source = level as Record<string, unknown>
-          defineAccessor(
-            target,
-            key,
-            () => fromHost(source[key], name),
-            descriptor.writable
-              ? (_, value) => {
-                  source[key] = toHost(value, `${name} value`)
-                }
-              : undefined,
-          )
-          continue
-        }
+        // Data properties stay host-side: a program write to one would change the host class itself.
+        if ("value" in descriptor) continue
         const get = descriptor.get
         const set = descriptor.set
         defineAccessor(

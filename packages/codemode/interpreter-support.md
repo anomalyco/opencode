@@ -429,7 +429,7 @@ Host classes and functions a host opts in through `Extension.make({ name, global
 Nothing is exposed unless a host provides it; extension calls are not tool calls.
 
 - [x] Each global is a class or a function, exposed as-is: constructors with `new`, prototype methods, accessors,
-      data properties, and statics (including through an exposed subclass, so `new this()` works), plus inheritance
+      and statics (including through an exposed subclass, so `new this()` works), plus inheritance
       up to the nearest exposed ancestor. A global that shadows a built-in or another extension throws at `make`.
 - [x] Instances of exposed classes stay on the host; the program holds a handle whose only members are the class's.
       The same host instance is always the same handle within a run, so identity and `instanceof` hold. Handles
@@ -442,7 +442,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       like any error. A getter must be synchronous.
 - [x] A prototype member runs only with a handle of its own class as `this`; a detached call, a plain object, or a
       handle of another class throws `TypeError: Illegal invocation`. Program edits to an exposed prototype affect
-      that run only.
+      that run only. Data properties on a class or prototype are not exposed, since a program write would change the
+      host class itself; expose one through an accessor.
 - [ ] Program functions as arguments to extension code (callbacks such as `forEach`).
 - [ ] Binary values (`Uint8Array`, `ArrayBuffer`) at the extension boundary; needs the binary value type above.
 

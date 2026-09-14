@@ -107,7 +107,13 @@ describe("extension classes behave like JS", () => {
       true,
       true,
     ])
-    expect(await value(`Bag.made = 0; new Bag(); new Bag(); return Bag.made`)).toBe(2)
+  })
+
+  test("data properties are invisible, so a program write never reaches the host class", async () => {
+    Bag.made = 0
+    expect(await value(`Bag.made = 999; return Bag.made`)).toBe(999)
+    expect(Bag.made).toBe(0)
+    expect(await value(`return [Bag.made, new Bag(["a"]).items]`)).toEqual([null, null])
   })
 
   test("inheritance chains to the exposed ancestor", async () => {
