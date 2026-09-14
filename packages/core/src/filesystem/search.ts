@@ -5,7 +5,8 @@ import path from "path"
 import { Context, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
-import { FileSystem } from "../filesystem"
+import type { FileSystem } from "../filesystem"
+import { Entry, Match } from "@opencode-ai/schema/filesystem"
 import { FSUtil } from "../fs-util"
 import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
@@ -61,7 +62,7 @@ export const ripgrepLayer = Layer.effect(
             .pipe(
               Effect.map((result) =>
                 result.map((entry) =>
-                  FileSystem.Entry.make({
+                  Entry.make({
                     ...entry,
                     path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
                   }),
@@ -86,9 +87,9 @@ export const ripgrepLayer = Layer.effect(
             .pipe(
               Effect.map((result) =>
                 result.map((match) =>
-                  FileSystem.Match.make({
+                  Match.make({
                     ...match,
-                    entry: FileSystem.Entry.make({
+                    entry: Entry.make({
                       ...match.entry,
                       path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
                     }),
@@ -109,7 +110,7 @@ export const ripgrepLayer = Layer.effect(
           return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
             const relative = item.target
             const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)
-            return FileSystem.Entry.make({
+            return Entry.make({
               path: RelativePath.make(relative),
               type,
             })
@@ -154,7 +155,7 @@ export const fffLayer = Layer.effect(
           })
           if (!found.ok) throw found.error
           return found.value.items.map((item) =>
-            FileSystem.Entry.make({
+            Entry.make({
               path: RelativePath.make(item.relativePath.replaceAll("\\", "/")),
               type: "file",
             }),
@@ -172,8 +173,8 @@ export const fffLayer = Layer.effect(
           if (!found.ok) throw found.error
           return found.value.items.map((match) => {
             const bytes = Buffer.from(match.lineContent)
-            return FileSystem.Match.make({
-              entry: FileSystem.Entry.make({
+            return Match.make({
+              entry: Entry.make({
                 path: RelativePath.make(match.relativePath.replaceAll("\\", "/")),
                 type: "file",
               }),
@@ -222,7 +223,7 @@ export const fffLayer = Layer.effect(
             .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
             .map((item) => {
               const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
-              return FileSystem.Entry.make({
+              return Entry.make({
                 path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
                 type: item.type,
               })
