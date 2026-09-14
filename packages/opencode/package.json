@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@babel/core": "7.28.4",
+    "@effect/sql-sqlite-bun": "catalog:",
     "@octokit/webhooks-types": "7.6.1",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/http-recorder": "workspace:*",
@@ -85,6 +86,7 @@
     "@octokit/rest": "catalog:",
     "@openauthjs/openauth": "catalog:",
     "@opencode-ai/codemode": "workspace:*",
+    "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
     "@opencode-ai/llm": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
