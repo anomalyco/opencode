@@ -91,6 +91,9 @@ OpenCode Go ออกแบบมาสำหรับ [OpenCode](https://openco
 1. ส่งทราฟฟิกตามปกติของ coding agent
 2. ระบุตัวตนด้วย user agent ของตนเอง เช่น `my-coding-agent/1.0` แทนชื่อ SDK หรือไลบรารี HTTP แบบทั่วไป
 3. ส่ง session ID ที่คงที่ใน `x-opencode-session` สำหรับแต่ละบทสนทนา เพื่อให้เราปรับ routing และ prompt caching ให้เหมาะสมได้
+   ใช้ ID เดิมซ้ำสำหรับทุกคำขอในบทสนทนา รวมถึงการเรียกเสริมด้วย แทนที่จะสร้างใหม่ต่อคำขอหรือต่อโปรเซส และส่งไปยังทุก endpoint
+   ที่ไคลเอนต์ใช้ (`/responses`, `/chat/completions` และ `/messages`) เพราะ header ที่เพิ่มไว้ใน middleware ของ SDK
+   เพียงตัวเดียวจะไม่ถูกส่งไปยัง endpoint อื่น
 
 ### ไคลเอนต์ที่ผ่านการตรวจสอบแล้ว
 

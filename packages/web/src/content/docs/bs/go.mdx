@@ -104,6 +104,9 @@ Vaš klijent treba:
    generičkim nazivom SDK-a ili HTTP biblioteke.
 3. Slati stabilan ID sesije u zaglavlju `x-opencode-session` za svaki razgovor kako bismo mogli optimizovati usmjeravanje i
    keširanje promptova.
+   Koristiti isti ID za sve zahtjeve u razgovoru, uključujući pomoćne pozive, umjesto kreiranja novog po zahtjevu
+   ili po procesu, i slati ga na sve endpointe koje klijent koristi (`/responses`, `/chat/completions` i
+   `/messages`); zaglavlje dodano samo u middleware jednog SDK-a ne stiže do ostalih.
 
 ### Provjereni klijenti
 

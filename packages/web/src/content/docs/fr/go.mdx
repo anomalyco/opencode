@@ -94,6 +94,10 @@ Votre client doit :
    qu'avec le nom générique d'un SDK ou d'une bibliothèque HTTP.
 3. Envoyer un ID de session stable dans `x-opencode-session` pour chaque conversation afin que nous puissions optimiser le routage et
    la mise en cache des prompts.
+   Réutiliser le même ID pour toutes les requêtes d'une conversation, appels auxiliaires compris, plutôt que d'en
+   générer un par requête ou par processus, et l'envoyer sur tous les endpoints utilisés par le client
+   (`/responses`, `/chat/completions` et `/messages`) ; un en-tête ajouté uniquement dans le middleware d'un seul
+   SDK n'atteint pas les autres.
 
 ### Clients validés
 

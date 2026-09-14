@@ -96,6 +96,10 @@ Dein Client sollte:
    nicht mit dem allgemeinen Namen eines SDKs oder einer HTTP-Bibliothek.
 3. für jede Unterhaltung eine stabile Sitzungs-ID in `x-opencode-session` senden, damit wir das Routing und
    Prompt-Caching optimieren können.
+   Dieselbe ID für alle Anfragen einer Unterhaltung wiederverwenden, Hilfsaufrufe eingeschlossen, statt pro Anfrage
+   oder pro Prozess eine neue zu erzeugen, und sie an allen vom Client genutzten Endpunkten senden (`/responses`,
+   `/chat/completions` und `/messages`); ein Header, der nur in der Middleware eines einzigen SDK gesetzt wird,
+   erreicht die anderen nicht.
 
 ### Validierte Clients
 
