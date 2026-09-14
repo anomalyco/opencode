@@ -223,8 +223,11 @@ export const layer = (options?: Options) =>
           Effect.gen(function* () {
             if (input.params.mode === "url") {
               const formID = Form.ID.create()
-              const key = input.server + "\u0000" + input.params.elicitationId
-              urlElicitations.set(key, formID)
+              // Legacy only: 2026-07-28 has no elicitationId and no completion notification, so the form
+              // settles when the user confirms and the SDK retries the tool call itself.
+              const elicitationID: string | undefined = input.params.elicitationId
+              const key = elicitationID === undefined ? undefined : input.server + "\u0000" + elicitationID
+              if (key) urlElicitations.set(key, formID)
               return yield* forms
                 .ask({
                   id: formID,
@@ -233,14 +236,14 @@ export const layer = (options?: Options) =>
                   metadata: {
                     kind: "mcp-elicitation",
                     server: input.server,
-                    elicitationID: input.params.elicitationId,
+                    ...(elicitationID === undefined ? {} : { elicitationID }),
                     message: input.params.message,
                   },
                   fields: [{ key: URL_ELICITATION_FIELD_KEY, type: "external", url: input.params.url }],
                 })
                 .pipe(
                   Effect.raceFirst(waitForAbort(input.signal)),
-                  Effect.ensuring(Effect.sync(() => urlElicitations.delete(key))),
+                  Effect.ensuring(Effect.sync(() => key && urlElicitations.delete(key))),
                   Effect.map(
                     (state): McpClient.ElicitationResult => ({
                       action: state.status === "answered" ? "accept" : "cancel",

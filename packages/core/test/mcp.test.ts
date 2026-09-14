@@ -2,7 +2,13 @@ import path from "node:path"
 import fs from "node:fs/promises"
 import { describe, expect, test } from "bun:test"
 import { Client, InMemoryTransport, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
-import { createMcpHandler, Server, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server"
+import {
+  createMcpHandler,
+  inputRequired,
+  inputResponse,
+  Server,
+  WebStandardStreamableHTTPServerTransport,
+} from "@modelcontextprotocol/server"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
@@ -142,13 +148,21 @@ function resourceServer(
           })
         }
         if (input.urlElicitation) {
-          protocol.setRequestHandler("tools/call", async () => {
-            const result = await protocol.elicitInput({
-              mode: "url",
-              message: "Authorize access",
-              url: "https://example.com/authorize",
-              elicitationId: "elicitation-test",
-            })
+          const url = "https://example.com/authorize"
+          // Modern servers cannot call elicitInput; they return input_required and the client retries.
+          protocol.setRequestHandler("tools/call", async (request, ctx) => {
+            const responses = ctx.mcpReq.inputResponses
+            if (input.modern && !responses)
+              return inputRequired({ inputRequests: { auth: inputRequired.elicitUrl({ message: "Authorize", url }) } })
+            const response = inputResponse(responses, "auth")
+            const result = input.modern
+              ? { action: response.kind === "elicit" ? response.action : "cancel" }
+              : await protocol.elicitInput({
+                  mode: "url",
+                  message: "Authorize access",
+                  url,
+                  elicitationId: "elicitation-test",
+                })
             return {
               content: [{ type: "text", text: JSON.stringify(result) }],
               structuredContent: result,
@@ -1288,6 +1302,36 @@ test("acknowledges completed MCP URL elicitations without returning internal con
           return result
         }).pipe(
           Effect.provide(resourceMcpLayer(server.url, (form) => Deferred.succeed(created, form).pipe(Effect.asVoid))),
+        )
+
+        expect(result.structured).toEqual({ action: "accept" })
+      }),
+    ),
+  )
+})
+
+test("settles modern MCP URL elicitations when the user confirms", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ modern: true, resources: false, urlElicitation: true })
+        const created = yield* Deferred.make<Form.Info>()
+        const result = yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          const forms = yield* Form.Service
+          const call = yield* service.callTool({ server: "resources", name: "url-elicitation" }).pipe(Effect.forkScoped)
+
+          const form = yield* Deferred.await(created)
+          expect(form.metadata).not.toHaveProperty("elicitationID")
+          yield* forms.reply({ id: form.id, answer: { elicitation: true } })
+          return yield* Fiber.join(call)
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+              (form) => Deferred.succeed(created, form).pipe(Effect.asVoid),
+            ),
+          ),
         )
 
         expect(result.structured).toEqual({ action: "accept" })
