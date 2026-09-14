@@ -1328,7 +1328,6 @@ test.each(["manual", "select"] as const)(
             get: async () => ({
               animations: false,
               terminal: { copy },
-              session: { terminal: true },
             }),
             update: async () => ({}),
           },
