@@ -2,14 +2,15 @@ export * as McpOAuth from "./oauth.js"
 
 import {
   auth,
+  LATEST_PROTOCOL_VERSION,
   checkResourceAllowed,
   discoverOAuthServerInfo,
+  extractWWWAuthenticateParams,
   parseErrorResponse,
   UnauthorizedError,
   type FetchLike,
   type OAuthClientProvider,
   type OAuthDiscoveryState,
-  type OAuthServerInfo,
   type StoredOAuthClientInformation,
   type StoredOAuthTokens,
 } from "@modelcontextprotocol/client"
@@ -117,7 +118,7 @@ export interface Options {
     readonly open: (url: URL) => void | Promise<void>
   }
   readonly clientMetadataUrl?: string
-  readonly discovery?: OAuthServerInfo
+  readonly discovery?: OAuthDiscoveryState
   readonly invalidate?: OAuthClientProvider["invalidateCredentials"]
 }
 
@@ -360,10 +361,34 @@ export const authorize = (input: {
     })
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
 
+    // The server's 401 names where its resource metadata lives and which scopes it wants; without it
+    // discovery can only guess the well-known path, which not every server layout answers.
+    const challenge = yield* Effect.tryPromise((signal) =>
+      fetchFn(input.config.url, {
+        method: "POST",
+        headers: {
+          ...input.config.headers,
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 0,
+          method: "initialize",
+          params: { protocolVersion: LATEST_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "opencode" } },
+        }),
+        signal,
+      }),
+    ).pipe(
+      Effect.map((response) => extractWWWAuthenticateParams(response)),
+      Effect.timeout("5 seconds"),
+      Effect.orElseSucceed(() => ({ resourceMetadataUrl: undefined, scope: undefined })),
+    )
+    const resourceMetadataUrl = challenge.resourceMetadataUrl
     // CIMD needs the server to advertise it and accept public clients, and our published document only
     // lists the loopback redirect; a configured client_id always wins.
     const discovery = yield* Effect.tryPromise({
-      try: () => discoverOAuthServerInfo(input.config.url, { fetchFn }),
+      try: () => discoverOAuthServerInfo(input.config.url, { resourceMetadataUrl, fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
     const cimd =
@@ -381,7 +406,7 @@ export const authorize = (input: {
       config: input.config,
       store,
       clientMetadataUrl: cimd ? CLIENT_METADATA_URL : undefined,
-      discovery,
+      discovery: { ...discovery, resourceMetadataUrl: resourceMetadataUrl?.toString() },
       redirect: {
         url: oauth?.redirect_uri ?? `http://127.0.0.1:${port}${redirectPath}`,
         state,
@@ -405,7 +430,7 @@ export const authorize = (input: {
     })
 
     yield* Effect.tryPromise({
-      try: () => auth(oauthProvider, { serverUrl: input.config.url, scope: oauth?.scope, fetchFn }),
+      try: () => auth(oauthProvider, { serverUrl: input.config.url, scope: oauth?.scope ?? challenge.scope, fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
 
@@ -424,7 +449,7 @@ export const authorize = (input: {
                 serverUrl: input.config.url,
                 authorizationCode: value.code,
                 iss: value.iss,
-                scope: oauth?.scope,
+                scope: oauth?.scope ?? challenge.scope,
                 fetchFn,
               }),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),

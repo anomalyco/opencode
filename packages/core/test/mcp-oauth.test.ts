@@ -89,14 +89,18 @@ const authorizationServer = (metadata: Record<string, unknown>) => {
 }
 
 const start = (
-  server: ReturnType<typeof Bun.serve>,
+  target: string | ReturnType<typeof Bun.serve>,
   oauth?: ConfigMCP.OAuth,
   store: ReturnType<typeof memoryCredentials> = memoryCredentials([]),
 ) =>
   Effect.gen(function* () {
     const authorization = yield* McpOAuth.authorize({
       name: "test",
-      config: new ConfigMCP.Remote({ type: "remote", url: server.url.href, ...(oauth ? { oauth } : {}) }),
+      config: new ConfigMCP.Remote({
+        type: "remote",
+        url: typeof target === "string" ? target : target.url.href,
+        ...(oauth ? { oauth } : {}),
+      }),
       integrationID,
       methodID,
     })
@@ -314,6 +318,34 @@ describe("MCP OAuth", () => {
 
     expect(probes).toContain("/.well-known/oauth-protected-resource/mcp")
     expect(probes.some((probe) => probe.includes("codemode"))).toBe(false)
+  })
+
+  test("finds resource metadata through the 401 header when the well-known path is not served", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/mcp")
+          return new Response(null, {
+            status: 401,
+            headers: { "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/custom/metadata"` },
+          })
+        if (url.pathname === "/custom/metadata")
+          return Response.json({ resource: `${url.origin}/mcp`, authorization_servers: [`${url.origin}/as`] })
+        if (url.pathname === "/.well-known/oauth-authorization-server/as")
+          return Response.json({
+            issuer: `${url.origin}/as`,
+            authorization_endpoint: `${url.origin}/as/authorize`,
+            token_endpoint: `${url.origin}/as/token`,
+            response_types_supported: ["code"],
+          })
+        return new Response(null, { status: 404 })
+      },
+    })
+    const { url } = await Effect.runPromise(
+      Effect.scoped(start(`${server.url.origin}/mcp`, { client_id: "client" })),
+    ).finally(() => server.stop(true))
+    expect(url.pathname).toBe("/as/authorize")
   })
 
   test("forwards iss from the redirect so issuer-advertising servers can complete", async () => {
