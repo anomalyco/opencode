@@ -15,6 +15,7 @@ const platformMap = {
   darwin: "darwin",
   linux: "linux",
   win32: "windows",
+  android: "linux",
 }
 const archMap = {
   x64: "x64",
@@ -78,6 +79,9 @@ function supportsAvx2() {
 
 function isMusl() {
   if (platform !== "linux") return false
+
+  // Termux on Android uses the musl binary + Alpine musl loader via patchelf
+  if (os.platform() === "android") return true
 
   try {
     if (fs.existsSync("/etc/alpine-release")) return true
