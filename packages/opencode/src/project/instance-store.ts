@@ -6,6 +6,7 @@ import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { ConfigFingerprint } from "@/config/fingerprint"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
@@ -24,6 +25,10 @@ export interface Interface {
   readonly disposeDirectory: (directory: string) => Effect.Effect<void>
   readonly disposeAll: () => Effect.Effect<void>
   readonly provide: <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+  // True when any loaded instance's on-disk config inputs (project config,
+  // agent/command/mode/plugin files, OPENCODE_CONFIG) changed since that
+  // instance booted. A missing or unreadable baseline counts as changed.
+  readonly configChanged: () => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstanceStore") {}
@@ -32,13 +37,15 @@ export const use = serviceUse(Service)
 
 interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
+  configHash?: string
 }
 
-const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service> = Layer.effect(
+const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service | FSUtil.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const project = yield* Project.Service
     const bootstrap = yield* InstanceBootstrap.Service
+    const fsutil = yield* FSUtil.Service
     const scope = yield* Scope.Scope
     const cache = new Map<string, Entry>()
 
@@ -73,6 +80,11 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
       Effect.gen(function* () {
         const exit = yield* Effect.exit(boot({ ...input, directory }))
         if (Exit.isFailure(exit)) yield* removeEntry(directory, entry)
+        else
+          entry.configHash = yield* ConfigFingerprint.hashInstanceInputs(directory, exit.value.worktree).pipe(
+            Effect.provideService(FSUtil.Service, fsutil),
+            Effect.orElseSucceed(() => undefined),
+          )
         yield* Deferred.done(entry.deferred, exit).pipe(Effect.asVoid)
       })
 
@@ -186,6 +198,20 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
       return yield* cachedDisposeAll
     })
 
+    const configChanged = Effect.fn("InstanceStore.configChanged")(function* () {
+      for (const [directory, entry] of cache) {
+        const exit = yield* Deferred.await(entry.deferred).pipe(Effect.exit)
+        if (Exit.isFailure(exit)) continue
+        if (!entry.configHash) return true
+        const fresh = yield* ConfigFingerprint.hashInstanceInputs(directory, exit.value.worktree).pipe(
+          Effect.provideService(FSUtil.Service, fsutil),
+          Effect.orElseSucceed(() => undefined),
+        )
+        if (fresh === undefined || fresh !== entry.configHash) return true
+      }
+      return false
+    })
+
     const provide = <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
       load(input).pipe(Effect.flatMap((ctx) => effect.pipe(Effect.provideService(InstanceRef, ctx))))
 
@@ -198,6 +224,7 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
       disposeDirectory,
       disposeAll,
       provide,
+      configChanged,
     })
   }),
 )
@@ -207,7 +234,7 @@ export const bootstrapNode = LayerNode.unbound(InstanceBootstrap.Service, Node.t
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Project.node, bootstrapNode],
+  deps: [Project.node, bootstrapNode, FSUtil.node],
 })
 
 export * as InstanceStore from "./instance-store"

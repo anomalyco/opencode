@@ -2,6 +2,8 @@ import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Deferred, Effect, Fiber, Layer } from "effect"
+import fs from "fs/promises"
+import path from "path"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -47,6 +49,30 @@ describe("InstanceStore", () => {
 
       expect(ctx.directory).toBe(dir)
       expect(ctx.worktree).toBe(dir)
+    }),
+  )
+
+  it.live("configChanged tracks on-disk config inputs", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const home = yield* tmpdirScoped()
+      const previousHome = process.env.OPENCODE_TEST_HOME
+      process.env.OPENCODE_TEST_HOME = home
+      try {
+        const store = yield* InstanceStore.Service
+        yield* store.load({ directory: dir })
+
+        expect(yield* store.configChanged()).toBe(false)
+
+        yield* Effect.promise(() => fs.mkdir(path.join(dir, ".opencode", "agent"), { recursive: true }))
+        yield* Effect.promise(() =>
+          fs.writeFile(path.join(dir, ".opencode", "agent", "reviewer.md"), "review things"),
+        )
+        expect(yield* store.configChanged()).toBe(true)
+      } finally {
+        if (previousHome === undefined) delete process.env.OPENCODE_TEST_HOME
+        else process.env.OPENCODE_TEST_HOME = previousHome
+      }
     }),
   )
 

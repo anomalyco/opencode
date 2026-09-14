@@ -7,7 +7,7 @@ import { ServerAuth } from "@/server/auth"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
-import { reloadIfGlobalConfigChanged } from "@/server/global-lifecycle"
+import { reloadIfConfigChanged } from "@/server/global-lifecycle"
 
 Heap.start()
 
@@ -59,7 +59,7 @@ export const rpc = {
     await upgrade().catch(() => {})
   },
   async reload() {
-    await AppRuntime.runPromise(reloadIfGlobalConfigChanged())
+    await AppRuntime.runPromise(reloadIfConfigChanged())
   },
   async shutdown() {
     await InstanceRuntime.disposeAllInstances()
