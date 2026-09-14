@@ -489,7 +489,9 @@ describe("MCP errors", () => {
     expect(
       new Mcp.ToolCallError({ server: Mcp.ServerName.make("demo"), tool: "search", message: "failed" }).message,
     ).toBe("failed")
-    expect(new McpClient.NeedsAuthError({ server: "demo" }).message).toBe("MCP server requires authentication: demo")
+    expect(new McpClient.NeedsAuthError({ server: "demo", reason: "Unauthorized" }).message).toBe(
+      "MCP server requires authentication: demo (Unauthorized)",
+    )
     expect(new McpClient.ConnectError({ server: "demo", message: "offline" }).message).toBe("offline")
   })
 })

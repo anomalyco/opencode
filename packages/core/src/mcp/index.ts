@@ -420,7 +420,7 @@ export const layer = (options?: Options) =>
           const error = Cause.squash(result.cause)
           entry.status =
             error instanceof McpClient.NeedsAuthError
-              ? { status: "needs_auth" }
+              ? { status: "needs_auth", reason: error.reason }
               : { status: "failed", error: error instanceof Error ? error.message : String(error) }
           yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
           yield* bus.publish(McpEvent.StatusChanged, { server: name })

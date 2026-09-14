@@ -74,7 +74,7 @@ const Disabled = Schema.Struct({ status: Schema.Literal("disabled") }).annotate(
 const Failed = Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }).annotate({
   identifier: "Mcp.Status.Failed",
 })
-const NeedsAuth = Schema.Struct({ status: Schema.Literal("needs_auth") }).annotate({
+const NeedsAuth = Schema.Struct({ status: Schema.Literal("needs_auth"), reason: Schema.String }).annotate({
   identifier: "Mcp.Status.NeedsAuth",
 })
 

@@ -286,7 +286,7 @@ export type McpStatusDisabled = { status: "disabled" }
 
 export type McpStatusFailed = { status: "failed"; error: string }
 
-export type McpStatusNeedsAuth = { status: "needs_auth" }
+export type McpStatusNeedsAuth = { status: "needs_auth"; reason: string }
 
 export type McpResource = { server: string; name: string; uri: string; description?: string; mimeType?: string }
 

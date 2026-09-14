@@ -39,9 +39,10 @@ export type ResourceTemplate = ResourceTemplateType
 
 export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
   server: Schema.String,
+  reason: Schema.String,
 }) {
   override get message() {
-    return `MCP server requires authentication: ${this.server}`
+    return `MCP server requires authentication: ${this.server} (${this.reason})`
   }
 }
 
@@ -303,7 +304,7 @@ export const connect = Effect.fnUntraced(function* (
   }
 
   const error = Cause.squash(exit.cause)
-  if (error instanceof UnauthorizedError) return yield* new NeedsAuthError({ server })
+  if (error instanceof UnauthorizedError) return yield* new NeedsAuthError({ server, reason: error.message })
   if (error instanceof UnsupportedProtocolVersionError)
     return yield* new ConnectError({
       server,
