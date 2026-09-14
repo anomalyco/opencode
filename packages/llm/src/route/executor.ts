@@ -7,7 +7,6 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http"
-import { context as otelContext, propagation } from "@opentelemetry/api"
 import {
   AuthenticationReason,
   ContentPolicyReason,
@@ -371,16 +370,8 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
     const executeOnce = (request: HttpClientRequest.HttpClientRequest) =>
       Effect.gen(function* () {
         const redactedNames = yield* Headers.CurrentRedactedNames
-        // Inject W3C traceparent into the outbound request so that an
-        // OTLP-capable server can link its span to the caller's trace.
-        const carrier: Record<string, string> = {}
-        propagation.inject(otelContext.active(), carrier)
-        const traced = Object.entries(carrier).reduce(
-          (req, [k, v]) => HttpClientRequest.setHeader(req, k, v),
-          request,
-        )
         return yield* http
-          .execute(traced)
+          .execute(request)
           .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
       })
     return Service.of({

@@ -25,6 +25,7 @@ import { EffectPromise } from "@/effect/promise"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
 import { optional } from "@opencode-ai/core/schema"
+import { context as otelContext, propagation } from "@opentelemetry/api"
 import { ProviderTransform } from "./transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -1817,6 +1818,16 @@ const layer = Layer.effect(
 
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
+
+          // Inject W3C traceparent into outbound LLM requests so that an
+          // OTLP-capable gateway can link its span to the caller's trace.
+          const carrier: Record<string, string> = {}
+          propagation.inject(otelContext.active(), carrier)
+          if (Object.keys(carrier).length > 0) {
+            const headers = new Headers(opts.headers as HeadersInit)
+            for (const [k, v] of Object.entries(carrier)) headers.set(k, v)
+            opts.headers = headers
+          }
 
           const res = await fetchFn(input, {
             ...opts,
