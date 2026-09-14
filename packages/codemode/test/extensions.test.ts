@@ -181,14 +181,23 @@ describe("values are converted at the boundary, never shared", () => {
   test("a program Error crosses as a host Error with its name and message", async () => {
     held.length = 0
     await value(`keep(new TypeError("bad"))`)
-    expect(held[0]).toBeInstanceOf(Error)
-    expect((held[0] as Error).name).toBe("TypeError")
+    expect(held[0]).toBeInstanceOf(TypeError)
     expect((held[0] as Error).message).toBe("bad")
+    expect(Object.keys(held[0] as object)).toEqual([])
   })
 
-  test("functions and promises cannot be passed in", async () => {
+  test("functions, promises, and symbols cannot be passed in", async () => {
     expect((await failure(`keep(() => 1)`)).message).toContain("Argument 1 to keep contains a function")
     expect((await failure(`keep(later(1))`)).message).toContain("un-awaited Promise")
+    expect((await failure(`keep(Symbol.iterator)`)).message).toContain("Argument 1 to keep contains a symbol")
+  })
+
+  test("only interpreter primitives come out", async () => {
+    const target = CodeMode.make({
+      extensions: [Extension.make({ name: "odd", globals: { sym: () => Symbol("s"), big: () => 10n } })],
+    })
+    expect((await failure(`sym()`, target)).message).toContain("sym produced a symbol")
+    expect((await failure(`big()`, target)).message).toContain("big produced a bigint")
   })
 
   test("an instance of an unexposed class cannot come out", async () => {

@@ -437,7 +437,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
 - [x] Every value crossing in either direction is converted, never shared: plain objects and arrays are copied,
       `Date`, `RegExp`, `URL`, `URLSearchParams`, `Map`, and `Set` become fresh copies with their contents converted,
       errors cross as errors with their name and message, and a `__proto__` key is dropped. Functions, generators,
-      and un-awaited promises cannot be passed in; an instance of an unexposed class cannot come out.
+      un-awaited promises, and symbols cannot be passed in; an instance of an unexposed class, a symbol, or a BigInt
+      cannot come out.
 - [x] A host `Promise` becomes a program promise. Whatever host code returns, resolves, throws, or rejects with
       crosses the same way, so `catch (e)` receives a copy of the thrown value (an `Error` of the matching type, or
       plain data). A getter must be synchronous.

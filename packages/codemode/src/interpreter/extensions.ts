@@ -57,7 +57,10 @@ export const extensionGlobals = <R>(
 
   const toHost = (value: unknown, label: string, depth = 0, seen = new Set<object>()): unknown => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
-    if (value === null || typeof value !== "object") return value
+    if (value === null || typeof value !== "object") {
+      if (isPrimitive(value)) return value
+      throw typeError(`${label} contains ${describeValue(value)}, which cannot be passed to an extension.`)
+    }
     if (value instanceof ProgramHandle) return value.instance
     if (value instanceof ProgramDate) return new Date(value.time)
     if (value instanceof ProgramRegExp) return new RegExp(value.regex.source, value.regex.flags)
@@ -75,10 +78,10 @@ export const extensionGlobals = <R>(
       throw typeError(`${label} contains ${describeValue(value)}, which cannot be passed to an extension.`)
     }
     if (value instanceof ProgramError) {
+      const name = coerceToString(get(value, "name"))
       const message = get(value, "message")
-      const error = new Error(message === undefined ? "" : coerceToString(message))
-      error.name = coerceToString(get(value, "name"))
-      return error
+      const text = message === undefined ? "" : coerceToString(message)
+      return name === "AggregateError" ? new AggregateError([], text) : new (hostErrors[name] ?? Error)(text)
     }
     if (seen.has(value)) throw typeError(`${label} contains a circular value.`)
     seen.add(value)
@@ -96,8 +99,8 @@ export const extensionGlobals = <R>(
 
   const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>()): unknown => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
-    if (value === null || (typeof value !== "object" && typeof value !== "function")) return value
-    if (typeof value === "object") {
+    if (isPrimitive(value)) return value
+    if (value !== null && typeof value === "object") {
       const existing = handles.get(value)
       if (existing !== undefined) return existing
       const proto = handlePrototype(value)
@@ -283,8 +286,26 @@ export const extensionGlobals = <R>(
   )
 }
 
+const hostErrors: Record<string, ErrorConstructor | undefined> = {
+  TypeError,
+  RangeError,
+  SyntaxError,
+  ReferenceError,
+  EvalError,
+  URIError,
+}
+
+// The primitives the interpreter operates on; symbols and BigInts are not among them.
+const isPrimitive = (value: unknown): boolean =>
+  value === null ||
+  value === undefined ||
+  typeof value === "string" ||
+  typeof value === "number" ||
+  typeof value === "boolean"
+
 const describeHost = (value: unknown): string => {
   if (typeof value === "function") return "a function"
+  if (typeof value !== "object" || value === null) return `a ${typeof value}`
   const name = (value as { constructor?: { name?: string } }).constructor?.name
   return name === undefined || name === "" ? "an object" : `a ${name}`
 }
