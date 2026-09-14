@@ -43,9 +43,10 @@
     "@typescript/native-preview": "catalog:"
   },
   "dependencies": {
+    "@opencode-ai/schema": "workspace:*",
+    "@opentelemetry/api": "1.9.0",
     "@smithy/eventstream-codec": "4.2.14",
     "@smithy/util-utf8": "4.2.2",
-    "@opencode-ai/schema": "workspace:*",
     "aws4fetch": "1.0.20",
     "effect": "catalog:"
   }
