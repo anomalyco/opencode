@@ -10,6 +10,7 @@ import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ApiVcsApplyError } from "../groups/instance"
+import { SkillNotFoundError } from "../errors"
 import { markInstanceForDisposal } from "../lifecycle"
 
 export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance", (handlers) =>
@@ -85,6 +86,24 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       return yield* skill.all()
     })
 
+    const enableSkill = Effect.fn("InstanceHttpApi.enableSkill")(function* (ctx: { params: { name: string } }) {
+      yield* skill.enable(ctx.params.name).pipe(
+        Effect.catchTag("Skill.NotFoundError", (error) =>
+          Effect.fail(new SkillNotFoundError({ name: error.name, message: `Skill not found: ${error.name}` })),
+        ),
+      )
+      return true
+    })
+
+    const disableSkill = Effect.fn("InstanceHttpApi.disableSkill")(function* (ctx: { params: { name: string } }) {
+      yield* skill.disable(ctx.params.name).pipe(
+        Effect.catchTag("Skill.NotFoundError", (error) =>
+          Effect.fail(new SkillNotFoundError({ name: error.name, message: `Skill not found: ${error.name}` })),
+        ),
+      )
+      return true
+    })
+
     const getLsp = Effect.fn("InstanceHttpApi.lsp")(function* () {
       return yield* lsp.status()
     })
@@ -104,6 +123,8 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       .handle("command", getCommand)
       .handle("agent", getAgent)
       .handle("skill", getSkill)
+      .handle("enableSkill", enableSkill)
+      .handle("disableSkill", disableSkill)
       .handle("lsp", getLsp)
       .handle("formatter", getFormatter)
   }),

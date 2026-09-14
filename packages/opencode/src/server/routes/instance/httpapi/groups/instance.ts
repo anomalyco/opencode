@@ -6,6 +6,7 @@ import { Vcs } from "@/project/vcs"
 import { Skill } from "@/skill"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { SkillNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import {
@@ -51,6 +52,8 @@ export const InstancePaths = {
   command: "/command",
   agent: "/agent",
   skill: "/skill",
+  skillEnable: "/skill/:name/enable",
+  skillDisable: "/skill/:name/disable",
   lsp: "/lsp",
   formatter: "/formatter",
 } as const
@@ -164,6 +167,30 @@ export const InstanceApi = HttpApi.make("instance")
             identifier: "app.skills",
             summary: "List skills",
             description: "Get a list of all available skills in the OpenCode system.",
+          }),
+        ),
+        HttpApiEndpoint.post("enableSkill", InstancePaths.skillEnable, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Skill enabled successfully"),
+          error: SkillNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "app.enableSkill",
+            summary: "Enable skill",
+            description: "Enable a skill by name.",
+          }),
+        ),
+        HttpApiEndpoint.post("disableSkill", InstancePaths.skillDisable, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Skill disabled successfully"),
+          error: SkillNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "app.disableSkill",
+            summary: "Disable skill",
+            description: "Disable a skill by name.",
           }),
         ),
         HttpApiEndpoint.get("lsp", InstancePaths.lsp, {

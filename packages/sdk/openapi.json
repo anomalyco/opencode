@@ -2819,9 +2819,12 @@
                       },
                       "content": {
                         "type": "string"
+                      },
+                      "enabled": {
+                        "type": "boolean"
                       }
                     },
-                    "required": ["name", "location", "content"],
+                    "required": ["name", "location", "content", "enabled"],
                     "additionalProperties": false
                   },
                   "description": "List of skills"
@@ -2846,6 +2849,152 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.skills({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/skill/{name}/enable": {
+      "post": {
+        "tags": ["instance"],
+        "operationId": "app.enableSkill",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Skill enabled successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Skill enabled successfully"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SkillNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Enable a skill by name.",
+        "summary": "Enable skill",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.enableSkill({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/skill/{name}/disable": {
+      "post": {
+        "tags": ["instance"],
+        "operationId": "app.disableSkill",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Skill disabled successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Skill disabled successfully"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SkillNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Disable a skill by name.",
+        "summary": "Disable skill",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.disableSkill({\n  ...\n})"
           }
         ]
       }
@@ -21172,6 +21321,12 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "disabled": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "additionalProperties": false
@@ -22575,6 +22730,23 @@
           }
         },
         "required": ["name", "mode", "permission", "options"],
+        "additionalProperties": false
+      },
+      "SkillNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SkillNotFoundError"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "name", "message"],
         "additionalProperties": false
       },
       "LSPStatus": {

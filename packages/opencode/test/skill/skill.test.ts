@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
+import { Config } from "../../src/config/config"
 import { Discovery } from "../../src/skill/discovery"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -16,7 +17,9 @@ import fs from "fs/promises"
 
 const node = LayerNode.compile(CrossSpawnSpawner.node)
 
-const it = testEffect(Layer.mergeAll(LayerNode.compile(Skill.node), node, testInstanceStoreLayer))
+const it = testEffect(
+  Layer.mergeAll(LayerNode.compile(Skill.node), LayerNode.compile(Config.node), node, testInstanceStoreLayer),
+)
 const itWithoutClaudeCodeSkills = testEffect(
   Layer.mergeAll(
     LayerNode.compile(Skill.node, [[RuntimeFlags.node, RuntimeFlags.layer({ disableClaudeCodeSkills: true })]]),
@@ -73,12 +76,14 @@ describe("skill", () => {
             description: "A tagged skill.",
             location: "/tmp/plugin.git#v1.3.0/SKILL.md",
             content: "",
+            enabled: true,
           },
           {
             name: "built-in-skill",
             description: "A built-in skill.",
             location: "<built-in>",
             content: "",
+            enabled: true,
           },
         ],
         { verbose: true },
@@ -315,6 +320,170 @@ description: A skill in the .claude/skills directory.
           expect(error._tag).toBe("Skill.NotFoundError")
           expect(error.name).toBe("missing-skill")
           expect(error.message).toContain('Skill "missing-skill" not found.')
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("enable and disable toggle the runtime state of a skill", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "toggle-skill", "SKILL.md"),
+              `---
+name: toggle-skill
+description: Skill for toggle tests.
+---
+
+# Toggle Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const byName = (s: Skill.Info) => s.name === "toggle-skill"
+          expect((yield* skill.all()).find(byName)?.enabled).toBe(true)
+
+          yield* skill.disable("toggle-skill")
+
+          const disabled = (yield* skill.all()).find(byName)
+          expect(disabled?.enabled).toBe(false)
+          // Disabled skills stay listed (so they can be re-enabled) but are
+          // hidden from everything the model can reach.
+          expect((yield* skill.available()).find(byName)).toBeUndefined()
+          const error = yield* Effect.flip(skill.require("toggle-skill"))
+          expect(error).toBeInstanceOf(Skill.NotFoundError)
+
+          yield* skill.enable("toggle-skill")
+          expect((yield* skill.all()).find(byName)?.enabled).toBe(true)
+          expect((yield* skill.available()).find(byName)?.enabled).toBe(true)
+          expect((yield* skill.require("toggle-skill")).name).toBe("toggle-skill")
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("fails with typed error when toggling a missing skill", () =>
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const skill = yield* Skill.Service
+          for (const toggle of [skill.disable, skill.enable]) {
+            const error = yield* Effect.flip(toggle("missing-skill"))
+            expect(error).toBeInstanceOf(Skill.NotFoundError)
+            expect(error._tag).toBe("Skill.NotFoundError")
+            expect(error.name).toBe("missing-skill")
+          }
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("respects skills.disabled from config at startup", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "opencode.json"),
+              JSON.stringify({
+                $schema: "https://opencode.ai/config.json",
+                skills: { disabled: ["cfg-disabled-skill"] },
+              }),
+            ),
+          )
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "cfg-disabled-skill", "SKILL.md"),
+              `---
+name: cfg-disabled-skill
+description: Disabled via config.
+---
+
+# Config Disabled Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const byName = (s: Skill.Info) => s.name === "cfg-disabled-skill"
+          expect((yield* skill.all()).find(byName)?.enabled).toBe(false)
+          expect((yield* skill.available()).find(byName)).toBeUndefined()
+          const error = yield* Effect.flip(skill.require("cfg-disabled-skill"))
+          expect(error).toBeInstanceOf(Skill.NotFoundError)
+
+          yield* skill.enable("cfg-disabled-skill")
+          expect((yield* skill.all()).find(byName)?.enabled).toBe(true)
+          expect((yield* skill.available()).find(byName)).toBeDefined()
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("persists runtime toggles through the global config channel", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "persist-skill", "SKILL.md"),
+              `---
+name: persist-skill
+description: Persist toggle tests.
+---
+
+# Persist Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const config = yield* Config.Service
+
+          yield* skill.disable("persist-skill")
+          const afterDisable = yield* config.getGlobal()
+          expect(afterDisable.skills?.disabled).toEqual(["persist-skill"])
+
+          yield* skill.enable("persist-skill")
+          const afterEnable = yield* config.getGlobal()
+          expect(afterEnable.skills?.disabled).toBeUndefined()
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("respects skills.disabled in the project root opencode.json", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, "opencode.json"),
+              JSON.stringify({
+                $schema: "https://opencode.ai/config.json",
+                skills: { disabled: ["root-disabled-skill"] },
+              }),
+            ),
+          )
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "root-disabled-skill", "SKILL.md"),
+              `---
+name: root-disabled-skill
+description: Disabled via project root config.
+---
+
+# Root Disabled Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const byName = (s: Skill.Info) => s.name === "root-disabled-skill"
+          expect((yield* skill.all()).find(byName)?.enabled).toBe(false)
+          expect((yield* skill.available()).find(byName)).toBeUndefined()
         }),
       { git: true },
     ),
