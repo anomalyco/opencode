@@ -18,6 +18,7 @@ import { McpEvent } from "./mcp-event.js"
 import { Model } from "./model.js"
 import { ModelsDev } from "./models-dev.js"
 import { Permission } from "./permission.js"
+import { Settings } from "./settings.js"
 import { PersistentPty } from "./persistent-pty.js"
 import { Plugin } from "./plugin.js"
 import { Project } from "./project.js"
@@ -59,6 +60,7 @@ const featureDefinitions = Event.inventory(
   ...Command.Event.Definitions,
   ...Config.Event.Definitions,
   ...Skill.Event.Definitions,
+  ...Settings.Event.Definitions,
   ...Pty.Event.Definitions,
   ...PersistentPty.Event.Definitions,
   ...Shell.Event.Definitions,

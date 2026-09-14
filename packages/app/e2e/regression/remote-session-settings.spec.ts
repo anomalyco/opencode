@@ -380,7 +380,8 @@ async function mockServers(
       }
       return json(route, { location: { directory }, data: options.pending?.[url.origin] ?? [] })
     }
-    if (["/api/command", "/api/reference", "/api/question/request"].includes(url.pathname))
+    if (url.pathname === "/api/settings") return json(route, [])
+    if (["/api/command", "/api/skill", "/api/reference", "/api/question/request"].includes(url.pathname))
       return json(route, { location: { directory }, data: [] })
     if (url.pathname === "/api/mcp") return json(route, { location: { directory }, data: [] })
     if (url.pathname === "/api/mcp/resource")

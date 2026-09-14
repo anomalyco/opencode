@@ -17,6 +17,7 @@ import {
   ServiceUnavailableError,
   SessionBusyError,
   SkillNotFoundError,
+  SkillDisabledError,
 } from "@opencode/protocol/errors"
 import { AbsolutePath } from "@opencode/core/schema"
 import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
@@ -308,6 +309,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 Effect.catchTag("Session.SkillNotFoundError", (error) =>
                   Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
                 ),
+                Effect.catchTag(
+                  "Skill.DisabledError",
+                  (error) => new SkillDisabledError({ skill: error.id, message: error.message }),
+                ),
               ),
           }
         }),
@@ -361,6 +366,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Session.SkillNotFoundError", (error) =>
                 Effect.fail(new SkillNotFoundError({ skill: error.skill, message: `Skill not found: ${error.skill}` })),
+              ),
+              Effect.catchTag(
+                "Skill.DisabledError",
+                (error) => new SkillDisabledError({ skill: error.id, message: error.message }),
               ),
             )
           return HttpApiSchema.NoContent.make()

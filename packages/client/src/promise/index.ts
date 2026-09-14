@@ -10,6 +10,7 @@ export type {
   IntegrationApi,
   ModelApi,
   PluginApi,
+  SettingsApi,
   ProviderApi,
   ReferenceApi,
   RpcApi,

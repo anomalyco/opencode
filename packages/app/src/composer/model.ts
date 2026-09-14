@@ -189,7 +189,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       resource,
     })),
   )
-  const skills = createMemo(() => data.location.skill.list({ directory: sdk().directory }) ?? [])
+  const skills = createMemo(() => data.location.skill.available({ directory: sdk().directory }) ?? [])
   const context = createMemo<ComposerSuggestion[]>(() => [
     ...references(),
     ...skills().map((skill) => ({

@@ -331,6 +331,8 @@ export type RpcOutput = { output?: any }
 
 export type PermissionReply = "once" | "always" | "reject"
 
+export type SettingsTarget = { kind: string; id: string }
+
 export type Pty = {
   id: string
   title: string
@@ -404,6 +406,8 @@ export type ReferenceGitSource = { type: "git"; repository: string; branch?: str
 export type WorktreeDirectory = { directory: string; strategy?: string }
 
 export type WorktreeInfo = { directory: string }
+
+export type SettingsValue = JsonValue
 
 export type VcsBranch = { current?: string; default?: string }
 
@@ -1512,6 +1516,15 @@ export type PermissionReplied = {
   data: { sessionID: string; requestID: string; reply: PermissionReply }
 }
 
+export type SettingsUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "settings.updated"
+  location?: LocationRef
+  data: { target: SettingsTarget }
+}
+
 export type PtyCreated = {
   id: string
   created: number
@@ -1623,6 +1636,8 @@ export type SessionStatusUpdated = {
 export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
 
 export type WorktreeList = Array<WorktreeDirectory>
+
+export type SettingsEntry = { target: SettingsTarget; value: SettingsValue }
 
 export type VcsInfo = { branch: VcsBranch }
 
@@ -2369,6 +2384,7 @@ export type V2Event =
   | CommandUpdated
   | ConfigUpdated
   | SkillUpdated
+  | SettingsUpdated
   | PtyCreated
   | PtyUpdated
   | PtyExited
@@ -2463,6 +2479,14 @@ export type MessageNotFoundError = {
 }
 export const isMessageNotFoundError = (value: unknown): value is MessageNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MessageNotFoundError"
+
+export type SkillDisabledError = {
+  readonly _tag: "SkillDisabledError"
+  readonly skill: string
+  readonly message: string
+}
+export const isSkillDisabledError = (value: unknown): value is SkillDisabledError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillDisabledError"
 
 export type CommandNotFoundError = {
   readonly _tag: "CommandNotFoundError"
@@ -6138,6 +6162,30 @@ export type WorktreeRefreshInput = {
 }
 
 export type WorktreeRefreshOutput = void
+
+export type SettingsListOutput = Array<SettingsEntry>
+
+export type SettingsGetInput = {
+  readonly kind: { readonly kind: string; readonly id: string }["kind"]
+  readonly id: { readonly kind: string; readonly id: string }["id"]
+}
+
+export type SettingsGetOutput = SettingsEntry | null
+
+export type SettingsSetInput = {
+  readonly kind: { readonly kind: string; readonly id: string }["kind"]
+  readonly id: { readonly kind: string; readonly id: string }["id"]
+  readonly value: { readonly value: JsonValue }["value"]
+}
+
+export type SettingsSetOutput = void
+
+export type SettingsResetInput = {
+  readonly kind: { readonly kind: string; readonly id: string }["kind"]
+  readonly id: { readonly kind: string; readonly id: string }["id"]
+}
+
+export type SettingsResetOutput = void
 
 export type VcsGetInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]

@@ -239,6 +239,13 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  SettingsListOutput,
+  SettingsGetInput,
+  SettingsGetOutput,
+  SettingsSetInput,
+  SettingsSetOutput,
+  SettingsResetInput,
+  SettingsResetOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -715,7 +722,7 @@ export function make(options: ClientOptions) {
             path: `/api/session/${encodeURIComponent(input.sessionID)}/skill`,
             body: { id: input["id"], skill: input["skill"], resume: input["resume"] },
             successStatus: 204,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401, 404, 409],
             empty: true,
           },
           requestOptions,
@@ -2000,6 +2007,47 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/worktree/refresh`,
             query: { location: input?.["location"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    settings: {
+      list: (requestOptions?: RequestOptions) =>
+        request<SettingsListOutput>(
+          { method: "GET", path: `/api/settings`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ),
+      get: (input: SettingsGetInput, requestOptions?: RequestOptions) =>
+        request<SettingsGetOutput>(
+          {
+            method: "GET",
+            path: `/api/settings/${encodeURIComponent(input.kind)}/${encodeURIComponent(input.id)}`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      set: (input: SettingsSetInput, requestOptions?: RequestOptions) =>
+        request<SettingsSetOutput>(
+          {
+            method: "PUT",
+            path: `/api/settings/${encodeURIComponent(input.kind)}/${encodeURIComponent(input.id)}`,
+            body: { value: input["value"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      reset: (input: SettingsResetInput, requestOptions?: RequestOptions) =>
+        request<SettingsResetOutput>(
+          {
+            method: "DELETE",
+            path: `/api/settings/${encodeURIComponent(input.kind)}/${encodeURIComponent(input.id)}`,
             successStatus: 204,
             declaredStatuses: [400, 401],
             empty: true,

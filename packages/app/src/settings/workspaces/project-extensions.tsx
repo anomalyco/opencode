@@ -23,9 +23,11 @@ import { pluginLabels } from "@/providers/catalog/plugin"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { configuredLanguageServers } from "./project-lsp"
 import { SettingsList } from "@/settings/list"
+import { SkillToggle } from "../providers/skill-toggle"
 import "./project.css"
 
 type SkillItem = {
+  id: string
   name: string
   path: string
 }
@@ -287,7 +289,13 @@ export const ProjectSettingsExtensions: Component<{
   const pluginRows = (items: string[]) => <For each={items}>{(name) => <ExtensionRow icon="cube" name={name} />}</For>
 
   const skillRows = (items: SkillItem[]) => (
-    <For each={items}>{(item) => <ExtensionRow icon="post-skill" name={item.name} />}</For>
+    <For each={items}>
+      {(item) => (
+        <ExtensionRow icon="post-skill" name={item.name}>
+          <SkillToggle id={item.id} name={item.name} />
+        </ExtensionRow>
+      )}
+    </For>
   )
 
   return (

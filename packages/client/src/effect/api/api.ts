@@ -35,6 +35,7 @@ import type { Pty } from "@opencode/schema/pty"
 import type { PtyTicket } from "@opencode/schema/pty-ticket"
 import type { Reference } from "@opencode/schema/reference"
 import type { Worktree } from "@opencode/schema/worktree"
+import type { Settings } from "@opencode/schema/settings"
 import type { Vcs } from "@opencode/schema/vcs"
 import type { WebSearch } from "@opencode/schema/websearch"
 import type { Config } from "@opencode/schema/config"
@@ -2201,6 +2202,28 @@ export interface WorktreeApi<E = never> {
   readonly refresh: WorktreeRefreshOperation<E>
 }
 
+export type SettingsListOutput = ReadonlyArray<Settings.Entry>
+export type SettingsListOperation<E = never> = () => Effect.Effect<SettingsListOutput, E>
+
+export type SettingsGetInput = { readonly kind: string; readonly id: string }
+export type SettingsGetOutput = Settings.Entry | null
+export type SettingsGetOperation<E = never> = (input: SettingsGetInput) => Effect.Effect<SettingsGetOutput, E>
+
+export type SettingsSetInput = { readonly kind: string; readonly id: string; readonly value: Settings.Value }
+export type SettingsSetOutput = void
+export type SettingsSetOperation<E = never> = (input: SettingsSetInput) => Effect.Effect<SettingsSetOutput, E>
+
+export type SettingsResetInput = { readonly kind: string; readonly id: string }
+export type SettingsResetOutput = void
+export type SettingsResetOperation<E = never> = (input: SettingsResetInput) => Effect.Effect<SettingsResetOutput, E>
+
+export interface SettingsApi<E = never> {
+  readonly list: SettingsListOperation<E>
+  readonly get: SettingsGetOperation<E>
+  readonly set: SettingsSetOperation<E>
+  readonly reset: SettingsResetOperation<E>
+}
+
 export type VcsGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type VcsGetOutput = { readonly location: Location.PublicRef; readonly data: Vcs.Info }
 export type VcsGetOperation<E = never> = (input?: VcsGetInput) => Effect.Effect<VcsGetOutput, E>
@@ -2337,6 +2360,7 @@ export interface AppApi<E = never> {
   readonly shell: ShellApi<E>
   readonly reference: ReferenceApi<E>
   readonly worktree: WorktreeApi<E>
+  readonly settings: SettingsApi<E>
   readonly vcs: VcsApi<E>
   readonly debug: DebugApi<E>
   readonly migration: MigrationApi<E>

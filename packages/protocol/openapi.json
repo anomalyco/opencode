@@ -1952,11 +1952,18 @@
             }
           },
           "409": {
-            "description": "ConflictError",
+            "description": "ConflictError | SkillDisabledError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConflictErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SkillDisabledErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -2214,6 +2221,16 @@
                       "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SkillDisabledError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillDisabledErrorEncoded"
                 }
               }
             }
@@ -8791,7 +8808,7 @@
             }
           }
         },
-        "description": "Retrieve currently registered skills.",
+        "description": "Retrieve all registered skill definitions. Activation overrides are available through the settings API.",
         "summary": "List skills"
       }
     },
@@ -11699,6 +11716,246 @@
         },
         "description": "Discover worktrees from the requested location and reconcile the shared project inventory.",
         "summary": "Refresh worktrees"
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "tags": ["settings"],
+        "operationId": "settings.list",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Settings.Entry"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List explicit global setting values. Domains own their value schemas, defaults, and behavior.",
+        "summary": "List setting overrides"
+      }
+    },
+    "/api/settings/{kind}/{id}": {
+      "get": {
+        "tags": ["settings"],
+        "operationId": "settings.get",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Registered setting kind, such as skill.activation. Each kind defines its value schema."
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Subject of the setting. Use global for a setting without an entity-specific subject."
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Settings.Entry"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one explicit setting override, or null when the domain default applies. An entry whose value is null is distinct from a missing override.",
+        "summary": "Get setting override"
+      },
+      "put": {
+        "tags": ["settings"],
+        "operationId": "settings.set",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Registered setting kind, such as skill.activation. Each kind defines its value schema."
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Subject of the setting. Use global for a setting without an entity-specific subject."
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Validate a value against its registered setting kind and persist it across all projects and sessions on this server.",
+        "summary": "Set setting override",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "$ref": "#/components/schemas/Settings.Value"
+                  }
+                },
+                "required": ["value"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["settings"],
+        "operationId": "settings.reset",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Registered setting kind, such as skill.activation. Each kind defines its value schema."
+            },
+            "required": true
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Subject of the setting. Use global for a setting without an entity-specific subject."
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Remove the explicit setting so the target follows its domain default again.",
+        "summary": "Reset setting override"
       }
     },
     "/api/vcs": {
@@ -15302,6 +15559,9 @@
               }
             },
             "additionalProperties": false
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/Mcp.Protocol"
           }
         },
         "required": ["type", "command"],
@@ -15329,6 +15589,11 @@
           }
         },
         "additionalProperties": false
+      },
+      "Mcp.Protocol": {
+        "type": "string",
+        "enum": ["legacy", "auto", "2026-07-28"],
+        "description": "MCP protocol negotiation. \"legacy\" (default) opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. \"auto\" probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. \"2026-07-28\" requires that revision and fails otherwise."
       },
       "Mcp.RemoteConfigEncoded": {
         "type": "object",
@@ -15380,6 +15645,9 @@
               }
             },
             "additionalProperties": false
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/Mcp.Protocol"
           }
         },
         "required": ["type", "url"],
@@ -15522,9 +15790,12 @@
           "status": {
             "type": "string",
             "enum": ["needs_auth"]
+          },
+          "error": {
+            "type": "string"
           }
         },
-        "required": ["status"],
+        "required": ["status", "error"],
         "additionalProperties": false
       },
       "Mcp.Status.Pending": {
@@ -18666,6 +18937,37 @@
         "required": ["data", "cursor"],
         "additionalProperties": false
       },
+      "Settings.Entry": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/Settings.Target"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Settings.Value"
+          }
+        },
+        "required": ["target", "value"],
+        "additionalProperties": false
+      },
+      "Settings.Target": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Registered setting kind, such as skill.activation. Each kind defines its value schema."
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Subject of the setting. Use global for a setting without an entity-specific subject."
+          }
+        },
+        "required": ["kind", "id"],
+        "additionalProperties": false
+      },
+      "Settings.Value": {},
       "Shell.Info": {
         "type": "object",
         "properties": {
@@ -18756,6 +19058,23 @@
           }
         },
         "required": ["id", "name", "path", "content"],
+        "additionalProperties": false
+      },
+      "SkillDisabledErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SkillDisabledError"]
+          },
+          "skill": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "skill", "message"],
         "additionalProperties": false
       },
       "SkillNotFoundErrorEncoded": {
@@ -19216,6 +19535,9 @@
     {
       "name": "worktree",
       "description": "Location-scoped worktree management routes."
+    },
+    {
+      "name": "settings"
     },
     {
       "name": "vcs",

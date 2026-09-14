@@ -10,6 +10,7 @@ import { pluginLabels } from "@/providers/catalog/plugin"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
 import type { SettingsView } from "@/settings/surface"
+import { SkillToggle } from "./skill-toggle"
 import "@/settings/settings.css"
 
 interface McpRowItem {
@@ -156,6 +157,7 @@ export const SettingsExtensions: Component<{
                         <Icon name="post-skill" class="text-v2-icon-icon-muted shrink-0" />
                         <span class="settings-extension-name truncate">{skill.name}</span>
                       </div>
+                      <SkillToggle id={skill.id} name={skill.name} />
                     </div>
                   )}
                 </For>

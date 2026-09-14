@@ -243,6 +243,13 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  SettingsListOutput,
+  SettingsGetInput,
+  SettingsGetOutput,
+  SettingsSetInput,
+  SettingsSetOutput,
+  SettingsResetInput,
+  SettingsResetOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -1473,6 +1480,33 @@ const adaptGroupWorktree = (raw: RawClient["server.worktree"]) => ({
   refresh: EndpointWorktreeRefresh(raw),
 })
 
+const EndpointSettingsList = (raw: RawClient["server.settings"]) => () =>
+  preserveEffect<SettingsListOutput>()(raw["settings.list"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointSettingsGet = (raw: RawClient["server.settings"]) => (input: SettingsGetInput) =>
+  preserveEffect<SettingsGetOutput>()(
+    raw["settings.get"]({ params: { kind: input["kind"], id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointSettingsSet = (raw: RawClient["server.settings"]) => (input: SettingsSetInput) =>
+  preserveEffect<SettingsSetOutput>()(
+    raw["settings.set"]({ params: { kind: input["kind"], id: input["id"] }, payload: { value: input["value"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointSettingsReset = (raw: RawClient["server.settings"]) => (input: SettingsResetInput) =>
+  preserveEffect<SettingsResetOutput>()(
+    raw["settings.reset"]({ params: { kind: input["kind"], id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupSettings = (raw: RawClient["server.settings"]) => ({
+  list: EndpointSettingsList(raw),
+  get: EndpointSettingsGet(raw),
+  set: EndpointSettingsSet(raw),
+  reset: EndpointSettingsReset(raw),
+})
+
 const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =>
   preserveEffect<VcsGetOutput>()(
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1590,6 +1624,7 @@ const adaptClient = (raw: RawClient) => ({
   shell: adaptGroupShell(raw["server.shell"]),
   reference: adaptGroupReference(raw["server.reference"]),
   worktree: adaptGroupWorktree(raw["server.worktree"]),
+  settings: adaptGroupSettings(raw["server.settings"]),
   vcs: adaptGroupVcs(raw["server.vcs"]),
   debug: adaptGroupDebug(raw["server.debug"]),
   migration: adaptGroupMigration(raw["server.migration"]),
