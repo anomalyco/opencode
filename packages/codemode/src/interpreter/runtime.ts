@@ -280,7 +280,7 @@ export class Runtime<R> {
   }
 }
 
-const MAX_CALL_DEPTH = 1000
+const MAX_CALL_DEPTH = 10_000
 
 /** One activation: the top-level program or a single function call, evaluating against its own scope chain. */
 class Frame<R> {

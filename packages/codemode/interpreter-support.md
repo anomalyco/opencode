@@ -100,7 +100,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Function declarations, function expressions, and arrow functions.
 - [x] Synchronous and `async` functions.
 - [x] Closures, recursion, default parameters, rest parameters, and destructured parameters.
-- [x] A call depth limit of 1000: deeper nesting throws a catchable `RangeError: Maximum call stack size exceeded`
+- [x] A call depth limit of 10000: deeper nesting throws a catchable `RangeError: Maximum call stack size exceeded`
       at the overflowing call instead of running until the timeout. Callbacks invoked by built-ins count below the
       call that invoked the built-in, and a resumed `await` starts from depth 0 as in JS, so long async chains such
       as recursive pagination are unaffected.

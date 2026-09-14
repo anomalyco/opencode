@@ -150,11 +150,11 @@ describe("call depth", () => {
     expect(failure.message).toBe("RangeError: Maximum call stack size exceeded (line 1, col 18)")
   })
 
-  test("the limit is 1000 nested calls", async () => {
+  test("the limit is 10000 nested calls", async () => {
     expect(await value(`let depth = 0; const f = () => { depth++; f() }; try { f() } catch { return depth }`)).toBe(
-      1000,
+      10000,
     )
-    expect(await value(`const f = (n) => (n === 0 ? 0 : 1 + f(n - 1)); return f(900)`)).toBe(900)
+    expect(await value(`const f = (n) => (n === 0 ? 0 : 1 + f(n - 1)); return f(9000)`)).toBe(9000)
   })
 
   test("recursion through a built-in callback counts", async () => {
