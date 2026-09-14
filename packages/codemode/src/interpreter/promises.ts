@@ -1,6 +1,6 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import type { Diagnostic } from "../codemode.js"
-import { ProgramThrow, typeError } from "./model.js"
+import { CallSite, ProgramThrow, typeError } from "./model.js"
 import {
   Callable,
   define,
@@ -13,7 +13,7 @@ import {
   record,
 } from "./objects.js"
 import { constructor, fn, methods, native, receiver, requiresNew } from "./native.js"
-import { createAggregateErrorValue, materialize, normalizeError } from "./errors.js"
+import { createAggregateErrorValue, locate, materialize, normalizeError } from "./errors.js"
 import { typeofValue } from "./references.js"
 import { applyCollectionCallback, isSupportedCallback, type Runner } from "./runner.js"
 
@@ -49,10 +49,11 @@ export class PromiseRuntime<R> {
   }
 
   create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<ProgramPromise, never, R> {
-    return Effect.suspend(() => {
+    return Effect.flatMap(CallSite, (site) => {
       // Allocate before forking so reruns get distinct IDs and diagnostics retain creation order.
       const id = this.nextID++
-      return Effect.map(Effect.forkIn(effect, this.scope, { startImmediately: true }), (fiber) => {
+      const body = Effect.catchDefect(effect, (defect) => Effect.die(locate(defect, site)))
+      return Effect.map(Effect.forkIn(body, this.scope, { startImmediately: true }), (fiber) => {
         const promise = new ProgramPromise(this.proto, fiber)
         this.active.add(promise)
         this.ids.set(promise, id)

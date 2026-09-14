@@ -108,6 +108,24 @@ describe("host errors escaping built-ins", () => {
     expect((await error(`new Promise(Symbol)`)).message).toEndWith("(line 1, col 1)")
   })
 
+  test("a rejection born inside a promise the built-in created is located at the creating call", async () => {
+    expect((await error(`return await Promise.all(1)`)).message).toEndWith("(line 1, col 14)")
+    expect((await error(`return await Promise.race([])`)).message).toEndWith("(line 1, col 14)")
+    expect((await error(`return await Promise.all({ [Symbol.iterator]: () => ({ next: 1 }) })`)).message).toEndWith(
+      "(line 1, col 14)",
+    )
+    expect((await error(`let p; p = Promise.resolve().then(() => p); return await p`)).message).toEndWith(
+      "(line 2, col 5)",
+    )
+  })
+
+  test("an un-awaited rejection born inside promise machinery keeps its location in the warning", async () => {
+    const result = await run(`Promise.all(1); return 1`)
+    expect(result.ok && result.warnings?.[0]?.message).toEndWith(
+      "TypeError: Promise.all expects an array or other synchronous iterable. (line 1, col 1)",
+    )
+  })
+
   test("a failure inside a built-in called by another built-in is located at the outer call", async () => {
     const failure = await error(`return Array.from({ [Symbol.iterator]: () => ({ next: 1 }) })`)
     expect(failure.message).toBe("TypeError: Iterator next must be a function. (line 1, col 8)")

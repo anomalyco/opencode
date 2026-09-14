@@ -48,6 +48,7 @@ import {
   type AstNode,
   AsyncIteratorSymbol,
   type Binding,
+  CallSite,
   type GeneratorRequestKind,
   GeneratorReturn,
   IteratorSymbol,
@@ -1578,7 +1579,11 @@ class Frame<R> {
 
   // Built-ins throw without a location, synchronously or inside their Effect; the call site supplies it.
   private native(body: () => Effect.Effect<unknown, unknown, R>, node?: AstNode): Effect.Effect<unknown, unknown, R> {
-    return Effect.catchDefect(Effect.suspend(body), (defect) => Effect.die(locate(defect, node)))
+    return Effect.provideService(
+      Effect.catchDefect(Effect.suspend(body), (defect) => Effect.die(locate(defect, node))),
+      CallSite,
+      node,
+    )
   }
 
   private evaluateCallArguments(

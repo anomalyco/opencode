@@ -1,10 +1,13 @@
 import type { Node } from "acorn"
+import { Context } from "effect"
 import type { ErrorType } from "./intrinsics.js"
 import type { DiagnosticKind } from "../codemode.js"
 import type { ProgramError } from "./objects.js"
 
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
 export type AstNode = Node
+
+export const CallSite = Context.Reference<AstNode | undefined>("codemode/CallSite", { defaultValue: () => undefined })
 
 export type Binding = {
   mutable: boolean
