@@ -10,6 +10,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { File } from "./file.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { VcsPatch } from "./vcs/patch.js"
+import { gitExecutable } from "./util/git-executable.js"
 
 export class Repository extends Schema.Class<Repository>("Git.Repository")({
   worktree: AbsolutePath,
@@ -313,7 +314,7 @@ const layer = Layer.effect(
     ) {
       const result = yield* proc
         .run(
-          ChildProcess.make("git", repositoryArgs(repository, args), {
+          ChildProcess.make(gitExecutable, repositoryArgs(repository, args), {
             cwd: repository.worktree,
             env: options?.env,
             extendEnv: true,
@@ -441,10 +442,14 @@ const layer = Layer.effect(
       if (!input.paths.length) return new Set<RelativePath>()
       const result = yield* proc
         .run(
-          ChildProcess.make("git", repositoryArgs(input.repository, ["check-ignore", "--no-index", "--stdin", "-z"]), {
-            cwd: input.repository.worktree,
-            extendEnv: true,
-          }),
+          ChildProcess.make(
+            gitExecutable,
+            repositoryArgs(input.repository, ["check-ignore", "--no-index", "--stdin", "-z"]),
+            {
+              cwd: input.repository.worktree,
+              extendEnv: true,
+            },
+          ),
           { stdin: input.paths.join("\0") + "\0" },
         )
         .pipe(
@@ -625,7 +630,7 @@ const layer = Layer.effect(
       cwd = repository.worktree,
     ) {
       const result = yield* proc
-        .run(ChildProcess.make("git", args, { cwd, extendEnv: true, stdin: "ignore" }))
+        .run(ChildProcess.make(gitExecutable, args, { cwd, extendEnv: true, stdin: "ignore" }))
         .pipe(
           Effect.mapError(
             (cause) => new WorktreeError({ operation, directory: worktreeDirectory, message: cause.message, cause }),
@@ -721,7 +726,7 @@ function run(cwd: string, proc: AppProcess.Interface, args: string[]) {
 function execute(cwd: string, proc: AppProcess.Interface, args: string[]) {
   return proc
     .run(
-      ChildProcess.make("git", args, {
+      ChildProcess.make(gitExecutable, args, {
         cwd,
         extendEnv: true,
         stdin: "ignore",
