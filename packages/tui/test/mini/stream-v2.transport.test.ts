@@ -1939,7 +1939,7 @@ describe("V2 mini transport", () => {
     await transport.interruptActiveTurn()
 
     expect(prompt).toHaveBeenCalled()
-    expect(interrupt).toHaveBeenCalledWith({ sessionID: "ses_1", continue: true })
+    expect(interrupt).toHaveBeenCalledWith({ sessionID: "ses_1", resume: true })
     expect(firstPrompt).not.toHaveBeenCalled()
     expect(firstInterrupt).not.toHaveBeenCalled()
     await transport.close()
@@ -2940,7 +2940,7 @@ describe("V2 mini transport", () => {
     idle.resolve()
     await turn
 
-    expect(interrupted).toHaveBeenCalledWith({ sessionID: "ses_1", continue: true })
+    expect(interrupted).toHaveBeenCalledWith({ sessionID: "ses_1", resume: true })
     await transport.close()
   })
 
@@ -2960,7 +2960,7 @@ describe("V2 mini transport", () => {
       request = input
       queueMicrotask(() => {
         events.push({
-          id: input.id ?? "evt_missing",
+          id: input.id?.replace(/^msg_/, "evt_") ?? "evt_missing",
           created: 0,
           type: "session.shell.started",
           durable: durable("ses_1"),
@@ -3012,7 +3012,7 @@ describe("V2 mini transport", () => {
       includeFiles: true,
     })
 
-    expect(request).toMatchObject({ sessionID: "ses_1", command: "ls", id: expect.stringMatching(/^evt_/) })
+    expect(request).toMatchObject({ sessionID: "ses_1", command: "ls", id: expect.stringMatching(/^msg_/) })
     expect(ui.commits.filter((item) => item.shell)).toMatchObject([
       { phase: "start", partID: "shell:sh_shell", tool: "shell", toolState: "running", shell: { command: "ls" } },
       {
@@ -3149,7 +3149,7 @@ describe("V2 mini transport", () => {
     expect(done).toBe(false)
 
     events.push({
-      id: request.id ?? "evt_missing",
+      id: request.id?.replace(/^msg_/, "evt_") ?? "evt_missing",
       created: 0,
       type: "session.shell.started",
       durable: durable("ses_1", 2),
@@ -3190,7 +3190,7 @@ describe("V2 mini transport", () => {
     })
     await turn
 
-    expect(request.id).toMatch(/^evt_/)
+    expect(request.id).toMatch(/^msg_/)
     expect(ui.commits.some((item) => item.partID === "shell:sh_owned" && item.text === "/tmp")).toBe(true)
     await transport.close()
   })
@@ -3395,7 +3395,7 @@ describe("V2 mini transport", () => {
 
     expect(request).toMatchObject({
       sessionID: "ses_1",
-      command: "deploy",
+      name: "deploy",
       text: "prod",
       files: [
         { uri: "file:///tmp/context.txt", name: "context.txt" },
