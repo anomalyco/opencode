@@ -171,6 +171,34 @@ describe("values are converted at the boundary, never shared", () => {
     expect([...(held[0] as Set<{ z: number }>)][0]).toEqual({ z: 1 })
   })
 
+  test("bytes cross as copies in both directions; ArrayBuffer comes in as Uint8Array", async () => {
+    const stored = new Uint8Array([1, 2, 3])
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "bin",
+          globals: {
+            stored: () => stored,
+            buffer: () => stored.buffer,
+            wide: () => new Uint16Array(1),
+            first: (bytes: Uint8Array) => {
+              bytes[0] = 99
+              return bytes.constructor.name
+            },
+          },
+        }),
+      ],
+    })
+    expect(
+      await value(
+        `const b = stored(); b[0] = 42; const mine = new Uint8Array([5]); const name = first(mine); return [[...b], [...stored()], [...buffer()], b instanceof Uint8Array, name, mine[0]]`,
+        target,
+      ),
+    ).toEqual([[42, 2, 3], [1, 2, 3], [1, 2, 3], true, "Uint8Array", 5])
+    expect([...stored]).toEqual([1, 2, 3])
+    expect((await failure(`wide()`, target)).message).toContain("produced a Uint16Array, which the program cannot hold")
+  })
+
   test("a __proto__ key never reaches the host object", async () => {
     held.length = 0
     await value(`keep({ __proto__: { polluted: true }, a: 1 })`)

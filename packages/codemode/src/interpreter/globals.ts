@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { arrayGlobal } from "../stdlib/array.js"
+import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
 import { mapGlobal, setGlobal } from "../stdlib/collections.js"
 import { consoleGlobal } from "../stdlib/console.js"
 import { dateGlobal } from "../stdlib/date.js"
@@ -88,6 +89,9 @@ const table: Record<string, Factory> = {
   Set: (host) => setGlobal(host.runner),
   URL: (host) => urlGlobal(host.runner),
   URLSearchParams: (host) => urlSearchParamsGlobal(host.runner),
+  Uint8Array: (host) => uint8ArrayGlobal(host.runner),
+  TextEncoder: (host) => textEncoderGlobal(host.runner),
+  TextDecoder: (host) => textDecoderGlobal(host.runner),
   encodeURI: (host) => uriGlobal(host.runner, "encodeURI"),
   encodeURIComponent: (host) => uriGlobal(host.runner, "encodeURIComponent"),
   decodeURI: (host) => uriGlobal(host.runner, "decodeURI"),

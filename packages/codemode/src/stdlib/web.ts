@@ -1,6 +1,7 @@
 import { fn, methods } from "../interpreter/native.js"
 import { typeError } from "../interpreter/model.js"
-import { ProgramObject } from "../interpreter/objects.js"
+import { ProgramBytes, ProgramObject } from "../interpreter/objects.js"
+import { describeValue } from "../interpreter/references.js"
 import type { Runner } from "../interpreter/runner.js"
 import { coerceToString } from "./value.js"
 
@@ -19,6 +20,19 @@ export const base64Global = <R>(runner: Runner<R>, name: "atob" | "btoa") =>
 
 export const cryptoGlobal = <R>(runner: Runner<R>) => {
   const object = new ProgramObject(runner.prototypes.Object)
-  methods(runner.prototypes, object, [["randomUUID", 0, () => crypto.randomUUID()]])
+  methods(runner.prototypes, object, [
+    ["randomUUID", 0, () => crypto.randomUUID()],
+    [
+      "getRandomValues",
+      1,
+      (_, args) => {
+        if (!(args[0] instanceof ProgramBytes)) {
+          throw typeError(`crypto.getRandomValues expects a Uint8Array, received ${describeValue(args[0])}.`)
+        }
+        crypto.getRandomValues(args[0].bytes)
+        return args[0]
+      },
+    ],
+  ])
   return object
 }

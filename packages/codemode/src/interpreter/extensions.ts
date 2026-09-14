@@ -15,6 +15,7 @@ import {
   hidden,
   type NativeFunction,
   ProgramArray,
+  ProgramBytes,
   ProgramDate,
   ProgramError,
   ProgramGenerator,
@@ -62,6 +63,7 @@ export const extensionGlobals = <R>(
       throw typeError(`${label} contains ${describeValue(value)}, which cannot be passed to an extension.`)
     }
     if (value instanceof ProgramHandle) return value.instance
+    if (value instanceof ProgramBytes) return new Uint8Array(value.bytes)
     if (value instanceof ProgramDate) return new Date(value.time)
     if (value instanceof ProgramRegExp) return new RegExp(value.regex.source, value.regex.flags)
     if (value instanceof ProgramURL) return new URL(value.url.href)
@@ -111,6 +113,8 @@ export const extensionGlobals = <R>(
       }
       if (value instanceof Date) return new ProgramDate(protos.Date, value.getTime())
       if (value instanceof RegExp) return new ProgramRegExp(protos.RegExp, value.source, value.flags)
+      if (value instanceof Uint8Array) return new ProgramBytes(protos.Uint8Array, new Uint8Array(value))
+      if (value instanceof ArrayBuffer) return new ProgramBytes(protos.Uint8Array, new Uint8Array(value.slice(0)))
       if (value instanceof Error) {
         return createErrorValue(protos[isErrorType(value.name) ? value.name : "Error"], value.message)
       }

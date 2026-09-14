@@ -169,6 +169,16 @@ export class ProgramURL extends ProgramObject {
   }
 }
 
+/** A `Uint8Array`: the host array does the byte clamping and ignores out-of-range writes, as JS does. */
+export class ProgramBytes extends ProgramObject {
+  constructor(
+    proto: ProgramObject,
+    readonly bytes: Uint8Array,
+  ) {
+    super(proto)
+  }
+}
+
 /** An instance of an extension class: the host object lives in a field no property path reaches. */
 export class ProgramHandle extends ProgramObject {
   constructor(
@@ -182,13 +192,21 @@ export class ProgramHandle extends ProgramObject {
 /** Built-in objects that wrap a host value; data-like, but never plain data. */
 export const isWrapper = (
   value: unknown,
-): value is ProgramDate | ProgramRegExp | ProgramMap | ProgramSet | ProgramURL | ProgramURLSearchParams =>
+): value is
+  | ProgramDate
+  | ProgramRegExp
+  | ProgramMap
+  | ProgramSet
+  | ProgramURL
+  | ProgramURLSearchParams
+  | ProgramBytes =>
   value instanceof ProgramDate ||
   value instanceof ProgramRegExp ||
   value instanceof ProgramMap ||
   value instanceof ProgramSet ||
   value instanceof ProgramURL ||
-  value instanceof ProgramURLSearchParams
+  value instanceof ProgramURLSearchParams ||
+  value instanceof ProgramBytes
 
 const MAX_ARRAY_INDEX = 4_294_967_295
 
@@ -201,18 +219,30 @@ export const parseArrayIndex = (key: string | number): number | undefined => {
 
 const canonical = (key: PropertyKey): string | symbol => (typeof key === "symbol" ? key : String(key))
 
+/** Objects whose integer keys are live elements rather than own property slots. */
+type Indexed = ProgramArray | ProgramBytes
+
+const isIndexed = (target: ProgramObject): target is Indexed =>
+  target instanceof ProgramArray || target instanceof ProgramBytes
+
+const elements = (target: Indexed): Array<unknown> | Uint8Array =>
+  target instanceof ProgramArray ? target.items : target.bytes
+
 const index = (target: ProgramObject, key: string | symbol): number | undefined =>
-  target instanceof ProgramArray && typeof key === "string" ? parseArrayIndex(key) : undefined
+  isIndexed(target) && typeof key === "string" ? parseArrayIndex(key) : undefined
 
 /** The own property under `key`, including an array's live indexes and `length`. */
 export const own = (target: ProgramObject, key: PropertyKey): Slot | undefined => {
   const name = canonical(key)
-  if (target instanceof ProgramArray) {
+  if (isIndexed(target)) {
     const at = index(target, name)
     if (at !== undefined) {
-      return at in target.items ? { value: target.items[at], ...data } : undefined
+      const items = elements(target)
+      return at in items ? { value: items[at], ...data } : undefined
     }
-    if (name === "length") return { value: target.items.length, writable: true, enumerable: false, configurable: false }
+    if (target instanceof ProgramArray && name === "length") {
+      return { value: target.items.length, writable: true, enumerable: false, configurable: false }
+    }
   }
   return target.props.get(name)
 }
@@ -250,13 +280,14 @@ export const hasPrototype = (value: unknown, proto: ProgramObject): boolean => {
   return false
 }
 
-const writeArray = (target: ProgramArray, name: string | symbol, value: unknown): boolean | undefined => {
+const writeElement = (target: Indexed, name: string | symbol, value: unknown): boolean | undefined => {
   const at = index(target, name)
   if (at !== undefined) {
-    target.items[at] = value
+    if (target instanceof ProgramBytes) target.bytes[at] = typeof value === "number" ? value : Number(value)
+    else target.items[at] = value
     return true
   }
-  if (name !== "length") return undefined
+  if (!(target instanceof ProgramArray) || name !== "length") return undefined
   const length = typeof value === "number" ? value : Number(value)
   if (!Number.isInteger(length) || length < 0) return false
   checkArrayLength(length)
@@ -277,15 +308,15 @@ export const set = (target: ProgramObject, key: PropertyKey, value: unknown): bo
     }
     if (!slot.writable) return false
     if (current !== target) break
-    if (target instanceof ProgramArray) {
-      const written = writeArray(target, name, value)
+    if (isIndexed(target)) {
+      const written = writeElement(target, name, value)
       if (written !== undefined) return written
     }
     slot.value = value
     return true
   }
-  if (target instanceof ProgramArray) {
-    const written = writeArray(target, name, value)
+  if (isIndexed(target)) {
+    const written = writeElement(target, name, value)
     if (written !== undefined) return written
   }
   target.props.set(name, { value, ...data })
@@ -295,7 +326,7 @@ export const set = (target: ProgramObject, key: PropertyKey, value: unknown): bo
 /** [[DefineOwnProperty]] for a data property, ignoring the chain. */
 export const define = (target: ProgramObject, key: PropertyKey, value: unknown, attrs: Attributes = data): void => {
   const name = canonical(key)
-  if (target instanceof ProgramArray && writeArray(target, name, value) !== undefined) return
+  if (isIndexed(target) && writeElement(target, name, value) !== undefined) return
   target.props.set(name, { value, ...attrs })
 }
 
@@ -310,10 +341,10 @@ export const defineAccessor = (
 
 export const remove = (target: ProgramObject, key: PropertyKey): boolean => {
   const name = canonical(key)
-  if (target instanceof ProgramArray) {
+  if (isIndexed(target)) {
     const at = index(target, name)
-    if (at !== undefined) return delete target.items[at]
-    if (name === "length") return false
+    if (at !== undefined) return target instanceof ProgramBytes ? !(at in target.bytes) : delete target.items[at]
+    if (target instanceof ProgramArray && name === "length") return false
   }
   const slot = target.props.get(name)
   if (slot === undefined) return true
@@ -327,7 +358,8 @@ export const ownKeys = (target: ProgramObject): Array<string | symbol> => {
   const strings = [...target.props.keys()].filter((key): key is string => typeof key === "string")
   const symbols = [...target.props.keys()].filter((key): key is symbol => typeof key === "symbol")
   return [
-    ...(target instanceof ProgramArray ? [...Object.keys(target.items), "length"] : []),
+    ...(isIndexed(target) ? Object.keys(elements(target)) : []),
+    ...(target instanceof ProgramArray ? ["length"] : []),
     ...strings.filter((key) => parseArrayIndex(key) !== undefined).sort((a, b) => Number(a) - Number(b)),
     ...strings.filter((key) => parseArrayIndex(key) === undefined),
     ...symbols,

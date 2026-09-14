@@ -5,6 +5,7 @@ import {
   entries,
   get,
   ProgramArray,
+  ProgramBytes,
   ProgramDate,
   ProgramMap,
   ProgramObject,
@@ -66,6 +67,7 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
   if (value instanceof ProgramRegExp) return coerceToString(value)
   if (value instanceof ProgramURL) return coerceToString(value)
   if (value instanceof ProgramURLSearchParams) return coerceToString(value)
+  if (value instanceof ProgramBytes) return `Uint8Array(${value.bytes.length}) [${value.bytes.join(",")}]`
   if (depth > MAX_CONSOLE_DEPTH) return "..."
   if (seen.has(value)) return "[Circular]"
   if (value instanceof ProgramMap) {

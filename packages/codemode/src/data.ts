@@ -10,6 +10,7 @@ import {
   isWrapper,
   parseArrayIndex,
   ProgramArray,
+  ProgramBytes,
   ProgramDate,
   ProgramError,
   ProgramGenerator,
@@ -137,6 +138,15 @@ const copy = (
   if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : null
   if (value instanceof ProgramURL) return value.url.href
   if (value instanceof URL) return value.href
+  if (value instanceof ProgramBytes) {
+    if (boundary) {
+      throw new ToolRuntimeError(
+        "InvalidDataValue",
+        `${label} contains a Uint8Array; pass text instead, e.g. \`new TextDecoder().decode(bytes)\` or \`bytes.toBase64()\`.`,
+      )
+    }
+    return Object.fromEntries(value.bytes.entries())
+  }
   if (boundary && protos === undefined) {
     if (value instanceof ProgramRegExp) return String(value.regex)
     if (value instanceof ProgramURLSearchParams) return value.params.toString()

@@ -21,6 +21,7 @@ import {
   keys,
   own,
   ProgramArray,
+  ProgramBytes,
   ProgramDate,
   ProgramError,
   ProgramObject,
@@ -110,6 +111,7 @@ export const classTag = (value: unknown): string => {
   if (value instanceof ProgramError) return "Error"
   if (value instanceof ProgramDate) return "Date"
   if (value instanceof ProgramRegExp) return "RegExp"
+  if (value instanceof ProgramBytes) return "Uint8Array"
   if (typeof value === "string") return "String"
   if (typeof value === "number") return "Number"
   if (typeof value === "boolean") return "Boolean"

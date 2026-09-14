@@ -75,6 +75,7 @@ import {
   NativeFunction,
   parseArrayIndex,
   ProgramArray,
+  ProgramBytes,
   ProgramDate,
   ProgramFunction,
   ProgramGenerator,
@@ -732,7 +733,9 @@ class Frame<R> {
               ? value.set.values()
               : value instanceof ProgramURLSearchParams
                 ? value.params.entries()
-                : undefined
+                : value instanceof ProgramBytes
+                  ? value.bytes.values()
+                  : undefined
     if (iterator !== undefined) {
       const proto = this.runtime.prototypes.Array
       return Effect.succeed({
@@ -1836,7 +1839,8 @@ class Frame<R> {
         typeof value === "string" ||
         value instanceof ProgramMap ||
         value instanceof ProgramSet ||
-        value instanceof ProgramURLSearchParams
+        value instanceof ProgramURLSearchParams ||
+        value instanceof ProgramBytes
       ) {
         const cursor = yield* self.syncIterator(value, node)
         if (!cursor) throw typeError("Built-in iterator is unavailable.", node)

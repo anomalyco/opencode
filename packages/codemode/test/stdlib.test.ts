@@ -721,6 +721,185 @@ describe("Set", () => {
   })
 })
 
+describe("Uint8Array", () => {
+  test("constructs from a length, an array, an iterable, or another Uint8Array", async () => {
+    expect(
+      await value(`
+      const a = new Uint8Array(2)
+      const b = new Uint8Array([1, 2, 300])
+      const c = Uint8Array.from(new Set([7, 8]))
+      const d = new Uint8Array(b)
+      d[0] = 9
+      return [[...a], [...b], [...c], [...d], [...b], new Uint8Array("3").length, [...Uint8Array.of(1, "2")]]
+    `),
+    ).toEqual([[0, 0], [1, 2, 44], [7, 8], [9, 2, 44], [1, 2, 44], 3, [1, 2]])
+    expect((await error(`new Uint8Array(-1)`)).message).toContain("Invalid typed array length: -1")
+    expect((await error(`new Uint8Array(1.5)`)).message).toContain("Invalid typed array length")
+    expect((await error(`new Uint8Array(20_000_000)`)).message).toContain("Invalid array length")
+    expect((await error(`Uint8Array.from(/x/)`)).message).toContain("received a RegExp")
+  })
+
+  test("index reads and writes clamp to a byte and ignore out-of-range writes, like JS", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array(3)
+      b[0] = 300
+      b[1] = -1
+      b["2"] = "7"
+      b[5] = 9
+      b.tag = "x"
+      return [b[0], b[1], b[2], b[5], b.length, Object.keys(b), 1 in b, 5 in b, b.tag]
+    `),
+    ).toEqual([44, 255, 7, null, 3, ["0", "1", "2", "tag"], true, false, "x"])
+    expect((await error(`delete new Uint8Array(1)[0]`)).message).toContain("Cannot delete property '0'")
+    expect((await error(`Uint8Array.prototype.length`)).message).toContain("incompatible receiver")
+  })
+
+  test("iteration, spread, destructuring, and Array.from", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      const [x, ...rest] = b
+      const seen = []
+      for (const byte of b) seen.push(byte)
+      function* g() { yield* b }
+      return [x, rest, seen, [...g()], Array.from(b, (n) => n * 2), new Set(b).size, Array.isArray(b)]
+    `),
+    ).toEqual([1, [2, 3], [1, 2, 3], [1, 2, 3], [2, 4, 6], 3, false])
+  })
+
+  test("methods", async () => {
+    expect(
+      await value(`
+      const b = Uint8Array.from([1, 2, 3, 2])
+      const view = b.subarray(1, 3)
+      view.fill(9)
+      const copy = b.slice(0, 2)
+      copy[0] = 5
+      const target = new Uint8Array(4)
+      target.set([1, 2], 2)
+      target.set(b.subarray(0, 1))
+      return [
+        b.at(-1), [...b], [...copy], [...target], b.indexOf(9), b.lastIndexOf(9), b.includes(3), b.includes(2, 1),
+        b.join("-"), b.toString(), [...b.keys()], [...b.values()], [...b.entries()], [...Uint8Array.from([1, 2]).reverse()],
+      ]
+    `),
+    ).toEqual([
+      2,
+      [1, 9, 9, 2],
+      [5, 9],
+      [1, 0, 1, 2],
+      1,
+      2,
+      false,
+      true,
+      "1-9-9-2",
+      "1,9,9,2",
+      [0, 1, 2, 3],
+      [1, 9, 9, 2],
+      [
+        [0, 1],
+        [1, 9],
+        [2, 9],
+        [3, 2],
+      ],
+      [2, 1],
+    ])
+    expect((await error(`new Uint8Array(2).set([1, 2, 3])`)).message).toContain("does not fit")
+    expect((await error(`new Uint8Array(2).set([1], 2)`)).message).toContain("does not fit")
+  })
+
+  test("base64 and hex", async () => {
+    expect(
+      await value(`
+      return [
+        new Uint8Array([104, 105]).toBase64(), new Uint8Array([255, 0]).toHex(),
+        [...Uint8Array.fromBase64("aGk=")], [...Uint8Array.fromHex("ff00")],
+      ]
+    `),
+    ).toEqual(["aGk=", "ff00", [104, 105], [255, 0]])
+    expect(await error(`Uint8Array.fromBase64("!!!")`)).toMatchObject({
+      message: expect.stringContaining("SyntaxError"),
+    })
+    expect(await error(`Uint8Array.fromHex("zz")`)).toMatchObject({ message: expect.stringContaining("SyntaxError") })
+  })
+
+  test("coercion, console, JSON, and Object.prototype.toString", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2])
+      console.log(b, new Uint8Array())
+      return [String(b), b + "", +new Uint8Array([5]), Number.isNaN(Number(b)), b == "1,2", JSON.stringify(b), b.toLocaleString(), typeof b, b instanceof Uint8Array]
+    `),
+    ).toEqual(["1,2", "1,2", 5, true, true, '{"0":1,"1":2}', "[object Uint8Array]", "object", true])
+    expect((await run(`console.log(new Uint8Array([1, 2]), new Uint8Array())`)).logs).toEqual([
+      "Uint8Array(2) [1,2] Uint8Array(0) []",
+    ])
+  })
+
+  test("cannot cross the tool boundary; the error says how to encode it", async () => {
+    expect((await error(`return new Uint8Array(1)`)).message).toContain(
+      "Execution result contains a Uint8Array; pass text instead",
+    )
+    expect((await error(`return { deep: [new Uint8Array(1)] }`)).message).toContain("bytes.toBase64()")
+  })
+})
+
+describe("TextEncoder and TextDecoder", () => {
+  test("round-trips UTF-8 and exposes the standard fields", async () => {
+    expect(
+      await value(`
+      const encoder = new TextEncoder()
+      const bytes = encoder.encode("héllo ✓")
+      const decoder = new TextDecoder()
+      return [
+        [...bytes], decoder.decode(bytes), decoder.decode(), [...encoder.encode()], encoder.encoding,
+        decoder.encoding, decoder.fatal, decoder.ignoreBOM, new TextDecoder("UTF8", { fatal: true }).fatal,
+        new TextDecoder().decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41])),
+        new TextDecoder("utf-8", { ignoreBOM: true }).decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41])),
+        new TextDecoder().decode(new Uint8Array([0xff])),
+        encoder instanceof TextEncoder, decoder instanceof TextDecoder,
+      ]
+    `),
+    ).toEqual([
+      [104, 195, 169, 108, 108, 111, 32, 226, 156, 147],
+      "héllo ✓",
+      "",
+      [],
+      "utf-8",
+      "utf-8",
+      false,
+      false,
+      true,
+      "A",
+      "\ufeffA",
+      "\ufffd",
+      true,
+      true,
+    ])
+  })
+
+  test("only UTF-8 is supported; fatal decoding rejects malformed input", async () => {
+    expect((await error(`new TextDecoder("latin1")`)).message).toContain('The "latin1" encoding is not supported')
+    expect((await error(`new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array([0xff]))`)).message).toContain(
+      "not valid utf-8",
+    )
+    expect((await error(`new TextDecoder().decode("text")`)).message).toContain(
+      "expects a Uint8Array, received a string",
+    )
+    expect((await error(`TextDecoder()`)).message).toContain("requires 'new'")
+  })
+
+  test("crypto.getRandomValues fills the given bytes in place", async () => {
+    expect(
+      await value(
+        `const b = new Uint8Array(16); const same = crypto.getRandomValues(b) === b; return [same, b.length, b.some ? 0 : Array.from(b).some((n) => n !== 0)]`,
+      ),
+    ).toEqual([true, 16, true])
+    expect((await error(`crypto.getRandomValues([1])`)).message).toContain("expects a Uint8Array, received an array")
+  })
+})
+
 describe("stdlib integration", () => {
   test("constructor follows own keys, shadowing, writes, and new", async () => {
     expect(

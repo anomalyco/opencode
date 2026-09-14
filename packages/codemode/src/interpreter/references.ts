@@ -6,6 +6,7 @@ import {
   isWrapper,
   ownKeys,
   ProgramArray,
+  ProgramBytes,
   ProgramDate,
   ProgramGenerator,
   ProgramHandle,
@@ -86,6 +87,7 @@ export const describeValue = (value: unknown): string => {
   if (value instanceof ProgramSet) return "a Set"
   if (value instanceof ProgramURL) return "a URL"
   if (value instanceof ProgramURLSearchParams) return "a URLSearchParams"
+  if (value instanceof ProgramBytes) return "a Uint8Array"
   if (value instanceof ProgramGenerator) return "a generator"
   if (value instanceof ProgramHandle) return `a ${value.instance.constructor.name}`
   if (isRuntimeReference(value)) return "a function"

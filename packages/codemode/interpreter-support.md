@@ -25,9 +25,9 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       cannot replace a prototype; `JSON.stringify` still emits the key, like JS, since a string cannot pollute.
 - [x] Values `JSON.stringify` would flatten to `{}` cross the host boundary in a useful form instead: a Set as an
       array, a RegExp as `"/source/flags"`, a URLSearchParams as its query string. A Map still crosses as `{}`.
-      Functions, generators, promises, and extension handles are rejected with a hint. In-program `JSON.stringify`
-      keeps JS behavior for all of these.
-- [x] Live Date, RegExp, Map, Set, URL, and URLSearchParams values inside CodeMode.
+      Functions, generators, promises, extension handles, and a Uint8Array are rejected with a hint. In-program
+      `JSON.stringify` keeps JS behavior for all of these.
+- [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, and Uint8Array values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
       shadowable by program declarations like other globals.
@@ -424,13 +424,31 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       `entries`, `toString`, and `size`.
 - [x] URL values serialize to their href; URLSearchParams serialize to `{}`.
 
+## Uint8Array
+
+The only binary type. Bytes stay inside the program or cross to extensions; the tool boundary rejects them with a
+hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
+
+- [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`,
+      and `fromHex`. Lengths are capped like arrays.
+- [x] Index reads and writes with JS byte semantics: values wrap modulo 256, out-of-range writes are ignored, indexes
+      cannot be deleted. `length` is a prototype accessor, so `Object.keys` lists only indexes.
+- [x] `at`, `slice`, `subarray` (a view on the same bytes), `set`, `fill`, `reverse`, `indexOf`, `lastIndexOf`,
+      `includes`, `join`, `toString`, `toBase64`, `toHex`, and materialized `keys`, `values`, and `entries` arrays.
+- [x] Spread, destructuring, `for...of`, `yield*`, `Array.from`, and `new Set(bytes)`. `Array.isArray` is false.
+- [x] String coercion joins with commas; `JSON.stringify` gives `{"0":1,...}`; `console.log` prints
+      `Uint8Array(n) [...]`.
+- [ ] Callback methods (`forEach`, `map`, `filter`, `find`, `reduce`, ...); use `Array.from(bytes, fn)` meanwhile.
+- [ ] `ArrayBuffer`, `DataView`, and other typed arrays.
+
 ## Web platform helpers
 
 - [x] `atob` and `btoa` with forgiving-base64 decoding and WebIDL string conversion; invalid input throws a
       `TypeError`, since there is no `DOMException`.
-- [x] `crypto.randomUUID()`.
-- [ ] `crypto.getRandomValues` and `crypto.subtle`, `TextEncoder`/`TextDecoder`, and `Blob`: these need a binary
-      value type, which the JSON-like data model does not have yet.
+- [x] `crypto.randomUUID()` and `crypto.getRandomValues(uint8Array)`.
+- [x] `TextEncoder` and `TextDecoder` for UTF-8 only: any other label is a `RangeError`. `TextDecoder` accepts the
+      `fatal` and `ignoreBOM` options; `decode` takes a Uint8Array or nothing.
+- [ ] `crypto.subtle`, `Blob`, and `TextDecoder` streaming or non-UTF-8 encodings.
 
 ## Extensions
 
@@ -444,7 +462,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       The same host instance is always the same handle within a run, so identity and `instanceof` hold. Handles
       cannot cross the data boundary: returning, stringifying, throwing, or passing one to a tool fails.
 - [x] Every value crossing in either direction is converted, never shared: plain objects and arrays are copied,
-      `Date`, `RegExp`, `URL`, `URLSearchParams`, `Map`, and `Set` become fresh copies with their contents converted,
+      `Date`, `RegExp`, `URL`, `URLSearchParams`, `Map`, `Set`, and `Uint8Array` become fresh copies with their
+      contents converted (a host `ArrayBuffer` comes in as a `Uint8Array`; other typed arrays cannot come out),
       errors cross as errors with their name and message, and a `__proto__` key is dropped. Functions, generators,
       un-awaited promises, and symbols cannot be passed in; an instance of an unexposed class, a symbol, or a BigInt
       cannot come out.
@@ -456,7 +475,6 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       that run only. Data properties on a class or prototype are not exposed, since a program write would change the
       host class itself; expose one through an accessor.
 - [ ] Program functions as arguments to extension code (callbacks such as `forEach`).
-- [ ] Binary values (`Uint8Array`, `ArrayBuffer`) at the extension boundary; needs the binary value type above.
 
 ## Errors and diagnostics
 

@@ -6,6 +6,7 @@ import {
   isWrapper,
   type NativeFunction,
   ProgramArray,
+  ProgramBytes,
   ProgramDate,
   ProgramError,
   ProgramMap,
@@ -29,6 +30,7 @@ export const coerceToString = (value: unknown): string => {
   if (value instanceof ProgramSet) return "[object Set]"
   if (value instanceof ProgramURL) return value.url.href
   if (value instanceof ProgramURLSearchParams) return value.params.toString()
+  if (value instanceof ProgramBytes) return value.bytes.join(",")
   if (value instanceof ProgramError) {
     // Match Error.prototype.toString: "name: message", or just one when the other is empty.
     const name = get(value, "name")
@@ -48,6 +50,7 @@ export const coerceToString = (value: unknown): string => {
 
 export const coerceToNumber = (value: unknown): number => {
   if (value instanceof ProgramDate) return value.time
+  if (value instanceof ProgramBytes) return Number(coerceToString(value))
   if (isWrapper(value)) return Number.NaN
   if (value instanceof ProgramArray) return Number(coerceToString(value))
   return value !== null && typeof value === "object" ? Number.NaN : Number(value)
