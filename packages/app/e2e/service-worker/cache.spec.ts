@@ -335,7 +335,7 @@ fixture("upgrades the legacy shared precache only after old tabs close", async (
 fixture("does not substitute cached HTML for API or missing asset navigations", async ({ page, site }) => {
   await install(page, site.url)
   const api = await page.goto(`${site.url}/api/status`)
-  expect(await api?.json()).toEqual({ version: "test", pid: 1, urls: [site.url] })
+  expect(await api?.json()).toEqual({ version: "test", pid: 1, urls: ["http://localhost"] })
   expect(api?.fromServiceWorker()).toBe(false)
   const asset = await page.goto(`${site.url}/_assets/missing.js`)
   expect(asset?.status()).toBe(404)
