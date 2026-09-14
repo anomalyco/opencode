@@ -19,6 +19,8 @@ export interface SoundSettings {
   errors: string
 }
 
+export type NavigationMode = "tabs" | "sidebar"
+
 export interface Settings {
   general: {
     autoSave: boolean
@@ -34,6 +36,8 @@ export interface Settings {
     editToolPartsExpanded: boolean
     showCustomAgents: boolean
     mobileTitlebarPosition: "top" | "bottom"
+    navigationMode?: NavigationMode
+    sidebarSessionDays?: number
     newLayoutDesigns?: boolean
     layoutTransitionEligible?: boolean
     agentVisibilityInitialized?: boolean
@@ -195,6 +199,8 @@ const defaultSettings: Settings = {
     editToolPartsExpanded: false,
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
+    navigationMode: "tabs",
+    sidebarSessionDays: 3,
   },
   appearance: {
     fontSize: 14,
@@ -427,6 +433,17 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setMobileTitlebarPosition(value: "top" | "bottom") {
           setStore("general", "mobileTitlebarPosition", value)
+        },
+        navigationMode: withFallback(() => store.general?.navigationMode, defaultSettings.general.navigationMode),
+        setNavigationMode(value: NavigationMode) {
+          setStore("general", "navigationMode", value)
+        },
+        sidebarSessionDays: withFallback(
+          () => store.general?.sidebarSessionDays,
+          defaultSettings.general.sidebarSessionDays,
+        ),
+        setSidebarSessionDays(value: number) {
+          setStore("general", "sidebarSessionDays", value)
         },
         newLayoutDesigns,
         setNewLayoutDesigns(value: boolean) {

@@ -19,6 +19,7 @@ import { eq } from "drizzle-orm"
 import { and } from "drizzle-orm"
 import { gte } from "drizzle-orm"
 import { isNull } from "drizzle-orm"
+import { isNotNull } from "drizzle-orm"
 import { desc } from "drizzle-orm"
 import { like } from "drizzle-orm"
 import { sql } from "drizzle-orm"
@@ -559,7 +560,9 @@ const layer: Layer.Layer<
       if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
       if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
       if (input?.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
-      if (!input?.archived) conditions.push(isNull(SessionTable.time_archived))
+      // archived=true lists only archived sessions; default excludes them.
+      if (input?.archived === true) conditions.push(isNotNull(SessionTable.time_archived))
+      else conditions.push(isNull(SessionTable.time_archived))
 
       const query =
         conditions.length > 0
