@@ -34,7 +34,7 @@ const scenarios = [
     title: false,
   },
   {
-    name: "grouped edit with title",
+    name: "grouped edit",
     placement: "grouped",
     tools: [
       toolPart(
@@ -46,14 +46,14 @@ const scenarios = [
       ),
     ],
     files: ["a"],
-    title: true,
+    title: false,
   },
   {
     name: "running edit input fallback",
     placement: "grouped",
     tools: [toolPart("prt_sticky_edit", "edit", "running", { path: "src/a.ts", oldString: before, newString: after })],
     files: ["a"],
-    title: true,
+    title: false,
   },
   {
     name: "grouped write",
