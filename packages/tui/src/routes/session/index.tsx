@@ -86,6 +86,7 @@ import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
   createSessionRows,
+  legacyTurns,
   messageBoundaryIDs,
   resolvePart,
   sessionRowID,
@@ -153,6 +154,7 @@ export function Session(props: {
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
   const messageIndexes = createMemo(() => new Map(messages().map((message, index) => [message.id, index])))
+  const legacy = createMemo(() => legacyTurns(messages()))
   const messagesBeforeRevert = () => {
     const messageID = session()?.revert?.messageID
     if (!messageID) return messages()
@@ -1256,6 +1258,7 @@ export function Session(props: {
         diffWrapMode,
         models,
         messageIndex: (messageID) => messageIndexes().get(messageID),
+        legacyTurns: legacy,
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
@@ -1937,9 +1940,11 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
         ?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
   )
   const messages = createMemo(() => data.session.message.list(ctx.sessionID))
-  const duration = createMemo(() => turnDuration(props.message, messages(), ctx.messageIndex(props.message.id)))
+  const duration = createMemo(() =>
+    turnDuration(props.message, messages(), ctx.messageIndex(props.message.id), ctx.legacyTurns()),
+  )
   const tokensPerSecond = createMemo(() =>
-    turnTokensPerSecond(props.message, messages(), ctx.messageIndex(props.message.id)),
+    turnTokensPerSecond(props.message, messages(), ctx.messageIndex(props.message.id), ctx.legacyTurns()),
   )
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   return (
