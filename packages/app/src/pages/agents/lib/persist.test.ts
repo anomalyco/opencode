@@ -5,10 +5,12 @@ import {
   loadFilter,
   loadProject,
   loadSplitOpen,
+  loadSplitPct,
   loadWindow,
   saveFilter,
   saveProject,
   saveSplitOpen,
+  saveSplitPct,
   saveWindow,
   setEnabled,
   type PersistStore,
@@ -102,5 +104,17 @@ describe("persist no-throw and isolation", () => {
     setEnabled(true, a);
     expect(isEnabled(a)).toBe(true);
     expect(isEnabled(b)).toBe(false);
+  });
+  it("splitPct round-trips, clamps 25-75, defaults 50", () => {
+    const s = memoryStub();
+    expect(loadSplitPct(s)).toBe(50);
+    saveSplitPct(62, s);
+    expect(loadSplitPct(s)).toBe(62);
+    saveSplitPct(10, s);
+    expect(loadSplitPct(s)).toBe(25);
+    saveSplitPct(90, s);
+    expect(loadSplitPct(s)).toBe(75);
+    saveSplitPct(Number.NaN, s);
+    expect(loadSplitPct(s)).toBe(75);
   });
 });

@@ -88,7 +88,9 @@ export function useFleet(): FleetData {
       userAt = seconds(message.time.created)
     }
     if (userAt <= 0) return null
-    const parts = sync().session.data.part[sessionID] ?? []
+    const parts = messages
+      .filter((message) => message.role === "assistant")
+      .flatMap((message) => sync().session.data.part[message.id] ?? [])
     let firstPartAt: number | null = null
     for (const part of parts) {
       if (!("time" in part)) continue
@@ -150,6 +152,9 @@ export function useFleet(): FleetData {
         title: item.title,
         agent: item.agent ?? lastAgent,
         model: item.model ? `${item.model.providerID}/${item.model.id}` : "",
+        provider: item.model?.providerID ?? "",
+        role: item.parentID ? "subagent" : "orchestrator",
+        parentID: item.parentID ?? null,
         stage: mapStage({
           permissionPending: pending,
           busy,

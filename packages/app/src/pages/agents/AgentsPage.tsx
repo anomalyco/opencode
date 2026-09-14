@@ -32,7 +32,7 @@ export default function AgentsPage(props?: { force?: boolean }): JSX.Element {
       <span style={{ color: fleet.anyLive() ? "rgba(107,230,140,.95)" : "rgba(255,255,255,.42)" }}>
         ●{fleet.rows().filter((row) => row.live).length} {language.t("agents.live")}
       </span>
-      <span style={{ color: "rgba(255,255,255,.72)" }}>{`${fleet.out1mAll().toFixed(1)} tok/s`}</span>
+      <span style={{ color: "rgba(255,255,255,.72)" }}>{`${(fleet.out1mAll() / 60).toFixed(1)} tok/s`}</span>
       <span style={{ color: "rgba(255,255,255,.42)" }}>{`SSE ●`}</span>
       <span style={{ "margin-left": "auto", display: "inline-flex", gap: "4px" }}>
         <For each={[...WINDOWS]}>

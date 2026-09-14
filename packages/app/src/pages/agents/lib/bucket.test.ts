@@ -9,9 +9,9 @@ function eq(a: unknown, b: unknown, msg: string): void {
   if (sa !== sb) throw new Error(`bucket assert failed: ${msg}: got ${sa} want ${sb}`);
 }
 
-check(SPARK_N === 18, "SPARK_N=18");
+check(SPARK_N === 64, "SPARK_N=64");
 
-// 5m exact indexes at now=1800, secs=300: 1500->0, 1650->9, 1800->17
+// 5m exact indexes at now=1800, secs=300, span=300/64=4.6875: 1500->0, 1650->32, 1800->63
 {
   const now = 1800;
   const secs = 300;
@@ -21,10 +21,10 @@ check(SPARK_N === 18, "SPARK_N=18");
     { t: 1800, out: 4, sessionID: "s" },
   ];
   const sparks = bucketize(ticks, now, secs);
-  check(sparks.length === 18, "bucketize length 18");
+  check(sparks.length === 64, "bucketize length 64");
   check(sparks[0] === 1, "1500->bucket0");
-  check(sparks[9] === 2, "1650->bucket9");
-  check(sparks[17] === 4, "1800->bucket17");
+  check(sparks[32] === 2, "1650->bucket32");
+  check(sparks[63] === 4, "1800->bucket63");
 }
 
 // oow dropped
@@ -42,12 +42,12 @@ check(SPARK_N === 18, "SPARK_N=18");
   eq(total, 1, "oow dropped");
 }
 
-// single-tick -> bucket17
+// single-tick -> bucket63
 {
   const sparks = bucketize([{ t: 1800, out: 7, sessionID: "s" }], 1800, 300);
-  eq(sparks[17], 7, "single-tick bucket17");
+  eq(sparks[63], 7, "single-tick bucket63");
   eq(
-    sparks.slice(0, 17).reduce((a, b) => a + b, 0),
+    sparks.slice(0, 63).reduce((a, b) => a + b, 0),
     0,
     "single-tick rest zero",
   );
@@ -55,7 +55,7 @@ check(SPARK_N === 18, "SPARK_N=18");
 
 // empty -> zeros
 {
-  eq(bucketize([], 1800, 300), new Array(18).fill(0), "empty zeros");
+  eq(bucketize([], 1800, 300), new Array(64).fill(0), "empty zeros");
 }
 
 // rollingOut1m boundary at now=1000: 940 excl, 941+1000 incl, 1001 excl -> 5
@@ -114,7 +114,7 @@ check(SPARK_N === 18, "SPARK_N=18");
   const now = 1800;
   const secs = 300;
   const sparks = bucketize([{ t: now + 0.5, out: 5, sessionID: "s" }], now, secs);
-  eq(sparks[17], 5, "skew clamp to last bucket");
+  eq(sparks[63], 5, "skew clamp to last bucket");
   const dropped = bucketize([{ t: now + 5, out: 5, sessionID: "s" }], now, secs);
   eq(
     dropped.reduce((a, b) => a + b, 0),

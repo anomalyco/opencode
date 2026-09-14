@@ -1,6 +1,6 @@
 export const WINDOW_SECS = { "5m": 300, "1h": 3600, "24h": 86400 } as const;
 export type WindowKey = keyof typeof WINDOW_SECS;
-export const SPARK_N = 18;
+export const SPARK_N = 64;
 export interface TokenTick {
   t: number;
   out: number;

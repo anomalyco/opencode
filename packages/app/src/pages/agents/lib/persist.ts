@@ -9,12 +9,13 @@ export const KEYS = {
   filter: "agents.filter",
   project: "agents.project",
   splitOpen: "agents.splitOpen",
+  splitPct: "agents.splitPct",
   enabled: "agents.enabled",
 } as const;
 
 export type WindowKey = "5m" | "1h" | "24h";
 const WINDOWS: readonly WindowKey[] = ["5m", "1h", "24h"];
-const FILTERS: readonly string[] = ["all", "working", "attention", "errors", "idle"];
+const FILTERS: readonly string[] = ["all", "working", "input", "idle", "error"];
 
 const mem = new Map<string, string>();
 
@@ -169,6 +170,25 @@ export function loadSplitOpen(store?: PersistStore): boolean {
 export function saveSplitOpen(open: boolean, store?: PersistStore): void {
   try {
     setOf(store, KEYS.splitOpen, open ? "1" : "0");
+  } catch {
+    // never throw
+  }
+}
+
+export function loadSplitPct(store?: PersistStore): number {
+  try {
+    const v = Number(getOf(store, KEYS.splitPct));
+    if (!Number.isFinite(v) || v === 0) return 50;
+    return Math.min(75, Math.max(25, v));
+  } catch {
+    return 50;
+  }
+}
+
+export function saveSplitPct(pct: number, store?: PersistStore): void {
+  try {
+    if (!Number.isFinite(pct)) return;
+    setOf(store, KEYS.splitPct, String(Math.round(Math.min(75, Math.max(25, pct)))));
   } catch {
     // never throw
   }

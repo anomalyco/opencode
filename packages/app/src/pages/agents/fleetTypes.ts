@@ -12,6 +12,9 @@ export type FleetRowData = {
   title: string
   agent: string
   model: string
+  provider: string
+  role: "orchestrator" | "subagent"
+  parentID: string | null
   stage: { state: string; severity: FleetSeverity }
   tin: number
   tout: number
