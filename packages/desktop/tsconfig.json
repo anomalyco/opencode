@@ -19,5 +19,5 @@
   },
   "references": [{ "path": "../app" }],
   "include": ["src", "package.json"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.node-test.ts"]
 }

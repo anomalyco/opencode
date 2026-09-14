@@ -11,6 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsgo -b",
+    "test:node": "node --disable-warning=ExperimentalWarning --test src/main/*.node-test.ts",
     "predev": "bun ./scripts/predev.ts",
     "dev": "electron-vite dev",
     "prebuild": "bun ./scripts/prebuild.ts",
