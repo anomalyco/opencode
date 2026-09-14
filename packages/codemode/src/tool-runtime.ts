@@ -1,5 +1,6 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
 import { fromData, toData, ToolRuntimeError } from "./data.js"
+import type { Prototypes } from "./interpreter/intrinsics.js"
 import { toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
@@ -308,6 +309,7 @@ export type ToolRuntime<R = never> = {
 /** Per-execution call state over tools prepared once for the runtime. */
 export const make = <R>(
   prepared: Prepared<R>,
+  prototypes: Prototypes,
   maxToolCalls: number | undefined,
   hooks?: ToolCallHooks<R>,
 ): ToolRuntime<R> => {
@@ -373,7 +375,7 @@ export const make = <R>(
             }),
           )
           return yield* Effect.try({
-            try: () => fromData(decodeToolOutput(tool, raw), `Result from tool '${name}'`),
+            try: () => fromData(prototypes, decodeToolOutput(tool, raw), `Result from tool '${name}'`),
             catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
           })
         }),
@@ -386,7 +388,11 @@ export const make = <R>(
     keys: (path) => namespaceKeys(root, path),
     search: (args) =>
       Effect.suspend(() =>
-        executeTool("search", searchTool, args.map((arg) => toData(arg, "Arguments for tool 'search'"))),
+        executeTool(
+          "search",
+          searchTool,
+          args.map((arg) => toData(arg, "Arguments for tool 'search'")),
+        ),
       ),
     execute: (path, args) =>
       Effect.gen(function* () {

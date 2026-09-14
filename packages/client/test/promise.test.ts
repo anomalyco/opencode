@@ -5,7 +5,6 @@ test("exposes every standard HTTP API group", () => {
   const client = OpenCode.make({ baseUrl: "http://localhost:3000" })
 
   expect(Object.keys(client)).toEqual([
-    "health",
     "server",
     "location",
     "agent",
@@ -31,7 +30,6 @@ test("exposes every standard HTTP API group", () => {
     "shell",
     "reference",
     "worktree",
-    "workspace",
     "vcs",
     "debug",
     "migration",
@@ -54,7 +52,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
   expect(client.experimental.persistentPty.read).toBeFunction()
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
-  expect(Object.keys(client.project)).toEqual(["list", "update", "current"])
+  expect(Object.keys(client.project)).toEqual(["list", "update"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
 })
 
@@ -194,19 +192,19 @@ test("websearch.query uses the public HTTP contract", async () => {
   expect(await request?.json()).toEqual({ query: "opencode", providerID: "exa" })
 })
 
-test("server.get uses the public HTTP contract", async () => {
+test("server.status uses the public HTTP contract", async () => {
   let request: Request | undefined
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async (input) => {
       request = input instanceof Request ? input : new Request(input)
-      return Response.json({ urls: ["http://192.168.1.10:4096"] })
+      return Response.json({ version: "2.0.0", pid: 1, urls: ["http://192.168.1.10:4096"] })
     },
   })
 
-  expect(await client.server.get()).toEqual({ urls: ["http://192.168.1.10:4096"] })
+  expect(await client.server.status()).toEqual({ version: "2.0.0", pid: 1, urls: ["http://192.168.1.10:4096"] })
   expect(request?.method).toBe("GET")
-  expect(request?.url).toBe("http://localhost:3000/api/server")
+  expect(request?.url).toBe("http://localhost:3000/api/status")
 })
 
 test("experimental wellknown integration add uses the public HTTP contract", async () => {
@@ -241,12 +239,10 @@ test("credential.activate uses the public HTTP contract", async () => {
     },
   })
 
-  await client.credential.activate({ credentialID: "cred_work", location: { directory: "/tmp/project" } })
+  await client.credential.activate({ credentialID: "cred_work" })
 
   expect(request?.method).toBe("POST")
-  expect(request?.url).toBe(
-    "http://localhost:3000/api/credential/cred_work/activate?location%5Bdirectory%5D=%2Ftmp%2Fproject",
-  )
+  expect(request?.url).toBe("http://localhost:3000/api/credential/cred_work/activate")
 })
 
 test("integration connections optionally submit a form answer", async () => {
@@ -409,21 +405,6 @@ test("worktree operations send the configuration location separately from their 
     { directory: "/configured/task", strategy: "git" },
   ])
   expect(requests[3]?.url).toBe("http://localhost:3000/api/worktree?location%5Bdirectory%5D=%2Frepo%2Fnested")
-})
-
-test("workspace.destroy returns the transition result", async () => {
-  let request: Request | undefined
-  const client = OpenCode.make({
-    baseUrl: "http://localhost:3000",
-    fetch: async (input, init) => {
-      request = input instanceof Request ? input : new Request(input, init)
-      return Response.json({ destroyed: false })
-    },
-  })
-
-  expect(await client.workspace.destroy({ workspaceID: "wrk_missing" })).toEqual({ destroyed: false })
-  expect(request?.method).toBe("DELETE")
-  expect(request?.url).toBe("http://localhost:3000/api/workspace/wrk_missing")
 })
 
 test("shell list and remove use the public HTTP contract", async () => {
@@ -701,7 +682,7 @@ test("event.subscribe reports heartbeat comments as stream activity", async () =
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
-test("event transport passes through ordinary health requests", async () => {
+test("event transport passes through ordinary status requests", async () => {
   const requests: string[] = []
   const event = { id: "evt_connected", created: 1, type: "server.connected", data: {} }
   const client = OpenCode.make({
@@ -714,12 +695,16 @@ test("event transport passes through ordinary health requests", async () => {
           headers: { "content-type": "text/event-stream" },
         })
       }
-      return Response.json({ healthy: true, version: "2.0.0", pid: 1 })
+      return Response.json({ version: "2.0.0", pid: 1, urls: ["http://localhost:3000"] })
     },
   })
   await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
-  await expect(client.health.get()).resolves.toEqual({ healthy: true, version: "2.0.0", pid: 1 })
-  expect(requests).toEqual(["/api/event", "/api/health"])
+  await expect(client.server.status()).resolves.toEqual({
+    version: "2.0.0",
+    pid: 1,
+    urls: ["http://localhost:3000"],
+  })
+  expect(requests).toEqual(["/api/event", "/api/status"])
 })
 
 test("event.subscribe terminates on malformed Promise SSE data", async () => {

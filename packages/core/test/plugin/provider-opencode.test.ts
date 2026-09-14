@@ -75,11 +75,11 @@ function required<T>(value: T | undefined): T {
   return value
 }
 
-function eventually<A>(
-  effect: Effect.Effect<A>,
+function eventually<A, E>(
+  effect: Effect.Effect<A, E>,
   predicate: (value: A) => boolean,
   remaining = 1000,
-): Effect.Effect<A, Error> {
+): Effect.Effect<A, E | Error> {
   return Effect.gen(function* () {
     const value = yield* effect
     if (predicate(value)) return value

@@ -130,6 +130,7 @@ const rpcFromEffect = Effect.fn("Plugin.Rpc.fromEffect")(function* (host: HostRp
                 try: (signal) => {
                   // SAFETY: Promise RPC handlers return Promise values before this adapter erases their concrete types.
                   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+                  // oxlint-disable-next-line no-restricted-globals -- The portable RPC registry intentionally erases each handler's concrete signature.
                   return Reflect.apply(handler, undefined, [
                     input,
                     {

@@ -63,7 +63,7 @@ const skillInfo = Skill.Info.make({
   id: Skill.ID.make("guide"),
   name: Skill.Name.make("Guide"),
   description: "Session guidance",
-  location: AbsolutePath.make("/skills/guide/SKILL.md"),
+  path: AbsolutePath.make("/skills/guide/SKILL.md"),
   content: "  Raw guidance\n",
 })
 

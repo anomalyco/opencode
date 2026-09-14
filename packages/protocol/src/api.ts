@@ -16,7 +16,6 @@ import { EventGroup, makeEventGroup } from "./groups/event.js"
 import type { Definition } from "@opencode/schema/event"
 import { AgentGroup } from "./groups/agent.js"
 import { PluginGroup } from "./groups/plugin.js"
-import { HealthGroup } from "./groups/health.js"
 import { ServerGroup } from "./groups/server.js"
 import { DebugGroup } from "./groups/debug.js"
 import { PtyGroup } from "./groups/pty.js"
@@ -34,7 +33,6 @@ import { WorktreeGroup } from "./groups/worktree.js"
 import { VcsGroup } from "./groups/vcs.js"
 import { MigrationGroup } from "./groups/migration.js"
 import { ConfigGroup } from "./groups/config.js"
-import { WorkspaceGroup } from "./groups/workspace.js"
 
 type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof LocationGroup, LocationId>
@@ -45,7 +43,6 @@ type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof IntegrationGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof WebSearchGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof McpGroup, LocationId>
-  | HttpApiGroup.AddMiddleware<typeof CredentialGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ProjectGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof FileSystemGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof CommandGroup, LocationId>
@@ -85,13 +82,12 @@ type ApiGroups<
   SessionLocationService,
   Event extends HttpApiGroup.Constraint,
 > =
-  | typeof HealthGroup
   | typeof ServerGroup
   | typeof DebugGroup
   | typeof MigrationGroup
-  | typeof WorkspaceGroup
   | typeof GenerateGroup
   | typeof PersistentPtyGroup
+  | typeof CredentialGroup
   | LocationGroups<LocationId>
   | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
   | SessionGroups<SessionLocationId, SessionLocationService>
@@ -151,7 +147,6 @@ const makeApiFromGroup = <
   Group
 > =>
   HttpApi.make("server")
-    .add(HealthGroup)
     .add(ServerGroup)
     .add(LocationGroup.middleware(locationMiddleware))
     .add(AgentGroup.middleware(locationMiddleware))
@@ -163,7 +158,7 @@ const makeApiFromGroup = <
     .add(ProviderGroup.middleware(locationMiddleware))
     .add(IntegrationGroup.middleware(locationMiddleware))
     .add(McpGroup.middleware(locationMiddleware))
-    .add(CredentialGroup.middleware(locationMiddleware))
+    .add(CredentialGroup)
     .add(ProjectGroup.middleware(locationMiddleware))
     .add(makeFormGroup(locationMiddleware, formLocationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
@@ -177,7 +172,6 @@ const makeApiFromGroup = <
     .add(ShellGroup.middleware(locationMiddleware))
     .add(ReferenceGroup.middleware(locationMiddleware))
     .add(WorktreeGroup.middleware(locationMiddleware))
-    .add(WorkspaceGroup)
     .add(VcsGroup.middleware(locationMiddleware))
     .add(DebugGroup)
     .add(MigrationGroup)

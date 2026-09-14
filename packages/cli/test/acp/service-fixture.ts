@@ -6,7 +6,6 @@ import {
   type ModelInfo,
   type ModelRef,
   type SessionInfo,
-  type SkillInfo,
   type TokenUsageInfo,
 } from "@opencode/client/promise"
 import { ACPService } from "../../src/acp/service"
@@ -34,7 +33,6 @@ type FixtureOptions = {
   readonly defaultModel?: ModelInfo
   readonly agents?: readonly AgentInfo[]
   readonly commands?: readonly CommandInfo[]
-  readonly skills?: readonly SkillInfo[]
 }
 
 export const testModel = {
@@ -88,15 +86,6 @@ export const reviewCommand = {
   name: "review",
   description: "Review changes",
 } satisfies CommandInfo
-
-export const verifySkill = {
-  id: "verify",
-  name: "verify",
-  description: "Verify work",
-  slash: true,
-  location: "/skills/verify.md",
-  content: "verify",
-} satisfies SkillInfo
 
 export function makeSession(
   id: string,
@@ -152,7 +141,6 @@ export function makeACPFixture(options: FixtureOptions = {}) {
 
       const directory = request.query["location[directory]"] ?? "/workspace"
       const location = { directory, project: { id: "global", directory } }
-      if (request.path === "/api/plugin/await-activation") return new Response(null, { status: 204 })
       if (request.path === "/api/event") {
         let controller: ReadableStreamDefaultController<Uint8Array> | undefined
         return new Response(
@@ -178,9 +166,6 @@ export function makeACPFixture(options: FixtureOptions = {}) {
       }
       if (request.path === "/api/command") {
         return Response.json({ location, data: options.commands ?? [reviewCommand] })
-      }
-      if (request.path === "/api/skill") {
-        return Response.json({ location, data: options.skills ?? [verifySkill] })
       }
       return new Response(null, { status: 404 })
     },

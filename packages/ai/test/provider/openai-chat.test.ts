@@ -698,6 +698,54 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("preserves HTTP and HTTPS image URLs in user content", () =>
+    Effect.gen(function* () {
+      const urls = ["https://example.com/image.png?size=64#preview", "http://example.com/image.jpg"]
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: urls.map((data) => ({ type: "media" as const, mediaType: "image/png", data })),
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: urls.map((url) => ({ type: "image_url", image_url: { url } })) },
+      ])
+    }),
+  )
+
+  it.effect("preserves remote image URLs from tool results", () =>
+    Effect.gen(function* () {
+      const url = "https://example.com/tool-image.png?version=2"
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Describe the image."),
+            Message.assistant([ToolCallPart.make({ id: "call_image", name: "read_image", input: {} })]),
+            Message.tool({
+              id: "call_image",
+              name: "read_image",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Image attached." },
+                { type: "file", mime: "image/png", uri: url },
+              ],
+            }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toContainEqual({
+        role: "tool",
+        tool_call_id: "call_image",
+        content: "Image attached.",
+      })
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "user",
+        content: [{ type: "image_url", image_url: { url } }],
+      })
+    }),
+  )
+
   it.effect("rejects non-image media that cannot be lowered", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(

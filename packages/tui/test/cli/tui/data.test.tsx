@@ -43,7 +43,7 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCode
   events.emit({ ...event, location: { directory } })
 }
 
-const config = createTuiResolvedConfig({ session: { terminal: false } })
+const config = createTuiResolvedConfig({}, { terminal: false })
 
 function DataProvider(props: ParentProps) {
   return (
@@ -2068,7 +2068,6 @@ test("refreshes references after updates", async () => {
 test("keeps shell state scoped to location", async () => {
   const events = createEventStream()
   const other = "/tmp/opencode/other"
-  const workspace = "ws_other"
   let removed: URL | undefined
   const calls = createFetch((url, request) => {
     if (url.pathname === "/api/shell/sh_other" && request.method === "DELETE") {
@@ -2080,7 +2079,6 @@ test("keeps shell state scoped to location", async () => {
     return json({
       location: {
         directory: requestDirectory ?? directory,
-        workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
         project: { id: "proj_test", directory: requestDirectory ?? directory },
       },
       data: [
@@ -2131,10 +2129,10 @@ test("keeps shell state scoped to location", async () => {
 
   try {
     await wait(() => data.shell.list().some((shell) => shell.id === "sh_default"))
-    await data.shell.sync({ directory: other, workspaceID: workspace })
+    await data.shell.sync({ directory: other })
 
     expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
-    expect(data.shell.list({ directory: other, workspaceID: workspace }).map((shell) => shell.id)).toEqual(["sh_other"])
+    expect(data.shell.list({ directory: other }).map((shell) => shell.id)).toEqual(["sh_other"])
     expect(data.shell.listBySession("ses_shared").map((shell) => [shell.id, shell.location.directory])).toEqual([
       ["sh_default", directory],
       ["sh_other", other],
@@ -2145,13 +2143,13 @@ test("keeps shell state scoped to location", async () => {
     app.mockInput.pressKey("d", { ctrl: true })
     await wait(() => removed !== undefined)
     expect(removed?.searchParams.get("location[directory]")).toBe(other)
-    expect(removed?.searchParams.get("location[workspace]")).toBe(workspace)
+    expect(removed?.searchParams.has("location[workspace]")).toBe(false)
 
     events.emit({
       id: "evt_shell_created",
       created: 0,
       type: "shell.created",
-      location: { directory: other, workspaceID: workspace },
+      location: { directory: other },
       data: {
         info: {
           id: "sh_live_other",
@@ -2166,7 +2164,7 @@ test("keeps shell state scoped to location", async () => {
       },
     })
     await wait(() =>
-      data.shell.list({ directory: other, workspaceID: workspace }).some((shell) => shell.id === "sh_live_other"),
+      data.shell.list({ directory: other }).some((shell) => shell.id === "sh_live_other"),
     )
     expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
     expect(
@@ -2431,7 +2429,7 @@ test("adds, dismisses, and refreshes form requests", async () => {
 test("tracks global forms by location", async () => {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
-  const other = { directory: "/tmp/opencode-other", workspaceID: "wrk_other" }
+  const other = { directory: "/tmp/opencode-other" }
   let data!: ReturnType<typeof useData>
   let client!: ReturnType<typeof useClient>
 
@@ -2496,16 +2494,14 @@ test("tracks global forms by location", async () => {
 test("syncs global forms once for each requested location", async () => {
   const events = createEventStream()
   const requests: URL[] = []
-  const other = { directory: "/tmp/opencode-other", workspaceID: "wrk_other" }
+  const other = { directory: "/tmp/opencode-other" }
   const calls = createFetch((url) => {
     if (url.pathname !== "/api/form/request") return
     requests.push(url)
     const requestedDirectory = url.searchParams.get("location[directory]") ?? directory
-    const requestedWorkspace = url.searchParams.get("location[workspace]") ?? undefined
     return json({
       location: {
         directory: requestedDirectory,
-        workspaceID: requestedWorkspace,
         project: { id: "proj_test", directory: requestedDirectory },
       },
       data: [
@@ -2548,7 +2544,7 @@ test("syncs global forms once for each requested location", async () => {
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.searchParams.get("location[directory]")).toBe(other.directory)
-    expect(requests[0]?.searchParams.get("location[workspace]")).toBe(other.workspaceID)
+    expect(requests[0]?.searchParams.has("location[workspace]")).toBe(false)
     expect(data.session.form.list("global", other)?.map((form) => form.id)).toEqual(["frm_other"])
     expect(data.session.form.list("global", { directory })?.map((form) => form.id)).toEqual(["frm_default"])
 
@@ -2565,7 +2561,7 @@ test("resyncs global forms only for the active location after reconnect", async 
   const requests: URL[] = []
   const counts = new Map<string, number>()
   const home = { directory: process.cwd() }
-  const other = { directory: "/tmp/opencode-other", workspaceID: "wrk_other" }
+  const other = { directory: "/tmp/opencode-other" }
   const calls = createFetch((url) => {
     if (url.pathname === "/api/location")
       return json({ ...home, project: { id: "proj_test", directory: home.directory } })
@@ -2581,13 +2577,11 @@ test("resyncs global forms only for the active location after reconnect", async 
     if (url.pathname !== "/api/form/request") return
     requests.push(url)
     const requestedDirectory = url.searchParams.get("location[directory]") ?? home.directory
-    const requestedWorkspace = url.searchParams.get("location[workspace]") ?? undefined
     const count = (counts.get(requestedDirectory) ?? 0) + 1
     counts.set(requestedDirectory, count)
     return json({
       location: {
         directory: requestedDirectory,
-        workspaceID: requestedWorkspace,
         project: { id: "proj_test", directory: requestedDirectory },
       },
       data: [
@@ -2631,12 +2625,9 @@ test("resyncs global forms only for the active location after reconnect", async 
     await wait(() => data.session.form.list("global", home)?.[0]?.id === "frm_default_2", 4000)
     expect(data.session.form.list("global", other)?.[0]?.id).toBe("frm_other_1")
     expect(requests).toHaveLength(1)
-    expect(
-      requests.map((url) => [
-        url.searchParams.get("location[directory]") ?? directory,
-        url.searchParams.get("location[workspace]") ?? undefined,
-      ]),
-    ).toEqual([[home.directory, undefined]])
+    expect(requests.map((url) => url.searchParams.get("location[directory]") ?? directory)).toEqual([
+      home.directory,
+    ])
   } finally {
     app.renderer.destroy()
   }

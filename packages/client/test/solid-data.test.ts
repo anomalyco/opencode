@@ -302,7 +302,7 @@ test("adopts cached directory-project sessions when their repository is resolved
         ...session(0),
         id: "ses_remote",
         projectID: "directory-root",
-        location: { directory: "/repo", workspaceID: "workspace-remote" },
+        location: { directory: "/repo" },
       },
     ]
     sessions.forEach((item) => setup.data.session.remember(item))
@@ -342,7 +342,7 @@ test("adopts cached directory-project sessions when their repository is resolved
     expect(setup.data.session.get("ses_escaped")?.projectID).toBe("global")
     expect(setup.data.session.get("ses_other")?.projectID).toBe("other-repository")
     expect(setup.data.session.get("ses_sibling")?.projectID).toBe("global")
-    expect(setup.data.session.get("ses_remote")?.projectID).toBe("directory-root")
+    expect(setup.data.session.get("ses_remote")?.projectID).toBe("repository")
     await wait(() => setup.data.session.get("ses_uncached")?.projectID === "repository")
     expect(setup.data.session.get("ses_uncached")?.subpath).toBe("app")
   } finally {
@@ -350,7 +350,7 @@ test("adopts cached directory-project sessions when their repository is resolved
   }
 })
 
-test("refreshes global credential events across every loaded location and workspace", async () => {
+test("refreshes global credential events across every loaded location", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const requests: URL[] = []
   const api = OpenCode.make({
@@ -363,7 +363,6 @@ test("refreshes global credential events across every loaded location and worksp
       return Response.json({
         location: {
           directory,
-          workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
           project: { id: "project", directory, canonical: directory },
         },
         data: [],
@@ -385,7 +384,7 @@ test("refreshes global credential events across every loaded location and worksp
     }),
     dispose,
   }))
-  const locations = [{ directory: "/project" }, { directory: "/other", workspaceID: "workspace-other" }]
+  const locations = [{ directory: "/project" }, { directory: "/other" }]
 
   try {
     await Promise.all(
@@ -408,14 +407,10 @@ test("refreshes global credential events across every loaded location and worksp
     listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
     await wait(() => requests.length === 2)
     expect(
-      requests.map((url) => [
-        url.pathname,
-        url.searchParams.get("location[directory]"),
-        url.searchParams.get("location[workspace]"),
-      ]),
+      requests.map((url) => [url.pathname, url.searchParams.get("location[directory]")]),
     ).toEqual([
-      ["/api/integration", "/project", null],
-      ["/api/integration", "/other", "workspace-other"],
+      ["/api/integration", "/project"],
+      ["/api/integration", "/other"],
     ])
     requests.length = 0
 
@@ -429,17 +424,13 @@ test("refreshes global credential events across every loaded location and worksp
       listeners.forEach((listener) => listener({ name: switched.type, details: switched }))
       await wait(() => requests.length === 4)
       expect(
-        requests.map((url) => [
-          url.pathname,
-          url.searchParams.get("location[directory]"),
-          url.searchParams.get("location[workspace]"),
-        ]),
+        requests.map((url) => [url.pathname, url.searchParams.get("location[directory]")]),
       ).toEqual(
         expect.arrayContaining([
-          ["/api/model", "/project", null],
-          ["/api/provider", "/project", null],
-          ["/api/model", "/other", "workspace-other"],
-          ["/api/provider", "/other", "workspace-other"],
+          ["/api/model", "/project"],
+          ["/api/provider", "/project"],
+          ["/api/model", "/other"],
+          ["/api/provider", "/other"],
         ]),
       )
       locations.forEach((location, index) =>
@@ -465,7 +456,6 @@ test("refreshes references for the location an update names", async () => {
       return Response.json({
         location: {
           directory,
-          workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
           project: { id: "project", directory, canonical: directory },
         },
         data: [],
@@ -487,7 +477,7 @@ test("refreshes references for the location an update names", async () => {
     }),
     dispose,
   }))
-  const other = { directory: "/other", workspaceID: "workspace-other" }
+  const other = { directory: "/other" }
 
   try {
     await Promise.all([setup.data.location.reference.sync(), setup.data.location.reference.sync(other)])
@@ -502,11 +492,10 @@ test("refreshes references for the location an update names", async () => {
     }
     listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
     await wait(() => requests.length === 1)
-    expect([
-      requests[0]!.pathname,
-      requests[0]!.searchParams.get("location[directory]"),
-      requests[0]!.searchParams.get("location[workspace]"),
-    ]).toEqual(["/api/reference", "/other", "workspace-other"])
+    expect([requests[0]!.pathname, requests[0]!.searchParams.get("location[directory]")]).toEqual([
+      "/api/reference",
+      "/other",
+    ])
   } finally {
     setup.dispose()
   }

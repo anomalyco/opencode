@@ -45,9 +45,9 @@ test.each([
 
     await fixture.create()
 
-    expect(fixture.requests).toEqual([{ payload: { name: "fresh" }, directory: input.directory, workspace: null }])
+    expect(fixture.requests).toEqual([{ payload: { name: "fresh" }, directory: input.directory }])
     expect(fixture.data.location.info({ directory: created })?.project.canonical).toBe(clone)
-    expect(fixture.reads.locations.filter((directory) => directory === input.directory)).toHaveLength(1)
+    expect(fixture.reads.locations.filter((directory) => directory === input.directory)).toHaveLength(input.home ? 3 : 1)
     expect(fixture.reads.session).toBe(input.home ? 0 : 1)
     expect(fixture.moves).toEqual([])
     if (!input.home) expect(fixture.route.data).toEqual({ type: "home", location: { directory: created } })
@@ -59,12 +59,11 @@ test.each([
 test.each([
   { name: "another clone", launch: main },
   { name: "another project", launch: "/tmp/opencode/elsewhere", launchProjectID: "proj_launch" },
-  { name: "another workspace", launch: main, workspaceID: "wrk_clone" },
 ])("uses Home's selected location instead of launch in $name", async (input) => {
   const fixture = await renderMove({ ...input, directory: `${clone}/packages/tui`, home: true })
   try {
     await fixture.data.location.syncInfo()
-    const selected = { directory: `${clone}/packages/tui`, workspaceID: input.workspaceID }
+    const selected = { directory: `${clone}/packages/tui` }
     fixture.location.set(selected)
     expect(fixture.data.location.default().directory).toBe(input.launch)
     expect(fixture.data.location.info(selected)).toBeUndefined()
@@ -75,7 +74,7 @@ test.each([
     expect(frame).toContain(clone)
     expect(frame.indexOf(clone)).toBeLessThan(frame.indexOf(main))
     expect(fixture.requests).toEqual([
-      { payload: { name: "fresh" }, directory: `${clone}/packages/tui`, workspace: input.workspaceID ?? null },
+      { payload: { name: "fresh" }, directory: `${clone}/packages/tui` },
     ])
     expect(fixture.data.location.info(selected)?.project.canonical).toBe(clone)
     expect(fixture.moves).toEqual([])
@@ -149,17 +148,36 @@ test.each([false, true])("Ctrl+M moves only an existing session (home=%s)", asyn
 test.each([
   { name: "session", unavailable: "session" as const },
   { name: "location", unavailable: "location" as const },
-  { name: "selected Home location", unavailable: "location" as const, home: true, launch: main },
 ])("does not create from another clone when $name lookup fails", async (input) => {
   const fixture = await renderMove({ ...input, directory: `${linked}/packages/tui`, worktree: linked })
   try {
-    if (input.home) fixture.location.set({ directory: `${linked}/packages/tui` })
     await fixture.create()
 
     expect(fixture.requests).toEqual([])
     expect(fixture.moves).toEqual([])
     expect(fixture.toast.currentToast).toMatchObject({ title: "Creating workspace failed", variant: "error" })
     expect(fixture.move.creating()).toBe(false)
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+test("does not open creation when the selected Home location lookup fails", async () => {
+  const fixture = await renderMove({
+    unavailable: "location",
+    home: true,
+    launch: main,
+    directory: `${linked}/packages/tui`,
+    worktree: linked,
+  })
+  try {
+    fixture.location.set({ directory: `${linked}/packages/tui` })
+    await fixture.move.open()
+    await fixture.app.waitFor(() => fixture.toast.currentToast !== null)
+
+    expect(fixture.requests).toEqual([])
+    expect(fixture.moves).toEqual([])
+    expect(fixture.toast.currentToast).toMatchObject({ message: "Unable to determine current project", variant: "error" })
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -179,7 +197,7 @@ async function renderMove(input: {
   const moves: unknown[] = []
   const reads = { session: 0, locations: [] as string[], worktrees: [] as string[] }
   const calls = createFetch(async (url, request) => {
-    if (url.pathname === "/api/location" || url.pathname === "/api/project/current") {
+    if (url.pathname === "/api/location") {
       const directory = url.searchParams.get("location[directory]") ?? launch
       const project = {
         id: directory === launch ? (input.launchProjectID ?? "proj_test") : "proj_test",
@@ -191,13 +209,11 @@ async function renderMove(input: {
               ? launch
               : main,
       }
-      if (url.pathname === "/api/project/current") return json(project)
       reads.locations.push(directory)
       if (input.unavailable === "location" && directory === input.directory)
         return json({ message: "Location unavailable" }, { status: 503 })
       return json({
         directory,
-        workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
         project,
       })
     }
@@ -231,7 +247,6 @@ async function renderMove(input: {
         requests.push({
           payload: await request.json(),
           directory: url.searchParams.get("location[directory]"),
-          workspace: url.searchParams.get("location[workspace]"),
         })
         return json({ directory: created })
       }

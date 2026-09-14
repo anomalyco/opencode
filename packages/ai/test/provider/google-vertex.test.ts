@@ -75,6 +75,45 @@ describe("Google Vertex providers", () => {
     }),
   )
 
+  it.effect("maps service tiers to the Vertex shared PayGo header", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: GoogleVertex.configure({
+            accessToken: "vertex-token",
+            location: "global",
+            project: "vertex-project",
+            providerOptions: { serviceTier: "flex" },
+          }).model("gemini-2.5-flash"),
+          prompt: "Say hello.",
+        }),
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(request.headers.get("x-vertex-ai-llm-shared-request-type")).toBe("flex")
+              expect(yield* Effect.promise(() => request.json())).not.toHaveProperty("serviceTier")
+              return input.respond(
+                sseEvents({
+                  candidates: [
+                    {
+                      content: { role: "model", parts: [{ text: "Hello." }] },
+                      finishReason: "STOP",
+                    },
+                  ],
+                }),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello.")
+    }),
+  )
+
   it.effect("strips function call ids Vertex does not accept from lowered bodies", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

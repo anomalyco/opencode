@@ -522,7 +522,7 @@ const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenRes
     call_id: part.id,
     name: part.name,
     namespace: part.namespace,
-    arguments: ProviderShared.encodeJson(part.input),
+    arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   }
 }
 

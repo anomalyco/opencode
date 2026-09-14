@@ -11,6 +11,7 @@ import { ConfigAgentPlugin } from "@opencode/core/config/plugin/agent"
 import { ConfigCommandPlugin } from "@opencode/core/config/plugin/command"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigReferencePlugin } from "@opencode/core/config/plugin/reference"
+import { ConfigCompatibilityPlugin } from "@opencode/core/config/plugin/compatibility"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { Bus } from "@opencode/core/bus"
 import { Integration } from "@opencode/core/integration"
@@ -67,7 +68,7 @@ describe("config plugin reloads", () => {
               const plugins = yield* Plugin.Service
               const skills = yield* Skill.Service
               const host = yield* PluginHost.make(plugins)
-              yield* ConfigSkillPlugin.Plugin.effect(host)
+              yield* ConfigCompatibilityPlugin.Plugin.effect(host)
               expect(yield* skills.list()).toEqual([])
 
               // Finish startup by observing an ordinary config reload before creating the root.
@@ -80,7 +81,7 @@ describe("config plugin reloads", () => {
                 Bun.write(skill, "---\nname: probe\ndescription: Hot reload\n---\nTest skill"),
               )
               yield* waitUntil(skills.list().pipe(Effect.map((items) => items.some((item) => item.id === "probe"))))
-              expect((yield* skills.list())[0]?.location).toBe(AbsolutePath.make(skill))
+              expect((yield* skills.list())[0]?.path).toBe(AbsolutePath.make(skill))
               yield* Effect.promise(() => fs.rm(root, { recursive: true }))
               yield* waitUntil(skills.list().pipe(Effect.map((items) => items.length === 0)))
               yield* Effect.promise(() => Bun.write(skill, "---\nname: probe\ndescription: Recreated\n---\nTest skill"))

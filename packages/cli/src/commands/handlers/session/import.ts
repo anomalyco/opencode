@@ -44,7 +44,7 @@ export default Runtime.handler(
         headers: { ...Service.headers(server.endpoint), "content-type": "application/json" },
         body: JSON.stringify({
           ...encoded,
-          location: { directory: location.directory, workspaceID: location.workspaceID },
+          location: { directory: location.directory },
         }),
       }),
     )

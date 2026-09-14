@@ -90,7 +90,7 @@ test("rotates HTTP and PTY clients together", async () => {
   const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init)
     requests.push({ url: request.url, authorization: request.headers.get("authorization") })
-    return Response.json({ healthy: true, version: "2.0.0-test", pid: 1 })
+    return Response.json({ version: "2.0.0-test", pid: 1, urls: [request.url] })
   }) as typeof globalThis.fetch
   const transport = createServerTransport({
     http: { url: "http://127.0.0.1:4100", password: "first" },
@@ -98,23 +98,23 @@ test("rotates HTTP and PTY clients together", async () => {
   })
   const initialPty = transport.pty
 
-  await transport.api.health.get()
+  await transport.api.server.status()
   const replacement = transport.update({
     url: "http://127.0.0.1:4200",
     password: "second",
   })
-  await transport.api.health.get()
+  await transport.api.server.status()
 
   expect(replacement).toBe(transport.api)
   expect(transport.pty).not.toBe(initialPty)
   expect(transport.url).toBe("http://127.0.0.1:4200")
   expect(requests).toEqual([
     {
-      url: "http://127.0.0.1:4100/api/health",
+      url: "http://127.0.0.1:4100/api/status",
       authorization: `Basic ${btoa("opencode:first")}`,
     },
     {
-      url: "http://127.0.0.1:4200/api/health",
+      url: "http://127.0.0.1:4200/api/status",
       authorization: `Basic ${btoa("opencode:second")}`,
     },
   ])

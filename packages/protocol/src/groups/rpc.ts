@@ -21,7 +21,7 @@ export const RpcGroup = HttpApiGroup.make("server.rpc")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.rpc.call",
+          identifier: "rpc.call",
           summary: "Call a plugin RPC",
           description: "Dispatch a method to the currently registered RPC at the requested location.",
         }),

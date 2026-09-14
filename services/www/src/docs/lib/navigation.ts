@@ -95,6 +95,7 @@ export const docsSections: DocsSection[] = [
           { title: "Overview", slug: "build/plugins" },
           { title: "RPC", slug: "build/plugins/rpc" },
           { title: "CLI", slug: "build/plugins/cli" },
+          { title: "Migrate from V1", slug: "build/plugins/migrate-v1" },
         ],
       },
       {

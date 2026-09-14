@@ -150,7 +150,7 @@ export class OpenCodeDO {
     if (this.configurations !== 1 || admitted.some(item => item.payload.text !== "Packed prompt:packed-thread")) {
       throw new Error("Packed instance configuration did not share or prepare prompts correctly")
     }
-    return Response.json(await opencode.health.get())
+    return Response.json(await opencode.server.status())
   }
 }
 
@@ -180,7 +180,7 @@ try {
     "Packed workerd health returned " + response.status + ": " + await response.text(),
   )
   const body = await response.json()
-  if (body.healthy !== true || body.version !== "packed-workerd") {
+  if (body.version !== "packed-workerd" || body.pid !== 1 || !Array.isArray(body.urls)) {
     throw new Error("Unexpected packed workerd health: " + JSON.stringify(body))
   }
 } finally {

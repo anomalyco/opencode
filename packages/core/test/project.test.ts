@@ -51,7 +51,7 @@ describe("Project.list", () => {
         {
           id: Project.ID.make("newer"),
           canonical: abs("/newer"),
-          time: { created: 2, updated: 2, initialized: 3 },
+          time: { created: 2, updated: 2 },
           sandboxes: [],
         },
         {
@@ -551,7 +551,7 @@ describe("Project.resolve", () => {
         icon: { color: "#123456" },
         commands: { start: "bun dev" },
         sandboxes: [abs("/preserved-sandbox")],
-        time: { created: 1, initialized: 2 },
+        time: { created: 1 },
       })
     }),
   )

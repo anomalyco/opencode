@@ -1,5 +1,7 @@
 import { DataProvider } from "@opencode/session-ui/context"
-import { BackgroundMoveHint, BackgroundWorkSummary } from "./message-timeline"
+import { BackgroundMoveHint } from "./message-timeline"
+import { BackgroundWorkSummary } from "../summary/background"
+import "../summary/summary.css"
 
 const tasks = [
   { id: "task_explore", type: "subagent" as const, agent: "explore", label: "Reviewing component implementation" },

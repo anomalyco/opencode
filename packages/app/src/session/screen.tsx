@@ -9,10 +9,13 @@ import {
   createEffect,
   createComputed,
   on,
+  onMount,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { debounce } from "@solid-primitives/scheduled"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
-import { MessageTimeline, SessionSummaryPanel } from "@/session/timeline/message-timeline"
+import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
 import { projectForSession } from "@/shell/layout/helpers"
 import { ComposerDropzone } from "@/composer/dropzone"
@@ -39,6 +42,11 @@ import { createTimelineCache } from "./timeline/cache"
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
   return { default: SessionMobileFiles }
+})
+
+const SessionSummaryPanel = lazy(async () => {
+  const { SessionSummaryPanel } = await import("./summary/panel")
+  return { default: SessionSummaryPanel }
 })
 
 export function SessionScreen(props: { session: SessionModel }) {
@@ -70,11 +78,24 @@ export function SessionScreen(props: { session: SessionModel }) {
     sideTerminalPresent: false,
     mobileTerminalCached: false,
     mobileMoveDismissed: false,
+    summaryResizeTranslate: undefined as string | undefined,
   })
   const [elements, setElements] = createStore<{
+    chat?: HTMLDivElement
     side?: HTMLDivElement
     bottomTerminal?: HTMLDivElement
   }>({})
+  const finishWindowResize = debounce(() => setStore("summaryResizeTranslate", undefined), 150)
+  onMount(() => {
+    makeEventListener(window, "resize", () => {
+      if (store.summaryResizeTranslate === undefined) {
+        const content = elements.chat?.querySelector("[data-timeline-virtual-content]")
+        // Freeze the painted offset, including an in-flight slide, until resizing settles.
+        setStore("summaryResizeTranslate", content ? getComputedStyle(content).translate : "none")
+      }
+      finishWindowResize()
+    })
+  })
   const sideVisible = createMemo(() => isDesktop() && screen.side.layout().visible)
   const sideTerminalVisible = createMemo(() => isDesktop() && screen.terminal.side() && screen.terminal.open())
   const bottomTerminalVisible = createMemo(() => isDesktop() && screen.terminal.open() && screen.terminal.bottom())
@@ -333,6 +354,9 @@ export function SessionScreen(props: { session: SessionModel }) {
               "transition-none": screen.size.active() || !sidePresence.animate(),
             }}
             data-slot="session-chat-panel"
+            ref={(element) => setElements("chat", element)}
+            data-summary-open={isDesktop() && review.details.open()}
+            data-summary-resizing={store.summaryResizeTranslate !== undefined}
             data-width-animating={store.sideWidthMotion}
             data-scrollbar-hidden={store.timelineScrollbarHidden || store.sideWidthMotion}
             onPointerMove={revealTimelineScrollbar}
@@ -344,6 +368,7 @@ export function SessionScreen(props: { session: SessionModel }) {
             onTransitionCancel={trackSideWidthMotion}
             style={{
               width: screen.panel.width(),
+              "--session-summary-resize-translate": store.summaryResizeTranslate,
             }}
           >
             <Show when={!!session.identity.params.id}>

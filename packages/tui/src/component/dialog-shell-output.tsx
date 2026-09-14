@@ -30,7 +30,7 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
     // The running-shell inventory drops exited commands. Keep this view tied to
     // the opened ID and its original Location, not the list's current selection.
     const id = props.shell.id
-    const location = { directory: props.location.directory, workspace: props.location.workspaceID }
+    const location = { directory: props.location.directory }
     let cursor: number | undefined
     let disposed = false
     let missing = false

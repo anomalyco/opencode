@@ -330,7 +330,6 @@ export function Autocomplete(props: {
       const { lineRange, base } = parseFileLineRange(input.query ?? "")
       const requestLocation = {
         directory: input.location?.directory,
-        workspace: input.location?.workspaceID ?? data.location.default().workspaceID,
       }
       const width = props.anchor().width - 4
       if (input.visible === "directory") {
@@ -518,17 +517,6 @@ export function Autocomplete(props: {
         description: serverCommand.description,
         queueable: true,
         onSelect: () => insertSlash(serverCommand.name),
-      })
-    }
-
-    for (const skill of data.location.skill
-      .list(location.current)
-      ?.filter((skill) => skill.slash === true && !commandNames.has(skill.id)) ?? []) {
-      results.push({
-        display: "/" + skill.id,
-        description: skill.description,
-        kind: "skill",
-        onSelect: () => insertSlash(skill.id),
       })
     }
 

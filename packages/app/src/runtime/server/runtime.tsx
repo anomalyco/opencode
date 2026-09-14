@@ -1,6 +1,5 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { Accessor, createEffect, createMemo, createResource, createRoot, getOwner } from "solid-js"
-import { createStore } from "solid-js/store"
 import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
 import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
@@ -28,24 +27,8 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       () => server.list,
       () => true,
     )
-    const [store, setStore] = createStore({
-      settings: {
-        serverKey: undefined as ServerConnection.Key | undefined,
-      },
-    })
     const models = createGlobalModels()
     const notificationCoordinator = createNotificationCoordinator()
-
-    const settingsServer = createMemo(() => {
-      const list = server.list
-      return list.find((conn) => ServerConnection.key(conn) === store.settings.serverKey) ?? list[0]
-    })
-
-    createEffect(() => {
-      const conn = settingsServer()
-      const key = conn ? ServerConnection.key(conn) : undefined
-      if (store.settings.serverKey !== key) setStore("settings", "serverKey", key)
-    })
 
     const serverCtxs = new Map<ServerConnection.Key, ReturnType<typeof createServerController>>()
     const serverCtxDisposers = new Map<ServerConnection.Key, () => void>()
@@ -85,17 +68,6 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       servers: {
         list: () => server.list,
         health: serverHealth,
-      },
-      settings: {
-        server: {
-          get key() {
-            return store.settings.serverKey
-          },
-          selected: settingsServer,
-          set(key: ServerConnection.Key) {
-            if (store.settings.serverKey !== key) setStore("settings", "serverKey", key)
-          },
-        },
       },
       models,
       ensureServerCtx(conn: ServerConnection.Any) {

@@ -536,8 +536,8 @@ export function CurrentContextToolGroup(props: {
   const label = createMemo(() => {
     const thoughts = props.parts.filter((part) => part.type === "reasoning").length
     if (!names() && !thoughts) {
-      const title = i18n.t("ui.messagePart.context.details")
-      return { text: title, title, before: "", count: "", between: "", after: "" }
+      const text = i18n.t("ui.messagePart.context.updates")
+      return { text, title: "", before: text, count: "", between: "", after: "" }
     }
     const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
     const count = props.parts.filter((part) => part.type === "tool" || part.type === "shell").length || thoughts
@@ -622,7 +622,12 @@ export function CurrentContextToolGroup(props: {
               <Show when={label().before || label().count || label().between}>
                 <span data-slot="context-tool-group-usage">
                   <Show when={label().before}>
-                    {(before) => <span data-slot="context-tool-group-prefix">{before()} </span>}
+                    {(before) => (
+                      <span data-slot="context-tool-group-prefix">
+                        {before()}
+                        {label().title ? " " : ""}
+                      </span>
+                    )}
                   </Show>
                   <Show when={label().count}>
                     {(count) => <span data-slot="context-tool-group-count">{count()} </span>}
@@ -632,7 +637,7 @@ export function CurrentContextToolGroup(props: {
                   </Show>
                 </span>
               </Show>
-              <span data-slot="basic-tool-tool-title">{label().title}</span>
+              <Show when={label().title}>{(title) => <span data-slot="basic-tool-tool-title">{title()}</span>}</Show>
               <Show when={label().after}>
                 {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
               </Show>
@@ -1025,7 +1030,6 @@ function FileAccordionGroup(props: { children: JSX.Element }) {
     <div
       data-component="accordion"
       data-scope="apply-patch"
-      style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
       onKeyDown={(event) => {
         if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
         if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return

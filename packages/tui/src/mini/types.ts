@@ -85,7 +85,6 @@ export type RunPrompt = {
   command?: {
     name: string
     arguments: string
-    // Catalog source of the matched slash entry ("skill" routes to session.skill).
     source?: string
   }
 }
@@ -295,7 +294,6 @@ export type FooterPromptRoute =
   | { type: "subagent-menu" }
   | { type: "subagent"; sessionID: string }
   | { type: "command" }
-  | { type: "skill" }
   | { type: "agent" }
   | { type: "model" }
   | { type: "variant" }

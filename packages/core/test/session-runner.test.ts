@@ -1497,7 +1497,7 @@ describe("SessionRunnerLLM", () => {
       expect(continued.system.map((part) => part.text)).toContain("Checkpoint instructions")
       expect(systemTexts(continued)).toEqual(["Newest instructions"])
 
-      const forked = yield* s.session.fork({ sessionID, boundary: { type: "before", messageID: after.id } })
+      const forked = yield* s.session.fork({ sessionID, before: after.id })
       yield* s.session.prompt({ sessionID: forked.id, text: "Fork prompt", resume: false })
       yield* s.session.resume(forked.id)
       expect(s.requests.at(-1)?.messages[0]).toEqual(replacement[0])
@@ -1552,7 +1552,7 @@ describe("SessionRunnerLLM", () => {
     s.systemBaseline = "Latest context"
     yield* s.runPrompt("Third")
 
-    const forked = yield* s.session.fork({ sessionID, boundary: { type: "before", messageID: second.id } })
+    const forked = yield* s.session.fork({ sessionID, before: second.id })
     expect(
       yield* s.db.select().from(InstructionStateTable).where(eq(InstructionStateTable.session_id, forked.id)).get(),
     ).toMatchObject({
@@ -1597,14 +1597,14 @@ describe("SessionRunnerLLM", () => {
     s.systemBaseline = "Changed context"
     const second = yield* s.runPrompt("Second")
 
-    const child = yield* s.session.fork({ sessionID, boundary: { type: "before", messageID: second.id } })
+    const child = yield* s.session.fork({ sessionID, before: second.id })
     const inheritedFirst = (yield* s.session.messages({ sessionID: child.id })).find(
       (message) => message.type === "user" && message.text === "First",
     )
     if (!inheritedFirst) return yield* Effect.die(new Error("Nested fork boundary message not found"))
     const grandchild = yield* s.session.fork({
       sessionID: child.id,
-      boundary: { type: "before", messageID: inheritedFirst.id },
+      before: inheritedFirst.id,
     })
 
     expect(
@@ -2036,7 +2036,7 @@ describe("SessionRunnerLLM", () => {
     yield* replaySessionProjection(sessionID)
     const latest = yield* s.runPrompt("Third")
     expect(systemTexts(s.requests[3])).toEqual(["Replacement context"])
-    const fork = yield* s.session.fork({ sessionID, boundary: { type: "before", messageID: latest.id } })
+    const fork = yield* s.session.fork({ sessionID, before: latest.id })
     expect(
       (yield* s.session.context(fork.id)).flatMap((message) => (message.type === "system" ? [message.text] : [])),
     ).toEqual(["Replacement context"])
@@ -4401,7 +4401,13 @@ describe("SessionRunnerLLM", () => {
       Expected.assistant({}, [
         Expected.failedTool(
           { id: "call-missing" },
-          { error: { type: "tool.execution", message: "Unknown tool: missing" } },
+          {
+            error: {
+              type: "tool.execution",
+              message:
+                'No tool named "missing" is currently available. Please use a tool from the available tool list.',
+            },
+          },
         ),
       ]),
       Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),

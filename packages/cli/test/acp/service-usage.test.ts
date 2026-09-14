@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { makeACPFixture, makeSession, secondModel, type FixtureContext, type FixtureRequest } from "./service-fixture"
 
 describe("acp service prompt routing and usage", () => {
-  test("routes slash commands, skills, and compact through their session endpoints", async () => {
+  test("routes slash commands and compact through their session endpoints", async () => {
     await using fixture = makeACPFixture({
       fetch(request, context) {
         if (request.method === "POST" && request.path === "/api/session") {
@@ -12,15 +12,6 @@ describe("acp service prompt routing and usage", () => {
           return Response.json({ data: makeSession("ses_routes") })
         }
         if (request.method === "POST" && request.path === "/api/session/ses_routes/command") {
-          return new Response(null, { status: 204 })
-        }
-        if (request.method === "POST" && request.path === "/api/session/ses_routes/skill") {
-          const id = requestID(request)
-          completeTurn(context, "ses_routes", {
-            id: id.replace(/^msg_/, "evt_"),
-            type: "session.skill.activated",
-            data: { sessionID: "ses_routes", skill: "verify" },
-          })
           return new Response(null, { status: 204 })
         }
         if (request.method === "POST" && request.path === "/api/session/ses_routes/compact") {
@@ -41,22 +32,13 @@ describe("acp service prompt routing and usage", () => {
       sessionId: session.sessionId,
       prompt: [{ type: "text", text: "/review now" }],
     })
-    const skillResult = await fixture.service.prompt({
-      sessionId: session.sessionId,
-      prompt: [{ type: "text", text: "/verify" }],
-    })
     const compactResult = await fixture.service.prompt({
       sessionId: session.sessionId,
       prompt: [{ type: "text", text: "/compact" }],
     })
 
-    expect([commandResult.stopReason, skillResult.stopReason, compactResult.stopReason]).toEqual([
-      "end_turn",
-      "end_turn",
-      "end_turn",
-    ])
+    expect([commandResult.stopReason, compactResult.stopReason]).toEqual(["end_turn", "end_turn"])
     const command = fixture.requests.find((request) => request.path === "/api/session/ses_routes/command")
-    const skill = fixture.requests.find((request) => request.path === "/api/session/ses_routes/skill")
     const compact = fixture.requests.find((request) => request.path === "/api/session/ses_routes/compact")
     expect(command?.body).toMatchObject({
       command: "review",
@@ -64,7 +46,6 @@ describe("acp service prompt routing and usage", () => {
       files: [],
       delivery: "steer",
     })
-    expect(skill?.body).toMatchObject({ id: expect.any(String), skill: "verify" })
     expect(compact?.body).toMatchObject({ id: expect.any(String) })
     expect(fixture.requests.some((request) => request.path === "/api/session/ses_routes/prompt")).toBe(false)
   })
@@ -237,7 +218,7 @@ describe("acp service prompt routing and usage", () => {
 
 function requestID(request: FixtureRequest) {
   if (!request.body || typeof request.body !== "object") throw new Error(`missing body for ${request.path}`)
-  const id = Reflect.get(request.body, "id")
+  const id = "id" in request.body ? request.body.id : undefined
   if (typeof id !== "string") throw new Error(`missing prompt id for ${request.path}`)
   return id
 }

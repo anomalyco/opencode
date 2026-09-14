@@ -14,7 +14,7 @@ export const AgentGroup = HttpApiGroup.make("server.agent")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.agent.list",
+          identifier: "agent.list",
           summary: "List agents",
           description: "Retrieve currently registered agents.",
         }),
@@ -30,7 +30,7 @@ export const AgentGroup = HttpApiGroup.make("server.agent")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.agent.get",
+          identifier: "agent.get",
           summary: "Get agent",
           description: "Retrieve a single currently registered agent.",
         }),

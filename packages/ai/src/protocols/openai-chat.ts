@@ -315,7 +315,7 @@ const lowerToolCall = (part: ToolCallPart, options: LoweringOptions): OpenAIChat
   type: "function",
   function: {
     name: part.name,
-    arguments: ProviderShared.encodeJson(part.input),
+    arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   },
 })
 
@@ -323,7 +323,11 @@ const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart
   const media = ProviderShared.normalizeMedia(part)
   if (!media.mime.startsWith("image/"))
     return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.mediaType}`)
-  return { type: "image_url" as const, image_url: { url: media.dataUrl } }
+  const url =
+    typeof part.data === "string" && (part.data.startsWith("https://") || part.data.startsWith("http://"))
+      ? part.data
+      : media.dataUrl
+  return { type: "image_url" as const, image_url: { url } }
 })
 
 const openAICompatibleReasoningContent = (native: unknown) =>
@@ -766,7 +770,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
               supportsStrictMode,
             ),
           ),
-    tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
+    tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     ...(supportsUsageInStreaming ? { stream_options: { include_usage: true } } : {}),
     ...(zaiToolStream && hasActiveTools ? { tool_stream: true } : {}),

@@ -15,16 +15,21 @@ import {
 
 const synced = { type: "log.synced" as const, aggregateID: "ses_test", seq: Event.Seq.make(1) }
 
-test("health.get decodes the readiness response", async () => {
+test("server.status decodes the readiness response", async () => {
   const httpClient = HttpClient.make((request) =>
-    Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ healthy: true, version: "old", pid: 123 }))),
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        Response.json({ version: "current", pid: 123, urls: ["http://localhost:3000"] }),
+      ),
+    ),
   )
   const result = await Effect.gen(function* () {
     const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
-    return yield* client.health.get()
+    return yield* client.server.status()
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
-  expect(result).toEqual({ healthy: true, version: "old", pid: 123 })
+  expect(result).toEqual({ version: "current", pid: 123, urls: ["http://localhost:3000"] })
 })
 
 test("vcs.base decodes nullable review-base metadata", async () => {

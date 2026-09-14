@@ -26,7 +26,7 @@ export const WorktreeGroup = HttpApiGroup.make("server.worktree")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.worktree.list",
+          identifier: "worktree.list",
           summary: "List worktrees",
           description:
             "Discover worktrees through the requested location's strategies and return its project's inventory.",
@@ -43,7 +43,7 @@ export const WorktreeGroup = HttpApiGroup.make("server.worktree")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.worktree.create",
+          identifier: "worktree.create",
           summary: "Create worktree",
           description:
             "Create a local worktree using the location's registered strategy and directory defaults, then run the project's setup script.",
@@ -60,7 +60,7 @@ export const WorktreeGroup = HttpApiGroup.make("server.worktree")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.worktree.remove",
+          identifier: "worktree.remove",
           summary: "Remove worktree",
           description: "Remove a managed worktree from the requested location's project using its recorded strategy.",
         }),
@@ -75,7 +75,7 @@ export const WorktreeGroup = HttpApiGroup.make("server.worktree")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.worktree.refresh",
+          identifier: "worktree.refresh",
           summary: "Refresh worktrees",
           description: "Discover worktrees from the requested location and reconcile the shared project inventory.",
         }),

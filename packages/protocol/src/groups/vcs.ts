@@ -29,7 +29,7 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.vcs.get",
+          identifier: "vcs.get",
           summary: "VCS info",
           description: "Get current and default branch information for the requested location.",
         }),
@@ -44,7 +44,7 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.vcs.base",
+          identifier: "vcs.base",
           summary: "VCS review base",
           description:
             "Infer a local review base from named branch creation history, or the repository default only when currently on that branch. Returns null before the first commit or when the provider lacks base metadata; ambiguous Git history requires an explicit base on diff requests.",
@@ -59,7 +59,7 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.vcs.status",
+          identifier: "vcs.status",
           summary: "VCS status",
           description: "List uncommitted working-copy changes relative to the requested location.",
         }),
@@ -73,7 +73,7 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.vcs.branches",
+          identifier: "vcs.branches",
           summary: "VCS branches",
           description: "List local and remote branches available at the requested location.",
         }),
@@ -88,7 +88,7 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.vcs.diff",
+          identifier: "vcs.diff",
           summary: "VCS diff",
           description:
             "Diff HEAD to the working copy (working), the base merge-base to the working copy (branch), or the base merge-base to HEAD (committed). Omitting base preserves repository-default comparison; supplying it overrides the comparison without saving it.",

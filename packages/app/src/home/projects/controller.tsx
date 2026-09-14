@@ -1,6 +1,7 @@
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { useServerActionsController } from "@/servers/registry/controller"
 import { useSettingsCommand } from "@/settings/command"
+import { useSettingsSurface } from "@/settings/surface"
 import { type LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -27,6 +28,7 @@ export function createHomeProjectsController(home: HomeController) {
   const dialog = useDialog()
   const language = useLanguage()
   const openSettings = useSettingsCommand()
+  const settings = useSettingsSurface()
   const serverManagement = useServerActionsController()
   const global = useGlobal()
   const authenticate = useSshAuthenticate()
@@ -131,8 +133,9 @@ export function createHomeProjectsController(home: HomeController) {
           })
       },
       edit: (conn: ServerConnection.Any, project: LocalProject) => {
-        void import("@/settings/workspaces/project-dialog").then(({ DialogEditProject }) => {
-          void dialog.show(() => <DialogEditProject server={conn} project={project} />)
+        settings.openProject({
+          server: ServerConnection.key(conn),
+          project: project.worktree,
         })
       },
       unseenCount: (conn: ServerConnection.Any, project: LocalProject) => {

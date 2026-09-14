@@ -55,8 +55,11 @@ import { SessionModelTransport } from "./session/model-transport.js"
 import { llmClient } from "./effect/app-node-platform.js"
 import { Snapshot } from "./snapshot.js"
 import { Session } from "./session/session.js"
+import { SessionDiff, TurnRangeError } from "./session/diff.js"
+import { LocationServiceMap } from "./location-service-map.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import type { EventLog } from "@opencode/schema/event-log"
+import type { FileDiff } from "@opencode/schema/file-diff"
 import { Job } from "./job.js"
 import type { Command } from "./command.js"
 import { SessionEnvironment } from "./session/environment.js"
@@ -91,7 +94,7 @@ type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: Sess
 
 type ForkInput = {
   sessionID: SessionSchema.ID
-  boundary: SessionSchema.ForkRequestBoundary
+  before?: SessionMessage.ID
 }
 
 export {
@@ -109,6 +112,7 @@ export {
 type InboxItemRef = { readonly sessionID: SessionSchema.ID; readonly inboxID: SessionMessage.ID }
 
 export { DestinationNotFoundError, DestinationNotDirectoryError, DestinationUnavailableError }
+export { TurnRangeError }
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<{
@@ -135,6 +139,13 @@ export interface Interface {
   readonly context: (
     sessionID: SessionSchema.ID,
   ) => Effect.Effect<SessionMessage.Info[], NotFoundError | MessageDecodeError>
+  /** Structured diffs of the files changed by a turn or range of turns; see `SessionDiff.turn`. */
+  readonly diff: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly from?: SessionMessage.ID
+    readonly to?: SessionMessage.ID
+    readonly context?: number
+  }) => Effect.Effect<readonly FileDiff.Info[], NotFoundError | MessageNotFoundError | TurnRangeError | Snapshot.Error>
   /**
    * Durable admitted session work not yet visible in projected history,
    * ordered by admission. Includes unpromoted user and synthetic inputs and
@@ -227,6 +238,7 @@ const layer = Layer.effect(
     const moves = yield* SessionMove.Service
     const jobs = yield* Job.Service
     const environments = yield* SessionEnvironment.Service
+    const locations = yield* LocationServiceMap.Service
     const sessions = yield* Session.make()
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
 
@@ -296,17 +308,17 @@ const layer = Layer.effect(
           .where(
             and(
               eq(SessionMessageTable.session_id, input.sessionID),
-              input.boundary.type === "before" ? eq(SessionMessageTable.id, input.boundary.messageID) : undefined,
+              input.before ? eq(SessionMessageTable.id, input.before) : undefined,
             ),
           )
           .orderBy(desc(SessionMessageTable.seq))
           .limit(1)
           .get()
           .pipe(Effect.orDie)
-        if (!boundary && input.boundary.type === "before")
+        if (!boundary && input.before)
           return yield* new MessageNotFoundError({
             sessionID: input.sessionID,
-            messageID: input.boundary.messageID,
+            messageID: input.before,
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
         const sessionID = SessionSchema.ID.create()
@@ -324,7 +336,7 @@ const layer = Layer.effect(
         yield* bus.publish(SessionEvent.Forked, {
           sessionID,
           parentID: parent.id,
-          boundary: { ...input.boundary, messageID: boundary.id },
+          boundary: { type: input.before ? "before" : "through", messageID: boundary.id },
           ...inherited,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
@@ -358,6 +370,17 @@ const layer = Layer.effect(
       context: Effect.fn("Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
         return yield* store.context(sessionID)
+      }),
+      diff: Effect.fn("Session.diff")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        const active = yield* execution.isActive(input.sessionID)
+        return yield* SessionDiff.turn(db, locations, {
+          session,
+          active,
+          from: input.from,
+          to: input.to,
+          context: input.context,
+        })
       }),
       inbox: (sessionID) => sessions.forSession(sessionID).inbox(),
       cancelInbox: (input) => sessions.forSession(input.sessionID).cancelInbox(input.inboxID),
@@ -448,6 +471,7 @@ export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.gl
     SessionInbox.node,
     SessionMove.node,
     SessionProjector.node,
+    LocationServiceMap.node,
     FSUtil.node,
     App.node,
   ],

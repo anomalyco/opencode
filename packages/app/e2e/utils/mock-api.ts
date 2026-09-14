@@ -32,7 +32,7 @@ export class MockBadRequest extends Schema.TaggedError<MockBadRequest>()("MockBa
 }) {}
 
 const Group = HttpApiGroup.make("mock")
-  .add(HttpApiEndpoint.get("health", "/api/health", { success: Json }))
+  .add(HttpApiEndpoint.get("status", "/api/status", { success: Json }))
   .add(
     HttpApiEndpoint.get("event", "/api/event", {
       success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/event-stream" })),
@@ -70,7 +70,21 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("mcp", "/api/mcp", { success: Json }))
   .add(HttpApiEndpoint.get("mcpResource", "/api/mcp/resource", { success: Json }))
   .add(HttpApiEndpoint.get("projectList", "/api/project", { success: Json }))
-  .add(HttpApiEndpoint.get("projectCurrent", "/api/project/current", { success: Json }))
+  .add(
+    HttpApiEndpoint.patch("projectUpdate", "/api/project/:projectID", {
+      params: { projectID: Schema.String },
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
+  .add(HttpApiEndpoint.get("configShells", "/api/config/shell", { success: Json }))
+  .add(
+    HttpApiEndpoint.patch("configUpdate", "/api/experimental/config", {
+      payload: Schema.Struct({ shell: Schema.NullOr(Schema.String) }),
+      success: HttpApiSchema.NoContent,
+    }),
+  )
+  .add(HttpApiEndpoint.get("websearchProviders", "/api/websearch/provider", { success: Json }))
   .add(
     HttpApiEndpoint.get("worktreeList", "/api/worktree", {
       success: Json,

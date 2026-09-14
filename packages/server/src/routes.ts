@@ -160,6 +160,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.succeedContext(
           Context.pick(
             Database.Service,
+            Credential.Service,
             PermissionSaved.Service,
             PluginUpdate.Service,
             Project.Service,

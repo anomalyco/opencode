@@ -31,7 +31,7 @@ const info = Skill.Info.make({
   id: Skill.ID.make("effect"),
   name: Skill.Name.make("Effect"),
   description: "Effect guidance",
-  location: AbsolutePath.make(path.resolve("/skills/effect.md")),
+  path: AbsolutePath.make(path.resolve("/skills/effect.md")),
   content: "  Use Effect\n",
 })
 const locations = makeGlobalNode({
@@ -129,7 +129,7 @@ describe("Session.skill", () => {
         resume: false,
       })
       yield* SessionInbox.promote(database.db, bus, session.id, "steer")
-      const forked = yield* sessions.fork({ sessionID: session.id, boundary: { type: "before", messageID: selected } })
+      const forked = yield* sessions.fork({ sessionID: session.id, before: selected })
 
       expect(yield* sessions.messages({ sessionID: forked.id })).toEqual([
         expect.objectContaining({ type: "user", text: "Before the skill" }),

@@ -148,7 +148,6 @@ export const Info = Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
-      terminal: Schema.optional(Schema.Boolean).annotate({ description: "Enable persistent session terminal panes" }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning by default",
@@ -260,6 +259,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   session: Omit<NonNullable<Info["session"]>, "new_location" | "permissions" | "tps"> & {
     new_location: "launch" | "inherit"
     permissions: "prompt" | "autoaccept"
+    terminal: boolean
     tps: boolean
   }
   tabs: {
@@ -308,7 +308,7 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
       new_location: input.session?.new_location ?? "launch",
       permissions: input.session?.permissions ?? "prompt",
       // Persistent terminal panes need the opencode-pty daemon, which does not ship Windows binaries.
-      terminal: input.session?.terminal ?? process.platform !== "win32",
+      terminal: process.platform !== "win32",
       tps: input.session?.tps ?? true,
     },
     tabs: {

@@ -1,48 +1,60 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import type { Diagnostic } from "../codemode.js"
-import { type AstNode, InterpreterRuntimeError, ProgramThrow, PromiseInstanceMethodReference } from "./model.js"
-import { get, ProgramArray, ProgramFunction, ProgramObject, record } from "./objects.js"
-import { HostFunction, requiresNew, sync } from "./host.js"
-import { caughtErrorValue, normalizeError } from "./errors.js"
+import { CallSite, ProgramThrow, typeError } from "./model.js"
+import {
+  Callable,
+  define,
+  get,
+  hidden,
+  ProgramArray,
+  ProgramFunction,
+  ProgramObject,
+  ProgramPromise,
+  record,
+} from "./objects.js"
+import { constructor, fn, methods, native, receiver, requiresNew } from "./native.js"
+import { createAggregateErrorValue, locate, materialize, normalizeError } from "./errors.js"
 import { typeofValue } from "./references.js"
-import { createAggregateErrorValue } from "../stdlib/value.js"
-import { Values } from "../values.js"
-import { applyCollectionCallback, isSupportedCallback, type Runner, type SupportedCallback } from "./runner.js"
+import { applyCollectionCallback, isSupportedCallback, type Runner } from "./runner.js"
 
 // A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
-const capability = (name: string, settle: (value: unknown) => void) =>
-  sync(name, (args) => {
+const capability = <R>(runner: Runner<R>, name: string, settle: (value: unknown) => void) =>
+  fn(runner.prototypes, name, 1, (_, args) => {
     settle(args[0])
     return undefined
   })
 
 // Observation only controls rejection reporting; program completion interrupts all promise work.
 export class PromiseRuntime<R> {
-  private readonly active = new Set<Values.Promise>()
-  private readonly ids = new WeakMap<Values.Promise, number>()
-  private readonly observed = new WeakSet<Values.Promise>()
+  private readonly active = new Set<ProgramPromise>()
+  private readonly ids = new WeakMap<ProgramPromise, number>()
+  private readonly observed = new WeakSet<ProgramPromise>()
   private readonly failures = new Map<number, Diagnostic>()
   private nextID = 0
 
-  constructor(private readonly scope: Scope.Scope) {}
+  constructor(
+    private readonly scope: Scope.Scope,
+    private readonly proto: ProgramObject,
+  ) {}
 
   // Resolution bodies need the promise's own identity to reject `resolve(promise)` self-resolution.
   createWithSelf(
-    body: (self: { promise?: Values.Promise }) => Effect.Effect<unknown, unknown, R>,
-  ): Effect.Effect<Values.Promise, never, R> {
-    const self: { promise?: Values.Promise } = {}
+    body: (self: { promise?: ProgramPromise }) => Effect.Effect<unknown, unknown, R>,
+  ): Effect.Effect<ProgramPromise, never, R> {
+    const self: { promise?: ProgramPromise } = {}
     return Effect.map(this.create(body(self)), (promise) => {
       self.promise = promise
       return promise
     })
   }
 
-  create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<Values.Promise, never, R> {
-    return Effect.suspend(() => {
+  create(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<ProgramPromise, never, R> {
+    return Effect.flatMap(CallSite, (site) => {
       // Allocate before forking so reruns get distinct IDs and diagnostics retain creation order.
       const id = this.nextID++
-      return Effect.map(Effect.forkIn(effect, this.scope, { startImmediately: true }), (fiber) => {
-        const promise = new Values.Promise(fiber)
+      const body = Effect.catchDefect(effect, (defect) => Effect.die(locate(defect, site.node)))
+      return Effect.map(Effect.forkIn(body, this.scope, { startImmediately: true }), (fiber) => {
+        const promise = new ProgramPromise(this.proto, fiber)
         this.active.add(promise)
         this.ids.set(promise, id)
         fiber.addObserver((exit) => {
@@ -63,14 +75,14 @@ export class PromiseRuntime<R> {
   }
 
   // Observation must be recorded when responsibility transfers, before the consumer fiber runs.
-  markObserved(promise: Values.Promise): void {
+  markObserved(promise: ProgramPromise): void {
     this.observed.add(promise)
     const id = this.ids.get(promise)
     this.ids.delete(promise)
     if (id !== undefined) this.failures.delete(id)
   }
 
-  await(promise: Values.Promise): Effect.Effect<Exit.Exit<unknown, unknown>> {
+  await(promise: ProgramPromise): Effect.Effect<Exit.Exit<unknown, unknown>> {
     return Fiber.await(promise.fiber)
   }
 
@@ -94,17 +106,15 @@ export class PromiseRuntime<R> {
   }
 }
 
-export const selfResolutionError = (node?: AstNode): InterpreterRuntimeError =>
-  new InterpreterRuntimeError("Chaining cycle detected: a promise cannot resolve with itself.", node).as("TypeError")
-
 export const resolvePromiseValue = <R>(
   runner: Runner<R>,
   value: unknown,
-  node: AstNode,
-  own?: { promise?: Values.Promise },
+  own?: { promise?: ProgramPromise },
 ): Effect.Effect<unknown, unknown, R> => {
-  if (own?.promise !== undefined && value === own.promise) return Effect.fail(selfResolutionError(node))
-  if (value instanceof Values.Promise) return runner.settlePromise(value)
+  if (own?.promise !== undefined && value === own.promise) {
+    return Effect.die(typeError("Chaining cycle detected: a promise cannot resolve with itself."))
+  }
+  if (value instanceof ProgramPromise) return runner.settlePromise(value)
   if (!(value instanceof ProgramObject)) return Effect.succeed(value)
   const then = get(value, "then")
   if (typeofValue(then) !== "function") return Effect.succeed(value)
@@ -113,14 +123,16 @@ export const resolvePromiseValue = <R>(
     // Promise resolution invokes a thenable's method in a later job.
     yield* Effect.yieldNow
     const deferred = Deferred.makeUnsafe<unknown, unknown>()
-    const resolve = capability("resolve", (result) => Deferred.doneUnsafe(deferred, Exit.succeed(result)))
-    const reject = capability("reject", (reason) => Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(reason))))
-    const executed = yield* Effect.exit(runner.invokeCallable(then, [resolve, reject], node))
+    const resolve = capability(runner, "resolve", (result) => Deferred.doneUnsafe(deferred, Exit.succeed(result)))
+    const reject = capability(runner, "reject", (reason) =>
+      Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(reason))),
+    )
+    const executed = yield* Effect.exit(runner.invokeCallable(then, value, [resolve, reject]))
     if (!Exit.isSuccess(executed)) {
       if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
       Deferred.doneUnsafe(deferred, Exit.fail(Cause.squash(executed.cause)))
     }
-    return yield* resolvePromiseValue(runner, yield* Deferred.await(deferred), node, own)
+    return yield* resolvePromiseValue(runner, yield* Deferred.await(deferred), own)
   })
 }
 
@@ -128,10 +140,9 @@ export const resolvePromise = <R>(
   runner: Runner<R>,
   promises: PromiseRuntime<R>,
   value: unknown,
-  node: AstNode,
-): Effect.Effect<Values.Promise, never, R> => {
-  if (value instanceof Values.Promise) return Effect.succeed(value)
-  return promises.createWithSelf((self) => resolvePromiseValue(runner, value, node, self))
+): Effect.Effect<ProgramPromise, never, R> => {
+  if (value instanceof ProgramPromise) return Effect.succeed(value)
+  return promises.createWithSelf((self) => resolvePromiseValue(runner, value, self))
 }
 
 const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject"] as const
@@ -141,10 +152,9 @@ const invokePromiseMethod = <R>(
   promises: PromiseRuntime<R>,
   name: (typeof promiseStatics)[number],
   args: Array<unknown>,
-  node: AstNode,
 ): Effect.Effect<unknown, unknown, R> => {
   if (name === "resolve") {
-    return resolvePromise(runner, promises, args[0], node)
+    return resolvePromise(runner, promises, args[0])
   }
   if (name === "reject") {
     return promises.create(Effect.fail(new ProgramThrow(args[0])))
@@ -152,23 +162,20 @@ const invokePromiseMethod = <R>(
 
   return promises.create(
     Effect.gen(function* () {
-      const cursor = yield* runner.syncIterator(args[0], node)
-      if (cursor === undefined) {
-        throw new InterpreterRuntimeError(`Promise.${name} expects an array or other synchronous iterable.`, node).as(
-          "TypeError",
-        )
-      }
-      const items: Array<Values.Promise> = []
+      const cursor = yield* runner.syncIterator(args[0])
+      if (cursor === undefined) throw typeError(`Promise.${name} expects an array or other synchronous iterable.`)
+      const items: Array<ProgramPromise> = []
       while (true) {
         const step = yield* cursor.next
         if (step.done) break
-        const item = yield* resolvePromise(runner, promises, step.value, node)
+        const item = yield* resolvePromise(runner, promises, step.value)
         promises.markObserved(item)
         items.push(item)
       }
 
       if (name === "all") {
         return new ProgramArray(
+          runner.prototypes.Array,
           yield* settleAfterTurn(
             Effect.all(
               items.map((item) => Effect.flatten(promises.await(item))),
@@ -182,21 +189,23 @@ const invokePromiseMethod = <R>(
         for (const item of items) {
           const exit = yield* promises.await(item)
           if (Exit.isSuccess(exit)) {
-            outcomes.push(record({ status: "fulfilled", value: exit.value }))
+            outcomes.push(record(runner.prototypes.Object, { status: "fulfilled", value: exit.value }))
             continue
           }
           if (Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
-          outcomes.push(record({ status: "rejected", reason: caughtErrorValue(Cause.squash(exit.cause)) }))
+          outcomes.push(
+            record(runner.prototypes.Object, {
+              status: "rejected",
+              reason: materialize(runner, Cause.squash(exit.cause)),
+            }),
+          )
         }
         yield* Effect.yieldNow
-        return new ProgramArray(outcomes)
+        return new ProgramArray(runner.prototypes.Array, outcomes)
       }
       if (name === "race") {
         if (items.length === 0) {
-          throw new InterpreterRuntimeError(
-            "Promise.race([]) would never settle; provide at least one promise or value.",
-            node,
-          )
+          throw typeError("Promise.race([]) would never settle; provide at least one promise or value.")
         }
         return yield* settleAfterTurn(Effect.flatten(Effect.raceAll(items.map((item) => promises.await(item)))))
       }
@@ -204,13 +213,13 @@ const invokePromiseMethod = <R>(
         Effect.flatMap(promises.await(item), (exit) => {
           if (Exit.isSuccess(exit)) return Effect.fail(new PromiseAnyFulfilled(exit.value))
           if (Cause.hasInterruptsOnly(exit.cause)) return Effect.failCause(exit.cause)
-          return Effect.succeed(caughtErrorValue(Cause.squash(exit.cause)))
+          return Effect.succeed(materialize(runner, Cause.squash(exit.cause)))
         }),
       )
       return yield* settleAfterTurn(
         Effect.all(flipped, { concurrency: "unbounded" }).pipe(
           Effect.flatMap((reasons) =>
-            Effect.fail(new ProgramThrow(createAggregateErrorValue(reasons, "All promises were rejected"))),
+            Effect.fail(new ProgramThrow(createAggregateErrorValue(runner, reasons, "All promises were rejected"))),
           ),
           Effect.catch((error) =>
             error instanceof PromiseAnyFulfilled ? Effect.succeed(error.value) : Effect.fail(error),
@@ -221,43 +230,42 @@ const invokePromiseMethod = <R>(
   )
 }
 
-export const invokePromiseInstanceMethod = <R>(
+const instanceMethod = <R>(
   runner: Runner<R>,
   promises: PromiseRuntime<R>,
-  ref: PromiseInstanceMethodReference,
+  name: "then" | "catch" | "finally",
+  thisValue: unknown,
   args: Array<unknown>,
-  node: AstNode,
-): Effect.Effect<Values.Promise, never, R> => {
-  const method = `Promise.prototype.${ref.name}`
-  promises.markObserved(ref.promise)
-  if (ref.name === "finally") {
-    return chainFinally(runner, promises, ref.promise, reactionHandler(args[0], method, node), method, node)
+): Effect.Effect<ProgramPromise, unknown, R> => {
+  const method = `Promise.prototype.${name}`
+  const promise = receiver(ProgramPromise, thisValue, method)
+  promises.markObserved(promise)
+  if (name === "finally") {
+    return chainFinally(runner, promises, promise, reactionHandler(args[0], method), method)
   }
-  const onFulfilled = ref.name === "then" ? reactionHandler(args[0], method, node) : undefined
-  const onRejected = reactionHandler(ref.name === "then" ? args[1] : args[0], method, node)
-  return chainReaction(runner, promises, ref.promise, onFulfilled, onRejected, method, node)
+  const onFulfilled = name === "then" ? reactionHandler(args[0], method) : undefined
+  const onRejected = reactionHandler(name === "then" ? args[1] : args[0], method)
+  return chainReaction(runner, promises, promise, onFulfilled, onRejected, method)
 }
 
 const constructPromise = <R>(
   runner: Runner<R>,
   promises: PromiseRuntime<R>,
   executor: unknown,
-  node: AstNode,
-): Effect.Effect<Values.Promise, unknown, R> => {
+): Effect.Effect<ProgramPromise, unknown, R> => {
   if (!(executor instanceof ProgramFunction)) {
-    throw new InterpreterRuntimeError(
-      "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).",
-      node,
-    ).as("TypeError")
+    throw typeError("new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).")
   }
   return Effect.gen(function* () {
     const deferred = Deferred.makeUnsafe<unknown, unknown>()
     const promise = yield* promises.createWithSelf((self) =>
-      Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(runner, value, node, self)),
+      Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(runner, value, self)),
     )
-    const resolve = capability("resolve", (value) => Deferred.doneUnsafe(deferred, Exit.succeed(value)))
-    const reject = capability("reject", (value) => Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(value))))
-    const executed = yield* Effect.exit(runner.invokeFunction(executor, [resolve, reject]))
+    const resolve = capability(runner, "resolve", (value) => Deferred.doneUnsafe(deferred, Exit.succeed(value)))
+    const reject = capability(runner, "reject", (value) =>
+      Deferred.doneUnsafe(deferred, Exit.fail(new ProgramThrow(value))),
+    )
+    const executed = yield* Effect.exit(runner.invokeCallable(executor, undefined, [resolve, reject]))
     if (!Exit.isSuccess(executed)) {
       if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
       Deferred.doneUnsafe(deferred, Exit.fail(Cause.squash(executed.cause)))
@@ -274,12 +282,11 @@ class PromiseAnyFulfilled {
   constructor(readonly value: unknown) {}
 }
 
-const reactionHandler = (value: unknown, method: string, node: AstNode): SupportedCallback | undefined => {
+const reactionHandler = (value: unknown, method: string): Callable | undefined => {
   if (isSupportedCallback(value)) return value
   if (typeofValue(value) === "function") {
-    throw new InterpreterRuntimeError(
+    throw typeError(
       `${method} cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => tools.ns.tool(value).`,
-      node,
     )
   }
   return undefined
@@ -288,7 +295,7 @@ const reactionHandler = (value: unknown, method: string, node: AstNode): Support
 // Teardown bypasses handlers; settled reactions yield once so handlers never run inline.
 const reactionExit = <R>(
   promises: PromiseRuntime<R>,
-  source: Values.Promise,
+  source: ProgramPromise,
 ): Effect.Effect<Exit.Exit<unknown, unknown>, unknown, R> =>
   Effect.gen(function* () {
     const exit = yield* promises.await(source)
@@ -300,20 +307,19 @@ const reactionExit = <R>(
 const chainReaction = <R>(
   runner: Runner<R>,
   promises: PromiseRuntime<R>,
-  source: Values.Promise,
-  onFulfilled: SupportedCallback | undefined,
-  onRejected: SupportedCallback | undefined,
+  source: ProgramPromise,
+  onFulfilled: Callable | undefined,
+  onRejected: Callable | undefined,
   method: string,
-  node: AstNode,
-): Effect.Effect<Values.Promise, never, R> => {
+): Effect.Effect<ProgramPromise, never, R> => {
   return promises.createWithSelf((self) =>
     Effect.gen(function* () {
       const exit = yield* reactionExit(promises, source)
       const handler = Exit.isSuccess(exit) ? onFulfilled : onRejected
       if (handler === undefined) return yield* exit
-      const input = Exit.isSuccess(exit) ? exit.value : caughtErrorValue(Cause.squash(exit.cause))
-      const result = yield* applyCollectionCallback(runner, handler, method, node)([input])
-      return yield* resolvePromiseValue(runner, result, node, self)
+      const input = Exit.isSuccess(exit) ? exit.value : materialize(runner, Cause.squash(exit.cause))
+      const result = yield* applyCollectionCallback(runner, handler, method)([input])
+      return yield* resolvePromiseValue(runner, result, self)
     }),
   )
 }
@@ -321,19 +327,18 @@ const chainReaction = <R>(
 const chainFinally = <R>(
   runner: Runner<R>,
   promises: PromiseRuntime<R>,
-  source: Values.Promise,
-  cleanup: SupportedCallback | undefined,
+  source: ProgramPromise,
+  cleanup: Callable | undefined,
   method: string,
-  node: AstNode,
-): Effect.Effect<Values.Promise, never, R> =>
+): Effect.Effect<ProgramPromise, never, R> =>
   promises.create(
     Effect.gen(function* () {
       const exit = yield* reactionExit(promises, source)
       if (cleanup !== undefined) {
-        const result = yield* applyCollectionCallback(runner, cleanup, method, node)([])
+        const result = yield* applyCollectionCallback(runner, cleanup, method)([])
         const intermediate = yield* promises.create(
           Effect.gen(function* () {
-            yield* runner.settlePromise(yield* resolvePromise(runner, promises, result, node))
+            yield* runner.settlePromise(yield* resolvePromise(runner, promises, result))
             return yield* exit
           }),
         )
@@ -344,30 +349,32 @@ const chainFinally = <R>(
   )
 
 export const promiseGlobal = <R>(runner: Runner<R>, promises: PromiseRuntime<R>) => {
+  const protos = runner.prototypes
+  const proto = protos.Promise
+  const promise = constructor<R>(protos, proto, {
+    name: "Promise",
+    length: 1,
+    call: requiresNew("Promise"),
+    construct: (args) => constructPromise(runner, promises, args[0]),
+  })
   // Combinators are not callbacks: `[p].map(Promise.resolve)` must ask for an arrow function.
-  const statics = new Map<string, HostFunction<R>>(
-    promiseStatics.map((name) => [
+  for (const name of promiseStatics) {
+    define(
+      promise,
       name,
-      new HostFunction<R>({
-        name: `Promise.${name}`,
-        call: (args, node) => invokePromiseMethod(runner, promises, name, args, node),
+      native<R>(protos, {
+        name,
+        length: 1,
+        call: (_, args) => invokePromiseMethod(runner, promises, name, args),
         callback: false,
       }),
-    ]),
-  )
-  return new HostFunction<R>({
-    name: "Promise",
-    call: requiresNew("Promise"),
-    construct: (args, node) => constructPromise(runner, promises, args[0], node),
-    instanceOf: (value) => value instanceof Values.Promise,
-    // Unknown statics fail loudly so a missing await cannot hide behind `undefined`.
-    members: (key, node) => {
-      const method = typeof key === "string" ? statics.get(key) : undefined
-      if (method !== undefined) return method
-      throw new InterpreterRuntimeError(
-        `Promise.${String(key)} is not available. Available: Promise.all, Promise.allSettled, Promise.race, Promise.any, Promise.resolve, and Promise.reject; consume promises with await.`,
-        node,
-      )
-    },
-  })
+      hidden,
+    )
+  }
+  methods(protos, proto, [
+    ["then", 2, (thisValue, args) => instanceMethod(runner, promises, "then", thisValue, args)],
+    ["catch", 1, (thisValue, args) => instanceMethod(runner, promises, "catch", thisValue, args)],
+    ["finally", 1, (thisValue, args) => instanceMethod(runner, promises, "finally", thisValue, args)],
+  ])
+  return promise
 }

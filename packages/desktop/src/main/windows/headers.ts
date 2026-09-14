@@ -7,7 +7,7 @@ export const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-repor
 // A server's own `Access-Control-Allow-Headers` is kept as-is. Chromium reuses a cached preflight
 // only when that header names `authorization` explicitly (`*` never covers it), so overwriting the
 // server's exact list with `*` forced a fresh OPTIONS round trip in front of every API call.
-export function addRendererHeaders(headers: object, options: { document: boolean }) {
+export function addRendererHeaders(headers: Record<string, string | string[]>, options: { document: boolean }) {
   upsertHeader(headers, "Access-Control-Allow-Origin", ["*"])
   if (!hasHeader(headers, "Access-Control-Allow-Headers")) {
     upsertHeader(headers, "Access-Control-Allow-Headers", ["*, authorization"])
@@ -19,11 +19,11 @@ export function addRendererHeaders(headers: object, options: { document: boolean
   if (options.document) upsertHeader(headers, documentPolicyHeader, [jsCallStacksDocumentPolicy])
 }
 
-export function hasHeader(headers: object, key: string) {
+export function hasHeader(headers: Record<string, string | string[]>, key: string) {
   return Object.keys(headers).some((header) => header.toLowerCase() === key.toLowerCase())
 }
 
-export function upsertHeader(headers: object, key: string, value: string | string[]) {
+export function upsertHeader(headers: Record<string, string | string[]>, key: string, value: string | string[]) {
   const current = Object.keys(headers).find((header) => header.toLowerCase() === key.toLowerCase())
-  Reflect.set(headers, current ?? key, value)
+  headers[current ?? key] = value
 }

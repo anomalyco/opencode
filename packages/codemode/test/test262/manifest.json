@@ -8,7 +8,6 @@
     "this": "\\bthis\\b",
     "arguments": "\\barguments\\b",
     "call/apply/bind": "\\.(call|apply|bind)\\s*\\(",
-    "prototype objects": "\\.prototype\\b",
     "accessor properties": "\\b(get|set)\\s+[\\w$\\[][^\\n(]*\\(",
     "property descriptors": "Object\\.(defineProperty|defineProperties|getOwnPropertyDescriptors?|getOwnPropertyNames|create|getPrototypeOf|setPrototypeOf|freeze|seal|preventExtensions|isFrozen|isSealed|isExtensible)\\b",
     "boxed primitives": "\\bnew\\s+(String|Number|Boolean)\\s*\\(",

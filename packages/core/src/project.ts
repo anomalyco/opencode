@@ -85,7 +85,6 @@ function fromRow(row: typeof ProjectTable.$inferSelect): Info {
     time: {
       created: row.time_created,
       updated: row.time_updated,
-      initialized: row.time_initialized ?? undefined,
     },
     sandboxes: row.sandboxes,
   }

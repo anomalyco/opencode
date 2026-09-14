@@ -258,7 +258,7 @@ test.each([false, true])("command menu uses its full height on first open (mono=
     expect(frame).toContain("Show status")
     expect(frame).toContain("Compact session")
     expect(frame).toContain("New session")
-    expect(frame).toContain("Skills")
+    expect(frame).toContain("Variant cycle")
   } finally {
     app.footer.destroy()
     app.renderer.destroy()

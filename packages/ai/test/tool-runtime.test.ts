@@ -120,16 +120,16 @@ describe("LLMClient tools", () => {
 
       const second = bodies[1]
       if (!second || typeof second !== "object") throw new Error("Expected second request body")
-      const messages = Reflect.get(second, "messages")
-      const tools = Reflect.get(second, "tools")
+      const messages = "messages" in second ? second.messages : undefined
+      const tools = "tools" in second ? second.tools : undefined
 
-      expect(Reflect.get(second, "max_completion_tokens")).toBe(50)
-      expect(Reflect.get(second, "tool_choice")).toBe("auto")
+      expect("max_completion_tokens" in second ? second.max_completion_tokens : undefined).toBe(50)
+      expect("tool_choice" in second ? second.tool_choice : undefined).toBe("auto")
       expect(tools).toHaveLength(1)
       expect(
         Array.isArray(messages)
           ? messages.map((message) =>
-              message && typeof message === "object" ? Reflect.get(message, "role") : undefined,
+              message && typeof message === "object" && "role" in message ? message.role : undefined,
             )
           : undefined,
       ).toEqual(["user", "assistant", "tool"])
@@ -237,13 +237,16 @@ describe("LLMClient tools", () => {
         LLMEvent.toolError({
           id: "call_2",
           name: "missing",
-          message: "Unknown tool: missing",
+          message: 'No tool named "missing" is currently available. Please use a tool from the available tool list.',
           providerMetadata,
         }),
         LLMEvent.toolResult({
           id: "call_2",
           name: "missing",
-          result: { type: "error", value: "Unknown tool: missing" },
+          result: {
+            type: "error",
+            value: 'No tool named "missing" is currently available. Please use a tool from the available tool list.',
+          },
           providerMetadata,
         }),
       ])
@@ -395,7 +398,9 @@ describe("LLMClient tools", () => {
       required: ["temperature", "condition"],
       additionalProperties: false,
     })
-    expect(Reflect.get(Reflect.get(typed?.outputSchema ?? {}, "properties") as object, "temperature")).toBeDefined()
+    const properties =
+      typed?.outputSchema && "properties" in typed.outputSchema ? typed.outputSchema.properties : undefined
+    expect(properties && "temperature" in properties ? properties.temperature : undefined).toBeDefined()
     expect(dynamic?.outputSchema).toEqual(schema)
   })
 
@@ -712,12 +717,17 @@ describe("LLMClient tools", () => {
 
       const toolError = events.find(LLMEvent.is.toolError)
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "missing_tool" })
-      expect(toolError?.message).toContain("Unknown tool")
+      expect(toolError?.message).toBe(
+        'No tool named "missing_tool" is currently available. Please use a tool from the available tool list.',
+      )
       expect(events.find(LLMEvent.is.toolResult)).toMatchObject({
         type: "tool-result",
         id: "call_1",
         name: "missing_tool",
-        result: { type: "error", value: "Unknown tool: missing_tool" },
+        result: {
+          type: "error",
+          value: 'No tool named "missing_tool" is currently available. Please use a tool from the available tool list.',
+        },
       })
     }),
   )

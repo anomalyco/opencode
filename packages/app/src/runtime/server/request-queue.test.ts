@@ -195,7 +195,7 @@ describe("createRequestQueue", () => {
     input.tick(50)
     input.queue.fetch("http://server/api/worktree?location[directory]=%2Fc").catch(() => undefined)
     input.tick(100)
-    input.queue.fetch("http://server/api/health").catch(() => undefined)
+    input.queue.fetch("http://server/api/status").catch(() => undefined)
     expect(input.logs).toEqual([])
     input.tick(2_000)
     await new Promise((resolve) => setTimeout(resolve, 20))
@@ -210,7 +210,7 @@ describe("createRequestQueue", () => {
           ],
           queued: [
             { method: "GET", url: "http://server/api/worktree?location[directory]=%2Fc", ms: 2_100 },
-            { method: "GET", url: "http://server/api/health", ms: 2_000 },
+            { method: "GET", url: "http://server/api/status", ms: 2_000 },
           ],
         },
       },

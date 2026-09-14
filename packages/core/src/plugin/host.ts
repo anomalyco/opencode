@@ -177,6 +177,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
               options: event.options,
               sdk: event.sdk,
             }
+            // oxlint-disable-next-line no-restricted-globals -- The generic hook callback remains a union after narrowing by hook name.
             return Reflect.apply(callback, undefined, [output]).pipe(
               Effect.tap(() => Effect.sync(() => (event.sdk = output.sdk))),
             )
@@ -190,6 +191,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
             sdk: event.sdk,
             language: event.language,
           }
+          // oxlint-disable-next-line no-restricted-globals -- The generic hook callback remains a union after narrowing by hook name.
           return Reflect.apply(callback, undefined, [output]).pipe(
             Effect.tap(() => Effect.sync(() => (event.language = output.language))),
           )
@@ -266,7 +268,11 @@ export const make = Effect.fn("PluginHost.make")(function* (
     },
     integration: {
       list: () => response(integration.list()),
-      get: (input) => response(integration.get(Integration.ID.make(input.integrationID))),
+      get: Effect.fn(function* (input) {
+        const item = yield* integration.get(Integration.ID.make(input.integrationID))
+        if (!item) return yield* Effect.fail(new Error(`Integration not found: ${input.integrationID}`))
+        return yield* response(Effect.succeed(item))
+      }),
       connect: {
         key: (input) =>
           integration.connection.key({

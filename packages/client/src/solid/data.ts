@@ -131,7 +131,7 @@ export function locationKey(location: LocationRef) {
 }
 
 function locationQuery(ref: LocationRef) {
-  return { directory: ref.directory, workspace: ref.workspaceID }
+  return { directory: ref.directory }
 }
 
 function formRequestOptions(sessionID: string, ref?: LocationRef) {
@@ -139,7 +139,6 @@ function formRequestOptions(sessionID: string, ref?: LocationRef) {
   return {
     headers: {
       "x-opencode-directory": encodeURIComponent(ref.directory),
-      ...(ref.workspaceID ? { "x-opencode-workspace": ref.workspaceID } : {}),
     },
   }
 }
@@ -727,7 +726,6 @@ export function createData(config: CreateDataInput) {
           const explicit = event.data.adopted?.includes(info.projectID)
           const directory = explicit ? store.project.info[info.projectID]?.canonical : info.location.directory
           if (!directory) {
-            if (info.location.workspaceID) continue
             result.session.invalidate(sessionID)
             refresh(() => result.session.sync(sessionID))
             continue
@@ -736,7 +734,6 @@ export function createData(config: CreateDataInput) {
             {
               projectID: info.projectID,
               directory,
-              workspaceID: info.location.workspaceID,
             },
             event.data,
           )
@@ -1028,6 +1025,18 @@ export function createData(config: CreateDataInput) {
           if (currentAssistant) currentAssistant.retry = undefined
         })
         if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
+        // Mirror the projected idle marker so turn boundaries match before the next message read.
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "idle",
+          outcome:
+            event.type === "session.execution.succeeded"
+              ? "succeeded"
+              : event.type === "session.execution.failed"
+                ? "failed"
+                : "interrupted",
+          time: { created: event.created },
+        })
         // An event can overtake the first read; queue a revalidation when that read is still active.
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
@@ -1293,7 +1302,7 @@ export function createData(config: CreateDataInput) {
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
-    const ref = { directory: response.location.directory, workspaceID: response.location.workspaceID }
+    const ref = { directory: response.location.directory }
     return {
       location: response.location,
       data: Object.fromEntries(response.data.map((info) => [info.id, { ...info, location: ref }])),
@@ -1713,7 +1722,6 @@ export function createData(config: CreateDataInput) {
               })
               const location = {
                 directory: response.location.directory,
-                workspaceID: response.location.workspaceID,
               }
               const locationID = locationKey(location)
               setStore("session", "form", sessionID, [
@@ -1802,7 +1810,7 @@ export function createData(config: CreateDataInput) {
           if (!store.location[key]) setStore("location", key, {})
           setStore("location", key, "info", location)
           if (!ref) {
-            setDefaultLocation({ directory: location.directory, workspaceID: location.workspaceID })
+            setDefaultLocation({ directory: location.directory })
           }
         })
       },
@@ -1845,7 +1853,7 @@ export function createData(config: CreateDataInput) {
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
       config: locationResource("config", async (location) => ({
-        location: { directory: location.directory, workspaceID: location.workspace },
+        location: { directory: location.directory },
         data: await api().config.get({ location }),
       })),
       integration: locationResource("integration", (location) => api().integration.list({ location })),

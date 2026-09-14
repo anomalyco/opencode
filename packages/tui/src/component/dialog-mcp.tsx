@@ -119,7 +119,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
     }
     setLoading(name)
     const target = current()
-    const input = { server: name, location: { directory: target.directory, workspace: target.workspaceID } }
+    const input = { server: name, location: { directory: target.directory } }
     const call = server.status.status === "connected" ? client.api.mcp.disconnect(input) : client.api.mcp.connect(input)
     void call.catch(toast.error).finally(() => setLoading(null))
   }

@@ -47,7 +47,7 @@ describe("SkillTool", () => {
             id: Skill.ID.make("effect"),
             name: Skill.Name.make("Effect"),
             description: "Use Effect",
-            location: AbsolutePath.make(location),
+            path: AbsolutePath.make(location),
             content: "# Effect\n\nGuidance",
           }
           let current = [info]
@@ -138,12 +138,12 @@ describe("SkillTool", () => {
               id: Skill.ID.make("public"),
               name: Skill.Name.make("Public"),
               description: "Public guidance",
-              location: AbsolutePath.make(path.join(tmp.path, "public.md")),
+              path: AbsolutePath.make(path.join(tmp.path, "public.md")),
               content: "Public",
             })
             yield* Effect.promise(() =>
               Promise.all([
-                fs.writeFile(flat.location, "public"),
+                fs.writeFile(flat.path, "public"),
                 fs.writeFile(path.join(tmp.path, "secret.md"), "secret"),
               ]),
             )

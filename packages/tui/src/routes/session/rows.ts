@@ -289,6 +289,7 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
     ...messages.filter(isInput),
   ].reduce<ProjectionEntry[]>((rows, message) => {
     if (message.type !== "assistant") {
+      if (message.type === "idle") return rows
       if (message.type === "synthetic" && !message.description?.trim()) return rows
       if (message.type === "compaction" && message.status === "completed" && usage) usage.previousTurnCache = undefined
       rows.push({ entry: { type: "message", messageID: message.id }, closesPrevious: !pending.has(message.id) })

@@ -3,7 +3,12 @@ import { Location } from "@opencode/schema/location"
 import { Form } from "@opencode/schema/form"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { InvalidRequestError } from "../errors.js"
+import {
+  IntegrationAttemptNotFoundError,
+  IntegrationMethodNotFoundError,
+  IntegrationNotFoundError,
+  InvalidRequestError,
+} from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const IntegrationGroup = HttpApiGroup.make("server.integration")
@@ -15,7 +20,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.list",
+          identifier: "integration.list",
           summary: "List integrations",
           description: "Retrieve available integrations and their authentication methods.",
         }),
@@ -25,12 +30,13 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
     HttpApiEndpoint.get("integration.get", "/api/integration/:integrationID", {
       params: { integrationID: Integration.ID },
       query: LocationQuery,
-      success: Location.response(Schema.UndefinedOr(Integration.Info)),
+      success: Location.response(Integration.Info),
+      error: IntegrationNotFoundError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.get",
+          identifier: "integration.get",
           summary: "Get integration",
           description: "Retrieve one integration and its authentication methods.",
         }),
@@ -46,7 +52,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.experimental.integration.wellknown.add",
+          identifier: "experimental.integration.wellknown.add",
           summary: "Add wellknown integration",
           description: "Discover and persist an experimental wellknown integration source.",
         }),
@@ -62,12 +68,12 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         label: Schema.optional(Schema.String),
       }),
       success: HttpApiSchema.NoContent,
-      error: InvalidRequestError,
+      error: [IntegrationNotFoundError, InvalidRequestError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.connect.key",
+          identifier: "integration.connect.key",
           summary: "Connect with key",
           description: "Run a key authentication method and store the resulting credential.",
         }),
@@ -88,7 +94,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.oauth.connect",
+          identifier: "integration.oauth.connect",
           summary: "Begin OAuth connection",
           description: "Start an OAuth attempt and return the authorization details.",
         }),
@@ -99,11 +105,12 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       params: { integrationID: Integration.ID, attemptID: Integration.AttemptID },
       query: LocationQuery,
       success: Location.response(Integration.AttemptStatus),
+      error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.oauth.status",
+          identifier: "integration.oauth.status",
           summary: "Get OAuth attempt status",
           description: "Poll the current status of an OAuth attempt.",
         }),
@@ -118,13 +125,13 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         query: LocationQuery,
         payload: Schema.Struct({ code: Schema.optional(Schema.String) }),
         success: HttpApiSchema.NoContent,
-        error: InvalidRequestError,
+        error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError, InvalidRequestError],
       },
     )
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.oauth.complete",
+          identifier: "integration.oauth.complete",
           summary: "Complete OAuth connection",
           description: "Complete a code-based OAuth attempt and store the resulting credential.",
         }),
@@ -139,7 +146,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.oauth.cancel",
+          identifier: "integration.oauth.cancel",
           summary: "Cancel OAuth connection",
           description: "Cancel an OAuth attempt and release its resources.",
         }),
@@ -154,12 +161,12 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
         label: Schema.optional(Schema.String),
       }),
       success: Location.response(Integration.CommandAttempt),
-      error: InvalidRequestError,
+      error: [IntegrationNotFoundError, IntegrationMethodNotFoundError, InvalidRequestError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.command.connect",
+          identifier: "integration.command.connect",
           summary: "Begin command connection",
           description: "Start a command authentication attempt.",
         }),
@@ -170,11 +177,12 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       params: { integrationID: Integration.ID, attemptID: Integration.AttemptID },
       query: LocationQuery,
       success: Location.response(Integration.CommandAttemptStatus),
+      error: [IntegrationNotFoundError, IntegrationAttemptNotFoundError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.command.status",
+          identifier: "integration.command.status",
           summary: "Get command attempt status",
           description: "Poll the current status and output of a command authentication attempt.",
         }),
@@ -189,7 +197,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.command.cancel",
+          identifier: "integration.command.cancel",
           summary: "Cancel command connection",
           description: "Cancel a command authentication attempt and terminate its process.",
         }),

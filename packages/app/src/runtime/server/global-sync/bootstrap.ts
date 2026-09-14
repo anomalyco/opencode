@@ -2,8 +2,6 @@ import type { Config, Path, Project, ProviderAuthResponse } from "@/runtime/serv
 import type {
   LocationGetInput,
   LocationGetOutput,
-  ProjectCurrentInput,
-  ProjectCurrentOutput,
   ProjectListOutput,
 } from "@opencode/client/promise"
 import { showToast } from "@/shell/notifications/toast"
@@ -61,7 +59,6 @@ export const loadGlobalConfigQuery = (scope: ServerScope) =>
 
 type ProjectApi = {
   readonly list: () => Promise<ProjectListOutput>
-  readonly current: (input?: ProjectCurrentInput) => Promise<ProjectCurrentOutput>
 }
 type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<LocationGetOutput> }
 
@@ -132,6 +129,7 @@ export async function bootstrapDirectory(input: {
   mcp: boolean
   api: {
     readonly project: ProjectApi
+    readonly location: LocationApi
   }
   store: Store<State>
   setStore: SetStoreFunction<State>
@@ -155,8 +153,8 @@ export async function bootstrapDirectory(input: {
     seededProject
       ? undefined
       : () =>
-          retry(() => input.api.project.current({ location: { directory: input.directory } })).then((project) =>
-            input.setStore("project", project.id),
+          retry(() => input.api.location.get({ location: { directory: input.directory } })).then((location) =>
+            input.setStore("project", location.project.id),
           ),
   ].filter((task): task is () => Promise<void> => !!task)
 
