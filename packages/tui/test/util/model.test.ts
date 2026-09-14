@@ -7,6 +7,31 @@ describe("util.model", () => {
     expect(parse("invalid")).toEqual({ providerID: "invalid", modelID: "" })
   })
 
+  test("parses variant from model identifier if present", () => {
+    expect(parse("anthropic/claude-3-5-sonnet#thinking")).toEqual({
+      providerID: "anthropic",
+      modelID: "claude-3-5-sonnet",
+      variant: "thinking",
+    })
+    expect(parse("openrouter/anthropic/claude-3.5-sonnet#high")).toEqual({
+      providerID: "openrouter",
+      modelID: "anthropic/claude-3.5-sonnet",
+      variant: "high",
+    })
+    expect(parse("provider/model#")).toEqual({
+      providerID: "provider",
+      modelID: "model",
+    })
+  })
+
+  test("handles undefined, null, non-string, and empty model identifiers safely", () => {
+    expect(parse(undefined as any)).toEqual({ providerID: "", modelID: "" })
+    expect(parse(null as any)).toEqual({ providerID: "", modelID: "" })
+    expect(parse({} as any)).toEqual({ providerID: "", modelID: "" })
+    expect(parse(true as any)).toEqual({ providerID: "", modelID: "" })
+    expect(parse("")).toEqual({ providerID: "", modelID: "" })
+  })
+
   test("includes the selected variant in model refs", () => {
     expect(formatRef({ providerID: "anthropic", id: "sonnet", variant: "thinking" })).toBe("anthropic/sonnet/thinking")
     expect(formatRef({ providerID: "anthropic", id: "sonnet" })).toBe("anthropic/sonnet")
@@ -45,5 +70,11 @@ describe("util.model", () => {
     expect(switchLabel({ providerID: "anthropic", id: "sonnet", variant: "high" }, undefined, previous)).toBe(
       "Switched model to anthropic/sonnet/high",
     )
+  })
+
+  test("handles empty or invalid model in switchLabel safely", () => {
+    expect(switchLabel(undefined as any)).toBe("")
+    expect(switchLabel({} as any)).toBe("")
+    expect(switchLabel({ providerID: "anthropic" } as any)).toBe("")
   })
 })

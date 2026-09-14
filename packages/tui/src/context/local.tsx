@@ -54,7 +54,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const models = () => data.location.model.list(location.ref)
     const providers = () => data.location.provider.list(location.ref)
 
-    function isModelValid(model: ModelPreferenceModel) {
+    function isModelValid(model?: ModelPreferenceModel) {
+      if (!model?.providerID || !model?.modelID) return false
       return !!models()?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
     }
 
@@ -205,18 +206,35 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           ?.findLast((entry) => entry.type === "document" && entry.info.model !== undefined)
         const configured = entry?.type === "document" ? entry.info.model : undefined
         if (!configured) return
-        return typeof configured === "string"
-          ? { ...parse(configured), variant: undefined }
-          : { providerID: configured.providerID, modelID: configured.model, variant: configured.variant }
+        if (typeof configured === "string") {
+          const parsed = parse(configured)
+          if (!parsed.providerID || !parsed.modelID) return undefined
+          return parsed
+        }
+        if (typeof configured === "object" && configured !== null) {
+          const record = configured as Record<string, unknown>
+          const providerID = typeof record.providerID === "string" ? record.providerID : undefined
+          const modelID =
+            typeof record.model === "string"
+              ? record.model
+              : typeof record.modelID === "string"
+                ? record.modelID
+                : undefined
+          const variant = typeof record.variant === "string" ? record.variant : undefined
+          if (!providerID || !modelID) return undefined
+          return { providerID, modelID, variant }
+        }
+        return undefined
       })
 
       const fallbackModel = createMemo(() => {
-        if (args.model) {
-          const { providerID, modelID } = parse(args.model)
-          if (isModelValid({ providerID, modelID })) {
+        if (args.model && typeof args.model === "string") {
+          const { providerID, modelID, variant } = parse(args.model)
+          if (providerID && modelID && isModelValid({ providerID, modelID })) {
             return {
               providerID,
               modelID,
+              variant,
             }
           }
         }
@@ -242,7 +260,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const a = agent.current()
         return getFirstValidModel(
           () => a && selectionState.newSessionModelByLocationAgent[locationAgentKey(a.id)],
-          () => a?.model && { providerID: a.model.providerID, modelID: a.model.id },
+          () => a?.model && { providerID: a.model.providerID, modelID: a.model.id, variant: a.model.variant },
           fallbackModel,
         )
       })
@@ -265,12 +283,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return `${JSON.stringify([ref.directory, ref.workspaceID])}:${agentID}`
       }
 
-      function preferredSelection(model: ModelPreferenceModel): ModelSelection {
+      function preferredSelection(model: ModelPreferenceModel & { variant?: string }): ModelSelection {
         const configured = agent.current()?.model
         const fallback = configuredModel()
         const preferred = preferences.variant[modelPreferenceKey(model)]
         const variant = normalizeModelVariant(
           preferred ??
+            model.variant ??
             (configured?.providerID === model.providerID && configured.id === model.modelID
               ? configured.variant
               : undefined) ??
