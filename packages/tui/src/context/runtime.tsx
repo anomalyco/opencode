@@ -31,15 +31,15 @@ function provider<T>(context: ReturnType<typeof createContext<T>>, value: T, chi
   })
 }
 
-export function TuiPathsProvider(props: { value: TuiPaths; children: JSX.Element }) {
+export function TuiPathsProvider(props: { value: TuiPaths; children: JSX.Element }) { process.stderr.write("TUI-PATHS-BODY\n")
   return provider(PathsContext, props.value, () => props.children)
 }
 
-export function TuiTerminalEnvironmentProvider(props: { value: TuiTerminalEnvironment; children: JSX.Element }) {
+export function TuiTerminalEnvironmentProvider(props: { value: TuiTerminalEnvironment; children: JSX.Element }) { process.stderr.write("TTE-BODY\n")
   return provider(TerminalEnvironmentContext, props.value, () => props.children)
 }
 
-export function TuiStartupProvider(props: { value: TuiStartup; children: JSX.Element }) {
+export function TuiStartupProvider(props: { value: TuiStartup; children: JSX.Element }) { process.stderr.write("TSTARTUP-BODY\n")
   return provider(StartupContext, props.value, () => props.children)
 }
 
