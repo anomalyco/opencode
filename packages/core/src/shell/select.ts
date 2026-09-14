@@ -3,6 +3,7 @@ export * as ShellSelect from "./select.js"
 import path from "path"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
+import { spawnSync } from "child_process"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -89,7 +90,18 @@ function executable(file: string, options?: Options, bin?: string) {
     if (stat(shell)?.isFile()) return shell
     return
   }
-  return findExecutable(shell, bin) ?? undefined
+  const found = findExecutable(shell, bin)
+  if (found) return found
+  // Store/MSIX installs expose their executable as a Windows app-execution alias, an
+  // AppExecLink reparse point that stat and which cannot see even though CreateProcess
+  // resolves it by name. where.exe does see it, so it separates "installed as an alias"
+  // from "not installed" and keeps a configured shell like pwsh from silently falling back.
+  if (process.platform === "win32" && meta(shell) && aliased(shell)) return shell
+  return undefined
+}
+
+function aliased(file: string) {
+  return spawnSync("where.exe", [file], { stdio: "ignore", windowsHide: true }).status === 0
 }
 
 function win(options?: Options, bin?: string) {
