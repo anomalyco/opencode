@@ -42,9 +42,17 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
 function createEventSource(client: RpcClient): EventSource {
   return {
     subscribe: async (handler) => {
-      return client.on<GlobalEvent>("global.event", (e) => {
-        handler(e)
-      })
+      const unsubscribes = [
+        client.on<GlobalEvent>("global.event", (e) => {
+          handler(e)
+        }),
+        client.on<GlobalEvent[]>("global.event.batch", (events) => {
+          events.forEach((event) => handler(event))
+        }),
+      ]
+      return () => {
+        unsubscribes.forEach((unsubscribe) => unsubscribe())
+      }
     },
   }
 }

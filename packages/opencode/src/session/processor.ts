@@ -469,7 +469,13 @@ const layer = Layer.effect(
             })
             yield* session.updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
-              const patch = yield* snapshot.patch(ctx.snapshot)
+              // track() stages then write-trees, so an unchanged tree proves the
+              // snapshot index already equals ctx.snapshot and patch() would diff
+              // to an empty file list. Skip its redundant stage + diff subprocesses.
+              const unchanged = completedSnapshot !== undefined && completedSnapshot === ctx.snapshot
+              const patch = unchanged
+                ? { hash: ctx.snapshot, files: [] as string[] }
+                : yield* snapshot.patch(ctx.snapshot)
               if (patch.files.length) {
                 yield* session.updatePart({
                   id: PartID.ascending(),

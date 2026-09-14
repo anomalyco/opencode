@@ -902,6 +902,30 @@ it.instance(
 )
 
 it.instance(
+  "diffFull truncates oversized patches while keeping small files",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    yield* write(`${tmp.path}/big.txt`, "a".repeat(600_000))
+    yield* write(`${tmp.path}/small.txt`, "before\n")
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    yield* write(`${tmp.path}/big.txt`, "b".repeat(600_000))
+    yield* write(`${tmp.path}/small.txt`, "after\n")
+    const after = yield* snapshot.track()
+    expect(after).toBeTruthy()
+    const diffs = yield* snapshot.diffFull(before!, after!)
+    const big = diffs.find((diff) => diff.file === "big.txt")!
+    expect(big.truncated).toBe(true)
+    expect(big.patch).toBe("")
+    const small = diffs.find((diff) => diff.file === "small.txt")!
+    expect(small.patch).toContain("+after")
+    expect(small.truncated).toBeUndefined()
+  }),
+  { git: true },
+)
+
+it.instance(
   "diffFull with a large interleaved mixed diff",
   Effect.gen(function* () {
     const tmp = yield* bootstrap()

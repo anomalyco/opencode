@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context, Option } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
@@ -7,9 +7,11 @@ import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Hash } from "@opencode-ai/core/util/hash"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
 import { Info } from "@opencode-ai/schema/file-diff"
+import os from "os"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,
@@ -31,6 +33,12 @@ interface GitResult {
   readonly stderr: string
 }
 
+type TransactionToken = {
+  readonly pid: number
+  readonly hostname: string
+  readonly createdAt: number
+}
+
 type State = Omit<Interface, "init">
 
 export interface Interface {
@@ -38,20 +46,21 @@ export interface Interface {
   readonly cleanup: () => Effect.Effect<void>
   readonly track: () => Effect.Effect<string | undefined>
   readonly patch: (hash: string) => Effect.Effect<Patch>
-  readonly restore: (snapshot: string) => Effect.Effect<void>
-  readonly revert: (patches: Patch[]) => Effect.Effect<void>
+  readonly restore: (snapshot: string) => Effect.Effect<boolean>
+  readonly revert: (patches: Patch[]) => Effect.Effect<boolean>
   readonly diff: (hash: string) => Effect.Effect<string>
   readonly diffFull: (from: string, to: string) => Effect.Effect<FileDiff[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
 
-const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | Config.Service> = Layer.effect(
+const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | Config.Service | EffectFlock.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const appProcess = yield* AppProcess.Service
     const config = yield* Config.Service
+    const flock = yield* EffectFlock.Service
     const locks = new Map<string, Semaphore.Semaphore>()
 
     const lock = (key: string) => {
@@ -78,25 +87,84 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         const encodeTopLevelLiteralPathspecs = (files: string[]) =>
           encodeNulTerminatedPaths(files.map((file) => `:(top,literal)${file}`))
 
+        const indexLock = path.join(state.gitdir, "index.lock")
+        const transactionToken = path.join(state.gitdir, "snapshot-transaction-token")
+        const hostname = os.hostname()
+        const isIndexLockContention = (result: GitResult) =>
+          result.code !== 0 && result.stderr.includes(`Unable to create '${indexLock}': File exists.`)
+
+        const indexLockAge = Effect.fnUntraced(function* () {
+          const stat = yield* fs.stat(indexLock).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (!stat) return undefined
+          return Math.max(0, Date.now() - Option.getOrElse(stat.mtime, () => new Date(0)).getTime())
+        })
+
+        // Git retries immediately without a schedule. Native lock ownership is unknown, so retry briefly, diagnose, never delete.
+        const indexLockRetry = Schedule.exponential(25, 1.5).pipe(
+          Schedule.either(Schedule.spaced(250)),
+          Schedule.jittered,
+          Schedule.while((meta) => meta.elapsed < 2_000),
+        )
+        const snapshotGitEnv = (env?: Record<string, string>) => ({ ...env, LC_ALL: "C", LANG: "C" })
+
         const git = Effect.fnUntraced(
           function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
-            const result = yield* appProcess.run(
-              ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: opts?.env, extendEnv: true }),
-              { stdin: opts?.stdin },
+            const result = Effect.suspend(() =>
+              Effect.gen(function* () {
+                const writesIndex = ["add", "rm", "read-tree"].some((subcommand) => cmd.includes(subcommand))
+                if (writesIndex && (yield* exists(indexLock))) {
+                  return {
+                    code: ChildProcessSpawner.ExitCode(128),
+                    text: "",
+                    stderr: `fatal: Unable to create '${indexLock}': File exists.`,
+                  } satisfies GitResult
+                }
+                return yield* appProcess
+                  .run(ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: snapshotGitEnv(opts?.env), extendEnv: true }), {
+                    stdin: opts?.stdin,
+                  })
+                  .pipe(
+                    Effect.map((result) =>
+                      ({
+                        code: ChildProcessSpawner.ExitCode(result.exitCode),
+                        text: result.stdout.toString("utf8"),
+                        stderr: result.stderr.toString("utf8"),
+                      }) satisfies GitResult,
+                    ),
+                    Effect.catch((err) =>
+                      Effect.succeed({
+                        code: ChildProcessSpawner.ExitCode(1),
+                        text: "",
+                        stderr: err instanceof Error ? err.message : String(err),
+                      }),
+                    ),
+                  )
+              }),
             )
-            return {
-              code: ChildProcessSpawner.ExitCode(result.exitCode),
-              text: result.stdout.toString("utf8"),
-              stderr: result.stderr.toString("utf8"),
-            } satisfies GitResult
+
+            return yield* result.pipe(
+              Effect.flatMap((result) => (isIndexLockContention(result) ? Effect.fail(result) : Effect.succeed(result))),
+               Effect.retry({ schedule: indexLockRetry, while: isIndexLockContention }),
+               Effect.catch((result) =>
+                 Effect.gen(function* () {
+                    if (isIndexLockContention(result)) {
+                      const ageMs = yield* indexLockAge()
+                      yield* Effect.logError("snapshot_index_lock_stuck", {
+                        indexLock,
+                        ageMs,
+                        remedy: "remove the lock manually only after confirming no git process owns it",
+                      })
+                      yield* Effect.sync(() =>
+                        process.stderr.write(
+                          `snapshot_index_lock_stuck index_lock=${indexLock} age_ms=${ageMs ?? "unknown"} remedy=manual-confirm-and-remove\n`,
+                        ),
+                      )
+                   }
+                   return result
+                 }),
+               ),
+            )
           },
-          Effect.catch((err) =>
-            Effect.succeed({
-              code: ChildProcessSpawner.ExitCode(1),
-              text: "",
-              stderr: err instanceof Error ? err.message : String(err),
-            }),
-          ),
         )
 
         const ignore = Effect.fnUntraced(function* (files: string[]) {
@@ -130,8 +198,8 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         })
 
         const drop = Effect.fnUntraced(function* (files: string[]) {
-          if (!files.length) return
-          yield* git(
+          if (!files.length) return true
+          const result = yield* git(
             [
               ...cfg,
               ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
@@ -141,10 +209,16 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               stdin: encodeTopLevelLiteralPathspecs(files),
             },
           )
+          if (result.code === 0) return true
+          yield* Effect.logError("failed to remove ignored snapshot files", {
+            exitCode: result.code,
+            stderr: result.stderr,
+          })
+          return false
         })
 
         const stage = Effect.fnUntraced(function* (files: string[]) {
-          if (!files.length) return
+          if (!files.length) return true
           const result = yield* git(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
@@ -152,17 +226,107 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               stdin: encodeTopLevelLiteralPathspecs(files),
             },
           )
-          if (result.code === 0) return
-          yield* Effect.logWarning("failed to add snapshot files", {
+          if (result.code === 0) return true
+          yield* Effect.logError("failed to add snapshot files", {
             exitCode: result.code,
             stderr: result.stderr,
           })
+          return false
         })
 
         const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
         const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
         const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
-        const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
+        // The key uses the XDG-data gitdir while EffectFlock owns XDG-state lock files, so roots stay intentionally independent.
+        // Snapshot transactions are non-reentrant: nested acquisition could self-deadlock on the local semaphore.
+        const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) =>
+          lock(state.gitdir).withPermits(1)(fx.pipe(flock.withLock(`snapshot:${state.gitdir}`)))
+        // git gc provides its own cross-process gc.pid coordination, so cleanup must not wait on a stalled snapshot flock.
+        const lockedLocal = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
+        const safeLocked = <A, E, R>(operation: string, fallback: A, fx: Effect.Effect<A, E, R>) =>
+          locked(fx).pipe(
+            Effect.sandbox,
+            Effect.catch((cause) =>
+              Effect.logError("snapshot transaction lock failed", {
+                operation,
+                gitdir: state.gitdir,
+                cause: Cause.pretty(cause),
+              }).pipe(Effect.as(fallback)),
+            ),
+          )
+        const parseTransactionToken = (content: string): TransactionToken | undefined => {
+          try {
+            const parsed: unknown = JSON.parse(content)
+            if (
+              !parsed ||
+              typeof parsed !== "object" ||
+              !("pid" in parsed) ||
+              !("hostname" in parsed) ||
+              !("createdAt" in parsed) ||
+              typeof parsed.pid !== "number" ||
+              !Number.isInteger(parsed.pid) ||
+              parsed.pid <= 0 ||
+              typeof parsed.hostname !== "string" ||
+              typeof parsed.createdAt !== "number" ||
+              !Number.isFinite(parsed.createdAt)
+            ) {
+              return undefined
+            }
+            return parsed as TransactionToken
+          } catch {
+            return undefined
+          }
+        }
+        const isProvablyDeadLocalPid = (pid: number) => {
+          if (pid === process.pid) return false
+          try {
+            process.kill(pid, 0)
+            return false
+          } catch (error) {
+            return (error as NodeJS.ErrnoException).code === "ESRCH"
+          }
+        }
+        const removeTransactionToken = () =>
+          fs.remove(transactionToken).pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)))
+        const withTransactionToken = <A, E, R>(fx: Effect.Effect<A, E, R>) =>
+          Effect.gen(function* () {
+            if (yield* exists(transactionToken)) {
+              const owner = parseTransactionToken(yield* read(transactionToken))
+              if (owner && owner.hostname === hostname && isProvablyDeadLocalPid(owner.pid)) {
+                const removed = yield* removeTransactionToken()
+                if (removed) {
+                  yield* Effect.logInfo("snapshot_transaction_token_reclaimed", {
+                    pid: owner.pid,
+                    hostname: owner.hostname,
+                    createdAt: owner.createdAt,
+                    ageMs: Math.max(0, Date.now() - owner.createdAt),
+                  })
+                }
+              }
+              if (yield* exists(transactionToken)) {
+                yield* Effect.logError("snapshot_transaction_overlap", {
+                  token: transactionToken,
+                  owner,
+                  remedy: "inspect the token and remove it only after confirming its owner is dead",
+                })
+                return undefined
+              }
+            }
+            const created = yield* fs
+              .writeFileString(transactionToken, JSON.stringify({ pid: process.pid, hostname, createdAt: Date.now() }), {
+                flag: "wx",
+              })
+              .pipe(Effect.as(true), Effect.catch(() => Effect.succeed(false)))
+            if (!created) {
+              yield* Effect.logError("snapshot_transaction_overlap", {
+                token: transactionToken,
+                owner: parseTransactionToken(yield* read(transactionToken)),
+                remedy: "inspect the token and remove it only after confirming its owner is dead",
+              })
+              return undefined
+            }
+            return yield* fx.pipe(Effect.ensuring(removeTransactionToken().pipe(Effect.asVoid)))
+          })
 
         const enabled = Effect.fnUntraced(function* () {
           if (state.vcs !== "git") return false
@@ -195,7 +359,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         // Reuse the hashes for the git storage between the original repo and snapshot
         // on huge repos like chromium checkout the git add --all rebuilding the
         // hashes can take minutes. By doing this we eliminating this at all
-        const seed = Effect.fnUntraced(function* () {
+        const seed = Effect.fnUntraced(function* (sourceFormat?: string) {
           if (state.vcs !== "git") return
 
           const commonDir = yield* git(["rev-parse", "--path-format=absolute", "--git-common-dir"], {
@@ -224,10 +388,11 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             .writeFileString(path.join(state.gitdir, "objects", "info", "alternates"), alternates.join("\n") + "\n")
             .pipe(Effect.orDie)
 
-          // Seed the index from the source repo so already-hashed entries are reused.
-          // Best-effort: a missing/incompatible index just falls back to a full add.
+          const targetFormat = yield* git(["--git-dir", state.gitdir, "rev-parse", "--show-object-format"])
+          const snapshotFormat = targetFormat.code === 0 ? targetFormat.text.trim() : undefined
+          // A source index is only valid in a snapshot with the same object format; otherwise add rebuilds it safely.
           const sourceIndex = path.join(source, "index")
-          if (yield* exists(sourceIndex)) {
+          if (sourceFormat && snapshotFormat && sourceFormat === snapshotFormat && (yield* exists(sourceIndex))) {
             yield* fs.copyFile(sourceIndex, path.join(state.gitdir, "index")).pipe(Effect.catch(() => Effect.void))
           }
         })
@@ -246,19 +411,19 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             { concurrency: 2 },
           )
           if (diff.code !== 0 || other.code !== 0) {
-            yield* Effect.logWarning("failed to list snapshot files", {
+            yield* Effect.logError("failed to list snapshot files", {
               diffCode: diff.code,
               diffStderr: diff.stderr,
               otherCode: other.code,
               otherStderr: other.stderr,
             })
-            return
+            return false
           }
 
           const tracked = diff.text.split("\0").filter(Boolean)
           const untracked = other.text.split("\0").filter(Boolean)
           const all = Array.from(new Set([...tracked, ...untracked]))
-          if (!all.length) return
+          if (!all.length) return true
 
           // Resolve source-repo ignore rules against the exact candidate set.
           // --no-index keeps this pattern-based even when a path is already tracked.
@@ -268,11 +433,11 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           if (ignored.size > 0) {
             const ignoredFiles = Array.from(ignored)
             yield* Effect.logInfo("removing gitignored files from snapshot", { count: ignoredFiles.length })
-            yield* drop(ignoredFiles)
+            if (!(yield* drop(ignoredFiles))) return false
           }
 
           const allow = all.filter((item) => !ignored.has(item))
-          if (!allow.length) return
+          if (!allow.length) return true
 
           const large = new Set(
             (yield* Effect.all(
@@ -294,11 +459,51 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           const block = new Set(untracked.filter((item) => large.has(item)))
           yield* sync(Array.from(block))
           // Stage only the allowed candidate paths so snapshot updates stay scoped.
-          yield* stage(allow.filter((item) => !block.has(item)))
+          return yield* stage(allow.filter((item) => !block.has(item)))
+        })
+
+        const setup = Effect.fnUntraced(function* (existed: boolean) {
+          if (!existed) {
+            const sourceFormatResult = yield* git(["rev-parse", "--show-object-format"], { cwd: state.worktree })
+            const sourceFormat = sourceFormatResult.code === 0 ? sourceFormatResult.text.trim() : undefined
+            const init = yield* git(["init", ...(sourceFormat ? [`--object-format=${sourceFormat}`] : [])], {
+              env: { GIT_DIR: state.gitdir, GIT_WORK_TREE: state.worktree },
+            })
+            if (init.code !== 0) {
+              yield* Effect.logError("failed to initialize snapshot git repository", {
+                exitCode: init.code,
+                stderr: init.stderr,
+              })
+              return false
+            }
+            const configuration = [
+              ["core.autocrlf", "false"],
+              ["core.longpaths", "true"],
+              ["core.symlinks", "true"],
+              ["core.fsmonitor", "false"],
+              ["feature.manyFiles", "true"],
+              ["index.version", "4"],
+              ["index.threads", "true"],
+              ["core.untrackedCache", "true"],
+            ]
+            for (const [key, value] of configuration) {
+              const result = yield* git(["--git-dir", state.gitdir, "config", key, value])
+              if (result.code === 0) continue
+              yield* Effect.logWarning("failed to configure new snapshot git repository", {
+                key,
+                exitCode: result.code,
+                stderr: result.stderr,
+              })
+            }
+
+            yield* seed(sourceFormat)
+            yield* Effect.logInfo("initialized")
+          }
+          return true
         })
 
         const cleanup = Effect.fnUntraced(function* () {
-          return yield* locked(
+          return yield* lockedLocal(
             Effect.gen(function* () {
               if (!(yield* enabled())) return
               if (!(yield* exists(state.gitdir))) return
@@ -312,44 +517,56 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               }
               yield* Effect.logInfo("cleanup", { prune })
             }),
+          ).pipe(
+            Effect.sandbox,
+            Effect.catch((cause) => Effect.logError("snapshot cleanup failed", { cause: Cause.pretty(cause) })),
           )
         })
 
         const track = Effect.fnUntraced(function* () {
-          return yield* locked(
+          return yield* safeLocked(
+            "track",
+            undefined,
             Effect.gen(function* () {
               if (!(yield* enabled())) return
               const existed = yield* exists(state.gitdir)
               yield* fs.ensureDir(state.gitdir).pipe(Effect.orDie)
-              if (!existed) {
-                yield* git(["init"], {
-                  env: { GIT_DIR: state.gitdir, GIT_WORK_TREE: state.worktree },
-                })
-                yield* git(["--git-dir", state.gitdir, "config", "core.autocrlf", "false"])
-                yield* git(["--git-dir", state.gitdir, "config", "core.longpaths", "true"])
-                yield* git(["--git-dir", state.gitdir, "config", "core.symlinks", "true"])
-                yield* git(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"])
-                // Tuning for very large worktrees so the first add stays bounded.
-                yield* git(["--git-dir", state.gitdir, "config", "feature.manyFiles", "true"])
-                yield* git(["--git-dir", state.gitdir, "config", "index.version", "4"])
-                yield* git(["--git-dir", state.gitdir, "config", "index.threads", "true"])
-                yield* git(["--git-dir", state.gitdir, "config", "core.untrackedCache", "true"])
-                yield* seed()
-                yield* Effect.logInfo("initialized")
-              }
-              yield* add()
-              const result = yield* git(args(["write-tree"]), { cwd: state.directory })
-              const hash = result.text.trim()
-              yield* Effect.logInfo("tracking", { hash, cwd: state.directory, git: state.gitdir })
-              return hash
+              if (!(yield* setup(existed))) return
+              return yield* withTransactionToken(
+                Effect.gen(function* () {
+                  if (!(yield* add())) return
+                  const result = yield* git(args(["write-tree"]), { cwd: state.directory })
+                  if (result.code !== 0) {
+                    yield* Effect.logError("failed to write snapshot tree", {
+                      exitCode: result.code,
+                      stderr: result.stderr,
+                    })
+                    return
+                  }
+                  const hash = result.text.trim()
+                  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(hash)) {
+                    yield* Effect.logError("snapshot git returned an invalid tree hash", { hash, stderr: result.stderr })
+                    return
+                  }
+                  yield* Effect.logInfo("tracking", { hash, cwd: state.directory, git: state.gitdir })
+                  return hash
+                }),
+              )
             }),
           )
         })
 
         const patch = Effect.fnUntraced(function* (hash: string) {
-          return yield* locked(
+          return yield* safeLocked(
+            "patch",
+            { hash, files: [] },
             Effect.gen(function* () {
-              yield* add()
+              if (!(yield* enabled())) return { hash, files: [] }
+              // The empty Patch shape is intentional; staging loss has a stable operator diagnostic.
+              if (!(yield* add())) {
+                yield* Effect.logError("snapshot_patch_stage_failed", { hash })
+                return { hash, files: [] }
+              }
               const result = yield* git(
                 [...quote, ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", "."])],
                 {
@@ -380,34 +597,42 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         })
 
         const restore = Effect.fnUntraced(function* (snapshot: string) {
-          return yield* locked(
+          return yield* safeLocked(
+            "restore",
+            false,
             Effect.gen(function* () {
+              if (!(yield* enabled())) return false
               yield* Effect.logInfo("restore", { commit: snapshot })
               const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
               if (result.code === 0) {
                 const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
                   cwd: state.worktree,
                 })
-                if (checkout.code === 0) return
+                if (checkout.code === 0) return true
                 yield* Effect.logError("failed to restore snapshot", {
                   snapshot,
                   exitCode: checkout.code,
                   stderr: checkout.stderr,
                 })
-                return
+                return false
               }
               yield* Effect.logError("failed to restore snapshot", {
                 snapshot,
                 exitCode: result.code,
                 stderr: result.stderr,
               })
+              return false
             }),
           )
         })
 
         const revert = Effect.fnUntraced(function* (patches: Patch[]) {
-          return yield* locked(
+          return yield* safeLocked(
+            "revert",
+            false,
             Effect.gen(function* () {
+              if (!(yield* enabled())) return false
+              // File restoration spans checkout and deletion; git does not provide a single atomic operation for this sequence.
               const ops: { hash: string; file: string; rel: string }[] = []
               const seen = new Set<string>()
               for (const item of patches) {
@@ -427,7 +652,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.file])], {
                   cwd: state.worktree,
                 })
-                if (result.code === 0) return
+                if (result.code === 0) return true
                 const tree = yield* git([...core, ...args(["ls-tree", op.hash, "--", op.rel])], {
                   cwd: state.worktree,
                 })
@@ -436,15 +661,17 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                     file: op.file,
                     hash: op.hash,
                   })
-                  return
+                  return true
                 }
                 yield* Effect.logInfo("file did not exist in snapshot, deleting", { file: op.file, hash: op.hash })
                 yield* remove(op.file)
+                return true
               })
 
               const clash = (a: string, b: string) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`)
 
               for (let i = 0; i < ops.length; ) {
+                yield* Effect.yieldNow
                 const first = ops[i]!
                 const run = [first]
                 let j = i + 1
@@ -519,14 +746,22 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
                 i = j
               }
+              return true
             }),
           )
         })
 
         const diff = Effect.fnUntraced(function* (hash: string) {
-          return yield* locked(
+          return yield* safeLocked(
+            "diff",
+            "",
             Effect.gen(function* () {
-              yield* add()
+              if (!(yield* enabled())) return ""
+              // The empty diff shape is intentional; staging failure is separately observable for operators.
+              if (!(yield* add())) {
+                yield* Effect.logError("snapshot_diff_stage_failed", { hash })
+                return ""
+              }
               const result = yield* git([...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])], {
                 cwd: state.worktree,
               })
@@ -544,8 +779,11 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         })
 
         const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
-          return yield* locked(
+          return yield* safeLocked(
+            "diffFull",
+            [],
             Effect.gen(function* () {
+              if (!(yield* enabled())) return []
               type Row = {
                 file: string
                 status: "added" | "deleted" | "modified"
@@ -604,6 +842,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                   const batch = yield* appProcess.run(
                     ChildProcess.make("git", [...cfg, ...args(["cat-file", "--batch"])], {
                       cwd: state.directory,
+                      env: snapshotGitEnv(),
                       extendEnv: true,
                     }),
                     { stdin: refs.map((item) => item.ref).join("\n") + "\n" },
@@ -620,9 +859,8 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                   }
                   const out = batch.stdout
 
-                  const fail = (msg: string, extra?: Record<string, string>) => {
-                    return undefined
-                  }
+                  const fail = (message: string, extra?: Record<string, string>) =>
+                    Effect.logInfo(message, extra).pipe(Effect.as(undefined))
 
                   const map = new Map<string, { before: string; after: string }>()
                   const dec = new TextDecoder()
@@ -631,12 +869,12 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                     let end = i
                     while (end < out.length && out[end] !== 10) end += 1
                     if (end >= out.length) {
-                      return fail(
+                      return yield* fail(
                         "git cat-file --batch returned a truncated header during snapshot diff, falling back to per-file git show",
                       )
                     }
 
-                    const head = dec.decode(out.slice(i, end))
+                    const head = dec.decode(out.subarray(i, end))
                     i = end + 1
                     const hit = map.get(ref.file) ?? { before: "", after: "" }
                     if (head.endsWith(" missing")) {
@@ -646,7 +884,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
                     const match = head.match(/^[0-9a-f]+ blob (\d+)$/)
                     if (!match) {
-                      return fail(
+                      return yield* fail(
                         "git cat-file --batch returned an unexpected header during snapshot diff, falling back to per-file git show",
                         { head },
                       )
@@ -654,13 +892,13 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
                     const size = Number(match[1])
                     if (!Number.isInteger(size) || size < 0 || i + size >= out.length || out[i + size] !== 10) {
-                      return fail(
+                      return yield* fail(
                         "git cat-file --batch returned truncated content during snapshot diff, falling back to per-file git show",
                         { head },
                       )
                     }
 
-                    const text = dec.decode(out.slice(i, i + size))
+                    const text = dec.decode(out.subarray(i, i + size))
                     if (ref.side === "before") hit.before = text
                     if (ref.side === "after") hit.after = text
                     map.set(ref.file, hit)
@@ -668,7 +906,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                   }
 
                   if (i !== out.length) {
-                    return fail(
+                    return yield* fail(
                       "git cat-file --batch returned trailing data during snapshot diff, falling back to per-file git show",
                     )
                   }
@@ -735,20 +973,32 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               const step = 100
               const patch = (file: string, before: string, after: string) =>
                 formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
+              // Patch text is display-only: revert works from tree hashes, never from this text.
+              // Telemetry and log blobs would otherwise embed whole files into every diff event
+              // and row, so withhold patch text beyond a per-file and total budget.
+              const PATCH_FILE_BUDGET = 1024 * 1024
+              const PATCH_TOTAL_BUDGET = 1024 * 1024
+              let patchBudget = PATCH_TOTAL_BUDGET
 
               for (let i = 0; i < rows.length; i += step) {
                 const run = rows.slice(i, i + step)
+                yield* Effect.yieldNow
                 const text = yield* load(run)
 
                 for (const row of run) {
                   const hit = text?.get(row.file) ?? { before: "", after: "" }
                   const [before, after] = row.binary ? ["", ""] : text ? [hit.before, hit.after] : yield* show(row)
+                  const oversize =
+                    !row.binary && (before.length + after.length > PATCH_FILE_BUDGET || patchBudget <= 0)
+                  const patchText = row.binary || oversize ? "" : patch(row.file, before, after)
+                  if (!oversize && !row.binary) patchBudget -= patchText.length
                   result.push({
                     file: row.file,
-                    patch: row.binary ? "" : patch(row.file, before, after),
+                    patch: patchText,
                     additions: row.additions,
                     deletions: row.deletions,
                     status: row.status,
+                    ...(oversize ? { truncated: true as const } : {}),
                   })
                 }
               }
@@ -801,7 +1051,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, AppProcess.node, Config.node],
+  deps: [FSUtil.node, AppProcess.node, Config.node, EffectFlock.node],
 })
 
 export * as Snapshot from "."

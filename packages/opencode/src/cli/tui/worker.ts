@@ -3,7 +3,8 @@ import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
-import { GlobalBus } from "@/bus/global"
+import { GlobalBus, type GlobalEvent } from "@/bus/global"
+import { collapseEventBatch, EVENT_BATCH_INTERVAL, EVENT_BATCH_LIMIT } from "@/cli/tui/event-batch"
 import { ServerAuth } from "@/server/auth"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
@@ -20,9 +21,28 @@ const onUncaughtException = (_error: Error) => {}
 process.on("unhandledRejection", onUnhandledRejection)
 process.on("uncaughtException", onUncaughtException)
 
-// Subscribe to global events and forward them via RPC
+// Subscribe to global events and forward them via RPC. Events are buffered and
+// flushed on a short interval so a fast stream (several lanes emitting part
+// deltas) costs one cross-thread message per flush instead of one per token.
+const pendingEvents: GlobalEvent[] = []
+let flushTimer: ReturnType<typeof setTimeout> | undefined
+
+function flushEvents() {
+  flushTimer = undefined
+  if (pendingEvents.length === 0) return
+  Rpc.emit("global.event.batch", collapseEventBatch(pendingEvents.splice(0)))
+}
+
 GlobalBus.on("event", (event) => {
-  Rpc.emit("global.event", event)
+  pendingEvents.push(event)
+  if (pendingEvents.length >= EVENT_BATCH_LIMIT) {
+    if (flushTimer !== undefined) clearTimeout(flushTimer)
+    flushEvents()
+    return
+  }
+  if (flushTimer === undefined) {
+    flushTimer = setTimeout(flushEvents, EVENT_BATCH_INTERVAL)
+  }
 })
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined

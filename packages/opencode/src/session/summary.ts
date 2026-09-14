@@ -1,11 +1,19 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { isDeepStrictEqual } from "node:util"
 import { Effect, Layer, Context, Schema } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Database } from "@opencode-ai/core/database/database"
+import { MessageDiffTable, MessageTable } from "@opencode-ai/core/session/sql"
+import { EventTable } from "@opencode-ai/core/event/sql"
+import { and, eq, sql } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "@/snapshot"
+import { NotFoundError } from "@/storage/storage"
 import { Session } from "./session"
+import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
 import { Config } from "@/config/config"
+import { createDurableParentCache } from "./durable-parent-cache"
 
 function unquoteGitPath(input: string) {
   if (!input.startsWith('"')) return input
@@ -78,6 +86,60 @@ const layer = Layer.effect(
     const snapshot = yield* Snapshot.Service
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
+    const database = yield* Database.Service
+    // A message with a durable baseline is remembered so later changed summarizes skip the
+    // historical-event scan; the bounded cache evicts least-recently-used identities.
+    const durableParents = createDurableParentCache()
+
+    const turnMessages = Effect.fn("SessionSummary.turnMessages")(function* (input: {
+      sessionID: SessionID
+      messageID: MessageID
+    }) {
+      const size = 50
+      const newer = [] as SessionV1.WithParts[]
+      let before: string | undefined
+      while (true) {
+        const next = yield* MessageV2.page({ sessionID: input.sessionID, limit: size, before }).pipe(
+          Effect.provideService(Database.Service, database),
+          Effect.orDie,
+        )
+        for (let i = next.items.length - 1; i >= 0; i--) {
+          const item = next.items[i]
+          if (item) newer.push(item)
+        }
+        if (newer.some((m) => m.info.id === input.messageID)) break
+        if (!next.more || !next.cursor) break
+        before = next.cursor
+      }
+      // Children normally sort newer than their parent, but client-supplied or
+      // imported ids can invert that and land outside the window above. Backfill
+      // any children the walk missed so the turn is complete regardless of order.
+      if (newer.some((m) => m.info.id === input.messageID)) {
+        const known = new Set(newer.map((m) => m.info.id))
+        const orphans = yield* database.db
+          .select({ id: MessageTable.id })
+          .from(MessageTable)
+          .where(
+            and(
+              eq(MessageTable.session_id, input.sessionID),
+              sql`json_extract(${MessageTable.data}, '$.parentID') = ${input.messageID}`,
+            ),
+          )
+          .all()
+          .pipe(Effect.orDie)
+        for (const row of orphans) {
+          if (known.has(row.id)) continue
+          const child = yield* MessageV2.get({ sessionID: input.sessionID, messageID: row.id }).pipe(
+            Effect.provideService(Database.Service, database),
+            Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)),
+          )
+          if (child) newer.push(child)
+        }
+        newer.sort((a, b) => a.info.time.created - b.info.time.created || (a.info.id < b.info.id ? -1 : 1))
+        return newer
+      }
+      return newer.reverse()
+    })
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
@@ -103,6 +165,24 @@ const layer = Layer.effect(
       sessionID: SessionID
       messageID: MessageID
     }) {
+      if ((yield* config.get()).snapshot === false) return
+      const all = yield* turnMessages({ sessionID: input.sessionID, messageID: input.messageID })
+      if (!all.length) return
+
+      const messages = all.filter(
+        (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+      )
+      const target = messages.find((m) => m.info.id === input.messageID)
+      if (!target || target.info.role !== "user") return
+      yield* Effect.yieldNow
+      const msgDiffs = yield* computeDiff({ messages })
+      const dedicated = yield* database.db
+        .select({ message_id: MessageDiffTable.message_id })
+        .from(MessageDiffTable)
+        .where(eq(MessageDiffTable.message_id, input.messageID))
+        .get()
+        .pipe(Effect.orDie)
+      if (dedicated && isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
       yield* sessions.setSummary({
         sessionID: input.sessionID,
         summary: {
@@ -112,24 +192,48 @@ const layer = Layer.effect(
         },
       })
       yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
-      if ((yield* config.get()).snapshot === false) return
-      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      if (!all.length) return
-
-      const messages = all.filter(
-        (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
-      )
-      const target = messages.find((m) => m.info.id === input.messageID)
-      if (!target || target.info.role !== "user") return
-      const msgDiffs = yield* computeDiff({ messages })
-      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
-      yield* sessions.updateMessage(target.info)
+      // Imported/historic rows have no durable message event, so a diff-only publish would replay
+      // without its parent. Normal turns already have one, so this never adds a duplicate stream.
+      // event_aggregate_type_seq_idx scopes this to the session's message.updated rows.
+      const parentKey = `${input.sessionID}:${input.messageID}`
+      const durableParent =
+        durableParents.has(parentKey) ||
+        (yield* database.db
+          .select({ id: EventTable.id })
+          .from(EventTable)
+          .where(
+            and(
+              eq(EventTable.aggregate_id, input.sessionID),
+              eq(EventTable.type, "message.updated.1"),
+              sql`json_extract(${EventTable.data}, '$.info.id') = ${input.messageID}`,
+            ),
+          )
+          .limit(1)
+          .get()
+          .pipe(Effect.orDie))
+      if (!durableParent) {
+        const baseline = target.info.summary
+          ? { ...target.info, summary: { ...target.info.summary, diffs: [] } }
+          : target.info
+        yield* sessions.updateMessage(baseline)
+      }
+      durableParents.add(parentKey)
+      // Turn patches are their own durable stream: ordinary message updates must never duplicate them.
+      yield* events.publish(Session.Event.MessageDiffUpdated, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        diffs: msgDiffs,
+      })
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
       if (!input.messageID) return []
-      const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
-        (item) => item.info.id === input.messageID,
+      // MessageV2.get hydrates through the same diff-row merge as the page
+      // walk, so this returns identical values without scanning back every
+      // newer page when an old turn's diff is requested.
+      const message = yield* MessageV2.get({ sessionID: input.sessionID, messageID: input.messageID }).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)),
       )
       if (!message || message.info.role !== "user") return []
       const diffs = message.info.summary?.diffs ?? []
@@ -154,7 +258,7 @@ export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node],
+  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Database.node],
 })
 
 export * as SessionSummary from "./summary"

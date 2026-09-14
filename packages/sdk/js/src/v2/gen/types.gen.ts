@@ -13,6 +13,7 @@ export type Event =
   | EventSessionUpdated
   | EventSessionDeleted
   | EventMessageUpdated
+  | EventMessageDiffUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
@@ -790,6 +791,15 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           info: Message
+        }
+      }
+    | {
+        id: string
+        type: "message.diff.updated"
+        properties: {
+          sessionID: string
+          messageID: string
+          diffs: Array<SnapshotFileDiff>
         }
       }
     | {
@@ -1605,6 +1615,7 @@ export type GlobalEvent = {
     | SyncEventSessionUpdated
     | SyncEventSessionDeleted
     | SyncEventMessageUpdated
+    | SyncEventMessageDiffUpdated
     | SyncEventMessageRemoved
     | SyncEventMessagePartUpdated
     | SyncEventMessagePartRemoved
@@ -2864,6 +2875,7 @@ export type V2Event =
   | SessionUpdated
   | SessionDeleted
   | MessageUpdated
+  | MessageDiffUpdated
   | MessageRemoved
   | MessagePartUpdated
   | MessagePartRemoved
@@ -3250,6 +3262,22 @@ export type SyncEventMessageUpdated = {
     data: {
       sessionID: string
       info: Message
+    }
+  }
+}
+
+export type SyncEventMessageDiffUpdated = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "message.diff.updated.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      messageID: string
+      diffs: Array<SnapshotFileDiff>
     }
   }
 }
@@ -5164,6 +5192,25 @@ export type MessageUpdated = {
   }
 }
 
+export type MessageDiffUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "message.diff.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    messageID: string
+    diffs: Array<SnapshotFileDiff>
+  }
+}
+
 export type MessageRemoved = {
   id: string
   metadata?: {
@@ -6219,6 +6266,16 @@ export type EventMessageUpdated = {
   properties: {
     sessionID: string
     info: Message
+  }
+}
+
+export type EventMessageDiffUpdated = {
+  id: string
+  type: "message.diff.updated"
+  properties: {
+    sessionID: string
+    messageID: string
+    diffs: Array<SnapshotFileDiff>
   }
 }
 

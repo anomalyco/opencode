@@ -27,7 +27,7 @@ import { eq } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
-import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageDiffTable, MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
@@ -98,6 +98,7 @@ const older = (row: Cursor) =>
 function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$inferSelect)[]) {
   const ids = rows.map((row) => row.id)
   const partByMessage = new Map<string, Part[]>()
+  const diffByMessage = new Map<string, (typeof MessageDiffTable.$inferSelect)["diffs"]>()
   return Effect.gen(function* () {
     if (ids.length > 0) {
       const partRows = yield* db
@@ -113,12 +114,23 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
         if (list) list.push(next)
         else partByMessage.set(row.message_id, [next])
       }
+      const diffRows = yield* db
+        .select()
+        .from(MessageDiffTable)
+        .where(inArray(MessageDiffTable.message_id, ids))
+        .all()
+        .pipe(Effect.orDie)
+      diffRows.forEach((row) => diffByMessage.set(row.message_id, row.diffs))
     }
 
-    return rows.map((row) => ({
-      info: info(row),
-      parts: partByMessage.get(row.id) ?? [],
-    }))
+    return rows.map((row) => {
+      const current = info(row)
+      const diffs = diffByMessage.get(row.id)
+      return {
+        info: current.role === "user" && diffs ? { ...current, summary: { ...current.summary, diffs } } : current,
+        parts: partByMessage.get(row.id) ?? [],
+      }
+    })
   })
 }
 
@@ -512,10 +524,7 @@ export const get = Effect.fn("MessageV2.get")(function* (input: { sessionID: Ses
     .get()
     .pipe(Effect.orDie)
   if (!row) return yield* new NotFoundError({ message: `Message not found: ${input.messageID}` })
-  return {
-    info: info(row),
-    parts: yield* parts(input.messageID),
-  }
+  return (yield* hydrate(db, [row]))[0]!
 })
 
 export function filterCompacted(msgs: Iterable<WithParts>) {
