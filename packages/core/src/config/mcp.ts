@@ -31,6 +31,21 @@ export class OAuth extends Schema.Class<OAuth>("ConfigV2.MCP.OAuth")({
   redirect_uri: Schema.String.pipe(Schema.optional),
 }) {}
 
+export class Tls extends Schema.Class<Tls>("ConfigV2.MCP.Tls")({
+  ca_file: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "Path to a custom CA certificate file (PEM format) to trust when connecting to this MCP server.",
+  }),
+  ca_pem: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "Custom CA certificate content (PEM format) to trust when connecting to this MCP server.",
+  }),
+  fingerprint: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "SHA256 fingerprint of the server certificate to trust. Format: 'SHA256:XX:XX:...' or 'XX:XX:...'.",
+  }),
+}) {}
+
 export class Remote extends Schema.Class<Remote>("ConfigV2.MCP.Remote")({
   type: Schema.Literal("remote"),
   url: Schema.String,
@@ -38,6 +53,10 @@ export class Remote extends Schema.Class<Remote>("ConfigV2.MCP.Remote")({
   oauth: Schema.Union([OAuth, Schema.Literal(false)]).pipe(Schema.optional),
   disabled: Schema.Boolean.pipe(Schema.optional),
   timeout: Timeout.pipe(Schema.optional),
+  tls: Tls.pipe(Schema.optional).annotate({
+    description:
+      "TLS trust configuration for this MCP server. Use to trust self-signed certificates, private CAs, or pin specific certificates.",
+  }),
 }) {}
 
 export const Server = Schema.Union([Local, Remote]).pipe(Schema.toTaggedUnion("type"))
