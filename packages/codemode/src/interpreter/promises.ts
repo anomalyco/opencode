@@ -52,7 +52,7 @@ export class PromiseRuntime<R> {
     return Effect.flatMap(CallSite, (site) => {
       // Allocate before forking so reruns get distinct IDs and diagnostics retain creation order.
       const id = this.nextID++
-      const body = Effect.catchDefect(effect, (defect) => Effect.die(locate(defect, site)))
+      const body = Effect.catchDefect(effect, (defect) => Effect.die(locate(defect, site.node)))
       return Effect.map(Effect.forkIn(body, this.scope, { startImmediately: true }), (fiber) => {
         const promise = new ProgramPromise(this.proto, fiber)
         this.active.add(promise)

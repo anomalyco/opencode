@@ -131,3 +131,48 @@ describe("host errors escaping built-ins", () => {
     expect(failure.message).toBe("TypeError: Iterator next must be a function. (line 1, col 8)")
   })
 })
+
+describe("call depth", () => {
+  test("runaway recursion fails fast with a catchable RangeError", async () => {
+    const started = Date.now()
+    expect(
+      await value(`
+        const f = (n) => f(n + 1)
+        try { f(0) } catch (e) { return [e.name, e instanceof RangeError, e.message] }
+      `),
+    ).toEqual(["RangeError", true, "Maximum call stack size exceeded"])
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  test("uncaught overflow reports the call that overflowed", async () => {
+    const failure = await error(`const f = (n) => f(n + 1); return f(0)`)
+    expect(failure.kind).toBe("ExecutionFailure")
+    expect(failure.message).toBe("RangeError: Maximum call stack size exceeded (line 1, col 18)")
+  })
+
+  test("the limit is 1000 nested calls", async () => {
+    expect(await value(`let depth = 0; const f = () => { depth++; f() }; try { f() } catch { return depth }`)).toBe(
+      1000,
+    )
+    expect(await value(`const f = (n) => (n === 0 ? 0 : 1 + f(n - 1)); return f(900)`)).toBe(900)
+  })
+
+  test("recursion through a built-in callback counts", async () => {
+    const failure = await error(`const f = (n) => [n].map((x) => f(x + 1)); return f(0)`)
+    expect(failure.message).toStartWith("RangeError: Maximum call stack size exceeded")
+  })
+
+  test("an await resets the depth, so long async chains are fine", async () => {
+    expect(
+      await value(`
+        const page = async (n) => { await null; return n === 0 ? "done" : page(n - 1) }
+        return await page(3000)
+      `),
+    ).toBe("done")
+  })
+
+  test("an async function that recurses before its first await overflows like JS", async () => {
+    const failure = await error(`const f = async (n) => f(n + 1); return await f(0)`)
+    expect(failure.message).toStartWith("RangeError: Maximum call stack size exceeded")
+  })
+})

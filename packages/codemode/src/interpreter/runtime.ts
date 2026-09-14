@@ -280,6 +280,8 @@ export class Runtime<R> {
   }
 }
 
+const MAX_CALL_DEPTH = 1000
+
 /** One activation: the top-level program or a single function call, evaluating against its own scope chain. */
 class Frame<R> {
   private generatorState?: GeneratorState
@@ -288,6 +290,8 @@ class Frame<R> {
   constructor(
     private readonly runtime: Runtime<R>,
     private scopes: ScopeStack,
+    /** Nested call depth; resets when an await resumes, since the continuation runs from the job queue. */
+    private depth = 0,
   ) {}
 
   run(program: Program): Effect.Effect<unknown, unknown, R> {
@@ -691,7 +695,10 @@ class Frame<R> {
 
   private awaitValue(value: unknown): Effect.Effect<unknown, unknown, R> {
     return Effect.flatMap(resolvePromise(this.runtime.runner, this.runtime.promises, value), (promise) =>
-      this.settlePromise(promise),
+      Effect.ensuring(
+        this.settlePromise(promise),
+        Effect.sync(() => (this.depth = 0)),
+      ),
     )
   }
 
@@ -1569,7 +1576,7 @@ class Frame<R> {
         }
         return yield* self.createToolCallPromise(callable.path, args)
       }
-      if (callable instanceof ProgramFunction) return yield* self.invokeFunction(callable, args)
+      if (callable instanceof ProgramFunction) return yield* self.invokeFunction(callable, args, node)
       if (callable instanceof NativeFunction) {
         return yield* self.native(() => (callable as NativeFunction<R>).call(thisValue, args), node)
       }
@@ -1582,7 +1589,7 @@ class Frame<R> {
     return Effect.provideService(
       Effect.catchDefect(Effect.suspend(body), (defect) => Effect.die(locate(defect, node))),
       CallSite,
-      node,
+      { node, depth: this.depth },
     )
   }
 
@@ -1610,45 +1617,50 @@ class Frame<R> {
     })
   }
 
-  invokeFunction(fn: ProgramFunction, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
+  // A callback invoked by a built-in runs below the call that invoked the built-in, so the deeper of the two counts.
+  invokeFunction(fn: ProgramFunction, args: Array<unknown>, node?: AstNode): Effect.Effect<unknown, unknown, R> {
     const self = this
-    const invocation = new Frame(this.runtime, new ScopeStack([...fn.capturedScopes, new Map()]))
-    const run = Effect.gen(function* () {
-      // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
-      const paramScope = invocation.scopes.current()
-      for (const parameter of fn.parameters) {
-        for (const name of collectPatternNames(parameter)) {
-          paramScope.set(name, { mutable: true, value: undefined, initialized: false })
+    return Effect.flatMap(CallSite, (site) => {
+      const depth = Math.max(self.depth, site.depth) + 1
+      if (depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
+      const invocation = new Frame(this.runtime, new ScopeStack([...fn.capturedScopes, new Map()]), depth)
+      const run = Effect.gen(function* () {
+        // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
+        const paramScope = invocation.scopes.current()
+        for (const parameter of fn.parameters) {
+          for (const name of collectPatternNames(parameter)) {
+            paramScope.set(name, { mutable: true, value: undefined, initialized: false })
+          }
         }
-      }
-      for (const [index, parameter] of fn.parameters.entries()) {
-        if (parameter.type === "RestElement") {
-          yield* invocation.declarePattern(
-            parameter.argument,
-            new ProgramArray(self.runtime.prototypes.Array, args.slice(index)),
-            true,
-            parameter,
-            true,
-          )
-          break
+        for (const [index, parameter] of fn.parameters.entries()) {
+          if (parameter.type === "RestElement") {
+            yield* invocation.declarePattern(
+              parameter.argument,
+              new ProgramArray(self.runtime.prototypes.Array, args.slice(index)),
+              true,
+              parameter,
+              true,
+            )
+            break
+          }
+          yield* invocation.declarePattern(parameter, args[index], true, parameter, true)
         }
-        yield* invocation.declarePattern(parameter, args[index], true, parameter, true)
-      }
 
-      if (fn.body.type === "BlockStatement") {
-        invocation.scopes.push()
-        invocation.hoistVars(fn.body.body, paramScope)
-        const result = yield* invocation.evaluateStatement(fn.body)
-        return result.kind === "return" ? result.value : undefined
-      }
+        if (fn.body.type === "BlockStatement") {
+          invocation.scopes.push()
+          invocation.hoistVars(fn.body.body, paramScope)
+          const result = yield* invocation.evaluateStatement(fn.body)
+          return result.kind === "return" ? result.value : undefined
+        }
 
-      return yield* invocation.evaluateExpression(fn.body)
+        return yield* invocation.evaluateExpression(fn.body)
+      })
+      if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn.async))
+      if (!fn.async) return run
+      return this.runtime.promises.createWithSelf((self) =>
+        Effect.flatMap(run, (value) => resolvePromiseValue(invocation.runtime.runner, value, self)),
+      )
     })
-    if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn.async))
-    if (!fn.async) return run
-    return this.runtime.promises.createWithSelf((self) =>
-      Effect.flatMap(run, (value) => resolvePromiseValue(invocation.runtime.runner, value, self)),
-    )
   }
 
   private createGenerator(

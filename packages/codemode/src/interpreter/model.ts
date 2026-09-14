@@ -7,7 +7,10 @@ import type { ProgramError } from "./objects.js"
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
 export type AstNode = Node
 
-export const CallSite = Context.Reference<AstNode | undefined>("codemode/CallSite", { defaultValue: () => undefined })
+/** The program call a built-in is running under: where to locate failures born inside it, and how deep the stack is there. */
+export const CallSite = Context.Reference<{ readonly node?: AstNode; readonly depth: number }>("codemode/CallSite", {
+  defaultValue: () => ({ depth: 0 }),
+})
 
 export type Binding = {
   mutable: boolean
