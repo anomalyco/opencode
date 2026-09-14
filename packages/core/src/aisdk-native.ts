@@ -53,6 +53,7 @@ export function rewrite<ID extends string>(
 
 const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/amazon-bedrock": "@opencode/ai/providers/amazon-bedrock",
+  "@ai-sdk/alibaba": "@opencode/ai/providers/alibaba/chat",
   "@ai-sdk/anthropic": "@opencode/ai/providers/anthropic",
   "@ai-sdk/azure": "@opencode/ai/providers/azure/responses",
   "@ai-sdk/cerebras": "@opencode/ai/providers/cerebras",
@@ -67,6 +68,7 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/togetherai": "@opencode/ai/providers/togetherai",
   "@ai-sdk/xai": "@opencode/ai/providers/xai",
   "@openrouter/ai-sdk-provider": "@opencode/ai/providers/openrouter",
+  "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
 }
 
 const protocols = (name: string) => ({
@@ -83,6 +85,12 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "alibaba-token-plan": protocols("alibaba"),
   "alibaba-token-plan-cn": protocols("alibaba"),
   baseten: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/baseten" },
+  "cloudflare-ai-gateway": {
+    "@ai-sdk/anthropic": "@opencode/ai/providers/cloudflare-ai-gateway",
+    "@ai-sdk/openai": "@opencode/ai/providers/cloudflare-ai-gateway",
+    "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-ai-gateway",
+    "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
+  },
   "cloudflare-workers-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-workers-ai" },
   deepseek: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/deepseek" },
   "fireworks-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/fireworks" },

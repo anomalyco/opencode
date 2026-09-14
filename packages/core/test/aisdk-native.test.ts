@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { AISDKNative } from "@opencode/core/aisdk-native"
 
-function map(packageName: string, settings: Readonly<Record<string, unknown>>, modelID = "test-model") {
+function map(
+  packageName: string,
+  settings: Readonly<Record<string, unknown>>,
+  modelID = "test-model",
+  providerID = "test-provider",
+) {
   const target: {
     package?: string
     settings?: Record<string, unknown>
@@ -11,11 +16,24 @@ function map(packageName: string, settings: Readonly<Record<string, unknown>>, m
     package: `aisdk:${packageName}`,
     settings: { ...settings },
   }
-  AISDKNative.rewrite(target, { specifier: target.package, providerID: "test-provider", modelID })
+  AISDKNative.rewrite(target, { specifier: target.package, providerID, modelID })
   return target.package?.startsWith("aisdk:") ? undefined : target
 }
 
 describe("AISDKNative", () => {
+  test("keeps Cloudflare AI Gateway models on its native gateway package", () => {
+    for (const packageName of [
+      "ai-gateway-provider",
+      "@ai-sdk/openai",
+      "@ai-sdk/anthropic",
+      "@ai-sdk/openai-compatible",
+    ]) {
+      expect(map(packageName, {}, "openai/gpt-5.4", "cloudflare-ai-gateway")?.package).toBe(
+        "@opencode/ai/providers/cloudflare-ai-gateway",
+      )
+    }
+  })
+
   test("maps OpenAI-family packages and request options to native providers", () => {
     expect(
       map("@ai-sdk/openai", {

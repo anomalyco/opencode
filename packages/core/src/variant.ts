@@ -84,6 +84,13 @@ const responsesEffort = (effort: string): Overlay => ({
   settings: { reasoningEffort: effort, reasoningSummary: "auto", include: ENCRYPTED_REASONING },
 })
 
+const cloudflareAIGateway: Protocol = (model, support) => {
+  const id = modelID(model)
+  if (id.startsWith("openai/")) return openaiResponses(model, support)
+  if (id.startsWith("anthropic/")) return anthropicMessages(model, support)
+  return openaiChat(model, support)
+}
+
 const deepseekChat: Protocol = (_, support) => {
   switch (support.type) {
     case "effort":
@@ -540,9 +547,8 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/openrouter": openrouter,
 
   [Provider.aisdk("venice-ai-sdk-provider")]: openaiChat,
-  [Provider.aisdk("ai-gateway-provider")]: openaiChat,
+  "@opencode/ai/providers/cloudflare-ai-gateway": cloudflareAIGateway,
   [Provider.aisdk("@ai-sdk/gateway")]: vercelGateway,
   [Provider.aisdk("@jerome-benoit/sap-ai-provider-v2")]: sapAICore,
-  [Provider.aisdk("@ai-sdk/alibaba")]: alibabaAISDK,
   [Provider.aisdk("@ai-sdk/cohere")]: cohere,
 }

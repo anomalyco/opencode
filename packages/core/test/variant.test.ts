@@ -95,6 +95,28 @@ test("recognizes Claude version spellings and future models", () => {
   )
 })
 
+test("spells Cloudflare AI Gateway variants for their upstream routes", () => {
+  const pkg = "@opencode/ai/providers/cloudflare-ai-gateway"
+  expect(resolve(model(pkg, "openai/gpt-5.4"), [{ type: "effort", values: ["low", "xhigh"] }])).toEqual([
+    {
+      id: "low",
+      settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
+    {
+      id: "xhigh",
+      settings: { reasoningEffort: "xhigh", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
+  ])
+  expect(resolve(model(pkg, "anthropic/claude-sonnet-4-6"), [{ type: "effort", values: ["low", "high"] }])).toEqual([
+    { id: "low", settings: { effort: "low", thinking: { type: "adaptive", display: "summarized" } } },
+    { id: "high", settings: { effort: "high", thinking: { type: "adaptive", display: "summarized" } } },
+  ])
+  expect(resolve(model(pkg, "xai/grok-4.6"), [{ type: "effort", values: ["low", "high"] }])).toEqual([
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+})
+
 test("spells Chat Completions variants for direct providers", () => {
   expect(
     resolve(model("@opencode/ai/providers/deepseek", "deepseek-v4-flash"), [

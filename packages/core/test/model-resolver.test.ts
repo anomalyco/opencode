@@ -1051,6 +1051,7 @@ describe("ModelResolver", () => {
   it.effect("never loads the AI SDK for packages with native implementations", () =>
     Effect.gen(function* () {
       const packages = [
+        ["@ai-sdk/alibaba", "@opencode/ai/providers/alibaba/chat", "api-model"],
         ["@ai-sdk/anthropic", "@opencode/ai/providers/anthropic", "api-model"],
         ["@ai-sdk/amazon-bedrock", "@opencode/ai/providers/amazon-bedrock", "api-model"],
         ["@ai-sdk/amazon-bedrock/mantle", "@opencode/ai/providers/amazon-bedrock/mantle/chat", "openai.gpt-oss-120b"],
@@ -1067,6 +1068,7 @@ describe("ModelResolver", () => {
         ["@openrouter/ai-sdk-provider", "@opencode/ai/providers/openrouter", "api-model"],
         ["@ai-sdk/togetherai", "@opencode/ai/providers/togetherai", "api-model"],
         ["@ai-sdk/xai", "@opencode/ai/providers/xai", "api-model"],
+        ["ai-gateway-provider", "@opencode/ai/providers/cloudflare-ai-gateway", "xai/grok-4.6"],
       ] as const
 
       yield* Effect.forEach(packages, ([catalogPackage, nativePackage, modelID]) =>
