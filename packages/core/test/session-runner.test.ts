@@ -3459,6 +3459,172 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  scenario("recovers from stale encrypted reasoning without failing the session", function* (s) {
+    yield* s.admit("Think first")
+
+    yield* s.llm.push(
+      TestLLM.stop(
+        LLMEvent.reasoningStart({ id: "reasoning-openai" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-openai", text: "Encrypted thought" }),
+        LLMEvent.reasoningEnd({
+          id: "reasoning-openai",
+          providerMetadata: {
+            openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+          },
+        }),
+        LLMEvent.textStart({ id: "text-1" }),
+        LLMEvent.textDelta({ id: "text-1", text: "First answer" }),
+        LLMEvent.textEnd({ id: "text-1" }),
+      ),
+    )
+    yield* s.resume
+    yield* replaySessionProjection(sessionID)
+
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Think first"),
+      Expected.assistant({}, [
+        {
+          type: "reasoning",
+          text: "Encrypted thought",
+          state: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" },
+        },
+        {
+          type: "text",
+          text: "First answer",
+        },
+      ]),
+    ])
+
+    yield* s.admit("Continue")
+    yield* s.llm.push(
+      Stream.fail(
+        new AIError({
+          reason: new InvalidRequestError({
+            message: "reasoning `encrypted_content` was not issued to this caller",
+            classification: "stale-reasoning",
+          }),
+        }),
+      ),
+      TestLLM.text("Recovered answer", "text-recovered"),
+    )
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(3)
+    expect(s.requests[1]?.messages[1]?.content).toEqual([
+      {
+        type: "reasoning",
+        text: "Encrypted thought",
+        providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+      },
+      {
+        type: "text",
+        text: "First answer",
+      },
+    ])
+    expect(s.requests[2]?.messages[1]?.content).toEqual([
+      {
+        type: "reasoning",
+        text: "Encrypted thought",
+        providerMetadata: undefined,
+      },
+      {
+        type: "text",
+        text: "First answer",
+      },
+    ])
+
+    yield* replaySessionProjection(sessionID)
+    const context1 = yield* s.context
+    const firstAssistant1 = requireAssistant(context1)
+    const reasoning1 = firstAssistant1.content.find((item) => item.type === "reasoning")
+    expect(reasoning1?.state).toBeUndefined()
+    expect(context1).toMatchObject([
+      Expected.user("Think first"),
+      Expected.assistant({}, [
+        {
+          type: "reasoning",
+          text: "Encrypted thought",
+        },
+        {
+          type: "text",
+          text: "First answer",
+        },
+      ]),
+      Expected.user("Continue"),
+      Expected.assistant({}, [
+        {
+          type: "text",
+          text: "Recovered answer",
+        },
+      ]),
+    ])
+  })
+
+  scenario("recovers from stale encrypted reasoning after tool execution without failing", function* (s) {
+    yield* s.admit("Echo this")
+
+    yield* s.llm.push(
+      TestLLM.toolCalls(
+        LLMEvent.reasoningStart({ id: "reasoning-tool" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-tool", text: "Tool thought" }),
+        LLMEvent.reasoningEnd({
+          id: "reasoning-tool",
+          providerMetadata: {
+            openai: { itemId: "rs_tool", reasoningEncryptedContent: "tool-encrypted-state" },
+          },
+        }),
+        LLMEvent.toolCall({ id: "call-echo", name: "echo", input: { text: "hello" } }),
+      ),
+      Stream.fail(
+        new AIError({
+          reason: new InvalidRequestError({
+            message: "Referenced reasoning item 'rs_tool' was not found or has expired",
+            classification: "stale-reasoning",
+          }),
+        }),
+      ),
+      TestLLM.text("Done after tool", "text-after-tool"),
+    )
+
+    yield* s.resume
+
+    // 1st request: user prompt -> returns reasoning + tool call
+    // 2nd request: continuation with tool result + stale reasoning metadata -> fails with stale-reasoning
+    // 3rd request: retried continuation with tool result + sanitized reasoning -> succeeds with text
+    expect(s.requests).toHaveLength(3)
+    expect(s.executions).toEqual(["hello"])
+    expect(s.requests[1]?.messages[1]?.content).toContainEqual({
+      type: "reasoning",
+      text: "Tool thought",
+      providerMetadata: { openai: { itemId: "rs_tool", reasoningEncryptedContent: "tool-encrypted-state" } },
+    })
+    expect(s.requests[2]?.messages[1]?.content).toContainEqual({
+      type: "reasoning",
+      text: "Tool thought",
+      providerMetadata: undefined,
+    })
+
+    yield* replaySessionProjection(sessionID)
+    const context2 = yield* s.context
+    const firstAssistant2 = requireAssistant(context2)
+    const reasoning2 = firstAssistant2.content.find((item) => item.type === "reasoning")
+    expect(reasoning2?.state).toBeUndefined()
+    expect(context2).toMatchObject([
+      Expected.user("Echo this"),
+      Expected.assistant({ finish: "tool-calls" }, [
+        {
+          type: "reasoning",
+          text: "Tool thought",
+        },
+        Expected.completedTool(
+          { id: "call-echo", name: "echo" },
+          { input: { text: "hello" }, content: [Expected.text("hello")] },
+        ),
+      ]),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Done after tool")]),
+    ])
+  })
+
   scenario("keeps one durable reasoning part when reasoning closes after text", function* (s) {
     yield* s.admit("Think and answer")
 

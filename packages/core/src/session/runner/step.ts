@@ -6,6 +6,7 @@ import {
   LLMClient,
   LLMEvent,
   isContextOverflowFailure,
+  isStaleReasoningFailure,
   type ProviderErrorEvent,
   type ToolCall,
 } from "@opencode/ai"
@@ -37,6 +38,7 @@ export type Outcome = Data.TaggedEnum<{
     readonly decision: SessionRunnerRetry.Decision
   }
   RecoverFull: {}
+  RecoverStaleReasoning: {}
   Compacted: {}
 }>
 export const Outcome = Data.taggedEnum<Outcome>()
@@ -53,6 +55,7 @@ interface Input {
     retry: boolean,
   ) => Effect.Effect<{ readonly retry: false } | SessionRunnerRetry.Decision>
   readonly recoverContinuation: boolean
+  readonly recoverStaleReasoning: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
   readonly recoverOverflow: Effect.Effect<boolean>
 }
@@ -169,6 +172,12 @@ export const make = Effect.gen(function* () {
           !recorded.outputStarted
         )
           return Outcome.RecoverFull()
+        if (
+          input.recoverStaleReasoning &&
+          isStaleReasoningFailure(llmFailure) &&
+          !recorded.outputStarted
+        )
+          return Outcome.RecoverStaleReasoning()
         const retry =
           llmFailure && llmError && !isContextOverflowFailure(llmFailure)
             ? yield* restore(

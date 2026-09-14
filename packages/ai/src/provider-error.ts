@@ -45,6 +45,17 @@ const patterns = [
 
 const payloadPatterns = [/request entity too large/i, /payload too large/i, /request too large/i]
 
+const STALE_REASONING_PATTERNS = [
+  /reasoning.*encrypted_content.*not issued to this caller/i,
+  /was not issued to this caller/i,
+  /invalid_encrypted_content/i,
+  /encrypted.*content.*could not be decrypted/i,
+  /referenced reasoning item .* was not found/i,
+  /referenced reasoning item .* has expired/i,
+  /reasoning item .* was not found or has expired/i,
+  /item .* of type ['"]reasoning['"] was provided without its required following item/i,
+]
+
 const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]
 
 export const isContextOverflow = (message: string) =>
@@ -53,10 +64,18 @@ export const isContextOverflow = (message: string) =>
 
 export const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
 
+export const isStaleReasoning = (message: string) => STALE_REASONING_PATTERNS.some((pattern) => pattern.test(message))
+
 export const isContextOverflowFailure = (failure: unknown) =>
   failure instanceof AIError
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
+
+export const isStaleReasoningFailure = (failure: unknown) =>
+  failure instanceof AIError
+    ? (failure.reason._tag === "InvalidRequest" && failure.reason.classification === "stale-reasoning") ||
+      isStaleReasoning([failure.message, failure.reason.message, failure.reason.body ?? ""].filter(Boolean).join("\n"))
+    : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "stale-reasoning"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const QUOTA_CODES = new Set(["insufficient_quota", "usage_not_included", "billing_error"])
@@ -120,6 +139,8 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     return new InvalidRequestError({ ...details, classification: "context-overflow" })
   if (input.status === 413 || isPayloadTooLarge(text))
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
+  if (clientScoped && isStaleReasoning(text))
+    return new InvalidRequestError({ ...details, classification: "stale-reasoning" })
   if (CONTENT_POLICY_TEXT.test(text)) return new ContentPolicyError(details)
   if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
     return new QuotaExceededError(details)

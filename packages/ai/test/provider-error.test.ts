@@ -202,4 +202,19 @@ describe("provider error rawBody classification", () => {
       classifyProviderFailure({ message: "Request failed", rawBody: '{"error":{"code":"insufficient_quota"}}' })._tag,
     ).toBe("QuotaExceeded")
   })
+
+  test("classifies stale and invalid encrypted reasoning errors", () => {
+    const cases = [
+      "Error from provider (Console): Upstream request failed: [invalid_request_error] reasoning `encrypted_content` was not issued to this caller",
+      "Upstream request failed: [invalid_request_error] reasoning 'encrypted_content' was not issued to this caller",
+      "Upstream request failed: [invalid_encrypted_content] The encrypted content could not be verified. Reason: Encrypted content could not be decrypted or parsed.",
+      "Referenced reasoning item 'rs_123' was not found or has expired",
+      "Item 'rs_0a1b' of type 'reasoning' was provided without its required following item.",
+    ]
+    for (const message of cases) {
+      const reason = classifyProviderFailure({ message, status: 400 })
+      expect(reason._tag).toBe("InvalidRequest")
+      expect(reason).toMatchObject({ classification: "stale-reasoning" })
+    }
+  })
 })
