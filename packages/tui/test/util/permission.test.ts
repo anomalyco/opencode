@@ -20,4 +20,10 @@ test("preserves permission roots and self-contained metadata", () => {
       lines: ["Query: releases"],
     },
   )
+  expect(
+    permissionPresentation({ action: "devsearch", resources: [], metadata: { query: "effect retry" } }),
+  ).toMatchObject({
+    title: 'Developer Search "effect retry"',
+    lines: ["Query: effect retry"],
+  })
 })
