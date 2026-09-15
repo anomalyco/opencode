@@ -13,6 +13,11 @@ export type RetryReason = "free_tier_limit" | "account_rate_limit" | (string & {
 
 export type Retryable = {
   message: string
+  /**
+   * The provider reported an exhausted budget rather than momentary pressure. Such a limit does
+   * not recover inside a retry window, so waiting only burns time and hides the real error.
+   */
+  terminal?: boolean
   action?: {
     reason: RetryReason
     provider: string
@@ -29,6 +34,17 @@ export const RETRY_JITTER_FACTOR = 0.25
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 export const RETRY_MAX_RETRIES = 5
+
+// Providers signal an exhausted budget structurally before they say it in prose. These are
+// documented, stable identifiers - not message text, which varies per provider and locale.
+const TERMINAL_STATUS_CODES = new Set([402])
+const TERMINAL_ERROR_CODES = new Set([
+  // openai
+  "insufficient_quota",
+  "billing_hard_limit_reached",
+  "billing_not_active",
+  "account_deactivated",
+])
 
 const RETRYABLE_MESSAGE_PATTERNS = [
   /429|500|502|503|504|524/i,
@@ -142,16 +158,47 @@ export function retryable(error: Err, provider: string) {
         },
       }
     }
+    if (terminalStatus(status) || terminalBody(error.data.responseBody))
+      return { message: error.data.message, terminal: true }
     return { message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message }
   }
 
   const message = isRecord(error.data) ? error.data.message : undefined
   if (typeof message !== "string") return undefined
   const lower = message.toLowerCase()
+  if (terminalBody(message)) return { message, terminal: true }
   if (lower.includes("too_many_requests")) return { message: "Too Many Requests" }
   if (lower.includes("exhausted") || lower.includes("unavailable")) return { message: "Provider is overloaded" }
   if (matchesRetryableMessage(message)) return { message }
   return undefined
+}
+
+function terminalStatus(status: number | undefined) {
+  return status !== undefined && TERMINAL_STATUS_CODES.has(status)
+}
+
+// Terminal only on an explicit provider signal: a documented error code, or a google QuotaFailure
+// whose quota id names a per-day window. A per-minute quota stays retryable.
+function terminalBody(value: unknown) {
+  const body = parseJSON(value)
+  if (!isRecord(body)) return false
+  const error = isRecord(body.error) ? body.error : undefined
+  for (const code of [error?.type, error?.code, body.code, body.type]) {
+    if (typeof code === "string" && TERMINAL_ERROR_CODES.has(code.toLowerCase())) return true
+  }
+  const details = (isRecord(body.error) ? body.error.details : undefined) ?? body.details
+  if (!Array.isArray(details)) return false
+  for (const detail of details) {
+    if (!isRecord(detail)) continue
+    const violations = detail.violations
+    if (!Array.isArray(violations)) continue
+    for (const violation of violations) {
+      if (!isRecord(violation)) continue
+      const quota = violation.quotaId ?? violation.quotaMetric
+      if (typeof quota === "string" && /PerDay/i.test(quota)) return true
+    }
+  }
+  return false
 }
 
 function matchesRetryableMessage(value: unknown) {
@@ -194,12 +241,15 @@ export function policy(opts: {
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis
+        // The status is published first so the UI reports the limit exactly as it does today,
+        // then the schedule ends and the error reaches the caller instead of a pending retry.
         yield* opts.set({
           attempt: meta.attempt,
           message: retry.message,
           action: retry.action,
-          next: now + wait,
+          next: retry.terminal ? now : now + wait,
         })
+        if (retry.terminal) return yield* Cause.done(meta.attempt)
         return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]
       })
     }),
