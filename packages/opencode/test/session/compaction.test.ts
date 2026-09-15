@@ -1956,6 +1956,114 @@ describe("SessionNs.getUsage", () => {
     },
   )
 
+  test("ignores malformed cost tiers instead of throwing", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0, write: 0 },
+        tiers: [
+          // a null entry
+          null,
+          // no `tier` key at all
+          { input: 5, output: 20, cache: { read: 0, write: 0 } },
+          // `tier.size` is not a number
+          { input: 7, output: 30, cache: { read: 0, write: 0 }, tier: { type: "context", size: {} } },
+        ],
+      } as unknown as Provider.Model["cost"],
+    })
+    const input = {
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    }
+
+    expect(() => SessionNs.getUsage(input)).not.toThrow()
+
+    // every tier discarded, so the base pricing applies
+    expect(SessionNs.getUsage(input).cost).toBe(3 + 1.5)
+  })
+
+  test("keeps applying a tier whose size is a numeric string", () => {
+    // the pre-guard comparison coerced `contextTokens > "5000"`, and a hand-written config
+    // can still produce one — the guard must not turn that into a dropped tier
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0, write: 0 },
+        tiers: [{ input: 99, output: 99, cache: { read: 0, write: 0 }, tier: { type: "context", size: "5000" } }],
+      } as unknown as Provider.Model["cost"],
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    })
+
+    // tier rates apply: 1_000_000 @ 99 + 100_000 @ 99
+    expect(result.cost).toBe(99 + 9.9)
+  })
+
+  test.each([0, -1])("drops a tier whose size is %p instead of matching every context", (size) => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0, write: 0 },
+        tiers: [{ input: 99, output: 99, cache: { read: 0, write: 0 }, tier: { type: "context", size } }],
+      } as unknown as Provider.Model["cost"],
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    })
+
+    // falls back to the base rates, not the tier's
+    expect(result.cost).toBe(3 + 1.5)
+  })
+
+  test("drops a tier with valid shape but no pricing, falling back to base", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0, write: 0 },
+        // valid type + size>0, but NO input/output pricing → must not silently zero the cost
+        tiers: [{ tier: { type: "context", size: 5000 } }],
+      } as unknown as Provider.Model["cost"],
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    })
+    // before the fix this pricing-less tier won selection and yielded cost 0; now it is
+    // dropped and the base rates apply
+    expect(result.cost).toBe(3 + 1.5)
+    expect(Number.isNaN(result.cost)).toBe(false)
+  })
+
+  test("ignores a cost.tiers that is not an array", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: { input: 3, output: 15, cache: { read: 0, write: 0 }, tiers: {} } as unknown as Provider.Model["cost"],
+    })
+    const input = {
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    }
+
+    expect(() => SessionNs.getUsage(input)).not.toThrow()
+    expect(SessionNs.getUsage(input).cost).toBe(3 + 1.5)
+  })
+
   test("extracts cache write tokens from vertex metadata key", () => {
     const model = createModel({ context: 100_000, output: 32_000, npm: "@ai-sdk/google-vertex/anthropic" })
     const result = SessionNs.getUsage({
