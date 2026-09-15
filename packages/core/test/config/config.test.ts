@@ -2,6 +2,7 @@ import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
 import { Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
+import { fromEnv, layer } from "effect/ConfigProvider"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, Event, Info } from "@opencode/schema/config"
@@ -45,6 +46,7 @@ function testLayer(
   credentialNode = emptyCredentialNode,
   wellknownNode = emptyWellknownNode,
   options?: Config.Options,
+  env: Record<string, string> = {},
 ) {
   const locationLayer = Layer.succeed(
     Location.Service,
@@ -63,9 +65,10 @@ function testLayer(
     WellKnown.node.replace(wellknownNode),
     Watcher.node.replace(watcher),
   ])
-  // Merge the watcher layer by reference so Watcher.Test resolves to the same
-  // memoized instance the built graph uses.
-  return Layer.mergeAll(built, watcher)
+  // Pin the config environment (empty by default) so discovery never reads the
+  // ambient process environment. Merge the watcher layer by reference so
+  // Watcher.Test resolves to the same memoized instance the built graph uses.
+  return Layer.mergeAll(built.pipe(Layer.provide(layer(fromEnv({ env })))), watcher)
 }
 
 const provider = {
@@ -1602,6 +1605,113 @@ describe("Config", () => {
                 type: "git",
                 store: AbsolutePath.make(path.join(root, ".git")),
               }),
+            ),
+          )
+        })
+      }),
+    ),
+  )
+
+  it.live("excludes claude sources when disableClaudeCode option is set", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const directory = path.join(tmp.path, "repo")
+        const globalAgents = path.join(global, "home", ".agents")
+        const globalClaude = path.join(global, "home", ".claude")
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(globalAgents, { recursive: true })
+            await fs.mkdir(globalClaude, { recursive: true })
+            await fs.mkdir(directory, { recursive: true })
+            await fs.mkdir(path.join(directory, ".agents"), { recursive: true })
+          })
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const compatibility = yield* config.compatibility!()
+            expect(compatibility.claude.filter((item) => inFixture(tmp.path, item))).toEqual([])
+            expect(compatibility.agents.filter((item) => inFixture(tmp.path, item))).toEqual([
+              AbsolutePath.make(globalAgents),
+              AbsolutePath.make(path.join(directory, ".agents")),
+            ])
+          }).pipe(
+            Effect.provide(
+              testLayer(directory, global, directory, undefined, Watcher.testLayer, emptyCredentialNode, emptyWellknownNode, {
+                disableClaudeCode: true,
+              }),
+            ),
+          )
+        })
+      }),
+    ),
+  )
+
+  it.live("excludes claude sources when OPENCODE_DISABLE_CLAUDE_CODE is set", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const directory = path.join(tmp.path, "repo")
+        const globalAgents = path.join(global, "home", ".agents")
+        const globalClaude = path.join(global, "home", ".claude")
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(globalAgents, { recursive: true })
+            await fs.mkdir(globalClaude, { recursive: true })
+            await fs.mkdir(directory, { recursive: true })
+            await fs.mkdir(path.join(directory, ".agents"), { recursive: true })
+          })
+
+          yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const compatibility = yield* config.compatibility!()
+            expect(compatibility.claude.filter((item) => inFixture(tmp.path, item))).toEqual([])
+            expect(compatibility.agents.filter((item) => inFixture(tmp.path, item))).toEqual([
+              AbsolutePath.make(globalAgents),
+              AbsolutePath.make(path.join(directory, ".agents")),
+            ])
+          }).pipe(
+            Effect.provide(
+              testLayer(
+                directory,
+                global,
+                directory,
+                undefined,
+                Watcher.testLayer,
+                emptyCredentialNode,
+                emptyWellknownNode,
+                undefined,
+                { OPENCODE_DISABLE_CLAUDE_CODE: "1" },
+              ),
+            ),
+          )
+
+          // Proves the empty claude list above comes from the flag, not a broken fixture.
+          yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const compatibility = yield* config.compatibility!()
+            expect(compatibility.claude.filter((item) => inFixture(tmp.path, item))).toEqual([
+              AbsolutePath.make(globalClaude),
+            ])
+          }).pipe(
+            Effect.provide(
+              testLayer(
+                directory,
+                global,
+                directory,
+                undefined,
+                Watcher.testLayer,
+                emptyCredentialNode,
+                emptyWellknownNode,
+              ),
             ),
           )
         })
