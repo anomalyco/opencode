@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.deepseek": "DeepSeek V4.1 Flash 사용 한도가 한시적으로 4배 확대됩니다",
+  "go.graph.bonus": "사용량 {{count}}배",
   "nav.github": "GitHub",
   "nav.docs": "문서",
   "nav.changelog": "변경 내역",
@@ -254,7 +256,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "다음 예외",
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
-  "go.banner.text": "GLM-5.3-Flash 사용 한도가 한시적으로 2배 확대됩니다",
   "go.meta.description": "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
   "go.hero.body":
@@ -270,6 +271,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickle 및 무료 모델",
   "go.graph.go": "Go",
   "go.graph.label": "5시간당 요청 수",
+  "go.graph.period": "사용량",
+  "go.graph.model": "모델",
+  "go.graph.requests": "예상 요청 횟수 / 5시간",
+  "go.graph.allowance": "월간 사용량",
+  "go.graph.new": "신규",
+  "go.graph.scale": "요청 수는 비선형 눈금으로 표시됩니다",
+  "go.graph.showAll": "전체 {{count}}개 모델 보기",
+  "go.graph.showLess": "접기",
   "go.graph.limitedRegions": "일부 지역에서만 제공",
   "go.graph.limitedTime": "한정된 기간",
   "go.graph.usageLimits": "사용 한도",
