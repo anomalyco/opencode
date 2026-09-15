@@ -183,7 +183,8 @@ export const configure = (input: LanguageModelOptions = {}) => {
   const route = configuredRoute(input)
   return {
     id,
-    model: (modelID: string | ModelID) => route.model<OpenRouterProviderOptionsInput>({ id: modelID }),
+    model: (modelID: string | ModelID) =>
+      route.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
     configure,
   }
 }
