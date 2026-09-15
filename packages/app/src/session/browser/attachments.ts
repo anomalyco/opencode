@@ -25,9 +25,18 @@ type Live = {
   dispose: () => void
 }
 
+const fallbackBrowserAttachments = {
+  enabled: () => false,
+  supported: () => false,
+  state: () => undefined,
+  attach: () => {},
+  onFocus: () => () => {},
+  command: () => Promise.reject(new Error("browser.pane.unavailable")),
+}
+
 // Attachments belong to the shell session tab, not the session route: native pages and the agent's
 // browser survive visiting Settings or another tab and close when the session tab or the setting does.
-export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider } = createSimpleContext({
+const context = createSimpleContext({
   name: "BrowserAttachments",
   gate: false,
   init: () => {
@@ -159,3 +168,13 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
     }
   },
 })
+
+export const BrowserAttachmentsProvider = context.provider
+export const useBrowserAttachments = () => {
+  try {
+    return context.use()
+  } catch {
+    return fallbackBrowserAttachments
+  }
+}
+
