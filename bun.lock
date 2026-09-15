@@ -1059,6 +1059,7 @@
     "tree-sitter-bash",
   ],
   "patchedDependencies": {
+    "@ai-sdk/google@3.0.108": "patches/@ai-sdk%2Fgoogle@3.0.108.patch",
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
     "@tanstack/virtual-core@3.17.3": "patches/@tanstack%2Fvirtual-core@3.17.3.patch",
     "@ai-sdk/xai@3.0.102": "patches/@ai-sdk%2Fxai@3.0.102.patch",
