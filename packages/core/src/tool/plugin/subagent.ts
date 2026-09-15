@@ -7,6 +7,7 @@ import { Effect, Schema } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { Job } from "../../job.js"
+import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
@@ -29,6 +30,10 @@ export const Input = Schema.Struct({
   agent: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
   description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
+  model: Schema.optionalKey(Schema.String).annotate({
+    description:
+      'Run the subagent on a specific model, as "providerID/id" or "providerID/id#variant". Omit to use the agent\'s configured model, then the current session\'s model. Discover models with the opencode model_list tool.',
+  }),
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description:
       "Continue a specific previous subagent conversation by passing its sessionID. Calls without a sessionID start a new conversation.",
@@ -61,7 +66,27 @@ export const Plugin = {
     const agents = yield* Agent.Service
     const config = yield* Config.Service
     const permission = yield* Permission.Service
+    const models = yield* Model.Service
     const subagents = yield* SubagentJob.make
+
+    const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
+      const ref = yield* Effect.try({
+        try: () => Model.Ref.parse(input),
+        catch: () => new ToolFailure({ message: `Invalid model reference: ${input}. Use "providerID/id#variant".` }),
+      })
+      const model = (yield* models.available()).find(
+        (model) => model.providerID === ref.providerID && model.id === ref.id,
+      )
+      if (model === undefined)
+        return yield* new ToolFailure({
+          message: `Unknown model: ${ref.providerID}/${ref.id}. Use the opencode model_list tool to see available models.`,
+        })
+      if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
+        return yield* new ToolFailure({
+          message: `Unknown variant "${ref.variant}" for ${ref.providerID}/${ref.id}. Available: ${model.variants.map((variant) => variant.id).join(", ") || "none"}.`,
+        })
+      return ref
+    })
 
     yield* ctx.tool
       .transform((editor) =>
@@ -131,24 +156,23 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Session ${existing.id} is not a child of the current session`,
                 })
+              const override = input.model === undefined ? undefined : yield* resolveModel(input.model)
               // Continuing with a different agent switches the child, mirroring create semantics
-              // where the agent's configured model wins over the inherited one.
-              if (existing !== undefined && existing.agent !== agent.id) {
-                yield* sessions.switchAgent({ sessionID: existing.id, agent: agent.id }).pipe(
-                  Effect.andThen(
-                    agent.model === undefined
-                      ? Effect.void
-                      : sessions.switchModel({ sessionID: existing.id, model: agent.model }),
-                  ),
+              // where an explicit model wins over the agent's configured model, which wins over the inherited one.
+              if (existing !== undefined) {
+                const switched = existing.agent !== agent.id
+                const model = override ?? (switched ? agent.model : undefined)
+                yield* Effect.all([
+                  switched ? sessions.switchAgent({ sessionID: existing.id, agent: agent.id }) : Effect.void,
+                  model === undefined ? Effect.void : sessions.switchModel({ sessionID: existing.id, model }),
+                ]).pipe(
                   Effect.mapError(
-                    (error) =>
-                      new ToolFailure({ message: `Failed to switch subagent session agent: ${existing.id}`, error }),
+                    (error) => new ToolFailure({ message: `Failed to switch subagent session: ${existing.id}`, error }),
                   ),
                 )
               }
 
-              // Model selection is policy/config/session state, not an LLM-facing tool argument.
-              const model = agent.model ?? parent.model
+              const model = override ?? agent.model ?? parent.model
               const child =
                 existing ??
                 (yield* sessions

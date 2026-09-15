@@ -3,6 +3,7 @@ export * as OpenCodeTools from "./opencode.js"
 import { SystemPart, ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
+import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
@@ -22,6 +23,12 @@ export const MoveInput = Schema.Struct({
 })
 
 const MoveOutput = Schema.Struct({ sessionID: Session.ID, directory: AbsolutePath })
+
+export const ModelListInput = Schema.Struct({
+  providerID: Schema.optionalKey(Schema.String).annotate({ description: "Only list models from this provider." }),
+})
+
+const ModelListOutput = Schema.Struct({ models: Schema.Array(Model.Info) })
 
 export const Plugin = {
   id: "opencode.tools",
@@ -83,6 +90,27 @@ export const Plugin = {
               Effect.mapError(
                 (error) => new ToolFailure({ message: `Unable to move session to ${input.directory}`, error }),
               ),
+            ),
+        })
+        draft.add({
+          name: "model_list",
+          description:
+            'List the models available in this OpenCode instance. Reference a model as "providerID/id" or "providerID/id#variant" wherever a model is accepted, such as the subagent tool.',
+          input: ModelListInput,
+          output: ModelListOutput,
+          options: { namespace: "opencode", codemode: true },
+          execute: (input) =>
+            ctx.model.list().pipe(
+              Effect.map((list) => {
+                const models = list.data.filter(
+                  (model) => input.providerID === undefined || model.providerID === input.providerID,
+                )
+                return {
+                  output: { models },
+                  content: models.map((model) => `${model.providerID}/${model.id}: ${model.name}`).join("\n"),
+                }
+              }),
+              Effect.mapError((error) => new ToolFailure({ message: "Unable to list models", error })),
             ),
         })
       })
