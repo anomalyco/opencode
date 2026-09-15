@@ -93,10 +93,10 @@ export namespace FSUtil {
 
       const resolve = Effect.fn("FileSystem.resolve")(function* (path: string) {
         const resolved = pathResolve(windowsPath(path))
-        return yield* fs.realPath(resolved).pipe(
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(resolved)),
-          Effect.orDie,
-        )
+        // Best-effort canonicalization: unreadable traversal components (ACLs,
+        // ELOOP) degrade to the lexical path instead of killing fibers whose
+        // callers treat the result as advisory.
+        return yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved)))
       })
 
       const readJson = Effect.fn("FileSystem.readJson")(function* (path: string) {
