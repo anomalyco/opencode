@@ -1823,7 +1823,7 @@ function GenericTool(props: ToolProps) {
         onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
       >
         <box gap={1}>
-          <text fg={theme.text}>{limited()}</text>
+          <text fg={theme.text} wrapMode="word">{limited()}</text>
           <Show when={collapsed().overflow}>
             <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
           </Show>
@@ -1975,6 +1975,7 @@ export function InlineToolRow(props: {
                 flexGrow={1}
                 fg={props.failed ? props.errorColor : props.color}
                 attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+                wrapMode="word"
               >
                 {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
               </text>
@@ -1984,7 +1985,7 @@ export function InlineToolRow(props: {
       </Switch>
       <Show when={props.failed && props.errorExpanded}>
         <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
-          <text fg={props.errorColor}>{props.error}</text>
+          <text fg={props.errorColor} wrapMode="word">{props.error}</text>
         </box>
       </Show>
     </box>
@@ -2037,7 +2038,7 @@ function BlockTool(props: {
       </Show>
       {props.children}
       <Show when={error()}>
-        <text fg={theme.error}>{error()}</text>
+        <text fg={theme.error} wrapMode="word">{error()}</text>
       </Show>
     </box>
   )
@@ -2085,7 +2086,7 @@ function Shell(props: ToolProps) {
               <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
             </Show>
             <Show when={output()}>
-              <text fg={theme.text}>{limited()}</text>
+              <text fg={theme.text} wrapMode="word">{limited()}</text>
             </Show>
             <Show when={collapsed().overflow}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
@@ -2375,7 +2376,7 @@ function Execute(props: ToolProps) {
         <box paddingLeft={3}>
           <For each={outputPreview().split("\n")}>
             {(line, index) => (
-              <text paddingLeft={3} fg={theme.error}>
+              <text paddingLeft={3} fg={theme.error} wrapMode="word">
                 {index() === 0 ? "↳ " : "  "}
                 {line}
               </text>
