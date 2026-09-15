@@ -9448,6 +9448,7 @@ export type SessionListData = {
     scope?: "project"
     path?: string
     roots?: boolean | "true" | "false"
+    excludeActive?: boolean | "true" | "false"
     start?: number
     search?: string
     limit?: number
