@@ -61,6 +61,7 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   pl: () => merge(import("@/i18n/pl"), import("@opencode-ai/ui/i18n/pl")),
   ru: () => merge(import("@/i18n/ru"), import("@opencode-ai/ui/i18n/ru")),
   uk: () => merge(import("@/i18n/uk"), import("@opencode-ai/ui/i18n/uk")),
+  be: () => merge(import("@/i18n/be"), import("@opencode-ai/ui/i18n/be")),
   ar: () => merge(import("@/i18n/ar"), import("@opencode-ai/ui/i18n/ar")),
   no: () => merge(import("@/i18n/no"), import("@opencode-ai/ui/i18n/no")),
   br: () => merge(import("@/i18n/br"), import("@opencode-ai/ui/i18n/br")),
@@ -129,8 +130,20 @@ export function loadLocaleDict(locale: Locale) {
 }
 
 function detectLocale(): Locale {
-  if (typeof navigator !== "object") return "en"
-  return detectDesktopNativeLocale(navigator.languages?.length ? navigator.languages : [navigator.language])
+  const candidates: string[] = []
+  if (typeof navigator === "object") {
+    if (navigator.languages?.length) candidates.push(...navigator.languages)
+    if (navigator.language) candidates.push(navigator.language)
+  }
+  // Fall back to the runtime/OS locale (e.g. "be-BY") when the browser
+  // navigator is unavailable or empty (as in the TUI).
+  try {
+    const intlLocale = new Intl.DateTimeFormat().resolvedOptions().locale
+    if (intlLocale) candidates.push(intlLocale)
+  } catch {
+    // ignore
+  }
+  return detectDesktopNativeLocale(candidates.length ? candidates : ["en"])
 }
 
 export function normalizeLocale(value: string): Locale {
