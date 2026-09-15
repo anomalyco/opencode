@@ -1,31 +1,15 @@
 @font-face {
   font-family: "IBM Plex Mono";
-  src: url("../assets/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
-  font-weight: 400;
+  src: url("../assets/fonts/IBMPlexMonoVariable-Roman.woff2") format("woff2");
+  font-weight: 100 700;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
   font-family: "IBM Plex Mono";
-  src: url("../assets/fonts/ibm-plex-mono-latin-700-normal.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("../assets/fonts/ibm-plex-mono-latin-400-italic.woff2") format("woff2");
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  src: url("../assets/fonts/ibm-plex-mono-latin-700-italic.woff2") format("woff2");
-  font-weight: 700;
+  src: url("../assets/fonts/IBMPlexMonoVariable-Italic.woff2") format("woff2");
+  font-weight: 100 700;
   font-style: italic;
   font-display: swap;
 }
@@ -33,7 +17,7 @@
 :root {
   color-scheme: dark;
   --background: #090909;
-  --foreground: #ededed;
+  --foreground: #ffffff;
   --muted: #929292;
   --border: #303030;
   --surface: #101010;
@@ -78,7 +62,8 @@ body {
   color: var(--foreground);
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.875rem;
-  line-height: 1.5;
+  font-weight: 300;
+  line-height: 1.8em;
   letter-spacing: 0.02em;
 }
 
