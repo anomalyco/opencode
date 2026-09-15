@@ -2,6 +2,7 @@ research
 dist
 dist-*
 gen
+.cache
 app.log
 script/build-*.ts
 temporary-*.md
