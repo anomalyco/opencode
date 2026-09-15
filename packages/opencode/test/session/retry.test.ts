@@ -272,6 +272,32 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
   })
 
+  test("retries the processor incomplete-stream control", () => {
+    const control = {
+      name: "session.processor.retry-control",
+      data: { classification: "incomplete-stream", source: "unsettled-step", message: "unsettled-step" },
+    }
+
+    expect(SessionRetry.retryable(control, retryProvider)).toEqual({
+      message: "Provider returned an incomplete stream",
+    })
+  })
+
+  test("does not retry the processor mixed-interrupt control", () => {
+    const control = {
+      name: "session.processor.retry-control",
+      data: { classification: "mixed-interrupt", source: "interrupt", message: "attempt interrupted mid-failure" },
+    }
+
+    expect(SessionRetry.retryable(control, retryProvider)).toBeUndefined()
+  })
+
+  test("does not retry control data without a classification", () => {
+    const control = { name: "session.processor.retry-control", data: { source: "provider", message: "provider" } }
+
+    expect(SessionRetry.retryable(control, retryProvider)).toBeUndefined()
+  })
+
   test("retries 500 errors even when isRetryable is false", () => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
       new SessionV1.APIError({

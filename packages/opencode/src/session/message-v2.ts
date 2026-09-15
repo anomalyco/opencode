@@ -29,6 +29,7 @@ import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProviderError } from "@/provider/error"
+import { isContextOverflow } from "@opencode-ai/llm"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
@@ -616,7 +617,11 @@ export function fromError(
         },
       ).toObject()
     case OutputLengthError.isInstance(e):
-      return e
+      return e.toObject()
+    // A classification that survived the throw must not be re-parsed into an UnknownError, so
+    // already-typed overflow errors pass through with their payload intact.
+    case ContextOverflowError.isInstance(e):
+      return e.toObject()
     case LoadAPIKeyError.isInstance(e):
       return new AuthError(
         {
@@ -702,9 +707,14 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case e instanceof Error:
-      return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
-    default:
+    case e instanceof Error: {
+      // Untyped errors keep their legacy serialization; the existing matcher only diverts the
+      // overflow-shaped ones, which carry no response body of their own.
+      const message = errorMessage(e)
+      if (isContextOverflow(message)) return new ContextOverflowError({ message }, { cause: e }).toObject()
+      return new NamedError.Unknown({ message }, { cause: e }).toObject()
+    }
+    default: {
       try {
         const parsed = ProviderError.parseStreamError(e)
         if (parsed) {
@@ -729,7 +739,10 @@ export function fromError(
           ).toObject()
         }
       } catch {}
+      const message = errorMessage(e)
+      if (isContextOverflow(message)) return new ContextOverflowError({ message }, { cause: e }).toObject()
       return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
+    }
   }
 }
 
