@@ -9,7 +9,7 @@ export const Source = Schema.Struct({
 })
 export type Source = Schema.Schema.Type<typeof Source>
 
-export const Collision = Schema.Literal("last-wins", "source-qualified")
+export const Collision = Schema.Union([Schema.Literal("last-wins"), Schema.Literal("source-qualified")])
 export type Collision = Schema.Schema.Type<typeof Collision>
 
 export const Info = Schema.Struct({

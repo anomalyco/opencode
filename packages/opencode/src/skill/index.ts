@@ -102,7 +102,12 @@ export interface Interface {
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
 }
 
-const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"], source?: string) {
+const add = Effect.fnUntraced(function* (
+  state: State,
+  match: string,
+  events: EventV2Bridge.Service["Service"],
+  source?: string,
+) {
   const md = yield* Effect.tryPromise({
     try: () => ConfigMarkdown.parse(match),
     catch: (err) => err,
@@ -252,7 +257,9 @@ const loadSkills = Effect.fnUntraced(function* (
   discovered: DiscoveryState,
   events: EventV2Bridge.Service["Service"],
 ) {
-  for (const item of discovered.matches.toSorted((a, b) => (a.source ?? "").localeCompare(b.source ?? "") || a.match.localeCompare(b.match))) {
+  for (const item of discovered.matches.toSorted(
+    (a, b) => (a.source ?? "").localeCompare(b.source ?? "") || a.match.localeCompare(b.match),
+  )) {
     yield* add(state, item.match, events, item.source)
   }
 

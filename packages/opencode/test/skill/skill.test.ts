@@ -2,13 +2,8 @@ import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
-import { Discovery } from "../../src/skill/discovery"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
-import { EventV2Bridge } from "../../src/event-v2-bridge"
-import { Config } from "../../src/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Global } from "@opencode-ai/core/global"
 import { provideInstance, provideTmpdirInstance, testInstanceStoreLayer, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import path from "path"
@@ -580,6 +575,101 @@ description: A skill in the .opencode/skills directory.
           expect((yield* skill.dirs()).length).toBe(4)
         }),
       { git: true },
+    ),
+  )
+
+  it.live("qualifies same-named skills from explicit sources", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, "claude-skills", "review", "SKILL.md"),
+                `---
+name: review
+description: Claude review skill.
+---
+
+Claude review instructions.
+`,
+              ),
+              Bun.write(
+                path.join(dir, "agent-skills", "review", "SKILL.md"),
+                `---
+name: review
+description: Agent review skill.
+---
+
+Agent review instructions.
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.map((item) => item.name).toSorted()).toEqual(["agents/review", "claude/review"])
+          expect((yield* skill.require("claude/review")).description).toBe("Claude review skill.")
+          expect((yield* skill.require("agents/review")).description).toBe("Agent review skill.")
+        }),
+      {
+        git: true,
+        config: {
+          skills: {
+            sources: [
+              { id: "claude", path: "./claude-skills", enabled: true },
+              { id: "agents", path: "./agent-skills", enabled: true },
+            ],
+            collision: "source-qualified",
+          },
+        },
+      },
+    ),
+  )
+
+  it.live("resolves explicit-source collisions deterministically", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, "source-a", "review", "SKILL.md"),
+                `---
+name: review
+description: Source A.
+---
+`,
+              ),
+              Bun.write(
+                path.join(dir, "source-b", "review", "SKILL.md"),
+                `---
+name: review
+description: Source B.
+---
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.map((item) => item.name)).toEqual(["review"])
+          expect(list[0].description).toBe("Source B.")
+        }),
+      {
+        git: true,
+        config: {
+          skills: {
+            sources: [
+              { id: "a", path: "./source-a", enabled: true },
+              { id: "b", path: "./source-b", enabled: true },
+            ],
+            collision: "last-wins",
+          },
+        },
+      },
     ),
   )
 })
