@@ -475,20 +475,16 @@ describe("first-class promise values", () => {
 })
 
 describe("promises at data boundaries", () => {
-  test("returning an un-awaited promise inside data is a clear await-hinting diagnostic", async () => {
-    const diagnostic = await error(`return { result: tools.host.echo({ id: 1 }) }`)
-    expect(diagnostic.kind).toBe("InvalidDataValue")
-    expect(diagnostic.message).toContain("un-awaited Promise")
-    expect(diagnostic.message).toContain("await tools.ns.tool(...)")
+  test("an un-awaited promise serializes as {} like JSON.stringify, in results, arguments, and JSON.stringify", async () => {
+    expect(await value(`return { result: tools.host.echo({ id: 1 }) }`)).toEqual({ result: {} })
+    expect(await value(`return Array.from([Promise.resolve(1)])`)).toEqual([{}])
+    expect((await error(`return await tools.host.echo({ id: tools.host.echo({ id: 1 }) })`)).kind).toBe(
+      "InvalidToolInput",
+    )
+    expect(await value(`return JSON.stringify(Promise.resolve(1))`)).toBe("{}")
   })
 
-  test("collection helpers do not let un-awaited promises cross the result boundary", async () => {
-    const diagnostic = await error(`return Array.from([Promise.resolve(1)])`)
-    expect(diagnostic.kind).toBe("InvalidDataValue")
-    expect(diagnostic.message).toContain("un-awaited Promise")
-  })
-
-  test("invalid returned data cancels pending work", async () => {
+  test("returning with pending work still running interrupts it", async () => {
     const trace = makeTrace()
     const result = await run(
       `
@@ -497,23 +493,11 @@ describe("promises at data boundaries", () => {
       `,
       { trace, limits: { timeoutMs: 100 } },
     )
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error.kind).toBe("InvalidDataValue")
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toEqual({ pending: {} })
     expect(trace.completed).toBe(0)
     expect(trace.interrupted).toBe(1)
-  })
-
-  test("passing an un-awaited promise as a tool argument is a clear diagnostic", async () => {
-    const diagnostic = await error(`return await tools.host.echo({ id: tools.host.echo({ id: 1 }) })`)
-    expect(diagnostic.kind).toBe("InvalidDataValue")
-    expect(diagnostic.message).toContain("un-awaited Promise")
-  })
-
-  test("JSON.stringify of a promise is a diagnostic, not '{}'", async () => {
-    const diagnostic = await error(`return JSON.stringify(Promise.resolve(1))`)
-    expect(diagnostic.kind).toBe("InvalidDataValue")
-    expect(diagnostic.message).toContain("un-awaited Promise")
   })
 
   test("operators reject promise operands", async () => {
@@ -753,18 +737,19 @@ describe("Promise.allSettled", () => {
   test("reports fulfilled and rejected outcomes with catch-normalized reasons", async () => {
     expect(
       await value(`
-      return await Promise.allSettled([
+      const settled = await Promise.allSettled([
         tools.host.echo({ id: 5 }),
         tools.host.fail({}),
         "plain",
         Promise.reject(new Error("boom")),
       ])
+      return settled.map((s) => s.status === "rejected" ? { status: s.status, reason: String(s.reason) } : s)
     `),
     ).toEqual([
       { status: "fulfilled", value: 5 },
-      { status: "rejected", reason: { name: "Error", message: "Lookup refused" } },
+      { status: "rejected", reason: "Error: Lookup refused" },
       { status: "fulfilled", value: "plain" },
-      { status: "rejected", reason: { name: "Error", message: "boom" } },
+      { status: "rejected", reason: "Error: boom" },
     ])
   })
 
@@ -1303,12 +1288,13 @@ describe("promise construction", () => {
     expect(result.warnings?.[0].message).toContain("dropped")
   })
 
-  test("resolver functions cannot cross the data boundary", async () => {
-    const diagnostic = await error(`
+  test("resolver functions vanish at the data boundary like JSON.stringify", async () => {
+    expect(
+      await value(`
       let escaped
       new Promise((resolve) => { escaped = resolve })
-      return { escaped }
-    `)
-    expect(diagnostic.kind).toBe("InvalidDataValue")
+      return { escaped, kind: typeof escaped }
+    `),
+    ).toEqual({ kind: "function" })
   })
 })

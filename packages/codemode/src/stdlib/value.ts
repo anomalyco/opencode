@@ -1,4 +1,3 @@
-import { toProgram } from "../data.js"
 import { fn } from "../interpreter/native.js"
 import { typeError } from "../interpreter/model.js"
 import {
@@ -74,22 +73,21 @@ const coerce = <R>(ctx: Interpreter<R>, name: Coercion, args: Array<unknown>): u
     if (name === "parseInt") return parseInt(coerceToString(raw))
     return parseFloat(coerceToString(raw))
   }
-  const value = toProgram(ctx.builtins, raw, `${name} input`)
-  if (name === "Number") return coerceToNumber(value)
-  if (name === "Boolean") return Boolean(value)
-  if (name === "isFinite") return Number.isFinite(coerceToNumber(value))
-  if (name === "isNaN") return Number.isNaN(coerceToNumber(value))
+  if (name === "Number") return coerceToNumber(raw)
+  if (name === "Boolean") return Boolean(raw)
+  if (name === "isFinite") return Number.isFinite(coerceToNumber(raw))
+  if (name === "isNaN") return Number.isNaN(coerceToNumber(raw))
   if (name === "parseInt") {
     const radix = args[1]
     if (radix !== undefined && typeof radix !== "number") {
       throw typeError("parseInt expects a numeric radix.")
     }
-    return parseInt(coerceToString(value), radix)
+    return parseInt(coerceToString(raw), radix)
   }
-  if (name === "parseFloat") return parseFloat(coerceToString(value))
-  return coerceToString(value)
+  if (name === "parseFloat") return parseFloat(coerceToString(raw))
+  return coerceToString(raw)
 }
 
 /** A global coercion function such as `Number` or `parseInt`. */
 export const coercion = <R>(ctx: Interpreter<R>, name: Coercion, length = 1): Native<R> =>
-  fn(ctx.builtins, name, length, (_, args) => toProgram(ctx.builtins, coerce(ctx, name, args), `${name} result`))
+  fn(ctx.builtins, name, length, (_, args) => coerce(ctx, name, args))

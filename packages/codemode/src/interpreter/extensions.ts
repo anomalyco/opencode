@@ -1,9 +1,9 @@
 import { Effect } from "effect"
-import { MAX_VALUE_DEPTH } from "../data.js"
 import type { Extension } from "../extension.js"
 import { coerceToString } from "../stdlib/value.js"
 import type { Interpreter } from "./interpreter.js"
 import { createErrorValue, isErrorType } from "./intrinsics.js"
+import { MAX_VALUE_DEPTH } from "./limits.js"
 import { Throw, typeError } from "./model.js"
 import { constructor, fn } from "./native.js"
 import {

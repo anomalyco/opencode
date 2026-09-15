@@ -863,10 +863,9 @@ describe("CodeMode public contract", () => {
     const shadowed = await Effect.runPromise(runtime.execute(`const search = () => "local"; return search()`))
     expect(shadowed.ok).toBe(true)
     if (shadowed.ok) expect(shadowed.value).toBe("local")
-    // The reference itself cannot cross the data boundary.
+    // The reference itself vanishes at the data boundary, as functions do in JSON.stringify.
     const escaped = await Effect.runPromise(runtime.execute(`return { search }`))
-    expect(escaped.ok).toBe(false)
-    if (!escaped.ok) expect(escaped.error.kind).toBe("InvalidDataValue")
+    expect(escaped).toMatchObject({ ok: true, value: {} })
   })
 
   test("search defaults to 10 results and resolves exact tool paths", async () => {
@@ -1104,7 +1103,7 @@ describe("CodeMode public contract", () => {
     expect(observed).toStrictEqual([{ value: 21 }, 21])
   })
 
-  test("returns JSON-safe data and normalizes undefined to null", async () => {
+  test("returns JSON-safe data: undefined vanishes as in JSON.stringify, and a bare undefined is null", async () => {
     const result = await Effect.runPromise(
       CodeMode.execute({
         code: `return { top: undefined, nested: [1, undefined] }`,
@@ -1112,9 +1111,10 @@ describe("CodeMode public contract", () => {
     )
     expect(result).toStrictEqual({
       ok: true,
-      value: { top: null, nested: [1, null] },
+      value: { nested: [1, null] },
       toolCalls: [],
     })
+    expect(await Effect.runPromise(CodeMode.execute({ code: `return undefined` }))).toMatchObject({ value: null })
     expect(Schema.decodeUnknownSync(CodeMode.Result)(JSON.parse(JSON.stringify(result)))).toStrictEqual(result)
   })
 

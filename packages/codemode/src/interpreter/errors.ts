@@ -1,13 +1,14 @@
 import { Effect } from "effect"
 import type { Diagnostic } from "../codemode.js"
 import { ToolError } from "../tool-error.js"
-import { toData, ToolRuntimeError } from "../data.js"
+import { ToolRuntimeError } from "../tool-runtime.js"
 import { type AstNode, formatLocation, PendingThrow, Throw, sourceLocation, typeError } from "./model.js"
 import { containsRuntimeReference } from "./references.js"
 import { createErrorValue, type ErrorType, isErrorType } from "./intrinsics.js"
 import { constructor, methods, prototypeFrom, receiver } from "./native.js"
 import { type Callable, define, get, hidden, type Native, Arr, ErrorObj, Obj } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
+import { formatValue } from "../stdlib/console.js"
 import { coerceToString } from "../stdlib/value.js"
 
 export const normalizeError = (error: unknown): Diagnostic => {
@@ -44,11 +45,7 @@ export const normalizeError = (error: unknown): Diagnostic => {
     } else if (typeof value === "string") {
       message = value
     } else {
-      try {
-        message = JSON.stringify(toData(value, "Thrown value")) ?? String(value)
-      } catch {
-        message = String(value)
-      }
+      message = formatValue(value)
     }
     return { kind: "ExecutionFailure", message: `Uncaught: ${message}` }
   }

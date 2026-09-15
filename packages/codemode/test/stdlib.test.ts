@@ -394,8 +394,8 @@ describe("RegExp", () => {
     })
   })
 
-  test("regexes cross the boundary as their literal form; JSON.stringify keeps {} like JS", async () => {
-    expect(await value(`return [/a/, { r: /b/gi }]`)).toEqual(["/a/", { r: "/b/gi" }])
+  test("regexes serialize as {} like JSON.stringify, at the boundary and inside the program", async () => {
+    expect(await value(`return [/a/, { r: /b/gi }]`)).toEqual([{}, { r: {} }])
     expect(await value(`return JSON.stringify({ r: /a/g })`)).toBe('{"r":{}}')
   })
 
@@ -521,7 +521,7 @@ describe("URL and URI helpers", () => {
       cannotParse: false,
       parsed: "https://example.test/users",
       invalidIsTypeError: true,
-      boundary: ["https://example.test/a", "q=one"],
+      boundary: ["https://example.test/a", {}],
       json: '{"url":"https://example.test/a","params":{}}',
     })
   })
@@ -715,8 +715,9 @@ describe("Set", () => {
     ).toBe(6)
   })
 
-  test("sets cross the boundary as arrays; JSON.stringify keeps {} like JS", async () => {
-    expect(await value(`return { s: new Set([1, "a", { n: 1 }, undefined]) }`)).toEqual({ s: [1, "a", { n: 1 }, null] })
+  test("sets serialize as {} like JSON.stringify; spread to cross as an array", async () => {
+    expect(await value(`return { s: new Set([1, "a"]) }`)).toEqual({ s: {} })
+    expect(await value(`return [...new Set([1, "a", { n: 1 }])]`)).toEqual([1, "a", { n: 1 }])
     expect(await value(`return JSON.stringify(new Set([1]))`)).toBe("{}")
   })
 })
@@ -837,11 +838,9 @@ describe("Uint8Array", () => {
     ])
   })
 
-  test("cannot cross the tool boundary; the error says how to encode it", async () => {
-    expect((await error(`return new Uint8Array(1)`)).message).toContain(
-      "Execution result contains a Uint8Array; pass text instead",
-    )
-    expect((await error(`return { deep: [new Uint8Array(1)] }`)).message).toContain("bytes.toBase64()")
+  test("serializes by index like JSON.stringify; encode to cross as text", async () => {
+    expect(await value(`return new Uint8Array([7, 8])`)).toEqual({ "0": 7, "1": 8 })
+    expect(await value(`return new Uint8Array([7, 8]).toBase64()`)).toBe("Bwg=")
   })
 })
 

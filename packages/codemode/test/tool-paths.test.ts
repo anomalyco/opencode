@@ -313,8 +313,8 @@ describe("tool argument prototype safety", () => {
   })
 })
 
-describe("tool arguments cross in a useful form where JSON.stringify would give {}", () => {
-  test("Set, RegExp, and URLSearchParams; Map stays {} like JSON", async () => {
+describe("tool arguments cross exactly as JSON.stringify would serialize them", () => {
+  test("Set, RegExp, URLSearchParams, and Map all become {}", async () => {
     let seen: unknown
     const runtime = CodeMode.make({
       tools: {
@@ -334,6 +334,6 @@ describe("tool arguments cross in a useful form where JSON.stringify would give 
       runtime,
       `return await tools.inspect({ v: { s: new Set([1, 2]), r: /x/g, p: new URLSearchParams("a=1&b=2"), m: new Map([["k", 1]]) } })`,
     )
-    expect(seen).toEqual({ s: [1, 2], r: "/x/g", p: "a=1&b=2", m: {} })
+    expect(seen).toEqual({ s: {}, r: {}, p: {}, m: {} })
   })
 })

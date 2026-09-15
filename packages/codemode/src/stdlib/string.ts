@@ -1,5 +1,4 @@
 import { Effect } from "effect"
-import { toProgram } from "../data.js"
 import { constructor, type Method, methods } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { invalidData, rangeError, typeError } from "../interpreter/model.js"
@@ -66,9 +65,7 @@ const replaceWithCallback = <R>(
       const replacement = yield* apply(match.args)
       output.push(
         value.slice(end, match.offset),
-        replacement instanceof PromiseObj
-          ? "[object Promise]"
-          : coerceToString(toProgram(builtins, replacement, `String.${name} replacer result`)),
+        replacement instanceof PromiseObj ? "[object Promise]" : coerceToString(replacement),
       )
       end = match.offset + match.match.length
     }
@@ -209,7 +206,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
       const matched = value.match(pattern)
       if (matched === null) return null
       // Preserve the own `index` and `groups` properties on non-global matches.
-      if (pattern.global) return toProgram(builtins, matched, "String.match result")
+      if (pattern.global) return new Arr(builtins.Array, [...matched])
       return matchToValue(builtins, matched)
     }),
     simple("matchAll", 1, (value, args) => {

@@ -244,9 +244,9 @@ describe("the host object behind a handle is unreachable", () => {
     ).toEqual([[], [], "[object Object]"])
   })
 
-  test("a handle cannot be returned, stringified, or handed to a tool", async () => {
-    expect(await failure(`return new Bag()`)).toMatchObject({ kind: "InvalidDataValue" })
-    expect((await failure(`return JSON.stringify(new Bag())`)).message).toContain("contains a Bag")
+  test("a handle serializes as {} when returned, stringified, or handed to a tool", async () => {
+    expect(await value(`return new Bag()`)).toEqual({})
+    expect(await value(`return JSON.stringify(new Bag())`)).toBe("{}")
     const tools = CodeMode.make({
       extensions: [extension],
       tools: {
@@ -258,7 +258,7 @@ describe("the host object behind a handle is unreachable", () => {
         }),
       },
     })
-    expect((await failure(`return await tools.echo({ v: new Bag() })`, tools)).message).toContain("contains a Bag")
+    expect(await value(`return await tools.echo({ v: new Bag() })`, tools)).toEqual({})
   })
 
   test("a method only runs on a handle of its own class", async () => {
