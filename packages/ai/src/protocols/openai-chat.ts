@@ -718,6 +718,7 @@ const detectSupportsPromptCacheKey = (provider: string, baseURL: string | undefi
   const url = (baseURL ?? "").toLowerCase()
   const isAllowlistedProvider =
     p === "openai" ||
+    p === "azure" ||
     p === "deepseek" ||
     p === "zai" ||
     p === "zai-coding-plan" ||
@@ -727,6 +728,7 @@ const detectSupportsPromptCacheKey = (provider: string, baseURL: string | undefi
     p === "xai"
   const isAllowlistedBaseURL =
     url.includes("api.openai.com") ||
+    url.includes("openai.azure.com") ||
     url.includes("api.deepseek.com") ||
     url.includes("api.z.ai") ||
     url.includes("open.bigmodel.cn") ||

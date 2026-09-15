@@ -278,6 +278,23 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("sends prompt cache key for Azure Chat endpoints", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: Azure.configure({
+            resourceName: "opencode-test",
+            apiKey: "azure-key",
+          }).chat("gpt-4o"),
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+        }),
+      )
+
+      expect(prepared.body.prompt_cache_key).toBe("session_123")
+    }),
+  )
+
   it.effect("sends prompt cache key for Zai endpoints", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
