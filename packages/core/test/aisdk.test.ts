@@ -7,6 +7,7 @@ import { toSessionError } from "@opencode/core/session/to-session-error"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import {
+  Media,
   LLM,
   AIError,
   CompactionPart,
@@ -453,23 +454,13 @@ it.effect("normalizes file data across AI SDK prompt parts", () =>
         model: resolved,
         messages: [
           Message.user([
-            { type: "media", mediaType: "image/png", data: bytes, filename: "bytes.png" },
-            { type: "media", mediaType: "image/png", data: "AAAA", filename: "base64.png" },
-            {
-              type: "media",
-              mediaType: "image/png",
-              data: "data:image/png;charset=utf-8;base64,AQID",
-              filename: "inline.png",
-            },
-            { type: "media", mediaType: "image/png", data: "https://example.com/image.png" },
-            { type: "media", mediaType: "image/png", data: "s3://bucket/image.png" },
+            { type: "media", media: Media.bytes(bytes, "image/png"), filename: "bytes.png" },
+            { type: "media", media: Media.base64("AAAA", "image/png"), filename: "base64.png" },
+            { type: "media", media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"), filename: "inline.png" },
+            { type: "media", media: Media.url("https://example.com/image.png", { mediaType: "image/png" }) },
+            { type: "media", media: Media.base64("s3://bucket/image.png", "image/png") },
           ]),
-          Message.assistant({
-            type: "media",
-            mediaType: "application/pdf",
-            data: "http://example.com/document.pdf",
-            filename: "document.pdf",
-          }),
+          Message.assistant({ type: "media", media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }), filename: "document.pdf" }),
           Message.tool({
             id: "call_1",
             name: "screenshot",

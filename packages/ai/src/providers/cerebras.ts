@@ -5,6 +5,7 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("cerebras")
 const baseURL = "https://api.cerebras.ai/v1"
@@ -39,15 +40,20 @@ export const configure = (input: LanguageModelOptions = {}) => {
     endpoint: { baseURL: endpoint ?? baseURL },
     auth: AuthOptions.bearer(input, "CEREBRAS_API_KEY"),
   })
-  return {
+  return ModelRef.facade({
     id,
     model: (modelID: string | ModelID) =>
       configured.model<OpenAIProviderOptionsInput>({
         id: modelID,
-        compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning", supportsStore: false, supportsPromptCacheKey: true },
+        compatibility: {
+          maxTokensField: "max_tokens",
+          reasoningField: "reasoning",
+          supportsStore: false,
+          supportsPromptCacheKey: true,
+        },
       }),
     configure,
-  }
+  })
 }
 
 export const provider = configure()

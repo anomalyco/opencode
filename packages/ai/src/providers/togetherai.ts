@@ -5,6 +5,7 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("togetherai")
 const baseURL = "https://api.together.xyz/v1"
@@ -39,7 +40,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
     endpoint: { baseURL: endpoint ?? baseURL },
     auth: AuthOptions.bearer(input, ["TOGETHER_API_KEY", "TOGETHER_AI_API_KEY"]),
   })
-  return {
+  return ModelRef.facade({
     id,
     model: (modelID: string | ModelID) =>
       configured.model<OpenAIProviderOptionsInput>({
@@ -47,7 +48,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
         compatibility: { maxTokensField: "max_tokens", supportsStore: false, supportsStrictMode: false },
       }),
     configure,
-  }
+  })
 }
 
 export const provider = configure()

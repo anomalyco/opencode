@@ -15,6 +15,7 @@
   ],
   "exports": {
     ".": "./src/index.ts",
+    "./promise": "./src/promise.ts",
     "./testing": "./src/testing.ts",
     "./*": "./src/*.ts"
   },

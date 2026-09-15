@@ -8,6 +8,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type ModelID, type LLMRequest } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("groq")
 const baseURL = "https://api.groq.com/openai/v1"
@@ -84,7 +85,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
     endpoint: { baseURL: endpoint ?? baseURL },
     auth: AuthOptions.bearer(input, "GROQ_API_KEY"),
   })
-  return {
+  return ModelRef.facade({
     id,
     model: (modelID: string | ModelID) =>
       configured.model<ProviderOptions>({
@@ -98,7 +99,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
         },
       }),
     configure,
-  }
+  })
 }
 
 export const provider = configure()

@@ -18,20 +18,24 @@ import {
   type ToolEntryInput,
 } from "./schema/index.js"
 import { make as makeTool, toDefinitions, type ToolSchema } from "./tool.js"
+import { ModelRef, type ResolveLanguageModel } from "./model-ref.js"
+
+/** A concrete language model or a callable-facade ref whose provider exposes an LLM route. */
+export type LanguageModelInput = LanguageModel | ModelRef
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
-export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
+export type RequestInput<SelectedModel extends LanguageModelInput = LanguageModelInput> = Omit<
   ConstructorParameters<typeof LLMRequest>[0],
   "model" | "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
 > & {
-  readonly model: SelectedLanguageModel
+  readonly model: SelectedModel
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
   readonly messages?: ReadonlyArray<Message | Message.Input>
   readonly tools?: ReadonlyArray<ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
   readonly generation?: GenerationOptions.Input
-  readonly providerOptions?: NoInfer<LanguageModelProviderOptions<SelectedLanguageModel>>
+  readonly providerOptions?: NoInfer<LanguageModelProviderOptions<ResolveLanguageModel<SelectedModel>>>
   readonly http?: HttpOptions.Input
 }
 
@@ -39,10 +43,14 @@ export const generate = LLMClient.generate
 
 export const stream = LLMClient.stream
 
-export const request = <const SelectedLanguageModel extends LanguageModel>(
-  input: RequestInput<SelectedLanguageModel>,
-) => {
+// The stored request keeps the concrete model; refs are resolved once here so nothing downstream knows about them.
+const resolveModel = (model: LanguageModelInput) => (model instanceof ModelRef ? model.facade.model(model.id) : model)
+
+export const request = <const SelectedModel extends LanguageModelInput>(
+  input: RequestInput<SelectedModel>,
+): LLMRequest<ResolveLanguageModel<SelectedModel>> => {
   const {
+    model,
     system: requestSystem,
     prompt,
     messages,
@@ -53,8 +61,9 @@ export const request = <const SelectedLanguageModel extends LanguageModel>(
     http: requestHttp,
     ...rest
   } = input
-  return new LLMRequest({
+  return new LLMRequest<ResolveLanguageModel<SelectedModel>>({
     ...rest,
+    model: resolveModel(model) as ResolveLanguageModel<SelectedModel>,
     system: SystemPart.content(requestSystem),
     messages: [...(messages?.map(Message.make) ?? []), ...(prompt === undefined ? [] : [Message.user(prompt)])],
     tools: tools?.map(ToolEntry.make) ?? [],
@@ -69,8 +78,8 @@ const GENERATE_OBJECT_TOOL_NAME = "generate_object"
 
 const GENERATE_OBJECT_TOOL_DESCRIPTION = "Return the structured result by calling this tool."
 
-type GenerateObjectBase<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
-  RequestInput<SelectedLanguageModel>,
+type GenerateObjectBase<SelectedModel extends LanguageModelInput = LanguageModelInput> = Omit<
+  RequestInput<SelectedModel>,
   "tools" | "toolChoice"
 >
 
@@ -91,13 +100,13 @@ export class GenerateObjectResponse<T> {
 
 export interface GenerateObjectOptions<
   S extends ToolSchema<any>,
-  SelectedLanguageModel extends LanguageModel = LanguageModel,
-> extends GenerateObjectBase<SelectedLanguageModel> {
+  SelectedModel extends LanguageModelInput = LanguageModelInput,
+> extends GenerateObjectBase<SelectedModel> {
   readonly schema: S
 }
 
-export interface GenerateObjectDynamicOptions<SelectedLanguageModel extends LanguageModel = LanguageModel>
-  extends GenerateObjectBase<SelectedLanguageModel> {
+export interface GenerateObjectDynamicOptions<SelectedModel extends LanguageModelInput = LanguageModelInput>
+  extends GenerateObjectBase<SelectedModel> {
   /** Raw JSON Schema object describing the expected output shape. */
   readonly jsonSchema: JsonSchema.JsonSchema
 }
@@ -147,11 +156,11 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
  * 2. `jsonSchema: JsonSchema.JsonSchema` — `.object` is `unknown`. Use when
  *    the schema is only available at runtime (MCP, plugin manifests). Caller validates.
  */
-export function generateObject<const SelectedLanguageModel extends LanguageModel, S extends ToolSchema<any>>(
-  options: GenerateObjectOptions<S, SelectedLanguageModel>,
+export function generateObject<const SelectedModel extends LanguageModelInput, S extends ToolSchema<any>>(
+  options: GenerateObjectOptions<S, SelectedModel>,
 ): Effect.Effect<GenerateObjectResponse<Schema.Schema.Type<S>>, AIError, Service>
-export function generateObject<const SelectedLanguageModel extends LanguageModel>(
-  options: GenerateObjectDynamicOptions<SelectedLanguageModel>,
+export function generateObject<const SelectedModel extends LanguageModelInput>(
+  options: GenerateObjectDynamicOptions<SelectedModel>,
 ): Effect.Effect<GenerateObjectResponse<unknown>, AIError, Service>
 export function generateObject(options: GenerateObjectOptions<ToolSchema<any>> | GenerateObjectDynamicOptions) {
   if ("schema" in options) {
