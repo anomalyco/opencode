@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { CHANNEL } from "../constants"
 import { openExternalURL } from "../files"
 import { setAppQuitting } from "../windows"
+import { configureStableUpdates } from "./config"
 import type { Platform } from "./index"
 import { requiresStableMacInstaller, stableMacDownload } from "./migration"
 
@@ -20,9 +21,7 @@ export const make = Effect.gen(function* () {
     error: (...args) => runFork(Effect.logError(...args)),
     debug: (...args) => runFork(Effect.logDebug(...args)),
   }
-  updateClient.channel = "latest"
-  updateClient.allowPrerelease = false
-  updateClient.allowDowngrade = true
+  configureStableUpdates(updateClient)
   updateClient.autoDownload = false
   updateClient.autoInstallOnAppQuit = process.platform === "darwin"
   yield* Effect.logInfo("auto updater configured", {
