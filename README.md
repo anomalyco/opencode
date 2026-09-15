@@ -88,7 +88,7 @@ The install script respects the following priority order for the installation pa
 
 1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
 2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
+3. `$HOME/bin` - Standard user binary directory (if it exists)
 4. `$HOME/.opencode/bin` - Default fallback
 
 ```bash

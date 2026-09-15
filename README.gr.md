@@ -88,7 +88,7 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 1. `$OPENCODE_INSTALL_DIR` - Προσαρμοσμένος κατάλογος εγκατάστασης
 2. `$XDG_BIN_DIR` - Διαδρομή συμβατή με τις προδιαγραφές XDG Base Directory
-3. `$HOME/bin` - Τυπικός κατάλογος εκτελέσιμων αρχείων χρήστη (εάν υπάρχει ή μπορεί να δημιουργηθεί)
+3. `$HOME/bin` - Τυπικός κατάλογος εκτελέσιμων αρχείων χρήστη (εάν υπάρχει)
 4. `$HOME/.opencode/bin` - Προεπιλεγμένη εφεδρική διαδρομή
 
 ```bash

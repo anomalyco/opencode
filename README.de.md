@@ -88,7 +88,7 @@ Das Installationsskript beachtet die folgende Prioritätsreihenfolge für den In
 
 1. `$OPENCODE_INSTALL_DIR` - Benutzerdefiniertes Installationsverzeichnis
 2. `$XDG_BIN_DIR` - XDG Base Directory Specification-konformer Pfad
-3. `$HOME/bin` - Standard-Binärverzeichnis des Users (falls vorhanden oder erstellbar)
+3. `$HOME/bin` - Standard-Binärverzeichnis des Users (falls vorhanden)
 4. `$HOME/.opencode/bin` - Standard-Fallback
 
 ```bash

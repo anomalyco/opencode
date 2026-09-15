@@ -88,7 +88,7 @@ Installasjonsskriptet bruker følgende prioritet for installasjonsstien:
 
 1. `$OPENCODE_INSTALL_DIR` - Egendefinert installasjonsmappe
 2. `$XDG_BIN_DIR` - Sti som følger XDG Base Directory Specification
-3. `$HOME/bin` - Standard brukerbinar-mappe (hvis den finnes eller kan opprettes)
+3. `$HOME/bin` - Standard brukerbinar-mappe (hvis den finnes)
 4. `$HOME/.opencode/bin` - Standard fallback
 
 ```bash

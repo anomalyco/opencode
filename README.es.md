@@ -88,7 +88,7 @@ El script de instalación respeta el siguiente orden de prioridad para la ruta d
 
 1. `$OPENCODE_INSTALL_DIR` - Directorio de instalación personalizado
 2. `$XDG_BIN_DIR` - Ruta compatible con la especificación XDG Base Directory
-3. `$HOME/bin` - Directorio binario estándar del usuario (si existe o se puede crear)
+3. `$HOME/bin` - Directorio binario estándar del usuario (si existe)
 4. `$HOME/.opencode/bin` - Alternativa por defecto
 
 ```bash

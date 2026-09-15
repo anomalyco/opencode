@@ -88,7 +88,7 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 1. `$OPENCODE_INSTALL_DIR` - Пользовательский каталог установки
 2. `$XDG_BIN_DIR` - Путь, совместимый со спецификацией XDG Base Directory
-3. `$HOME/bin` - Стандартный каталог пользовательских бинарников (если существует или можно создать)
+3. `$HOME/bin` - Стандартный каталог пользовательских бинарников (если существует)
 4. `$HOME/.opencode/bin` - Fallback по умолчанию
 
 ```bash

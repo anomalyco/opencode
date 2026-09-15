@@ -88,7 +88,7 @@ Instalacijska skripta koristi sljedeći redoslijed prioriteta za putanju instala
 
 1. `$OPENCODE_INSTALL_DIR` - Prilagođeni instalacijski direktorij
 2. `$XDG_BIN_DIR` - Putanja usklađena sa XDG Base Directory specifikacijom
-3. `$HOME/bin` - Standardni korisnički bin direktorij (ako postoji ili se može kreirati)
+3. `$HOME/bin` - Standardni korisnički bin direktorij (ako postoji)
 4. `$HOME/.opencode/bin` - Podrazumijevana rezervna lokacija
 
 ```bash
