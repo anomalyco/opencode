@@ -15,19 +15,19 @@ it.live("boots the workerd profile over durable object storage", () =>
       config: { content: "{}" },
     })
 
-    const unauthorized = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/health")))
+    const unauthorized = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/status")))
     expect(unauthorized.status).toBe(401)
 
-    const health = yield* Effect.promise(() =>
+    const status = yield* Effect.promise(() =>
       handler(
-        new Request("http://opencode.local/api/health", {
+        new Request("http://opencode.local/api/status", {
           headers: { authorization: `Basic ${btoa("opencode:secret")}` },
         }),
       ),
     )
-    expect(health.status).toBe(200)
+    expect(status.status).toBe(200)
 
-    const body: unknown = yield* Effect.promise(() => health.json())
-    expect(body).toMatchObject({ healthy: true, version: "workerd-test" })
+    const body: unknown = yield* Effect.promise(() => status.json())
+    expect(body).toMatchObject({ version: "workerd-test" })
   }),
 )

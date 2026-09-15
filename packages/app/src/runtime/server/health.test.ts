@@ -17,11 +17,10 @@ describe("checkServerHealth", () => {
     const headers: Array<string | null> = []
     const fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
       headers.push(new Headers(init?.headers).get("authorization"))
-      return Response.json({ healthy: true, version: "2.0.0" })
+      return Response.json({ version: "2.0.0", pid: 1, urls: [server.url] })
     }) as typeof globalThis.fetch
 
-    const legacy = { ...server, username: "legacy", password }
-    expect(await checkServerHealth(legacy, fetch)).toEqual({ healthy: true, version: "2.0.0" })
+    expect(await checkServerHealth({ ...server, password }, fetch)).toEqual({ healthy: true, version: "2.0.0" })
     expect(headers).toEqual([password ? `Basic ${btoa(`opencode:${password}`)}` : null])
   })
 
@@ -29,7 +28,7 @@ describe("checkServerHealth", () => {
     let request: URL | undefined
     const fetch = (async (input: RequestInfo | URL) => {
       request = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
-      return new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
+      return new Response(JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       })
@@ -38,27 +37,7 @@ describe("checkServerHealth", () => {
     const result = await checkServerHealth(server, fetch)
 
     expect(result).toEqual({ healthy: true, version: "1.2.3" })
-    expect(request?.pathname).toBe("/api/health")
-  })
-
-  test("identifies a V1 server without a version as incompatible", async () => {
-    const requests: string[] = []
-    const fetch = (async (input: RequestInfo | URL) => {
-      const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
-      requests.push(url.pathname)
-      return new Response(
-        JSON.stringify(url.pathname === "/global/health" ? { version: "1.18.15" } : { healthy: true }),
-        {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        },
-      )
-    }) as unknown as typeof globalThis.fetch
-
-    const result = await checkServerHealth(server, fetch)
-
-    expect(result).toEqual({ healthy: false, version: "1.18.15", incompatible: true })
-    expect(requests).toEqual(["/api/health", "/global/health"])
+    expect(request?.pathname).toBe("/api/status")
   })
 
   test("allows slow servers thirty seconds by default", async () => {
@@ -73,14 +52,14 @@ describe("checkServerHealth", () => {
     })
 
     const fetch = (async () =>
-      new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
+      new Response(JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       })) as unknown as typeof globalThis.fetch
 
     await checkServerHealth(server, fetch).finally(() => {
       if (timeout) Object.defineProperty(AbortSignal, "timeout", timeout)
-      if (!timeout) Reflect.deleteProperty(AbortSignal, "timeout")
+      if (!timeout) delete (AbortSignal as Partial<typeof AbortSignal>).timeout
     })
 
     expect(timeoutMs).toBe(30_000)
@@ -121,7 +100,7 @@ describe("checkServerHealth", () => {
       timeoutMs: 10,
     }).finally(() => {
       if (timeout) Object.defineProperty(AbortSignal, "timeout", timeout)
-      if (!timeout) Reflect.deleteProperty(AbortSignal, "timeout")
+      if (!timeout) delete (AbortSignal as Partial<typeof AbortSignal>).timeout
     })
 
     expect(aborted).toBe(true)
@@ -132,7 +111,7 @@ describe("checkServerHealth", () => {
     let signal: AbortSignal | undefined
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       signal = abortFromInput(input, init)
-      return new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
+      return new Response(JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       })
@@ -151,7 +130,7 @@ describe("checkServerHealth", () => {
     const fetch = (async () => {
       count += 1
       if (count < 3) throw new TypeError("network")
-      return new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
+      return new Response(JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       })

@@ -36,7 +36,6 @@ export default Runtime.handler(
               try: () =>
                 client.session.list({
                   directory: location.directory,
-                  workspace: location.workspaceID,
                   parentID: null,
                   order: "desc",
                   limit: 50,

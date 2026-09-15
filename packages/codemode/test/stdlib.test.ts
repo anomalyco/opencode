@@ -17,8 +17,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
-import { AsyncIteratorSymbol, IteratorSymbol } from "../src/interpreter/model.js"
-import { objectAssign } from "../src/stdlib/object.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
@@ -247,9 +245,10 @@ describe("RegExp", () => {
         const stored = [pattern.lastIndex, typeof pattern.lastIndex]
         const match = pattern.exec("aacd2233ab12nm444ab42")
         pattern.lastIndex = 0
-        return [stored, match[0], match.index, pattern.lastIndex, delete pattern.lastIndex]
+        return [stored, match[0], match.index, pattern.lastIndex]
       `),
-    ).toEqual([["12", "string"], "ab4", 17, 0, false])
+    ).toEqual([["12", "string"], "ab4", 17, 0])
+    expect((await error(`delete /a/.lastIndex`)).message).toContain("Cannot delete property 'lastIndex'")
   })
 
   test("exec coerces CodeMode data objects assigned to lastIndex", async () => {
@@ -395,8 +394,8 @@ describe("RegExp", () => {
     })
   })
 
-  test("regexes serialize to {} at the boundary, like JSON", async () => {
-    expect(await value(`return /a/`)).toEqual({})
+  test("regexes serialize as {} like JSON.stringify, at the boundary and inside the program", async () => {
+    expect(await value(`return [/a/, { r: /b/gi }]`)).toEqual([{}, { r: {} }])
     expect(await value(`return JSON.stringify({ r: /a/g })`)).toBe('{"r":{}}')
   })
 
@@ -522,7 +521,7 @@ describe("URL and URI helpers", () => {
       cannotParse: false,
       parsed: "https://example.test/users",
       invalidIsTypeError: true,
-      boundary: ["https://example.test/a", {}],
+      boundary: ["https://example.test/a", "q=one"],
       json: '{"url":"https://example.test/a","params":{}}',
     })
   })
@@ -716,8 +715,187 @@ describe("Set", () => {
     ).toBe(6)
   })
 
-  test("sets serialize to {} at the boundary, like JSON", async () => {
-    expect(await value(`return { s: new Set([1]) }`)).toEqual({ s: {} })
+  test("sets cross the boundary as arrays; JSON.stringify keeps {} like JS", async () => {
+    expect(await value(`return { s: new Set([1, "a", { n: 1 }, undefined]) }`)).toEqual({ s: [1, "a", { n: 1 }, null] })
+    expect(await value(`return JSON.stringify(new Set([1]))`)).toBe("{}")
+  })
+})
+
+describe("Uint8Array", () => {
+  test("constructs from a length, an array, an iterable, or another Uint8Array", async () => {
+    expect(
+      await value(`
+      const a = new Uint8Array(2)
+      const b = new Uint8Array([1, 2, 300])
+      const c = Uint8Array.from(new Set([7, 8]))
+      const d = new Uint8Array(b)
+      d[0] = 9
+      return [[...a], [...b], [...c], [...d], [...b], new Uint8Array("3").length, [...Uint8Array.of(1, "2")]]
+    `),
+    ).toEqual([[0, 0], [1, 2, 44], [7, 8], [9, 2, 44], [1, 2, 44], 3, [1, 2]])
+    expect((await error(`new Uint8Array(-1)`)).message).toContain("Invalid typed array length: -1")
+    expect((await error(`new Uint8Array(1.5)`)).message).toContain("Invalid typed array length")
+    expect((await error(`new Uint8Array(20_000_000)`)).message).toContain("Invalid array length")
+    expect((await error(`Uint8Array.from(/x/)`)).message).toContain("received a RegExp")
+  })
+
+  test("index reads and writes clamp to a byte and ignore out-of-range writes, like JS", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array(3)
+      b[0] = 300
+      b[1] = -1
+      b["2"] = "7"
+      b[5] = 9
+      b.tag = "x"
+      return [b[0], b[1], b[2], b[5], b.length, Object.keys(b), 1 in b, 5 in b, b.tag]
+    `),
+    ).toEqual([44, 255, 7, null, 3, ["0", "1", "2", "tag"], true, false, "x"])
+    expect((await error(`delete new Uint8Array(1)[0]`)).message).toContain("Cannot delete property '0'")
+    expect((await error(`Uint8Array.prototype.length`)).message).toContain("incompatible receiver")
+  })
+
+  test("iteration, spread, destructuring, and Array.from", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      const [x, ...rest] = b
+      const seen = []
+      for (const byte of b) seen.push(byte)
+      function* g() { yield* b }
+      return [x, rest, seen, [...g()], Array.from(b, (n) => n * 2), new Set(b).size, Array.isArray(b)]
+    `),
+    ).toEqual([1, [2, 3], [1, 2, 3], [1, 2, 3], [2, 4, 6], 3, false])
+  })
+
+  test("methods", async () => {
+    expect(
+      await value(`
+      const b = Uint8Array.from([1, 2, 3, 2])
+      const view = b.subarray(1, 3)
+      view.fill(9)
+      const copy = b.slice(0, 2)
+      copy[0] = 5
+      const target = new Uint8Array(4)
+      target.set([1, 2], 2)
+      target.set(b.subarray(0, 1))
+      return [
+        b.at(-1), [...b], [...copy], [...target], b.indexOf(9), b.lastIndexOf(9), b.includes(3), b.includes(2, 1),
+        b.join("-"), b.toString(), [...b.keys()], [...b.values()], [...b.entries()], [...Uint8Array.from([1, 2]).reverse()],
+      ]
+    `),
+    ).toEqual([
+      2,
+      [1, 9, 9, 2],
+      [5, 9],
+      [1, 0, 1, 2],
+      1,
+      2,
+      false,
+      true,
+      "1-9-9-2",
+      "1,9,9,2",
+      [0, 1, 2, 3],
+      [1, 9, 9, 2],
+      [
+        [0, 1],
+        [1, 9],
+        [2, 9],
+        [3, 2],
+      ],
+      [2, 1],
+    ])
+    expect((await error(`new Uint8Array(2).set([1, 2, 3])`)).message).toContain("does not fit")
+    expect((await error(`new Uint8Array(2).set([1], 2)`)).message).toContain("does not fit")
+  })
+
+  test("base64 and hex", async () => {
+    expect(
+      await value(`
+      return [
+        new Uint8Array([104, 105]).toBase64(), new Uint8Array([255, 0]).toHex(),
+        [...Uint8Array.fromBase64("aGk=")], [...Uint8Array.fromHex("ff00")],
+      ]
+    `),
+    ).toEqual(["aGk=", "ff00", [104, 105], [255, 0]])
+    expect(await error(`Uint8Array.fromBase64("!!!")`)).toMatchObject({
+      message: expect.stringContaining("SyntaxError"),
+    })
+    expect(await error(`Uint8Array.fromHex("zz")`)).toMatchObject({ message: expect.stringContaining("SyntaxError") })
+  })
+
+  test("coercion, console, JSON, and Object.prototype.toString", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2])
+      console.log(b, new Uint8Array())
+      return [String(b), b + "", +new Uint8Array([5]), Number.isNaN(Number(b)), b == "1,2", JSON.stringify(b), b.toLocaleString(), typeof b, b instanceof Uint8Array]
+    `),
+    ).toEqual(["1,2", "1,2", 5, true, true, '{"0":1,"1":2}', "[object Uint8Array]", "object", true])
+    expect((await run(`console.log(new Uint8Array([1, 2]), new Uint8Array())`)).logs).toEqual([
+      "Uint8Array(2) [1,2] Uint8Array(0) []",
+    ])
+  })
+
+  test("cannot cross the tool boundary; the error says how to encode it", async () => {
+    expect((await error(`return new Uint8Array(1)`)).message).toContain("pass text instead")
+    expect((await error(`return { deep: [new Uint8Array(1)] }`)).message).toContain("bytes.toBase64()")
+    expect(await value(`return new Uint8Array([7, 8]).toBase64()`)).toBe("Bwg=")
+  })
+})
+
+describe("TextEncoder and TextDecoder", () => {
+  test("round-trips UTF-8 and exposes the standard fields", async () => {
+    expect(
+      await value(`
+      const encoder = new TextEncoder()
+      const bytes = encoder.encode("héllo ✓")
+      const decoder = new TextDecoder()
+      return [
+        [...bytes], decoder.decode(bytes), decoder.decode(), [...encoder.encode()], encoder.encoding,
+        decoder.encoding, decoder.fatal, decoder.ignoreBOM, new TextDecoder("UTF8", { fatal: true }).fatal,
+        new TextDecoder().decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41])),
+        new TextDecoder("utf-8", { ignoreBOM: true }).decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41])),
+        new TextDecoder().decode(new Uint8Array([0xff])),
+        encoder instanceof TextEncoder, decoder instanceof TextDecoder,
+      ]
+    `),
+    ).toEqual([
+      [104, 195, 169, 108, 108, 111, 32, 226, 156, 147],
+      "héllo ✓",
+      "",
+      [],
+      "utf-8",
+      "utf-8",
+      false,
+      false,
+      true,
+      "A",
+      "\ufeffA",
+      "\ufffd",
+      true,
+      true,
+    ])
+  })
+
+  test("only UTF-8 is supported; fatal decoding rejects malformed input", async () => {
+    expect((await error(`new TextDecoder("latin1")`)).message).toContain('The "latin1" encoding is not supported')
+    expect((await error(`new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array([0xff]))`)).message).toContain(
+      "not valid utf-8",
+    )
+    expect((await error(`new TextDecoder().decode("text")`)).message).toContain(
+      "expects a Uint8Array, received a string",
+    )
+    expect((await error(`TextDecoder()`)).message).toContain("requires 'new'")
+  })
+
+  test("crypto.getRandomValues fills the given bytes in place", async () => {
+    expect(
+      await value(
+        `const b = new Uint8Array(16); const same = crypto.getRandomValues(b) === b; return [same, b.length, b.some ? 0 : Array.from(b).some((n) => n !== 0)]`,
+      ),
+    ).toEqual([true, 16, true])
+    expect((await error(`crypto.getRandomValues([1])`)).message).toContain("expects a Uint8Array, received an array")
   })
 })
 
@@ -730,7 +908,7 @@ describe("stdlib integration", () => {
     expect(await value(`const o = {}; o.constructor = 7; return o.constructor`)).toBe(7)
     expect(await value(`return new ([].constructor)(3).length`)).toBe(3)
     expect(await value(`return typeof ({}).constructor`)).toBe("function")
-    expect(await value(`return ({}).constructor.constructor`)).toBeNull()
+    expect(await value(`return ({}).constructor.constructor === Function`)).toBe(true)
   })
 
   test("new dispatches on the constructor value, not its name", async () => {
@@ -738,9 +916,9 @@ describe("stdlib integration", () => {
     expect(await value(`const make = (C) => new C([["a", 1]]); return make(Map).get("a")`)).toBe(1)
     expect(await value(`const t = { M: Map }; return new t.M() instanceof Map`)).toBe(true)
     const shadowed = await error(`const Date = 5; return new Date()`)
-    expect(shadowed.message).toStartWith("Date is not a constructor.")
+    expect(shadowed.message).toStartWith("TypeError: Date is not a constructor.")
     const fn = await error(`const f = () => 1; return new f()`)
-    expect(fn.message).toStartWith("f cannot be constructed")
+    expect(fn.message).toStartWith("TypeError: f cannot be constructed")
   })
 
   test("Object.is uses SameValue semantics", async () => {
@@ -770,13 +948,18 @@ describe("stdlib integration", () => {
       ],
     ])
     expect(await value(`const match = /a/.exec("ba"); return [Object.values(match), Object.entries(match)]`)).toEqual([
-      ["a", 1],
+      ["a", 1, "ba"],
       [
         ["0", "a"],
         ["index", 1],
+        ["input", "ba"],
       ],
     ])
-    expect(await value(`return Object.keys(Object.values({ match: /a/.exec("ba") })[0])`)).toEqual(["0", "index"])
+    expect(await value(`return Object.keys(Object.values({ match: /a/.exec("ba") })[0])`)).toEqual([
+      "0",
+      "index",
+      "input",
+    ])
   })
 
   test("Object.fromEntries accepts every supported entry collection", async () => {
@@ -849,86 +1032,6 @@ describe("stdlib integration", () => {
     expect(await value(`try { Object.assign(null, { a: 1 }); return false } catch { return true }`)).toBe(true)
   })
 
-  test("Object.assign ignores non-enumerable supported symbols without reading them", () => {
-    const target = {}
-    const reads: Array<boolean> = []
-    const source = Object.defineProperty({}, IteratorSymbol, {
-      get() {
-        reads.push(true)
-        return target
-      },
-    })
-    expect(objectAssign([target, source], { type: "CallExpression", start: 0, end: 0 })).toBe(target)
-    expect(reads).toEqual([])
-    expect(Object.hasOwn(target, IteratorSymbol)).toBe(false)
-  })
-
-  test("Object.assign ignores nested non-enumerable supported symbols during cycle checks", () => {
-    const target = {}
-    const reads: Array<boolean> = []
-    const nested = Object.defineProperty({}, IteratorSymbol, {
-      get() {
-        reads.push(true)
-        return target
-      },
-    })
-    expect(objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toBe(target)
-    expect(reads).toEqual([])
-    expect(target).toEqual({ nested })
-  })
-
-  test("Object.assign rejects cycles through supported symbols on nested arrays", () => {
-    const target = {}
-    const nested = Object.defineProperty([], IteratorSymbol, { enumerable: true, value: target })
-    expect(() => objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toThrow(
-      "Object.assign result contains a circular value.",
-    )
-    expect(Object.hasOwn(target, "nested")).toBe(false)
-  })
-
-  test("Object.assign cycle checks traverse sparse keys lazily", () => {
-    const target = {}
-    const reads: Array<boolean> = []
-    const nested = Object.defineProperties([], {
-      4294967294: { enumerable: true, value: target },
-      later: {
-        enumerable: true,
-        get() {
-          reads.push(true)
-          return null
-        },
-      },
-    })
-    expect(() => objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toThrow(
-      "Object.assign result contains a circular value.",
-    )
-    expect(reads).toEqual([])
-  })
-
-  test("Object.assign stops after a supported symbol write fails", () => {
-    const previous = () => ({ done: true })
-    const target = Object.defineProperty({}, IteratorSymbol, { value: previous })
-    const reads: Array<boolean> = []
-    const source = Object.defineProperties(
-      {},
-      {
-        [IteratorSymbol]: { enumerable: true, value: () => ({ done: false }) },
-        [AsyncIteratorSymbol]: {
-          enumerable: true,
-          get() {
-            reads.push(true)
-            return () => ({ done: true })
-          },
-        },
-      },
-    )
-    expect(() => objectAssign([target, source], { type: "CallExpression", start: 0, end: 0 })).toThrow(
-      "Object.assign could not assign property",
-    )
-    expect(Reflect.get(target, IteratorSymbol)).toBe(previous)
-    expect(reads).toEqual([])
-  })
-
   test("Object.assign rejects direct and nested cycles", async () => {
     expect(
       await value(`
@@ -998,27 +1101,6 @@ describe("stdlib integration", () => {
         return [result === target, result.left === shared, result.left === result.right, shared.count]
       `),
     ).toEqual([true, true, true, 2])
-  })
-
-  test("Object.assign traverses shared aliases once", () => {
-    const reads: Array<boolean> = []
-    const shared = Object.defineProperty({}, "value", {
-      enumerable: true,
-      get() {
-        reads.push(true)
-        return 1
-      },
-    })
-    const target = {}
-    expect(
-      objectAssign([target, { left: shared, right: shared }], {
-        type: "CallExpression",
-        start: 0,
-        end: 0,
-      }),
-    ).toBe(target)
-    expect(target).toEqual({ left: shared, right: shared })
-    expect(reads).toEqual([true])
   })
 
   test("assignment resolves and reads its left side before evaluating the right side", async () => {
@@ -1199,7 +1281,7 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     const diagnostic = await error(`return Array.from(Promise.resolve([1]))`)
     expect(diagnostic.kind).toBe("InvalidDataValue")
     expect(diagnostic.message).toContain("await")
-    expect((await error(`return Array.from(() => 1)`)).kind).toBe("InvalidDataValue")
+    expect(await value(`return Array.from((a, b) => 1)`)).toEqual([null, null])
   })
 
   test("regexes stay callable through Object.values", async () => {

@@ -3,7 +3,6 @@ import { describe, expect } from "bun:test"
 import { Money } from "@opencode/schema/money"
 import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
-import { Catalog } from "@opencode/core/catalog"
 import { Integration } from "@opencode/core/integration"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -20,14 +19,14 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
-import { catalogHost, host, integrationHost } from "./host"
+import { providerHost, host, integrationHost } from "./host"
 import { PluginTestLayer } from "./fixture"
 
 const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),
 )
-const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.node, Bus.node]), [
+const layer = AppNodeBuilder.build(LayerNode.group([Provider.node, Model.node, Integration.node, Bus.node]), [
   Location.node.replace(locationLayer),
 ])
 const it = testEffect(layer)
@@ -41,6 +40,15 @@ function required<T>(value: T | undefined): T {
   return value
 }
 
+function activate(providers: Provider.Interface) {
+  return providers.transform((editor) => {
+    for (const record of editor.list())
+      editor.update(record.provider.id, (provider) => {
+        provider.activation = "enabled"
+      })
+  })
+}
+
 // One complete Location graph behind the production plugin host. Two of these stand in for
 // two Locations that share a single models.dev snapshot instance.
 const owner = Effect.gen(function* () {
@@ -50,7 +58,8 @@ const owner = Effect.gen(function* () {
     context,
     host,
     bus: Context.get(context, Bus.Service),
-    catalog: Context.get(context, Catalog.Service),
+    providers: Context.get(context, Provider.Service),
+    models: Context.get(context, Model.Service),
     integration: Context.get(context, Integration.Service),
   }
 })
@@ -66,7 +75,7 @@ const richSnapshot = (name = "Acme") => {
         id: providerID,
         name,
         activation: "auto",
-        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+        package: "@opencode/ai/providers/openai-compatible",
         settings: { baseURL: "https://api.acme.test/v1", thinking: { type: "adaptive", display: "summarized" } },
         headers: { "x-acme": "provider" },
         body: { service_tier: "default", tags: ["stable"] },
@@ -115,18 +124,24 @@ const richSnapshot = (name = "Acme") => {
 }
 
 describe("ModelsDevPlugin", () => {
-  isolated.effect("shares one snapshot between Locations while each catalog mutates only its own copies", () =>
+  isolated.effect("shares definitions between Locations while provider and model edits own their copies", () =>
     Effect.gen(function* () {
       const { providerID, modelID, snapshot } = richSnapshot()
       const pristine = JSON.stringify(snapshot)
       const source = ModelsDev.Service.of({ get: () => Effect.succeed(snapshot), refresh: () => Effect.void })
       const first = yield* owner
       const second = yield* owner
-      for (const each of [first, second])
+      for (const each of [first, second]) {
         yield* ModelsDevPlugin.effect(each.host).pipe(
           Effect.provideService(ModelsDev.Service, source),
           Effect.provideContext(each.context),
         )
+        yield* activate(each.providers)
+      }
+
+      const definitions = required((yield* first.providers.snapshot()).records.get(providerID)).models
+      expect(definitions.get(modelID)).toBe(snapshot[0].models[0])
+      expect(required((yield* second.providers.snapshot()).records.get(providerID)).models).toBe(definitions)
 
       // The stored environment method must own its names array; the source array is shared.
       let names: readonly string[] | undefined
@@ -138,8 +153,8 @@ describe("ModelsDevPlugin", () => {
       expect(names).toEqual(snapshot[0].environment)
       expect(names).not.toBe(snapshot[0].environment)
 
-      // Catalog-owned provider records are copies, not the source's nested objects.
-      const stored = required(yield* first.catalog.provider.get(providerID))
+      // Provider-owned records are copies, not the source's nested objects.
+      const stored = required(yield* first.providers.get(providerID))
       expect(stored.settings).toEqual(snapshot[0].info.settings)
       expect(stored.settings).not.toBe(snapshot[0].info.settings)
       expect(stored.headers).not.toBe(snapshot[0].info.headers)
@@ -148,16 +163,20 @@ describe("ModelsDevPlugin", () => {
       // A later plugin in the first Location mutates existing nested values in place through the
       // production host, the way the Bedrock, Azure, and config provider plugins do.
       const scope = yield* Scope.make()
-      yield* first.host.catalog
-        .transform((catalog) => {
-          catalog.provider.update(providerID, (provider) => {
+      yield* first.host.provider
+        .transform((editor) => {
+          editor.update(providerID, (provider) => {
             required(provider.settings).baseURL = "https://override.acme.test/v1"
             required(provider.settings).thinking.type = "disabled"
             required(provider.headers)["x-acme"] = "override"
             required(provider.body).service_tier = "priority"
             required(provider.body).tags.push("override")
           })
-          catalog.model.update(providerID, modelID, (model) => {
+        })
+        .pipe(Scope.provide(scope))
+      yield* first.host.model
+        .transform((editor) => {
+          editor.update(providerID, modelID, (model) => {
             required(model.settings).reasoning.effort = "high"
             required(model.headers)["x-mode"] = "slow"
             required(model.body).options.top_k = 7
@@ -175,8 +194,8 @@ describe("ModelsDevPlugin", () => {
         })
         .pipe(Scope.provide(scope))
 
-      const mutatedProvider = required(yield* first.catalog.provider.get(providerID))
-      const mutated = required(yield* first.catalog.model.get(providerID, modelID))
+      const mutatedProvider = required(yield* first.providers.get(providerID))
+      const mutated = required(yield* first.models.get(providerID, modelID))
       expect(mutatedProvider.settings).toEqual({
         baseURL: "https://override.acme.test/v1",
         thinking: { type: "disabled", display: "summarized" },
@@ -209,7 +228,7 @@ describe("ModelsDevPlugin", () => {
       expect(mutated.time.released).toBe(5)
 
       // The sibling Location and the shared source are untouched.
-      const sibling = required(yield* second.catalog.model.get(providerID, modelID))
+      const sibling = required(yield* second.models.get(providerID, modelID))
       expect(sibling.settings).toEqual({
         baseURL: "https://models.acme.test/v1",
         thinking: { type: "adaptive", display: "summarized" },
@@ -227,13 +246,13 @@ describe("ModelsDevPlugin", () => {
       expect(sibling.cost).toEqual(snapshot[0].models[0].cost)
       expect(sibling.limit).toEqual(snapshot[0].models[0].limit)
       expect(sibling.time).toEqual(snapshot[0].models[0].time)
-      expect(required(yield* second.catalog.provider.get(providerID)).settings).toEqual(snapshot[0].info.settings)
+      expect(required(yield* second.providers.get(providerID)).settings).toEqual(snapshot[0].info.settings)
       expect(JSON.stringify(snapshot)).toBe(pristine)
 
-      // Removing the mutating transform rebuilds the first catalog from the shared source.
+      // Removing both mutating transforms replays the shared definitions.
       yield* Scope.close(scope, Exit.void)
-      expect(yield* first.catalog.model.get(providerID, modelID)).toEqual(sibling)
-      expect(required(yield* first.catalog.provider.get(providerID)).settings).toEqual(snapshot[0].info.settings)
+      expect(yield* first.models.get(providerID, modelID)).toEqual(sibling)
+      expect(required(yield* first.providers.get(providerID)).settings).toEqual(snapshot[0].info.settings)
       expect(JSON.stringify(snapshot)).toBe(pristine)
     }),
   )
@@ -255,25 +274,26 @@ describe("ModelsDevPlugin", () => {
           Effect.provideService(ModelsDev.Service, source),
           Effect.provideContext(each.context),
         )
-      expect(required(yield* first.catalog.provider.get(initial.providerID)).name).toBe("Acme")
+      expect(required(yield* first.providers.get(initial.providerID)).name).toBe("Acme")
 
       current.snapshot = refreshed.snapshot
       yield* first.bus.publish(ModelsDev.Event.Refreshed, {})
-      // Integration and catalog reloads are debounced sequentially.
+      // Integration and provider reloads are debounced sequentially.
       yield* TestClock.adjust("500 millis")
       yield* TestClock.adjust("500 millis")
       yield* TestClock.adjust("500 millis")
 
-      expect(required(yield* first.catalog.provider.get(initial.providerID)).name).toBe("Acme Refreshed")
-      expect(required(yield* second.catalog.provider.get(initial.providerID)).name).toBe("Acme")
+      expect(required(yield* first.providers.get(initial.providerID)).name).toBe("Acme Refreshed")
+      expect(required(yield* second.providers.get(initial.providerID)).name).toBe("Acme")
       expect(JSON.stringify(initial.snapshot)).toBe(pristine)
       expect(JSON.stringify(refreshed.snapshot)).toBe(JSON.stringify(richSnapshot("Acme Refreshed").snapshot))
     }),
   )
 
-  real.effect("keeps the retained model seed unchanged across catalog replay", () =>
+  real.effect("keeps the retained definition unchanged across model replay", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
       const plugins = yield* Plugin.Service
       const providerID = Provider.ID.make("acme")
       const modelID = Model.ID.make("model")
@@ -285,7 +305,7 @@ describe("ModelsDevPlugin", () => {
                 id: providerID,
                 name: "Acme",
                 activation: "auto",
-                package: Provider.aisdk("@ai-sdk/openai-compatible"),
+                package: "@opencode/ai/providers/openai-compatible",
               },
               environment: [],
               models: [
@@ -309,29 +329,31 @@ describe("ModelsDevPlugin", () => {
       })
       const pluginHost = yield* PluginHost.make(plugins)
       yield* ModelsDevPlugin.effect(pluginHost).pipe(Effect.provideService(ModelsDev.Service, modelsDev))
+      yield* activate(providers)
 
       const scope = yield* Scope.make()
-      yield* catalog
+      yield* modelState
         .transform((editor) =>
-          editor.model.update(providerID, modelID, (model) => {
+          editor.update(providerID, modelID, (model) => {
             model.variants ??= []
             model.variants.push({ id: Model.VariantID.make("configured") })
           }),
         )
         .pipe(Scope.provide(scope))
-      expect((yield* catalog.model.get(providerID, modelID))?.variants).toEqual([
+      expect((yield* modelState.get(providerID, modelID))?.variants).toEqual([
         { id: Model.VariantID.make("configured") },
       ])
 
       yield* Scope.close(scope, Exit.void)
-      expect((yield* catalog.model.get(providerID, modelID))?.variants).toEqual([])
+      expect((yield* modelState.get(providerID, modelID))?.variants).toEqual([])
     }),
   )
 
-  it.effect("keeps the shared models.dev snapshot pristine while catalog transforms mutate records in place", () =>
+  it.effect("keeps the shared snapshot pristine while provider and model transforms mutate owned records", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
       const providerID = Provider.ID.make("acme")
       const modelID = Model.ID.make("gpt-5.4")
       const snapshot = [
@@ -340,7 +362,7 @@ describe("ModelsDevPlugin", () => {
             id: providerID,
             name: "Acme",
             activation: "auto",
-            package: Provider.aisdk("@ai-sdk/openai-compatible"),
+            package: "@opencode/ai/providers/openai-compatible",
             settings: { baseURL: "https://api.acme.test/v1" },
             headers: { "x-acme": "provider" },
           },
@@ -367,7 +389,7 @@ describe("ModelsDevPlugin", () => {
       // The plugin receives the same snapshot instance every Location shares.
       yield* ModelsDevPlugin.effect(
         host({
-          catalog: catalogHost(catalog),
+          provider: providerHost(providers),
           integration: integrationHost(integrations),
         }),
       ).pipe(
@@ -377,21 +399,24 @@ describe("ModelsDevPlugin", () => {
         ),
       )
 
-      // Later plugins mutate nested provider and model records in place, as the Bedrock provider does.
-      yield* catalog.transform((draft) => {
-        draft.provider.update(providerID, (provider) => {
+      yield* activate(providers)
+      // Each stage mutates its owned records without modifying shared source definitions.
+      yield* providers.transform((draft) => {
+        draft.update(providerID, (provider) => {
           if (provider.settings) provider.settings.baseURL = "https://override.acme.test/v1"
           if (provider.headers) provider.headers["x-acme"] = "override"
         })
-        draft.model.update(providerID, modelID, (model) => {
+      })
+      yield* modelState.transform((draft) => {
+        draft.update(providerID, modelID, (model) => {
           if (model.settings) model.settings.baseURL = "https://override.models.acme.test/v1"
           model.variants.push({ id: Model.VariantID.make("configured") })
           model.capabilities.input.push("image")
         })
       })
 
-      const provider = yield* catalog.provider.get(providerID)
-      const model = yield* catalog.model.get(providerID, modelID)
+      const provider = yield* providers.get(providerID)
+      const model = yield* modelState.get(providerID, modelID)
       expect(provider?.settings?.baseURL).toBe("https://override.acme.test/v1")
       expect(provider?.headers).toEqual({ "x-acme": "override" })
       expect(model?.settings?.baseURL).toBe("https://override.models.acme.test/v1")
@@ -401,10 +426,11 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
-  it.effect("projects normalized models.dev snapshots into the catalog", () =>
+  it.effect("projects normalized definitions for available providers", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
       const providerID = Provider.ID.make("acme")
       const modelID = Model.ID.make("gpt-5.4")
       const models = ModelsDev.Service.of({
@@ -415,7 +441,7 @@ describe("ModelsDevPlugin", () => {
                 id: providerID,
                 name: "Acme",
                 activation: "auto",
-                package: Provider.aisdk("@ai-sdk/openai-compatible"),
+                package: "@opencode/ai/providers/openai-compatible",
                 settings: { baseURL: "https://api.acme.test/v1" },
               },
               environment: [],
@@ -467,7 +493,7 @@ describe("ModelsDevPlugin", () => {
                   providerID,
                   name: "GPT-5.4 Fast",
                   family: Model.Family.make("gpt"),
-                  package: Provider.aisdk("@ai-sdk/openai-compatible"),
+                  package: "@opencode/ai/providers/openai-compatible",
                   settings: { baseURL: "https://api.acme.test/v1" },
                   headers: { "x-mode": "fast" },
                   body: { service_tier: "priority" },
@@ -514,13 +540,14 @@ describe("ModelsDevPlugin", () => {
 
       yield* ModelsDevPlugin.effect(
         host({
-          catalog: catalogHost(catalog),
+          provider: providerHost(providers),
           integration: integrationHost(integrations),
         }),
       ).pipe(Effect.provideService(ModelsDev.Service, models))
+      yield* activate(providers)
 
-      const base = yield* catalog.model.get(providerID, Model.ID.make("gpt-5.4"))
-      const fast = yield* catalog.model.get(providerID, Model.ID.make("gpt-5.4-fast"))
+      const base = yield* modelState.get(providerID, Model.ID.make("gpt-5.4"))
+      const fast = yield* modelState.get(providerID, Model.ID.make("gpt-5.4-fast"))
 
       expect(base?.variants).toEqual([])
       expect(base?.body).toBeUndefined()
@@ -529,7 +556,7 @@ describe("ModelsDevPlugin", () => {
         modelID: "gpt-5.4",
         providerID: "acme",
         name: "GPT-5.4 Fast",
-        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+        package: "@opencode/ai/providers/openai-compatible",
         settings: { baseURL: "https://api.acme.test/v1" },
         headers: { "x-mode": "fast" },
         body: { service_tier: "priority" },
@@ -566,10 +593,11 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
-  it.effect("omits deprecated models from the catalog", () =>
+  it.effect("omits deprecated model definitions", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
       const providerID = Provider.ID.make("acme")
       const activeID = Model.ID.make("current")
       const deprecatedID = Model.ID.make("legacy")
@@ -591,7 +619,7 @@ describe("ModelsDevPlugin", () => {
             id: providerID,
             name: "Acme",
             activation: "auto",
-            package: Provider.aisdk("@ai-sdk/openai-compatible"),
+            package: "@opencode/ai/providers/openai-compatible",
           },
           environment: [],
           models: [
@@ -609,7 +637,7 @@ describe("ModelsDevPlugin", () => {
 
       yield* ModelsDevPlugin.effect(
         host({
-          catalog: catalogHost(catalog),
+          provider: providerHost(providers),
           integration: integrationHost(integrations),
         }),
       ).pipe(
@@ -622,18 +650,19 @@ describe("ModelsDevPlugin", () => {
         ),
       )
 
-      expect(yield* catalog.model.get(providerID, activeID)).toBeDefined()
-      expect(yield* catalog.model.get(providerID, deprecatedID)).toBeUndefined()
+      yield* activate(providers)
+      expect(yield* modelState.get(providerID, activeID)).toBeDefined()
+      expect(yield* modelState.get(providerID, deprecatedID)).toBeUndefined()
     }),
   )
 
   it.effect("registers key methods for providers with environment variables", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
       yield* ModelsDevPlugin.effect(
         host({
-          catalog: catalogHost(catalog),
+          provider: providerHost(providers),
           integration: integrationHost(integrations),
         }),
       )
@@ -664,12 +693,13 @@ describe("ModelsDevPlugin", () => {
       () =>
         Effect.gen(function* () {
           const integrations = yield* Integration.Service
-          const catalog = yield* Catalog.Service
+          const providers = yield* Provider.Service
+          const modelState = yield* Model.Service
           const providerID = Provider.ID.make("acme")
           const modelID = Model.ID.make("gpt-5.4")
           yield* ModelsDevPlugin.effect(
             host({
-              catalog: catalogHost(catalog),
+              provider: providerHost(providers),
               integration: integrationHost(integrations),
             }),
           ).pipe(
@@ -683,7 +713,7 @@ describe("ModelsDevPlugin", () => {
                         id: providerID,
                         name: "Acme",
                         activation: "auto",
-                        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+                        package: "@opencode/ai/providers/openai-compatible",
                         settings: { baseURL: "https://${ACME_HOST}/${UNDECLARED_HOST}/v1" },
                       },
                       environment: ["ACME_HOST", "ACME_MODEL_PATH", "ACME_API_KEY"],
@@ -710,10 +740,11 @@ describe("ModelsDevPlugin", () => {
             ),
           )
 
-          expect((yield* catalog.provider.get(providerID))?.settings?.baseURL).toBe(
+          yield* activate(providers)
+          expect((yield* providers.get(providerID))?.settings?.baseURL).toBe(
             "https://${ACME_HOST}/${UNDECLARED_HOST}/v1",
           )
-          expect((yield* catalog.model.get(providerID, modelID))?.settings?.baseURL).toBe(
+          expect((yield* modelState.get(providerID, modelID))?.settings?.baseURL).toBe(
             "https://${ACME_HOST}/${ACME_MODEL_PATH}/v1",
           )
         }),
@@ -723,7 +754,8 @@ describe("ModelsDevPlugin", () => {
   it.effect("copies model request bodies without reinterpreting literal __proto__ keys", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
       const providerID = Provider.ID.make("acme")
       const modelID = Model.ID.make("gpt-5.4")
       // A JSON body may legitimately contain a "__proto__" key; both copy stages must keep it as an own property.
@@ -733,7 +765,7 @@ describe("ModelsDevPlugin", () => {
           id: providerID,
           name: "Acme",
           activation: "auto",
-          package: Provider.aisdk("@ai-sdk/openai-compatible"),
+          package: "@opencode/ai/providers/openai-compatible",
         },
         environment: [],
         models: [
@@ -755,7 +787,7 @@ describe("ModelsDevPlugin", () => {
       } satisfies ModelsDev.Snapshot
       yield* ModelsDevPlugin.effect(
         host({
-          catalog: catalogHost(catalog),
+          provider: providerHost(providers),
           integration: integrationHost(integrations),
         }),
       ).pipe(
@@ -765,7 +797,8 @@ describe("ModelsDevPlugin", () => {
         ),
       )
 
-      const copied = (yield* catalog.model.get(providerID, modelID))?.body
+      yield* activate(providers)
+      const copied = (yield* modelState.get(providerID, modelID))?.body
       expect(copied).not.toBe(body)
       expect(Object.hasOwn(copied ?? {}, "__proto__")).toBe(true)
       expect(Object.keys(copied ?? {})).toEqual(["__proto__", "keep"])
@@ -777,7 +810,7 @@ describe("ModelsDevPlugin", () => {
   it.effect("omits legacy provider aliases", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
       const snapshots = [
         ["azure", "Azure", "AZURE_API_KEY", "@ai-sdk/azure"],
         ["azure-cognitive-services", "Azure Cognitive Services", "AZURE_COGNITIVE_SERVICES_API_KEY", "@ai-sdk/azure"],
@@ -801,7 +834,7 @@ describe("ModelsDevPlugin", () => {
 
       yield* ModelsDevPlugin.effect(
         host({
-          catalog: catalogHost(catalog),
+          provider: providerHost(providers),
           integration: integrationHost(integrations),
         }),
       ).pipe(
@@ -814,10 +847,10 @@ describe("ModelsDevPlugin", () => {
         ),
       )
 
-      expect(yield* catalog.provider.get(Provider.ID.azure)).toBeDefined()
-      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex"))).toBeDefined()
-      expect(yield* catalog.provider.get(Provider.ID.make("azure-cognitive-services"))).toBeUndefined()
-      expect(yield* catalog.provider.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
+      expect(yield* providers.get(Provider.ID.azure)).toBeDefined()
+      expect(yield* providers.get(Provider.ID.make("google-vertex"))).toBeDefined()
+      expect(yield* providers.get(Provider.ID.make("azure-cognitive-services"))).toBeUndefined()
+      expect(yield* providers.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toMatchObject({
         methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_API_KEY"] }],
@@ -830,14 +863,14 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
-  it.effect("advertises only key-bearing Google Vertex environment variables", () =>
+  it.effect("advertises only credential-bearing environment variables", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
 
       yield* ModelsDevPlugin.effect(
         host({
-          catalog: catalogHost(catalog),
+          provider: providerHost(providers),
           integration: integrationHost(integrations),
         }),
       ).pipe(
@@ -848,10 +881,20 @@ describe("ModelsDevPlugin", () => {
               Effect.succeed([
                 {
                   info: {
+                    id: Provider.ID.make("cloudflare-workers-ai"),
+                    name: "Cloudflare Workers AI",
+                    activation: "auto",
+                    package: "@opencode/ai/providers/cloudflare-workers-ai",
+                  },
+                  environment: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"],
+                  models: [],
+                },
+                {
+                  info: {
                     id: Provider.ID.make("google-vertex"),
                     name: "Google Vertex",
                     activation: "auto",
-                    package: Provider.aisdk("@ai-sdk/google-vertex"),
+                    package: "@opencode/ai/providers/google-vertex",
                   },
                   environment: ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION", "GOOGLE_APPLICATION_CREDENTIALS"],
                   models: [],
@@ -867,21 +910,41 @@ describe("ModelsDevPlugin", () => {
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toMatchObject({
         methods: [{ type: "key" }, { type: "env", names: ["GOOGLE_VERTEX_API_KEY"] }],
       })
+      expect(yield* integrations.get(Integration.ID.make("cloudflare-workers-ai"))).toMatchObject({
+        methods: [
+          { type: "key" },
+          {
+            type: "env",
+            names: ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"],
+          },
+        ],
+      })
+      yield* withEnv({ CLOUDFLARE_ACCOUNT_ID: "account", CLOUDFLARE_API_KEY: "token" }, () =>
+        integrations.connection
+          .active(Integration.ID.make("cloudflare-workers-ai"))
+          .pipe(
+            Effect.tap((connection) =>
+              Effect.sync(() => expect(connection).toEqual({ type: "env", name: "CLOUDFLARE_API_KEY" })),
+            ),
+          ),
+      )
     }),
   )
 
   it.effect("converts reasoning options into settings variants", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
       const integrations = yield* Integration.Service
       yield* ModelsDevPlugin.effect(
         host({
-          catalog: catalogHost(catalog),
+          provider: providerHost(providers),
           integration: integrationHost(integrations),
         }),
       )
 
-      const model = yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-reasoning"))
+      yield* activate(providers)
+      const model = yield* modelState.get(Provider.ID.openai, Model.ID.make("gpt-reasoning"))
       expect(model?.variants?.map((variant) => variant.id)).toEqual([
         Model.VariantID.make("low"),
         Model.VariantID.make("high"),
@@ -903,7 +966,7 @@ describe("ModelsDevPlugin", () => {
         },
       })
 
-      const mode = yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-reasoning-high"))
+      const mode = yield* modelState.get(Provider.ID.openai, Model.ID.make("gpt-reasoning-high"))
       expect(mode).toMatchObject({
         id: "gpt-reasoning-high",
         name: "GPT Reasoning High",
@@ -915,23 +978,23 @@ describe("ModelsDevPlugin", () => {
         Model.VariantID.make("high"),
       ])
 
-      const pro = yield* catalog.model.get(Provider.ID.openai, Model.ID.make("gpt-reasoning-pro"))
+      const pro = yield* modelState.get(Provider.ID.openai, Model.ID.make("gpt-reasoning-pro"))
       expect(pro).toMatchObject({
         id: "gpt-reasoning-pro",
         body: { reasoning: { mode: "pro" } },
       })
 
-      const budgetModel = yield* catalog.model.get(Provider.ID.anthropic, Model.ID.make("claude-budget"))
+      const budgetModel = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-budget"))
       expect(budgetModel?.variants).toContainEqual({
         id: Model.VariantID.make("high"),
-        settings: { thinking: { type: "enabled", budgetTokens: 16000 } },
+        settings: { thinking: { type: "enabled", budgetTokens: 32000 } },
       })
       expect(budgetModel?.variants).toContainEqual({
         id: Model.VariantID.make("max"),
-        settings: { thinking: { type: "enabled", budgetTokens: 31999 } },
+        settings: { thinking: { type: "enabled", budgetTokens: 63999 } },
       })
 
-      const anthropicEffortModel = yield* catalog.model.get(Provider.ID.anthropic, Model.ID.make("claude-opus-4.7"))
+      const anthropicEffortModel = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-opus-4.7"))
       expect(anthropicEffortModel?.variants).toEqual([
         { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
         {
@@ -940,7 +1003,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const anthropicToggleModel = yield* catalog.model.get(Provider.ID.anthropic, Model.ID.make("claude-toggle"))
+      const anthropicToggleModel = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-toggle"))
       expect(anthropicToggleModel?.variants).toEqual([
         { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
         {
@@ -949,13 +1012,19 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const opus45 = yield* catalog.model.get(Provider.ID.anthropic, Model.ID.make("claude-opus-4-5"))
+      const opus45 = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-opus-4-5"))
       expect(opus45?.variants).toEqual([
-        { id: Model.VariantID.make("low"), settings: { effort: "low" } },
-        { id: Model.VariantID.make("high"), settings: { effort: "high" } },
+        {
+          id: Model.VariantID.make("low"),
+          settings: { effort: "low", thinking: { type: "enabled", budgetTokens: 8191 } },
+        },
+        {
+          id: Model.VariantID.make("high"),
+          settings: { effort: "high", thinking: { type: "enabled", budgetTokens: 8191 } },
+        },
       ])
 
-      const grok = yield* catalog.model.get(Provider.ID.make("xai"), Model.ID.make("grok-4.5"))
+      const grok = yield* modelState.get(Provider.ID.make("xai"), Model.ID.make("grok-4.5"))
       expect(grok?.variants).toEqual(
         ["low", "medium", "high"].map((id) => ({
           id: Model.VariantID.make(id),
@@ -963,7 +1032,7 @@ describe("ModelsDevPlugin", () => {
         })),
       )
 
-      const minimax = yield* catalog.model.get(Provider.ID.make("opencode-go"), Model.ID.make("minimax-m3"))
+      const minimax = yield* modelState.get(Provider.ID.make("opencode-go"), Model.ID.make("minimax-m3"))
       expect(minimax?.variants).toEqual([
         { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
         {
@@ -972,13 +1041,13 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const toggle = yield* catalog.model.get(Provider.ID.make("alibaba"), Model.ID.make("toggle-only"))
+      const toggle = yield* modelState.get(Provider.ID.make("alibaba"), Model.ID.make("toggle-only"))
       expect(toggle?.variants).toEqual([
         { id: Model.VariantID.make("none"), settings: { enableThinking: false } },
         { id: Model.VariantID.make("thinking"), settings: { enableThinking: true } },
       ])
 
-      const combined = yield* catalog.model.get(Provider.ID.make("alibaba"), Model.ID.make("toggle-budget"))
+      const combined = yield* modelState.get(Provider.ID.make("alibaba"), Model.ID.make("toggle-budget"))
       expect(combined?.variants).toEqual([
         { id: Model.VariantID.make("none"), settings: { enableThinking: false } },
         {
@@ -991,7 +1060,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const gateway = yield* catalog.model.get(Provider.ID.make("vercel"), Model.ID.make("alibaba/qwen-toggle"))
+      const gateway = yield* modelState.get(Provider.ID.make("vercel"), Model.ID.make("alibaba/qwen-toggle"))
       expect(gateway?.variants).toEqual([
         { id: Model.VariantID.make("none"), settings: { enableThinking: false } },
         {
@@ -1004,7 +1073,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const gatewayNova = yield* catalog.model.get(Provider.ID.make("vercel"), Model.ID.make("amazon/nova-2-lite"))
+      const gatewayNova = yield* modelState.get(Provider.ID.make("vercel"), Model.ID.make("amazon/nova-2-lite"))
       expect(gatewayNova?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
@@ -1020,7 +1089,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const gatewayFallback = yield* catalog.model.get(
+      const gatewayFallback = yield* modelState.get(
         Provider.ID.make("vercel"),
         Model.ID.make("deepseek/deepseek-toggle"),
       )
@@ -1039,13 +1108,13 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const openrouter = yield* catalog.model.get(Provider.ID.make("openrouter"), Model.ID.make("openrouter-toggle"))
+      const openrouter = yield* modelState.get(Provider.ID.make("openrouter"), Model.ID.make("openrouter-toggle"))
       expect(openrouter?.variants).toEqual([
         { id: Model.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
         { id: Model.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
       ])
 
-      const google = yield* catalog.model.get(Provider.ID.make("google"), Model.ID.make("gemini-2.5-flash"))
+      const google = yield* modelState.get(Provider.ID.make("google"), Model.ID.make("gemini-2.5-flash"))
       expect(google?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
@@ -1061,7 +1130,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const vertex = yield* catalog.model.get(Provider.ID.make("google-vertex"), Model.ID.make("gemini-2.5-flash-lite"))
+      const vertex = yield* modelState.get(Provider.ID.make("google-vertex"), Model.ID.make("gemini-2.5-flash-lite"))
       expect(vertex?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
@@ -1077,26 +1146,26 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const bedrock = yield* catalog.model.get(
+      const bedrock = yield* modelState.get(
         Provider.ID.make("amazon-bedrock"),
         Model.ID.make("us.amazon.nova-2-lite-v1:0"),
       )
       expect(bedrock?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
-          settings: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } },
+          body: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } },
         },
         {
           id: Model.VariantID.make("low"),
-          settings: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } },
+          body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } } },
         },
         {
           id: Model.VariantID.make("high"),
-          settings: { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } },
+          body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } } },
         },
       ])
 
-      const sapGemini = yield* catalog.model.get(Provider.ID.make("sap-ai-core"), Model.ID.make("gemini-2.5-flash"))
+      const sapGemini = yield* modelState.get(Provider.ID.make("sap-ai-core"), Model.ID.make("gemini-2.5-flash"))
       expect(sapGemini?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
@@ -1112,7 +1181,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const sapNova = yield* catalog.model.get(Provider.ID.make("sap-ai-core"), Model.ID.make("amazon--nova-lite"))
+      const sapNova = yield* modelState.get(Provider.ID.make("sap-ai-core"), Model.ID.make("amazon--nova-lite"))
       expect(sapNova?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
@@ -1134,7 +1203,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const sapCohere = yield* catalog.model.get(
+      const sapCohere = yield* modelState.get(
         Provider.ID.make("sap-ai-core"),
         Model.ID.make("cohere--command-a-reasoning"),
       )
@@ -1153,7 +1222,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const sapAnthropicEffort = yield* catalog.model.get(
+      const sapAnthropicEffort = yield* modelState.get(
         Provider.ID.make("sap-ai-core"),
         Model.ID.make("anthropic--claude-4.7-opus"),
       )
@@ -1171,7 +1240,7 @@ describe("ModelsDevPlugin", () => {
         },
       ])
 
-      const sapAnthropicBudget = yield* catalog.model.get(
+      const sapAnthropicBudget = yield* modelState.get(
         Provider.ID.make("sap-ai-core"),
         Model.ID.make("anthropic--claude-4-sonnet"),
       )

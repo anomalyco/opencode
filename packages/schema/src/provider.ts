@@ -3,6 +3,7 @@ export * as Provider from "./provider.js"
 import { Effect, Schema } from "effect"
 import { Integration } from "./integration.js"
 import { optional, PositiveInt, statics } from "./schema.js"
+import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Provider.ID"),
@@ -22,6 +23,9 @@ export const ID = Schema.String.pipe(
 )
 export type ID = typeof ID.Type
 
+const Updated = ephemeral({ type: "provider.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
+
 export const Package = Schema.String
 export type Package = typeof Package.Type
 
@@ -33,6 +37,10 @@ export const Compaction = Schema.Union([
   Schema.Struct({ mode: Schema.Literal("local") }),
   Schema.Struct({ mode: Schema.Literal("provider"), threshold: PositiveInt.pipe(optional) }),
 ]).annotate({ identifier: "Provider.Compaction" })
+
+/** "websocket" on a route without a WebSocket channel warns and falls back to HTTP. */
+export const Transport = Schema.Literals(["http", "websocket"]).annotate({ identifier: "Provider.Transport" })
+export type Transport = typeof Transport.Type
 
 export const Overlays = {
   settings: Schema.Record(Schema.String, Schema.Any).pipe(optional),
@@ -59,8 +67,8 @@ export const Info = Schema.Struct({
   activation: Activation,
   package: Package,
   compaction: Compaction.pipe(optional),
-  /** Session WebSocket policy for routes that support it; omitted means disabled. */
-  websocket: Schema.Boolean.pipe(optional),
+  /** Session transport for this provider's models; omitted means HTTP. */
+  transport: Transport.pipe(optional),
   ...Overlays,
 })
   .annotate({ identifier: "Provider.Info" })

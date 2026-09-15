@@ -10,7 +10,7 @@ network. Its native types and methods are generated from the same contract as th
 ## Install
 
 ```sh
-bun add @opencode/client@beta
+bun add @opencode/client
 ```
 
 ## Create a client
@@ -156,7 +156,7 @@ const client = OpenCode.make({
   headers: Service.headers(endpoint),
 })
 
-const health = await client.health.get()
+const status = await client.server.status()
 ```
 
 `Service.ensure()` accepts an optional registration file, version, service

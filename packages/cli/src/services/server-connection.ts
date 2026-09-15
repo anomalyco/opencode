@@ -29,7 +29,7 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     } satisfies Endpoint
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const health = yield* Effect.tryPromise({
-      try: () => client.health.get({ signal: AbortSignal.timeout(5_000) }),
+      try: () => client.server.status({ signal: AbortSignal.timeout(5_000) }),
       catch: (cause) => connectError(endpoint, cause),
     })
     if (health.version !== OPENCODE_VERSION)

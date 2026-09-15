@@ -131,7 +131,7 @@ export function locationKey(location: LocationRef) {
 }
 
 function locationQuery(ref: LocationRef) {
-  return { directory: ref.directory, workspace: ref.workspaceID }
+  return { directory: ref.directory }
 }
 
 function formRequestOptions(sessionID: string, ref?: LocationRef) {
@@ -139,7 +139,6 @@ function formRequestOptions(sessionID: string, ref?: LocationRef) {
   return {
     headers: {
       "x-opencode-directory": encodeURIComponent(ref.directory),
-      ...(ref.workspaceID ? { "x-opencode-workspace": ref.workspaceID } : {}),
     },
   }
 }
@@ -253,6 +252,7 @@ export function createData(config: CreateDataInput) {
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
+  const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -261,6 +261,7 @@ export function createData(config: CreateDataInput) {
 
   function removePending(sessionID: string, inboxID?: string) {
     if (!inboxID) return
+    pendingUpdates.get(sessionID)?.set(inboxID, undefined)
     if (store.session.pending[sessionID]?.some((item) => item.id === inboxID))
       setStore(
         "session",
@@ -310,6 +311,7 @@ export function createData(config: CreateDataInput) {
   function updatePending(sessionID: string, inboxID: string, delivery: SessionInbox.Delivery) {
     const index = store.session.pending[sessionID]?.findIndex((item) => item.id === inboxID) ?? -1
     const item = store.session.pending[sessionID]?.[index]
+    pendingUpdates.get(sessionID)?.set(inboxID, item ? { ...item, delivery } : delivery)
     if (index < 0 || !item || item.delivery === delivery) return
     setStore("session", "pending", sessionID, index, { ...item, delivery })
   }
@@ -390,8 +392,8 @@ export function createData(config: CreateDataInput) {
     message.update(item.sessionID, (draft, index) => {
       const row =
         item.type === "user"
-          ? { id: item.id, type: "user" as const, ...item.payload, time: { created: item.timeCreated } }
-          : { id: item.id, type: "synthetic" as const, ...item.payload, time: { created: item.timeCreated } }
+          ? { id: item.id, type: "user" as const, ...item.payload, time: { created: item.time.created } }
+          : { id: item.id, type: "synthetic" as const, ...item.payload, time: { created: item.time.created } }
       const position = index.get(item.id)
       if (position === undefined) return message.append(draft, index, row)
       draft[position] = row
@@ -672,7 +674,7 @@ export function createData(config: CreateDataInput) {
         })
         refresh(() =>
           api()
-            .session.message({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
+            .session.message.get({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
             .then((item) => {
               message.update(event.data.sessionID, (draft, index) => {
                 const position = index.get(item.id)
@@ -727,7 +729,6 @@ export function createData(config: CreateDataInput) {
           const explicit = event.data.adopted?.includes(info.projectID)
           const directory = explicit ? store.project.info[info.projectID]?.canonical : info.location.directory
           if (!directory) {
-            if (info.location.workspaceID) continue
             result.session.invalidate(sessionID)
             refresh(() => result.session.sync(sessionID))
             continue
@@ -736,7 +737,6 @@ export function createData(config: CreateDataInput) {
             {
               projectID: info.projectID,
               directory,
-              workspaceID: info.location.workspaceID,
             },
             event.data,
           )
@@ -772,12 +772,14 @@ export function createData(config: CreateDataInput) {
       }
       case "session.inbox.enqueued": {
         outbox.delete(event.data.inboxID)
-        admitLocal({
+        const item = {
           id: event.data.inboxID,
           sessionID: event.data.sessionID,
-          timeCreated: event.created,
+          time: { created: event.created },
           ...event.data.item,
-        })
+        }
+        pendingUpdates.get(item.sessionID)?.set(item.id, item)
+        admitLocal(item)
         if (event.data.item.type === "compaction") {
           const active = compacting.get(event.data.sessionID)
           active?.observed.add(event.data.inboxID)
@@ -1028,6 +1030,18 @@ export function createData(config: CreateDataInput) {
           if (currentAssistant) currentAssistant.retry = undefined
         })
         if (event.type === "session.execution.interrupted" && event.data.reason === "shutdown") return
+        // Mirror the projected idle marker so turn boundaries match before the next message read.
+        message.insert(event.data.sessionID, {
+          id: messageIDFromEvent(event.id),
+          type: "idle",
+          outcome:
+            event.type === "session.execution.succeeded"
+              ? "succeeded"
+              : event.type === "session.execution.failed"
+                ? "failed"
+                : "interrupted",
+          time: { created: event.created },
+        })
         // An event can overtake the first read; queue a revalidation when that read is still active.
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
@@ -1178,10 +1192,13 @@ export function createData(config: CreateDataInput) {
     if (!event.location) return
     const location = event.location
     switch (event.type) {
-      case "catalog.updated":
-        result.location.model.invalidate(location)
+      case "provider.updated":
         result.location.provider.invalidate(location)
-        refresh(() => Promise.all([result.location.model.sync(location), result.location.provider.sync(location)]))
+        refresh(() => result.location.provider.sync(location))
+        break
+      case "model.updated":
+        result.location.model.invalidate(location)
+        refresh(() => result.location.model.sync(location))
         break
       case "agent.updated":
         result.location.agent.invalidate(location)
@@ -1293,7 +1310,7 @@ export function createData(config: CreateDataInput) {
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
-    const ref = { directory: response.location.directory, workspaceID: response.location.workspaceID }
+    const ref = { directory: response.location.directory }
     return {
       location: response.location,
       data: Object.fromEntries(response.data.map((info) => [info.id, { ...info, location: ref }])),
@@ -1367,23 +1384,40 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
-            const pending = await api().session.inbox.list({ sessionID })
-            // A positive read acknowledges admission even when its SSE echo is delayed.
-            pending.forEach((item) => outbox.delete(item.id))
-            // Compactions also coalesce by Session, not just by the proposed ID.
-            if (pending.some((item) => item.type === "compaction"))
-              store.session.pending[sessionID]
-                ?.filter((item) => item.type === "compaction")
-                .forEach((item) => outbox.delete(item.id))
-            // Keep optimistic rows still awaiting their echo: this fetch may
-            // have raced ahead of an in-flight admission the server does not
-            // know about yet.
-            const inflight = (store.session.pending[sessionID] ?? []).filter((item) => outbox.has(item.id))
-            const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
-            batch(() => {
-              setStore("session", "pending", sessionID, reconcile(merged))
-              merged.forEach(materializeInboxMessage)
-            })
+            const updates = new Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>()
+            pendingUpdates.set(sessionID, updates)
+            try {
+              const snapshot = await api().session.inbox.list({ sessionID })
+              // Events can overtake this HTTP response on a remote connection.
+              // Reconcile them before an older snapshot can resurrect delivered input.
+              const current = new Map(snapshot.map((item) => [item.id, item]))
+              updates.forEach((item, id) => {
+                if (item === undefined) current.delete(id)
+                else if (typeof item === "string") {
+                  const existing = current.get(id)
+                  if (existing) current.set(id, { ...existing, delivery: item })
+                } else current.set(id, item)
+              })
+              const pending = [...current.values()]
+              // A positive read acknowledges admission even when its SSE echo is delayed.
+              pending.forEach((item) => outbox.delete(item.id))
+              // Compactions also coalesce by Session, not just by the proposed ID.
+              if (pending.some((item) => item.type === "compaction"))
+                store.session.pending[sessionID]
+                  ?.filter((item) => item.type === "compaction")
+                  .forEach((item) => outbox.delete(item.id))
+              // Keep optimistic rows still awaiting their echo: this fetch may
+              // have raced ahead of an in-flight admission the server does not
+              // know about yet.
+              const inflight = (store.session.pending[sessionID] ?? []).filter((item) => outbox.has(item.id))
+              const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
+              batch(() => {
+                setStore("session", "pending", sessionID, reconcile(merged))
+                merged.forEach(materializeInboxMessage)
+              })
+            } finally {
+              if (pendingUpdates.get(sessionID) === updates) pendingUpdates.delete(sessionID)
+            }
           })
         },
         invalidate(sessionID: string) {
@@ -1457,7 +1491,7 @@ export function createData(config: CreateDataInput) {
           admitLocal({
             id,
             sessionID: input.sessionID,
-            timeCreated: Date.now(),
+            time: { created: Date.now() },
             type: "compaction",
             delivery: "steer",
             payload: {},
@@ -1508,7 +1542,7 @@ export function createData(config: CreateDataInput) {
           admitLocal({
             id,
             sessionID: request.sessionID,
-            timeCreated: Date.now(),
+            time: { created: Date.now() },
             type: "user",
             delivery: request.delivery ?? "steer",
             // Files and skills stay off the optimistic row: their durable
@@ -1713,7 +1747,6 @@ export function createData(config: CreateDataInput) {
               })
               const location = {
                 directory: response.location.directory,
-                workspaceID: response.location.workspaceID,
               }
               const locationID = locationKey(location)
               setStore("session", "form", sessionID, [
@@ -1802,7 +1835,7 @@ export function createData(config: CreateDataInput) {
           if (!store.location[key]) setStore("location", key, {})
           setStore("location", key, "info", location)
           if (!ref) {
-            setDefaultLocation({ directory: location.directory, workspaceID: location.workspaceID })
+            setDefaultLocation({ directory: location.directory })
           }
         })
       },
@@ -1845,7 +1878,7 @@ export function createData(config: CreateDataInput) {
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
       config: locationResource("config", async (location) => ({
-        location: { directory: location.directory, workspaceID: location.workspace },
+        location: { directory: location.directory },
         data: await api().config.get({ location }),
       })),
       integration: locationResource("integration", (location) => api().integration.list({ location })),

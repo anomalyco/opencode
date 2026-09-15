@@ -52,9 +52,9 @@ const server = Bun.serve({
       await writeFile(registration + ".prepared", JSON.stringify(handoff))
       return Response.json({ handoff })
     }
-    if (pathname !== "/api/health") return new Response(null, { status: 404 })
+    if (pathname !== "/api/status") return new Response(null, { status: 404 })
     requests += 1
-    if (mode === "starting") await writeFile(registration + ".health-request", "")
+    if (mode === "starting") await writeFile(registration + ".status-request", "")
     if (mode === "hanging") {
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
@@ -64,12 +64,11 @@ const server = Bun.serve({
       while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)
       return new Response(null, { status: 503 })
     }
-    if (mode === "legacy") return Response.json({ healthy: true })
     if (mode === "starting" && !(await Bun.file(registration + ".release").exists()))
-      return Response.json({ healthy: true, version, pid: process.pid }, { status: 503 })
-    if (mode === "failed-owner") return Response.json({ healthy: true, version, pid: process.pid }, { status: 500 })
-    if (mode === "starting" || mode === "graceful") return Response.json({ healthy: true, version, pid: process.pid })
-    return Response.json({ healthy: true, version, pid: process.pid })
+      return Response.json({ version, pid: process.pid, urls: [server.url.toString()] }, { status: 503 })
+    if (mode === "failed-owner")
+      return Response.json({ version, pid: process.pid, urls: [server.url.toString()] }, { status: 500 })
+    return Response.json({ version, pid: process.pid, urls: [server.url.toString()] })
   },
 })
 
@@ -77,7 +76,7 @@ await writeFile(
   registration + ".tmp",
   JSON.stringify({
     id,
-    version: mode === "legacy" ? undefined : version,
+    version,
     url: server.url.toString(),
     pid: process.pid,
     password: "private",

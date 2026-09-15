@@ -51,10 +51,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
           const session = yield* ctx.session
             .get({ sessionID: input.sessionID })
             .pipe(Effect.mapError(() => call.error("unavailable", "Session not found.", {})))
-          if (
-            session.location.directory !== ctx.location.directory ||
-            session.location.workspaceID !== ctx.location.workspaceID
-          )
+          if (session.location.directory !== ctx.location.directory)
             return yield* Effect.fail(call.error("unavailable", "Session belongs to another location.", {}))
           const browser = yield* Effect.acquireRelease(
             Effect.gen(function* () {

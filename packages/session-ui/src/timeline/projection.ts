@@ -16,7 +16,7 @@ export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
 
 export type ReasoningMode = "hidden" | "compact" | "full"
 
-type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" }>
+type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" | "idle" }>
 type Entry = { type: "assistant"; message: SessionMessageAssistant } | { type: "notice"; message: Notice }
 type Content = SessionMessageAssistant["content"][number]
 type GroupRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
@@ -271,7 +271,7 @@ export namespace Timeline {
             detail,
             new Set(
               messages
-                .filter((message) => message.type === "compaction" && timelineNoticeRequired(message))
+                .filter((message) => message.type === "compaction" || message.type === "model-switched")
                 .map((message) => message.id),
             ),
           )
@@ -415,13 +415,13 @@ function shellFailed(message: SessionMessageShell) {
   )
 }
 
-function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, required: ReadonlySet<string>) {
+function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, separate: ReadonlySet<string>) {
   return rows.reduce<TimelineRow.TimelineRow[]>((result, row) => {
     const previous = result.at(-1)
     const current =
       ((row._tag === "Notice" && detail.notices.placement === "grouped") ||
         (row._tag === "Shell" && detail.shell.placement === "grouped")) &&
-      !required.has(row.messageID)
+      !separate.has(row.messageID)
         ? new TimelineRow.AssistantPart({
             userMessageID: row.userMessageID,
             previousAssistantPart: previous?._tag === "AssistantPart",
@@ -763,7 +763,8 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function isNotice(message: SessionMessageInfo): message is Notice {
-  if (message.type === "user" || message.type === "assistant" || message.type === "shell") return false
+  if (message.type === "user" || message.type === "assistant" || message.type === "shell" || message.type === "idle")
+    return false
   if (message.type !== "synthetic") return true
   return !!message.description?.trim() || timelineNoticeRequired(message)
 }

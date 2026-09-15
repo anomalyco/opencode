@@ -169,7 +169,7 @@ describe("Amazon Bedrock Mantle provider", () => {
           summary: [{ type: "summary_text", text: "Considering." }],
           encrypted_content: "mantle-state",
         },
-        { role: "user", content: [{ type: "input_text", text: "Continue." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Continue." }] },
       ])
     }),
   )

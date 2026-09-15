@@ -52,15 +52,6 @@ export const settings: Setting[] = [
     keywords: ["side panel"],
   },
   {
-    title: "Terminal",
-    category: "Session",
-    path: ["session", "terminal"],
-    default: process.platform !== "win32",
-    values: [false, true],
-    labels: ["off", "on"],
-    keywords: ["pty", "shell", "terminal pane"],
-  },
-  {
     title: "Scrollbar",
     category: "Session",
     path: ["session", "scrollbar"],
@@ -119,6 +110,15 @@ export const settings: Setting[] = [
     values: ["launch", "inherit"],
     labels: ["launch directory", "active session"],
     keywords: ["directory", "cwd", "inherit"],
+  },
+  {
+    title: "Permissions",
+    category: "Session",
+    path: ["session", "permissions"],
+    default: "prompt",
+    values: ["prompt", "autoaccept"],
+    labels: ["prompt", "auto accept"],
+    keywords: ["approve", "accept", "permission requests"],
   },
   {
     title: "Enabled",

@@ -100,7 +100,7 @@ function fixture(
 }
 
 const installs = [
-  { method: "npm", command: ["npm", "install", "--global", "@opencode/cli@2.3.4-beta.1"] },
+  { method: "npm", command: ["npm", "install", "--global", "--force", "@opencode/cli@2.3.4-beta.1"] },
   {
     method: "pnpm",
     command: ["pnpm", "add", "--global", "--allow-build=@opencode/cli", "@opencode/cli@2.3.4-beta.1"],

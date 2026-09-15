@@ -5,12 +5,13 @@ import type { PluginOptions } from "../options.js"
 import type { App } from "../app.js"
 import type { AgentDomain } from "./agent.js"
 import type { AISDKDomain } from "./aisdk.js"
-import type { CatalogDomain } from "./catalog.js"
 import type { CommandDomain } from "./command.js"
 import type { EventDomain } from "./event.js"
 import type { IntegrationDomain } from "./integration.js"
 import type { MCPDomain } from "./mcp.js"
+import type { ModelDomain } from "./model.js"
 import type { PermissionDomain } from "./permission.js"
+import type { ProviderDomain } from "./provider.js"
 import type { ReferenceDomain } from "./reference.js"
 import type { RpcDomain } from "./rpc.js"
 import type { SessionDomain } from "./session.js"
@@ -28,7 +29,6 @@ export interface Context {
   readonly options: PluginOptions
   readonly agent: AgentDomain
   readonly aisdk: AISDKDomain
-  readonly catalog: CatalogDomain
   readonly command: CommandDomain
   readonly event: EventDomain
   readonly experimental: {
@@ -36,9 +36,11 @@ export interface Context {
   }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
+  readonly model: ModelDomain
   readonly generate: GenerateApi
   readonly permission: PermissionDomain
   readonly plugin: Pick<PluginApi, "list">
+  readonly provider: ProviderDomain
   readonly reference: ReferenceDomain
   readonly rpc: RpcDomain
   readonly session: SessionDomain

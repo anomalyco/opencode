@@ -138,10 +138,10 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
     })
 
     snapshot = yield* load()
-    yield* ctx.catalog.transform((catalog) => {
+    yield* ctx.provider.transform((providers) => {
       for (const [providerID, item] of Object.entries(snapshot.config?.providers ?? {})) {
-        const source = catalog.provider.get(item.canonical ?? providerID)
-        catalog.provider.update(providerID, (provider) => {
+        const source = providers.get(item.canonical ?? providerID)
+        providers.update(providerID, (provider) => {
           if (source && source.provider !== provider)
             Object.assign(provider, structuredClone(source.provider), { id: provider.id })
           provider.integrationID = Integration.ID.make("opencode")
@@ -158,7 +158,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
 
         for (const [modelID, config] of Object.entries(item.models ?? {})) {
           const base = source?.models.get(config.modelID ?? modelID) ?? source?.models.get(modelID)
-          catalog.model.update(providerID, modelID, (model) => {
+          providers.models.update(providerID, modelID, (model) => {
             Object.assign(model, structuredClone(base ?? model))
             if (config.family !== undefined) model.family = config.family
             if (config.name !== undefined) model.name = config.name
@@ -205,21 +205,37 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
             if (config.limit !== undefined) model.limit = { ...model.limit, ...config.limit }
           })
         }
+        const configured = providers.get(providerID)
+        if (configured)
+          providers.add({
+            info: configured.provider,
+            models: Array.from(configured.models.values()),
+            sourceConnection: snapshot.connection,
+          })
       }
 
-      const item = catalog.provider.get(Provider.ID.opencode)
+      const item = providers.get(Provider.ID.opencode)
       if (!item) return
       const hasKey = Boolean(process.env.OPENCODE_API_KEY || snapshot.connection || item.provider.settings?.apiKey)
-      catalog.provider.update(item.provider.id, (provider) => {
+      providers.update(item.provider.id, (provider) => {
         if (!hasKey) {
           provider.activation = "enabled"
           provider.settings = { ...provider.settings, apiKey: "public" }
         }
       })
+    })
+    yield* ctx.model.transform((models) => {
+      const item = models.provider.get(Provider.ID.opencode)
+      if (!item) return
+      const hasKey = Boolean(
+        process.env.OPENCODE_API_KEY ||
+          snapshot.connection ||
+          (item.provider.settings?.apiKey && item.provider.settings.apiKey !== "public"),
+      )
       if (hasKey) return
-      for (const model of item.models.values()) {
+      for (const model of models.list(item.provider.id)) {
         if (!model.cost.some((cost) => cost.input > 0)) continue
-        catalog.model.update(item.provider.id, model.id, (draft) => {
+        models.update(item.provider.id, model.id, (draft) => {
           draft.enabled = false
         })
       }
@@ -284,7 +300,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
 
     const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
       snapshot = next
-      yield* Effect.all([ctx.catalog.reload(), ctx.websearch.reload()], { concurrency: 2, discard: true })
+      yield* Effect.all([ctx.provider.reload(), ctx.websearch.reload()], { concurrency: 2, discard: true })
     })
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))
     yield* bus.subscribe(Credential.Event.Switched).pipe(

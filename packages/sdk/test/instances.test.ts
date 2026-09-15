@@ -112,7 +112,7 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
   )
 
   await first.sessions.switchAgent({ sessionID, agent: "plan" })
-  const fork = await first.sessions.fork({ sessionID, boundary: { type: "through" } })
+  const fork = await first.sessions.fork({ sessionID })
   expect(fork.metadata).toEqual(original.metadata)
   expect(fork.location).toEqual(original.location)
   expect(fork.fork?.sessionID).toBe(sessionID)

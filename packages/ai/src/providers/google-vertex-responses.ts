@@ -16,14 +16,14 @@ export type Config = RouteDefaultsInput &
     readonly providerOptions?: OpenResponsesProviderOptionsInput
   }
 
-export interface Settings extends ProviderPackage.Settings {
-  readonly accessToken?: string
-  readonly apiKey?: never
-  readonly baseURL?: string
-  readonly location?: string
-  readonly project?: string
-  readonly providerOptions?: OpenResponsesProviderOptionsInput
-}
+export type Settings = ProviderPackage.Settings &
+  OpenResponsesProviderOptionsInput & {
+    readonly accessToken?: string
+    readonly apiKey?: never
+    readonly baseURL?: string
+    readonly location?: string
+    readonly project?: string
+  }
 
 const route = Route.make({
   id: "google-vertex-responses",
@@ -77,17 +77,17 @@ export const provider = {
 
 export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
   modelID,
-  settings,
+  { accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions },
 ) => {
-  if (settings.apiKey !== undefined)
+  if (apiKey !== undefined)
     throw new ProviderConfigurationError({ provider: id, message: "Google Vertex Responses does not support API keys" })
   return configure({
-    accessToken: settings.accessToken,
-    baseURL: settings.baseURL,
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    location: settings.location,
-    project: settings.project,
-    providerOptions: settings.providerOptions,
+    accessToken,
+    baseURL,
+    headers: headers === undefined ? undefined : { ...headers },
+    http: body === undefined ? undefined : { body: { ...body } },
+    location,
+    project,
+    providerOptions,
   }).model(modelID)
 }

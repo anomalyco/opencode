@@ -7,7 +7,7 @@ import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("cloudflare-workers-ai")
-export const authEnvVars = ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN"] as const
+export const authEnvVars = ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"] as const
 
 type WorkersAIURL = AtLeastOne<{
   readonly accountId: string
@@ -21,9 +21,9 @@ export type LanguageModelOptions = WorkersAIURL &
   }
 
 export type Settings = ProviderPackage.Settings &
+  OpenAIProviderOptionsInput &
   WorkersAIURL & {
     readonly apiKey?: string
-    readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
 export const baseURL = (input: WorkersAIURL) => {
@@ -63,13 +63,15 @@ export const configure = (input: LanguageModelOptions) => {
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
-  configure({
-    apiKey: settings.apiKey,
+export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) => {
+  const { accountId: _, apiKey, baseURL: _url, body, headers, ...providerOptions } = settings
+  return configure({
+    apiKey,
     baseURL: baseURL(settings),
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    providerOptions: settings.providerOptions,
+    headers: headers === undefined ? undefined : { ...headers },
+    http: body === undefined ? undefined : { body: { ...body } },
+    providerOptions,
   }).model(modelID)
+}
 
 export * as CloudflareWorkersAI from "./cloudflare-workers-ai.js"

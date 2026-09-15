@@ -561,7 +561,9 @@ describe("SessionRestart background recovery", () => {
         expect(yield* restarted.pendingBackground).toEqual([])
         expect(yield* SessionInbox.list(database.db, sessionID)).toHaveLength(delivered ? 0 : 1)
         yield* SessionInbox.promote(database.db, bus, sessionID, "steer")
-        expect(yield* sessions.messages({ sessionID })).toMatchObject([
+        // Recovery ends a busy period, so an idle marker follows the notification.
+        const messages = (yield* sessions.messages({ sessionID })).filter((message) => message.type !== "idle")
+        expect(messages).toMatchObject([
           {
             id: background.notificationID,
             type: "synthetic",
@@ -569,7 +571,6 @@ describe("SessionRestart background recovery", () => {
             metadata: { state: "completed" },
           },
         ])
-        expect(yield* sessions.messages({ sessionID })).toHaveLength(1)
       }),
     )
   }
@@ -1103,7 +1104,7 @@ describe("SessionExecution interrupt continuation", () => {
       yield* execution.resume(sessionID).pipe(Effect.forkScoped)
       yield* Deferred.await(draining)
 
-      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
       // The successor drain is steer-scoped: queued next-turn work stays parked.
@@ -1135,7 +1136,7 @@ describe("SessionExecution interrupt continuation", () => {
       yield* execution.resume(sessionID).pipe(Effect.forkScoped)
       yield* Deferred.await(draining)
 
-      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
       expect(drains).toEqual(["input"])
@@ -1158,7 +1159,7 @@ describe("SessionExecution interrupt continuation", () => {
       )
       const execution = Context.get(context, SessionExecution.Service)
 
-      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
       expect(drains).toEqual([{ force: false, promotable: "steer" }])
@@ -1187,7 +1188,7 @@ describe("SessionExecution interrupt continuation", () => {
       yield* execution.resume(sessionID).pipe(Effect.forkScoped)
       yield* Deferred.await(draining)
 
-      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
       // Control work is housekeeping, not next-turn input: continue runs it.
@@ -1213,7 +1214,7 @@ describe("SessionExecution interrupt continuation", () => {
       )
       const execution = Context.get(context, SessionExecution.Service)
 
-      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
       // The queued prompt is next in line; the compaction behind it waits its turn.

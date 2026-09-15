@@ -48,7 +48,7 @@ export function createSessionRequestModel() {
     providers: async (sessionID) => {
       const session = data.session.get(sessionID) ?? (await serverSDK.api.session.get({ sessionID }))
       const result = await serverSDK.api.websearch.providers({
-        location: { directory: session.location.directory, workspace: session.location.workspaceID },
+        location: { directory: session.location.directory },
       })
       return result.data.map((provider) => ({ value: provider.id, label: provider.name }))
     },

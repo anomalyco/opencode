@@ -46,7 +46,7 @@ export async function resolveSessionTarget(input: {
     selection.location ??
     (await resolveLocation(
       input.client,
-      selected ? { directory: selected.location.directory, workspace: selected.location.workspaceID } : input.location,
+      selected ? { directory: selected.location.directory } : input.location,
       input.signal,
     ))
   const prepared = await input.prepare({
@@ -64,14 +64,14 @@ export async function resolveSessionTarget(input: {
         {
           agent: prepared.agent,
           model: prepared.model,
-          location: { directory: location.directory, workspaceID: location.workspaceID },
+          location: { directory: location.directory },
         },
         ...requestOptions(input.signal),
       )
       .catch((error) => {
         throw new SessionTargetMutationError(error)
       }))
-  if (input.environment !== undefined && location.workspaceID === undefined)
+  if (input.environment !== undefined)
     await input.client.session
       .environment({ sessionID: session.id, variables: input.environment }, ...requestOptions(input.signal))
       .catch((error) => {
@@ -94,7 +94,7 @@ export function parseSessionTargetModel(value?: string): ModelRef | undefined {
 
 async function selectSession(input: {
   client: OpenCodeClient
-  location?: { directory?: string; workspace?: string }
+  location?: { directory?: string }
   continue?: boolean
   session?: string
   fork?: boolean
@@ -102,7 +102,7 @@ async function selectSession(input: {
 }) {
   const explicit = input.session
     ? await input.client.session.get({ sessionID: input.session }, ...requestOptions(input.signal)).catch((error) => {
-        if (error && typeof error === "object" && Reflect.get(error, "_tag") === "SessionNotFoundError")
+        if (error && typeof error === "object" && "_tag" in error && error._tag === "SessionNotFoundError")
           return undefined
         throw error
       })
@@ -112,7 +112,7 @@ async function selectSession(input: {
     return {
       session: input.fork
         ? await input.client.session
-            .fork({ sessionID: explicit.id, boundary: { type: "through" } }, ...requestOptions(input.signal))
+            .fork({ sessionID: explicit.id }, ...requestOptions(input.signal))
             .catch((error) => {
               throw new SessionTargetMutationError(error)
             })
@@ -126,7 +126,7 @@ async function selectSession(input: {
   return {
     session: input.fork
       ? await input.client.session
-          .fork({ sessionID: selected.id, boundary: { type: "through" } }, ...requestOptions(input.signal))
+          .fork({ sessionID: selected.id }, ...requestOptions(input.signal))
           .catch((error) => {
             throw new SessionTargetMutationError(error)
           })
@@ -143,7 +143,6 @@ async function latestSession(
   const page = await client.session.list(
     {
       directory: location.directory,
-      workspace: location.workspaceID,
       parentID: null,
       limit: SESSION_PAGE_LIMIT,
       order: "desc",
@@ -151,10 +150,7 @@ async function latestSession(
     },
     ...requestOptions(signal),
   )
-  const selected = page.data.find(
-    (session) =>
-      session.location.directory === location.directory && session.location.workspaceID === location.workspaceID,
-  )
+  const selected = page.data.find((session) => session.location.directory === location.directory)
   if (selected) return selected
   if (!page.cursor.next || page.data.length === 0) return
   return latestSession(client, location, page.cursor.next, signal)
@@ -162,7 +158,7 @@ async function latestSession(
 
 function resolveLocation(
   client: OpenCodeClient,
-  location?: { directory?: string; workspace?: string },
+  location?: { directory?: string },
   signal?: AbortSignal,
 ) {
   if (!location && !signal) return client.location.get()

@@ -121,6 +121,125 @@ describe("provider error classification", () => {
     ).toEqual(["Authentication", "QuotaExceeded", "RateLimit", "InvalidRequest", "ProviderInternal"])
   })
 
+  test("classifies Azure content filter rejections by their structured codes", () => {
+    const message = "The response was filtered"
+    const azure = {
+      error: {
+        message,
+        type: null,
+        param: "prompt",
+        code: "content_filter",
+        status: 400,
+        innererror: { code: "ResponsibleAIPolicyViolation", content_filter_result: {} },
+      },
+    }
+    const innerOnly = { error: { message, code: null, innererror: { code: "ResponsibleAIPolicyViolation" } } }
+
+    expect(classifyProviderFailure({ message, status: 400, rawBody: JSON.stringify(azure) })._tag).toBe("ContentPolicy")
+    expect(classifyProviderFailure({ message, status: 400, rawBody: JSON.stringify(innerOnly) })._tag).toBe(
+      "ContentPolicy",
+    )
+  })
+
+  test("classifies policy rejections that reuse generic request codes by the provider explanation", () => {
+    const openai = {
+      error: {
+        message:
+          "Invalid prompt: your prompt was flagged as potentially violating our usage policy. Please try again with a different prompt.",
+        type: "invalid_request_error",
+        param: null,
+        code: "invalid_prompt",
+      },
+    }
+    const anthropic = {
+      type: "error",
+      error: { type: "invalid_request_error", message: "Output blocked by content filtering policy" },
+    }
+
+    expect(
+      [openai, anthropic].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 400, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
+  })
+
+  test("classifies OpenRouter typed policy errors across its API skins", () => {
+    const chat = {
+      id: "gen-abc123",
+      object: "chat.completion.chunk",
+      error: {
+        code: 403,
+        message: "Your input was flagged",
+        metadata: { error_type: "content_policy_violation", reasons: ["violence"], flagged_input: "..." },
+      },
+      choices: [{ index: 0, delta: { content: "" }, finish_reason: "error" }],
+    }
+    const responses = {
+      type: "response.failed",
+      response: {
+        id: "resp_abc123",
+        status: "failed",
+        error: { code: "image_content_policy_violation", message: "Your input was flagged" },
+        error_type: "content_policy_violation",
+      },
+    }
+    const messages = {
+      type: "error",
+      error: { type: "invalid_request_error", message: "Claude refused to respond", error_type: "refusal" },
+    }
+
+    expect(
+      [
+        classifyProviderFailure({ message: chat.error.message, status: 403, rawBody: JSON.stringify(chat) }),
+        classifyProviderFailure({ message: responses.response.error.message, rawBody: JSON.stringify(responses) }),
+        classifyProviderFailure({ message: messages.error.message, rawBody: JSON.stringify(messages) }),
+      ].map((failure) => failure._tag),
+    ).toEqual(["ContentPolicy", "ContentPolicy", "ContentPolicy"])
+  })
+
+  test("recovers policy codes that OpenCode Zen preserves only in its message label", () => {
+    // Zen drops upstream codes outside its allow-list and replaces the type, but
+    // `Protocol.errorMessage` keeps the original code as a `[code]` prefix.
+    const zen = {
+      error: {
+        type: "server_error",
+        message: "Upstream request failed: [content_filter] The response was filtered",
+      },
+    }
+
+    expect(
+      classifyProviderFailure({ message: zen.error.message, status: 400, rawBody: JSON.stringify(zen) })._tag,
+    ).toBe("ContentPolicy")
+  })
+
+  test("keeps invalid_prompt schema validation failures as invalid requests", () => {
+    // Bedrock Mantle reports request validation failures under `invalid_prompt`
+    // with a pydantic dump that lists every input union member's fields.
+    const message = [
+      "SubmitRequestFailure: code=-32602, msg=219 validation errors for ResponsesRequest",
+      "input.list[union[EasyInputMessageParam,ResponseComputerToolCallParam]].2.ResponseComputerToolCallParam.pending_safety_checks",
+      "  Field required [type=missing, input_value={'content': [...], 'role': 'assistant', 'type': 'message'}, input_type=dict]",
+    ].join("\n")
+    const failure = classifyProviderFailure({
+      message,
+      status: 200,
+      rawBody: JSON.stringify({ response: { status: "failed", error: { code: "invalid_prompt", message } } }),
+    })
+
+    expect(failure._tag).toBe("InvalidRequest")
+  })
+
+  test("does not infer content policy from policy phrases outside the provider explanation", () => {
+    const failure = classifyProviderFailure({
+      message: "Provider request failed with HTTP 400",
+      status: 400,
+      rawBody: JSON.stringify({ error: { message: "Unknown parameter: content_policy_id" } }),
+    })
+
+    expect(failure._tag).toBe("InvalidRequest")
+  })
+
   test("classifies transient client statuses as provider internal", () => {
     expect([408, 409].map((status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag)).toEqual([
       "ProviderInternal",

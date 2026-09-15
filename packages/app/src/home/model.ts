@@ -39,8 +39,7 @@ export function createHomeController() {
     const id = selectedProject()?.id
     if (!ctx || !id || ctx.sdk.connection.status() !== "connected") return
     // Selecting a project is the demand for its worktree inventory: the session filter spans its worktrees.
-    const root = ctx.sync.data.project.find((project) => project.id === id)?.worktree
-    if (root) void ctx.sync.worktrees.load(root)
+    void ctx.sync.worktrees.list(id).then(() => ctx.sync.worktrees.refresh(id))
   })
 
   function setSelection(next: HomeProjectSelection) {
@@ -110,7 +109,7 @@ export function createHomeController() {
             .list({ path: ".", location })
             .then(async (files) => {
               // TODO: Initialize empty directories when V2 exposes a native Git init API.
-              return ctx.sdk.api.project.current({ location })
+              return ctx.sdk.api.location.get({ location }).then((result) => result.project)
             })
             .then((project) => ctx.sync.child(item, { bootstrap: false })[1]("project", project.id))
             .catch(() => undefined)

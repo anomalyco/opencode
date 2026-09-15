@@ -6,6 +6,7 @@ import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
 import { Project } from "@opencode/schema/project"
 import { Provider } from "@opencode/schema/provider"
+import { Event } from "@opencode/schema/event"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { ToolMode } from "@opencode/schema/session-stats"
 import { TokenUsage } from "@opencode/schema/token-usage"
@@ -293,7 +294,10 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
         .where(
           and(
             inArray(EventTable.aggregate_id, batch),
-            eq(EventTable.type, SessionEvent.UsageRecorded.type),
+            eq(
+              EventTable.type,
+              Event.versionedType(SessionEvent.UsageRecorded.type, SessionEvent.UsageRecorded.durable.version),
+            ),
             sql`json_extract(${EventTable.data}, '$.source') = 'compaction'`,
             gte(EventTable.created, from),
             lt(EventTable.created, to),

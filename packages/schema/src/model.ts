@@ -4,9 +4,13 @@ import { Schema } from "effect"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Money } from "./money.js"
+import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
 export type ID = typeof ID.Type
+
+const Updated = ephemeral({ type: "model.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
 
 export const VariantID = Schema.String.pipe(Schema.brand("Model.VariantID"))
 export type VariantID = typeof VariantID.Type
@@ -60,6 +64,7 @@ export const Compatibility = Schema.Struct({
   maxTokensField: MaxTokensField.pipe(optional),
   requireFinishReason: Schema.Boolean.pipe(optional),
   requireAssistantAfterTool: Schema.Boolean.pipe(optional),
+  supportsPromptCacheKey: Schema.Boolean.pipe(optional),
 }).annotate({ identifier: "Model.Compatibility" })
 
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
@@ -67,7 +72,6 @@ export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
-  responsesWebsockets: Schema.Boolean.pipe(optional),
 })
   .annotate({ identifier: "Model.Capabilities" })
   .pipe(
@@ -107,8 +111,8 @@ export const Info = Schema.Struct({
   compatibility: Compatibility.pipe(optional),
   package: Provider.Package.pipe(optional),
   compaction: Provider.Compaction.pipe(optional),
-  /** Session WebSocket policy; omitted inherits the provider policy, then defaults to disabled. */
-  websocket: Schema.Boolean.pipe(optional),
+  /** Session transport; omitted inherits the provider transport, then defaults to HTTP. */
+  transport: Provider.Transport.pipe(optional),
   ...Provider.Overlays,
   capabilities: Capabilities,
   variants: Schema.Array(Variant),

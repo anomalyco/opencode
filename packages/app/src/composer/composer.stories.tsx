@@ -187,7 +187,7 @@ function ComposerStory(props: {
           )
         },
         onStop: () =>
-          setStory("activity", props.continueOnStop ? "POST /interrupt · continue: true" : "Stop requested"),
+          setStory("activity", props.continueOnStop ? "POST /interrupt · resume: true" : "Stop requested"),
       },
     },
   })

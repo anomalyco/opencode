@@ -1,6 +1,5 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode/core/catalog"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -53,11 +52,11 @@ const noAmbientAWS = {
   AWS_DEFAULT_REGION: undefined,
 }
 
-const seedBedrock = Effect.fn(function* (settings?: Record<string, unknown>) {
-  const catalog = yield* Catalog.Service
+const seedBedrock = Effect.fn(function* (settings?: Provider.Settings) {
+  const catalog = yield* Provider.Service
   yield* catalog.transform((catalog) => {
-    catalog.provider.update(Provider.ID.amazonBedrock, (item) => {
-      item.package = Provider.aisdk("@ai-sdk/amazon-bedrock")
+    catalog.update(Provider.ID.amazonBedrock, (item) => {
+      item.package = "@opencode/ai/providers/amazon-bedrock"
       if (settings) item.settings = settings
     })
   })
@@ -70,8 +69,8 @@ describe("AmazonBedrockPlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* seedBedrock({ endpoint: "https://bedrock.example" })
         yield* addPlugin()
-        const result = required(yield* catalog.provider.get(Provider.ID.amazonBedrock))
-        expect(result.package).toBe(Provider.aisdk("@ai-sdk/amazon-bedrock"))
+        const result = required(yield* catalog.get(Provider.ID.amazonBedrock))
+        expect(result.package).toBe("@opencode/ai/providers/amazon-bedrock")
         expect(result.settings).toEqual({ baseURL: "https://bedrock.example", region: "us-east-1" })
       }),
     ),
@@ -82,7 +81,7 @@ describe("AmazonBedrockPlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* seedBedrock({ baseURL: "https://base.example", endpoint: "https://endpoint.example" })
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).settings).toEqual({
+        expect(required(yield* catalog.get(Provider.ID.amazonBedrock)).settings).toEqual({
           baseURL: "https://base.example",
           region: "us-east-1",
         })
@@ -117,7 +116,7 @@ describe("AmazonBedrockPlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* seedBedrock()
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).activation).toBe("auto")
+        expect(required(yield* catalog.get(Provider.ID.amazonBedrock)).activation).toBe("auto")
       }),
     ),
   )
@@ -128,7 +127,7 @@ describe("AmazonBedrockPlugin", () => {
         Effect.gen(function* () {
           const catalog = yield* seedBedrock()
           yield* addPlugin()
-          expect(required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).activation).toBe("enabled")
+          expect(required(yield* catalog.get(Provider.ID.amazonBedrock)).activation).toBe("enabled")
         }),
       ),
     )
@@ -139,7 +138,7 @@ describe("AmazonBedrockPlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* seedBedrock({ profile: "work" })
         yield* addPlugin()
-        const result = required(yield* catalog.provider.get(Provider.ID.amazonBedrock))
+        const result = required(yield* catalog.get(Provider.ID.amazonBedrock))
         expect(result.activation).toBe("enabled")
         expect(result.settings).toEqual({ profile: "work", region: "us-east-1" })
       }),
@@ -149,15 +148,15 @@ describe("AmazonBedrockPlugin", () => {
   it.effect("does not override a disabled provider", () =>
     withEnv({ ...noAmbientAWS, AWS_PROFILE: "work" }, () =>
       Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
+        const catalog = yield* Provider.Service
         yield* catalog.transform((catalog) => {
-          catalog.provider.update(Provider.ID.amazonBedrock, (item) => {
-            item.package = Provider.aisdk("@ai-sdk/amazon-bedrock")
+          catalog.update(Provider.ID.amazonBedrock, (item) => {
+            item.package = "@opencode/ai/providers/amazon-bedrock"
             item.activation = "disabled"
           })
         })
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).activation).toBe("disabled")
+        expect(required(yield* catalog.get(Provider.ID.amazonBedrock)).activation).toBe("disabled")
       }),
     ),
   )
@@ -167,16 +166,16 @@ describe("AmazonBedrockPlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* seedBedrock()
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).settings).toEqual({
+        expect(required(yield* catalog.get(Provider.ID.amazonBedrock)).settings).toEqual({
           region: "eu-west-1",
         })
 
         yield* catalog.transform((catalog) => {
-          catalog.provider.update(Provider.ID.amazonBedrock, (item) => {
+          catalog.update(Provider.ID.amazonBedrock, (item) => {
             item.settings = { region: "ap-southeast-2" }
           })
         })
-        expect(required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).settings).toEqual({
+        expect(required(yield* catalog.get(Provider.ID.amazonBedrock)).settings).toEqual({
           region: "ap-southeast-2",
         })
       }),
@@ -188,12 +187,12 @@ describe("AmazonBedrockPlugin", () => {
       Effect.gen(function* () {
         const catalog = yield* seedBedrock()
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).settings).toEqual({
+        expect(required(yield* catalog.get(Provider.ID.amazonBedrock)).settings).toEqual({
           region: "us-west-2",
         })
         const fallback = yield* Effect.gen(function* () {
           yield* catalog.reload()
-          return required(yield* catalog.provider.get(Provider.ID.amazonBedrock)).settings
+          return required(yield* catalog.get(Provider.ID.amazonBedrock)).settings
         }).pipe((fx) => withEnv({ AWS_DEFAULT_REGION: undefined }, () => fx))
         expect(fallback).toEqual({ region: "us-east-1" })
       }),
@@ -203,22 +202,22 @@ describe("AmazonBedrockPlugin", () => {
   it.effect("applies to Mantle and native Bedrock packages", () =>
     withEnv({ ...noAmbientAWS, AWS_PROFILE: "work" }, () =>
       Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
+        const catalog = yield* Provider.Service
         yield* catalog.transform((catalog) => {
-          catalog.provider.update(Provider.ID.make("mantle"), (item) => {
-            item.package = Provider.aisdk("@ai-sdk/amazon-bedrock/mantle")
+          catalog.update(Provider.ID.make("mantle"), (item) => {
+            item.package = "@opencode/ai/providers/amazon-bedrock/mantle/responses"
           })
-          catalog.provider.update(Provider.ID.make("native"), (item) => {
+          catalog.update(Provider.ID.make("native"), (item) => {
             item.package = "@opencode/ai/providers/amazon-bedrock"
           })
-          catalog.provider.update(Provider.ID.make("other"), (item) => {
-            item.package = Provider.aisdk("@ai-sdk/anthropic")
+          catalog.update(Provider.ID.make("other"), (item) => {
+            item.package = "@opencode/ai/providers/anthropic"
           })
         })
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.make("mantle"))).activation).toBe("enabled")
-        expect(required(yield* catalog.provider.get(Provider.ID.make("native"))).activation).toBe("enabled")
-        expect(required(yield* catalog.provider.get(Provider.ID.make("other"))).activation).toBe("auto")
+        expect(required(yield* catalog.get(Provider.ID.make("mantle"))).activation).toBe("enabled")
+        expect(required(yield* catalog.get(Provider.ID.make("native"))).activation).toBe("enabled")
+        expect(required(yield* catalog.get(Provider.ID.make("other"))).activation).toBe("auto")
       }),
     ),
   )

@@ -60,11 +60,17 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   const shutdown = yield* Latch.make()
   const status = yield* Status.make()
   const bound = yield* listen({ hostname, port })
+  const urls = () => {
+    const address = bound.server.address()
+    if (address === null || typeof address === "string") return []
+    const host = address.family === "IPv6" ? `[${address.address}]` : address.address
+    return ServerInfo.connectionURLs(`http://${host}:${address.port}`, hostname)
+  }
   const application = yield* Ref.make(Option.none<App>())
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
-      dispatch(password, status, application, options.app?.version ?? "unknown").pipe(
+      dispatch(password, status, application, options.app?.version ?? "unknown", urls).pipe(
         HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       ),
       errorResponseLogger,
@@ -94,12 +100,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
           ...options,
           password,
         },
-        () => {
-          const address = bound.server.address()
-          if (address === null || typeof address === "string") return []
-          const host = address.family === "IPv6" ? `[${address.address}]` : address.address
-          return ServerInfo.connectionURLs(`http://${host}:${address.port}`, hostname)
-        },
+        urls,
       ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
       applicationScope,
     )
@@ -180,14 +181,15 @@ function dispatch(
   status: Status.Interface,
   application: Ref.Ref<Option.Option<App>>,
   version: string,
+  urls: () => ReadonlyArray<string>,
 ): App {
   const auth = ServerAuth.Config.of({ password: Option.some(password), username: "opencode" })
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(request.url, "http://localhost")
-    if (request.method === "GET" && url.pathname === "/api/health") {
+    if (request.method === "GET" && url.pathname === "/api/status") {
       if (!(yield* authorizedRequest(request, auth))) return unauthorized()
-      return yield* healthResponse(status, version)
+      return yield* statusResponse(status, version, urls)
     }
     const state = yield* status.current
     const app = yield* Ref.get(application)
@@ -209,10 +211,14 @@ function unauthorized() {
   })
 }
 
-const healthResponse = Effect.fnUntraced(function* (status: Status.Interface, version: string) {
+const statusResponse = Effect.fnUntraced(function* (
+  status: Status.Interface,
+  version: string,
+  urls: () => ReadonlyArray<string>,
+) {
   const state = yield* status.current
   return HttpServerResponse.jsonUnsafe(
-    { healthy: true, version, pid: process.pid },
+    { version, pid: process.pid, urls: urls() },
     {
       status: state.type === "ready" ? 200 : state.type === "failed" ? 500 : 503,
       headers: state.type === "starting" || state.type === "stopping" ? { "retry-after": "1" } : undefined,

@@ -27,7 +27,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
         if (!body || typeof body !== "object") {
           return new Response(null, { status: 400 })
         }
-        const id = Reflect.get(body, "id")
+        const id = "id" in body ? body.id : undefined
         if (typeof id !== "string") return new Response(null, { status: 400 })
         queueMicrotask(() => {
           if (!events) return

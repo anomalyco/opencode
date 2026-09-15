@@ -96,7 +96,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
             SessionInbox.Synthetic.make({
               id: SessionMessage.ID.make("msg_plan_test"),
               sessionID,
-              timeCreated: DateTime.makeUnsafe(0),
+              time: { created: DateTime.makeUnsafe(0) },
               type: "synthetic",
               payload: { text: input.text },
               delivery: "steer",

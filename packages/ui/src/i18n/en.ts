@@ -111,7 +111,7 @@ const source = {
   "ui.messagePart.compaction.interrupted": "Session compaction interrupted",
   "ui.messagePart.providerCompaction": "Session compacted by provider",
   "ui.messagePart.compaction.usage": "{{input}} in · {{output}} out",
-  "ui.messagePart.context.details": "Details",
+  "ui.messagePart.context.updates": "Updates",
   "ui.messagePart.context.read.one": "{{count}} read",
   "ui.messagePart.context.read.other": "{{count}} reads",
   "ui.messagePart.context.search.one": "{{count}} search",

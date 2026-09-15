@@ -50,7 +50,9 @@ function all(renderable: Renderable): Renderable[] {
 }
 
 function mouseListeners(renderable: Renderable) {
+  // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose listener state through its public API.
   const general = Reflect.get(renderable, "_mouseListener")
+  // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose listener state through its public API.
   const specific = Reflect.get(renderable, "_mouseListeners")
   return Boolean(general) || (specific && typeof specific === "object" && Object.keys(specific).length > 0)
 }
@@ -87,6 +89,7 @@ export function createHarness(renderer: CliRenderer): Harness {
     // captureCharFrame follows the test renderer's output sink. Recording
     // redirects that sink to the timeline, so read the live render buffer
     // instead; it is also the source used by screenshots.
+    // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose the live render buffer publicly.
     screen: () => decoder.decode((Reflect.get(renderer, "currentRenderBuffer") as RenderBuffer).getRealCharBytes()),
   }
 }

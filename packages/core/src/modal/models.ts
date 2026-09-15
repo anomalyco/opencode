@@ -48,6 +48,12 @@ const decodeModel = Schema.decodeUnknownOption(RemoteModel)
 type RemoteModel = typeof RemoteModel.Type
 
 export async function get(baseURL: string, apiKey: string, existing: readonly Model.Info[]) {
+  return derive(baseURL, await load(baseURL, apiKey), existing)
+}
+
+export type Snapshot = readonly RemoteModel[]
+
+export async function load(baseURL: string, apiKey: string): Promise<Snapshot> {
   const response = await fetch(`${baseURL.replace(/\/+$/, "")}/models`, {
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -58,10 +64,14 @@ export async function get(baseURL: string, apiKey: string, existing: readonly Mo
 
   // Decode each item tolerantly so one malformed entry cannot discard the
   // whole inventory. A malformed envelope still fails the fetch.
-  const remote = decodeResponse(await response.json()).data.flatMap((raw) => {
+  return decodeResponse(await response.json()).data.flatMap((raw) => {
     const model = Option.getOrUndefined(decodeModel(raw))
     return model ? [model] : []
   })
+}
+
+/** Combine remote facts with source templates, never a previously transformed model result. */
+export function derive(baseURL: string, remote: Snapshot, existing: readonly Model.Info[]) {
   const templates = new Map(existing.map((model) => [model.id, model]))
   const result = new Map<Model.ID, Model.Info>()
   for (const item of remote) {
@@ -97,8 +107,8 @@ function build(id: Model.ID, remote: RemoteModel, baseURL: string, previous?: Mo
       remote.interleaved === undefined
         ? previous?.compatibility
         : (Model.compatibility(remote.interleaved) ?? previous?.compatibility),
-    package: Provider.aisdk("@ai-sdk/openai-compatible"),
-    settings: Provider.mergeOverlay(previous?.settings, { baseURL }),
+    package: "@opencode/ai/providers/openai-compatible",
+    settings: Provider.mergeOverlay(previous?.settings, { baseURL, provider: providerID }),
     headers: previous?.headers,
     body: previous?.body,
     capabilities: {

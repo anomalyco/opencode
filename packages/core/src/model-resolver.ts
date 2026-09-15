@@ -5,11 +5,9 @@ import { LanguageModel, ProviderConfigurationError } from "@opencode/ai"
 import { Auth } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
-import { AISDKNative } from "./aisdk-native.js"
-import { Catalog } from "./catalog.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
-import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
+import { Capabilities, ID, Info, Model, Ref, VariantID } from "./model.js"
 import { Npm } from "@opencode/util/npm"
 import { Provider } from "./provider.js"
 
@@ -121,8 +119,8 @@ export interface Resolved {
   readonly limit: Info["limit"]
   /** Model policy overrides the provider policy; omitted means local compaction. */
   readonly compaction?: Info["compaction"]
-  /** Whether the session WebSocket may carry this model's requests when the route supports it. */
-  readonly websocket: boolean
+  /** Model transport overrides the provider transport; omitted means HTTP. */
+  readonly transport?: Info["transport"]
 }
 
 export interface Interface {
@@ -132,8 +130,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelResolver") {}
 
-// Catalog models are shared with the retained registry value and stay editable by later transforms, so
-// resolution copies with spreads: immer's produce would deep-freeze the unchanged subtrees it shares with its input.
+// Variant resolution adds request-local overlays without changing the committed model snapshot.
 export const withVariant = (
   model: Info,
   variantID: VariantID | undefined,
@@ -195,19 +192,9 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   dependencies?: Dependencies,
 ) {
   const resolved = prepareRuntimeModel(model, credential)
-  const packageName = Provider.packageName(resolved.package)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
   const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
-  const mapping = Provider.isAISDK(resolved.package)
-    ? AISDKNative.map({
-        packageName,
-        settings: configured,
-        modelID: resolved.modelID ?? resolved.id,
-        providerID: resolved.canonical ?? resolved.providerID,
-      })
-    : undefined
-  const native = mapping?.package ?? packageName
-  if (Provider.isAISDK(resolved.package) && !mapping) {
+  if (Provider.isAISDK(resolved.package)) {
     const loadAISDK = dependencies?.loadAISDK
     if (!loadAISDK) return yield* unsupported(resolved)
     const settings = yield* prepareProviderSettings(
@@ -222,10 +209,9 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
       Effect.mapError((error) => initialization(resolved, "init", error.cause)),
     )
   }
-  if (!native) return yield* unsupported(resolved)
-
-  const specifier = native
-  const mapped = yield* prepareProviderSettings(resolved, mapping?.settings ?? configured)
+  const specifier = Provider.packageName(resolved.package)
+  if (!specifier) return yield* unsupported(resolved)
+  const mapped = yield* prepareProviderSettings(resolved, Provider.nativeSettings(configured))
   const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
     Effect.mapError((error) => initialization(resolved, "load", error.cause)),
   )
@@ -233,8 +219,8 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     ...(credential ? Struct.omit(mapped, ["accessToken", "apiKey", "authToken"]) : mapped),
     ...(resolved.canonical === undefined ? {} : { provider: resolved.canonical }),
     ...nativeCredentialSettings(specifier, credential),
-    headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
-    body: Provider.mergeOverlay(mapping?.body, resolved.body),
+    headers: resolved.headers,
+    body: resolved.body,
   }
   return yield* Effect.try({
     try: () => {
@@ -358,12 +344,13 @@ export const hasPackage = (model: Info) => Boolean(model.package)
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const catalog = yield* Catalog.Service
+    const providers = yield* Provider.Service
+    const models = yield* Model.Service
     const integrations = yield* Integration.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
-      const provider = yield* catalog.provider.get(selected.providerID)
+      const provider = yield* providers.get(selected.providerID)
       const connection = yield* integrations.connection.active(
         provider?.integrationID ?? Integration.ID.make(selected.providerID),
       )
@@ -391,20 +378,20 @@ export const layer = Layer.effect(
         cost: selected.cost,
         limit: selected.limit,
         compaction: selected.compaction,
-        websocket: selected.websocket ?? false,
+        transport: selected.transport,
       }
     })
     return Service.of({
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
         const selected = requested
-          ? yield* catalog.model.get(requested.providerID, requested.id)
-          : yield* catalog.model
+          ? yield* models.get(requested.providerID, requested.id)
+          : yield* models
               .default()
               .pipe(
                 Effect.flatMap((model) =>
                   model && hasPackage(model)
                     ? Effect.succeed(model)
-                    : Effect.map(catalog.model.available(), (models) => models.find(hasPackage)),
+                    : Effect.map(models.available(), (models) => models.find(hasPackage)),
                 ),
               )
         if (!selected) return undefined
@@ -462,5 +449,5 @@ function usesAPIKeyAuth(packageName: string | undefined) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Catalog.node, Integration.node, Npm.node, AISDK.node],
+  deps: [Provider.node, Model.node, Integration.node, Npm.node, AISDK.node],
 })

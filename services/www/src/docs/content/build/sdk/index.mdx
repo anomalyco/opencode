@@ -12,7 +12,7 @@ For Cloudflare Durable Objects, see the [Cloudflare guide](/build/sdk/cloudflare
 Install the SDK:
 
 ```sh
-bun add @opencode/sdk@beta
+bun add @opencode/sdk
 ```
 
 ## Create a host
@@ -41,6 +41,22 @@ The embedded host uses the same Promise values, declared errors, request
 options, and `AsyncIterable` streams as `@opencode/client`. It exposes the
 full generated client and adds the convenience aliases `sessions` and `events`
 for the session and event groups.
+
+## Worktrees
+
+Worktree operations require a `projectID`. Create and refresh load configuration and plugins from the project's saved
+canonical checkout. List reads saved inventory only; remove activates canonical plugins and uses the recorded strategy,
+failing if that strategy is unavailable.
+
+```ts
+const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
+```
+
+Refresh discovers worktrees across known checkout roots using all available strategies. Register a custom strategy
+through a [plugin's worktree transform](/build/plugins#worktrees).
 
 ## Stream events
 

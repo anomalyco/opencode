@@ -65,6 +65,7 @@ const show = Effect.fn("Updater.show")(function* (
     )
     return
   }
+  if (state.status === "download-required") return
   if (state.status !== "ready") return
 
   const response = yield* promise(() =>

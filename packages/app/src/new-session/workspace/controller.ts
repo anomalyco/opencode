@@ -67,12 +67,13 @@ export function createNewSessionWorkspaceController(input: {
   const [worktrees, worktreeActions] = createResource(worktreeSource, async (source) => ({
     projectID: source.projectID,
     items: await serverSDK.api.worktree
-      .list({ location: { directory: source.directory } })
+      .list({ projectID: source.projectID })
       .catch(() => (currentProject()?.id === source.projectID ? currentProject()?.worktrees : undefined) ?? []),
   }))
   onCleanup(
     serverSDK.event.listen((event) => {
-      if (event.type === "worktree.updated") void worktreeActions.refetch()
+      if (event.type === "worktree.updated" && event.data.projectID === currentProject()?.id)
+        void worktreeActions.refetch()
     }),
   )
   // `latest` only skips Suspense once the resource has resolved at least once. Before that it

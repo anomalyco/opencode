@@ -31,6 +31,8 @@ import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { projectForSession } from "@/shell/layout/helpers"
 import { useSettingsDialog } from "@/settings/command"
+import { updaterAction } from "@/shell/updates/action"
+import type { UpdaterState } from "@/shell/updates/types"
 import devIcon from "../../../../desktop/icons/dev/64x64.png"
 import betaIcon from "../../../../desktop/icons/beta/64x64.png"
 
@@ -43,8 +45,7 @@ const macTrafficLightsBaseWidth = 68
 const macTrafficLightsTopClearance = 28
 
 export type TitlebarUpdate = {
-  version: string | undefined
-  installing: boolean
+  state: UpdaterState | undefined
   install: () => void
 }
 
@@ -96,13 +97,14 @@ export function Titlebar(props: {
   })
 
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
-    const installing = props.update?.installing ?? false
-    const version = props.update?.version
+    const state = props.update?.state
+    const installing = state?.status === "installing"
+    const version = state?.status === "ready" || state?.status === "download-required" ? state.version : undefined
     return {
       visible: version !== undefined || installing,
       installing,
       label: language.t("titlebar.update"),
-      ariaLabel: language.t("toast.update.action.installRestart"),
+      ariaLabel: language.t(updaterAction(state).label),
       title: version ? language.t("titlebar.updateVersion", { version }) : undefined,
       onInstall: () => props.update?.install(),
     }
@@ -679,12 +681,11 @@ export function Titlebar(props: {
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col gap-2">
-                              <TitlebarRightMount vertical />
-                              <Show when={updateState().visible}>
+                            <Show when={updateState().visible}>
+                              <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
                                 <TitlebarUpdateIconButton state={updateState()} vertical />
-                              </Show>
-                            </div>
+                              </div>
+                            </Show>
                           </Portal>
                         )}
                       </Show>

@@ -1,10 +1,9 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js"
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-import { GetPromptRequestSchema, ListPromptsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+import { Server } from "@modelcontextprotocol/server"
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio"
 
 const server = new Server({ name: "prompts", version: "1.0.0" }, { capabilities: { prompts: {} } })
 
-server.setRequestHandler(ListPromptsRequestSchema, ({ params }) =>
+server.setRequestHandler("prompts/list", ({ params }) =>
   Promise.resolve(
     params?.cursor === "page-2"
       ? { prompts: [{ name: "second", description: "Second prompt" }] }
@@ -21,7 +20,7 @@ server.setRequestHandler(ListPromptsRequestSchema, ({ params }) =>
   ),
 )
 
-server.setRequestHandler(GetPromptRequestSchema, ({ params }) =>
+server.setRequestHandler("prompts/get", ({ params }) =>
   Promise.resolve({
     messages: [{ role: "user", content: { type: "text", text: params.arguments?.topic ?? "missing" } }],
   }),

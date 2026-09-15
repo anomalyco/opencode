@@ -14,6 +14,7 @@ import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
+import { Worktree } from "@opencode/core/worktree"
 import { Session } from "@opencode/core/session"
 import { Instance } from "@opencode/core/instance/service"
 import { SessionTransfer } from "@opencode/core/session/transfer"
@@ -55,6 +56,7 @@ const applicationServiceNodes = [
   httpClient,
   Job.node,
   Project.node,
+  Worktree.node,
   Session.node,
   Instance.node,
   SessionTransfer.node,
@@ -160,6 +162,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.succeedContext(
           Context.pick(
             Database.Service,
+            Credential.Service,
             PermissionSaved.Service,
             PluginUpdate.Service,
             Project.Service,

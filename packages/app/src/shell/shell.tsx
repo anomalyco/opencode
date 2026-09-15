@@ -9,6 +9,7 @@ import { TitlebarRightProvider } from "@/shell/titlebar/right-slot"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
 import { SshAuthentication } from "@/servers/ssh/authentication"
+import { useUpdaterInstall } from "@/shell/updates/download"
 
 const DebugBar = lazy(() => import("@/shell/debug/debug-bar").then((module) => ({ default: module.DebugBar })))
 
@@ -16,6 +17,7 @@ export default function Layout(props: ParentProps) {
   const platform = usePlatform()
   const settings = useSettingsSurface()
   const preferences = useSettings()
+  const installUpdate = useUpdaterInstall()
   const mobile = createMediaQuery("(max-width: 767px)")
   const [state, setState] = createStore({
     debugTools: false,
@@ -26,15 +28,10 @@ export default function Layout(props: ParentProps) {
   const bottomTitlebar = () => mobile() && preferences.general.mobileTitlebarPosition() === "bottom"
 
   const update: TitlebarUpdate = {
-    get version() {
-      const state = platform.updater?.state()
-      if (state?.status !== "ready") return undefined
-      return state.version
+    get state() {
+      return platform.updater?.state()
     },
-    get installing() {
-      return platform.updater?.state().status === "installing"
-    },
-    install: () => void platform.updater?.install(),
+    install: installUpdate,
   }
 
   return (

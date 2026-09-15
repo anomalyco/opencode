@@ -109,6 +109,11 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   experimental: ConfigExperimental.Info.pipe(optional),
 }) {}
 
+export const Patch = Schema.Struct({
+  shell: Schema.NullOr(Schema.String),
+}).annotate({ identifier: "Config.Patch" })
+export interface Patch extends Schema.Schema.Type<typeof Patch> {}
+
 export class Document extends Schema.Class<Document>("Config.Document")({
   type: Schema.Literal("document"),
   path: AbsolutePath.pipe(optional),
@@ -120,17 +125,7 @@ export class Directory extends Schema.Class<Directory>("Config.Directory")({
   path: AbsolutePath,
 }) {}
 
-export class AgentsDirectory extends Schema.Class<AgentsDirectory>("Config.AgentsDirectory")({
-  type: Schema.Literal("agents"),
-  path: AbsolutePath,
-}) {}
-
-export class ClaudeDirectory extends Schema.Class<ClaudeDirectory>("Config.ClaudeDirectory")({
-  type: Schema.Literal("claude"),
-  path: AbsolutePath,
-}) {}
-
-export const Entry = Schema.Union([Document, Directory, AgentsDirectory, ClaudeDirectory]).annotate({
+export const Entry = Schema.Union([Document, Directory]).annotate({
   identifier: "Config.Entry",
 })
 export type Entry = typeof Entry.Type

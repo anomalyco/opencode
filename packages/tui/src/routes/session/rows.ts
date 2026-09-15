@@ -123,7 +123,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
                   input: data.session.input.has(sessionID(), message.id),
                 },
               ]
-            : message.type === "compaction"
+            : message.type === "compaction" || message.type === "idle"
               ? [
                   {
                     id: message.id,
@@ -283,12 +283,34 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
   const usage = turnTokens
     ? { steps: [] as SessionMessageAssistant[], previousTurnCache: undefined as CacheUsage | undefined }
     : undefined
+  // Without any idle marker, history predates markers and a turn ends with its terminal step.
+  // With markers, steers keep the turn open, so usage accumulates until the marker closes it.
+  const legacy = !messages.some((message) => message.type === "idle")
+  const flushTurn = (rows: ProjectionEntry[]) => {
+    if (!usage) return
+    const steps = usage.steps.filter(hasTokenUsage)
+    const last = steps.at(-1)
+    usage.steps.length = 0
+    if (!last) return
+    rows.push({
+      entry: {
+        type: "turn-usage",
+        messageIDs: steps.map((step) => step.id),
+        ...(usage.previousTurnCache === undefined ? {} : { previousCache: usage.previousTurnCache }),
+      },
+    })
+    usage.previousTurnCache = { read: last.tokens.cache.read, model: last.model }
+  }
   const entries = [
     ...messages.filter((message) => !pending.has(message.id)),
     ...pendingCompactions,
     ...messages.filter(isInput),
   ].reduce<ProjectionEntry[]>((rows, message) => {
     if (message.type !== "assistant") {
+      if (message.type === "idle") {
+        flushTurn(rows)
+        return rows
+      }
       if (message.type === "synthetic" && !message.description?.trim()) return rows
       if (message.type === "compaction" && message.status === "completed" && usage) usage.previousTurnCache = undefined
       rows.push({ entry: { type: "message", messageID: message.id }, closesPrevious: !pending.has(message.id) })
@@ -305,21 +327,7 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
     if (terminal || message.retry) {
       rows.push({ entry: { type: "assistant-footer", messageID: message.id } })
     }
-    if (terminal && usage) {
-      const stepsWithUsage = usage.steps.filter(hasTokenUsage)
-      const last = stepsWithUsage.at(-1)
-      if (last) {
-        rows.push({
-          entry: {
-            type: "turn-usage",
-            messageIDs: stepsWithUsage.map((step) => step.id),
-            ...(usage.previousTurnCache === undefined ? {} : { previousCache: usage.previousTurnCache }),
-          },
-        })
-        usage.previousTurnCache = { read: last.tokens.cache.read, model: last.model }
-      }
-      usage.steps.length = 0
-    }
+    if (terminal && legacy) flushTurn(rows)
     return rows
   }, [])
   return projectEntries(entries)
@@ -339,10 +347,18 @@ export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheU
   return drop > 0 ? drop : undefined
 }
 
-export function turnDuration(message: SessionMessageAssistant, messages: SessionMessageInfo[], position?: number) {
+// `legacy` marks a session without idle markers, where a turn ends at the next prompt. Reactive
+// callers should pass it from a shared memo: the default scans every message, which subscribes
+// the footer to the whole history.
+export function turnDuration(
+  message: SessionMessageAssistant,
+  messages: SessionMessageInfo[],
+  position?: number,
+  legacy = legacyTurns(messages),
+) {
   if (message.time.completed === undefined) return 0
   const index = position ?? messages.findIndex((item) => item.id === message.id)
-  const input = messages[inputIndex(messages, index === -1 ? messages.length : index)]
+  const input = messages[inputIndex(messages, index === -1 ? messages.length : index, legacy)]
   return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
 }
 
@@ -350,10 +366,11 @@ export function turnTokensPerSecond(
   message: SessionMessageAssistant,
   messages: SessionMessageInfo[],
   position?: number,
+  legacy = legacyTurns(messages),
 ) {
   const index = position ?? messages.findIndex((item) => item.id === message.id)
   const end = index === -1 ? messages.length : index + 1
-  const start = inputIndex(messages, end)
+  const start = inputIndex(messages, end, legacy)
   const steps = messages
     .slice(start + 1, end)
     .filter((item): item is SessionMessageAssistant => item.type === "assistant")
@@ -367,13 +384,23 @@ export function turnTokensPerSecond(
   return output / (duration / 1_000)
 }
 
-function inputIndex(messages: SessionMessageInfo[], end: number) {
-  // Reading a sliced prefix subscribes every footer to unrelated historical messages.
+export function legacyTurns(messages: SessionMessageInfo[]) {
+  return !messages.some((message) => message.type === "idle")
+}
+
+function inputIndex(messages: SessionMessageInfo[], end: number, legacy: boolean) {
+  // Reading a sliced prefix subscribes every footer to unrelated historical messages, so walk
+  // back only as far as the turn boundary: the nearest input in legacy sessions, otherwise the
+  // first input after the previous idle marker.
+  let input = -1
   for (let index = end - 1; index >= 0; index--) {
     const message = messages[index]
-    if (message.type === "user" || message.type === "synthetic") return index
+    if (message.type === "idle") return input
+    if (message.type !== "user" && message.type !== "synthetic") continue
+    if (legacy) return index
+    input = index
   }
-  return -1
+  return input
 }
 
 function hasTokenUsage(

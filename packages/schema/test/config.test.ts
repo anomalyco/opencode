@@ -49,8 +49,6 @@ describe("Config.Entry", () => {
       }),
       new Config.Document({ type: "document", info: new Config.Info({ shell: "/bin/zsh" }) }),
       new Config.Directory({ type: "directory", path: AbsolutePath.make("/project/.opencode") }),
-      new Config.AgentsDirectory({ type: "agents", path: AbsolutePath.make("/project/.agents") }),
-      new Config.ClaudeDirectory({ type: "claude", path: AbsolutePath.make("/project/.claude") }),
     ]
 
     const encoded = Schema.encodeSync(Schema.Array(Config.Entry))(entries)
@@ -59,7 +57,7 @@ describe("Config.Entry", () => {
     expect(decoded).toEqual(entries)
     expect(decoded[0]).toBeInstanceOf(Config.Document)
     expect(decoded[1]).not.toHaveProperty("path")
-    expect(decoded.map((entry) => entry.type)).toEqual(["document", "document", "directory", "agents", "claude"])
+    expect(decoded.map((entry) => entry.type)).toEqual(["document", "document", "directory"])
     expect(decoded[0]?.type === "document" ? decoded[0].info.permissions : undefined).toEqual([
       { action: "shell", resource: "*", effect: "ask" },
       { action: "shell", resource: "git status", effect: "allow" },

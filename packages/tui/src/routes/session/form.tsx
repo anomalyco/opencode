@@ -1,4 +1,4 @@
-import { createStore } from "solid-js/store"
+import { createStore, unwrap } from "solid-js/store"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { usePaste, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import {
@@ -41,6 +41,21 @@ function truncate(label: string, max: number) {
   return label.length > max ? label.slice(0, max - 1).trimEnd() + "…" : label
 }
 
+type FormDraft = {
+  tab: number
+  answers: Record<string, FormValue | undefined>
+  custom: Record<string, string | undefined>
+  externalReady: Record<string, boolean>
+  selected: number
+  editing: boolean
+  error: string
+}
+
+// Holds in-progress answers per form across FormPrompt remounts, since the
+// session route is keyed by sessionID and unmounts on tab switch. Mirrors
+// component/prompt/draft-stash.ts: a draft is consumed on take.
+const drafts = new Map<string, FormDraft>()
+
 export function FormPrompt(props: { form: FormWithLocation }) {
   const data = useData()
   const themes = useThemes()
@@ -56,19 +71,23 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const toast = useToast()
   const configuredFields = props.form.fields.filter(isFormAnswerField)
   const initial = formInitialValues(props.form.fields)
+  const draft = drafts.get(props.form.id)
+  drafts.delete(props.form.id)
 
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
   const [reviewHeight, setReviewHeight] = createSignal(1)
   const [reviewScrollable, setReviewScrollable] = createSignal(false)
-  const [store, setStore] = createStore({
-    tab: 0,
-    answers: initial.answers,
-    custom: initial.custom,
-    externalReady: {} as Record<string, boolean>,
-    selected: formSelected(configuredFields[0], configuredFields[0]?.default),
-    editing: false,
-    error: "",
-  })
+  const [store, setStore] = createStore<FormDraft>(
+    draft ?? {
+      tab: 0,
+      answers: initial.answers,
+      custom: initial.custom,
+      externalReady: {},
+      selected: formSelected(configuredFields[0], configuredFields[0]?.default),
+      editing: false,
+      error: "",
+    },
+  )
 
   let textarea: TextareaRenderable | undefined
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable>()
@@ -218,6 +237,22 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
   onCleanup(() => {
     if (measureReview) renderer.off(CliRenderEvents.FRAME, measureReview)
+    // A reply or cancel removes the form from data before this unmount runs, so a
+    // form still listed here is only hidden by navigation and worth restoring.
+    const pending = data.session.form
+      .list(props.form.sessionID, props.form.location)
+      ?.some((item) => item.id === props.form.id)
+    if (!pending) return
+    // Textual answers live in the editor until committed, so capture them here.
+    const current = answerField()
+    const snapshot = unwrap(store)
+    drafts.set(props.form.id, {
+      ...snapshot,
+      custom:
+        current && textarea && !textarea.isDestroyed
+          ? { ...snapshot.custom, [current.key]: textarea.plainText }
+          : snapshot.custom,
+    })
   })
 
   // Refs publish after initialization so burst typing stays with the interceptor until the editor is ready.

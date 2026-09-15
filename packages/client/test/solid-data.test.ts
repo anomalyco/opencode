@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
+import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
 
 const session = (viewed: number): SessionInfo => ({
   id: "ses_refresh",
@@ -302,7 +302,7 @@ test("adopts cached directory-project sessions when their repository is resolved
         ...session(0),
         id: "ses_remote",
         projectID: "directory-root",
-        location: { directory: "/repo", workspaceID: "workspace-remote" },
+        location: { directory: "/repo" },
       },
     ]
     sessions.forEach((item) => setup.data.session.remember(item))
@@ -342,7 +342,7 @@ test("adopts cached directory-project sessions when their repository is resolved
     expect(setup.data.session.get("ses_escaped")?.projectID).toBe("global")
     expect(setup.data.session.get("ses_other")?.projectID).toBe("other-repository")
     expect(setup.data.session.get("ses_sibling")?.projectID).toBe("global")
-    expect(setup.data.session.get("ses_remote")?.projectID).toBe("directory-root")
+    expect(setup.data.session.get("ses_remote")?.projectID).toBe("repository")
     await wait(() => setup.data.session.get("ses_uncached")?.projectID === "repository")
     expect(setup.data.session.get("ses_uncached")?.subpath).toBe("app")
   } finally {
@@ -350,7 +350,7 @@ test("adopts cached directory-project sessions when their repository is resolved
   }
 })
 
-test("refreshes global credential events across every loaded location and workspace", async () => {
+test("refreshes global credential events across every loaded location", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const requests: URL[] = []
   const api = OpenCode.make({
@@ -363,7 +363,6 @@ test("refreshes global credential events across every loaded location and worksp
       return Response.json({
         location: {
           directory,
-          workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
           project: { id: "project", directory, canonical: directory },
         },
         data: [],
@@ -385,7 +384,7 @@ test("refreshes global credential events across every loaded location and worksp
     }),
     dispose,
   }))
-  const locations = [{ directory: "/project" }, { directory: "/other", workspaceID: "workspace-other" }]
+  const locations = [{ directory: "/project" }, { directory: "/other" }]
 
   try {
     await Promise.all(
@@ -407,15 +406,9 @@ test("refreshes global credential events across every loaded location and worksp
     }
     listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
     await wait(() => requests.length === 2)
-    expect(
-      requests.map((url) => [
-        url.pathname,
-        url.searchParams.get("location[directory]"),
-        url.searchParams.get("location[workspace]"),
-      ]),
-    ).toEqual([
-      ["/api/integration", "/project", null],
-      ["/api/integration", "/other", "workspace-other"],
+    expect(requests.map((url) => [url.pathname, url.searchParams.get("location[directory]")])).toEqual([
+      ["/api/integration", "/project"],
+      ["/api/integration", "/other"],
     ])
     requests.length = 0
 
@@ -428,18 +421,12 @@ test("refreshes global credential events across every loaded location and worksp
       }
       listeners.forEach((listener) => listener({ name: switched.type, details: switched }))
       await wait(() => requests.length === 4)
-      expect(
-        requests.map((url) => [
-          url.pathname,
-          url.searchParams.get("location[directory]"),
-          url.searchParams.get("location[workspace]"),
-        ]),
-      ).toEqual(
+      expect(requests.map((url) => [url.pathname, url.searchParams.get("location[directory]")])).toEqual(
         expect.arrayContaining([
-          ["/api/model", "/project", null],
-          ["/api/provider", "/project", null],
-          ["/api/model", "/other", "workspace-other"],
-          ["/api/provider", "/other", "workspace-other"],
+          ["/api/model", "/project"],
+          ["/api/provider", "/project"],
+          ["/api/model", "/other"],
+          ["/api/provider", "/other"],
         ]),
       )
       locations.forEach((location, index) =>
@@ -448,6 +435,140 @@ test("refreshes global credential events across every loaded location and worksp
       requests.length = 0
     }
   } finally {
+    setup.dispose()
+  }
+})
+
+for (const resource of ["provider", "model"] as const) {
+  test(`refreshes ${resource} values only at the location named by ${resource}.updated`, async () => {
+    const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+    const requests: URL[] = []
+    const current = { name: "Before" }
+    const api = OpenCode.make({
+      baseUrl: "http://opencode.local",
+      fetch: async (input, init) => {
+        const request = input instanceof Request ? input : new Request(input, init)
+        const url = new URL(request.url)
+        requests.push(url)
+        const directory = url.searchParams.get("location[directory]") ?? "/project"
+        if (url.pathname !== "/api/provider" && url.pathname !== "/api/model")
+          throw new Error(`Unexpected request: ${request.url}`)
+        return Response.json({
+          location: { directory, project: { id: directory, directory, canonical: directory } },
+          data:
+            url.pathname === "/api/provider"
+              ? [{ id: "company", name: current.name, activation: "enabled", package: "aisdk:@ai-sdk/openai" }]
+              : [modelInfo(current.name)],
+        })
+      },
+    })
+    const setup = createRoot((dispose) => ({
+      data: createData({
+        api: () => api,
+        directory: "/project",
+        event: {
+          on: () => () => {},
+          listen(handler) {
+            listeners.add(handler)
+            return () => listeners.delete(handler)
+          },
+        },
+        connection: { status: () => "connected" },
+      }),
+      dispose,
+    }))
+    const project = { directory: "/project" }
+    const other = { directory: "/other" }
+    const unaffected = resource === "provider" ? "model" : "provider"
+
+    try {
+      await Promise.all(
+        [project, other].flatMap((location) => [
+          setup.data.location.provider.sync(location),
+          setup.data.location.model.sync(location),
+        ]),
+      )
+      const untouchedResource = setup.data.location[unaffected].list(project)
+      const untouchedLocation = setup.data.location[resource].list(other)
+      requests.length = 0
+      current.name = "After"
+      const event: OpenCodeEvent = {
+        id: `evt_${resource}_updated`,
+        created: 1,
+        type: `${resource}.updated`,
+        location: project,
+        data: {},
+      }
+      listeners.forEach((listener) => listener({ name: event.type, details: event }))
+
+      await wait(() => setup.data.location[resource].list(project)?.[0]?.name === "After")
+      expect(requests.map((url) => [url.pathname, url.searchParams.get("location[directory]")])).toEqual([
+        [`/api/${resource}`, "/project"],
+      ])
+      expect(setup.data.location[unaffected].list(project)).toBe(untouchedResource)
+      expect(setup.data.location[resource].list(other)).toBe(untouchedLocation)
+      expect(setup.data.location[unaffected].list(project)?.[0]?.name).toBe("Before")
+      expect(setup.data.location[resource].list(other)?.[0]?.name).toBe("Before")
+    } finally {
+      setup.dispose()
+    }
+  })
+}
+
+test("revalidates model discovery when an update overtakes an in-flight model list", async () => {
+  const started = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  let requests = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (new URL(request.url).pathname !== "/api/model") throw new Error(`Unexpected request: ${request.url}`)
+      const initial = ++requests === 1
+      if (initial) {
+        started.resolve()
+        await release.promise
+      }
+      return Response.json({
+        location: { directory: "/project" },
+        data: [modelInfo(initial ? "Before discovery" : "Discovered model")],
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+
+  try {
+    const initial = setup.data.location.model.sync()
+    await started.promise
+    const event: OpenCodeEvent = {
+      id: "evt_models_discovered",
+      created: 1,
+      type: "model.updated",
+      location: { directory: "/project" },
+      data: {},
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    release.resolve()
+    await initial
+    await wait(() => setup.data.location.model.list()?.[0]?.name === "Discovered model")
+    expect(requests).toBe(2)
+  } finally {
+    release.resolve()
     setup.dispose()
   }
 })
@@ -465,7 +586,6 @@ test("refreshes references for the location an update names", async () => {
       return Response.json({
         location: {
           directory,
-          workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
           project: { id: "project", directory, canonical: directory },
         },
         data: [],
@@ -487,7 +607,7 @@ test("refreshes references for the location an update names", async () => {
     }),
     dispose,
   }))
-  const other = { directory: "/other", workspaceID: "workspace-other" }
+  const other = { directory: "/other" }
 
   try {
     await Promise.all([setup.data.location.reference.sync(), setup.data.location.reference.sync(other)])
@@ -502,11 +622,10 @@ test("refreshes references for the location an update names", async () => {
     }
     listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
     await wait(() => requests.length === 1)
-    expect([
-      requests[0]!.pathname,
-      requests[0]!.searchParams.get("location[directory]"),
-      requests[0]!.searchParams.get("location[workspace]"),
-    ]).toEqual(["/api/reference", "/other", "workspace-other"])
+    expect([requests[0]!.pathname, requests[0]!.searchParams.get("location[directory]")]).toEqual([
+      "/api/reference",
+      "/other",
+    ])
   } finally {
     setup.dispose()
   }
@@ -877,6 +996,22 @@ test("projects background user shell metadata from durable shell data", () => {
     setup.dispose()
   }
 })
+
+function modelInfo(name: string): ModelInfo {
+  return {
+    id: "chat",
+    modelID: "chat",
+    providerID: "company",
+    name,
+    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    variants: [],
+    time: { released: 0 },
+    cost: [],
+    status: "active",
+    enabled: true,
+    limit: { context: 8192, output: 1024 },
+  }
+}
 
 function activityFixture(read: () => Response | Promise<Response>) {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()

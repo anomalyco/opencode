@@ -301,6 +301,7 @@ test("uses migrated keybinds when persistence fails", async () => {
   const fs = new Proxy(node, {
     get(target, property, receiver) {
       if (property === "rename") return () => Effect.die(new Error("read-only config"))
+      // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property access.
       return Reflect.get(target, property, receiver)
     },
   })
@@ -423,24 +424,24 @@ test("updates effective duplicate canonical keybinds", async () => {
   const file = path.join(directory.path, "cli.json")
   await Bun.write(
     file,
-    `{"keybinds":{"session.delete":"first","session.delete":"last","permission.mode":"off","permission.mode":"on"}}`,
+    `{"keybinds":{"session.delete":"first","session.delete":"last","opencode.settings":"off","opencode.settings":"on"}}`,
   )
 
   const config = await run(
     directory.path,
     Effect.gen(function* () {
       const service = yield* Config.Service
-      expect((yield* service.get()).keybinds).toEqual({ "session.delete": "last", "permission.mode": "on" })
+      expect((yield* service.get()).keybinds).toEqual({ "session.delete": "last", "opencode.settings": "on" })
       return yield* service.update((draft) => {
-        draft.keybinds = { ...draft.keybinds, "session.delete": "changed", "permission.mode": "changed" }
+        draft.keybinds = { ...draft.keybinds, "session.delete": "changed", "opencode.settings": "changed" }
       })
     }),
   )
 
-  expect(config.keybinds).toEqual({ "session.delete": "changed", "permission.mode": "changed" })
+  expect(config.keybinds).toEqual({ "session.delete": "changed", "opencode.settings": "changed" })
   expect(parse(await Bun.file(file).text()).keybinds).toEqual({
     "session.delete": "changed",
-    "permission.mode": "changed",
+    "opencode.settings": "changed",
   })
 })
 

@@ -35,7 +35,7 @@ for (const entrypoint of ["create", "layer"] as const) {
       ).pipe(Effect.provideService(FetchHttpClient.Fetch, ambient))
 
       yield* Effect.gen(function* () {
-        expect(yield* client.health.get()).toMatchObject({ healthy: true, version: "transport-test" })
+        expect(yield* client.server.status()).toMatchObject({ version: "transport-test" })
         const session = yield* client.sessions.create({
           location: Location.Ref.make({ directory: AbsolutePath.make(directory.path) }),
         })
@@ -56,7 +56,7 @@ for (const entrypoint of ["create", "layer"] as const) {
       yield* Scope.close(scope, Exit.void)
       expect(
         Exit.isFailure(
-          yield* client.health.get().pipe(Effect.provideService(FetchHttpClient.Fetch, ambient), Effect.exit),
+          yield* client.server.status().pipe(Effect.provideService(FetchHttpClient.Fetch, ambient), Effect.exit),
         ),
       ).toBe(true)
       expect(calls).toEqual([])

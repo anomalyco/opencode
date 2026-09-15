@@ -47,7 +47,7 @@ describe("confined generators", () => {
       { value: 2, done: false },
       { value: 4, done: false },
       { value: 7, done: true },
-      { value: null, done: true },
+      { done: true },
     ])
   })
 
@@ -84,7 +84,7 @@ describe("confined generators", () => {
         try { iterator.throw("second") } catch (error) { exhausted = error }
         return [suspended, exhausted, iterator.next()]
       `),
-    ).toEqual(["first", "second", { value: null, done: true }])
+    ).toEqual(["first", "second", { done: true }])
   })
 
   test("rejects synchronous generator reentry", async () => {
@@ -236,11 +236,7 @@ describe("confined generators", () => {
       `),
     ).toEqual([
       [true, true, true],
-      [
-        { value: 1, done: false },
-        { value: 3, done: true },
-        { value: null, done: true },
-      ],
+      [{ value: 1, done: false }, { value: 3, done: true }, { done: true }],
       ["start", "received 2"],
     ])
   })
@@ -339,7 +335,7 @@ describe("confined generators", () => {
       { value: 1, done: false },
       { value: "recovered", done: false },
       ["caught bad"],
-      { value: null, done: true },
+      { done: true },
       ["caught bad", "finally"],
     ])
   })
@@ -391,11 +387,8 @@ describe("confined generators", () => {
     ).toEqual([[1, 2], "TypeError"])
   })
 
-  test("keeps generator references opaque at the data boundary", async () => {
-    const result = await execute(`function* generate() { yield 1 } return generate()`)
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.error.kind).toBe("InvalidDataValue")
+  test("a returned generator serializes as {} like JSON.stringify", async () => {
+    expect(await value(`function* generate() { yield 1 } return generate()`)).toEqual({})
   })
 
   // test/built-ins/GeneratorPrototype/return/from-state-suspended-start.js
@@ -421,14 +414,7 @@ describe("confined generators", () => {
 
         return [startReturn, afterReturn, startThrow, afterThrow, completedThrow, events]
       `),
-    ).toEqual([
-      { value: 7, done: true },
-      { value: null, done: true },
-      "start",
-      { value: null, done: true },
-      "completed",
-      [],
-    ])
+    ).toEqual([{ value: 7, done: true }, { done: true }, "start", { done: true }, "completed", []])
   })
 
   // test/built-ins/AsyncGeneratorPrototype/return/return-suspendedStart-promise.js
@@ -454,14 +440,7 @@ describe("confined generators", () => {
 
         return [startReturn, afterReturn, startThrow, afterThrow, completedThrow, events]
       `),
-    ).toEqual([
-      { value: 7, done: true },
-      { value: null, done: true },
-      "start",
-      { value: null, done: true },
-      "completed",
-      [],
-    ])
+    ).toEqual([{ value: 7, done: true }, { done: true }, "start", { done: true }, "completed", []])
   })
 
   // test/built-ins/AsyncGeneratorPrototype/return/return-suspendedYield-try-finally.js
@@ -512,7 +491,7 @@ describe("confined generators", () => {
         }
         return results
       `),
-    ).toEqual(["direct", { value: null, done: true }, "delegated", { value: null, done: true }])
+    ).toEqual(["direct", { done: true }, "delegated", { done: true }])
   })
 
   // test/built-ins/AsyncFromSyncIteratorPrototype/next/for-await-iterator-next-rejected-promise-close.js
@@ -1033,14 +1012,14 @@ describe("confined generators", () => {
     ).toBe("a=1")
   })
 
-  test("converts URLSearchParams pair elements before requesting the next", async () => {
+  test("coerces URLSearchParams pair elements like JS and closes both generators", async () => {
     expect(
       await value(`
         const events = []
         function* pair() {
           try {
             events.push("first")
-            yield (function* () {})()
+            yield Promise.resolve(1)
             events.push("second")
             yield 2
           } finally { events.push("pair close") }
@@ -1048,11 +1027,10 @@ describe("confined generators", () => {
         function* entries() {
           try { yield pair() } finally { events.push("outer close") }
         }
-        let name
-        try { new URLSearchParams(entries()) } catch (error) { name = error.name }
-        return [events, name]
+        const params = new URLSearchParams(entries())
+        return [events, params.toString()]
       `),
-    ).toEqual([["first", "pair close", "outer close"], "Error"])
+    ).toEqual([["first", "second", "pair close", "outer close"], "%5Bobject+Object%5D=2"])
   })
 
   test("validates URLSearchParams pair lengths after converting the outer sequence", async () => {

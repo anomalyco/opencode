@@ -6,71 +6,19 @@
     "description": "Experimental HttpApi surface for selected instance routes."
   },
   "paths": {
-    "/api/health": {
-      "get": {
-        "tags": ["health"],
-        "operationId": "v2.health.get",
-        "parameters": [],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "ServiceHealth",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceHealth"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Report the owning server process and its application status.",
-        "summary": "Check server health"
-      }
-    },
-    "/api/server": {
+    "/api/status": {
       "get": {
         "tags": ["server"],
-        "operationId": "v2.server.get",
+        "operationId": "server.status",
         "parameters": [],
         "security": [],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "ServerStatus",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "urls": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "required": ["urls"],
-                  "additionalProperties": false
+                  "$ref": "#/components/schemas/ServerStatus"
                 }
               }
             }
@@ -96,14 +44,14 @@
             }
           }
         },
-        "description": "Return the URLs that can be used to connect to this server.",
-        "summary": "Get server information"
+        "description": "Return the server identity, connection URLs, and readiness status.",
+        "summary": "Get server status"
       }
     },
     "/api/location": {
       "get": {
         "tags": ["location"],
-        "operationId": "v2.location.get",
+        "operationId": "location.get",
         "parameters": [
           {
             "name": "location",
@@ -114,16 +62,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -149,11 +87,11 @@
         "security": [],
         "responses": {
           "200": {
-            "description": "Location.Info",
+            "description": "Location.PublicInfo",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Location.InfoEncoded"
+                  "$ref": "#/components/schemas/Location.PublicInfo"
                 }
               }
             }
@@ -186,7 +124,7 @@
     "/api/agent": {
       "get": {
         "tags": ["agent"],
-        "operationId": "v2.agent.list",
+        "operationId": "agent.list",
         "parameters": [
           {
             "name": "location",
@@ -197,16 +135,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -239,7 +167,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -282,7 +210,7 @@
     "/api/agent/{agentID}": {
       "get": {
         "tags": ["agent"],
-        "operationId": "v2.agent.get",
+        "operationId": "agent.get",
         "parameters": [
           {
             "name": "agentID",
@@ -301,16 +229,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -343,7 +261,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Agent.Info"
@@ -393,7 +311,7 @@
     "/api/plugin": {
       "get": {
         "tags": ["plugin"],
-        "operationId": "v2.plugin.list",
+        "operationId": "plugin.list",
         "parameters": [
           {
             "name": "location",
@@ -404,16 +322,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -446,7 +354,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -486,86 +394,10 @@
         "summary": "List plugins"
       }
     },
-    "/api/plugin/await-activation": {
-      "post": {
-        "tags": ["plugin"],
-        "operationId": "v2.plugin.awaitActivation",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Wait for configured plugin activation at a Location to settle, including missing-package installs. Completion does not imply every plugin succeeded or background resource discovery finished. Cancelling this wait does not cancel activation.",
-        "summary": "Wait for plugin activation"
-      }
-    },
     "/api/plugin/check": {
       "post": {
         "tags": ["plugin"],
-        "operationId": "v2.plugin.check",
+        "operationId": "plugin.check",
         "parameters": [
           {
             "name": "location",
@@ -576,16 +408,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -618,7 +440,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -691,7 +513,7 @@
     "/api/plugin/update": {
       "post": {
         "tags": ["plugin"],
-        "operationId": "v2.plugin.update",
+        "operationId": "plugin.update",
         "parameters": [
           {
             "name": "location",
@@ -702,16 +524,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -804,24 +616,8 @@
     "/api/session": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.list",
+        "operationId": "session.list",
         "parameters": [
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "pattern": "^wrk"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
-          },
           {
             "name": "limit",
             "in": "query",
@@ -1005,7 +801,7 @@
       },
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.create",
+        "operationId": "session.create",
         "parameters": [],
         "security": [],
         "responses": {
@@ -1099,7 +895,7 @@
                   "location": {
                     "anyOf": [
                       {
-                        "$ref": "#/components/schemas/Location.Ref"
+                        "$ref": "#/components/schemas/Location.PublicRef"
                       },
                       {
                         "type": "null"
@@ -1115,6 +911,16 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "permissions": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Permission.Ruleset"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -1125,10 +931,10 @@
         }
       }
     },
-    "/api/session/stats": {
+    "/api/experimental/session/stats": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.stats",
+        "operationId": "experimental.session.stats",
         "parameters": [
           {
             "name": "from",
@@ -1258,10 +1064,10 @@
         "summary": "Get session statistics"
       }
     },
-    "/api/session/import": {
+    "/api/experimental/session/import": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.import",
+        "operationId": "experimental.session.import",
         "parameters": [],
         "security": [],
         "responses": {
@@ -1343,7 +1149,7 @@
                   "location": {
                     "anyOf": [
                       {
-                        "$ref": "#/components/schemas/Location.Ref"
+                        "$ref": "#/components/schemas/Location.PublicRef"
                       },
                       {
                         "type": "null"
@@ -1360,10 +1166,10 @@
         }
       }
     },
-    "/api/session/{sessionID}/export": {
+    "/api/experimental/session/{sessionID}/export": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.export",
+        "operationId": "experimental.session.export",
         "parameters": [
           {
             "name": "sessionID",
@@ -1458,7 +1264,7 @@
     "/api/session/active": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.active",
+        "operationId": "session.active",
         "parameters": [],
         "security": [],
         "responses": {
@@ -1512,7 +1318,7 @@
     "/api/session/{sessionID}": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.get",
+        "operationId": "session.get",
         "parameters": [
           {
             "name": "sessionID",
@@ -1579,7 +1385,7 @@
       },
       "delete": {
         "tags": ["session"],
-        "operationId": "v2.session.remove",
+        "operationId": "session.remove",
         "parameters": [
           {
             "name": "sessionID",
@@ -1629,12 +1435,89 @@
         },
         "description": "Delete a session and its child sessions.",
         "summary": "Delete session"
+      },
+      "patch": {
+        "tags": ["session"],
+        "operationId": "session.rename",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Update the session title.",
+        "summary": "Rename session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": ["title"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/session/{sessionID}/fork": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.fork",
+        "operationId": "session.fork",
         "parameters": [
           {
             "name": "sessionID",
@@ -1713,7 +1596,7 @@
             }
           }
         },
-        "description": "Create a child session by copying projected history through or before a message boundary.",
+        "description": "Create a child session by copying projected history before a message. Omit before to copy the full history.",
         "summary": "Fork session",
         "requestBody": {
           "content": {
@@ -1721,11 +1604,18 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "boundary": {
-                    "$ref": "#/components/schemas/Session.ForkRequestBoundary"
+                  "before": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
-                "required": ["boundary"],
                 "additionalProperties": false
               }
             }
@@ -1737,7 +1627,7 @@
     "/api/session/{sessionID}/agent": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.switchAgent",
+        "operationId": "session.switchAgent",
         "parameters": [
           {
             "name": "sessionID",
@@ -1816,7 +1706,7 @@
     "/api/session/{sessionID}/model": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.switchModel",
+        "operationId": "session.switchModel",
         "parameters": [
           {
             "name": "sessionID",
@@ -1892,89 +1782,10 @@
         }
       }
     },
-    "/api/session/{sessionID}/rename": {
-      "post": {
-        "tags": ["session"],
-        "operationId": "v2.session.rename",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "description": "Update the session title.",
-        "summary": "Rename session",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "title": {
-                    "type": "string"
-                  }
-                },
-                "required": ["title"],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
     "/api/session/{sessionID}/move": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.move",
+        "operationId": "session.move",
         "parameters": [
           {
             "name": "sessionID",
@@ -2029,7 +1840,7 @@
             }
           }
         },
-        "description": "Move a session to another project directory, optionally transferring local changes.",
+        "description": "Move a session to another project directory at the requested delivery boundary.",
         "summary": "Move session",
         "requestBody": {
           "content": {
@@ -2039,10 +1850,6 @@
                 "properties": {
                   "directory": {
                     "type": "string"
-                  },
-                  "workspaceID": {
-                    "type": "string",
-                    "pattern": "^wrk"
                   },
                   "delivery": {
                     "anyOf": [
@@ -2067,7 +1874,7 @@
     "/api/session/{sessionID}/prompt": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.prompt",
+        "operationId": "session.prompt",
         "parameters": [
           {
             "name": "sessionID",
@@ -2229,7 +2036,7 @@
     "/api/session/{sessionID}/command": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.command",
+        "operationId": "session.command",
         "parameters": [
           {
             "name": "sessionID",
@@ -2305,7 +2112,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "command": {
+                  "name": {
                     "type": "string"
                   },
                   "text": {
@@ -2340,7 +2147,7 @@
                     ]
                   }
                 },
-                "required": ["command", "text"],
+                "required": ["name", "text"],
                 "additionalProperties": false
               }
             }
@@ -2349,10 +2156,10 @@
         }
       }
     },
-    "/api/session/{sessionID}/skill": {
+    "/api/experimental/session/{sessionID}/skill": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.skill",
+        "operationId": "experimental.session.skill",
         "parameters": [
           {
             "name": "sessionID",
@@ -2419,17 +2226,6 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "pattern": "^msg_"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "skill": {
                     "type": "string"
                   },
                   "resume": {
@@ -2443,7 +2239,7 @@
                     ]
                   }
                 },
-                "required": ["skill"],
+                "required": ["id"],
                 "additionalProperties": false
               }
             }
@@ -2455,7 +2251,7 @@
     "/api/session/{sessionID}/synthetic": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.synthetic",
+        "operationId": "session.synthetic",
         "parameters": [
           {
             "name": "sessionID",
@@ -2602,7 +2398,7 @@
     "/api/session/{sessionID}/shell": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.shell",
+        "operationId": "session.shell",
         "parameters": [
           {
             "name": "sessionID",
@@ -2669,7 +2465,7 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "pattern": "^evt_"
+                        "pattern": "^msg_"
                       },
                       {
                         "type": "null"
@@ -2692,7 +2488,7 @@
     "/api/session/{sessionID}/compact": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.compact",
+        "operationId": "session.compact",
         "parameters": [
           {
             "name": "sessionID",
@@ -2809,10 +2605,10 @@
         }
       }
     },
-    "/api/session/{sessionID}/wait": {
+    "/api/experimental/session/{sessionID}/wait": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.wait",
+        "operationId": "experimental.session.wait",
         "parameters": [
           {
             "name": "sessionID",
@@ -2884,7 +2680,7 @@
     "/api/session/{sessionID}/revert/stage": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.revert.stage",
+        "operationId": "session.revert.stage",
         "parameters": [
           {
             "name": "sessionID",
@@ -3008,10 +2804,10 @@
         }
       }
     },
-    "/api/session/{sessionID}/revert/clear": {
-      "post": {
+    "/api/session/{sessionID}/revert": {
+      "delete": {
         "tags": ["session"],
-        "operationId": "v2.session.revert.clear",
+        "operationId": "session.revert.clear",
         "parameters": [
           {
             "name": "sessionID",
@@ -3092,7 +2888,7 @@
     "/api/session/{sessionID}/revert/commit": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.revert.commit",
+        "operationId": "session.revert.commit",
         "parameters": [
           {
             "name": "sessionID",
@@ -3163,7 +2959,7 @@
     "/api/session/{sessionID}/context": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.context",
+        "operationId": "session.context",
         "parameters": [
           {
             "name": "sessionID",
@@ -3242,10 +3038,156 @@
         "summary": "Get session context"
       }
     },
+    "/api/session/{sessionID}/diff": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "session.diff",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^msg_"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "User message whose turn to diff. Defaults to the turn of the newest user message."
+            },
+            "required": false
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^msg_"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Later user message whose turn ends the range. Defaults to the turn of `from` alone."
+            },
+            "required": false
+          },
+          {
+            "name": "context",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Unchanged lines around each hunk. Omit for full-file patches."
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FileDiff.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "MessageNotFoundError | SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MessageNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Structured per-file diffs of the files a turn changed. A turn runs from the first prompt after the session was last idle until its next idle marker, so prompts steered in while it was busy belong to the same turn; `to` extends the range through a later turn. Compares the range's first recorded snapshot with its last; a step still running in the active session compares against the working copy. Ranges that span a location change are rejected. In sessions without any idle marker, a prompt's turn spans until the next user message.",
+        "summary": "Diff session turns"
+      }
+    },
     "/api/session/{sessionID}/inbox": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.inbox.list",
+        "operationId": "session.inbox.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -3317,7 +3259,7 @@
     "/api/session/{sessionID}/inbox/{inboxID}": {
       "delete": {
         "tags": ["session"],
-        "operationId": "v2.session.inbox.cancel",
+        "operationId": "session.inbox.cancel",
         "parameters": [
           {
             "name": "sessionID",
@@ -3391,7 +3333,7 @@
     "/api/session/{sessionID}/inbox/{inboxID}/steer": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.inbox.steer",
+        "operationId": "session.inbox.steer",
         "parameters": [
           {
             "name": "sessionID",
@@ -3465,7 +3407,7 @@
     "/api/session/{sessionID}/inbox/{inboxID}/queue": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.inbox.queue",
+        "operationId": "session.inbox.queue",
         "parameters": [
           {
             "name": "sessionID",
@@ -3536,10 +3478,10 @@
         "summary": "Queue steered item"
       }
     },
-    "/api/session/{sessionID}/instructions/entries": {
+    "/api/experimental/session/{sessionID}/instructions/entries": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.instructions.entry.list",
+        "operationId": "experimental.session.instructions.entry.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -3615,10 +3557,10 @@
         "summary": "List instruction entries"
       }
     },
-    "/api/session/{sessionID}/instructions/entries/{key}": {
+    "/api/experimental/session/{sessionID}/instructions/entries/{key}": {
       "put": {
         "tags": ["session"],
-        "operationId": "v2.session.instructions.entry.put",
+        "operationId": "experimental.session.instructions.entry.put",
         "parameters": [
           {
             "name": "sessionID",
@@ -3711,7 +3653,7 @@
       },
       "delete": {
         "tags": ["session"],
-        "operationId": "v2.session.instructions.entry.remove",
+        "operationId": "experimental.session.instructions.entry.remove",
         "parameters": [
           {
             "name": "sessionID",
@@ -3781,7 +3723,7 @@
     "/api/session/{sessionID}/generate": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.generate",
+        "operationId": "session.generate",
         "parameters": [
           {
             "name": "sessionID",
@@ -3877,7 +3819,7 @@
     "/api/experimental/session/{sessionID}/log": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.log",
+        "operationId": "session.log",
         "parameters": [
           {
             "name": "sessionID",
@@ -4051,7 +3993,7 @@
     "/api/session/{sessionID}/interrupt": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.interrupt",
+        "operationId": "session.interrupt",
         "parameters": [
           {
             "name": "sessionID",
@@ -4063,7 +4005,7 @@
             "required": true
           },
           {
-            "name": "continue",
+            "name": "resume",
             "in": "query",
             "schema": {
               "anyOf": [
@@ -4129,14 +4071,14 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When continue=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
+        "description": "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When resume=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
         "summary": "Interrupt session execution"
       }
     },
     "/api/session/{sessionID}/background": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.background",
+        "operationId": "session.background",
         "parameters": [
           {
             "name": "sessionID",
@@ -4198,7 +4140,7 @@
     "/api/session/{sessionID}/message/{messageID}": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.session.message",
+        "operationId": "session.message.get",
         "parameters": [
           {
             "name": "sessionID",
@@ -4280,10 +4222,10 @@
         "summary": "Get session message"
       }
     },
-    "/api/session/{sessionID}/environment": {
+    "/api/experimental/session/{sessionID}/environment": {
       "put": {
         "tags": ["session"],
-        "operationId": "v2.session.environment",
+        "operationId": "experimental.session.environment",
         "parameters": [
           {
             "name": "sessionID",
@@ -4358,7 +4300,7 @@
     "/api/session/{sessionID}/view": {
       "post": {
         "tags": ["session"],
-        "operationId": "v2.session.view",
+        "operationId": "session.view",
         "parameters": [
           {
             "name": "sessionID",
@@ -4415,8 +4357,7 @@
                 "type": "object",
                 "properties": {
                   "idle": {
-                    "type": "integer",
-                    "minimum": 0
+                    "type": "number"
                   }
                 },
                 "required": ["idle"],
@@ -4431,7 +4372,7 @@
     "/api/session/{sessionID}/message": {
       "get": {
         "tags": ["session"],
-        "operationId": "v2.message.list",
+        "operationId": "session.message.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -4587,7 +4528,7 @@
     "/api/model": {
       "get": {
         "tags": ["model"],
-        "operationId": "v2.model.list",
+        "operationId": "model.list",
         "parameters": [
           {
             "name": "location",
@@ -4598,16 +4539,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -4640,7 +4571,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -4693,7 +4624,7 @@
     "/api/model/default": {
       "get": {
         "tags": ["model"],
-        "operationId": "v2.model.default",
+        "operationId": "model.default",
         "parameters": [
           {
             "name": "location",
@@ -4704,16 +4635,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -4746,7 +4667,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "anyOf": [
@@ -4803,7 +4724,7 @@
     "/api/generate": {
       "post": {
         "tags": ["generate"],
-        "operationId": "v2.generate.text",
+        "operationId": "generate.text",
         "parameters": [],
         "security": [],
         "responses": {
@@ -4889,7 +4810,7 @@
     "/api/provider": {
       "get": {
         "tags": ["provider"],
-        "operationId": "v2.provider.list",
+        "operationId": "provider.list",
         "parameters": [
           {
             "name": "location",
@@ -4900,16 +4821,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -4942,7 +4853,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -4995,7 +4906,7 @@
     "/api/provider/{providerID}": {
       "get": {
         "tags": ["provider"],
-        "operationId": "v2.provider.get",
+        "operationId": "provider.get",
         "parameters": [
           {
             "name": "providerID",
@@ -5014,16 +4925,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -5056,7 +4957,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Provider.Info"
@@ -5116,7 +5017,7 @@
     "/api/integration": {
       "get": {
         "tags": ["integration"],
-        "operationId": "v2.integration.list",
+        "operationId": "integration.list",
         "parameters": [
           {
             "name": "location",
@@ -5127,16 +5028,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -5169,7 +5060,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -5212,7 +5103,7 @@
     "/api/integration/{integrationID}": {
       "get": {
         "tags": ["integration"],
-        "operationId": "v2.integration.get",
+        "operationId": "integration.get",
         "parameters": [
           {
             "name": "integrationID",
@@ -5231,16 +5122,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -5273,17 +5154,10 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/Integration.Info"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
+                      "$ref": "#/components/schemas/Integration.Info"
                     }
                   },
                   "required": ["location", "data"],
@@ -5311,6 +5185,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "IntegrationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Retrieve one integration and its authentication methods.",
@@ -5320,7 +5204,7 @@
     "/api/experimental/integration/wellknown": {
       "post": {
         "tags": ["integration"],
-        "operationId": "v2.experimental.integration.wellknown.add",
+        "operationId": "experimental.integration.wellknown.add",
         "parameters": [
           {
             "name": "location",
@@ -5331,16 +5215,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -5420,7 +5294,7 @@
     "/api/integration/{integrationID}/connect/key": {
       "post": {
         "tags": ["integration"],
-        "operationId": "v2.integration.connect.key",
+        "operationId": "integration.connect.key",
         "parameters": [
           {
             "name": "integrationID",
@@ -5439,16 +5313,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -5502,6 +5366,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "IntegrationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Run a key authentication method and store the resulting credential.",
@@ -5548,7 +5422,7 @@
     "/api/integration/{integrationID}/connect/oauth": {
       "post": {
         "tags": ["integration"],
-        "operationId": "v2.integration.oauth.connect",
+        "operationId": "integration.oauth.connect",
         "parameters": [
           {
             "name": "integrationID",
@@ -5567,16 +5441,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -5609,7 +5473,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Integration.AttemptEncoded"
@@ -5693,7 +5557,7 @@
     "/api/integration/{integrationID}/connect/oauth/{attemptID}": {
       "get": {
         "tags": ["integration"],
-        "operationId": "v2.integration.oauth.status",
+        "operationId": "integration.oauth.status",
         "parameters": [
           {
             "name": "integrationID",
@@ -5720,16 +5584,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -5762,7 +5616,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Integration.AttemptStatus"
@@ -5793,6 +5647,23 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "IntegrationNotFoundError | IntegrationAttemptNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IntegrationNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IntegrationAttemptNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
           }
         },
         "description": "Poll the current status of an OAuth attempt.",
@@ -5800,7 +5671,7 @@
       },
       "delete": {
         "tags": ["integration"],
-        "operationId": "v2.integration.oauth.cancel",
+        "operationId": "integration.oauth.cancel",
         "parameters": [
           {
             "name": "integrationID",
@@ -5827,16 +5698,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -5892,7 +5753,7 @@
     "/api/integration/{integrationID}/connect/oauth/{attemptID}/complete": {
       "post": {
         "tags": ["integration"],
-        "operationId": "v2.integration.oauth.complete",
+        "operationId": "integration.oauth.complete",
         "parameters": [
           {
             "name": "integrationID",
@@ -5919,16 +5780,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -5982,6 +5833,23 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "IntegrationNotFoundError | IntegrationAttemptNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IntegrationNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IntegrationAttemptNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
           }
         },
         "description": "Complete a code-based OAuth attempt and store the resulting credential.",
@@ -6014,7 +5882,7 @@
     "/api/integration/{integrationID}/connect/command": {
       "post": {
         "tags": ["integration"],
-        "operationId": "v2.integration.command.connect",
+        "operationId": "integration.command.connect",
         "parameters": [
           {
             "name": "integrationID",
@@ -6033,16 +5901,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -6075,7 +5933,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Integration.CommandAttempt"
@@ -6110,6 +5968,23 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "IntegrationNotFoundError | IntegrationMethodNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IntegrationNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IntegrationMethodNotFoundErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -6149,7 +6024,7 @@
     "/api/integration/{integrationID}/connect/command/{attemptID}": {
       "get": {
         "tags": ["integration"],
-        "operationId": "v2.integration.command.status",
+        "operationId": "integration.command.status",
         "parameters": [
           {
             "name": "integrationID",
@@ -6176,16 +6051,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -6218,7 +6083,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Integration.CommandAttemptStatus"
@@ -6249,6 +6114,23 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "IntegrationNotFoundError | IntegrationAttemptNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IntegrationNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IntegrationAttemptNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
           }
         },
         "description": "Poll the current status and output of a command authentication attempt.",
@@ -6256,7 +6138,7 @@
       },
       "delete": {
         "tags": ["integration"],
-        "operationId": "v2.integration.command.cancel",
+        "operationId": "integration.command.cancel",
         "parameters": [
           {
             "name": "integrationID",
@@ -6283,16 +6165,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -6348,7 +6220,7 @@
     "/api/mcp": {
       "get": {
         "tags": ["mcp"],
-        "operationId": "v2.mcp.list",
+        "operationId": "mcp.list",
         "parameters": [
           {
             "name": "location",
@@ -6359,16 +6231,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -6401,7 +6263,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -6441,10 +6303,10 @@
         "summary": "List MCP servers"
       }
     },
-    "/api/mcp/{server}": {
+    "/api/experimental/mcp/{server}": {
       "put": {
         "tags": ["mcp"],
-        "operationId": "v2.mcp.add",
+        "operationId": "experimental.mcp.add",
         "parameters": [
           {
             "name": "server",
@@ -6463,16 +6325,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -6550,7 +6402,7 @@
       },
       "delete": {
         "tags": ["mcp"],
-        "operationId": "v2.mcp.remove",
+        "operationId": "experimental.mcp.remove",
         "parameters": [
           {
             "name": "server",
@@ -6569,16 +6421,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -6641,10 +6483,10 @@
         "summary": "Remove MCP server"
       }
     },
-    "/api/mcp/{server}/connect": {
+    "/api/experimental/mcp/{server}/connect": {
       "post": {
         "tags": ["mcp"],
-        "operationId": "v2.mcp.connect",
+        "operationId": "experimental.mcp.connect",
         "parameters": [
           {
             "name": "server",
@@ -6663,16 +6505,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -6735,10 +6567,10 @@
         "summary": "Connect MCP server"
       }
     },
-    "/api/mcp/{server}/disconnect": {
+    "/api/experimental/mcp/{server}/disconnect": {
       "post": {
         "tags": ["mcp"],
-        "operationId": "v2.mcp.disconnect",
+        "operationId": "experimental.mcp.disconnect",
         "parameters": [
           {
             "name": "server",
@@ -6757,16 +6589,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -6832,7 +6654,7 @@
     "/api/mcp/resource": {
       "get": {
         "tags": ["mcp"],
-        "operationId": "v2.mcp.resource.catalog",
+        "operationId": "mcp.resource.catalog",
         "parameters": [
           {
             "name": "location",
@@ -6843,16 +6665,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -6885,7 +6697,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Mcp.ResourceCatalog"
@@ -6925,7 +6737,7 @@
     "/api/credential/{credentialID}": {
       "patch": {
         "tags": ["credential"],
-        "operationId": "v2.credential.update",
+        "operationId": "credential.update",
         "parameters": [
           {
             "name": "credentialID",
@@ -6934,46 +6746,6 @@
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
           }
         ],
         "security": [],
@@ -7024,7 +6796,7 @@
       },
       "delete": {
         "tags": ["credential"],
-        "operationId": "v2.credential.remove",
+        "operationId": "credential.remove",
         "parameters": [
           {
             "name": "credentialID",
@@ -7033,46 +6805,6 @@
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
           }
         ],
         "security": [],
@@ -7108,7 +6840,7 @@
     "/api/credential/{credentialID}/activate": {
       "post": {
         "tags": ["credential"],
-        "operationId": "v2.credential.activate",
+        "operationId": "credential.activate",
         "parameters": [
           {
             "name": "credentialID",
@@ -7117,46 +6849,6 @@
               "type": "string"
             },
             "required": true
-          },
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
           }
         ],
         "security": [],
@@ -7192,7 +6884,7 @@
     "/api/project": {
       "get": {
         "tags": ["project"],
-        "operationId": "v2.project.list",
+        "operationId": "project.list",
         "parameters": [],
         "security": [],
         "responses": {
@@ -7237,7 +6929,7 @@
     "/api/project/{projectID}": {
       "patch": {
         "tags": ["project"],
-        "operationId": "v2.project.update",
+        "operationId": "project.update",
         "parameters": [
           {
             "name": "projectID",
@@ -7320,93 +7012,10 @@
         }
       }
     },
-    "/api/project/current": {
-      "get": {
-        "tags": ["project"],
-        "operationId": "v2.project.current",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Project.Current",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Project.Current"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Resolve the project for the requested location.",
-        "summary": "Get current project"
-      }
-    },
     "/api/form/request": {
       "get": {
         "tags": ["form"],
-        "operationId": "v2.form.request.list",
+        "operationId": "form.request.list",
         "parameters": [
           {
             "name": "location",
@@ -7417,16 +7026,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -7459,7 +7058,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -7502,7 +7101,7 @@
     "/api/session/{sessionID}/form": {
       "get": {
         "tags": ["form"],
-        "operationId": "v2.session.form.list",
+        "operationId": "session.form.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -7571,7 +7170,7 @@
       },
       "post": {
         "tags": ["form"],
-        "operationId": "v2.session.form.create",
+        "operationId": "session.form.create",
         "parameters": [
           {
             "name": "sessionID",
@@ -7673,7 +7272,7 @@
     "/api/session/{sessionID}/form/{formID}": {
       "get": {
         "tags": ["form"],
-        "operationId": "v2.session.form.get",
+        "operationId": "session.form.get",
         "parameters": [
           {
             "name": "sessionID",
@@ -7760,7 +7359,7 @@
     "/api/session/{sessionID}/form/{formID}/state": {
       "get": {
         "tags": ["form"],
-        "operationId": "v2.session.form.state",
+        "operationId": "session.form.state",
         "parameters": [
           {
             "name": "sessionID",
@@ -7847,7 +7446,7 @@
     "/api/session/{sessionID}/form/{formID}/reply": {
       "post": {
         "tags": ["form"],
-        "operationId": "v2.session.form.reply",
+        "operationId": "session.form.reply",
         "parameters": [
           {
             "name": "sessionID",
@@ -7947,7 +7546,7 @@
     "/api/session/{sessionID}/form/{formID}/cancel": {
       "post": {
         "tags": ["form"],
-        "operationId": "v2.session.form.cancel",
+        "operationId": "session.form.cancel",
         "parameters": [
           {
             "name": "sessionID",
@@ -8030,7 +7629,7 @@
     "/api/permission/request": {
       "get": {
         "tags": ["permission"],
-        "operationId": "v2.permission.request.list",
+        "operationId": "permission.request.list",
         "parameters": [
           {
             "name": "location",
@@ -8041,16 +7640,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -8083,7 +7672,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -8126,7 +7715,7 @@
     "/api/permission/saved": {
       "get": {
         "tags": ["permission"],
-        "operationId": "v2.permission.saved.list",
+        "operationId": "permission.saved.list",
         "parameters": [
           {
             "name": "projectID",
@@ -8194,7 +7783,7 @@
     "/api/permission/saved/{id}": {
       "delete": {
         "tags": ["permission"],
-        "operationId": "v2.permission.saved.remove",
+        "operationId": "permission.saved.remove",
         "parameters": [
           {
             "name": "id",
@@ -8238,7 +7827,7 @@
     "/api/session/{sessionID}/permission": {
       "post": {
         "tags": ["permission"],
-        "operationId": "v2.session.permission.create",
+        "operationId": "session.permission.create",
         "parameters": [
           {
             "name": "sessionID",
@@ -8379,7 +7968,7 @@
       },
       "get": {
         "tags": ["permission"],
-        "operationId": "v2.session.permission.list",
+        "operationId": "session.permission.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -8451,7 +8040,7 @@
     "/api/session/{sessionID}/permission/{requestID}": {
       "get": {
         "tags": ["permission"],
-        "operationId": "v2.session.permission.get",
+        "operationId": "session.permission.get",
         "parameters": [
           {
             "name": "sessionID",
@@ -8539,7 +8128,7 @@
     "/api/session/{sessionID}/permission/{requestID}/reply": {
       "post": {
         "tags": ["permission"],
-        "operationId": "v2.session.permission.reply",
+        "operationId": "session.permission.reply",
         "parameters": [
           {
             "name": "sessionID",
@@ -8637,10 +8226,89 @@
         }
       }
     },
+    "/api/session/{sessionID}/permission/rules": {
+      "put": {
+        "tags": ["permission"],
+        "operationId": "session.permission.rules",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace the session-scoped permission rules. Rules are evaluated after the agent's rules, and the last matching rule wins.",
+        "summary": "Replace session permission rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "permissions": {
+                    "$ref": "#/components/schemas/Permission.Ruleset"
+                  }
+                },
+                "required": ["permissions"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/fs/read/*": {
       "get": {
         "tags": ["filesystem"],
-        "operationId": "v2.fs.read",
+        "operationId": "fs.read",
         "parameters": [
           {
             "name": "location",
@@ -8651,16 +8319,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -8715,6 +8373,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "FileNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Serve one file relative to the requested location.",
@@ -8724,7 +8392,7 @@
     "/api/fs/list": {
       "get": {
         "tags": ["filesystem"],
-        "operationId": "v2.fs.list",
+        "operationId": "fs.list",
         "parameters": [
           {
             "name": "location",
@@ -8735,16 +8403,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -8793,7 +8451,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -8836,7 +8494,7 @@
     "/api/fs/find": {
       "get": {
         "tags": ["filesystem"],
-        "operationId": "v2.fs.find",
+        "operationId": "fs.find",
         "parameters": [
           {
             "name": "location",
@@ -8847,16 +8505,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -8921,7 +8569,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -8964,7 +8612,7 @@
     "/api/command": {
       "get": {
         "tags": ["command"],
-        "operationId": "v2.command.list",
+        "operationId": "command.list",
         "parameters": [
           {
             "name": "location",
@@ -8975,16 +8623,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -9017,7 +8655,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -9060,7 +8698,7 @@
     "/api/skill": {
       "get": {
         "tags": ["skill"],
-        "operationId": "v2.skill.list",
+        "operationId": "skill.list",
         "parameters": [
           {
             "name": "location",
@@ -9071,16 +8709,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -9113,7 +8741,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -9156,7 +8784,7 @@
     "/api/rpc/{rpcID}/{method}": {
       "post": {
         "tags": ["rpc"],
-        "operationId": "v2.rpc.call",
+        "operationId": "rpc.call",
         "parameters": [
           {
             "name": "rpcID",
@@ -9183,16 +8811,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -9282,7 +8900,7 @@
     "/api/event": {
       "get": {
         "tags": ["event"],
-        "operationId": "v2.event.subscribe",
+        "operationId": "event.subscribe",
         "parameters": [],
         "security": [],
         "responses": {
@@ -9405,7 +9023,7 @@
     "/api/pty": {
       "get": {
         "tags": ["pty"],
-        "operationId": "v2.pty.list",
+        "operationId": "pty.list",
         "parameters": [
           {
             "name": "location",
@@ -9416,16 +9034,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -9458,7 +9066,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -9499,7 +9107,7 @@
       },
       "post": {
         "tags": ["pty"],
-        "operationId": "v2.pty.create",
+        "operationId": "pty.create",
         "parameters": [
           {
             "name": "location",
@@ -9510,16 +9118,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -9552,7 +9150,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Pty"
@@ -9626,7 +9224,7 @@
     "/api/pty/{ptyID}": {
       "get": {
         "tags": ["pty"],
-        "operationId": "v2.pty.get",
+        "operationId": "pty.get",
         "parameters": [
           {
             "name": "ptyID",
@@ -9646,16 +9244,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -9688,7 +9276,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Pty"
@@ -9736,7 +9324,7 @@
       },
       "put": {
         "tags": ["pty"],
-        "operationId": "v2.pty.update",
+        "operationId": "pty.update",
         "parameters": [
           {
             "name": "ptyID",
@@ -9756,16 +9344,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -9798,7 +9376,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Pty"
@@ -9877,7 +9455,7 @@
       },
       "delete": {
         "tags": ["pty"],
-        "operationId": "v2.pty.remove",
+        "operationId": "pty.remove",
         "parameters": [
           {
             "name": "ptyID",
@@ -9897,16 +9475,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -9972,7 +9540,7 @@
     "/api/pty/{ptyID}/connect-token": {
       "post": {
         "tags": ["pty"],
-        "operationId": "v2.pty.connect.token",
+        "operationId": "pty.connect.token",
         "parameters": [
           {
             "name": "ptyID",
@@ -10015,16 +9583,6 @@
                           "type": "null"
                         }
                       ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
                     }
                   },
                   "additionalProperties": false
@@ -10049,7 +9607,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/PtyTicket.ConnectToken"
@@ -10109,7 +9667,7 @@
     "/api/pty/{ptyID}/connect": {
       "get": {
         "tags": ["pty"],
-        "operationId": "v2.pty.connect",
+        "operationId": "pty.connect",
         "parameters": [
           {
             "name": "ptyID",
@@ -10123,13 +9681,6 @@
           {
             "in": "query",
             "name": "location[directory]",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "location[workspace]",
             "schema": {
               "type": "string"
             }
@@ -10969,7 +10520,7 @@
     "/api/experimental/persistent-pty/{ptyID}/connect": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "v2.persistentPty.connect",
+        "operationId": "persistentPty.connect",
         "parameters": [
           {
             "name": "ptyID",
@@ -11094,7 +10645,7 @@
     "/api/shell": {
       "get": {
         "tags": ["shell"],
-        "operationId": "v2.shell.list",
+        "operationId": "shell.list",
         "parameters": [
           {
             "name": "location",
@@ -11105,16 +10656,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -11147,7 +10688,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -11188,7 +10729,7 @@
       },
       "post": {
         "tags": ["shell"],
-        "operationId": "v2.shell.create",
+        "operationId": "shell.create",
         "parameters": [
           {
             "name": "location",
@@ -11199,16 +10740,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -11241,7 +10772,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Shell.Info"
@@ -11308,7 +10839,7 @@
     "/api/shell/{id}": {
       "get": {
         "tags": ["shell"],
-        "operationId": "v2.shell.get",
+        "operationId": "shell.get",
         "parameters": [
           {
             "name": "id",
@@ -11328,16 +10859,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -11370,7 +10891,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Shell.Info"
@@ -11418,7 +10939,7 @@
       },
       "delete": {
         "tags": ["shell"],
-        "operationId": "v2.shell.remove",
+        "operationId": "shell.remove",
         "parameters": [
           {
             "name": "id",
@@ -11438,16 +10959,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -11513,7 +11024,7 @@
     "/api/shell/{id}/timeout": {
       "patch": {
         "tags": ["shell"],
-        "operationId": "v2.shell.timeout",
+        "operationId": "shell.timeout",
         "parameters": [
           {
             "name": "id",
@@ -11533,16 +11044,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -11575,7 +11076,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Shell.Info"
@@ -11643,7 +11144,7 @@
     "/api/shell/{id}/output": {
       "get": {
         "tags": ["shell"],
-        "operationId": "v2.shell.output",
+        "operationId": "shell.output",
         "parameters": [
           {
             "name": "id",
@@ -11663,16 +11164,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -11723,7 +11214,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "object",
@@ -11791,7 +11282,7 @@
     "/api/reference": {
       "get": {
         "tags": ["reference"],
-        "operationId": "v2.reference.list",
+        "operationId": "reference.list",
         "parameters": [
           {
             "name": "location",
@@ -11802,16 +11293,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -11844,7 +11325,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -11887,47 +11368,15 @@
     "/api/worktree": {
       "get": {
         "tags": ["worktree"],
-        "operationId": "v2.worktree.list",
+        "operationId": "worktree.list",
         "parameters": [
           {
-            "name": "location",
+            "name": "projectID",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "type": "string"
             },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "required": true
           }
         ],
         "security": [],
@@ -11943,18 +11392,11 @@
             }
           },
           "400": {
-            "description": "WorktreeError | InvalidRequestError",
+            "description": "InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/WorktreeErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
                 }
               }
             }
@@ -11968,56 +11410,25 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Discover worktrees through the requested location's strategies and return its project's inventory.",
+        "description": "Return the project's saved worktree inventory without loading configuration or running discovery.",
         "summary": "List worktrees"
       },
       "post": {
         "tags": ["worktree"],
-        "operationId": "v2.worktree.create",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "operationId": "worktree.create",
+        "parameters": [],
         "security": [],
         "responses": {
           "200": {
@@ -12056,9 +11467,19 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Create a local worktree using the location's registered strategy and directory defaults, then run the project's setup script.",
+        "description": "Load the project's canonical configuration, create a local worktree using its selected strategy, then run the project's setup script.",
         "summary": "Create worktree",
         "requestBody": {
           "content": {
@@ -12073,49 +11494,8 @@
       },
       "delete": {
         "tags": ["worktree"],
-        "operationId": "v2.worktree.remove",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "operationId": "worktree.remove",
+        "parameters": [],
         "security": [],
         "responses": {
           "204": {
@@ -12147,9 +11527,19 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Remove a managed worktree from the requested location's project using its recorded strategy.",
+        "description": "Load the project's canonical configuration and remove a saved worktree using its recorded strategy.",
         "summary": "Remove worktree",
         "requestBody": {
           "content": {
@@ -12166,49 +11556,8 @@
     "/api/worktree/refresh": {
       "post": {
         "tags": ["worktree"],
-        "operationId": "v2.worktree.refresh",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "operationId": "worktree.refresh",
+        "parameters": [],
         "security": [],
         "responses": {
           "204": {
@@ -12240,102 +11589,31 @@
                 }
               }
             }
-          }
-        },
-        "description": "Discover worktrees from the requested location and reconcile the shared project inventory.",
-        "summary": "Refresh worktrees"
-      }
-    },
-    "/api/workspace": {
-      "post": {
-        "tags": ["workspace"],
-        "operationId": "v2.workspace.create",
-        "parameters": [],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "string",
-                      "pattern": "^wrk"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
           },
           "404": {
-            "description": "ProviderNotFoundError",
+            "description": "ProjectNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ConflictError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Create a logical workspace. A caller-supplied ID is idempotent when retried with the same provider; reusing it with another provider returns a conflict.",
-        "summary": "Create workspace",
+        "description": "Load the project's canonical configuration, discover worktrees across known checkout roots using all available strategies, and reconcile saved state.",
+        "summary": "Refresh worktrees",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
-                  "id": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "pattern": "^wrk"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "provider": {
+                  "projectID": {
                     "type": "string"
                   }
                 },
-                "required": ["provider"],
+                "required": ["projectID"],
                 "additionalProperties": false
               }
             }
@@ -12344,72 +11622,10 @@
         }
       }
     },
-    "/api/workspace/{workspaceID}": {
-      "delete": {
-        "tags": ["workspace"],
-        "operationId": "v2.workspace.destroy",
-        "parameters": [
-          {
-            "name": "workspaceID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^wrk"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Reports whether this request destroyed an existing workspace.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkspaceDestroyResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "UnknownError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnknownErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Make a workspace not exist. This operation is idempotent: an already-missing workspace succeeds with `destroyed: false`, while a workspace removed by this request returns `destroyed: true`.",
-        "summary": "Destroy workspace"
-      }
-    },
     "/api/vcs": {
       "get": {
         "tags": ["vcs"],
-        "operationId": "v2.vcs.get",
+        "operationId": "vcs.get",
         "parameters": [
           {
             "name": "location",
@@ -12420,16 +11636,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -12462,7 +11668,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Vcs.Info"
@@ -12502,7 +11708,7 @@
     "/api/vcs/base": {
       "get": {
         "tags": ["vcs"],
-        "operationId": "v2.vcs.base",
+        "operationId": "vcs.base",
         "parameters": [
           {
             "name": "location",
@@ -12513,16 +11719,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -12555,7 +11751,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "anyOf": [
@@ -12612,7 +11808,7 @@
     "/api/vcs/status": {
       "get": {
         "tags": ["vcs"],
-        "operationId": "v2.vcs.status",
+        "operationId": "vcs.status",
         "parameters": [
           {
             "name": "location",
@@ -12623,16 +11819,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -12665,7 +11851,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -12708,7 +11894,7 @@
     "/api/vcs/branches": {
       "get": {
         "tags": ["vcs"],
-        "operationId": "v2.vcs.branches",
+        "operationId": "vcs.branches",
         "parameters": [
           {
             "name": "location",
@@ -12719,16 +11905,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -12791,7 +11967,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/Vcs.BranchList"
@@ -12831,7 +12007,7 @@
     "/api/vcs/diff": {
       "get": {
         "tags": ["vcs"],
-        "operationId": "v2.vcs.diff",
+        "operationId": "vcs.diff",
         "parameters": [
           {
             "name": "location",
@@ -12842,16 +12018,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -12915,7 +12081,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -12968,7 +12134,7 @@
     "/api/debug/location": {
       "get": {
         "tags": ["debug"],
-        "operationId": "v2.debug.location.list",
+        "operationId": "debug.location.list",
         "parameters": [],
         "security": [],
         "responses": {
@@ -12979,7 +12145,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Location.Ref"
+                    "$ref": "#/components/schemas/Location.PublicRef"
                   }
                 }
               }
@@ -13011,7 +12177,7 @@
       },
       "delete": {
         "tags": ["debug"],
-        "operationId": "v2.debug.location.evict",
+        "operationId": "debug.location.evict",
         "parameters": [
           {
             "name": "location",
@@ -13022,16 +12188,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -13087,7 +12243,7 @@
     "/api/experimental/migration/v1": {
       "get": {
         "tags": ["migration"],
-        "operationId": "v2.experimental.migration.v1.status",
+        "operationId": "experimental.migration.v1.status",
         "parameters": [],
         "security": [],
         "responses": {
@@ -13198,7 +12354,7 @@
     "/api/websearch/provider": {
       "get": {
         "tags": ["websearch"],
-        "operationId": "v2.websearch.providers",
+        "operationId": "websearch.providers",
         "parameters": [
           {
             "name": "location",
@@ -13209,16 +12365,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -13251,7 +12397,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "type": "array",
@@ -13304,7 +12450,7 @@
     "/api/websearch": {
       "post": {
         "tags": ["websearch"],
-        "operationId": "v2.websearch.query",
+        "operationId": "websearch.query",
         "parameters": [
           {
             "name": "location",
@@ -13315,16 +12461,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -13357,7 +12493,7 @@
                   "type": "object",
                   "properties": {
                     "location": {
-                      "$ref": "#/components/schemas/Location.InfoEncoded"
+                      "$ref": "#/components/schemas/Location.PublicRef"
                     },
                     "data": {
                       "$ref": "#/components/schemas/WebSearch.ResponseEncoded"
@@ -13434,7 +12570,7 @@
     "/api/config": {
       "get": {
         "tags": ["config"],
-        "operationId": "v2.config.get",
+        "operationId": "config.get",
         "parameters": [
           {
             "name": "location",
@@ -13445,16 +12581,6 @@
                   "type": "object",
                   "properties": {
                     "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "workspace": {
                       "anyOf": [
                         {
                           "type": "string"
@@ -13515,6 +12641,96 @@
         },
         "description": "Return configuration documents and discovery sources for the requested location, from lowest to highest priority.",
         "summary": "Get configuration"
+      }
+    },
+    "/api/config/shell": {
+      "get": {
+        "tags": ["config"],
+        "operationId": "config.shells",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConfigShell.Option"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return shells available to terminal and agent execution.",
+        "summary": "List available shells"
+      }
+    },
+    "/api/experimental/config": {
+      "patch": {
+        "tags": ["config"],
+        "operationId": "experimental.config.update",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Patch supported fields in the highest-precedence global configuration document.",
+        "summary": "Update global configuration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Config.Patch"
+              }
+            }
+          },
+          "required": true
+        }
       }
     }
   },
@@ -13704,34 +12920,6 @@
         },
         "additionalProperties": false
       },
-      "Config.AgentsDirectoryEncoded": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["agents"]
-          },
-          "path": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "path"],
-        "additionalProperties": false
-      },
-      "Config.ClaudeDirectoryEncoded": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["claude"]
-          },
-          "path": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "path"],
-        "additionalProperties": false
-      },
       "Config.CommandEncoded": {
         "type": "object",
         "properties": {
@@ -13820,12 +13008,6 @@
           },
           {
             "$ref": "#/components/schemas/Config.DirectoryEncoded"
-          },
-          {
-            "$ref": "#/components/schemas/Config.AgentsDirectoryEncoded"
-          },
-          {
-            "$ref": "#/components/schemas/Config.ClaudeDirectoryEncoded"
           }
         ]
       },
@@ -14271,8 +13453,8 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
-          "websocket": {
-            "type": "boolean"
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
           },
           "modelID": {
             "type": "string"
@@ -14363,6 +13545,23 @@
         },
         "additionalProperties": false
       },
+      "Config.Patch": {
+        "type": "object",
+        "properties": {
+          "shell": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["shell"],
+        "additionalProperties": false
+      },
       "Config.Plugin.EntryEncoded": {
         "type": "object",
         "properties": {
@@ -14382,8 +13581,8 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
-          "websocket": {
-            "type": "boolean"
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
           },
           "canonical": {
             "type": "string"
@@ -14479,6 +13678,22 @@
           }
         },
         "required": ["directory"],
+        "additionalProperties": false
+      },
+      "ConfigShell.Option": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "acceptable": {
+            "type": "boolean"
+          }
+        },
+        "required": ["path", "name", "acceptable"],
         "additionalProperties": false
       },
       "ConfigWebSearch.InfoEncoded": {
@@ -14588,6 +13803,23 @@
           }
         },
         "required": ["file", "patch", "additions", "deletions", "status"],
+        "additionalProperties": false
+      },
+      "FileNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["FileNotFoundError"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "path", "message"],
         "additionalProperties": false
       },
       "FileSystem.Entry": {
@@ -15805,6 +15037,63 @@
         "required": ["id", "type", "label"],
         "additionalProperties": false
       },
+      "IntegrationAttemptNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["IntegrationAttemptNotFoundError"]
+          },
+          "integrationID": {
+            "type": "string"
+          },
+          "attemptID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "integrationID", "attemptID", "message"],
+        "additionalProperties": false
+      },
+      "IntegrationMethodNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["IntegrationMethodNotFoundError"]
+          },
+          "integrationID": {
+            "type": "string"
+          },
+          "methodID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "integrationID", "methodID", "message"],
+        "additionalProperties": false
+      },
+      "IntegrationNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["IntegrationNotFoundError"]
+          },
+          "integrationID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "integrationID", "message"],
+        "additionalProperties": false
+      },
       "InvalidCursorErrorEncoded": {
         "type": "object",
         "properties": {
@@ -15853,15 +15142,11 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
-      "Location.InfoEncoded": {
+      "Location.PublicInfo": {
         "type": "object",
         "properties": {
           "directory": {
             "type": "string"
-          },
-          "workspaceID": {
-            "type": "string",
-            "pattern": "^wrk"
           },
           "project": {
             "type": "object",
@@ -15883,15 +15168,11 @@
         "required": ["directory", "project"],
         "additionalProperties": false
       },
-      "Location.Ref": {
+      "Location.PublicRef": {
         "type": "object",
         "properties": {
           "directory": {
             "type": "string"
-          },
-          "workspaceID": {
-            "type": "string",
-            "pattern": "^wrk"
           }
         },
         "required": ["directory"],
@@ -15942,6 +15223,9 @@
               }
             },
             "additionalProperties": false
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/Mcp.Protocol"
           }
         },
         "required": ["type", "command"],
@@ -15969,6 +15253,11 @@
           }
         },
         "additionalProperties": false
+      },
+      "Mcp.Protocol": {
+        "type": "string",
+        "enum": ["legacy", "auto", "2026-07-28"],
+        "description": "MCP protocol negotiation. \"legacy\" (default) opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. \"auto\" probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. \"2026-07-28\" requires that revision and fails otherwise."
       },
       "Mcp.RemoteConfigEncoded": {
         "type": "object",
@@ -16020,6 +15309,9 @@
               }
             },
             "additionalProperties": false
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/Mcp.Protocol"
           }
         },
         "required": ["type", "url"],
@@ -16162,9 +15454,12 @@
           "status": {
             "type": "string",
             "enum": ["needs_auth"]
+          },
+          "error": {
+            "type": "string"
           }
         },
-        "required": ["status"],
+        "required": ["status", "error"],
         "additionalProperties": false
       },
       "Mcp.Status.Pending": {
@@ -16232,9 +15527,6 @@
             "items": {
               "type": "string"
             }
-          },
-          "responsesWebsockets": {
-            "type": "boolean"
           }
         },
         "required": ["tools", "input", "output"],
@@ -16331,8 +15623,8 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
-          "websocket": {
-            "type": "boolean"
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
           },
           "settings": {
             "type": "object"
@@ -17058,22 +16350,6 @@
         },
         "additionalProperties": false
       },
-      "Project.Current": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "directory": {
-            "type": "string"
-          },
-          "canonical": {
-            "type": "string"
-          }
-        },
-        "required": ["id", "directory", "canonical"],
-        "additionalProperties": false
-      },
       "Project.Icon": {
         "type": "object",
         "properties": {
@@ -17097,10 +16373,6 @@
             "minimum": 0
           },
           "updated": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "initialized": {
             "type": "integer",
             "minimum": 0
           }
@@ -17322,8 +16594,8 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
-          "websocket": {
-            "type": "boolean"
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
           },
           "settings": {
             "type": "object"
@@ -17362,6 +16634,10 @@
       },
       "Provider.Settings": {
         "type": "object"
+      },
+      "Provider.Transport": {
+        "type": "string",
+        "enum": ["http", "websocket"]
       },
       "ProviderNotFoundErrorEncoded": {
         "type": "object",
@@ -17461,12 +16737,6 @@
           },
           "branch": {
             "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "hidden": {
-            "type": "boolean"
           }
         },
         "required": ["type", "repository"],
@@ -17503,12 +16773,6 @@
           },
           "path": {
             "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "hidden": {
-            "type": "boolean"
           }
         },
         "required": ["type", "path"],
@@ -17589,22 +16853,24 @@
         "required": ["_tag", "type", "message"],
         "additionalProperties": false
       },
-      "ServiceHealth": {
+      "ServerStatus": {
         "type": "object",
         "properties": {
-          "healthy": {
-            "type": "boolean",
-            "enum": [true]
-          },
           "version": {
             "type": "string"
           },
           "pid": {
             "type": "integer",
             "minimum": 0
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "required": ["healthy", "version", "pid"],
+        "required": ["version", "pid", "urls"],
         "additionalProperties": false
       },
       "ServiceUnavailableErrorEncoded": {
@@ -17665,36 +16931,6 @@
           }
         ]
       },
-      "Session.ForkRequestBoundary": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": ["before"]
-              },
-              "messageID": {
-                "type": "string",
-                "pattern": "^msg_"
-              }
-            },
-            "required": ["type", "messageID"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": ["through"]
-              }
-            },
-            "required": ["type"],
-            "additionalProperties": false
-          }
-        ]
-      },
       "Session.Inbox.Compaction": {
         "type": "object",
         "properties": {
@@ -17706,8 +16942,15 @@
             "type": "string",
             "pattern": "^ses"
           },
-          "timeCreated": {
-            "type": "number"
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -17720,7 +16963,7 @@
             "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
+        "required": ["id", "sessionID", "time", "type", "payload", "delivery"],
         "additionalProperties": false
       },
       "Session.Inbox.CompactionPayload": {
@@ -17764,37 +17007,44 @@
             "type": "string",
             "pattern": "^ses"
           },
-          "timeCreated": {
-            "type": "number"
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
             "enum": ["move"]
           },
-          "payload": {
-            "$ref": "#/components/schemas/Session.Inbox.MovePayload"
-          },
           "delivery": {
             "$ref": "#/components/schemas/Session.Inbox.Delivery"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/Session.Inbox.MovePayload"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
+        "required": ["id", "sessionID", "time", "type", "delivery", "payload"],
         "additionalProperties": false
       },
       "Session.Inbox.MovePayload": {
         "type": "object",
         "properties": {
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
           "projectID": {
             "type": "string"
           },
           "subpath": {
             "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.PublicRef"
           }
         },
-        "required": ["location", "projectID"],
+        "required": ["projectID", "location"],
         "additionalProperties": false
       },
       "Session.Inbox.Synthetic": {
@@ -17808,8 +17058,15 @@
             "type": "string",
             "pattern": "^ses"
           },
-          "timeCreated": {
-            "type": "number"
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -17822,7 +17079,7 @@
             "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
+        "required": ["id", "sessionID", "time", "type", "payload", "delivery"],
         "additionalProperties": false
       },
       "Session.Inbox.SyntheticPayload": {
@@ -17852,8 +17109,15 @@
             "type": "string",
             "pattern": "^ses"
           },
-          "timeCreated": {
-            "type": "number"
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -17866,7 +17130,7 @@
             "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
+        "required": ["id", "sessionID", "time", "type", "payload", "delivery"],
         "additionalProperties": false
       },
       "Session.Inbox.UserPayload": {
@@ -17969,17 +17233,20 @@
           "title": {
             "type": "string"
           },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
           "subpath": {
             "type": "string"
           },
           "metadata": {
             "$ref": "#/components/schemas/Session.Metadata"
           },
+          "permissions": {
+            "$ref": "#/components/schemas/Permission.Ruleset"
+          },
           "revert": {
             "$ref": "#/components/schemas/Session.Revert"
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.PublicRef"
           }
         },
         "required": ["id", "projectID", "cost", "tokens", "time", "location"],
@@ -18394,6 +17661,38 @@
         "required": ["type", "id", "time", "status", "reason", "summary", "recent"],
         "additionalProperties": false
       },
+      "Session.Message.Idle": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "enum": ["idle"]
+          },
+          "outcome": {
+            "type": "string",
+            "enum": ["succeeded", "failed", "interrupted"]
+          }
+        },
+        "required": ["id", "time", "type", "outcome"],
+        "additionalProperties": false
+      },
       "Session.Message.Info": {
         "anyOf": [
           {
@@ -18425,6 +17724,9 @@
           },
           {
             "$ref": "#/components/schemas/Session.Message.Compaction"
+          },
+          {
+            "$ref": "#/components/schemas/Session.Message.Idle"
           }
         ]
       },
@@ -18452,30 +17754,37 @@
             "type": "string",
             "enum": ["location-switched"]
           },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
           "projectID": {
             "type": "string"
           },
           "subpath": {
             "type": "string"
           },
+          "location": {
+            "$ref": "#/components/schemas/Location.PublicRef"
+          },
           "previous": {
-            "type": "object",
-            "properties": {
-              "location": {
-                "$ref": "#/components/schemas/Location.Ref"
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "$ref": "#/components/schemas/Location.PublicRef"
+                  },
+                  "projectID": {
+                    "type": "string"
+                  },
+                  "subpath": {
+                    "type": "string"
+                  }
+                },
+                "required": ["location"],
+                "additionalProperties": false
               },
-              "projectID": {
-                "type": "string"
-              },
-              "subpath": {
-                "type": "string"
+              {
+                "type": "null"
               }
-            },
-            "required": ["location"],
-            "additionalProperties": false
+            ]
           }
         },
         "required": ["id", "time", "type", "location"],
@@ -19400,20 +18709,17 @@
           "description": {
             "type": "string"
           },
-          "slash": {
-            "type": "boolean"
-          },
           "autoinvoke": {
             "type": "boolean"
           },
-          "location": {
+          "path": {
             "type": "string"
           },
           "content": {
             "type": "string"
           }
         },
-        "required": ["id", "name", "location", "content"],
+        "required": ["id", "name", "path", "content"],
         "additionalProperties": false
       },
       "SkillNotFoundErrorEncoded": {
@@ -19680,22 +18986,10 @@
         "required": ["url", "time"],
         "additionalProperties": false
       },
-      "WorkspaceDestroyResult": {
-        "type": "object",
-        "properties": {
-          "destroyed": {
-            "type": "boolean",
-            "description": "True when this request transitioned the workspace from existing to destroyed."
-          }
-        },
-        "required": ["destroyed"],
-        "additionalProperties": false,
-        "description": "Reports whether this request destroyed an existing workspace."
-      },
       "Worktree.CreateInput": {
         "type": "object",
         "properties": {
-          "strategy": {
+          "projectID": {
             "type": "string"
           },
           "from": {
@@ -19711,6 +19005,7 @@
             "type": "string"
           }
         },
+        "required": ["projectID"],
         "additionalProperties": false
       },
       "Worktree.Directory": {
@@ -19745,6 +19040,9 @@
       "Worktree.RemoveInput": {
         "type": "object",
         "properties": {
+          "projectID": {
+            "type": "string"
+          },
           "directory": {
             "type": "string"
           },
@@ -19752,7 +19050,7 @@
             "type": "boolean"
           }
         },
-        "required": ["directory", "force"],
+        "required": ["projectID", "directory", "force"],
         "additionalProperties": false
       },
       "WorktreeErrorEncoded": {
@@ -19791,9 +19089,6 @@
   },
   "security": [],
   "tags": [
-    {
-      "name": "health"
-    },
     {
       "name": "server"
     },
@@ -19888,11 +19183,7 @@
     },
     {
       "name": "worktree",
-      "description": "Location-scoped worktree management routes."
-    },
-    {
-      "name": "workspace",
-      "description": "Workspace lifecycle routes."
+      "description": "Project-based worktree management routes."
     },
     {
       "name": "vcs",

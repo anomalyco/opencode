@@ -9,8 +9,6 @@ import { createApi, createEventStream, createFetch } from "../../fixture/tui-cli
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import type { LogLevel, LogSink } from "../../../src/context/log"
 
-const projectID = "proj_test"
-
 async function wait(fn: () => boolean, timeout = 2000) {
   const start = Date.now()
   while (!fn()) {
@@ -19,13 +17,10 @@ async function wait(fn: () => boolean, timeout = 2000) {
   }
 }
 
-function event(
-  payload: OpenCodeEvent,
-  input: { directory: string; project?: string; workspace?: string },
-): OpenCodeEvent {
+function event(payload: OpenCodeEvent, input: { directory: string }): OpenCodeEvent {
   return {
     ...payload,
-    location: { directory: input.directory, workspaceID: input.workspace },
+    location: { directory: input.directory },
   }
 }
 
@@ -55,7 +50,7 @@ async function mount(reconnect?: (signal: AbortSignal) => Promise<{ api: OpenCod
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   const seen: OpenCodeEvent[] = []
-  const workspaces: Array<string | undefined> = []
+  const directories: Array<string | undefined> = []
   let client!: ReturnType<typeof useClient>
   let done!: () => void
   const ready = new Promise<void>((resolve) => {
@@ -72,28 +67,28 @@ async function mount(reconnect?: (signal: AbortSignal) => Promise<{ api: OpenCod
             done()
           }}
           seen={seen}
-          workspaces={workspaces}
+          directories={directories}
         />
       </ClientProvider>
     </TestTuiContexts>
   ))
 
   await ready
-  return { app, events, emit: events.emit, client, seen, workspaces }
+  return { app, events, emit: events.emit, client, seen, directories }
 }
 
 function Probe(props: {
   seen: OpenCodeEvent[]
-  workspaces: Array<string | undefined>
+  directories: Array<string | undefined>
   onReady: (ctx: { client: ReturnType<typeof useClient> }) => void
 }) {
   const client = useClient()
   const event = useEvent()
 
   onMount(() => {
-    event.subscribe((evt, { workspace }) => {
+    event.subscribe((evt, { directory }) => {
       props.seen.push(evt)
-      props.workspaces.push(workspace)
+      props.directories.push(directory)
     })
     props.onReady({ client })
   })
@@ -136,35 +131,35 @@ describe("useEvent", () => {
   })
 
   test("delivers events for the current project", async () => {
-    const { app, emit, seen, workspaces } = await mount()
+    const { app, emit, seen, directories } = await mount()
 
     try {
-      emit(event(vcs("main"), { directory: "/tmp/other", project: projectID, workspace: "ws_a" }))
+      emit(event(vcs("main"), { directory: "/tmp/other" }))
 
       await wait(() => seen.length === 1)
 
-      expect(seen).toEqual([event(vcs("main"), { directory: "/tmp/other", workspace: "ws_a" })])
-      expect(workspaces).toEqual(["ws_a"])
+      expect(seen).toEqual([event(vcs("main"), { directory: "/tmp/other" })])
+      expect(directories).toEqual(["/tmp/other"])
     } finally {
       app.renderer.destroy()
     }
   })
 
-  test("delivers current project events regardless of active workspace", async () => {
+  test("delivers current project events regardless of active directory", async () => {
     const { app, emit, seen } = await mount()
 
     try {
-      emit(event(vcs("ws"), { directory: "/tmp/other", project: projectID, workspace: "ws_b" }))
+      emit(event(vcs("ws"), { directory: "/tmp/other" }))
 
       await wait(() => seen.length === 1)
 
-      expect(seen).toEqual([event(vcs("ws"), { directory: "/tmp/other", workspace: "ws_b" })])
+      expect(seen).toEqual([event(vcs("ws"), { directory: "/tmp/other" })])
     } finally {
       app.renderer.destroy()
     }
   })
 
-  test("delivers truly global events even when a workspace is active", async () => {
+  test("delivers truly global events", async () => {
     const { app, emit, seen } = await mount()
 
     try {

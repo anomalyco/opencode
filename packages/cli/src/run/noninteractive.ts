@@ -700,7 +700,7 @@ export async function runNonInteractivePrompt(input: Input) {
         ? Promise.resolve(undefined)
         : input.client.form.request
             .list({
-              location: { directory: input.location.directory, workspace: input.location.workspaceID },
+              location: { directory: input.location.directory },
             })
             .catch(() => undefined),
     ])
@@ -745,7 +745,7 @@ export async function runNonInteractivePrompt(input: Input) {
 }
 
 function sameLocation(left: LocationRef | undefined, right: LocationRef) {
-  return !!left && left.directory === right.directory && left.workspaceID === right.workspaceID
+  return !!left && left.directory === right.directory
 }
 
 function formRequestOptions(location: LocationRef | undefined): [] | [{ headers: Record<string, string> }] {
@@ -754,14 +754,13 @@ function formRequestOptions(location: LocationRef | undefined): [] | [{ headers:
     {
       headers: {
         "x-opencode-directory": encodeURIComponent(location.directory),
-        ...(location.workspaceID ? { "x-opencode-workspace": location.workspaceID } : {}),
       },
     },
   ]
 }
 
 function formAlreadySettled(error: unknown) {
-  return !!error && typeof error === "object" && Reflect.get(error, "_tag") === "FormAlreadySettledError"
+  return !!error && typeof error === "object" && "_tag" in error && error._tag === "FormAlreadySettledError"
 }
 
 function partID(eventID: string) {

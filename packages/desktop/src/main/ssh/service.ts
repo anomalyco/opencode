@@ -27,7 +27,7 @@ const make = Effect.fn("Ssh.make")(function* (cli: DesktopCli.Resolved) {
   const controller = yield* createSshController({
     version: cli.version,
     development: !app.isPackaged && cli.binary === undefined,
-    binary: cli.binary ?? cli.command[0] ?? "opencode2",
+    binary: cli.binary ?? cli.command[0] ?? "opencode",
     command: cli.command,
     configs: stored._tag === "Some" ? stored.value : [],
     save: (configs) => Effect.try({ try: () => getStore().set("ssh.servers", configs), catch: SshFailure.from }),

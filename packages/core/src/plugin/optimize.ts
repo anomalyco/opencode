@@ -72,7 +72,7 @@ function make(
       const hook = (event: SessionHooks["context"]) =>
         Effect.gen(function* () {
           const model =
-            (yield* ctx.catalog.model.list()).data.find(
+            (yield* ctx.model.list()).data.find(
               (model) => model.providerID === event.model.providerID && model.id === event.model.id,
             ) ?? Model.Info.default(event.model.providerID, event.model.id)
           // Curate tools before rendering their guidance, including for agents with a custom system prompt.

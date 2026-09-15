@@ -20,6 +20,7 @@ import {
 } from "../schema/index.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
+import { effortUpdate } from "../effort-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
@@ -66,7 +67,6 @@ type MessagePhase = Schema.Schema.Type<typeof MessagePhase>
 
 export const MessageMetadata = Schema.Struct({
   itemId: Schema.optional(Schema.String),
-  type: Schema.optional(Schema.Literal("message")),
   status: Schema.optional(Schema.String),
   phase: Schema.optional(MessagePhase),
 })
@@ -164,14 +164,21 @@ export const CompactionItem = Schema.Struct({
   encrypted_content: Schema.String,
 })
 
+// Kept out of the baseline `InputItem` union: only the OpenAI extension accepts it.
+export const ConfigurationUpdate = Schema.Struct({
+  type: Schema.Literal("configuration_update"),
+  reasoning: Schema.Struct({ effort: OpenResponsesOptions.ReasoningEffort }),
+})
+type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
+
 export const InputItem = Schema.Union([
   CompactionItem,
-  Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
-  Schema.Struct({ role: Schema.tag("developer"), content: Schema.String }),
+  Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("system"), content: Schema.String }),
+  Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({
+    type: Schema.tag("message"),
     role: Schema.tag("user"),
     content: Schema.Array(OpenResponsesInputContent),
-    type: Schema.optional(Schema.Literal("message")),
     id: Schema.optional(Schema.String),
     status: Schema.optional(Schema.String),
   }),
@@ -208,6 +215,7 @@ export type HostedToolReplayItem = {
 type LoweredInputItem =
   | OpenResponsesInputItem
   | HostedToolReplayItem
+  | ConfigurationUpdate
   | {
       readonly type: "message"
       readonly id?: string
@@ -522,7 +530,7 @@ const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenRes
     call_id: part.id,
     name: part.name,
     namespace: part.namespace,
-    arguments: ProviderShared.encodeJson(part.input),
+    arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   }
 }
 
@@ -634,6 +642,8 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
   return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter))
 })
 
+const DEFAULT_EFFORT = "medium"
+
 const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
@@ -646,7 +656,16 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
       Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
     )(message.providerMetadata?.[providerMetadataKey])
     if (message.role === "system") {
+      const update = effortUpdate(message)
+      if (update) {
+        // Consecutive updates are rejected, so a newer one replaces its predecessor.
+        const last = input.at(-1)
+        if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
+        input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
+        continue
+      }
       input.push({
+        type: "message",
         role: "developer",
         content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(adapter.name, message)),
       })
@@ -656,7 +675,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
     if (message.role === "user") {
       const content = yield* Effect.forEach(message.content, (part) => lowerUserContent(part, request, adapter))
       if (content.length > 0)
-        input.push({ role: "user", content, type: metadata?.type, id: metadata?.itemId, status: metadata?.status })
+        input.push({ type: "message", role: "user", content, id: metadata?.itemId, status: metadata?.status })
       continue
     }
 
@@ -747,6 +766,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
               ? part.result.value
               : [{ type: "text", text: ProviderShared.toolResultText(part) }]
           input.push({
+            type: "message",
             role: "user",
             content: yield* Effect.forEach(content, (item) => lowerHostedToolResultContentItem(item, request, adapter)),
           })
@@ -789,8 +809,7 @@ export const lowerConversation = Effect.fn("OpenResponses.lowerConversation")(fu
   }
 })
 
-export const lowerGeneration = (request: LLMRequest) => {
-  const options = OpenResponsesOptions.resolve(request)
+export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
   const generation = request.generation
   const cacheKey = ProviderShared.promptCacheKey(request)
   const parallelToolCalls = resolveParallelToolCalls(request)

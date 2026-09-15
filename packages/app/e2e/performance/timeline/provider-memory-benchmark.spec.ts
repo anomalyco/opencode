@@ -4,7 +4,7 @@ import { expectSessionTitle } from "../../utils/waits"
 import { fixture, pageMessages } from "./session-timeline-stress.fixture"
 import { installStressSessionTabs, installTimelineSettings, stressSessionHref } from "./timeline-test-helpers"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
-import type { CatalogUpdated } from "@opencode/client/promise"
+import type { ModelUpdated } from "@opencode/client/promise"
 
 benchmark("measures retained renderer memory with a large model catalog", async ({ page, report }) => {
   benchmark.setTimeout(120_000)
@@ -77,17 +77,17 @@ benchmark("measures retained renderer memory with a large model catalog", async 
   selected.name = "Updated catalog model"
   await page.evaluate(
     (event) => {
-      const host = window as Window & { __mockServerStream?: { push: (events: CatalogUpdated[]) => void } }
+      const host = window as Window & { __mockServerStream?: { push: (events: ModelUpdated[]) => void } }
       if (!host.__mockServerStream) throw new Error("Missing fixture event stream")
       host.__mockServerStream.push([event])
     },
     {
-      id: "evt_catalog_refresh",
+      id: "evt_model_refresh",
       created: Date.now(),
-      type: "catalog.updated",
+      type: "model.updated",
       location: { directory: fixture.directory },
       data: {},
-    } satisfies CatalogUpdated,
+    } satisfies ModelUpdated,
   )
   await expect(page.locator('[data-action="composer-model"]')).toContainText(selected.name)
   report(

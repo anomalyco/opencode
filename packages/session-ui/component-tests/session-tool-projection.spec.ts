@@ -4,38 +4,25 @@ import { expect, story } from "../../storybook/playwright/story"
 story("renders every admitted tool family and hides timeline-only exclusions", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "workflow" } })
   const first = timeline.locator(
-    '[data-timeline-part-ids="tool_family_read,tool_family_glob,tool_family_grep,tool_family_list,tool_family_webfetch,tool_family_websearch,tool_family_subagent,tool_family_shell,tool_family_edit,tool_family_write,tool_family_patch"]',
+    '[data-timeline-part-ids="tool_family_read,tool_family_glob,tool_family_grep,tool_family_list,tool_family_webfetch,tool_family_websearch,tool_family_subagent,tool_family_shell,tool_family_edit,tool_family_write,tool_family_write_extra,tool_family_patch"]',
   )
   const second = timeline.locator('[data-timeline-part-ids="tool_family_skill,tool_family_custom"]')
   await expect(first).toBeVisible()
   await expect(second).toBeVisible()
   await first.getByRole("button").click()
   await second.getByRole("button").click()
-  for (const id of [
-    "webfetch",
-    "websearch",
-    "subagent",
-    "shell",
-    "edit",
-    "write",
-    "patch",
-    "question",
-    "skill",
-    "custom",
-  ]) {
+  for (const id of ["webfetch", "websearch", "subagent", "shell", "question", "skill", "custom"]) {
     await expect(timeline.locator(`[data-timeline-part-id="tool_family_${id}"]`), id).toBeVisible()
   }
-  for (const name of ["edit", "write", "patch"]) {
-    const tool = timeline.locator(`[data-timeline-part-id="tool_family_${name}"]`)
-    await expect(tool.getByText("1 file", { exact: true })).toBeVisible()
-    await expect(tool.getByRole("button")).toHaveCount(1)
-    await expect(tool.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "false")
-    await expect(tool.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("data-locked", "")
-    await expect(tool.locator('[data-slot="message-part-title-filename"]')).toHaveCount(0)
-    await expect(tool.locator('[data-slot="message-part-actions"]')).toHaveCount(0)
-    await expect(tool.locator('[data-slot="basic-tool-tool-title"]')).toHaveCSS("font-size", "13px")
-    await expect(tool.locator('[data-slot="basic-tool-tool-title"]')).toHaveCSS("line-height", "16px")
-  }
+  const files = timeline.locator(
+    '[data-timeline-part-ids="tool_family_edit,tool_family_write,tool_family_write_extra,tool_family_patch"]',
+  )
+  await expect(files).toBeVisible()
+  await expect(files.locator('[data-scope="apply-patch"]')).toHaveCount(1)
+  await expect(files.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "new.ts", "extra.ts"])
+  await expect(files.locator('[data-slot="basic-tool-tool-title"]')).toHaveCount(0)
+  await expect(files.locator('[data-scope="apply-patch"] button')).toHaveCount(3)
+  await expect(files.locator('[data-scope="apply-patch"] button[aria-expanded="false"]')).toHaveCount(3)
   await expect(timeline.locator('[data-timeline-part-id="tool_family_todo"]')).toHaveCount(0)
 })
 

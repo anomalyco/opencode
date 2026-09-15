@@ -95,23 +95,10 @@ export async function checkServerHealth(
       fetch,
       headers,
     })
-      .health.get({ signal })
-      .then(async (x) => {
-        if (typeof x.healthy !== "boolean") return { error: new Error("Invalid health response") }
-        if (x.healthy && typeof x.version !== "string") {
-          const legacy = await fetch(new URL("/global/health", server.url), { headers, signal })
-            .then((response) => response.json())
-            .catch(() => undefined)
-          const version =
-            typeof legacy === "object" && legacy !== null && "version" in legacy && typeof legacy.version === "string"
-              ? legacy.version
-              : "1"
-          return { data: { healthy: false, version, incompatible: true } }
-        }
-        return { data: { healthy: x.healthy, version: x.version } }
-      })
+      .server.status({ signal })
+      .then((status) => ({ data: { healthy: true as const, version: status.version } }))
       .catch((error) => ({ error }))
-    if ("data" in current && current.data) return current.data
+    if ("data" in current) return current.data
     if (signal?.aborted) return { healthy: false }
 
     return next(count, current.error)

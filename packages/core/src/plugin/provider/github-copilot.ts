@@ -1,7 +1,7 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { Catalog } from "../../catalog.js"
+import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
 import { Bus } from "../../bus.js"
 import { CopilotModels } from "../../github-copilot/models.js"
@@ -157,12 +157,13 @@ const oauth = (app: App.Info) =>
 export const GithubCopilotPlugin = define({
   id: "opencode.provider.github.copilot",
   effect: Effect.fn(function* (ctx) {
-    const catalog = yield* Catalog.Service
+    const providers = yield* Provider.Service
     const bus = yield* Bus.Service
     const loading = Semaphore.makeUnsafe(1)
     const loaded: {
       baseURL?: string
-      models?: Map<Model.ID, Model.Info>
+      models?: CopilotModels.Snapshot
+      connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     } = {}
 
     const load = Effect.fn("GithubCopilotPlugin.load")(function* () {
@@ -173,63 +174,70 @@ export const GithubCopilotPlugin = define({
       if (credential?.type !== "oauth") {
         loaded.baseURL = undefined
         loaded.models = undefined
+        loaded.connection = undefined
         return
       }
 
-      loaded.baseURL = copilotBaseURL(credential.metadata)
-      const provider = yield* catalog.provider.get(Provider.ID.githubCopilot)
-      const existing = (yield* catalog.model.all()).filter((model) => model.providerID === Provider.ID.githubCopilot)
-      loaded.models = yield* Effect.tryPromise({
+      const url = copilotBaseURL(credential.metadata) ?? baseURL()
+      const provider = yield* providers.get(Provider.ID.githubCopilot)
+      const remote = yield* Effect.tryPromise({
         try: () =>
-          CopilotModels.get(
-            loaded.baseURL ?? baseURL(),
-            {
-              ...provider?.headers,
-              Authorization: `Bearer ${credential.refresh}`,
-              "User-Agent": App.useragent(ctx.app),
-              "X-GitHub-Api-Version": apiVersion,
-            },
-            existing,
-          ),
+          CopilotModels.load(url, {
+            ...provider?.headers,
+            Authorization: `Bearer ${credential.refresh}`,
+            "User-Agent": App.useragent(ctx.app),
+            "X-GitHub-Api-Version": apiVersion,
+          }),
         catch: (cause) => cause,
       }).pipe(
         Effect.catch((cause) =>
           Effect.logWarning("failed to sync GitHub Copilot models", { cause }).pipe(Effect.as(undefined)),
         ),
       )
+      if (
+        IntegrationConnection.key(connection) !==
+        IntegrationConnection.key(yield* ctx.integration.connection.active("github-copilot"))
+      )
+        return
+      loaded.baseURL = url
+      loaded.models = remote
+      loaded.connection = connection
     })
 
     yield* ctx.integration.transform((editor) => {
       editor.method.remove("github-copilot", { type: "key" })
       editor.method.update(oauth(ctx.app))
     })
-    yield* ctx.catalog.transform((evt) => {
-      const item = evt.provider.get(Provider.ID.githubCopilot)
+    yield* ctx.provider.transform((evt) => {
+      const item = evt.get(Provider.ID.githubCopilot)
       if (!item) return
       if (loaded.models) {
-        for (const id of item.models.keys()) {
-          if (!loaded.models.has(Model.ID.make(id))) evt.model.remove(item.provider.id, id)
-        }
-        for (const [id, model] of loaded.models) {
-          evt.model.update(item.provider.id, id, (draft) => Object.assign(draft, structuredClone(model)))
-        }
-      } else {
-        for (const id of item.models.keys()) {
-          evt.model.update(item.provider.id, id, (model) => {
-            model.package = Provider.aisdk("@ai-sdk/github-copilot")
-            if (loaded.baseURL) model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
-          })
-        }
+        evt.add({
+          info: item.provider,
+          models: Array.from(
+            CopilotModels.derive(loaded.baseURL ?? baseURL(), loaded.models, Array.from(item.models.values())).values(),
+          ),
+          sourceConnection: loaded.connection,
+        })
+        return
       }
-      if (item.models.has(Model.ID.make("gpt-5-chat-latest"))) {
-        evt.model.update(item.provider.id, Model.ID.make("gpt-5-chat-latest"), (model) => {
+      for (const id of item.models.keys()) {
+        evt.models.update(item.provider.id, id, (model) => {
+          model.package = Provider.aisdk("@ai-sdk/github-copilot")
+          if (loaded.baseURL) model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
+        })
+      }
+    })
+    yield* ctx.model.transform((models) => {
+      if (models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"))) {
+        models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"), (model) => {
           // This chat-only alias conflicts with the Copilot GPT-5 Responses route,
           // so hide it only for Copilot rather than for every provider catalog.
           model.enabled = false
         })
       }
     })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
+    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("github-copilot")),
       Stream.runForEach(refresh),

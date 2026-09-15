@@ -109,11 +109,11 @@ test("passes through non-event fetches", async ({ page }) => {
   const timeline = await setupTimeline(page)
 
   const health = await page.evaluate(async () => {
-    const response = await fetch("/api/health")
+    const response = await fetch("/api/status")
     return response.json()
   })
 
-  expect(health).toEqual({ healthy: true, version: "2.0.0", pid: 1 })
+  expect(health).toEqual({ version: "2.0.0", pid: 1, urls: [] })
   await expect.poll(async () => (await timeline.transport.connections()).length).toBe(1)
 })
 

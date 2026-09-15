@@ -111,8 +111,6 @@ export type SessionTabsController = Pick<ContextController, "tabs" | "current" |
   newTab?: () => boolean
   add?: () => void
   detail?: (sessionID: string) => string | undefined
-  isPreview?: (sessionID: string) => boolean
-  promote?: (sessionID: string) => void
   rename?: (sessionID: string) => void
   search?: () => void
   status(sessionID: string): SessionTabsStatus
@@ -198,23 +196,6 @@ function TabIndicator(props: {
       </Show>
     </box>
   )
-}
-
-function createPreviewDoubleClick(tabs: SessionTabsController) {
-  let previous: { sessionID: string; time: number } | undefined
-  return (sessionID: string) => {
-    if (!tabs.isPreview?.(sessionID)) {
-      previous = undefined
-      return
-    }
-    const now = Date.now()
-    if (previous?.sessionID === sessionID && now - previous.time < 300) {
-      previous = undefined
-      tabs.promote?.(sessionID)
-      return
-    }
-    previous = { sessionID, time: now }
-  }
 }
 
 function createGlowLevel(dimmed: () => boolean, animations: () => boolean) {
@@ -399,9 +380,6 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
       ...(props.tabs.add ? [{ title: "New tab", run: () => props.tabs.add?.() }] : []),
       ...(sessionID
         ? [
-            ...(props.tabs.promote && props.tabs.isPreview?.(sessionID)
-              ? [{ title: "Keep open", run: () => props.tabs.promote?.(sessionID) }]
-              : []),
             {
               title: "Rename",
               run: () =>
@@ -573,7 +551,6 @@ function VerticalSessionTabs(props: {
       !!location && location.project.directory !== location.project.canonical,
     )
   }
-  const handleClick = createPreviewDoubleClick(tabs)
   // OpenTUI captures the first drag target, which may differ from the tab pressed on a fast move.
   const [dragging, setDragging] = createSignal<string>()
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
@@ -896,7 +873,6 @@ function VerticalSessionTabs(props: {
                       return
                     }
                     didDrag = false
-                    handleClick(tab.sessionID)
                     marquee.enter(tab.sessionID, title(), compact() ? Infinity : hoveredTitleWidth())
                     setDragging(tab.sessionID)
                   }}
@@ -950,10 +926,7 @@ function VerticalSessionTabs(props: {
                         numbers={props.numbers}
                         spinner={props.spinner}
                         unreadMarker={props.unreadMarker}
-                        attributes={
-                          (selected() ? TextAttributes.BOLD : 0) |
-                          (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0)
-                        }
+                        attributes={selected() ? TextAttributes.BOLD : undefined}
                       />
                     </box>
                   </Show>
@@ -1052,11 +1025,11 @@ function VerticalSessionTabs(props: {
                           wrapMode="none"
                           selectable={false}
                           attributes={
-                            (status().renaming && !animations()
+                            status().renaming && !animations()
                               ? TextAttributes.DIM
                               : selected()
                                 ? TextAttributes.BOLD
-                                : 0) | (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
+                                : undefined
                           }
                         >
                           <Show
@@ -1287,7 +1260,6 @@ function HorizontalSessionTabs(props: {
   const [addHovered, setAddHovered] = createSignal(false)
   const marquee = createTabMarquee(animations)
   const hovered = marquee.hovered
-  const handleClick = createPreviewDoubleClick(tabs)
   // OpenTUI captures the first drag target, which may differ from the tab pressed on a fast move.
   const [dragging, setDragging] = createSignal<string>()
   // A drag reorders a local preview and persists one move on release instead of writing
@@ -1664,7 +1636,6 @@ function HorizontalSessionTabs(props: {
                 }
                 didDrag = false
                 releaseCloseHold()
-                handleClick(tab.sessionID)
                 marquee.enter(tab.sessionID, title(), hoveredTitleWidth())
                 setDragging(tab.sessionID)
               }}
@@ -1706,10 +1677,7 @@ function HorizontalSessionTabs(props: {
                   backdrop={background()}
                   wrapMode="none"
                   selectable={false}
-                  attributes={
-                    (status().renaming && !animations() ? TextAttributes.DIM : (bold() ?? 0)) |
-                      (tabs.isPreview?.(tab.sessionID) ? TextAttributes.ITALIC : 0) || undefined
-                  }
+                  attributes={status().renaming && !animations() ? TextAttributes.DIM : bold()}
                 >
                   <Show when={scrolling() || glows() || titleFades()} fallback={visibleTitle()}>
                     <Index each={visibleTitleParts()}>

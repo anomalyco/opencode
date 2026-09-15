@@ -53,6 +53,8 @@ export function createBrowserPage(
       webviewTag: false,
       devTools: false,
       backgroundThrottling: false,
+      // Agent navigation, including in hidden tabs, must not take the user's keyboard focus.
+      focusOnNavigation: false,
     },
   })
   const contents = view.webContents
@@ -157,6 +159,8 @@ export function createBrowserPage(
               webSecurity: true,
               webviewTag: false,
               devTools: false,
+              // Electron applies these preferences before the popup is adopted by our view.
+              focusOnNavigation: false,
               partition: options.partition,
             },
           },

@@ -315,7 +315,7 @@ const lowerToolCall = (part: ToolCallPart, options: LoweringOptions): OpenAIChat
   type: "function",
   function: {
     name: part.name,
-    arguments: ProviderShared.encodeJson(part.input),
+    arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   },
 })
 
@@ -323,7 +323,11 @@ const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart
   const media = ProviderShared.normalizeMedia(part)
   if (!media.mime.startsWith("image/"))
     return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.mediaType}`)
-  return { type: "image_url" as const, image_url: { url: media.dataUrl } }
+  const url =
+    typeof part.data === "string" && (part.data.startsWith("https://") || part.data.startsWith("http://"))
+      ? part.data
+      : media.dataUrl
+  return { type: "image_url" as const, image_url: { url } }
 })
 
 const openAICompatibleReasoningContent = (native: unknown) =>
@@ -711,7 +715,10 @@ const detectZaiToolStream = (provider: string, baseURL: string | undefined, mode
 
 const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
   const options = OpenAIOptions.resolve(request)
-  const cacheKey = ProviderShared.promptCacheKey(request)
+  // Default off: strict providers 400 on unknown body fields, so only send
+  // the key where compatibility explicitly allows it. Header-based affinity
+  // (x-session-affinity, x-grok-conv-id, ...) is unaffected.
+  const cacheKey = (request.model.compatibility?.supportsPromptCacheKey ?? false) ? ProviderShared.promptCacheKey(request) : undefined
   return {
     ...(supportsStore && options.store !== undefined ? { store: options.store } : {}),
     // For providers that support `store`, ensure stateless `store:false` is sent
@@ -766,7 +773,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
               supportsStrictMode,
             ),
           ),
-    tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
+    tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     ...(supportsUsageInStreaming ? { stream_options: { include_usage: true } } : {}),
     ...(zaiToolStream && hasActiveTools ? { tool_stream: true } : {}),

@@ -251,27 +251,6 @@ describe("run runtime queue", () => {
     expect(ui.commits).toEqual([])
   })
 
-  test("skill commands retain their local input echo", async () => {
-    const ui = createFooterApiFixture()
-    const task = runPromptQueue({
-      footer: ui.api,
-      onSend: (_prompt, emittedUser) => expect(emittedUser).toBe(true),
-      run: async () => ui.api.close(),
-    })
-
-    ui.submit({ text: "/review", parts: [], command: { name: "review", arguments: "", source: "skill" } })
-    await task
-    expect(ui.commits).toEqual([
-      {
-        kind: "user",
-        text: "/review",
-        phase: "start",
-        source: "system",
-        messageID: expect.any(String),
-      },
-    ])
-  })
-
   test("demo commands own their local input echo", async () => {
     const { createRunDemo } = await import("../../src/mini/demo")
     const ui = createFooterApiFixture()

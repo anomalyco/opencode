@@ -244,7 +244,6 @@ const agents = await client.app.agents()
 | 方法                | 描述         | 响应                                          |
 | ------------------- | ------------ | --------------------------------------------- |
 | `project.list()`    | 列出所有项目 | <a href={typesUrl}><code>Project[]</code></a> |
-| `project.current()` | 获取当前项目 | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -254,8 +253,6 @@ const agents = await client.app.agents()
 // List all projects
 const projects = await client.project.list()
 
-// Get current project
-const currentProject = await client.project.current()
 ```
 
 ---

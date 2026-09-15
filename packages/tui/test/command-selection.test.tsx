@@ -99,7 +99,7 @@ test("custom commands commit the captured agent, model and variant before execut
     await setup.waitFor(() => mutations.length === 3)
     expect(mutations[2]).toEqual({
       type: "command",
-      body: { command: "review", text: "selected input", files: [], agents: [], delivery: "steer" },
+      body: { name: "review", text: "selected input", files: [], agents: [], delivery: "steer" },
     })
   } finally {
     agent.resolve(new Response(null, { status: 204 }))
