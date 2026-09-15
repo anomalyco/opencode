@@ -46,6 +46,15 @@ interface FetchDecompressionError extends Error {
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
 export { isMedia }
 
+/**
+ * Maximum number of media attachments (images, PDFs) sent in a single model
+ * request. Providers enforce count limits (e.g. Console Go rejects requests
+ * with more than 50 images). Oldest media beyond this budget is replaced with
+ * a text placeholder so long sessions degrade gracefully instead of bricking
+ * with an unrecoverable 400 error. See https://github.com/anomalyco/opencode/issues/47487
+ */
+export const MAX_MODEL_IMAGES = 40
+
 function truncateToolOutput(text: string, maxChars?: number) {
   if (!maxChars || text.length <= maxChars) return text
   const omitted = text.length - maxChars
@@ -192,6 +201,38 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     return { type: "json", value: output as never }
   }
 
+  // Enforce a client-side image budget so providers with count limits
+  // (e.g. 50 images max) never receive an unrecoverable request.
+  // Oldest media beyond MAX_MODEL_IMAGES is replaced with a text placeholder.
+  let mediaToOmit = 0
+  if (!options?.stripMedia) {
+    let totalMedia = 0
+    for (const msg of input) {
+      for (const part of msg.parts) {
+        if (
+          msg.info.role === "user" &&
+          part.type === "file" &&
+          part.mime !== "text/plain" &&
+          part.mime !== "application/x-directory" &&
+          isMedia(part.mime)
+        ) {
+          totalMedia++
+        }
+        if (
+          msg.info.role === "assistant" &&
+          part.type === "tool" &&
+          part.state.status === "completed" &&
+          !part.state.time.compacted
+        ) {
+          for (const attachment of part.state.attachments ?? []) {
+            if (isMedia(attachment.mime)) totalMedia++
+          }
+        }
+      }
+    }
+    mediaToOmit = Math.max(0, totalMedia - MAX_MODEL_IMAGES)
+  }
+
   for (const msg of input) {
     if (msg.parts.length === 0) continue
 
@@ -214,6 +255,12 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             userMessage.parts.push({
               type: "text",
               text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
+            })
+          } else if (isMedia(part.mime) && mediaToOmit > 0) {
+            mediaToOmit--
+            userMessage.parts.push({
+              type: "text",
+              text: `[Attached ${part.mime}: ${part.filename ?? "file"} - omitted to stay under provider image limit]`,
             })
           } else {
             userMessage.parts.push({
@@ -295,22 +342,40 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
             const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
+            // Drop oldest media beyond the budget, keeping newest images.
+            // Messages are processed oldest-first so the first mediaToOmit
+            // entries encountered are the oldest.
+            const omittedPlaceholders: string[] = []
+            const budgetedAttachments = []
+            for (const attachment of attachments) {
+              if (isMedia(attachment.mime) && mediaToOmit > 0) {
+                mediaToOmit--
+                omittedPlaceholders.push(
+                  `[Attached ${attachment.mime}: ${attachment.filename ?? "file"} - omitted to stay under provider image limit]`,
+                )
+              } else {
+                budgetedAttachments.push(attachment)
+              }
+            }
+            const textWithBudget =
+              omittedPlaceholders.length > 0 ? [outputText, ...omittedPlaceholders].join("\n") : outputText
+
             // For providers that don't support media in tool results, extract media files
             // (images, PDFs) to be sent as a separate user message
-            const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
+            const mediaAttachments = budgetedAttachments.filter((a) => isMedia(a.mime))
             const extractedMedia = mediaAttachments.filter((a) => !supportsMediaInToolResult(a))
             if (extractedMedia.length > 0) {
               media.push(...extractedMedia)
             }
-            const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
+            const finalAttachments = budgetedAttachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
 
             const output =
               finalAttachments.length > 0
                 ? {
-                    text: outputText,
+                    text: textWithBudget,
                     attachments: finalAttachments,
                   }
-                : outputText
+                : textWithBudget
 
             assistantMessage.parts.push({
               type: ("tool-" + part.tool) as `tool-${string}`,
