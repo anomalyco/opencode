@@ -211,4 +211,28 @@ describe("createSessionTabs", () => {
       dispose()
     })
   })
+
+  test("treats custom panel tabs as closable without treating them as files", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({
+        active: "side-chat://one" as string | undefined,
+        all: ["file://src/a.ts", "side-chat://one"],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: (tab) => (tab.startsWith("file://") ? tab.slice("file://".length) : undefined),
+        normalizeTab: (tab) => tab,
+        customTab: (tab) => tab.startsWith("side-chat://"),
+      })
+
+      expect(result.panelTabs()).toEqual(["file://src/a.ts", "side-chat://one"])
+      expect(result.openedTabs()).toEqual(["file://src/a.ts"])
+      expect(result.customTabs()).toEqual(["side-chat://one"])
+      expect(result.activeTab()).toBe("side-chat://one")
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.closableTab()).toBe("side-chat://one")
+      dispose()
+    })
+  })
 })

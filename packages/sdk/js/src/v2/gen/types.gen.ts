@@ -9926,6 +9926,7 @@ export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessag
 export type SessionForkData = {
   body?: {
     messageID?: string
+    parentID?: string
   }
   path: {
     sessionID: string

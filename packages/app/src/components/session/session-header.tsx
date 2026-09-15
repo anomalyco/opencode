@@ -137,7 +137,13 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
   })
 }
 
-export function SessionHeader() {
+export function SessionHeader(props: {
+  sideChat?: {
+    visible: boolean
+    opened: boolean
+    onToggle: () => void
+  }
+}) {
   const layout = useLayout()
   const command = useCommand()
   const server = useServer()
@@ -237,6 +243,10 @@ export function SessionHeader() {
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
+    sideChatVisible: props.sideChat?.visible ?? false,
+    sideChatOpened: props.sideChat?.opened ?? false,
+    sideChatLabel: language.t("command.session.sideChat"),
+    onSideChatToggle: props.sideChat?.onToggle ?? (() => {}),
     reviewLabel: language.t("command.review.toggle"),
     reviewKeybind: reviewTooltipKeybind(command),
     reviewVisible: isDesktop(),
@@ -445,6 +455,20 @@ export function SessionHeader() {
                         <StatusPopover />
                       </Tooltip>
                     </Show>
+                    <Show when={props.sideChat?.visible}>
+                      <Tooltip placement="bottom" value={language.t("command.session.sideChat")}>
+                        <Button
+                          variant="ghost"
+                          class="titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                          onClick={props.sideChat?.onToggle}
+                          aria-label={language.t("command.session.sideChat")}
+                          aria-expanded={props.sideChat?.opened}
+                          aria-controls="side-chat-panel"
+                        >
+                          <Icon size="small" name="branch" />
+                        </Button>
+                      </Tooltip>
+                    </Show>
                     <TooltipKeybind
                       title={language.t("command.terminal.toggle")}
                       keybind={command.keybind("terminal.toggle")}
@@ -519,6 +543,10 @@ export function SessionHeader() {
 type SessionHeaderV2ActionsState = {
   statusVisible: boolean
   statusLabel: string
+  sideChatVisible: boolean
+  sideChatOpened: boolean
+  sideChatLabel: string
+  onSideChatToggle: () => void
   reviewLabel: string
   reviewKeybind: string[]
   reviewVisible: boolean
@@ -535,6 +563,22 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
         <Tooltip placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />
         </Tooltip>
+      </Show>
+      <Show when={props.state.sideChatVisible}>
+        <TooltipV2 class="shrink-0" placement="bottom" value={props.state.sideChatLabel}>
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!w-9 shrink-0"
+            state={props.state.sideChatOpened ? "pressed" : undefined}
+            onClick={props.state.onSideChatToggle}
+            aria-label={props.state.sideChatLabel}
+            aria-expanded={props.state.sideChatOpened}
+            aria-controls="review-panel"
+            icon={<IconV2 name="branch" />}
+          />
+        </TooltipV2>
       </Show>
       <Show when={props.state.reviewVisible}>
         <TooltipV2
