@@ -130,7 +130,7 @@ const targets = singleFlag
         return false
       }
 
-      return true
+      return !baselineFlag
     })
   : allTargets
 
