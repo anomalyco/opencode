@@ -30,19 +30,21 @@ const it = testEffect(
   ]),
 )
 
-const configLayer = Layer.succeed(Config.Service, TestConfig.make())
-
-const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<RuntimeFlags.Info> = {}) =>
+const instructionLayer = (
+  global: Partial<Global.Interface>,
+  flags: Partial<RuntimeFlags.Info> = {},
+  config: Partial<Config.Interface> = {},
+) =>
   AppNodeBuilder.build(Instruction.node, [
-    [Config.node, configLayer],
+    [Config.node, Layer.succeed(Config.Service, TestConfig.make(config))],
     [Global.node, Global.layerWith(global)],
     [RuntimeFlags.node, RuntimeFlags.layer(flags)],
   ])
 
 const provideInstruction =
-  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>) =>
+  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>, config?: Partial<Config.Interface>) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    self.pipe(Effect.provide(instructionLayer(global, flags)))
+    self.pipe(Effect.provide(instructionLayer(global, flags, config)))
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -112,6 +114,51 @@ function loaded(filepath: string): SessionV1.WithParts[] {
 }
 
 describe("Instruction.resolve", () => {
+  it.live("bare skips automatic root and nearby instructions", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* writeFiles(dir, {
+        "AGENTS.md": "# Root Instructions",
+        "EXPLICIT.md": "# Explicit Instructions",
+        "subdir/AGENTS.md": "# Nearby Instructions",
+        "subdir/file.ts": "const value = true",
+      })
+
+      yield* Instruction.Service.use((svc) =>
+        Effect.gen(function* () {
+          expect(Array.from(yield* svc.systemPaths())).toEqual([path.join(dir, "EXPLICIT.md")])
+          expect(yield* svc.resolve([], path.join(dir, "subdir", "file.ts"), MessageID.make("msg_bare"))).toEqual([])
+        }),
+      ).pipe(
+        provideInstruction({ home: dir, config: dir }, undefined, {
+          get: () => Effect.succeed({ instructions: ["EXPLICIT.md"] }),
+        }),
+        provideInstance(dir, "bare"),
+      )
+    }),
+  )
+
+  it.live("bare resolves explicit relative instructions with worktree-aware globbing", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpWithFiles({
+        "shared/EXPLICIT.md": "# Shared Explicit Instructions",
+        "project/file.ts": "const value = true",
+      })
+      const directory = path.join(root, "project")
+
+      yield* Instruction.Service.use((svc) =>
+        Effect.gen(function* () {
+          expect(Array.from(yield* svc.systemPaths())).toEqual([path.join(root, "shared", "EXPLICIT.md")])
+        }),
+      ).pipe(
+        provideInstruction({ home: root, config: root }, undefined, {
+          get: () => Effect.succeed({ instructions: ["../shared/*.md"] }),
+        }),
+        provideInstance(directory, "bare"),
+      )
+    }),
+  )
+
   it.live("returns empty when AGENTS.md is at project root (already in systemPaths)", () =>
     withFiles({ "AGENTS.md": "# Root Instructions", "src/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {

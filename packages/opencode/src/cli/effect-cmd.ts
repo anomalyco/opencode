@@ -22,6 +22,8 @@ interface EffectCmdOpts<Args, A> {
   aliases?: string | readonly string[]
   describe: string | false
   builder?: (yargs: Argv) => Argv<Args>
+  /** Validate parsed arguments before deciding whether to load an instance. */
+  validate?: (args: WithDoubleDash<Args>) => string | undefined
   /**
    * Whether the command needs a project InstanceContext. Defaults to true.
    *
@@ -44,6 +46,8 @@ interface EffectCmdOpts<Args, A> {
    * `serve`, `web`, `account`, `db`, `upgrade`).
    */
   instance?: boolean | ((args: Args) => boolean)
+  /** Additional InstanceStore input resolved before instance bootstrap. */
+  instanceInput?: (args: Args) => Omit<InstanceStore.LoadInput, "directory">
   /** Defaults to process.cwd(). Override for commands that take a directory positional. */
   directory?: (args: Args) => string
   handler: (args: WithDoubleDash<Args>) => Effect.Effect<A, CliError, AppServices | InstanceStore.Service>
@@ -76,6 +80,8 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
       const { AppRuntime } = await import("@/effect/app-runtime")
       // yargs typing wraps Args in ArgumentsCamelCase<WithDoubleDash<...>>; cast at the boundary.
       const args = rawArgs as unknown as WithDoubleDash<Args>
+      const validation = opts.validate?.(args)
+      if (validation) throw new CliError({ message: validation, exitCode: 1 })
       const useInstance = typeof opts.instance === "function" ? opts.instance(args) : opts.instance !== false
       if (!useInstance) {
         await AppRuntime.runPromise(opts.handler(args))
@@ -85,7 +91,9 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
       const { InstanceRef } = await import("@/effect/instance-ref")
       const directory = opts.directory?.(args) ?? process.cwd()
       const { store, ctx } = await AppRuntime.runPromise(
-        InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
+        InstanceStore.Service.use((store) =>
+          store.load({ directory, ...opts.instanceInput?.(args) }).pipe(Effect.map((ctx) => ({ store, ctx }))),
+        ),
       )
       try {
         await AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx)))

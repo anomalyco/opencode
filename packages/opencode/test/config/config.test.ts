@@ -158,10 +158,10 @@ async function writeConfig(dir: string, config: object, name = "opencode.json") 
 const writeConfigEffect = (dir: string, config: object, name = "opencode.json") =>
   FSUtil.use.writeWithDirs(path.join(dir, name), JSON.stringify(config))
 
-const withInstanceDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =>
+const withInstanceDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>, profile?: InstanceContext["profile"]) =>
   effect.pipe(
     Effect.provideService(TestInstance, { directory: dir }),
-    provideInstanceEffect(dir),
+    provideInstanceEffect(dir, profile),
     Effect.provide(testInstanceStoreLayer),
     Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)),
   )
@@ -2068,6 +2068,131 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
     { config: { model: "project/model" } },
   )
 })
+
+describe("bare config profile", () => {
+  it.instance(
+    "skips project config and keeps explicit content",
+    () =>
+      withProcessEnv(
+        "OPENCODE_CONFIG_CONTENT",
+        JSON.stringify({ model: "explicit/model", username: "explicit-user" }),
+        Effect.gen(function* () {
+          const config = yield* Config.use.get()
+          const report = yield* Config.use.getLoadReport()
+
+          expect(config.model).toBe("explicit/model")
+          expect(config.username).toBe("explicit-user")
+          expect(report.profile).toBe("bare")
+          expect(report.loaded).toEqual(["explicit"])
+          expect(report.skipped).toEqual(["well-known", "global", "project", "config-dir"])
+          expect(report.startup).toEqual(["internal-plugins"])
+        }),
+      ),
+    { profile: "bare", config: { model: "project/model", username: "project-user" } },
+  )
+
+  it.instance(
+    "does not report empty explicit config as loaded",
+    () =>
+      withProcessEnv(
+        "OPENCODE_CONFIG_CONTENT",
+        "{}",
+        Effect.gen(function* () {
+          const report = yield* Config.use.getLoadReport()
+          expect(report.loaded).not.toContain("explicit")
+        }),
+      ),
+    { profile: "bare" },
+  )
+
+  it.live("skips global config", () =>
+    withGlobalConfig({ config: { model: "global/model", username: "global-user" } }, () =>
+      Effect.gen(function* () {
+        const directory = yield* tmpdirScoped()
+        const config = yield* withInstanceDir(directory, Config.use.get(), "bare")
+
+        expect(config.model).toBeUndefined()
+        expect(config.username).not.toBe("global-user")
+      }),
+    ),
+  )
+
+  it.instance(
+    "keeps managed permission precedence",
+    () =>
+      Effect.gen(function* () {
+        yield* writeManagedSettingsEffect({ permission: { bash: "deny" } })
+        yield* withProcessEnv(
+          "OPENCODE_CONFIG_CONTENT",
+          JSON.stringify({ permission: { bash: "allow" } }),
+          Effect.gen(function* () {
+            const config = yield* Config.use.get()
+            expect(config.permission?.bash).toBe("deny")
+          }),
+        )
+      }),
+    { profile: "bare" },
+  )
+
+  it.instance(
+    "ignores OPENCODE_CONFIG_DIR without writing discovery files",
+    () =>
+      Effect.gen(function* () {
+        const configDir = yield* tmpdirScoped()
+        yield* withProcessEnv(
+          "OPENCODE_CONFIG_DIR",
+          configDir,
+          Effect.gen(function* () {
+            expect(yield* Config.use.directories()).toEqual([])
+            expect(yield* FSUtil.use.existsSafe(path.join(configDir, ".gitignore"))).toBe(false)
+          }),
+        )
+      }),
+    { profile: "bare" },
+  )
+})
+
+describe("config load report", () => {
+  it.instance(
+    "does not report an empty project config as loaded",
+    () =>
+      Effect.gen(function* () {
+        const report = yield* Config.use.getLoadReport()
+        expect(report.loaded).not.toContain("project")
+      }),
+    { config: {} },
+  )
+
+  it.instance("does not report an empty config directory as loaded", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      yield* withProcessEnv(
+        "OPENCODE_CONFIG_DIR",
+        directory,
+        Effect.gen(function* () {
+          const report = yield* Config.use.getLoadReport()
+          expect(report.loaded).not.toContain("config-dir")
+        }),
+      )
+    }),
+  )
+})
+
+const bareWellKnown = wellKnown({
+  config: { model: "remote/model" },
+})
+
+bareWellKnown.it.instance(
+  "bare does not fetch well-known config",
+  () =>
+    Effect.gen(function* () {
+      const config = yield* Config.use.get()
+      expect(config.model).toBeUndefined()
+      expect(bareWellKnown.seen.wellKnown).toBeUndefined()
+      expect(bareWellKnown.seen.remote).toBeUndefined()
+    }),
+  { profile: "bare" },
+)
 
 // Regression for #28206: malformed OPENCODE_PERMISSION JSON used to crash
 // the app on startup with an unhandled SyntaxError. Loading the config with

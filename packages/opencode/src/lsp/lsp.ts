@@ -13,6 +13,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { containsPath } from "@/project/instance-context"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { InstanceOptions } from "@/project/instance-options"
 import { LspEvent } from "@opencode-ai/schema/lsp-event"
 
 export const Event = LspEvent
@@ -145,10 +146,11 @@ const layer = Layer.effect(
     const state = yield* InstanceState.make<State>(
       Effect.fn("LSP.state")(function* (ctx) {
         const cfg = yield* config.get()
+        const enabled = InstanceOptions.resolve(ctx.profile).startup.lsp
 
         const servers: Record<string, LSPServer.Info> = {}
 
-        if (!cfg.lsp) {
+        if (!enabled || !cfg.lsp) {
           yield* Effect.logInfo("all LSPs are disabled")
         } else {
           for (const server of Object.values(LSPServer)) {
@@ -207,6 +209,7 @@ const layer = Layer.effect(
 
     const getClients = Effect.fnUntraced(function* (file: string) {
       const ctx = yield* InstanceState.context
+      if (!InstanceOptions.resolve(ctx.profile).startup.lsp) return [] as LSPClient.Info[]
       if (!containsPath(file, ctx)) return [] as LSPClient.Info[]
       const s = yield* InstanceState.get(state)
       const clients = yield* Effect.promise(async () => {

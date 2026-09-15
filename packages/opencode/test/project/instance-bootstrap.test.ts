@@ -78,6 +78,17 @@ it.live("InstanceStore.provide runs InstanceBootstrap before effect", () =>
   }),
 )
 
+it.live("bare InstanceStore bootstrap does not execute project plugins", () =>
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapFixture
+    const store = yield* InstanceStore.Service
+
+    yield* store.provide({ directory: tmp.directory, profile: "bare" }, Effect.succeed("ok"))
+
+    expect(existsSync(tmp.marker)).toBe(false)
+  }),
+)
+
 it.live("CLI bootstrap runs InstanceBootstrap before callback", () =>
   Effect.gen(function* () {
     const tmp = yield* bootstrapFixture

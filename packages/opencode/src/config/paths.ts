@@ -20,23 +20,29 @@ export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   })).toReversed()
 })
 
-export const directories = Effect.fn("ConfigPaths.directories")(function* (directory: string, worktree?: string) {
+export const directories = Effect.fn("ConfigPaths.directories")(function* (
+  directory: string,
+  worktree?: string,
+  options?: { global?: boolean; project?: boolean; configDirectory?: boolean },
+) {
   const afs = yield* FSUtil.Service
   return unique([
-    Global.Path.config,
-    ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+    ...(options?.global === false ? [] : [Global.Path.config]),
+    ...(options?.project !== false && !Flag.OPENCODE_DISABLE_PROJECT_CONFIG
       ? yield* afs.up({
           targets: [".opencode"],
           start: directory,
           stop: worktree,
         })
       : []),
-    ...(yield* afs.up({
-      targets: [".opencode"],
-      start: Global.Path.home,
-      stop: Global.Path.home,
-    })),
-    ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
+    ...(options?.global === false
+      ? []
+      : yield* afs.up({
+          targets: [".opencode"],
+          start: Global.Path.home,
+          stop: Global.Path.home,
+        })),
+    ...(options?.configDirectory !== false && Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
   ])
 })
 

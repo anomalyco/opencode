@@ -1,10 +1,11 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Deferred, Effect, Fiber, Layer } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { InstanceOptions } from "../../src/project/instance-options"
 import { InstanceStore } from "../../src/project/instance-store"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -34,9 +35,22 @@ const setBootstrap = (run: Effect.Effect<void>) =>
 
 const registerDisposerScoped = (disposer: (directory: string) => Promise<void>) =>
   Effect.acquireRelease(
-    Effect.sync(() => registerDisposer(disposer)),
+    Effect.sync(() => registerDisposer((ctx) => disposer(ctx.directory))),
     (off) => Effect.sync(off),
   )
+
+describe("InstanceOptions", () => {
+  test("returns deeply frozen policies", () => {
+    const policy = InstanceOptions.resolve()
+
+    expect(Object.isFrozen(policy)).toBe(true)
+    expect(Object.isFrozen(policy.config)).toBe(true)
+    expect(Object.isFrozen(policy.discovery)).toBe(true)
+    expect(Object.isFrozen(policy.startup)).toBe(true)
+    expect(Reflect.set(policy.config, "global", false)).toBe(false)
+    expect(InstanceOptions.resolve().config.global).toBe(true)
+  })
+})
 
 describe("InstanceStore", () => {
   it.live("loads instance context", () =>
@@ -83,6 +97,43 @@ describe("InstanceStore", () => {
 
       expect(second).toBe(first)
       expect(initialized).toBe(1)
+    }),
+  )
+
+  it.live("keeps default and bare contexts separate for the same directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+
+      const normal = yield* store.load({ directory: dir })
+      const bare = yield* store.load({ directory: dir, profile: "bare" })
+
+      expect(normal).not.toBe(bare)
+      expect(normal.profile).toBe("default")
+      expect(bare.profile).toBe("bare")
+      expect(yield* store.load({ directory: dir })).toBe(normal)
+      expect(yield* store.load({ directory: dir, profile: "bare" })).toBe(bare)
+    }),
+  )
+
+  it.live("disposeDirectory removes every profile for a directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      let initialized = 0
+
+      yield* setBootstrap(
+        Effect.sync(() => {
+          initialized++
+        }),
+      )
+      yield* store.load({ directory: dir })
+      yield* store.load({ directory: dir, profile: "bare" })
+      yield* store.disposeDirectory(dir)
+      yield* store.load({ directory: dir })
+      yield* store.load({ directory: dir, profile: "bare" })
+
+      expect(initialized).toBe(4)
     }),
   )
 
