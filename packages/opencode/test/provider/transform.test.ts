@@ -2531,6 +2531,37 @@ describe("ProviderTransform.message - empty image handling", () => {
       text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
     })
   })
+
+  test("should replace images with error text when the model lacks image support", () => {
+    const validBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    const noImageModel = {
+      ...mockModel,
+      capabilities: {
+        ...mockModel.capabilities,
+        input: { ...mockModel.capabilities.input, image: false },
+      },
+    }
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What is in this image?" },
+          { type: "image", image: `data:image/png;base64,${validBase64}` },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, noImageModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "What is in this image?" })
+    expect(result[0].content[1]).toEqual({
+      type: "text",
+      text: "ERROR: Cannot read image (this model does not support image input). Inform the user.",
+    })
+  })
 })
 
 describe("ProviderTransform.message - anthropic empty content filtering", () => {
