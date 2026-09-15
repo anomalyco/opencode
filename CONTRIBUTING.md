@@ -94,6 +94,30 @@ opencode web             # Start server + open web interface
 opencode <directory>     # Start TUI in specific directory
 ```
 
+### Running dev with the caller's working directory
+
+`bun dev` runs from `packages/opencode`, so `process.cwd()` is the opencode
+package directory rather than the project you are working on. This means the
+shell tool and instance root default to `packages/opencode`, not your actual
+project — different from how the built `opencode` binary behaves.
+
+`bin/dev.ts` fixes this. It `chdir`s back to a directory you pass as its first
+argument before loading `src/index.ts`, so `process.cwd()` matches the caller's
+working directory just like the production binary.
+
+```bash
+# From packages/opencode, run opencode against /path/to/project:
+bun run --conditions=browser bin/dev.ts /path/to/project run "hello"
+bun run --conditions=browser bin/dev.ts /path/to/project          # TUI
+```
+
+For convenience, `packages/opencode/script/opencode_d` is a wrapper that
+invokes the launcher with the caller's cwd. Symlink it onto your `PATH`:
+
+```bash
+ln -s "$(pwd)/packages/opencode/script/opencode_d" ~/.local/bin/opencode_d
+```
+
 ### Running the API Server
 
 To start the OpenCode headless API server:
