@@ -219,6 +219,33 @@ export type ProviderHook = {
 /** @deprecated Use AuthOAuthResult instead. */
 export type AuthOuathResult = AuthOAuthResult
 
+export type PluginRouteMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+
+export type PluginRouteRequest = {
+  method: string
+  /** Path after the `/plugin/<pluginID>` prefix, with leading slash */
+  path: string
+  params: Record<string, string>
+  query: Record<string, string>
+  headers: Record<string, string>
+  /** Parsed JSON body when the request is JSON, otherwise raw text (may be undefined) */
+  body?: unknown
+}
+
+export type PluginRouteResponse = {
+  status?: number
+  headers?: Record<string, string>
+  /** Objects are serialized as JSON, strings are sent as text/plain */
+  body?: unknown
+}
+
+export type PluginRoute = {
+  method: PluginRouteMethod
+  /** Path relative to `/plugin/<pluginID>`, e.g. `/webhook` or `/issue/:id` */
+  path: string
+  handler: (request: PluginRouteRequest) => Promise<PluginRouteResponse> | PluginRouteResponse
+}
+
 export interface Hooks {
   dispose?: () => Promise<void>
   event?: (input: { event: Event }) => Promise<void>
@@ -226,6 +253,11 @@ export interface Hooks {
   tool?: {
     [key: string]: ToolDefinition
   }
+  /**
+   * HTTP routes mounted by the server at `/plugin/<pluginID><path>`.
+   * Routes are public (no server authentication); authenticate inside the handler.
+   */
+  routes?: PluginRoute[]
   auth?: AuthHook
   provider?: ProviderHook
   /**
