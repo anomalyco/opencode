@@ -54,9 +54,76 @@ test.each(["latex", "math", "tex", "LATEX title=example"])("renders a %s fence",
   expect(output.captureCharFrame()).not.toContain("\\frac")
 })
 
+test.each([32, 120])("renders a boxed cube root after an ordinary cube-root fence at width %s", async (width) => {
+  const output = await setup(
+    "```latex\n" +
+      String.raw`\sqrt[3]{3}\cdot\sqrt[3]{3}=\sqrt[3]{9}` +
+      "\n```\n\n```latex\n" +
+      String.raw`\sqrt[3]{3}\cdot\sqrt[3]{\boxed{?}}
+=
+\sqrt[3]{27}
+=
+3` +
+      "\n```",
+    width,
+  )
+  expect(output.markdown.getChildren().map((child) => child.constructor.name)).toEqual([
+    "ScrollBoxRenderable",
+    "ScrollBoxRenderable",
+  ])
+  expect(output.captureCharFrame()).not.toContain("\\")
+  expect(output.captureCharFrame()).toContain("?")
+  expect(output.captureCharFrame()).toContain("= 3")
+  expect(output.captureCharFrame()).toContain("\u250c\u2500\u2500\u2500\u2510")
+})
+
+test.each([
+  String.raw`\sqrt[3]{3}\cdot\sqrt[3]{\boxed{?}}=\sqrt[3]{27}=3`,
+  String.raw`\sqrt [3] {3} \cdot
+  \sqrt [3] { \boxed
+  { ? } } = \sqrt [3] {27} = 3`,
+])("ignores harmless whitespace around boxed roots: %s", async (source) => {
+  const output = await setup(`\`\`\`latex\n${source}\n\`\`\``)
+  expect(output.markdown.getChildren()[0]?.constructor.name).toBe("ScrollBoxRenderable")
+  expect(output.captureCharFrame()).not.toContain("\\")
+  expect(output.captureCharFrame()).toContain("?")
+  expect(output.captureCharFrame()).toContain("= 3")
+})
+
+test.each([
+  String.raw`\unsupported{x}`,
+  String.raw`\cancel{\frac{a}{b}}`,
+  String.raw`\unknown*[label]{a}{b}`,
+  String.raw`\mystery`,
+  String.raw`\constructor{x}`,
+])("degrades unknown commands locally without losing their source: %s", async (source) => {
+  const output = await setup(`\`\`\`latex\n\\sqrt[3]{${source}}=\\frac{1}{2}\n\`\`\``)
+  expect(output.markdown.getChildren()[0]?.constructor.name).toBe("ScrollBoxRenderable")
+  expect(output.captureCharFrame()).toContain(source)
+  expect(output.captureCharFrame()).toContain("3\u256d")
+  expect(output.captureCharFrame()).toContain("\u2570\u256f")
+  expect(output.captureCharFrame()).toContain("\u2500\u2500\u2500")
+  expect(output.captureCharFrame()).not.toContain("\\sqrt")
+  expect(output.captureCharFrame().match(/\\frac/g) ?? []).toHaveLength(source.includes("\\frac") ? 1 : 0)
+})
+
+test("preserves line breaks and comments inside opaque commands", async () => {
+  const output = await setup("```latex\n\\sqrt{\\unknown{a % comment\n  b}}=1\n```")
+  expect(output.markdown.getChildren()[0]?.constructor.name).toBe("ScrollBoxRenderable")
+  const frame = output.captureCharFrame()
+  expect(frame).toContain("\\unknown{a % comment")
+  expect(frame).toContain("  b}")
+  expect(frame).not.toContain("\\sqrt")
+  expect(frame.indexOf("  b}")).toBeGreaterThan(frame.indexOf("% comment"))
+})
+
 test.each([
   String.raw`\frac{1}{`,
-  String.raw`\unsupported{x}`,
+  String.raw`\boxed{?`,
+  String.raw`\boxed}`,
+  String.raw`\unsupported{x`,
+  String.raw`\unsupported[option`,
+  "x + \\",
   String.raw`\cfrac[x]{1}{2}`,
   String.raw`\left\unknown x\right)`,
   String.raw`\begin{array}{p{2cm}}x\end{array}`,
@@ -68,6 +135,15 @@ Hello
   const output = await setup(`\`\`\`latex\n${source}\n\`\`\``)
   const block = output.markdown.getChildren()[0]
   expect(block).toBeInstanceOf(CodeRenderable)
+  if (!(block instanceof CodeRenderable)) throw new Error("Expected source fallback")
+  expect(block.content).toBe(source)
+})
+
+test("falls back to source when a literal layout exceeds the cell budget", async () => {
+  const source = "\\unknown{" + "x".repeat(2000) + "\nx".repeat(500) + "}"
+  const output = await setup(`\`\`\`latex\n${source}\n\`\`\``)
+  const block = output.markdown.getChildren()[0]
+  expect(block?.constructor.name).toBe("CodeRenderable")
   if (!(block instanceof CodeRenderable)) throw new Error("Expected source fallback")
   expect(block.content).toBe(source)
 })
@@ -149,14 +225,20 @@ test("does not reuse another fence's preview or keep a removed fence's preview",
   expect(output.markdown.getChildren()[0]).toBeInstanceOf(CodeRenderable)
 })
 
-test("does not leave a stale formula when a stream ends with invalid math", async () => {
+test("renders locally preserved commands instead of a stale streaming preview", async () => {
   const output = await setup("```latex\nx^2")
   expect(output.markdown.getChildren()[0]?.getChildren()[0]).toBeInstanceOf(TextRenderable)
+  const previous = output.captureCharFrame()
 
-  output.markdown.content += " + \\unsupported{x}\n```"
+  output.markdown.content += " + \\unsupported{"
+  await output.renderOnce()
+  expect(output.captureCharFrame()).toBe(previous)
+
+  output.markdown.content += "x}\n```"
   output.markdown.streaming = false
   await output.renderOnce()
-  expect(output.markdown.getChildren()[0]).toBeInstanceOf(CodeRenderable)
+  expect(output.markdown.getChildren()[0]?.constructor.name).toBe("ScrollBoxRenderable")
+  expect(output.captureCharFrame()).toContain("x\u00b2 + \\unsupported{x}")
 })
 
 test("keeps a matrix and surrounding Markdown intact in a narrow terminal", async () => {
