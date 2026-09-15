@@ -430,6 +430,36 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("rejects an edit whose strings differ only in line ending style", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "crlf.txt")
+      return Effect.promise(() => fs.writeFile(target, "before\r\nrest\r\n")).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            Effect.gen(function* () {
+              expect(
+                yield* executeTool(
+                  registry,
+                  call({ path: "crlf.txt", oldString: "before\r\nrest", newString: "before\nrest" }),
+                ),
+              ).toEqual({
+                status: "error",
+                error: {
+                  type: "tool.execution",
+                  message: "No changes to apply: oldString and newString are identical.",
+                },
+              })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("before\r\nrest\r\n")
+              expect(edit.assertions).toEqual([])
+              expect(edit.writes).toEqual([])
+            }),
+          ),
+        ),
+      )
+    }),
+  )
+
   it.live("returns specific missing file and directory errors", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
