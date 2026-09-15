@@ -1499,6 +1499,33 @@ const scenarios: Scenario[] = [
       }),
     ),
   http.protected
+    .post("/session/{sessionID}/retry", "session.retry")
+    .preserveDatabase()
+    .withLlm()
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        const session = yield* ctx.session({ title: "Retry failed turn" })
+        yield* ctx.message(session.id, { text: "recover this turn" })
+        yield* ctx.llmText("recovered assistant")
+        return session
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/retry", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { providerID: "test", modelID: "test-model" },
+    }))
+    .status(204, (ctx) =>
+      Effect.gen(function* () {
+        yield* ctx.llmWait(1)
+        const messages = yield* ctx.messages(ctx.state.id)
+        check(
+          messages.filter((message) => message.info.role === "user").length === 1,
+          "retry should not add another user message",
+        )
+      }),
+    ),
+  http.protected
     .post("/session/{sessionID}/command", "session.command")
     .preserveDatabase()
     .withLlm()
@@ -1746,6 +1773,7 @@ const llmScenarios = new Set([
   "session.init",
   "session.prompt",
   "session.prompt_async",
+  "session.retry",
   "session.command",
   "session.summarize",
 ])

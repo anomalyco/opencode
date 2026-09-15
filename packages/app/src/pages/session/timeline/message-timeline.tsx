@@ -71,6 +71,7 @@ import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/sessio
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
+import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { sessionTitle } from "@/utils/session-title"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
@@ -139,6 +140,62 @@ function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSu
         <TextReveal text={props.reasoningHeading} class="session-turn-thinking-heading" travel={25} duration={700} />
       </Show>
     </div>
+  )
+}
+
+function TimelineErrorCard(props: {
+  text: string
+  details: string
+  failedModel: { modelID: string; providerID: string }
+  onRecover?: (model: { modelID: string; providerID: string }) => Promise<void>
+}) {
+  const language = useLanguage()
+  const [state, setState] = createStore({ pending: false })
+  const recover = (model: { modelID: string; providerID: string }) => {
+    if (!props.onRecover || state.pending) return
+    setState("pending", true)
+    void props.onRecover(model).finally(() => setState("pending", false))
+  }
+
+  return (
+    <Card variant="error" class="error-card">
+      <div class="flex flex-col gap-3">
+        <div>{props.text}</div>
+        <details class="group">
+          <summary class="cursor-pointer select-none text-12-medium text-text-weak hover:text-text-strong">
+            {language.t("session.errorRecovery.details")}
+          </summary>
+          <pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border-weak-base p-3 font-mono text-11-regular text-text-weak select-text">
+            {props.details}
+          </pre>
+        </details>
+        <Show when={props.onRecover}>
+          <div class="flex flex-col gap-2 pt-3 border-t border-border-weak-base">
+            <div class="flex flex-col gap-0.5">
+              <div class="text-13-medium text-text-strong">{language.t("session.errorRecovery.title")}</div>
+              <div class="text-12-regular text-text-weak">{language.t("session.errorRecovery.description")}</div>
+            </div>
+            <ModelSelectorPopoverV2
+              exclude={props.failedModel}
+              trigger={(triggerProps) => (
+                <ButtonV2
+                  {...triggerProps}
+                  size="small"
+                  variant="neutral"
+                  disabled={state.pending}
+                  data-action="error-recovery-model"
+                >
+                  {state.pending
+                    ? language.t("session.errorRecovery.switching")
+                    : language.t("session.errorRecovery.chooseModel")}
+                </ButtonV2>
+              )}
+              onSelect={recover}
+            />
+          </div>
+        </Show>
+      </div>
+    </Card>
   )
 }
 
@@ -255,6 +312,10 @@ export function MessageTimeline(props: {
   setRevealMessage?: (fn: (id: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
   setHistoryAnchor?: (handlers: { capture: () => void; restore: (done: boolean) => void }) => void
+  onRecoverError?: (input: {
+    messageID: string
+    model: { modelID: string; providerID: string }
+  }) => Promise<void>
 }) {
   let touchGesture: number | undefined
 
@@ -1216,9 +1277,16 @@ export function MessageTimeline(props: {
         return (
           <TimelineRowFrame row={errorRow}>
             <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <Card variant="error" class="error-card">
-                {errorRow().text}
-              </Card>
+              <TimelineErrorCard
+                text={errorRow().text}
+                details={errorRow().details}
+                failedModel={errorRow().model}
+                onRecover={
+                  props.onRecoverError
+                    ? (model) => props.onRecoverError!({ messageID: errorRow().userMessageID, model })
+                    : undefined
+                }
+              />
             </div>
           </TimelineRowFrame>
         )
