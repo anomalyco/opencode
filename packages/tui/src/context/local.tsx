@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
@@ -54,7 +54,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const models = () => data.location.model.list(location.ref)
     const providers = () => data.location.provider.list(location.ref)
 
-    function isModelValid(model: ModelPreferenceModel) {
+    function isModelValid(model?: ModelPreferenceModel) {
+      if (!model?.providerID || !model?.modelID) return false
       return !!models()?.some((item) => item.providerID === model.providerID && item.id === model.modelID)
     }
 
@@ -165,6 +166,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const repository = createModelPreferenceRepository(path.join(paths.state, "model.json"))
       const pendingSelectionCommits = new Map<string, { agentID: string; selection: string }>()
+      const [cliSuperseded, setCliSuperseded] = createSignal(false)
       const selectionKey = (value: ModelSelection) =>
         `${modelPreferenceKey(value)}:${normalizeModelVariant(value.variant) ?? "default"}`
       const saveState = {
@@ -205,22 +207,36 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           ?.findLast((entry) => entry.type === "document" && entry.info.model !== undefined)
         const configured = entry?.type === "document" ? entry.info.model : undefined
         if (!configured) return
-        return typeof configured === "string"
-          ? { ...parse(configured), variant: undefined }
-          : { providerID: configured.providerID, modelID: configured.model, variant: configured.variant }
+        if (typeof configured === "string") {
+          const parsed = parse(configured)
+          if (!parsed.providerID || !parsed.modelID) return undefined
+          return parsed
+        }
+        if (typeof configured === "object" && configured !== null) {
+          const record = configured as Record<string, unknown>
+          const providerID = typeof record.providerID === "string" ? record.providerID : undefined
+          const modelID =
+            typeof record.model === "string"
+              ? record.model
+              : typeof record.modelID === "string"
+                ? record.modelID
+                : undefined
+          const variant = typeof record.variant === "string" ? record.variant : undefined
+          if (!providerID || !modelID) return undefined
+          return { providerID, modelID, variant }
+        }
+        return undefined
+      })
+
+      const cliModel = createMemo(() => {
+        if (!args.model || typeof args.model !== "string") return undefined
+        const parsed = parse(args.model)
+        if (!parsed.providerID || !parsed.modelID) return undefined
+        if (!isModelValid({ providerID: parsed.providerID, modelID: parsed.modelID })) return undefined
+        return parsed
       })
 
       const fallbackModel = createMemo(() => {
-        if (args.model) {
-          const { providerID, modelID } = parse(args.model)
-          if (isModelValid({ providerID, modelID })) {
-            return {
-              providerID,
-              modelID,
-            }
-          }
-        }
-
         const configured = configuredModel()
         if (configured && isModelValid(configured)) return configured
 
@@ -242,9 +258,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const a = agent.current()
         return getFirstValidModel(
           () => a && selectionState.newSessionModelByLocationAgent[locationAgentKey(a.id)],
-          () => a?.model && { providerID: a.model.providerID, modelID: a.model.id },
+          cliModel,
+          () => a?.model && { providerID: a.model.providerID, modelID: a.model.id, variant: a.model.variant },
           fallbackModel,
         )
+      })
+
+      createEffect(() => {
+        const cli = cliModel()
+        if (!cli) return
+        if (!models()) return
+        if (!preferences.ready) return
+        const key = modelPreferenceKey(cli)
+        if (preferences.recent.some((item) => modelPreferenceKey(item) === key)) return
+        setPreferences("recent", recentModels({ providerID: cli.providerID, modelID: cli.modelID }, preferences.recent))
+        savePreferences()
       })
 
       const currentSelection = createMemo<ModelSelection | undefined>(() => {
@@ -265,12 +293,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return `${JSON.stringify([ref.directory, ref.workspaceID])}:${agentID}`
       }
 
-      function preferredSelection(model: ModelPreferenceModel): ModelSelection {
+      function preferredSelection(model: ModelSelection): ModelSelection {
         const configured = agent.current()?.model
         const fallback = configuredModel()
+        const cli = cliSuperseded() ? undefined : cliModel()
+        const cliVariant =
+          cli && cli.providerID === model.providerID && cli.modelID === model.modelID ? cli.variant : undefined
         const preferred = preferences.variant[modelPreferenceKey(model)]
         const variant = normalizeModelVariant(
-          preferred ??
+          cliVariant ??
+            preferred ??
+            model.variant ??
             (configured?.providerID === model.providerID && configured.id === model.modelID
               ? configured.variant
               : undefined) ??
@@ -338,6 +371,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (route.data.type === "session") {
           const sessionID = route.data.sessionID
           const current = sessionSelection(sessionID)
+          setCliSuperseded(true)
           setSessionDraft(
             sessionID,
             current?.providerID === model.providerID && current.modelID === model.modelID
@@ -349,6 +383,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const current = agent.current()
         if (!current) return false
         setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), model)
+        setCliSuperseded(true)
         return true
       }
 
@@ -523,6 +558,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           set(value: string | undefined) {
             const m = currentSelection()
             if (!m) return
+            setCliSuperseded(true)
             if (route.data.type === "session") {
               setSessionDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
             }

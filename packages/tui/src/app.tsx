@@ -640,7 +640,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   onMount(() => {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
-      if (args.model) {
+      if (args.model && typeof args.model === "string") {
         const { providerID, modelID } = Model.parse(args.model)
         if (!providerID || !modelID)
           return toast.show({
@@ -648,7 +648,6 @@ function App(props: { pair?: DialogPairCredentials }) {
             message: `Invalid model format: ${args.model}`,
             duration: 3000,
           })
-        local.model.set({ providerID, modelID }, { recent: true })
       }
       if (args.sessionID && !args.fork) {
         route.navigate({

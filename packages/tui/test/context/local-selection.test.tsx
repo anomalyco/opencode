@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import path from "node:path"
 import { agent, model, renderLocal, session } from "../fixture/local"
 import { json } from "../fixture/tui-client"
 
@@ -145,6 +146,53 @@ test("same-model agent switches clear drafts without a model acknowledgment", as
   await publishSelection(setup, "plan", "first", false)
   await publishSelection(setup, "plan", "second")
   expect(setup.local.model.current()?.modelID).toBe("second")
+})
+
+test("handles malformed config models and non-string CLI model args safely", async () => {
+  await using setup = await renderLocal({
+    models: [model("first"), model("second", ["low", "high"])],
+    args: { model: true as any },
+    fetch: (url) => {
+      if (url.pathname === "/api/config")
+        return json([
+          { type: "document", info: { model: { providerID: "incomplete" } } },
+          { type: "document", info: { model: null } },
+          { type: "document", info: { model: 123 } },
+          { type: "document", info: { model: "provider/second#high" } },
+        ])
+    },
+  })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "second", variant: "high" })
+})
+
+test("preserves CLI model and variant ahead of recents and config and allows in-session variant switches", async () => {
+  await using setup = await renderLocal({
+    models: [model("first"), model("second", ["low", "high"])],
+    args: { model: "provider/second#high" },
+    preferences: { recent: [{ providerID: "provider", modelID: "first" }] },
+  })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "second", variant: "high" })
+  setup.local.model.variant.set("low")
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "second", variant: "low" })
+})
+
+test("CLI variant wins transiently over stored preference without persisting", async () => {
+  await using setup = await renderLocal({
+    models: [model("first"), model("second", ["low", "high"])],
+    args: { model: "provider/second#high" },
+    preferences: { variant: { "provider/second": "low" } },
+  })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "second", variant: "high" })
+  await setup.waitFor(async () => {
+    await Bun.sleep(10)
+    return setup.local.model.recent().some((item) => item.providerID === "provider" && item.modelID === "second")
+  })
+  const stored = (await Bun.file(path.join(setup.state, "model.json"))
+    .json()
+    .catch(() => ({}))) as { variant?: Record<string, string> }
+  expect(stored.variant?.["provider/second"]).toBe("low")
+  setup.local.model.variant.set("low")
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "second", variant: "low" })
 })
 
 async function publishSelection(
