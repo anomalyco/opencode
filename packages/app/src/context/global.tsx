@@ -1,7 +1,13 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createEffect, createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
+import {
+  createServerProjects,
+  knownProjectWorktrees,
+  RECENTLY_CLOSED_DISPLAY_LIMIT,
+  ServerConnection,
+  useServer,
+} from "./server"
 import { pathKey } from "@/utils/path-key"
 import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
@@ -127,7 +133,13 @@ function createServerCtx(
     return base
   }
 
-  const projectsList = createMemo(() => projects.list().map(enrich))
+  const projectsList = createMemo(() => {
+    const opened = projects.list()
+    const known = knownProjectWorktrees({ opened, known: sync.data.project }).map(
+      (worktree) => enrich({ worktree, expanded: false }),
+    )
+    return [...opened.map(enrich), ...known]
+  })
   const recentlyClosedList = createMemo(() => {
     const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
     return projects
@@ -147,6 +159,9 @@ function createServerCtx(
     isLocal,
     projects: {
       ...projects,
+      // Pre-union list of user-opened projects, for callers whose checks must ignore
+      // the appended server-known entries (e.g. "add project" persistence).
+      opened: projects.list,
       list: projectsList,
       recentlyClosed: recentlyClosedList,
     },
