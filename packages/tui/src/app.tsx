@@ -2,7 +2,9 @@ import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@op
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
+import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { installStdioFileGuard } from "./util/stdio-guard"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
@@ -188,6 +190,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
+      // Guards from the first frame onward. Released when this scope closes, which is before the
+      // fatal-error print below, so crash output still reaches a restored stderr.
+      yield* Effect.acquireRelease(
+        Effect.sync(() => installStdioFileGuard(path.join(global.log, "stdio-main.log"), { truncate: true })),
+        (restore) => Effect.sync(restore),
+      )
       const renderer = yield* Effect.acquireRelease(
         Effect.tryPromise({
           try: () =>
