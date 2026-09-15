@@ -37,6 +37,7 @@ import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionRunState } from "../../src/session/run-state"
+import { Identifier } from "../../src/id/id"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -496,6 +497,81 @@ noLLMServer.instance(
       const result = yield* prompt.loop({ sessionID: chat.id })
 
       expect(result.info.id).toBe(assistantID)
+    }),
+  { config: cfg },
+)
+
+it.instance(
+  "loop exits without an LLM request when the terminal assistant kept a pre-rollover parent",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      // Ascending IDs only carry the low bits of the epoch, so a transcript
+      // written across the rollover holds post-rollover IDs that sort before
+      // the pre-rollover ones. The assistant that settles the post-rollover
+      // user turn can therefore keep a pre-rollover user as parent.
+      const rollover = 2 ** 36
+      const preUserID = MessageID.make(Identifier.create("msg", "ascending", rollover - 3))
+      const preAssistantID = MessageID.make(Identifier.create("msg", "ascending", rollover - 2))
+      const postUserID = MessageID.make(Identifier.create("msg", "ascending", rollover + 1))
+      const postAssistantID = MessageID.make(Identifier.create("msg", "ascending", rollover + 2))
+      yield* sessions.updateMessage({
+        id: preUserID,
+        role: "user",
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        time: { created: rollover - 3 },
+      })
+      yield* sessions.updateMessage({
+        id: preAssistantID,
+        role: "assistant",
+        parentID: preUserID,
+        sessionID: chat.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: rollover - 2 },
+        finish: "tool-calls",
+      })
+      yield* sessions.updateMessage({
+        id: postUserID,
+        role: "user",
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        time: { created: rollover + 1 },
+      })
+      yield* sessions.updateMessage({
+        id: postAssistantID,
+        role: "assistant",
+        parentID: preUserID,
+        sessionID: chat.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: rollover + 2 },
+        finish: "stop",
+      })
+
+      // The post-rollover pair sorts before every pre-rollover ID.
+      expect(preUserID > postAssistantID).toBe(true)
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+
+      expect(yield* llm.hits).toHaveLength(0)
+      expect(result.info.id).toBe(postAssistantID)
     }),
   { config: cfg },
 )
