@@ -30,7 +30,7 @@ export const PromptCacheKeyPlugin = define({
         const providerID = Provider.ID.make(id)
         for (const model of models.list(providerID)) {
           models.update(model.providerID, model.id, (draft) => {
-            draft.compatibility = { supportsPromptCacheKey: true, ...draft.compatibility }
+            draft.compatibility = { ...draft.compatibility, supportsPromptCacheKey: true }
           })
         }
       }
