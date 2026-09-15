@@ -1389,6 +1389,29 @@ await ctx.session.hook("http.response", (event) => {
 })
 ```
 
+#### Native WebSocket (experimental)
+
+Providers that stream over a WebSocket open one connection per session and reuse it across requests, so
+`http.request` and `http.response` never see that traffic. The `experimental.ws.handshake` hook runs once per model
+call before the connection is selected. It carries the same `sessionID`, `agent`, `model`, and `kind` as the HTTP
+hooks, plus the connection `url` and `headers`. Changing `url` or `headers` changes which socket the request uses, so a
+rotated bearer token reopens the connection.
+
+HTTP hooks still run for every HTTP request, including the request a WebSocket route falls back to.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.handshake",
+  async (event) => {
+    event.headers.authorization = `Bearer ${await mintToken(event.url)}`
+    delete event.headers["api-key"]
+  },
+  { providerID: "azure" },
+)
+```
+
+This hook is experimental and its name or shape may change.
+
 #### Retry policy
 
 Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
@@ -1434,7 +1457,17 @@ interface SessionHooks {
   "model.request": SessionModelRequestHook
   "http.request": SessionHttpRequestHook
   "http.response": SessionHttpResponseHook
+  "experimental.ws.handshake": SessionWebSocketHandshakeHook
   retry: SessionRetryHook
+}
+
+interface SessionWebSocketHandshakeHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  url: string
+  headers: Record<string, string>
 }
 
 type RetryDecision = { retry: false } | { retry: true; delay: number }

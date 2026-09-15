@@ -171,6 +171,31 @@ describe("SessionModelTransport", () => {
     )
   })
 
+  test("selects the connection from the handshake and reopens when it changes", async () => {
+    const fixture = automatic()
+    const tokens = ["one", "one", "two"]
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session, (connect) =>
+          Effect.succeed({
+            url: connect.url,
+            headers: { ...connect.headers, authorization: `Bearer ${tokens.shift()}` },
+          }),
+        )
+        yield* collect(executor, exchange("first", { headers: { "api-key": "k" } }))
+        yield* collect(executor, exchange("second", { headers: { "api-key": "k" } }))
+        yield* collect(executor, exchange("third", { headers: { "api-key": "k" } }))
+
+        // Same minted token reuses the socket; a rotated token changes the affinity key and reopens it.
+        expect(fixture.connections).toHaveLength(2)
+        expect(fixture.connections.map((item) => item.headers.authorization)).toEqual(["Bearer one", "Bearer two"])
+        expect(fixture.connections.map((item) => item.sent)).toEqual([["first", "second"], ["third"]])
+      }),
+    )
+  })
+
   test("does not carry a checkpoint across physical connection rotation", async () => {
     const fixture = automatic()
     const checkpoints: Array<unknown> = []
