@@ -388,6 +388,22 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("rejects an event-stream frame that declares more than the 16 MiB maximum", () =>
+    Effect.gen(function* () {
+      // A truncated or malformed prelude can announce a frame far larger than
+      // the AWS maximum. Framing must reject it instead of buffering (and
+      // re-copying) every byte that follows a frame that never completes.
+      const prelude = new Uint8Array(8)
+      new DataView(prelude.buffer).setUint32(0, 0xffffffff, false)
+      const error = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(fixedBytes(concat([prelude, new Uint8Array(64)]))),
+        Effect.flip,
+      )
+
+      expect(error.message).toContain("above the 16777216 byte maximum")
+    }),
+  )
+
   it.effect("rejects requests with no auth path", () =>
     Effect.gen(function* () {
       const unsignedModel = AmazonBedrock.configure({
