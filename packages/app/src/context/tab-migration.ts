@@ -10,10 +10,12 @@ export function migrateTabs(value: unknown, fallback: ServerConnection.Key): Tab
     if (tab.type === "session" && typeof tab.sessionId === "string") {
       return [{ type: tab.type, server, sessionId: tab.sessionId }]
     }
+    // A directory decoded to U+FFFD can never resolve, so do not restore a draft that points at it.
     if (
       tab.type === "draft" &&
       typeof tab.draftID === "string" &&
       typeof tab.directory === "string" &&
+      !tab.directory.includes("\uFFFD") &&
       (tab.worktree === undefined || typeof tab.worktree === "string")
     ) {
       return [{ type: tab.type, server, draftID: tab.draftID, directory: tab.directory, worktree: tab.worktree }]
