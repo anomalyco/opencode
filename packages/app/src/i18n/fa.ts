@@ -172,6 +172,8 @@ export const dict = {
   "command.session.redo": "دوباره انجام دهید",
   "command.session.redo.description": "آخرین پیام لغو شده را دوباره انجام دهید",
   "command.session.compact": "جلسه فشرده",
+  "command.session.record-notes": "ذخیره یادگیری‌های دفترچه",
+  "command.session.record-notes.description": "یادگیری‌های این سشن را در دفترچهٔ پروژه ثبت کن",
   "command.session.compact.description": "برای کاهش اندازه زمینه، جلسه را خلاصه کنید",
   "command.session.fork": "فورک از پیام",
   "command.session.fork.description": "یک جلسه جدید از پیام قبلی ایجاد کنید",
