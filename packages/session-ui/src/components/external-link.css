@@ -1,0 +1,12 @@
+a[target="_blank"]::after {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-inline-start: 2px;
+  flex-shrink: 0;
+  vertical-align: -3px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 8.56V4H5.44M10 4L4 10' stroke='black'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 8.56V4H5.44M10 4L4 10' stroke='black'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+}
