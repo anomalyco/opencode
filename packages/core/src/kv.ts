@@ -29,6 +29,7 @@ export interface Interface {
   readonly set: (key: string, value: Value) => Effect.Effect<void>
   readonly remove: (key: string) => Effect.Effect<void>
   readonly scan: (options: ScanOptions) => Effect.Effect<ScanResult>
+  readonly scanAll: (prefix: string) => Effect.Effect<readonly Entry[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/KV") {}
@@ -37,6 +38,28 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
+    const scan: Interface["scan"] = Effect.fn("KV.scan")(function* (options) {
+      const limit = Number.isNaN(options.limit) ? 100 : Math.min(Math.max(Math.floor(options.limit ?? 100), 1), 1000)
+      const end = prefixEnd(options.prefix)
+      const rows = yield* db
+        .select({ key: KVTable.key, value: KVTable.value })
+        .from(KVTable)
+        .where(
+          and(
+            options.prefix === "" ? undefined : gte(KVTable.key, options.prefix),
+            end === undefined ? undefined : lt(KVTable.key, end),
+            options.after === undefined ? undefined : gt(KVTable.key, options.after),
+          ),
+        )
+        .orderBy(asc(KVTable.key))
+        .limit(limit + 1)
+        .all()
+        .pipe(Effect.orDie)
+      const entries = rows.slice(0, limit)
+      if (rows.length <= limit) return { entries }
+      return { entries, next: entries[entries.length - 1].key }
+    })
+
     return Service.of({
       get: Effect.fn("KV.get")(function* (key) {
         return (yield* db
@@ -57,26 +80,16 @@ const layer = Layer.effect(
       remove: Effect.fn("KV.remove")(function* (key) {
         yield* db.delete(KVTable).where(eq(KVTable.key, key)).run().pipe(Effect.orDie)
       }),
-      scan: Effect.fn("KV.scan")(function* (options) {
-        const limit = Number.isNaN(options.limit) ? 100 : Math.min(Math.max(Math.floor(options.limit ?? 100), 1), 1000)
-        const end = prefixEnd(options.prefix)
-        const rows = yield* db
-          .select({ key: KVTable.key, value: KVTable.value })
-          .from(KVTable)
-          .where(
-            and(
-              options.prefix === "" ? undefined : gte(KVTable.key, options.prefix),
-              end === undefined ? undefined : lt(KVTable.key, end),
-              options.after === undefined ? undefined : gt(KVTable.key, options.after),
-            ),
-          )
-          .orderBy(asc(KVTable.key))
-          .limit(limit + 1)
-          .all()
-          .pipe(Effect.orDie)
-        const entries = rows.slice(0, limit)
-        if (rows.length <= limit) return { entries }
-        return { entries, next: entries[entries.length - 1].key }
+      scan,
+      scanAll: Effect.fn("KV.scanAll")(function* (prefix) {
+        const entries: Entry[] = []
+        let after: string | undefined
+        do {
+          const page = yield* scan({ prefix, after, limit: 1000 })
+          entries.push(...page.entries)
+          after = page.next
+        } while (after !== undefined)
+        return entries
       }),
     })
   }),
