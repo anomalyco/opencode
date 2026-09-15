@@ -6,6 +6,63 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { McpCatalog } from "@/mcp/catalog"
 import { Effect } from "effect"
 
+// Issue #3523: OpenAI rejects `tools[].function.name` strings longer than 64
+// chars. Combined `<sanitized-server>_<sanitized-tool>` names can overflow,
+// which silently kills the request because the provider 400 never reaches
+// the TUI. The provider-facing helper truncates to `prefix(55) + "_" +
+// hash(8)` so collisions on the readable prefix still produce distinct keys.
+const MAX_TOOL_NAME_LENGTH = 64
+
+describe("McpCatalog.buildToolName", () => {
+  test("leaves short names byte-for-byte unchanged", () => {
+    const result = McpCatalog.buildToolName("short", "ping")
+    expect(result.name).toBe("short_ping")
+    expect(result.truncated).toBe(false)
+    expect(result.name.length).toBeLessThanOrEqual(MAX_TOOL_NAME_LENGTH)
+  })
+
+  test("truncates overflow to at most 64 chars with a hash suffix", () => {
+    // 35-char server name from the issue's reproducer + 1 ("_") + 35-char tool
+    // name = 71 chars (post-sanitize). Exceeds the provider limit.
+    const longServer = "chrome-devtools-aaaaaaaaaaaaaaaaaaa"
+    const longTool = "perform_extremely_specific_workflow_step_alpha"
+
+    const result = McpCatalog.buildToolName(longServer, longTool)
+
+    expect(result.truncated).toBe(true)
+    expect(result.name.length).toBeLessThanOrEqual(MAX_TOOL_NAME_LENGTH)
+    expect(result.name).toMatch(/_[0-9a-f]{8}$/)
+  })
+
+  test("collision-safe: two long names sharing a 55-char prefix stay distinct", () => {
+    // The two combined names below share their first 64 chars; blind
+    // .slice(0, 64) would collapse them into a single registry key.
+    const longServer = "chrome-devtools-aaaaaaaaaaaaaaaaaaa"
+    const toolAlpha = "perform_extremely_specific_workflow_step_alpha"
+    const toolBeta = "perform_extremely_specific_workflow_step_beta"
+
+    const alpha = McpCatalog.buildToolName(longServer, toolAlpha)
+    const beta = McpCatalog.buildToolName(longServer, toolBeta)
+
+    expect(alpha.name).not.toBe(beta.name)
+    expect(alpha.name.length).toBeLessThanOrEqual(MAX_TOOL_NAME_LENGTH)
+    expect(beta.name.length).toBeLessThanOrEqual(MAX_TOOL_NAME_LENGTH)
+    // The readable 55-char prefix is preserved unchanged on both sides.
+    expect(alpha.name.startsWith(alpha.name.slice(0, 55))).toBe(true)
+    expect(beta.name.startsWith(beta.name.slice(0, 55))).toBe(true)
+  })
+
+  test("hash is stable for the same combined input", () => {
+    const longServer = "chrome-devtools-aaaaaaaaaaaaaaaaaaa"
+    const longTool = "perform_extremely_specific_workflow_step_alpha"
+
+    const first = McpCatalog.buildToolName(longServer, longTool)
+    const second = McpCatalog.buildToolName(longServer, longTool)
+
+    expect(first.name).toBe(second.name)
+  })
+})
+
 const options = { toolCallId: "call_mcp", abortSignal: new AbortController().signal } as any
 
 function clientReturning(result: unknown) {
