@@ -64,6 +64,7 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 import { createSessionLineage } from "@/pages/session/session-lineage"
+import { ModHostScripts, ModStyles } from "@/components/mod-host"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome } from "@/pages/home"
@@ -315,6 +316,8 @@ function SharedProviders(props: ParentProps) {
     <>
       <BodyDesignClass />
       <CommandProvider>
+        <ModHostScripts />
+        <ModStyles />
         <DesktopCommands />
         <HighlightsProvider>{props.children}</HighlightsProvider>
       </CommandProvider>
@@ -326,6 +329,7 @@ function DesktopCommands() {
   const command = useCommand()
   const language = useLanguage()
   const platform = usePlatform()
+  const [mods, { refetch }] = createResource(() => platform.mods?.list())
 
   command.register("desktop", () => {
     const commands: CommandOption[] = []
@@ -338,6 +342,173 @@ function DesktopCommands() {
           void platform.exportDebugLogs?.()
         },
       })
+    }
+    if (platform.platform === "desktop" && platform.mods) {
+      commands.push({
+        id: "mods.safe-mode.enable",
+        title: "Disable all MODs (Safe Mode)",
+        category: "MODs",
+        onSelect: () => {
+          void platform.mods?.setSafeMode(true).then(() => {
+            if (
+              (mods.latest ?? []).some(
+                (mod) => mod.enabled && (mod.contributes?.server || mod.contributes?.database),
+              )
+            ) {
+              void platform.restart()
+              return
+            }
+            window.location.reload()
+          })
+        },
+      })
+      commands.push({
+        id: "mods.safe-mode.disable",
+        title: "Enable MOD loading",
+        category: "MODs",
+        onSelect: () => {
+          void platform.mods?.setSafeMode(false).then((loaded) => {
+            if (loaded.some((mod) => mod.enabled && mod.compatible && (mod.contributes?.server || mod.contributes?.database))) {
+              void platform.restart()
+              return
+            }
+            window.location.reload()
+          })
+        },
+      })
+      commands.push({
+        id: "mods.reload",
+        title: "Refresh MODs",
+        category: "MODs",
+        onSelect: () => {
+          void platform.mods?.reload().then((loaded) => {
+            if (loaded.some((mod) => mod.enabled && mod.compatible && (mod.contributes?.server || mod.contributes?.database))) {
+              void platform.restart()
+              return
+            }
+            if (loaded.some((mod) => mod.enabled && mod.compatible && mod.contributes?.host)) {
+              window.location.reload()
+              return
+            }
+            void refetch()
+            window.dispatchEvent(new Event("opencode:mods-changed"))
+          })
+        },
+      })
+      commands.push({
+        id: "mods.open-folder",
+        title: "Open MOD folder",
+        category: "MODs",
+        onSelect: () => {
+          void platform.mods?.openFolder()
+        },
+      })
+      for (const mod of mods.latest ?? []) {
+        commands.push({
+          id: `mods.toggle.${mod.id}`,
+          title: `${mod.enabled ? "Disable" : "Enable"} MOD: ${mod.name}`,
+          description:
+            mod.error ??
+            (mod.compatible
+              ? `${mod.version} - Load priority: ${mod.priority}`
+              : "Incompatible with this OpenCode version"),
+          category: "MODs",
+          disabled: !mod.compatible,
+          onSelect: () => {
+            void platform.mods?.setEnabled(mod.id, !mod.enabled).then(() => {
+              if (mod.contributes?.server || mod.contributes?.database) {
+                void platform.restart()
+                return
+              }
+              if (mod.contributes?.host) {
+                window.location.reload()
+                return
+              }
+              void refetch()
+              window.dispatchEvent(new Event("opencode:mods-changed"))
+            })
+          },
+        })
+        if (!mod.error) {
+          commands.push({
+            id: `mods.priority.increase.${mod.id}`,
+            title: `Increase MOD load priority: ${mod.name}`,
+            description: `Current priority: ${mod.priority}`,
+            category: "MODs",
+            disabled: mod.priority >= 1000,
+            onSelect: () => {
+              void platform.mods?.setPriority(mod.id, mod.priority + 1).then(() => {
+                if (mod.contributes?.server || mod.contributes?.database) {
+                  void platform.restart()
+                  return
+                }
+                window.location.reload()
+              })
+            },
+          })
+          commands.push({
+            id: `mods.priority.decrease.${mod.id}`,
+            title: `Decrease MOD load priority: ${mod.name}`,
+            description: `Current priority: ${mod.priority}`,
+            category: "MODs",
+            disabled: mod.priority <= -1000,
+            onSelect: () => {
+              void platform.mods?.setPriority(mod.id, mod.priority - 1).then(() => {
+                if (mod.contributes?.server || mod.contributes?.database) {
+                  void platform.restart()
+                  return
+                }
+                window.location.reload()
+              })
+            },
+          })
+          commands.push({
+            id: `mods.priority.reset.${mod.id}`,
+            title: `Reset MOD load priority: ${mod.name}`,
+            description: `Current priority: ${mod.priority}`,
+            category: "MODs",
+            disabled: mod.priority === 0,
+            onSelect: () => {
+              void platform.mods?.setPriority(mod.id, 0).then(() => {
+                if (mod.contributes?.server || mod.contributes?.database) {
+                  void platform.restart()
+                  return
+                }
+                window.location.reload()
+              })
+            },
+          })
+        }
+        if (!mod.enabled || !mod.compatible) continue
+        commands.push({
+          id: `mods.open.${mod.id}`,
+          title: `Open MOD: ${mod.name}`,
+          description: mod.description,
+          category: "MODs",
+          onSelect: () => {
+            void platform.mods?.openWindow(mod.id)
+          },
+        })
+        for (const contribution of mod.contributes?.commands ?? []) {
+          commands.push({
+            id: `mods.command.${mod.id}.${contribution.id}`,
+            title: contribution.title,
+            description: contribution.description ?? mod.name,
+            category: "MODs",
+            onSelect: () => {
+              if (contribution.panel) {
+                window.dispatchEvent(
+                  new CustomEvent("opencode:open-mod-panel", {
+                    detail: { modID: mod.id, panelID: contribution.panel },
+                  }),
+                )
+                return
+              }
+              void platform.mods?.openWindow(mod.id)
+            },
+          })
+        }
+      }
     }
     return commands
   })

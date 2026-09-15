@@ -133,6 +133,22 @@ const api: ElectronAPI = {
   setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
   setNativeTranslations: (bundle) => ipcRenderer.invoke("set-native-translations", bundle),
+  mods: {
+    list: () => ipcRenderer.invoke("mods-list"),
+    safeMode: () => ipcRenderer.invoke("mods-safe-mode"),
+    status: () => ipcRenderer.invoke("mods-status"),
+    setSafeMode: (enabled) => ipcRenderer.invoke("mods-set-safe-mode", enabled),
+    reload: () => ipcRenderer.invoke("mods-reload"),
+    preload: (id) => ipcRenderer.invoke("mods-preload", id),
+    setEnabled: (id, enabled, resolution) => ipcRenderer.invoke("mods-set-enabled", id, enabled, resolution),
+    setPriority: (id, priority) => ipcRenderer.invoke("mods-set-priority", id, priority),
+    openWindow: (id) => ipcRenderer.invoke("mods-open-window", id),
+    openFolder: () => ipcRenderer.invoke("mods-open-folder"),
+    storageGet: (id, key) => ipcRenderer.invoke("mods-storage-get", id, key),
+    storageSet: (id, key, value) => ipcRenderer.invoke("mods-storage-set", id, key, value),
+    storageDelete: (id, key) => ipcRenderer.invoke("mods-storage-delete", id, key),
+    openExternal: (id, url) => ipcRenderer.invoke("mods-open-external", id, url),
+  },
 }
 
 contextBridge.exposeInMainWorld("api", api)

@@ -16,6 +16,8 @@ type StartCommand = {
   port: number
   password: string
   userDataPath: string
+  modPlugins: string[]
+  shareProductionDatabase: boolean
 }
 
 type StopCommand = { type: "stop" }
@@ -50,7 +52,7 @@ parentPort.on("message", (event) => {
 
 async function start(command: StartCommand) {
   try {
-    prepareSidecarEnv(command.password, command.userDataPath)
+    prepareSidecarEnv(command.password, command.userDataPath, command.modPlugins, command.shareProductionDatabase)
     ensureLoopbackNoProxy()
     useSystemCertificates()
     useEnvProxy()
@@ -80,12 +82,19 @@ async function stop() {
   }
 }
 
-function prepareSidecarEnv(password: string, userDataPath: string) {
+function prepareSidecarEnv(
+  password: string,
+  userDataPath: string,
+  modPlugins: string[],
+  shareProductionDatabase: boolean,
+) {
   Object.assign(process.env, {
     OPENCODE_SERVER_USERNAME: "opencode",
     OPENCODE_SERVER_PASSWORD: password,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
+    OPENCODE_DESKTOP_MOD_PLUGINS: JSON.stringify(modPlugins),
   })
+  if (shareProductionDatabase) process.env.OPENCODE_DISABLE_CHANNEL_DB = "1"
 }
 
 function ensureLoopbackNoProxy() {
@@ -136,12 +145,16 @@ function parseCommand(value: unknown): SidecarCommand | undefined {
   if (typeof command.port !== "number") return
   if (typeof command.password !== "string") return
   if (typeof command.userDataPath !== "string") return
+  if (!Array.isArray(command.modPlugins) || command.modPlugins.some((plugin) => typeof plugin !== "string")) return
+  if (typeof command.shareProductionDatabase !== "boolean") return
   return {
     type: "start",
     hostname: command.hostname,
     port: command.port,
     password: command.password,
     userDataPath: command.userDataPath,
+    modPlugins: command.modPlugins,
+    shareProductionDatabase: command.shareProductionDatabase,
   }
 }
 

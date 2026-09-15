@@ -27,6 +27,42 @@ export type FatalRendererErrorLog = {
   platform: PlatformName
   os?: DesktopOS
 }
+export type DesktopMod = {
+  id: string
+  name: string
+  version: string
+  description?: string
+  permissions: (
+    | "storage"
+    | "external.open"
+    | "ui.sidebar"
+    | "ui.command"
+    | "ui.style"
+    | "ui.host"
+    | "server.host"
+    | "server.database"
+  )[]
+  priority: number
+  enabled: boolean
+  compatible: boolean
+  error?: string
+  contributes?: {
+    sidebar?: { id: string; title: string; entry: string; order?: number }[]
+    commands?: { id: string; title: string; description?: string; panel?: string }[]
+    styles?: string
+    host?: string
+    server?: string
+    database?: { source: "production" }
+  }
+}
+
+export type DesktopModConflict = {
+  modID: string
+  modName: string
+  type: "sidebar" | "command" | "style" | "host" | "server" | "database"
+  detail: string
+  certain: boolean
+}
 
 type PlatformBase = {
   /** App version */
@@ -121,6 +157,24 @@ type PlatformBase = {
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+
+  /** Manage isolated desktop MOD windows */
+  mods?: {
+    list(): Promise<DesktopMod[]>
+    safeMode(): Promise<boolean>
+    status(): Promise<{ version: string; enabled: boolean }>
+    setSafeMode(enabled: boolean): Promise<boolean>
+    reload(): Promise<DesktopMod[]>
+    preload(id: string): Promise<{ mod: DesktopMod; conflicts: DesktopModConflict[]; directory: string }>
+    setEnabled(id: string, enabled: boolean, resolution?: "candidate" | "existing"): Promise<DesktopMod[]>
+    setPriority(id: string, priority: number): Promise<DesktopMod[]>
+    openWindow(id: string): Promise<void>
+    openFolder(): Promise<string>
+    storageGet(id: string, key: string): Promise<string | null>
+    storageSet(id: string, key: string, value: string): Promise<void>
+    storageDelete(id: string, key: string): Promise<void>
+    openExternal(id: string, url: string): Promise<void>
+  }
 }
 
 export type Platform = PlatformBase &

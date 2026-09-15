@@ -29,6 +29,14 @@ export type UpdaterAPI = {
   install: () => Promise<void>
 }
 
+export type DesktopModConflict = {
+  modID: string
+  modName: string
+  type: "sidebar" | "command" | "style" | "host" | "server" | "database"
+  detail: string
+  certain: boolean
+}
+
 export type LinuxDisplayBackend = "wayland" | "auto"
 export type TitlebarTheme = {
   mode: "light" | "dark"
@@ -40,6 +48,34 @@ export type FatalRendererError = {
   version?: string
   platform: string
   os?: string
+}
+export type DesktopMod = {
+  id: string
+  name: string
+  version: string
+  description?: string
+  permissions: (
+    | "storage"
+    | "external.open"
+    | "ui.sidebar"
+    | "ui.command"
+    | "ui.style"
+    | "ui.host"
+    | "server.host"
+    | "server.database"
+  )[]
+  priority: number
+  enabled: boolean
+  compatible: boolean
+  error?: string
+  contributes?: {
+    sidebar?: { id: string; title: string; entry: string; order?: number }[]
+    commands?: { id: string; title: string; description?: string; panel?: string }[]
+    styles?: string
+    host?: string
+    server?: string
+    database?: { source: "production" }
+  }
 }
 
 export type ElectronAPI = {
@@ -113,4 +149,20 @@ export type ElectronAPI = {
   setForceFocus: (enabled: boolean) => Promise<void>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
   setNativeTranslations: (bundle: DesktopNativeBundle) => Promise<void>
+  mods: {
+    list: () => Promise<DesktopMod[]>
+    safeMode: () => Promise<boolean>
+    status: () => Promise<{ version: string; enabled: boolean }>
+    setSafeMode: (enabled: boolean) => Promise<boolean>
+    reload: () => Promise<DesktopMod[]>
+    preload: (id: string) => Promise<{ mod: DesktopMod; conflicts: DesktopModConflict[]; directory: string }>
+    setEnabled: (id: string, enabled: boolean, resolution?: "candidate" | "existing") => Promise<DesktopMod[]>
+    setPriority: (id: string, priority: number) => Promise<DesktopMod[]>
+    openWindow: (id: string) => Promise<void>
+    openFolder: () => Promise<string>
+    storageGet: (id: string, key: string) => Promise<string | null>
+    storageSet: (id: string, key: string, value: string) => Promise<void>
+    storageDelete: (id: string, key: string) => Promise<void>
+    openExternal: (id: string, url: string) => Promise<void>
+  }
 }

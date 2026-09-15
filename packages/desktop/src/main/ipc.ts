@@ -24,6 +24,7 @@ import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
+import type { createModManager } from "./mods"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -52,6 +53,7 @@ type Deps = {
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
   setNativeTranslations: (bundle: DesktopNativeBundle) => void
+  mods: ReturnType<typeof createModManager>
 }
 
 export function registerIpcHandlers(deps: Deps) {
@@ -110,6 +112,101 @@ export function registerIpcHandlers(deps: Deps) {
     const bundle = parseDesktopNativeBundle(value)
     if (!bundle) throw new Error("Invalid native translation bundle")
     deps.setNativeTranslations(bundle)
+  })
+  ipcMain.handle("mods-list", () => deps.mods.list())
+  ipcMain.handle("mods-safe-mode", () => deps.mods.safeMode())
+  ipcMain.handle("mods-status", () => deps.mods.status())
+  ipcMain.handle("mods-set-safe-mode", (_event: IpcMainInvokeEvent, enabled: boolean) => {
+    deps.mods.setSafeMode(enabled)
+    return deps.mods.safeMode()
+  })
+  ipcMain.handle("mods-reload", async () => {
+    await deps.mods.reload()
+    return deps.mods.list()
+  })
+  ipcMain.handle("mods-preload", (_event: IpcMainInvokeEvent, id: string) => deps.mods.preload(id))
+  ipcMain.handle(
+    "mods-set-enabled",
+    (_event: IpcMainInvokeEvent, id: string, enabled: boolean, resolution?: "candidate" | "existing") => {
+      deps.mods.setEnabled(id, enabled, resolution)
+      return deps.mods.list()
+    },
+  )
+  ipcMain.handle("mods-set-priority", (_event: IpcMainInvokeEvent, id: string, priority: number) => {
+    deps.mods.setPriority(id, priority)
+    return deps.mods.list()
+  })
+  ipcMain.handle("mods-open-window", (_event: IpcMainInvokeEvent, id: string) => deps.mods.openWindow(id))
+  ipcMain.handle("mods-open-folder", () => deps.mods.openFolder())
+  ipcMain.handle("mods-storage-get", (_event: IpcMainInvokeEvent, id: string, key: string) => {
+    deps.mods.manifestForID(id)
+    if (!deps.mods.hasPermissionForID(id, "storage")) throw new Error("MOD does not have storage permission")
+    const value = getStore(`opencode.mod.${id}.dat`).get(key)
+    if (value === undefined || value === null) return null
+    return typeof value === "string" ? value : JSON.stringify(value)
+  })
+  ipcMain.handle("mods-storage-set", (_event: IpcMainInvokeEvent, id: string, key: string, value: string) => {
+    deps.mods.manifestForID(id)
+    if (!deps.mods.hasPermissionForID(id, "storage")) throw new Error("MOD does not have storage permission")
+    getStore(`opencode.mod.${id}.dat`).set(key, value)
+  })
+  ipcMain.handle("mods-storage-delete", (_event: IpcMainInvokeEvent, id: string, key: string) => {
+    deps.mods.manifestForID(id)
+    if (!deps.mods.hasPermissionForID(id, "storage")) throw new Error("MOD does not have storage permission")
+    const name = `opencode.mod.${id}.dat`
+    getStore(name).delete(key)
+    void removeStoreFileIfEmpty(name)
+  })
+  ipcMain.handle("mods-open-external", async (_event: IpcMainInvokeEvent, id: string, url: string) => {
+    deps.mods.manifestForID(id)
+    if (!deps.mods.hasPermissionForID(id, "external.open"))
+      throw new Error("MOD does not have external.open permission")
+    if (!URL.canParse(url) || !["http:", "https:"].includes(new URL(url).protocol)) {
+      throw new Error("Only HTTP and HTTPS URLs can be opened")
+    }
+    await shell.openExternal(url)
+  })
+  ipcMain.handle("mod-get-manifest", (event: IpcMainInvokeEvent) => {
+    const { id, mod } = deps.mods.manifestFor(event.sender.id)
+    return {
+      id,
+      name: mod.manifest.name,
+      version: mod.manifest.version,
+      description: mod.manifest.description,
+      permissions: mod.manifest.permissions,
+    }
+  })
+  ipcMain.handle("mod-storage-get", (event: IpcMainInvokeEvent, key: string) => {
+    const { id } = deps.mods.manifestFor(event.sender.id)
+    if (!deps.mods.hasPermission(event.sender.id, "storage")) throw new Error("MOD does not have storage permission")
+    const value = getStore(`opencode.mod.${id}.dat`).get(key)
+    if (value === undefined || value === null) return null
+    return typeof value === "string" ? value : JSON.stringify(value)
+  })
+  ipcMain.handle("mod-storage-set", (event: IpcMainInvokeEvent, key: string, value: string) => {
+    const { id } = deps.mods.manifestFor(event.sender.id)
+    if (!deps.mods.hasPermission(event.sender.id, "storage")) throw new Error("MOD does not have storage permission")
+    getStore(`opencode.mod.${id}.dat`).set(key, value)
+  })
+  ipcMain.handle("mod-storage-delete", (event: IpcMainInvokeEvent, key: string) => {
+    const { id } = deps.mods.manifestFor(event.sender.id)
+    if (!deps.mods.hasPermission(event.sender.id, "storage")) throw new Error("MOD does not have storage permission")
+    const name = `opencode.mod.${id}.dat`
+    getStore(name).delete(key)
+    void removeStoreFileIfEmpty(name)
+  })
+  ipcMain.handle("mod-open-external", async (event: IpcMainInvokeEvent, url: string) => {
+    if (!deps.mods.hasPermission(event.sender.id, "external.open")) {
+      throw new Error("MOD does not have external.open permission")
+    }
+    if (!URL.canParse(url) || !["http:", "https:"].includes(new URL(url).protocol)) {
+      throw new Error("Only HTTP and HTTPS URLs can be opened")
+    }
+    await shell.openExternal(url)
+  })
+  ipcMain.handle("mod-close-window", (event: IpcMainInvokeEvent) => {
+    deps.mods.manifestFor(event.sender.id)
+    BrowserWindow.fromWebContents(event.sender)?.close()
   })
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     try {
