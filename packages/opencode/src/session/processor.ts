@@ -655,9 +655,13 @@ const layer = Layer.effect(
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
-            if (ctx.assistantMessage.finish === "unknown" && !generated) {
+            if (
+              !generated &&
+              !ctx.needsCompaction &&
+              (ctx.assistantMessage.finish === "unknown" || ctx.assistantMessage.finish === "stop")
+            ) {
               yield* new SessionRetry.EmptyResponseError({
-                message: "The model returned an empty response with an unknown finish reason",
+                message: `The model returned an empty response (finish reason: ${ctx.assistantMessage.finish})`,
               })
             }
           }).pipe(

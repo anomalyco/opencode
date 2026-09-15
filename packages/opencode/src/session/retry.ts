@@ -32,6 +32,11 @@ export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 
+// Unlike a rate limit or a 5xx, an empty completion carries no signal that the provider will ever
+// recover — some models/providers deterministically return empty-with-stop (small local models,
+// refusals). Nothing else bounds this case, so cap it separately rather than retrying forever.
+export const EMPTY_RESPONSE_MAX_RETRIES = 5
+
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
 }
@@ -186,7 +191,11 @@ export function policy(opts: {
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
       const retry =
-        meta.input instanceof EmptyResponseError ? { message: meta.input.message } : retryable(error, opts.provider)
+        meta.input instanceof EmptyResponseError
+          ? meta.attempt <= EMPTY_RESPONSE_MAX_RETRIES
+            ? { message: meta.input.message }
+            : undefined
+          : retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
