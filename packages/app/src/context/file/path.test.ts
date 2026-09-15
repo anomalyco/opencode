@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createPathHelpers, stripQueryAndHash, unquoteGitPath, encodeFilePath } from "./path"
+import { createPathHelpers, stripQueryAndHash, unquoteGitPath, encodeFilePath, parseFileURL } from "./path"
 
 describe("file path helpers", () => {
   test("normalizes file inputs against workspace root", () => {
@@ -54,6 +54,53 @@ describe("file path helpers", () => {
     expect(unquoteGitPath('"a/\\303\\251.txt"')).toBe("a/\u00e9.txt")
     expect(unquoteGitPath('"plain\\nname"')).toBe("plain\nname")
     expect(unquoteGitPath("a/b/c.ts")).toBe("a/b/c.ts")
+  })
+})
+
+describe("parseFileURL", () => {
+  test("decodes reserved characters in POSIX file URLs", () => {
+    expect(parseFileURL("file:///home/carole/Bureau/%3F%3F%3F.png")).toEqual({
+      path: "/home/carole/Bureau/???.png",
+      url: "file:///home/carole/Bureau/%3F%3F%3F.png",
+    })
+    expect(parseFileURL("file:///tmp/file%2520name%23.txt")?.path).toBe("/tmp/file%20name#.txt")
+  })
+
+  test("preserves Windows drives and UNC hosts", () => {
+    expect(parseFileURL("file:///C:/Users/test/file%3F.txt")?.path).toBe("/C:/Users/test/file?.txt")
+    expect(parseFileURL("file://server/share/file%23.txt")?.path).toBe("//server/share/file#.txt")
+  })
+
+  test("accepts localhost and rejects non-file URLs", () => {
+    expect(parseFileURL("file://localhost/tmp/file.txt")?.path).toBe("/tmp/file.txt")
+    expect(parseFileURL("https://example.com/file.txt")).toBeUndefined()
+    expect(parseFileURL("not a URL")).toBeUndefined()
+  })
+
+  test("normalizes single-slash URLs and preserves malformed escapes", () => {
+    expect(parseFileURL("file:/tmp/file%3F.txt")).toEqual({
+      path: "/tmp/file?.txt",
+      url: "file:///tmp/file%3F.txt",
+    })
+    expect(parseFileURL("file:///tmp/%zz.png")).toEqual({
+      path: "/tmp/%zz.png",
+      url: "file:///tmp/%zz.png",
+    })
+  })
+
+  test("falls back when URL.canParse is unavailable", () => {
+    const original = Object.getOwnPropertyDescriptor(URL, "canParse")
+    Object.defineProperty(URL, "canParse", { configurable: true, value: undefined })
+    try {
+      expect(parseFileURL("file:///home/carole/Bureau/%3F%3F%3F.png")).toEqual({
+        path: "/home/carole/Bureau/???.png",
+        url: "file:///home/carole/Bureau/%3F%3F%3F.png",
+      })
+      expect(parseFileURL("not a URL")).toBeUndefined()
+    } finally {
+      if (original) Object.defineProperty(URL, "canParse", original)
+      if (!original) Reflect.deleteProperty(URL, "canParse")
+    }
   })
 })
 
