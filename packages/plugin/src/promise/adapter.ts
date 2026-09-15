@@ -224,6 +224,7 @@ export function fromPromise(plugin: Plugin) {
         const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
         const CommandEndpoints = ClientApi.groups["server.command"].endpoints
         const ExperimentalEndpoints = ClientApi.groups["server.experimental"].endpoints
+        const FormEndpoints = ClientApi.groups["server.form"].endpoints
         const GenerateEndpoints = ClientApi.groups["server.generate"].endpoints
         const IntegrationEndpoints = ClientApi.groups["server.integration"].endpoints
         const McpEndpoints = ClientApi.groups["server.mcp"].endpoints
@@ -324,6 +325,14 @@ export function fromPromise(plugin: Plugin) {
             subscribe: (options) =>
               streams(
                 host.event.subscribe().pipe(
+                  Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
+                  Stream.map((event) => event as unknown as PromiseEvent),
+                ),
+                options,
+              ),
+            subscribeGlobal: (options) =>
+              streams(
+                host.event.subscribeGlobal().pipe(
                   Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
                   Stream.map((event) => event as unknown as PromiseEvent),
                 ),
@@ -572,6 +581,12 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
               ),
+            // list bypasses adaptApiMethod intentionally: the in-process
+            // SessionList is a cursor-free subset of the HTTP SessionsQuery
+            // (no anchor/cursor encoding), so there is no single endpoint
+            // schema to decode against.
+            list: (input) =>
+              run(host.session.list(input ?? {})).then((result) => ({ data: result.data })),
             create: adaptApiMethod(SessionEndpoints["session.create"], host.session.create),
             get: adaptApiMethod(SessionEndpoints["session.get"], host.session.get),
             switchAgent: adaptApiMethod(SessionEndpoints["session.switchAgent"], host.session.switchAgent),
@@ -584,7 +599,19 @@ export function fromPromise(plugin: Plugin) {
             rename: adaptApiMethod(SessionEndpoints["session.rename"], host.session.rename),
             move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
+            compact: adaptApiMethod(SessionEndpoints["session.compact"], host.session.compact),
+            skill: adaptApiMethod(SessionEndpoints["session.skill"], host.session.skill),
+            revert: {
+              stage: adaptApiMethod(SessionEndpoints["session.revert.stage"], host.session.revert.stage),
+              clear: adaptApiMethod(SessionEndpoints["session.revert.clear"], host.session.revert.clear),
+              commit: adaptApiMethod(SessionEndpoints["session.revert.commit"], host.session.revert.commit),
+            },
             context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
+            form: {
+              list: adaptApiMethod(FormEndpoints["session.form.list"], host.session.form.list),
+              reply: adaptApiMethod(FormEndpoints["session.form.reply"], host.session.form.reply),
+              cancel: adaptApiMethod(FormEndpoints["session.form.cancel"], host.session.form.cancel),
+            },
           },
           shell: {
             hook: (name, callback) =>

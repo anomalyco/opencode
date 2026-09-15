@@ -1,4 +1,4 @@
-import type { SessionApi } from "@opencode/client/effect/api"
+import type { SessionApi, FormApi } from "@opencode/client/effect/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
@@ -9,6 +9,7 @@ import type { SessionError } from "@opencode/schema/session-error"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { JsonSchema, Types } from "effect"
+import type { Effect } from "effect"
 import type { ModelHooks } from "./registration.js"
 
 export interface SessionPrompt {
@@ -123,6 +124,19 @@ export interface SessionHooks {
   readonly retry: SessionRetry
 }
 
+/** Intentional subset of the HTTP session list: in-process only, no cursor/pagination. */
+export interface SessionList {
+  /** Filter to sessions created in this directory. Must be absolute; relative paths fail. */
+  readonly directory?: string
+  /** Maximum sessions to return. Truncates without a cursor; there is no pagination. */
+  readonly limit?: number
+}
+
+/** In-process session listing — data layer shape, without HTTP cursor encoding. Truncated at `limit`. */
+export type SessionListResult = {
+  readonly data: Session.Info[]
+}
+
 export type SessionDomain = Pick<
   SessionApi<unknown>,
   | "create"
@@ -137,7 +151,15 @@ export type SessionDomain = Pick<
   | "rename"
   | "move"
   | "wait"
+  | "compact"
+  | "skill"
+  | "revert"
   | "context"
 > & {
+  // `list` is intentionally not `SessionApi["list"]`: the HTTP operation
+  // paginates via an opaque cursor encoding, which has no meaning in-process.
+  // The subset keeps the data shape and documents the truncation explicitly.
+  readonly list: (input?: SessionList) => Effect.Effect<SessionListResult, Error>
   readonly hook: ModelHooks<SessionHooks>
+  readonly form: Pick<FormApi<unknown>, "list" | "reply" | "cancel">
 }
