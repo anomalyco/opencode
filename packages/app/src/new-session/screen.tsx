@@ -60,6 +60,10 @@ export default function NewSessionPage(props: { draftId: string }) {
       empty: project.empty,
       open: () => project.setOpen(true),
     },
+    workspace: {
+      enabled: workspace.bar.visible,
+      cycle: workspace.selection.cycle,
+    },
   })
   createEffect(() => {
     if (!composer.ready()) return
