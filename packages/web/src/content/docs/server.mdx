@@ -44,6 +44,16 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 ---
 
+### Window title
+
+Set `OPENCODE_WEB_UI_TITLE` to change the title of the served web UI. This is useful when running multiple instances, since every browser tab would otherwise be titled `OpenCode`.
+
+```bash
+OPENCODE_WEB_UI_TITLE="work: frontend" opencode serve
+```
+
+---
+
 ### How it works
 
 When you run `opencode` it starts a TUI and a server. Where the TUI is the
