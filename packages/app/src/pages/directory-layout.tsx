@@ -1,3 +1,4 @@
+import { appPath } from "@/utils/base-path"
 import { DataProvider } from "@opencode-ai/session-ui/context"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -38,7 +39,7 @@ export function DirectoryDataProvider(
     if (props.draftID || props.server?.()) return
     const next = sync().data.path.directory
     if (!next || next === directory()) return
-    const path = location.pathname.slice(slug().length + 1)
+    const path = appPath(location.pathname).slice(slug().length + 1)
     navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
   })
 

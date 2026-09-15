@@ -1,3 +1,4 @@
+import { serverRequestURL } from "./base-path"
 import { authTokenFromCredentials } from "@/utils/server"
 
 export function terminalWebSocketURL(input: {
@@ -13,7 +14,7 @@ export function terminalWebSocketURL(input: {
   authToken?: boolean
 }) {
   const isV1 = input.protocol === "v1"
-  const next = new URL(`${input.url}${isV1 ? `/pty/${input.id}/connect` : `/api/pty/${input.id}/connect`}`)
+  const next = serverRequestURL(input.url, `${isV1 ? "" : "/api"}/pty/${encodeURIComponent(input.id)}/connect`)
   if (isV1) {
     next.searchParams.set("directory", input.directory)
   } else {
