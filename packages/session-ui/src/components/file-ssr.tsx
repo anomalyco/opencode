@@ -182,6 +182,8 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
     >
       <Dynamic component={DIFFS_TAG_NAME} ref={fileDiffRef} id="ssr-diff">
         <Show when={isServer}>
+          {/* @pierre/diffs prerenders through Solid SSR + shiki hast, which escape all
+              text nodes; prerenderedHTML is trusted-by-construction for diff content. */}
           <template shadowrootmode="open" innerHTML={local.preloadedDiff.prerenderedHTML} />
         </Show>
       </Dynamic>

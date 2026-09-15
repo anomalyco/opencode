@@ -11,6 +11,8 @@ type Driver = {
 }
 
 export type DraftStore = AsyncStorage & { putBlob(blob: Blob): Promise<BlobReference> }
+// ponytail: in-process object-URL cache, bounded by distinct blobs attached per
+// session; orphans are revoked with their blobs by the startup GC below.
 const urls = new Map<string, string>()
 
 function blobUrl(id: string, blob: Blob) {
@@ -115,7 +117,15 @@ export function createBrowserDraftStore(): DraftStore {
         blobs.addEventListener("success", () => {
           const cursor = blobs.result
           if (!cursor) return
-          if (!used.has(String(cursor.key))) cursor.delete()
+          const key = String(cursor.key)
+          if (!used.has(key)) {
+            cursor.delete()
+            const url = urls.get(key)
+            if (url) {
+              URL.revokeObjectURL(url)
+              urls.delete(key)
+            }
+          }
           cursor.continue()
         })
       })

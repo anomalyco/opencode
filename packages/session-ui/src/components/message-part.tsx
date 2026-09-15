@@ -1545,7 +1545,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const emptyMetadata: Record<string, any> = {}
 
   const input = () => part().state?.input ?? emptyInput
-  // @ts-expect-error
+  // @ts-expect-error tool state is a non-discriminated union; metadata only exists on settled variants.
   const partMetadata = () => part().state?.metadata ?? emptyMetadata
   const taskId = createMemo(() => {
     if (part().tool !== "task") return
@@ -1614,7 +1614,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               tool={part().tool}
               sessionID={part().sessionID}
               metadata={partMetadata()}
-              // @ts-expect-error
+              // @ts-expect-error tool state is a non-discriminated union; output only exists on settled variants.
               output={part().state.output}
               status={part().state.status}
               hideDetails={props.hideDetails}

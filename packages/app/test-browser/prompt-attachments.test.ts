@@ -110,6 +110,7 @@ test("rejects a duplicate native clipboard attachment in the V2 prompt store", a
       isDialogActive: () => false,
       warn: () => undefined,
       duplicate: duplicate.resolve,
+      oversize: () => undefined,
       onError: () => undefined,
       readClipboardImage: async () => files.shift() ?? null,
     })
@@ -146,6 +147,7 @@ test("rejects desktop duplicates and keeps changed files in the V2 prompt store"
       isDialogActive: () => false,
       warn: () => undefined,
       duplicate: () => duplicates.push("duplicate"),
+      oversize: () => undefined,
       onError: () => undefined,
       getPathForFile: (file) => (file.name === "browser.txt" ? "" : `/tmp/${file.name}`),
     })
