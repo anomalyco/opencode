@@ -8,6 +8,8 @@ export interface Args {
   sessionID?: string
   fork?: boolean
   auto?: boolean
+  ephemeral?: boolean
+  onSessionCreated?: (sessionID: string) => void
 }
 
 export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({

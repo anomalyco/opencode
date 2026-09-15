@@ -262,6 +262,7 @@ export type SessionsListOutput = {
         readonly patch: string
       }>
     }
+    readonly ephemeral?: boolean
   }>
   readonly cursor: { readonly previous?: string | null; readonly next?: string | null }
 }
@@ -324,6 +325,7 @@ export type SessionsCreateOutput = {
         readonly patch: string
       }>
     }
+    readonly ephemeral?: boolean
   }
 }["data"]
 
@@ -362,6 +364,7 @@ export type SessionsGetOutput = {
         readonly patch: string
       }>
     }
+    readonly ephemeral?: boolean
   }
 }["data"]
 
