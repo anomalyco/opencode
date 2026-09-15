@@ -93,6 +93,7 @@ export const dict = {
   "command.session.previous.unseen": "Previous unread session",
   "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archive session",
+  "command.session.location.cycle": "Cycle session location",
 
   "command.palette": "Command palette",
 
