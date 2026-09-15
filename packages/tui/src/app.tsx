@@ -641,15 +641,13 @@ function App(props: { pair?: DialogPairCredentials }) {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
       if (args.model && typeof args.model === "string") {
-        const { providerID, modelID, variant } = Model.parse(args.model)
+        const { providerID, modelID } = Model.parse(args.model)
         if (!providerID || !modelID)
           return toast.show({
             variant: "warning",
             message: `Invalid model format: ${args.model}`,
             duration: 3000,
           })
-        local.model.set({ providerID, modelID }, { recent: true })
-        if (variant) local.model.variant.set(variant)
       }
       if (args.sessionID && !args.fork) {
         route.navigate({

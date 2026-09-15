@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import path from "node:path"
 import { agent, model, renderLocal, session } from "../fixture/local"
 import { json } from "../fixture/tui-client"
 
@@ -171,6 +172,25 @@ test("preserves CLI model and variant ahead of recents and config and allows in-
     preferences: { recent: [{ providerID: "provider", modelID: "first" }] },
   })
   expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "second", variant: "high" })
+  setup.local.model.variant.set("low")
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "second", variant: "low" })
+})
+
+test("CLI variant wins transiently over stored preference without persisting", async () => {
+  await using setup = await renderLocal({
+    models: [model("first"), model("second", ["low", "high"])],
+    args: { model: "provider/second#high" },
+    preferences: { variant: { "provider/second": "low" } },
+  })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "second", variant: "high" })
+  await setup.waitFor(async () => {
+    await Bun.sleep(10)
+    return setup.local.model.recent().some((item) => item.providerID === "provider" && item.modelID === "second")
+  })
+  const stored = (await Bun.file(path.join(setup.state, "model.json"))
+    .json()
+    .catch(() => ({}))) as { variant?: Record<string, string> }
+  expect(stored.variant?.["provider/second"]).toBe("low")
   setup.local.model.variant.set("low")
   expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "second", variant: "low" })
 })

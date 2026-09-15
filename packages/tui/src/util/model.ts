@@ -1,15 +1,18 @@
+import { Model } from "@opencode/schema/model"
+
 export function parse(value?: string | null): { providerID: string; modelID: string; variant?: string } {
   if (typeof value !== "string" || value.length === 0) {
     return { providerID: "", modelID: "" }
   }
-  const variantIndex = value.indexOf("#")
-  const rawRef = variantIndex === -1 ? value : value.slice(0, variantIndex)
-  const variant = variantIndex === -1 ? undefined : value.slice(variantIndex + 1) || undefined
-  const [providerID, ...rest] = rawRef.split("/")
-  return {
-    providerID: providerID ?? "",
-    modelID: rest.join("/"),
-    ...(variant ? { variant } : {}),
+  try {
+    const ref = Model.Ref.parse(value)
+    return {
+      providerID: ref.providerID,
+      modelID: ref.id,
+      ...(ref.variant ? { variant: ref.variant } : {}),
+    }
+  } catch {
+    return { providerID: "", modelID: "" }
   }
 }
 

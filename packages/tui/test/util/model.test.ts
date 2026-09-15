@@ -4,7 +4,7 @@ import { formatRef, parse, switchLabel } from "../../src/util/model"
 describe("util.model", () => {
   test("splits provider from a nested model identifier", () => {
     expect(parse("provider/org/model")).toEqual({ providerID: "provider", modelID: "org/model" })
-    expect(parse("invalid")).toEqual({ providerID: "invalid", modelID: "" })
+    expect(parse("invalid")).toEqual({ providerID: "", modelID: "" })
   })
 
   test("parses variant from model identifier if present", () => {
@@ -18,10 +18,12 @@ describe("util.model", () => {
       modelID: "anthropic/claude-3.5-sonnet",
       variant: "high",
     })
-    expect(parse("provider/model#")).toEqual({
-      providerID: "provider",
-      modelID: "model",
-    })
+  })
+
+  test("rejects empty variants and extra separators as invalid", () => {
+    expect(parse("provider/model#")).toEqual({ providerID: "", modelID: "" })
+    expect(parse("provider/mo#de#l")).toEqual({ providerID: "", modelID: "" })
+    expect(parse("openai/gpt-5#high#extra")).toEqual({ providerID: "", modelID: "" })
   })
 
   test("handles undefined, null, non-string, and empty model identifiers safely", () => {
