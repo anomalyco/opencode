@@ -10,6 +10,7 @@ import { Hash } from "@opencode-ai/core/util/hash"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
 import { Info } from "@opencode-ai/schema/file-diff"
+import { isRecord } from "@/util/record"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,
@@ -22,6 +23,9 @@ export type FileDiff = typeof FileDiff.Type
 
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
+const maxDeletions = 100
+const diffContext = 3
+const patchBudget = 2 * 1024 * 1024
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -36,10 +40,10 @@ type State = Omit<Interface, "init">
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly cleanup: () => Effect.Effect<void>
-  readonly track: () => Effect.Effect<string | undefined>
-  readonly patch: (hash: string) => Effect.Effect<Patch>
+  readonly track: (owner?: string) => Effect.Effect<string | undefined>
+  readonly patch: (hash: string, files?: string[]) => Effect.Effect<Patch>
   readonly restore: (snapshot: string) => Effect.Effect<void>
-  readonly revert: (patches: Patch[]) => Effect.Effect<void>
+  readonly revert: (patches: Patch[], owner?: string) => Effect.Effect<void>
   readonly diff: (hash: string) => Effect.Effect<string>
   readonly diffFull: (from: string, to: string) => Effect.Effect<FileDiff[]>
 }
@@ -163,6 +167,80 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
         const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
         const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
+
+        // Ownership ledger: records which owner captured which snapshot tree and
+        // the capture order. The store itself is worktree-global, so reverts must
+        // be able to detect that another session/run captured in between.
+        const ownerLogPath = () => path.join(state.gitdir, "owner-log.json")
+        type OwnerEntry = { readonly hash: string; readonly owner: string; readonly generation: number }
+
+        const readOwnerLog = Effect.fnUntraced(function* () {
+          const target = ownerLogPath()
+          if (!(yield* exists(target))) return []
+          const text = yield* read(target)
+          if (!text) return []
+          try {
+            const parsed = JSON.parse(text) as unknown
+            if (Array.isArray(parsed)) {
+              return parsed.filter(
+                (item): item is OwnerEntry =>
+                  isRecord(item) &&
+                  typeof item.hash === "string" &&
+                  typeof item.owner === "string" &&
+                  typeof item.generation === "number",
+              )
+            }
+          } catch {
+            return []
+          }
+          return []
+        })
+
+        const writeOwnerLog = Effect.fnUntraced(function* (entries: OwnerEntry[]) {
+          const target = ownerLogPath()
+          yield* fs.ensureDir(state.gitdir).pipe(Effect.orDie)
+          yield* fs.writeFileString(target, JSON.stringify(entries)).pipe(Effect.orDie)
+        })
+
+        const recordOwner = Effect.fnUntraced(function* (hash: string, owner: string) {
+          if (!owner) return
+          const entries = yield* readOwnerLog()
+          const generation = entries.length ? entries[entries.length - 1]!.generation + 1 : 1
+          yield* writeOwnerLog([...entries, { hash, owner, generation }])
+        })
+
+        const assertOwnership = Effect.fnUntraced(function* (patches: Patch[], owner: string | undefined) {
+          // No owner means the caller does not participate in ownership tracking.
+          if (!owner || !patches.length) return undefined
+          const entries = yield* readOwnerLog()
+          // Legacy stores without an owner log cannot be verified; do not refuse
+          // (the tool-scoped patch list below still prevents foreign deletions).
+          if (!entries.length) return undefined
+
+          const known = new Map<string, OwnerEntry>()
+          for (const entry of entries) known.set(entry.hash, entry)
+          const targets = new Set(patches.map((item) => item.hash))
+          let minGeneration = Number.MAX_SAFE_INTEGER
+          let unknown = 0
+          for (const hash of targets) {
+            const entry = known.get(hash)
+            if (!entry) {
+              unknown += 1
+              continue
+            }
+            if (entry.generation < minGeneration) minGeneration = entry.generation
+          }
+          // Legacy patches whose snapshots predate ownership tracking: fall back to a
+          // weaker check — only refuse when the store has clearly been captured by a
+          // foreign owner after *all* target snapshots exist in the log.
+          if (unknown === targets.size) return undefined
+          for (const entry of entries) {
+            if (entry.generation > minGeneration && entry.owner !== owner) {
+              return `snapshot ${entry.hash} was captured by another run/session (${entry.owner}) after the revert target; refusing cross-session revert`
+            }
+          }
+          return undefined
+        })
 
         const enabled = Effect.fnUntraced(function* () {
           if (state.vcs !== "git") return false
@@ -315,7 +393,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           )
         })
 
-        const track = Effect.fnUntraced(function* () {
+        const track = Effect.fnUntraced(function* (owner: string | undefined) {
           return yield* locked(
             Effect.gen(function* () {
               if (!(yield* enabled())) return
@@ -340,38 +418,53 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               yield* add()
               const result = yield* git(args(["write-tree"]), { cwd: state.directory })
               const hash = result.text.trim()
+              yield* recordOwner(hash, owner ?? "opencode")
               yield* Effect.logInfo("tracking", { hash, cwd: state.directory, git: state.gitdir })
               return hash
             }),
           )
         })
 
-        const patch = Effect.fnUntraced(function* (hash: string) {
+        const patchPaths = (files: string[]) =>
+          files
+            .map((file) => {
+              const rel = path.relative(state.worktree, file).replaceAll("\\", "/")
+              return rel.startsWith("..") || path.isAbsolute(rel) ? undefined : rel
+            })
+            .filter((rel): rel is string => Boolean(rel))
+            .filter((rel) => rel !== "." && rel !== "")
+
+        const patch = Effect.fnUntraced(function* (hash: string, files: string[] | undefined) {
           return yield* locked(
             Effect.gen(function* () {
               yield* add()
-              const result = yield* git(
-                [...quote, ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", "."])],
-                {
-                  cwd: state.directory,
-                },
-              )
+              // Restrict the patch to the paths the owning tools reported. Without a
+              // reported set the list would include unrelated worktree changes from
+              // other sessions/editors, which a later revert would then mutate or
+              // delete. Unknown/empty sets stay conservative (no files).
+              const scoped = files ? patchPaths(files) : undefined
+              if (files && scoped!.length === 0) return { hash, files: [] }
+
+              const result = yield* git([
+                ...quote,
+                ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", ...(scoped ?? ["."])]),
+              ])
               if (result.code !== 0) {
                 yield* Effect.logWarning("failed to get diff", { hash, exitCode: result.code })
                 return { hash, files: [] }
               }
-              const files = result.text
+              const listed = result.text
                 .trim()
                 .split("\n")
                 .map((x) => x.trim())
                 .filter(Boolean)
 
               // Hide ignored-file removals from the user-facing patch output.
-              const ignored = yield* ignore(files)
+              const ignored = yield* ignore(listed)
 
               return {
                 hash,
-                files: files
+                files: listed
                   .filter((item) => !ignored.has(item))
                   .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
               }
@@ -405,9 +498,15 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           )
         })
 
-        const revert = Effect.fnUntraced(function* (patches: Patch[]) {
+        const revert = Effect.fnUntraced(function* (patches: Patch[], owner: string | undefined) {
           return yield* locked(
             Effect.gen(function* () {
+              const refusal = yield* assertOwnership(patches, owner)
+              if (refusal) {
+                yield* Effect.logError(refusal)
+                return
+              }
+
               const ops: { hash: string; file: string; rel: string }[] = []
               const seen = new Set<string>()
               for (const item of patches) {
@@ -421,6 +520,24 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                   })
                 }
               }
+
+              // Deleting files is the destructive half of a revert. A runaway list
+              // (e.g. a pre-fix patch with unrelated paths) must never delete more
+              // than the configured ceiling, so exceeding it aborts the revert.
+              let deletions = 0
+              const removeWithBudget = Effect.fnUntraced(function* (file: string, hash: string) {
+                if (deletions >= maxDeletions) {
+                  yield* Effect.logError("snapshot revert aborted: delete budget exceeded", {
+                    max: maxDeletions,
+                    file,
+                    hash,
+                  })
+                  return false
+                }
+                deletions += 1
+                yield* remove(file)
+                return true
+              })
 
               const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
                 yield* Effect.logInfo("reverting", { file: op.file, hash: op.hash })
@@ -439,7 +556,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                   return
                 }
                 yield* Effect.logInfo("file did not exist in snapshot, deleting", { file: op.file, hash: op.hash })
-                yield* remove(op.file)
+                yield* removeWithBudget(op.file, op.hash)
               })
 
               const clash = (a: string, b: string) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`)
@@ -511,10 +628,18 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                   }
                 }
 
-                for (const op of run) {
-                  if (have.has(op.rel)) continue
+                const deletes = run.filter((item) => !have.has(item.rel))
+                if (deletions + deletes.length > maxDeletions) {
+                  yield* Effect.logError("snapshot revert aborted: delete budget exceeded", {
+                    max: maxDeletions,
+                    pending: deletes.length,
+                    hash: first.hash,
+                  })
+                  return
+                }
+                for (const op of deletes) {
                   yield* Effect.logInfo("file did not exist in snapshot, deleting", { file: op.file, hash: op.hash })
-                  yield* remove(op.file)
+                  yield* removeWithBudget(op.file, op.hash)
                 }
 
                 i = j
@@ -733,10 +858,23 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               }
 
               const step = 100
-              const patch = (file: string, before: string, after: string) =>
-                formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
+              let budget = patchBudget
+              const makePatch = (file: string, before: string, after: string) => {
+                // Oversized files and the total patch budget get no diff body;
+                // their metadata (additions/deletions/status) is still reported.
+                if (!before.length && !after.length) return ""
+                if (before.length + after.length > limit) return ""
+                const one = formatPatch(structuredPatch(file, file, before, after, "", "", { context: diffContext }))
+                if (one.length > budget) {
+                  budget = 0
+                  return ""
+                }
+                budget -= one.length
+                return one
+              }
 
               for (let i = 0; i < rows.length; i += step) {
+                yield* Effect.yieldNow
                 const run = rows.slice(i, i + step)
                 const text = yield* load(run)
 
@@ -745,7 +883,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                   const [before, after] = row.binary ? ["", ""] : text ? [hit.before, hit.after] : yield* show(row)
                   result.push({
                     file: row.file,
-                    patch: row.binary ? "" : patch(row.file, before, after),
+                    patch: row.binary ? "" : makePatch(row.file, before, after),
                     additions: row.additions,
                     deletions: row.deletions,
                     status: row.status,
@@ -776,17 +914,17 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
       cleanup: Effect.fn("Snapshot.cleanup")(function* () {
         return yield* InstanceState.useEffect(state, (s) => s.cleanup())
       }),
-      track: Effect.fn("Snapshot.track")(function* () {
-        return yield* InstanceState.useEffect(state, (s) => s.track())
+      track: Effect.fn("Snapshot.track")(function* (owner?: string) {
+        return yield* InstanceState.useEffect(state, (s) => s.track(owner))
       }),
-      patch: Effect.fn("Snapshot.patch")(function* (hash: string) {
-        return yield* InstanceState.useEffect(state, (s) => s.patch(hash))
+      patch: Effect.fn("Snapshot.patch")(function* (hash: string, files?: string[]) {
+        return yield* InstanceState.useEffect(state, (s) => s.patch(hash, files))
       }),
       restore: Effect.fn("Snapshot.restore")(function* (snapshot: string) {
         return yield* InstanceState.useEffect(state, (s) => s.restore(snapshot))
       }),
-      revert: Effect.fn("Snapshot.revert")(function* (patches: Patch[]) {
-        return yield* InstanceState.useEffect(state, (s) => s.revert(patches))
+      revert: Effect.fn("Snapshot.revert")(function* (patches: Patch[], owner?: string) {
+        return yield* InstanceState.useEffect(state, (s) => s.revert(patches, owner))
       }),
       diff: Effect.fn("Snapshot.diff")(function* (hash: string) {
         return yield* InstanceState.useEffect(state, (s) => s.diff(hash))
