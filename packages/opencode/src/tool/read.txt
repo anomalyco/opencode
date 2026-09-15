@@ -11,4 +11,4 @@ Usage:
 - Any line longer than 2000 characters is truncated.
 - Call this tool in parallel when you know there are multiple files you want to read.
 - Avoid tiny repeated slices (30 line chunks). If you need more context, read a larger window.
-- This tool can read image files and PDFs and return them as file attachments.
+- This tool can read image files, PDFs, and short video files (mp4/webm/mov up to 20 MB) and return them as file attachments. Video only reaches the model when the current model accepts video input; otherwise it is replaced with an explanatory error.
