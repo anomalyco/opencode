@@ -4,7 +4,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { tool } from "ai"
-import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
@@ -22,7 +22,9 @@ import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { raw, reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Permission } from "@/permission"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { LLMEvent } from "@opencode-ai/llm"
@@ -170,6 +172,7 @@ const root = LayerNode.group([
   Session.node,
   SessionProjector.node,
   Provider.node,
+  Permission.node,
   Database.node,
   EventV2Bridge.node,
   SessionStatus.node,
@@ -209,6 +212,40 @@ const providerErrorLLM = Layer.succeed(
 const providerErrorEnv = LayerNode.compile(root, [...replacements, [LLM.node, providerErrorLLM]])
 const itProviderError = testEffect(providerErrorEnv)
 
+function providerToolCall(id: string, name: string, input: Record<string, unknown>): LLMEvent[] {
+  return [
+    LLMEvent.toolInputStart({ id, name }),
+    LLMEvent.toolInputEnd({ id, name }),
+    LLMEvent.toolCall({ id, name, input, providerExecuted: true }),
+    LLMEvent.toolResult({
+      id,
+      name,
+      result: { type: "json", value: { output: "ok" } },
+      providerExecuted: true,
+    }),
+  ]
+}
+
+const periodicDoomLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.fromIterable([
+        LLMEvent.stepStart({ index: 0 }),
+        ...providerToolCall("call-a1", "lookup", { query: "a" }),
+        ...providerToolCall("call-b1", "search", { query: "b" }),
+        ...providerToolCall("call-a2", "lookup", { query: "a" }),
+        ...providerToolCall("call-b2", "search", { query: "b" }),
+        ...providerToolCall("call-a3", "lookup", { query: "a" }),
+        ...providerToolCall("call-b3", "search", { query: "b" }),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ]),
+  }),
+)
+const periodicDoomEnv = LayerNode.compile(root, [...replacements, [LLM.node, periodicDoomLLM]])
+const itPeriodicDoom = testEffect(periodicDoomEnv)
+
 const fragmentFailureLLM = Layer.succeed(
   LLM.Service,
   LLM.Service.of({
@@ -236,6 +273,61 @@ const boot = Effect.fn("test.boot")(function* () {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+itPeriodicDoom.live("session.processor effect tests detect periodic doom loops", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+        const permission = yield* Permission.Service
+        const asked = yield* Deferred.make<PermissionV1.Request>()
+        const off = yield* events.listen((event) => {
+          if (event.type === Permission.Event.Asked.type) {
+            Deferred.doneUnsafe(asked, Effect.succeed(event.data as PermissionV1.Request))
+          }
+          return Effect.void
+        })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "periodic doom loop")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+        const run = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "periodic doom loop" }],
+            tools: {},
+          })
+          .pipe(Effect.forkChild)
+
+        const request = yield* Deferred.await(asked).pipe(Effect.timeout("1 second"))
+        expect(request.permission).toBe("doom_loop")
+        expect(request.patterns).toEqual(["search"])
+        yield* permission.reply({ requestID: request.id, reply: "once" })
+        expect(yield* Fiber.join(run)).toBe("continue")
+        yield* off
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const tools = parts.filter((part): part is SessionV1.ToolPart => part.type === "tool")
+        expect(tools).toHaveLength(6)
+        expect(tools.every((part) => part.state.status === "completed")).toBe(true)
+      }),
+    { config: cfg },
+  ),
+)
 
 it.live("session.processor effect tests capture llm input cleanly", () =>
   provideTmpdirServer(
