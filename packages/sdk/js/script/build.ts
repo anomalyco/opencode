@@ -112,6 +112,21 @@ if (sseTypesPatched === sseTypesSource) {
 }
 await Bun.write(sseTypesPath, sseTypesPatched)
 
+// Patch the SSE retry guard so an unset sseMaxRetryAttempts still caps the
+// retry loop instead of retrying forever and flooding the context window.
+const sseServerEventsPath = "./src/v2/gen/core/serverSentEvents.gen.ts"
+const sseServerEventsFile = Bun.file(sseServerEventsPath)
+const sseServerEventsSource = await sseServerEventsFile.text()
+const maxAttemptsGuard = "const maxRetryAttempts = sseMaxRetryAttempts ?? 5\n\n        if (attempt >= maxRetryAttempts) {"
+const sseServerEventsPatched = sseServerEventsSource.replace(
+  "if (sseMaxRetryAttempts !== undefined && attempt >= sseMaxRetryAttempts) {",
+  maxAttemptsGuard,
+)
+if (sseServerEventsPatched === sseServerEventsSource) {
+  throw new Error(`SSE retry guard patch did not apply (${sseServerEventsPath})`)
+}
+await Bun.write(sseServerEventsPath, sseServerEventsPatched)
+
 await $`bun prettier --write src/gen`
 await $`bun prettier --write src/v2`
 await $`rm -rf dist`

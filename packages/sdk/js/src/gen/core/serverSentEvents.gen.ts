@@ -193,7 +193,9 @@ export const createSseClient = <TData = unknown>({
         // connection failed or aborted; retry after delay
         onSseError?.(error)
 
-        if (sseMaxRetryAttempts !== undefined && attempt >= sseMaxRetryAttempts) {
+        const maxRetryAttempts = sseMaxRetryAttempts ?? 5
+
+        if (attempt >= maxRetryAttempts) {
           break // stop after firing error
         }
 
