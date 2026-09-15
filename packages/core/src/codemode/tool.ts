@@ -82,9 +82,9 @@ export const create = (
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
         const lock = Semaphore.makeUnsafe(1)
-        const updateCalls = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
+        const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
           lock.withPermit(
-            Ref.updateAndGet(calls, update).pipe(Effect.flatMap((toolCalls) => context.progress({ toolCalls }))),
+            Ref.updateAndGet(calls, update).pipe(Effect.tap((toolCalls) => context.progress({ toolCalls }))),
           )
         const result = yield* runtime(
           inventory,
@@ -103,27 +103,7 @@ export const create = (
               const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
               return text === "" ? null : text
             }),
-          {
-            onToolCallStart: ({ index, name, input }) => {
-              const shown = displayInput(input)
-              return updateCalls((items) => {
-                const next = [...items]
-                next[index] = { tool: name, status: "running", ...(shown ? { input: shown } : {}) }
-                return next
-              })
-            },
-            onToolCallEnd: ({ index, name, input, outcome }) => {
-              const shown = displayInput(input)
-              return updateCalls((items) => {
-                const next = [...items]
-                next[index] = {
-                  ...(items[index] ?? { tool: name, ...(shown ? { input: shown } : {}) }),
-                  status: outcome === "success" ? "completed" : "error",
-                }
-                return next
-              })
-            },
-          },
+          progressHooks(record),
         ).execute(code)
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -156,6 +136,33 @@ export const create = (
         }
       }),
   } satisfies Info
+}
+
+// Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
+function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>) {
+  const rows = new WeakMap<object, number>()
+  const start = (call: object, entry: ExecuteCall) =>
+    record((items) => {
+      rows.set(call, items.length)
+      return [...items, entry]
+    })
+  const settle = (call: object, result: CodeMode.CallResult) =>
+    record((items) => {
+      const index = rows.get(call)
+      if (index === undefined) return items
+      const next = [...items]
+      next[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
+      return next
+    })
+  return {
+    "tool.before": (call) => {
+      const shown = displayInput(call.input)
+      return start(call, { tool: call.name, status: "running", ...(shown ? { input: shown } : {}) })
+    },
+    "tool.after": settle,
+    "extension.before": (call) => start(call, { tool: call.name, status: "running" }),
+    "extension.after": settle,
+  } satisfies CodeMode.Hooks
 }
 
 export const catalog = (inventory: Inventory) => {
@@ -204,7 +211,7 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 function runtime(
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>,
-  hooks?: CodeMode.ToolCallHooks,
+  hooks?: CodeMode.Hooks,
 ) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
@@ -219,7 +226,7 @@ function runtime(
     })
   }
   const tools = renderTools(root)
-  return CodeMode.make<typeof tools>({ tools, ...hooks })
+  return CodeMode.make<typeof tools>({ tools, hooks })
 }
 
 function getNode<T>(root: Node<T>, path: string) {

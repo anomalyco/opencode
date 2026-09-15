@@ -36,26 +36,48 @@ export type ToolCall = {
   readonly name: string
 }
 
-export type ToolCallStarted = {
-  readonly index: number
+/** A tool call the program is making, with its decoded input. */
+export type ToolInvocation = { readonly name: string; readonly input: unknown }
+
+/** A call the program is making to an extension global, with its arguments. */
+export type ExtensionInvocation = {
+  readonly extension: string
   readonly name: string
-  readonly input: unknown
+  readonly args: ReadonlyArray<unknown>
 }
 
-export type ToolCallEnded = {
-  readonly index: number
-  readonly name: string
-  readonly input: unknown
-  readonly durationMs: number
-  readonly outcome: "success" | "failure" | "interrupted"
-  readonly message?: string
+/** How a call ended; `after` hooks observe it and cannot change it. */
+export type CallResult =
+  | { readonly status: "success"; readonly value: unknown }
+  | { readonly status: "failure"; readonly error: unknown }
+  | { readonly status: "interrupted" }
+
+/** Hooks around every call the program makes into the host. A failing `before` denies the call. */
+export type Hooks<R = never> = {
+  readonly "tool.before"?: ((call: ToolInvocation) => Effect.Effect<void, unknown, R>) | undefined
+  readonly "tool.after"?: ((call: ToolInvocation, result: CallResult) => Effect.Effect<void, never, R>) | undefined
+  readonly "extension.before"?: ((call: ExtensionInvocation) => Effect.Effect<void, unknown, R>) | undefined
+  readonly "extension.after"?:
+    | ((call: ExtensionInvocation, result: CallResult) => Effect.Effect<void, never, R>)
+    | undefined
 }
 
-export type ToolCallHooks<R = never> = {
-  /** Observes decoded tool input immediately before tool execution. */
-  readonly onToolCallStart?: ((call: ToolCallStarted) => Effect.Effect<void, never, R>) | undefined
-  /** Observes each admitted tool call as it succeeds, fails, or is interrupted. */
-  readonly onToolCallEnd?: ((call: ToolCallEnded) => Effect.Effect<void, never, R>) | undefined
+/** Runs `before`, then `run`, then `after` with how it ended, including when interrupted. */
+export const hooked = <Call, A, R>(
+  call: Call,
+  before: ((call: Call) => Effect.Effect<void, unknown, R>) | undefined,
+  after: ((call: Call, result: CallResult) => Effect.Effect<void, never, R>) | undefined,
+  run: Effect.Effect<A, unknown, R>,
+): Effect.Effect<A, unknown, R> => {
+  const observed =
+    after === undefined
+      ? run
+      : Effect.onExit(run, (exit) => {
+          if (Exit.isSuccess(exit)) return after(call, { status: "success", value: exit.value })
+          if (Cause.hasInterruptsOnly(exit.cause)) return after(call, { status: "interrupted" })
+          return after(call, { status: "failure", error: Cause.squash(exit.cause) })
+        })
+  return before === undefined ? observed : Effect.andThen(before(call), observed)
 }
 
 export type ToolDescription = {
@@ -316,6 +338,7 @@ export class ToolRuntimeError extends Error {
 /** The tool bridge of one execution. Arguments arrive and results leave as JSON; program values never enter. */
 export type ToolRuntime<R = never> = {
   readonly calls: Array<ToolCall>
+  readonly hooks: Hooks<R>
   readonly execute: (
     path: ReadonlyArray<string>,
     args: Array<Json | undefined>,
@@ -328,27 +351,11 @@ export type ToolRuntime<R = never> = {
 export const make = <R>(
   prepared: Prepared<R>,
   maxToolCalls: number | undefined,
-  hooks?: ToolCallHooks<R>,
+  hooks: Hooks<R> = {},
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
   const root = prepared.root
   const searchTool = makeSearchTool(prepared.searchIndex)
-
-  const observeEnd = <A, E>(effect: Effect.Effect<A, E, R>, call: ToolCallStarted): Effect.Effect<A, E, R> => {
-    const onEnd = hooks?.onToolCallEnd
-    if (onEnd === undefined) return effect
-    const startedAt = Date.now()
-    return effect.pipe(
-      Effect.onExit((exit) => {
-        const durationMs = Date.now() - startedAt
-        if (Exit.isSuccess(exit)) return onEnd({ ...call, durationMs, outcome: "success" })
-        if (Cause.hasInterruptsOnly(exit.cause)) return onEnd({ ...call, durationMs, outcome: "interrupted" })
-        const error = Cause.squash(exit.cause)
-        const message = error instanceof Error ? error.message : Cause.pretty(exit.cause)
-        return onEnd({ ...call, durationMs, outcome: "failure", message })
-      }),
-    )
-  }
 
   const recordCall = (call: ToolCall): void => {
     if (maxToolCalls !== undefined && calls.length >= maxToolCalls) {
@@ -371,14 +378,12 @@ export const make = <R>(
             name === "search" ? [] : ["The signature may have changed. Use search to get the current signature."],
           ),
       })
-      const index = yield* Effect.sync(() => {
-        recordCall({ name })
-        return calls.length - 1
-      })
-      const call = { index, name, input }
-      return yield* observeEnd(
+      yield* Effect.sync(() => recordCall({ name }))
+      return yield* hooked(
+        { name, input },
+        hooks["tool.before"],
+        hooks["tool.after"],
         Effect.gen(function* () {
-          if (hooks?.onToolCallStart !== undefined) yield* hooks.onToolCallStart(call)
           const raw = yield* Effect.suspend(() => tool.execute(input)).pipe(
             Effect.catchCause((cause) => {
               if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
@@ -400,12 +405,12 @@ export const make = <R>(
             catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
           })
         }),
-        call,
       )
     })
 
   return {
     calls,
+    hooks,
     keys: (path) => namespaceKeys(root, path),
     search: (args) => Effect.suspend(() => executeTool("search", searchTool, args)),
     execute: (path, args) =>

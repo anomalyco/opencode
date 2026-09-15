@@ -192,6 +192,16 @@ describe("values are converted at the boundary, never shared", () => {
     expect((await failure(`big()`, target)).message).toContain("big produced a bigint")
   })
 
+  test("a value that cannot come out carries a location like any built-in error, sync or async", async () => {
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({ name: "odd", globals: { sym: () => Symbol("s"), later: async () => Symbol("s") } }),
+      ],
+    })
+    expect((await failure(`sym()`, target)).location).toEqual((await failure(`JSON.parse("{")`, target)).location)
+    expect((await failure(`await later()`, target)).location).toBeDefined()
+  })
+
   test("a class instance cannot come out", async () => {
     class Other {}
     const target = CodeMode.make({

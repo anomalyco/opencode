@@ -467,6 +467,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
 - [x] A host function inside a result becomes a program function whose calls cross the same way, so a result can
       carry methods (`res.json()`) whose host closures keep the host state. Diagnostics name it by its path
       (`fetch.json`). Like any program function it vanishes at the data boundary.
+- [x] Each call to an extension global runs inside the host's `extension.before`/`extension.after` hooks as
+      `{ extension, name, args }`, with the host's own error on failure; calls to functions inside results do not.
 - [x] A host `Promise` becomes a program promise. Whatever host code returns, resolves, throws, or rejects with
       crosses the same way, so `catch (e)` receives a copy of the thrown value (an `Error` of the matching type, or
       plain data).

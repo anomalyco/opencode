@@ -16,7 +16,7 @@ export const executeProgram = <R>(
   code: string,
   prepared: ToolRuntime.Prepared<R>,
   limits: ResolvedExecutionLimits,
-  hooks: ToolRuntime.ToolCallHooks<R>,
+  hooks: ToolRuntime.Hooks<R>,
   globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, unknown]>,
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
