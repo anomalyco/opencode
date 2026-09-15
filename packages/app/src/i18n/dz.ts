@@ -737,6 +737,7 @@ export const dict: Record<string, string> = {
   "session.review.noChanges": "བསྒྱུར་བཅོས་མེད།",
   "session.review.noUncommittedChanges": "ཁས་ལེན་མ་འབད་བའི་བསྒྱུར་བཅོས་ཚུ་ད་ལྟོ་མེད།",
   "session.review.noBranchChanges": "ཡན་ལག་བསྒྱུར་བཅོས་ད་ལྟོ་མེད།",
+  "session.files.refresh": "གསརཔ་བཟོ།",
   "session.files.selectToOpen": "ཁ་ཕྱེ་ནི་ལུ་ཡིག་སྣོད་ཅིག་སེལ་འཐུ་འབད།",
   "session.files.all": "ཡིག་སྣོད་ཆ་མཉམ།",
   "session.files.empty": "ཡིག་སྣོད་ཚུ་མེད།",

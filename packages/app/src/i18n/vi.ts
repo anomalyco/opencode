@@ -734,6 +734,7 @@ export const dict = {
   "session.review.noChanges": "Không có thay đổi",
   "session.review.noUncommittedChanges": "Chưa có thay đổi nào chưa commit",
   "session.review.noBranchChanges": "Chưa có thay đổi nhánh",
+  "session.files.refresh": "Làm mới",
   "session.files.selectToOpen": "Chọn một tệp để mở",
   "session.files.all": "Tất cả tệp",
   "session.files.empty": "Không có tệp",

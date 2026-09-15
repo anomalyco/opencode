@@ -144,6 +144,15 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     setTree("dir", dir, "expanded", false)
   }
 
+  const loadedDirs = () => Object.keys(tree.dir).filter((key) => tree.dir[key]?.loaded)
+
+  // Force-reload every directory that has been listed at least once. Used by the
+  // manual tree refresh: the watcher only invalidates directories it knows about,
+  // so an external change can otherwise go unseen until a full page reload.
+  const refreshAll = async () => {
+    await Promise.all(loadedDirs().map((dir) => listDir(dir, { force: true })))
+  }
+
   const dirState = (input: string) => {
     const dir = options.normalizeDir(input)
     return tree.dir[dir]
@@ -165,6 +174,8 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     listDir,
     expandDir,
     collapseDir,
+    loadedDirs,
+    refreshAll,
     dirState,
     children,
     node: (path: string) => tree.node[path],

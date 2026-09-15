@@ -724,6 +724,7 @@ export const dict = {
   "session.review.noChanges": "Ongar broytingar",
   "session.review.noUncommittedChanges": "Ongar óbundnar broytingar enn",
   "session.review.noBranchChanges": "Ongar greinarbroytingar enn",
+  "session.files.refresh": "Fríska upp",
   "session.files.selectToOpen": "Vel eina fílu at lata upp",
   "session.files.all": "Allar fílur",
   "session.files.empty": "Ongar fílur",
