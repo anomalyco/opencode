@@ -337,7 +337,8 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
     console.log("│                      MODEL USAGE                       │")
     console.log("├────────────────────────────────────────────────────────┤")
 
-    for (const [model, usage] of modelsToDisplay) {
+    for (const [index, [model, usage]] of modelsToDisplay.entries()) {
+      if (index > 0) console.log("├────────────────────────────────────────────────────────┤")
       console.log(`│ ${model.padEnd(54)} │`)
       console.log(renderRow("  Messages", usage.messages.toLocaleString()))
       console.log(renderRow("  Input Tokens", formatNumber(usage.tokens.input)))
@@ -345,10 +346,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
       console.log(renderRow("  Cache Read", formatNumber(usage.tokens.cache.read)))
       console.log(renderRow("  Cache Write", formatNumber(usage.tokens.cache.write)))
       console.log(renderRow("  Cost", `$${usage.cost.toFixed(4)}`))
-      console.log("├────────────────────────────────────────────────────────┤")
     }
-    // Remove last separator and add bottom border
-    process.stdout.write("\x1B[1A") // Move up one line
     console.log("└────────────────────────────────────────────────────────┘")
   }
   console.log()
