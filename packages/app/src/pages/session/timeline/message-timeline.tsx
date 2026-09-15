@@ -77,6 +77,11 @@ import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
 import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
+import { createTimelineFind } from "./find"
+import { FileSearchBar } from "@opencode-ai/session-ui/file-search"
+import { makeEventListener } from "@solid-primitives/event-listener"
+
+const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
@@ -255,6 +260,7 @@ export function MessageTimeline(props: {
   setRevealMessage?: (fn: (id: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
   setHistoryAnchor?: (handlers: { capture: () => void; restore: (done: boolean) => void }) => void
+  onPauseScroll?: () => void
 }) {
   let touchGesture: number | undefined
 
@@ -497,6 +503,55 @@ export function MessageTimeline(props: {
     () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
   )
   const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => item.key as string))
+
+  const find = createTimelineFind({
+    rows: timelineRows,
+    renderedKeys: virtualRowKeys,
+    scrollElement: listRoot,
+    content: () => virtualContent,
+    getParts: getMsgParts,
+    getPart: getMsgPart,
+    getUserText: (messageID) => {
+      const message = projectedMessages().find((item) => item.id === messageID)
+      if (!message) return
+      if (message.type === "user") return message.text
+      if (message.type === "shell") return [message.command, message.output].filter(Boolean).join("\n")
+    },
+    headerOffset: () => (showHeader() ? 48 : 0),
+    scrollToIndex: (index) => virtualizer.scrollToIndex(index, { align: "center" }),
+    // Pause bottom-follow synchronously before navigating, otherwise the
+    // anchor-bottom resize handlers race the find scroll and win.
+    onNavigate: () => props.onPauseScroll?.(),
+  })
+
+  // The global find-host shortcuts ignore editable targets, so mod+f / mod+g
+  // are handled here as well to work while the composer is focused. File tab
+  // find claims the keys first via defaultPrevented. Mod follows the platform
+  // convention: Cmd on macOS, Ctrl elsewhere — plain Ctrl+F keeps its native
+  // cursor-forward behavior on macOS.
+  createEffect(() => {
+    if (typeof window === "undefined") return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      const mod = IS_MAC ? event.metaKey : event.ctrlKey
+      if (!mod || event.altKey) return
+      const key = event.key.toLowerCase()
+      if (key === "f") {
+        if (event.shiftKey) return
+        event.preventDefault()
+        event.stopPropagation()
+        find.focus()
+        return
+      }
+      if (key === "g") {
+        if (!find.open()) return
+        event.preventDefault()
+        event.stopPropagation()
+        find.next(event.shiftKey ? -1 : 1)
+      }
+    }
+    makeEventListener(window, "keydown", onKeyDown, { capture: true })
+  })
   createEffect(() => {
     props.setRevealMessage?.((id) => {
       const index = messageRowIndex().get(id)
@@ -1842,6 +1897,20 @@ export function MessageTimeline(props: {
           </Show>
         </div>
       </ScrollView>
+      <Show when={find.open()}>
+        <FileSearchBar
+          pos={find.pos}
+          query={find.query}
+          index={find.index}
+          count={find.count}
+          setInput={find.setInput}
+          onInput={find.setQuery}
+          onKeyDown={find.onInputKeyDown}
+          onClose={find.close}
+          onPrev={() => find.next(-1)}
+          onNext={() => find.next(1)}
+        />
+      </Show>
     </div>
   )
 }

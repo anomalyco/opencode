@@ -24,6 +24,16 @@
   }
 }
 
+/* Timeline find matches (CSS Custom Highlight API). The pierre file viewer
+   defines the same names for its shadow roots. */
+::highlight(opencode-find) {
+  background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+}
+
+::highlight(opencode-find-current) {
+  background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+}
+
 @layer components {
   [data-component="getting-started"] {
     container-type: inline-size;
