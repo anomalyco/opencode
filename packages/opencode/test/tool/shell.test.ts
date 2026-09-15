@@ -1,7 +1,7 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import os from "os"
 import path from "path"
@@ -21,6 +21,18 @@ import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceStore } from "@/project/instance-store"
+import { BackgroundJob } from "@/background/job"
+import { Database } from "@opencode-ai/core/database/database"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { Session } from "@/session/session"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionRunState } from "@/session/run-state"
+import { SessionStatus } from "@/session/status"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import type { SessionPrompt } from "../../src/session/prompt"
+import type { TaskPromptOps } from "../../src/tool/task"
 
 const shellLayer = Layer.mergeAll(
   LayerNode.compile(
@@ -32,6 +44,13 @@ const shellLayer = Layer.mergeAll(
       Config.node,
       Agent.node,
       RuntimeFlags.node,
+      BackgroundJob.node,
+      Database.node,
+      EventV2Bridge.node,
+      Session.node,
+      SessionProjector.node,
+      SessionRunState.node,
+      SessionStatus.node,
     ]),
   ),
   testInstanceStoreLayer,
@@ -1197,3 +1216,166 @@ describe("tool.shell truncation", () => {
     ),
   )
 })
+
+const backgroundLayer = Layer.mergeAll(
+  LayerNode.compile(
+    LayerNode.group([
+      CrossSpawnSpawner.node,
+      FSUtil.node,
+      Plugin.node,
+      Truncate.node,
+      Config.node,
+      Agent.node,
+      RuntimeFlags.node,
+      BackgroundJob.node,
+      Database.node,
+      EventV2Bridge.node,
+      Session.node,
+      SessionProjector.node,
+      SessionRunState.node,
+      SessionStatus.node,
+    ]),
+    [[RuntimeFlags.node, RuntimeFlags.layer({ experimentalBackgroundSubagents: true })]],
+  ),
+  testInstanceStoreLayer,
+)
+const backgroundIt = testEffect(backgroundLayer)
+
+const backgroundRef = {
+  providerID: ProviderV2.ID.make("test"),
+  modelID: ModelV2.ID.make("test-model"),
+}
+
+const seedChat = Effect.fn("ShellBackgroundTest.seed")(function* () {
+  const session = yield* Session.Service
+  const chat = yield* session.create({ title: "shell background" })
+  const user = yield* session.updateMessage({
+    id: MessageID.ascending(),
+    role: "user",
+    sessionID: chat.id,
+    agent: "build",
+    model: backgroundRef,
+    time: { created: Date.now() },
+  })
+  const assistant: SessionV1.Assistant = {
+    id: MessageID.ascending(),
+    role: "assistant",
+    parentID: user.id,
+    sessionID: chat.id,
+    mode: "build",
+    agent: "build",
+    cost: 0,
+    path: { cwd: "/tmp", root: "/tmp" },
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: backgroundRef.modelID,
+    providerID: backgroundRef.providerID,
+    variant: "xhigh",
+    time: { created: Date.now() },
+  }
+  yield* session.updateMessage(assistant)
+  return { chat, assistant }
+})
+
+describe("tool.shell background", () => {
+  backgroundIt.live("returns immediately and injects the result on completion", () =>
+    Effect.gen(function* () {
+      const captured = yield* Deferred.make<SessionPrompt.PromptInput>()
+      const ops: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) => {
+          const id = MessageID.ascending()
+          return Deferred.succeed(captured, input).pipe(
+            Effect.as({
+              info: {
+                id,
+                role: "assistant" as const,
+                parentID: input.messageID ?? id,
+                sessionID: input.sessionID,
+                mode: input.agent ?? "build",
+                agent: input.agent ?? "build",
+                cost: 0,
+                path: { cwd: "/tmp", root: "/tmp" },
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                modelID: backgroundRef.modelID,
+                providerID: backgroundRef.providerID,
+                time: { created: Date.now() },
+                finish: "stop" as const,
+              },
+              parts: [],
+            }),
+          )
+        },
+      }
+
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const jobs = yield* BackgroundJob.Service
+          const { chat, assistant } = yield* seedChat()
+          const result = yield* Effect.gen(function* () {
+            const bash = yield* initShell()
+            return yield* bash.execute(
+              { command: "echo bg-marker-ok", run_in_background: true },
+              {
+                sessionID: chat.id,
+                messageID: assistant.id,
+                agent: "build",
+                abort: new AbortController().signal,
+                extra: { promptOps: ops },
+                messages: [],
+                metadata: () => Effect.void,
+                ask: () => Effect.void,
+              },
+            )
+          })
+
+          const meta = result.metadata as { background?: boolean; jobId?: string }
+          expect(meta.background).toBe(true)
+          expect(result.metadata.truncated).toBe(false)
+          expect(result.output).toContain(`state="running"`)
+          expect(result.output).toContain(`<log>`)
+          const jobID = meta.jobId
+          if (!jobID) throw new Error("expected jobId in metadata")
+          const logPath = (result.metadata as { logPath?: string }).logPath
+          expect(logPath).toBeTruthy()
+
+          const waited = yield* jobs.wait({ id: jobID })
+          expect(waited.info?.status).toBe("completed")
+          expect(waited.info?.output).toContain("bg-marker-ok")
+
+          const log = yield* (yield* FSUtil.Service).readFileString(logPath!)
+          expect(log).toContain("bg-marker-ok")
+
+          const injected = yield* Deferred.await(captured)
+          expect(injected.sessionID).toBe(chat.id)
+          expect(injected.variant).toBe("xhigh")
+          expect(injected.agent).toBe("build")
+          const part = injected.parts[0]
+          expect(part?.type).toBe("text")
+          if (part?.type !== "text") throw new Error("expected text part")
+          expect(part.text).toContain(`state="completed"`)
+          expect(part.text).toContain("bg-marker-ok")
+        }),
+      )
+    }),
+  )
+})
+
+it.live("rejects background execution when the experiment is disabled", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const exit = yield* runIn(
+      tmp,
+      Effect.gen(function* () {
+        const bash = yield* initShell()
+        return yield* bash.execute(
+          { command: "echo nope", run_in_background: true },
+          ctx,
+        )
+      }),
+    ).pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
+  }),
+)
