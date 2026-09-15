@@ -5,9 +5,11 @@ import { useLanguage } from "~/context/language"
 import { goModels } from "./go-models"
 
 // Compress the request range, with the same domain in both views.
-const max = Math.max(...goModels.map((model) => model.requests))
+const max = Math.max(...goModels.filter((model) => Number.isFinite(model.requests)).map((model) => model.requests))
 const position = (requests: number) =>
-  4 + Math.pow(Math.log10(Math.max(requests / 100, 1)) / Math.log10(max / 100), 2.2) * 96
+  Number.isFinite(requests)
+    ? 4 + Math.pow(Math.log10(Math.max(requests / 100, 1)) / Math.log10(max / 100), 2.2) * 88
+    : 100
 const ticks = [100, 1000, 10000, 40000]
 
 export function LimitsGraph(props: { href: string }) {
@@ -74,7 +76,13 @@ export function LimitsGraph(props: { href: string }) {
         <div role="rowgroup" data-slot="rows">
           <For each={models()}>
             {(model, index) => (
-              <div role="row" data-slot="model-row" data-model={model.id} style={{ "--delay": `${index() * 30}ms` }}>
+              <div
+                role="row"
+                data-slot="model-row"
+                data-model={model.id}
+                data-unlimited={model.unlimited ? "" : undefined}
+                style={{ "--delay": `${index() * 30}ms` }}
+              >
                 <div role="rowheader" data-slot="model">
                   <bdi>{model.name}</bdi>
                   <Show when={model.fresh}>
@@ -82,6 +90,9 @@ export function LimitsGraph(props: { href: string }) {
                   </Show>
                   <Show when={model.bonus}>
                     <span data-slot="badge">{i18n.t("go.graph.bonus", { count: model.bonus! })}</span>
+                  </Show>
+                  <Show when={model.unlimited}>
+                    <span data-slot="badge">{i18n.t("go.graph.limitedTime")}</span>
                   </Show>
                   <Show when={model.regions}>
                     <a
@@ -98,7 +109,11 @@ export function LimitsGraph(props: { href: string }) {
                     </a>
                   </Show>
                 </div>
-                <div role="cell" data-slot="usage-value">
+                <div
+                  role="cell"
+                  data-slot="usage-value"
+                  aria-label={model.unlimited ? i18n.t("go.graph.unlimited") : undefined}
+                >
                   <div data-slot="track" aria-hidden="true">
                     <For each={ticks}>
                       {(tick) => <span data-slot="gridline" style={{ "--position": `${position(tick)}%` }} />}
@@ -106,23 +121,46 @@ export function LimitsGraph(props: { href: string }) {
                     <div data-slot="bar" style={{ "--width": `${position(model.requests)}%` }} />
                   </div>
                   <div data-slot="requests">
-                    <Show when={model.baseRequests}>
-                      <s>{format().format(model.baseRequests!)}</s>{" "}
+                    <Show
+                      when={!model.unlimited}
+                      fallback={
+                        <bdi aria-hidden="true" title={i18n.t("go.graph.unlimited")}>
+                          ∞
+                        </bdi>
+                      }
+                    >
+                      <Show when={model.baseRequests}>
+                        <s>{format().format(model.baseRequests!)}</s>{" "}
+                      </Show>
+                      <bdi>{format().format(model.requests)}</bdi>
                     </Show>
-                    <bdi>{format().format(model.requests)}</bdi>
                   </div>
                 </div>
-                <div role="cell" data-slot="allowance" data-high={model.allowance >= 60 ? "" : undefined}>
-                  <Show when={model.baseAllowance}>
-                    <s>{currency().format(model.baseAllowance!)}</s>{" "}
+                <div
+                  role="cell"
+                  data-slot="allowance"
+                  data-high={model.allowance >= 60 ? "" : undefined}
+                  aria-label={model.unlimited ? i18n.t("go.graph.unlimited") : undefined}
+                >
+                  <Show
+                    when={!model.unlimited}
+                    fallback={
+                        <bdi aria-hidden="true" title={i18n.t("go.graph.unlimited")}>
+                        ∞
+                      </bdi>
+                    }
+                  >
+                    <Show when={model.baseAllowance}>
+                      <s>{currency().format(model.baseAllowance!)}</s>{" "}
+                    </Show>
+                    <bdi>
+                      <For each={currency().formatToParts(model.allowance)}>
+                        {(part) => (
+                          <span data-slot={part.type === "currency" ? "currency" : undefined}>{part.value}</span>
+                        )}
+                      </For>
+                    </bdi>
                   </Show>
-                  <bdi>
-                    <For each={currency().formatToParts(model.allowance)}>
-                      {(part) => (
-                        <span data-slot={part.type === "currency" ? "currency" : undefined}>{part.value}</span>
-                      )}
-                    </For>
-                  </bdi>
                 </div>
               </div>
             )}
