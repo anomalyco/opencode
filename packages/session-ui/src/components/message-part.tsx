@@ -171,6 +171,7 @@ export interface MessageProps {
   showReasoningSummaries?: boolean
   useV2Actions?: boolean
   comments?: UserMessageComment[]
+  onSaveLearnings?: () => void
 }
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -203,6 +204,7 @@ export interface MessagePartProps {
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
   useV2Actions?: boolean
+  onSaveLearnings?: () => void
 }
 
 function MessageActionButton(
@@ -239,6 +241,41 @@ function MessageActionButton(
           onMouseDown={props.onMouseDown}
           onClick={props.onClick}
           aria-label={props["aria-label"]}
+        />
+      </TooltipV2>
+    </Show>
+  )
+}
+
+function SaveLearningsButton(props: {
+  label: string
+  useV2?: boolean
+  onClick: () => void
+}) {
+  return (
+    <Show
+      when={props.useV2}
+      fallback={
+        <Tooltip value={props.label} placement="top" gutter={4}>
+          <IconButton
+            icon="bookmark"
+            size="normal"
+            variant="ghost"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={props.onClick}
+            aria-label={props.label}
+          />
+        </Tooltip>
+      }
+    >
+      <TooltipV2 value={props.label} placement="top" gutter={4}>
+        <IconButtonV2
+          icon={<IconV2 name="bookmark" size="small" />}
+          size="normal"
+          variant="ghost-muted"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={props.onClick}
+          aria-label={props.label}
         />
       </TooltipV2>
     </Show>
@@ -949,13 +986,14 @@ export function Message(props: MessageProps) {
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
         {(assistantMessage) => (
-          <AssistantMessageDisplay
-            message={assistantMessage() as AssistantMessage}
-            parts={props.parts}
-            showAssistantCopyPartID={props.showAssistantCopyPartID}
-            showReasoningSummaries={props.showReasoningSummaries}
-            useV2Actions={props.useV2Actions}
-          />
+              <AssistantMessageDisplay
+                message={assistantMessage()}
+                parts={props.parts}
+                showAssistantCopyPartID={props.showAssistantCopyPartID}
+                showReasoningSummaries={props.showReasoningSummaries}
+                useV2Actions={props.useV2Actions}
+                onSaveLearnings={props.onSaveLearnings}
+              />
         )}
       </Match>
     </Switch>
@@ -968,6 +1006,7 @@ export function AssistantMessageDisplay(props: {
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
   useV2Actions?: boolean
+  onSaveLearnings?: () => void
 }) {
   const emptyTools: ToolPart[] = []
   const part = createMemo(() => index(props.parts))
@@ -1028,6 +1067,7 @@ export function AssistantMessageDisplay(props: {
                       message={props.message}
                       showAssistantCopyPartID={props.showAssistantCopyPartID}
                       useV2Actions={props.useV2Actions}
+                      onSaveLearnings={props.onSaveLearnings}
                     />
                   </Show>
                 )
@@ -1448,6 +1488,7 @@ export function Part(props: MessagePartProps) {
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
         useV2Actions={props.useV2Actions}
+        onSaveLearnings={props.onSaveLearnings}
       />
     </Show>
   )
@@ -1744,6 +1785,13 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
               onClick={handleCopy}
               aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
             />
+            <Show when={props.onSaveLearnings}>
+              <SaveLearningsButton
+                label={i18n.t("ui.message.saveLearnings")}
+                useV2={props.useV2Actions}
+                onClick={() => props.onSaveLearnings?.()}
+              />
+            </Show>
             <Show when={meta()}>
               <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
                 {meta()}

@@ -815,6 +815,28 @@
     }
   }
 
+  [data-slot="permission-row"][data-variant="align-start"] {
+    align-items: flex-start;
+  }
+
+  [data-slot="permission-diff"] {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 10px;
+    overflow-x: auto;
+    overflow-y: auto;
+    box-sizing: border-box;
+    background: var(--v2-bg-surface-2, rgba(127, 127, 127, 0.08));
+    color: var(--v2-text-text-base);
+    border: 1px solid var(--v2-border-inherit, rgba(127, 127, 127, 0.2));
+    border-radius: 8px;
+    font-family: var(--font-family-mono, monospace);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre;
+  }
+
   [data-slot="permission-footer"] {
     display: flex;
     align-items: center;

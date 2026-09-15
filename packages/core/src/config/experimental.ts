@@ -13,6 +13,15 @@ export class Policy extends Schema.Class<Policy>("ConfigV2.Experimental.Policy")
   action: PolicyAction,
 }) {}
 
+export class Notebook extends Schema.Class<Notebook>("ConfigV2.Experimental.Notebook")({
+  attach: Schema.Boolean.pipe(Schema.optional).annotate({
+    description: "Attach the relevant per-file notebook note to read/edit/write output on first touch (default: true)",
+  }),
+}) {}
+
 export class Experimental extends Schema.Class<Experimental>("ConfigV2.Experimental")({
   policies: Policy.pipe(Schema.Array, Schema.optional),
+  notebook: Notebook.pipe(Schema.optional).annotate({
+    description: "Notebook memory behavior",
+  }),
 }) {}
