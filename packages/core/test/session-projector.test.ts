@@ -564,4 +564,69 @@ describe("SessionProjector", () => {
       ])
     }),
   )
+
+  it.effect("bumps session time_updated on step lifecycle events", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+          time_created: 0,
+          time_updated: 0,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const events = yield* EventV2.Service
+      const updated = () =>
+        db.select({ time_updated: SessionTable.time_updated }).from(SessionTable).get().pipe(Effect.orDie)
+      const first = SessionMessage.ID.make("msg_step_1")
+      const second = SessionMessage.ID.make("msg_step_2")
+
+      yield* events.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: first,
+        timestamp: DateTime.makeUnsafe(5),
+        agent: "build",
+        model,
+      })
+      expect(yield* updated()).toEqual({ time_updated: 5 })
+
+      yield* events.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        assistantMessageID: first,
+        timestamp: DateTime.makeUnsafe(9),
+        finish: "stop",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+      expect(yield* updated()).toEqual({ time_updated: 9 })
+
+      yield* events.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: second,
+        timestamp: DateTime.makeUnsafe(12),
+        agent: "build",
+        model,
+      })
+      yield* events.publish(SessionEvent.Step.Failed, {
+        sessionID,
+        assistantMessageID: second,
+        timestamp: DateTime.makeUnsafe(15),
+        error: { type: "unknown", message: "boom" },
+      })
+      expect(yield* updated()).toEqual({ time_updated: 15 })
+    }),
+  )
 })
