@@ -334,6 +334,42 @@ describe("CatalogV2", () => {
     }),
   )
 
+  it.effect("treats missing and empty apiKey as unavailable without credentials", () => {
+    const integrationID = Integration.ID.make("gateway")
+    const providerID = ProviderV2.ID.make("remote")
+    const localCatalogLayer = Layer.fresh(
+      AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
+        [Location.node, locationLayer],
+      ]),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* (yield* Integration.Service).transform((editor) => editor.update(integrationID, () => {}))
+
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.integrationID = integrationID
+        }),
+      )
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).not.toContain(providerID)
+
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.request.body.apiKey = ""
+        }),
+      )
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).not.toContain(providerID)
+
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.request.body.apiKey = "secret"
+        }),
+      )
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
+    }).pipe(Effect.provide(localCatalogLayer))
+  })
+
   it.effect("removes providers denied by policy after loading", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
