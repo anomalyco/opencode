@@ -42,8 +42,12 @@ function collapseTail(output: string, maxLines: number, maxChars: number) {
   const lines = output.split("\n")
   if (lines.length <= maxLines && Array.from(output).length <= maxChars) return output
 
-  const preview = lines.slice(-maxLines).join("\n")
-  const visible = Array.from(preview)
-  if (visible.length < maxChars) return `…${preview}`
-  return `…${visible.slice(-Math.max(0, maxChars - 1)).join("")}`
+  const count = Math.max(1, lines.length - Math.max(0, maxLines - 1))
+  const label = `(${count} earlier ${count === 1 ? "line" : "lines"})`
+  if (maxLines <= 1) return label
+
+  const preview = Array.from(lines.slice(-(maxLines - 1)).join("\n"))
+  const available = maxChars - Array.from(label).length - 1
+  if (available <= 0) return label
+  return `${label}\n${preview.slice(-available).join("")}`
 }
