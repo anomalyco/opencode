@@ -84,10 +84,7 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
             path: item.path,
             absolute: path.resolve(location.directory, item.path),
             type: item.type,
-            ignored: ignored.ignores(
-              path.relative(location.project.directory, path.resolve(location.directory, item.path)) +
-                (item.type === "directory" ? "/" : ""),
-            ),
+            ignored: ignoredEntry(ignored, location.project.directory, location.directory, item),
           }))
         }),
       )
@@ -137,3 +134,24 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       .handle("status", status)
   }),
 ).pipe(Layer.provide(locationServiceMapLayer))
+
+function ignoredEntry(
+  ignored: ReturnType<typeof ignore>,
+  root: string,
+  directory: string,
+  item: { path: string; type: "file" | "directory" },
+) {
+  const relative =
+    path.relative(root, path.resolve(directory, item.path)).replaceAll("\\", "/") +
+    (item.type === "directory" ? "/" : "")
+  if (
+    !relative ||
+    relative === "." ||
+    relative === ".." ||
+    relative.startsWith("../") ||
+    relative.startsWith("/") ||
+    path.win32.isAbsolute(relative)
+  )
+    return false
+  return ignored.ignores(relative)
+}
