@@ -514,16 +514,6 @@ export async function bootstrapDirectory(input: {
           }),
         ),
       () => Promise.resolve(input.loadSessions(input.directory)),
-      input.mcp &&
-        (() =>
-          input.queryClient.fetchQuery(
-            loadMcpQuery(input.scope, input.directory, input.api.mcp, input.sdk, input.protocol),
-          )),
-      input.mcp &&
-        (() =>
-          input.queryClient.fetchQuery(
-            loadMcpResourcesQuery(input.scope, input.directory, input.api.mcp, input.sdk, input.protocol),
-          )),
       () =>
         input.queryClient
           .fetchQuery(loadProvidersQuery(input.scope, input.directory, input.api, input.sdk, input.protocol))
@@ -536,6 +526,17 @@ export async function bootstrapDirectory(input: {
             })
           }),
     ].filter(Boolean) as (() => Promise<any>)[]
+
+    // MCP servers can take up to their connect timeout to answer, so warm the
+    // MCP queries in the background instead of blocking directory readiness.
+    if (input.mcp) {
+      void input.queryClient
+        .fetchQuery(loadMcpQuery(input.scope, input.directory, input.api.mcp, input.sdk, input.protocol))
+        .catch(() => {})
+      void input.queryClient
+        .fetchQuery(loadMcpResourcesQuery(input.scope, input.directory, input.api.mcp, input.sdk, input.protocol))
+        .catch(() => {})
+    }
 
     await waitForPaint()
     const slowErrs = errors(await runAll(slow))
