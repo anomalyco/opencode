@@ -2468,3 +2468,65 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+for (const compact of ["proactive", "overflow", "none"] as const) {
+  it.instance(
+    `preserves structured output through ${compact} compaction`,
+    Effect.fnUntraced(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Structured compaction" })
+      const history = yield* seed(chat.id, { finish: "stop" })
+      if (compact === "proactive") {
+        yield* sessions.updateMessage({
+          ...history.assistant,
+          tokens: { input: 95_000, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+        })
+      }
+      const format = new SessionV1.OutputFormatJsonSchema({
+        type: "json_schema",
+        schema: {
+          type: "object",
+          properties: { verdict: { type: "string", enum: ["pass"] } },
+          required: ["verdict"],
+          additionalProperties: false,
+        },
+        retryCount: 1,
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        format,
+        parts: [{ type: "text", text: "Return a passing verdict." }],
+      })
+      if (compact === "overflow") {
+        yield* llm.error(413, { error: { message: "request entity too large" } })
+      }
+      if (compact !== "none") yield* llm.text("The user requested a passing structured verdict.")
+      // A compliant provider emits the requested tool only when it is offered.
+      // Without the format, the local server's text fallback exposes the loss.
+      yield* llm.toolMatch(
+        ({ body }) => Array.isArray(body.tools) && JSON.stringify(body.tools).includes('"StructuredOutput"'),
+        "StructuredOutput",
+        { verdict: "pass" },
+      )
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      expect(messages.some((message) => message.parts.some((part) => part.type === "compaction"))).toBe(
+        compact !== "none",
+      )
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role !== "assistant") throw new Error("Expected assistant result")
+      expect(result.info.error).toBeUndefined()
+      expect(result.info.structured).toEqual({ verdict: "pass" })
+      const last = messages.findLast((message) => message.info.role === "user")
+      expect(last).toBeDefined()
+      if (!last || last.info.role !== "user") throw new Error("Expected user request")
+      expect(last.info.format).toEqual(format)
+    }),
+  )
+}

@@ -12,7 +12,7 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/storage"
 
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -31,6 +31,9 @@ const TOOL_OUTPUT_MAX_CHARS = 2_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 15_000
+
+// Stored messages contain plain JSON; event publication expects schema instances.
+const decodeFormat = Schema.decodeUnknownSync(Schema.UndefinedOr(SessionV1.Format))
 type Turn = {
   start: number
   end: number
@@ -181,6 +184,7 @@ export interface Interface {
     model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
     auto: boolean
     overflow?: boolean
+    format?: SessionV1.User["format"]
   }) => Effect.Effect<void>
 }
 
@@ -475,7 +479,7 @@ const layer = Layer.effect(
             time: { created: Date.now() },
             agent: original.agent,
             model: original.model,
-            format: original.format,
+            format: decodeFormat(original.format),
             tools: original.tools,
             system: original.system,
           })
@@ -523,6 +527,7 @@ const layer = Layer.effect(
               time: { created: Date.now() },
               agent: userMessage.agent,
               model: userMessage.model,
+              format: decodeFormat(userMessage.format),
             })
             const text =
               (input.overflow
@@ -562,11 +567,13 @@ const layer = Layer.effect(
       model: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
       auto: boolean
       overflow?: boolean
+      format?: SessionV1.User["format"]
     }) {
       const msg = yield* session.updateMessage({
         id: MessageID.ascending(),
         role: "user",
         model: input.model,
+        format: decodeFormat(input.format),
         sessionID: input.sessionID,
         agent: input.agent,
         time: { created: Date.now() },
