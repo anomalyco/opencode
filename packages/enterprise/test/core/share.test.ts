@@ -22,6 +22,31 @@ describe.concurrent("core.share", () => {
     expect(await Share.get(share.id)).toBeUndefined()
   })
 
+  test("should revoke data access and remove all persisted share data", async () => {
+    const sessionID = Identifier.descending()
+    const share = await Share.create({ sessionID })
+    const data: Share.Data[] = [
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Private" },
+      },
+    ]
+
+    await Share.sync({ share: { id: share.id, secret: share.secret }, data })
+    await Storage.write(["share_compaction", share.id], { data })
+    await Storage.write(["share_event", share.id, Identifier.descending()], data)
+    await Storage.write(["share_data", share.id, "part", "msg1", "part1"], data[0].data)
+
+    await Share.remove({ id: share.id, secret: share.secret })
+
+    expect(await Share.get(share.id)).toBeUndefined()
+    expect(await Storage.read(["share_snapshot", share.id])).toBeUndefined()
+    expect(await Storage.read(["share_compaction", share.id])).toBeUndefined()
+    expect(await Storage.list({ prefix: ["share_event", share.id] })).toEqual([])
+    expect(await Storage.list({ prefix: ["share_data", share.id] })).toEqual([])
+    await expect(Share.data(share.id)).rejects.toBeInstanceOf(Share.Errors.NotFound)
+  })
+
   test("should sync data to a share", async () => {
     const sessionID = Identifier.descending()
     const share = await Share.create({ sessionID })

@@ -137,14 +137,14 @@ export namespace Share {
     if (share.secret !== body.secret) throw new Errors.InvalidSecret(body.id)
     await Storage.remove(["share", body.id])
     const groups = await Promise.all([
-      Storage.list({ prefix: ["share_snapshot", body.id] }),
-      Storage.list({ prefix: ["share_compaction", body.id] }),
       Storage.list({ prefix: ["share_event", body.id] }),
       Storage.list({ prefix: ["share_data", body.id] }),
     ])
-    for (const item of groups.flat()) {
-      await Storage.remove(item)
-    }
+    await Promise.all([
+      Storage.remove(["share_snapshot", body.id]),
+      Storage.remove(["share_compaction", body.id]),
+      ...groups.flat().map((item) => Storage.remove(item)),
+    ])
   })
 
   export const removeAdmin = fn(Info.pick({ id: true }), async (body) => {
@@ -168,6 +168,7 @@ export namespace Share {
   )
 
   export async function data(shareID: string) {
+    if (!(await get(shareID))) throw new Errors.NotFound(shareID)
     return (await readSnapshot(shareID)) ?? legacy(shareID)
   }
 
