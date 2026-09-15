@@ -19,14 +19,16 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       TypeScript is transpiled first; the emitted JavaScript must still use the supported subset.
 - [x] Top-level `await` and `return` through the program's implicit async-function scope.
 - [x] Explicit `return`, final top-level expression as a REPL-style result, and `null` when no value is produced.
-- [x] Program results use JSON-like boundaries, with `undefined` and non-finite numbers normalized to `null`. Tool
-      arguments follow JSON serialization semantics before their schema applies (see the tools section). Own
-      `__proto__` keys are dropped wherever a host object crosses to the host, so merging tool inputs or results
-      cannot replace a prototype; `JSON.stringify` still emits the key, like JS, since a string cannot pollute.
-- [x] Values `JSON.stringify` would flatten to `{}` cross the host boundary in a useful form instead: a Set as an
-      array, a RegExp as `"/source/flags"`, a URLSearchParams as its query string. A Map still crosses as `{}`.
-      Functions, generators, promises, extension handles, and a Uint8Array are rejected with a hint. In-program
-      `JSON.stringify` keeps JS behavior for all of these.
+- [x] The host boundary is `JSON.stringify` plus a short table. The program result and tool arguments cross as
+      what `JSON.stringify` would serialize: `toJSON` is honored, functions and `undefined` properties vanish,
+      `undefined` array elements and non-finite numbers become `null`, a cyclic value throws the same `TypeError`,
+      and Map, RegExp, and generators serialize as `{}`. A bare `undefined` result is `null`.
+      Tool results come back the way `JSON.parse(JSON.stringify(result))` would. The table, where a value cannot
+      be JSON but what the program meant is clear: a promise is awaited (a rejection fails the program), a Set
+      crosses as an array, a URLSearchParams as its query string, an Error as `{ name, message, ...own }`, a
+      Uint8Array is rejected with a hint to encode as text, and own `__proto__` keys are dropped so merging tool
+      inputs or results cannot replace a prototype. In-program `JSON.stringify` keeps JS behavior except for the
+      Error form and a promise, which is a `TypeError` with an await hint rather than a silent `{}`.
 - [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, and Uint8Array values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
@@ -231,8 +233,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       callables that settle the promise exactly once (they may escape the executor and settle later); an executor
       throw rejects unless the promise already settled, resolving with a promise or callable thenable adopts it, and
       resolving with the promise itself rejects with a `TypeError`. Resolver callables work anywhere callbacks are
-      accepted, including `.then`/`.catch` handlers and collection callbacks, but remain opaque references that cannot
-      cross the data boundary.
+      accepted, including `.then`/`.catch` handlers and collection callbacks, and vanish at the data boundary like
+      any function.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
       constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
       first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
@@ -240,11 +242,9 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Dotted tool names are canonicalized into namespace paths; a path can be both callable and a namespace, and the
       last tool supplied for a canonical path wins.
 - [x] Tool path segments may be named `constructor`, `prototype`, or `__proto__` because paths use inert Map keys.
-- [x] Outbound tool arguments follow JSON serialization semantics, like `JSON.stringify`: object properties with
-      `undefined` values are dropped, `undefined` array elements and non-finite numbers become `null`, and sparse
-      arrays densify. Tools never receive `undefined` inside their input object, though a bare `tools.t(undefined)`
-      argument still reaches schema decoding as `undefined`. Program results keep the stricter
-      normalization where every `undefined` becomes `null`.
+- [x] Outbound tool arguments are what `JSON.stringify` would serialize (see the boundary rule above). Tools never
+      receive `undefined` inside their input object, though a bare `tools.t(undefined)` argument still reaches schema
+      decoding as `undefined`.
 - [ ] Tokenize and case-fold non-ASCII tool paths, descriptions, and queries for tool search.
 
 ## Objects and properties
@@ -426,8 +426,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 
 ## Uint8Array
 
-The only binary type. Bytes stay inside the program or cross to extensions; the tool boundary rejects them with a
-hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
+The only binary type. Bytes stay inside the program or cross to extensions as copies; the tool boundary rejects them
+with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 
 - [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`,
       and `fromHex`. Lengths are capped like arrays.
@@ -452,29 +452,25 @@ hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 
 ## Extensions
 
-Host classes and functions a host opts in through `Extension.make({ name, globals })` and `CodeMode.make({ extensions })`.
+Host functions a host opts in through `Extension.make({ name, globals })` and `CodeMode.make({ extensions })`.
 Nothing is exposed unless a host provides it; extension calls are not tool calls.
 
-- [x] Each global is a class or a function, exposed as-is: constructors with `new`, prototype methods, accessors,
-      and statics (including through an exposed subclass, so `new this()` works), plus inheritance
-      up to the nearest exposed ancestor. A global that shadows a built-in or another extension throws at `make`.
-- [x] Instances of exposed classes stay on the host; the program holds a handle whose only members are the class's.
-      The same host instance is always the same handle within a run, so identity and `instanceof` hold. Handles
-      cannot cross the data boundary: returning, stringifying, throwing, or passing one to a tool fails.
+- [x] Each global is a function, callable but not constructible, run with `this` undefined. A global that shadows
+      a built-in or another extension throws at `make`.
 - [x] Every value crossing in either direction is converted, never shared: plain objects and arrays are copied,
       `Date`, `RegExp`, `URL`, `URLSearchParams`, `Map`, `Set`, and `Uint8Array` become fresh copies with their
       contents converted (a host `ArrayBuffer` comes in as a `Uint8Array`; other typed arrays cannot come out),
       errors cross as errors with their name and message, and a `__proto__` key is dropped. Functions, generators,
-      un-awaited promises, and symbols cannot be passed in; an instance of an unexposed class, a symbol, or a BigInt
-      cannot come out.
+      un-awaited promises, and symbols cannot be passed in; a class instance, a symbol, or a BigInt cannot come out.
+- [x] A host function inside a result becomes a program function whose calls cross the same way, so a result can
+      carry methods (`res.json()`) whose host closures keep the host state. Diagnostics name it by its path
+      (`fetch.json`). Like any program function it vanishes at the data boundary.
 - [x] A host `Promise` becomes a program promise. Whatever host code returns, resolves, throws, or rejects with
       crosses the same way, so `catch (e)` receives a copy of the thrown value (an `Error` of the matching type, or
-      plain data). A getter must be synchronous.
-- [x] A prototype member runs only with a handle of its own class as `this`; a detached call, a plain object, or a
-      handle of another class throws `TypeError: Illegal invocation`. Program edits to an exposed prototype affect
-      that run only. Data properties on a class or prototype are not exposed, since a program write would change the
-      host class itself; expose one through an accessor.
+      plain data).
 - [ ] Program functions as arguments to extension code (callbacks such as `forEach`).
+- [ ] Host classes. Stateful host objects are expressed as closures; a declared method table would be the next
+      step if `new X()` in a program is ever needed.
 
 ## Errors and diagnostics
 

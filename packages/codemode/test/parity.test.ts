@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
-import { Data } from "../src/data.js"
 
 // Runs a CodeMode program with no host tools and returns the CodeMode.Result. These tests pin the
 // JS-parity behaviors for the "99% of ordinary defensive JavaScript just works" goal: cases where
@@ -301,25 +300,22 @@ describe("H1: NaN/Infinity flow as intermediates and normalize to null at the bo
     expect(await value(`return JSON.stringify({ x: Number("z") })`)).toBe('{"x":null}')
   })
 
-  test("copyOut normalizes non-finite numbers to null (the shared return + tool-arg boundary)", () => {
-    // Tool-call arguments funnel through copyOut too, so this one function pins both boundaries.
-    expect(Data.toData(NaN, "value")).toBeNull()
-    expect(Data.toData(Infinity, "value")).toBeNull()
-    expect(Data.toData(-Infinity, "value", "result")).toBeNull()
-    expect(Data.toData(42, "value")).toBe(42)
-    expect(Data.toData({ a: NaN, b: [Infinity, 1] }, "value")).toEqual({ a: null, b: [null, 1] })
+  test("the boundary normalizes non-finite numbers to null like JSON.stringify", async () => {
+    expect(await value(`return { a: Number("z"), b: [Infinity, -Infinity, 1] }`)).toEqual({
+      a: null,
+      b: [null, null, 1],
+    })
   })
 })
 
-describe("copyOut undefined handling per boundary mode", () => {
-  test("json mode mirrors JSON.stringify for undefined", () => {
-    expect(Data.toData({ q: undefined, keep: 1 }, "value")).toStrictEqual({ keep: 1 })
-    expect(Data.toData([1, undefined, 2], "value")).toStrictEqual([1, null, 2])
-    expect(Data.toData({ nested: { a: undefined, b: [undefined] } }, "value")).toStrictEqual({
+describe("undefined at the boundary", () => {
+  test("vanishes like JSON.stringify", async () => {
+    expect(await value(`return { q: undefined, keep: 1, nested: { a: undefined, b: [undefined] } }`)).toStrictEqual({
+      keep: 1,
       nested: { b: [null] },
     })
-    expect(Data.toData(undefined, "value")).toBeUndefined()
-    expect(Data.toData({ a: undefined }, "value", "result")).toStrictEqual({ a: null })
+    expect(await value(`return [1, undefined, 2]`)).toStrictEqual([1, null, 2])
+    expect(await value(`return undefined`)).toBeNull()
   })
 })
 
@@ -451,7 +447,9 @@ describe("Error values and instanceof", () => {
     expect(await value(`return new Error("m")`)).toEqual({ name: "Error", message: "m" })
     expect(await value(`return JSON.stringify(new Error("m"))`)).toBe('{"name":"Error","message":"m"}')
     expect(
-      await value(`try { throw new Error("m") } catch (e) { return [Object.keys(e), e.name, e.hasOwnProperty("message")] }`),
+      await value(
+        `try { throw new Error("m") } catch (e) { return [Object.keys(e), e.name, e.hasOwnProperty("message")] }`,
+      ),
     ).toEqual([[], "Error", true])
     expect(await value(`return new Error().hasOwnProperty("message")`)).toBe(false)
   })

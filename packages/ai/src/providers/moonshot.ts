@@ -112,6 +112,7 @@ export const configure = (input: Config = {}) => {
         maxTokensField: "max_tokens",
         supportsStore: false,
         supportsStrictMode: false,
+        supportsPromptCacheKey: true,
         toolSchema: "moonshot",
         reasoningField: "reasoning_content",
       },

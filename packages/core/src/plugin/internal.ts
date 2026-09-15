@@ -84,6 +84,7 @@ import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
+import { IdentityPlugin } from "./identity.js"
 import { PlanPlugin } from "./plan.js"
 import { ModelsDevPlugin } from "./models-dev.js"
 import { McpCodeModeExclusionPlugin } from "./mcp-codemode-exclusion.js"
@@ -216,6 +217,7 @@ const pre = [
   PatchTool.Plugin,
   // Render model prompts after the patch plugin selects the available editing tools.
   ...OptimizePlugin.Plugins,
+  IdentityPlugin.Plugin,
   EditTool.Plugin,
   GlobTool.Plugin,
   GrepTool.Plugin,

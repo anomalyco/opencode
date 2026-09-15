@@ -54,7 +54,8 @@ type Factory = <R>(ctx: Interpreter<R>) => unknown
 // A table rather than a list so the names are known before any runtime exists.
 const table: Record<string, Factory> = {
   tools: () => new ToolReference([]),
-  search: (ctx) => native(ctx.builtins, { name: "search", call: (_, args) => ctx.tools.search(args), callback: false }),
+  search: (ctx) =>
+    native(ctx.builtins, { name: "search", call: (_, args) => ctx.tool(ctx.tools.search, args), callback: false }),
   undefined: () => undefined,
   NaN: () => NaN,
   Infinity: () => Infinity,

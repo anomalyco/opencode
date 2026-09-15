@@ -1257,6 +1257,26 @@ effect: (ctx) =>
   }),
 ```
 
+Providers that stream over a WebSocket reuse one connection per session, so the HTTP hooks never see that traffic. The
+experimental `experimental.ws.handshake` hook runs once per model call before the connection is selected and exposes the
+connection `url` and `headers`; changing either reopens the socket. HTTP hooks still run for any request a WebSocket
+route falls back to.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.handshake",
+      (event) =>
+        Effect.gen(function* () {
+          event.headers.authorization = `Bearer ${yield* mintToken(event.url)}`
+          delete event.headers["api-key"]
+        }),
+      { providerID: "azure" },
+    )
+  }),
+```
+
 Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
 classifies the failure and proposes its policy, but before any retry is scheduled. It does not expose how OpenCode
 internally performs the next attempt.

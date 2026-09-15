@@ -42,7 +42,7 @@ import type {
   YieldExpression,
 } from "acorn"
 import { Cause, Deferred, Effect, Exit } from "effect"
-import { toProgram } from "../data.js"
+import { fromJson, type Json, toBoundary } from "../data.js"
 import { ToolReference, type ToolRuntime } from "../tool-runtime.js"
 import {
   type AstNode,
@@ -291,6 +291,18 @@ export class Interpreter<R> {
   iterate(value: unknown) {
     return this.root.iterate(value)
   }
+
+  /** Runs one host tool: arguments cross as JSON and the result comes back as program values. */
+  tool(
+    run: (args: Array<Json | undefined>) => Effect.Effect<Json | undefined, unknown, R>,
+    args: Array<unknown>,
+  ): Effect.Effect<unknown, unknown, R> {
+    const ctx = this
+    return Effect.gen(function* () {
+      const json = yield* Effect.forEach(args, (arg) => toBoundary(ctx, arg))
+      return fromJson(ctx, yield* run(json))
+    })
+  }
 }
 
 const MAX_CALL_DEPTH = 10_000
@@ -344,7 +356,7 @@ class Frame<R> {
     path: ReadonlyArray<string>,
     args: Array<unknown>,
   ): Effect.Effect<PromiseObj, never, R> {
-    return this.ctx.pending.create(Effect.suspend(() => this.ctx.tools.execute(path, args)))
+    return this.ctx.pending.create(this.ctx.tool((json) => this.ctx.tools.execute(path, json), args))
   }
 
   // Fiber exits make settlement idempotent; yielding prevents inline continuation.
@@ -1216,7 +1228,8 @@ class Frame<R> {
       case "Literal": {
         const regex = node.regex
         if (regex) return Effect.sync(() => constructRegExp(this.ctx.builtins, [regex.pattern, regex.flags]))
-        return Effect.sync(() => toProgram(this.ctx.builtins, node.value, "Literal"))
+        if (typeof node.value === "bigint") throw typeError("BigInt literals are not supported.", node)
+        return Effect.succeed(node.value)
       }
       case "Identifier":
         return Effect.sync(() => this.scopes.get(node.name, node))
@@ -1305,11 +1318,7 @@ class Frame<R> {
       const lhs = yield* self.evaluateExpression(left)
       const rhs = yield* self.evaluateExpression(node.right)
       if (operator === "instanceof") return instanceofValue(lhs, rhs, node)
-      return toProgram(
-        self.ctx.builtins,
-        self.applyBinaryOperator(operator, lhs, rhs, node),
-        "Binary expression result",
-      )
+      return self.applyBinaryOperator(operator, lhs, rhs, node)
     })
   }
 
@@ -1429,7 +1438,7 @@ class Frame<R> {
         default:
           throw typeError(`Unsupported unary operator '${operator}'.`, node)
       }
-      return toProgram(this.ctx.builtins, result, "Unary expression result")
+      return result
     })
   }
 
@@ -1451,12 +1460,7 @@ class Frame<R> {
         if (operator !== "=") {
           const current = self.scopes.get(name, left)
           const rightValue = yield* self.evaluateExpression(node.right)
-          const next = toProgram(
-            self.ctx.builtins,
-            self.applyCompoundAssignment(operator, current, rightValue, node),
-            "Assignment result",
-          )
-          return self.scopes.set(name, next, left)
+          return self.scopes.set(name, self.applyCompoundAssignment(operator, current, rightValue, node), left)
         }
         const rightValue = yield* self.evaluateNamed(node.right, name)
         return self.scopes.set(name, rightValue, left)
@@ -1465,11 +1469,7 @@ class Frame<R> {
         return yield* self.modifyMember(left, (current) =>
           Effect.map(self.evaluateExpression(node.right), (rightValue) => {
             if (operator === "=") return { write: true, next: rightValue, result: rightValue }
-            const next = toProgram(
-              self.ctx.builtins,
-              self.applyCompoundAssignment(operator, current, rightValue, node),
-              "Assignment result",
-            )
+            const next = self.applyCompoundAssignment(operator, current, rightValue, node)
             return { write: true, next, result: next }
           }),
         )
@@ -2010,7 +2010,7 @@ class Frame<R> {
 
         if (index < expressions.length) {
           const raw = yield* self.evaluateExpression(expressions[index])
-          output += coerceToString(toProgram(self.ctx.builtins, raw, "Template interpolation"))
+          output += coerceToString(raw)
           checkStringLength(output.length)
         }
       }

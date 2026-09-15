@@ -1,5 +1,3 @@
-import { toData, toProgram } from "../data.js"
-import type { Builtins } from "../interpreter/intrinsics.js"
 import { type Method, methods } from "../interpreter/native.js"
 import {
   entries,
@@ -15,7 +13,7 @@ import {
   URLObj,
   URLSearchParamsObj,
 } from "../interpreter/objects.js"
-import { containsOpaqueReference, containsRuntimeReference, isRuntimeReference } from "../interpreter/references.js"
+import { containsOpaqueReference, isRuntimeReference } from "../interpreter/references.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { coerceToString } from "./value.js"
 
@@ -33,7 +31,7 @@ export const consoleGlobal = <R>(ctx: Interpreter<R>) => {
         name,
         0,
         (_, args) => {
-          ctx.logs.push(formatConsoleMessage(builtins, name, args))
+          ctx.logs.push(formatConsoleMessage(name, args))
           return undefined
         },
       ],
@@ -44,14 +42,15 @@ export const consoleGlobal = <R>(ctx: Interpreter<R>) => {
 
 const MAX_CONSOLE_DEPTH = 32
 
-const formatConsoleMessage = (builtins: Builtins, name: string, args: Array<unknown>): string => {
-  if (name === "dir") return args.length === 0 ? "undefined" : formatConsoleArgument(args[0])
-  if (name === "table") return formatConsoleTable(builtins, args[0], args[1])
+const formatConsoleMessage = (name: string, args: Array<unknown>): string => {
+  if (name === "dir") return args.length === 0 ? "undefined" : formatValue(args[0])
+  if (name === "table") return formatConsoleTable(args[0], args[1])
   const prefix = name === "warn" ? "[warn] " : name === "error" ? "[error] " : name === "debug" ? "[debug] " : ""
-  return `${prefix}${args.map((arg) => formatConsoleArgument(arg)).join(" ")}`
+  return `${prefix}${args.map((arg) => formatValue(arg)).join(" ")}`
 }
 
-const formatConsoleArgument = (value: unknown): string => {
+/** One value as `console.log` shows it. */
+export const formatValue = (value: unknown): string => {
   if (value === undefined) return "undefined"
   if (typeof value === "string") return value
   return formatConsoleValue(value, new Set(), 0)
@@ -103,25 +102,17 @@ const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): s
 const formatItems = (items: Array<unknown>, seen: Set<object>, depth: number): string =>
   items.map((item) => formatConsoleValue(item, seen, depth)).join(",")
 
-const formatConsoleTable = (builtins: Builtins, value: unknown, columnsArgument: unknown): string => {
+const formatConsoleTable = (value: unknown, columnsArgument: unknown): string => {
   if (value === undefined) return "undefined"
   if (containsOpaqueReference(value)) return "[opaque reference]"
-  const data = toProgram(builtins, value, "console.table argument")
-  const columns = consoleTableColumns(columnsArgument)
-  const rows = consoleTableRows(data, columns)
+  const columns = columnsArgument instanceof Arr ? columnsArgument.items.map(String) : undefined
+  const rows = consoleTableRows(value, columns)
   const keys = columns ?? Array.from(new Set(rows.flatMap((row) => Object.keys(row.values))))
   const header = ["(index)", ...keys].join("\t")
   return [
     header,
     ...rows.map((row) => [row.index, ...keys.map((key) => formatConsoleTableCell(row.values[key]))].join("\t")),
   ].join("\n")
-}
-
-const consoleTableColumns = (value: unknown): ReadonlyArray<string> | undefined => {
-  if (value === undefined) return undefined
-  if (containsRuntimeReference(value)) return undefined
-  const columns = toData(value, "console.table columns", "result")
-  return Array.isArray(columns) ? columns.map((column) => String(column)) : undefined
 }
 
 const consoleTableRows = (

@@ -1,5 +1,4 @@
 import { Effect } from "effect"
-import { toProgram } from "../data.js"
 import { constructor, methods, receiver } from "../interpreter/native.js"
 import {
   type AstNode,
@@ -138,12 +137,11 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
       "keys",
       1,
       (_, args) =>
-        toProgram(
-          builtins,
+        new Arr(
+          builtins.Array,
           args[0] instanceof ToolReference
             ? [...ctx.tools.keys(args[0].path)]
             : keys(enumerableSource(ctx, "Object.keys(...)", args[0])),
-          "Object.keys result",
         ),
     ],
     [

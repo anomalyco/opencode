@@ -179,16 +179,6 @@ export class Bytes extends Obj {
   }
 }
 
-/** An instance of an extension class: the host object lives in a field no property path reaches. */
-export class Handle extends Obj {
-  constructor(
-    proto: Obj,
-    readonly instance: object,
-  ) {
-    super(proto)
-  }
-}
-
 /** Built-in objects that wrap a host value; data-like, but never plain data. */
 export const isWrapper = (
   value: unknown,

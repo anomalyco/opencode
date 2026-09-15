@@ -205,8 +205,7 @@ describe("OpenAIPlugin", () => {
       expect(model.package).toBe("@opencode/ai/providers/openai")
       expect(model.enabled).toBe(true)
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
-      expect(model.capabilities.responsesWebsockets).toBe(true)
-      expect(model.websocket).toBe(true)
+      expect(model.transport).toBe("websocket")
       expect(direct.headers).not.toHaveProperty("originator")
       expect(direct.baseURL).toBe("https://api.openai.com/v1")
       expect(provider.headers).not.toHaveProperty("x-codex-beta-features")
@@ -237,13 +236,13 @@ describe("OpenAIPlugin", () => {
         id: "deployment-responses",
         provider: Provider.ID.azure,
       })
-      const prepare = (websocket?: boolean) =>
+      const prepare = (preference?: Model.Info["transport"]) =>
         Effect.gen(function* () {
           const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
-            capabilities: { tools: true, input: ["text"], output: ["text"], responsesWebsockets: true },
+            capabilities: { tools: true, input: ["text"], output: ["text"] },
             cost: [],
             limit: { context: 200_000, output: 32_000 },
-            websocket,
+            transport: preference,
           })
           const requests = yield* SessionModelRequest.Service
           return yield* requests.primary({
@@ -267,9 +266,9 @@ describe("OpenAIPlugin", () => {
           Effect.provideService(SessionModelTransport.Service, transport),
         )
 
-      const prepared = yield* prepare(true)
+      const prepared = yield* prepare("websocket")
       const defaulted = yield* prepare()
-      const disabled = yield* prepare(false)
+      const disabled = yield* prepare("http")
 
       expect(prepared.options.webSocket).toBe(executor)
       expect(prepared.options.http).toBeUndefined()

@@ -1,6 +1,6 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
-import { fromData, toData, ToolRuntimeError } from "./data.js"
-import type { Builtins } from "./interpreter/intrinsics.js"
+import type { Json } from "./data.js"
+import type { DiagnosticKind } from "./codemode.js"
 import { toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
@@ -299,17 +299,34 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Tool<R> => 
   return node.tool
 }
 
+export class ToolRuntimeError extends Error {
+  constructor(
+    readonly kind: Extract<
+      DiagnosticKind,
+      "UnknownTool" | "InvalidToolInput" | "InvalidToolOutput" | "ToolCallLimitExceeded"
+    >,
+    message: string,
+    readonly suggestions: ReadonlyArray<string> = [],
+  ) {
+    super(message)
+    this.name = "ToolRuntimeError"
+  }
+}
+
+/** The tool bridge of one execution. Arguments arrive and results leave as JSON; program values never enter. */
 export type ToolRuntime<R = never> = {
   readonly calls: Array<ToolCall>
-  readonly execute: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
-  readonly search: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
+  readonly execute: (
+    path: ReadonlyArray<string>,
+    args: Array<Json | undefined>,
+  ) => Effect.Effect<Json | undefined, unknown, R>
+  readonly search: (args: Array<Json | undefined>) => Effect.Effect<Json | undefined, unknown, R>
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
 }
 
 /** Per-execution call state over tools prepared once for the runtime. */
 export const make = <R>(
   prepared: Prepared<R>,
-  builtins: Builtins,
   maxToolCalls: number | undefined,
   hooks?: ToolCallHooks<R>,
 ): ToolRuntime<R> => {
@@ -340,9 +357,9 @@ export const make = <R>(
     calls.push(call)
   }
 
-  const executeTool = (name: string, tool: Tool<R>, externalArgs: Array<unknown>) =>
+  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>) =>
     Effect.gen(function* () {
-      const normalized = externalArgs.length === 0 ? [{}] : externalArgs
+      const normalized = args.length === 0 ? [{}] : args
       if (normalized.length !== 1)
         throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
       const input = yield* Effect.try({
@@ -374,8 +391,12 @@ export const make = <R>(
               )
             }),
           )
+          // The same round trip a tool result would take through text: exact JSON.stringify semantics.
           return yield* Effect.try({
-            try: () => fromData(builtins, decodeToolOutput(tool, raw), `Result from tool '${name}'`),
+            try: (): Json | undefined => {
+              const text = JSON.stringify(decodeToolOutput(tool, raw))
+              return text === undefined ? undefined : JSON.parse(text)
+            },
             catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
           })
         }),
@@ -386,21 +407,9 @@ export const make = <R>(
   return {
     calls,
     keys: (path) => namespaceKeys(root, path),
-    search: (args) =>
-      Effect.suspend(() =>
-        executeTool(
-          "search",
-          searchTool,
-          args.map((arg) => toData(arg, "Arguments for tool 'search'")),
-        ),
-      ),
+    search: (args) => Effect.suspend(() => executeTool("search", searchTool, args)),
     execute: (path, args) =>
-      Effect.gen(function* () {
-        const name = canonicalSegments(path).join(".")
-        const externalArgs = args.map((arg) => toData(arg, `Arguments for tool '${name}'`))
-        const tool = resolve(root, path)
-        return yield* executeTool(name, tool, externalArgs)
-      }),
+      Effect.suspend(() => executeTool(canonicalSegments(path).join("."), resolve(root, path), args)),
   }
 }
 

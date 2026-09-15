@@ -13,6 +13,7 @@ import {
 import { AIError, AIErrorReason, TransportError, type TransportOperation } from "@opencode/ai"
 import { Hash } from "@opencode/util/hash"
 import { Cause, Clock, Context, Effect, Fiber, Layer, Metric, Queue, Scope, Semaphore, Stream } from "effect"
+import { Headers } from "effect/unstable/http"
 import { Socket } from "effect/unstable/socket"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { SessionSchema } from "./schema.js"
@@ -52,8 +53,17 @@ interface State {
   channel?: Channel
 }
 
+/** Selects the connection for one exchange. Its output feeds the affinity key, so changed headers reopen the socket. */
+export interface Handshake {
+  readonly url: string
+  readonly headers: Record<string, string>
+}
+
 export interface Interface {
-  readonly bind: (sessionID: SessionSchema.ID) => WebSocketChannelExecutor
+  readonly bind: (
+    sessionID: SessionSchema.ID,
+    handshake?: (connect: Handshake) => Effect.Effect<Handshake>,
+  ) => WebSocketChannelExecutor
   readonly close: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   readonly closeAll: Effect.Effect<void>
 }
@@ -267,7 +277,8 @@ export const makeLayer = (connector: WebSocketConnector) =>
 
       const start = Effect.fn("SessionModelTransport.start")(function* (
         owner: State,
-        exchange: WebSocketChannelExchange,
+        input: WebSocketChannelExchange,
+        handshake?: (connect: Handshake) => Effect.Effect<Handshake>,
       ) {
         if (owner.closed)
           return yield* transportError("Session WebSocket owner is closed", {
@@ -276,7 +287,13 @@ export const makeLayer = (connector: WebSocketConnector) =>
             phase: "queue",
             delivery: "not-sent",
           })
-        if (owner.httpFallback) return fallback(exchange)
+        if (owner.httpFallback) return fallback(input)
+        const selected = handshake
+          ? yield* handshake({ url: input.connect.url, headers: { ...input.connect.headers } })
+          : undefined
+        const exchange: WebSocketChannelExchange = selected
+          ? { ...input, connect: { ...input.connect, url: selected.url, headers: Headers.fromInput(selected.headers) } }
+          : input
         const key = affinity(exchange)
         const now = yield* Clock.currentTimeMillis
         const current = owner.channel
@@ -465,7 +482,10 @@ export const makeLayer = (connector: WebSocketConnector) =>
         return { frames, complete, http: channel.connection.http }
       })
 
-      const bind = (sessionID: SessionSchema.ID): WebSocketChannelExecutor => ({
+      const bind = (
+        sessionID: SessionSchema.ID,
+        handshake?: (connect: Handshake) => Effect.Effect<Handshake>,
+      ): WebSocketChannelExecutor => ({
         execute: (exchange) => {
           const owner = state(sessionID)
           let execution: WebSocketChannelExecution | undefined
@@ -475,7 +495,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
             },
             frames: Stream.unwrap(
               Effect.acquireRelease(owner.lock.take(1), () => owner.lock.release(1), { interruptible: true }).pipe(
-                Effect.andThen(start(owner, exchange)),
+                Effect.andThen(start(owner, exchange, handshake)),
                 Effect.tap((started) =>
                   Effect.sync(() => {
                     execution = started

@@ -13453,8 +13453,8 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
-          "websocket": {
-            "type": "boolean"
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
           },
           "modelID": {
             "type": "string"
@@ -13581,8 +13581,8 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
-          "websocket": {
-            "type": "boolean"
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
           },
           "canonical": {
             "type": "string"
@@ -15530,9 +15530,6 @@
             "items": {
               "type": "string"
             }
-          },
-          "responsesWebsockets": {
-            "type": "boolean"
           }
         },
         "required": ["tools", "input", "output"],
@@ -15629,8 +15626,8 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
-          "websocket": {
-            "type": "boolean"
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
           },
           "settings": {
             "type": "object"
@@ -16600,8 +16597,8 @@
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
-          "websocket": {
-            "type": "boolean"
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
           },
           "settings": {
             "type": "object"
@@ -16640,6 +16637,10 @@
       },
       "Provider.Settings": {
         "type": "object"
+      },
+      "Provider.Transport": {
+        "type": "string",
+        "enum": ["http", "websocket"]
       },
       "ProviderNotFoundErrorEncoded": {
         "type": "object",

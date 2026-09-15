@@ -86,6 +86,19 @@ export interface SessionHttpResponse {
   response: Response
 }
 
+/**
+ * Connection a WebSocket-backed request opens or reuses. Runs once per model call before the
+ * Session's socket is selected; changing `url` or `headers` reopens the socket. Experimental.
+ */
+export interface SessionWebSocketHandshake {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly kind: SessionRequestKind
+  url: string
+  headers: Record<string, string>
+}
+
 export type SessionRetryDecision = { retry: false } | { retry: true; delay: number }
 
 export interface SessionRetry {
@@ -106,6 +119,7 @@ export interface SessionHooks {
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
   readonly retry: SessionRetry
 }
 

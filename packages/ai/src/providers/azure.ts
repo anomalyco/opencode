@@ -1,4 +1,3 @@
-import { Headers } from "effect/unstable/http"
 import { Auth } from "../route/auth.js"
 import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
 import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
@@ -60,11 +59,6 @@ const responsesRoute = OpenAIResponses.route.with({
       const url = new URL(value)
       url.searchParams.delete("api-version")
       return url.toString()
-    },
-    headers: (headers) => {
-      const apiKey = headers["api-key"]
-      if (!apiKey) return headers
-      return Headers.remove(Headers.set(headers, "authorization", `Bearer ${apiKey}`), "api-key")
     },
   }),
 })
@@ -135,7 +129,7 @@ export const configure = (input: Config) => {
   const chat = (modelID: string | ModelID) =>
     configuredRoute(chatRoute, input, modelID)
       .with(withOpenAIOptions(modelID, modelDefaults))
-      .model<OpenAIProviderOptionsInput>({ id: modelID })
+      .model<OpenAIProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } })
 
   return {
     id,

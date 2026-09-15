@@ -715,7 +715,10 @@ const detectZaiToolStream = (provider: string, baseURL: string | undefined, mode
 
 const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
   const options = OpenAIOptions.resolve(request)
-  const cacheKey = ProviderShared.promptCacheKey(request)
+  // Default off: strict providers 400 on unknown body fields, so only send
+  // the key where compatibility explicitly allows it. Header-based affinity
+  // (x-session-affinity, x-grok-conv-id, ...) is unaffected.
+  const cacheKey = (request.model.compatibility?.supportsPromptCacheKey ?? false) ? ProviderShared.promptCacheKey(request) : undefined
   return {
     ...(supportsStore && options.store !== undefined ? { store: options.store } : {}),
     // For providers that support `store`, ensure stateless `store:false` is sent

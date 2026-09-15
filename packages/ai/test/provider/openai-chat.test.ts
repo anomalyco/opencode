@@ -248,7 +248,23 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("maps the request prompt cache key", () =>
+  it.effect("maps the request prompt cache key when the compatibility flag is set", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAIChat.route
+            .with({ endpoint: { baseURL: "https://api.compatible.test/v1" }, auth: Auth.bearer("test") })
+            .model({ id: "compatible-model", compatibility: { supportsPromptCacheKey: true } }),
+          prompt: "Hello",
+          promptCacheKey: "session_123",
+        }),
+      )
+
+      expect(prepared.body.prompt_cache_key).toBe("session_123")
+    }),
+  )
+
+  it.effect("omits the prompt cache key without the compatibility flag", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -261,7 +277,7 @@ describe("OpenAI Chat route", () => {
         }),
       )
 
-      expect(prepared.body.prompt_cache_key).toBe("session_123")
+      expect(prepared.body).not.toHaveProperty("prompt_cache_key")
     }),
   )
 
@@ -280,7 +296,7 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("maps the xAI Chat prompt cache key to conversation affinity", () =>
+  it.effect("maps the xAI Chat prompt cache key to conversation affinity header only", () =>
     LLMClient.generate(
       LLM.request({
         model: XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).chat("grok-4.5"),
@@ -294,7 +310,8 @@ describe("OpenAI Chat route", () => {
             const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
             expect(web.headers.get("x-grok-conv-id")).toBe("session_123")
             const body = decodeJson(yield* Effect.promise(() => web.text()))
-            expect(ProviderShared.isRecord(body) ? body.prompt_cache_key : undefined).toBe("session_123")
+            // Chat uses the header; prompt_cache_key is Responses-only.
+            expect(ProviderShared.isRecord(body) ? body.prompt_cache_key : undefined).toBeUndefined()
             return input.respond(sseEvents(deltaChunk({}, "stop")), {
               headers: { "content-type": "text/event-stream" },
             })

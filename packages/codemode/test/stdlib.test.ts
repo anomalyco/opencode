@@ -394,8 +394,8 @@ describe("RegExp", () => {
     })
   })
 
-  test("regexes cross the boundary as their literal form; JSON.stringify keeps {} like JS", async () => {
-    expect(await value(`return [/a/, { r: /b/gi }]`)).toEqual(["/a/", { r: "/b/gi" }])
+  test("regexes serialize as {} like JSON.stringify, at the boundary and inside the program", async () => {
+    expect(await value(`return [/a/, { r: /b/gi }]`)).toEqual([{}, { r: {} }])
     expect(await value(`return JSON.stringify({ r: /a/g })`)).toBe('{"r":{}}')
   })
 
@@ -838,10 +838,9 @@ describe("Uint8Array", () => {
   })
 
   test("cannot cross the tool boundary; the error says how to encode it", async () => {
-    expect((await error(`return new Uint8Array(1)`)).message).toContain(
-      "Execution result contains a Uint8Array; pass text instead",
-    )
+    expect((await error(`return new Uint8Array(1)`)).message).toContain("pass text instead")
     expect((await error(`return { deep: [new Uint8Array(1)] }`)).message).toContain("bytes.toBase64()")
+    expect(await value(`return new Uint8Array([7, 8]).toBase64()`)).toBe("Bwg=")
   })
 })
 

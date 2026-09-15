@@ -301,6 +301,20 @@ describe("AzurePlugin", () => {
           })
           expect(foundry.request.headers.get("authorization")).toBe("Bearer https://ai.azure.com/.default-token")
           expect(foundry.request.headers.has("x-api-key")).toBe(false)
+
+          const handshake = yield* hooks.trigger("session", "experimental.ws.handshake", {
+            sessionID: Session.ID.make("ses_azure_ws"),
+            agent: Agent.ID.make("build"),
+            model,
+            kind: "primary",
+            url: "wss://test-resource.openai.azure.com/openai/v1/responses",
+            headers: { "api-key": "stored-token", "x-keep": "yes" },
+          })
+          expect(handshake.headers).toMatchObject({
+            authorization: "Bearer https://cognitiveservices.azure.com/.default-token",
+            "x-keep": "yes",
+          })
+          expect(handshake.headers).not.toHaveProperty("api-key")
         }),
     ),
   )
@@ -362,9 +376,7 @@ describe("AzurePlugin", () => {
           resourceName: "from-env",
           baseURL: "https://from-env.cognitiveservices.azure.com/openai",
         })
-        expect(
-          required(yield* models.get(Provider.ID.azure, Model.ID.make("anthropic"))).settings,
-        ).toMatchObject({
+        expect(required(yield* models.get(Provider.ID.azure, Model.ID.make("anthropic"))).settings).toMatchObject({
           resourceName: "model-resource",
           baseURL: "https://model-resource.services.ai.azure.com/anthropic/v1",
         })
@@ -461,15 +473,12 @@ describe("AzurePlugin", () => {
         yield* addPlugin()
 
         const responses = required(yield* service.get(Provider.ID.azure, models.responses))
-        expect(responses.capabilities.responsesWebsockets).toBe(true)
-        expect(responses.websocket).toBe(true)
+        expect(responses.transport).toBe("websocket")
         for (const modelID of [models.chat, models.preview, models.deploymentURL, models.gateway, models.nonAzure]) {
           const model = required(yield* service.get(Provider.ID.azure, modelID))
-          expect(model.capabilities.responsesWebsockets).toBeUndefined()
-          expect(model.websocket).toBeUndefined()
+          expect(model.transport).toBeUndefined()
         }
       }),
     ),
   )
-
 })

@@ -1050,9 +1050,7 @@ describe("OpenAPI.fromSpec", () => {
     const location = toolAt(OpenAPI.fromSpec({ spec: await opencodeSpec(), baseUrl }).tools, "location.get")
     if (!Tool.isTool(location)) throw new Error("location.get was not generated")
 
-    await Effect.runPromise(
-      location.execute({ location: { directory: "/tmp" } }).pipe(Effect.provide(client.layer)),
-    )
+    await Effect.runPromise(location.execute({ location: { directory: "/tmp" } }).pipe(Effect.provide(client.layer)))
 
     const url = new URL(client.requests[0]!.url)
     expect(url.searchParams.get("location[directory]")).toBe("/tmp")

@@ -1,6 +1,4 @@
 import { Effect } from "effect"
-import { toProgram, ToolRuntimeError } from "../data.js"
-import type { Builtins } from "../interpreter/intrinsics.js"
 import { constructor, fn, type Method, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
 import { PendingThrow, typeError, uriError } from "../interpreter/model.js"
 import { defineAccessor, entries, isWrapper, Arr, Obj, URLObj, URLSearchParamsObj } from "../interpreter/objects.js"
@@ -23,9 +21,6 @@ const urlProperties = [
   "hash",
 ] as const
 
-export const uriArgument = (builtins: Builtins, value: unknown, label: string): string =>
-  coerceToString(toProgram(builtins, value, label))
-
 type UriFunction = "encodeURI" | "encodeURIComponent" | "decodeURI" | "decodeURIComponent"
 
 const uriFunctions: Record<UriFunction, (value: string) => string> = {
@@ -37,7 +32,7 @@ const uriFunctions: Record<UriFunction, (value: string) => string> = {
 
 export const uriGlobal = <R>(ctx: Interpreter<R>, name: UriFunction) =>
   fn<R>(ctx.builtins, name, 1, (_, args) => {
-    const value = uriArgument(ctx.builtins, args[0], `${name} input`)
+    const value = coerceToString(args[0])
     try {
       return uriFunctions[name](value)
     } catch (error) {
@@ -45,8 +40,7 @@ export const uriGlobal = <R>(ctx: Interpreter<R>, name: UriFunction) =>
     }
   })
 
-const urlArgument = (builtins: Builtins, value: unknown, label: string): string =>
-  value instanceof URLObj ? value.url.href : uriArgument(builtins, value, label)
+const urlArgument = (value: unknown): string => (value instanceof URLObj ? value.url.href : coerceToString(value))
 
 export const urlGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
@@ -55,8 +49,8 @@ export const urlGlobal = <R>(ctx: Interpreter<R>) => {
     if (args.length === 0) {
       throw typeError("new URL(...) requires a URL string and an optional base URL.")
     }
-    const input = urlArgument(builtins, args[0], "new URL input")
-    const base = args[1] === undefined ? undefined : urlArgument(builtins, args[1], "new URL base")
+    const input = urlArgument(args[0])
+    const base = args[1] === undefined ? undefined : urlArgument(args[1])
     try {
       return new URLObj(into, builtins.URLSearchParams, new URL(input, base))
     } catch {
@@ -74,8 +68,8 @@ export const urlGlobal = <R>(ctx: Interpreter<R>) => {
     1,
     (_, args) => {
       if (args.length === 0) throw typeError(`URL.${name} requires a URL argument.`)
-      const input = urlArgument(builtins, args[0], `URL.${name} input`)
-      const base = args[1] === undefined ? undefined : urlArgument(builtins, args[1], `URL.${name} base`)
+      const input = urlArgument(args[0])
+      const base = args[1] === undefined ? undefined : urlArgument(args[1])
       try {
         const parsed = new URL(input, base)
         return name === "canParse" ? true : new URLObj(proto, builtins.URLSearchParams, parsed)
@@ -97,13 +91,9 @@ export const urlGlobal = <R>(ctx: Interpreter<R>) => {
         : (thisValue, value) => {
             const target = self(thisValue, name)
             try {
-              ;(target.url as unknown as Record<string, string>)[name] = uriArgument(
-                builtins,
-                value,
-                `URL.${name} value`,
-              )
+              ;(target.url as unknown as Record<string, string>)[name] = coerceToString(value)
             } catch (error) {
-              if (error instanceof PendingThrow || error instanceof ToolRuntimeError) throw error
+              if (error instanceof PendingThrow) throw error
               throw typeError(`URL.${name} received an invalid value.`)
             }
           },
@@ -130,7 +120,7 @@ const readPair = <R>(ctx: Interpreter<R>, value: unknown): Effect.Effect<Array<s
       items.push(
         yield* preserveConsumerError(
           cursor,
-          Effect.sync(() => uriArgument(ctx.builtins, step.value, "URLSearchParams pair value")),
+          Effect.sync(() => coerceToString(step.value)),
         ),
       )
     }
@@ -189,8 +179,7 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
   const self = (thisValue: unknown, name: string) =>
     receiver(URLSearchParamsObj, thisValue, `URLSearchParams.prototype.${name}`)
   const wrap = (items: Array<unknown>) => new Arr(builtins.Array, items)
-  const arg = (name: string, args: Array<unknown>, index: number): string =>
-    uriArgument(builtins, args[index], `URLSearchParams.${name} argument ${index + 1}`)
+  const arg = (args: Array<unknown>, index: number): string => coerceToString(args[index])
   const requireArgs = (name: string, args: Array<unknown>, count: number): void => {
     if (args.length < count) {
       throw typeError(`URLSearchParams.${name} requires ${count} argument${count === 1 ? "" : "s"}.`)
@@ -203,7 +192,7 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
       2,
       (thisValue, args) => {
         requireArgs("append", args, 2)
-        self(thisValue, "append").params.append(arg("append", args, 0), arg("append", args, 1))
+        self(thisValue, "append").params.append(arg(args, 0), arg(args, 1))
         return undefined
       },
     ],
@@ -213,8 +202,8 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
       (thisValue, args) => {
         requireArgs("delete", args, 1)
         const params = self(thisValue, "delete").params
-        if (args[1] !== undefined) params.delete(arg("delete", args, 0), arg("delete", args, 1))
-        else params.delete(arg("delete", args, 0))
+        if (args[1] !== undefined) params.delete(arg(args, 0), arg(args, 1))
+        else params.delete(arg(args, 0))
         return undefined
       },
     ],
@@ -223,7 +212,7 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
       1,
       (thisValue, args) => {
         requireArgs("get", args, 1)
-        return self(thisValue, "get").params.get(arg("get", args, 0))
+        return self(thisValue, "get").params.get(arg(args, 0))
       },
     ],
     [
@@ -231,7 +220,7 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
       1,
       (thisValue, args) => {
         requireArgs("getAll", args, 1)
-        return wrap(self(thisValue, "getAll").params.getAll(arg("getAll", args, 0)))
+        return wrap(self(thisValue, "getAll").params.getAll(arg(args, 0)))
       },
     ],
     [
@@ -240,9 +229,7 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
       (thisValue, args) => {
         requireArgs("has", args, 1)
         const params = self(thisValue, "has").params
-        return args[1] !== undefined
-          ? params.has(arg("has", args, 0), arg("has", args, 1))
-          : params.has(arg("has", args, 0))
+        return args[1] !== undefined ? params.has(arg(args, 0), arg(args, 1)) : params.has(arg(args, 0))
       },
     ],
     [
@@ -250,7 +237,7 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
       2,
       (thisValue, args) => {
         requireArgs("set", args, 2)
-        self(thisValue, "set").params.set(arg("set", args, 0), arg("set", args, 1))
+        self(thisValue, "set").params.set(arg(args, 0), arg(args, 1))
         return undefined
       },
     ],
