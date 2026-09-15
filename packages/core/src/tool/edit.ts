@@ -40,7 +40,9 @@ export const Output = Schema.Struct({
 export type Output = typeof Output.Type
 
 const normalizeLineEndings = (text: string) => text.replaceAll("\r\n", "\n")
-const detectLineEnding = (text: string): "\n" | "\r\n" => (text.includes("\r\n") ? "\r\n" : "\n")
+/** Treat a file as CRLF only when every newline is a CRLF; mixed-ending files are matched as LF. */
+const detectLineEnding = (text: string): "\n" | "\r\n" =>
+  text.includes("\r\n") && !text.replace(/\r\n/g, "").includes("\n") ? "\r\n" : "\n"
 const convertToLineEnding = (text: string, ending: "\n" | "\r\n") =>
   ending === "\n" ? normalizeLineEndings(text) : normalizeLineEndings(text).replaceAll("\n", "\r\n")
 
