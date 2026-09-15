@@ -1,5 +1,20 @@
 import { expect, test } from "bun:test"
-import { parseModel, recentModels } from "../../src/context/local"
+import { parseModel, recentModels, resolvePrimaryAgent, visiblePrimaryAgents } from "../../src/context/local"
+
+const agents = [
+  { name: "visible", mode: "primary", hidden: false },
+  { name: "hidden", mode: "primary", hidden: true },
+  { name: "hidden-subagent", mode: "subagent", hidden: true },
+] as const
+
+test("resolves hidden primary agents without including them in visible agents", () => {
+  expect(visiblePrimaryAgents([...agents]).map((agent) => agent.name)).toEqual(["visible"])
+  expect(resolvePrimaryAgent([...agents], "hidden")?.name).toBe("hidden")
+})
+
+test("does not resolve hidden subagents as primary agents", () => {
+  expect(resolvePrimaryAgent([...agents], "hidden-subagent")).toBeUndefined()
+})
 
 test("parses model IDs containing slashes", () => {
   expect(parseModel("provider/family/model")).toEqual({
