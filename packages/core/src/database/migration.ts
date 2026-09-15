@@ -93,6 +93,20 @@ export function applyOnly(db: Database, input: Migration[]) {
       }
     }
 
+    // Guard: if the DB's migration table contains IDs this binary has never heard
+    // of, the schema was advanced by a newer runtime. Fail fast here rather than
+    // silently opening an incompatible database and crashing deep inside a query.
+    const knownIds = new Set(input.map((m) => m.id))
+    const unknownAhead = [...completed].filter((id) => !knownIds.has(id))
+    if (unknownAhead.length > 0)
+      return yield* Effect.die(
+        new Error(
+          `Database schema is newer than this OpenCode runtime. ` +
+            `Unknown migration(s): ${unknownAhead.join(", ")}. ` +
+            `Upgrade your CLI or Desktop to match, or set OPENCODE_DB to use a separate database file.`,
+        ),
+      )
+
     for (const migration of input) {
       if (completed.has(migration.id)) continue
       yield* db.transaction((tx) =>
