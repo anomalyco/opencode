@@ -47,4 +47,8 @@ jobs:
             args+=("--execute")
           fi
 
-          bun script/github/close-prs.ts "${args[@]}"
+          bun script/github/close-prs.ts "${args[@]}" || {
+            exit_code=$?
+            echo "::warning::close-prs.ts exited with code $exit_code — check logs for GraphQL/token-scope errors"
+            exit $exit_code
+          }
