@@ -27,13 +27,13 @@ import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
-const info = Skill.Info.make({
+const info: Skill.Loaded = {
   id: Skill.ID.make("effect"),
   name: Skill.Name.make("Effect"),
   description: "Effect guidance",
   path: AbsolutePath.make(path.resolve("/skills/effect.md")),
   content: "  Use Effect\n",
-})
+}
 const locations = makeGlobalNode({
   service: LocationServiceMap.Service,
   layer: Layer.effect(

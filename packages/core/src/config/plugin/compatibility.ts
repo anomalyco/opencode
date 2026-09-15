@@ -21,10 +21,7 @@ export const Plugin = define({
     const lock = Semaphore.makeUnsafe(1)
     const skills: Skill.Info[] = []
 
-    const watch = Effect.fn("ConfigCompatibilityPlugin.watch")(function* (
-      target: string,
-      type: "file" | "directory",
-    ) {
+    const watch = Effect.fn("ConfigCompatibilityPlugin.watch")(function* (target: string, type: "file" | "directory") {
       const updates = yield* watcher.subscribe({ path: target, type })
       yield* FiberMap.run(
         watches,
@@ -72,7 +69,7 @@ export const Plugin = define({
     )
     yield* refresh()
     yield* ctx.skill.transform((editor) => {
-      for (const skill of skills) editor.add(skill)
+      for (const skill of skills) editor.add(skill, SkillFile.read(fs, skill.path))
     })
   }),
 })

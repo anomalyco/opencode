@@ -315,14 +315,7 @@ export type FileSystemEntry = { path: string; type: "file" | "directory" }
 
 export type CommandInfo = { name: string; description?: string }
 
-export type SkillInfo = {
-  id: string
-  name: string
-  description?: string
-  autoinvoke?: boolean
-  path: string
-  content: string
-}
+export type SkillInfo = { id: string; name: string; description?: string; autoinvoke?: boolean; path: string }
 
 export type RpcOutput = { output?: any }
 

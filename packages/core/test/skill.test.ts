@@ -16,14 +16,14 @@ const info = (id: string, description: string) =>
     name: Skill.Name.make(id),
     description,
     path: AbsolutePath.make(`/skills/${id}/SKILL.md`),
-    content: `# ${id}`,
   })
+const loaded = (id: string, description: string) => ({ ...info(id, description), content: `# ${id}` })
 
 describe("Skill", () => {
   it.effect("reads the current editor entry by ID", () =>
     Effect.gen(function* () {
       const skill = yield* Skill.Service
-      yield* skill.transform((editor) => editor.add(info("review", "Initial")))
+      yield* skill.transform((editor) => editor.add(loaded("review", "Initial")))
       yield* skill.transform((editor) => {
         expect(editor.get("review")).toBe(editor.list()[0])
         expect(editor.get("missing")).toBeUndefined()
@@ -43,14 +43,14 @@ describe("Skill", () => {
     Effect.gen(function* () {
       const skill = yield* Skill.Service
       yield* skill.transform((editor) => {
-        editor.add(info("review", "First"))
-        editor.add(info("deploy", "Deploy"))
-        editor.add(info("review", "Second"))
+        editor.add(loaded("review", "First"))
+        editor.add(loaded("deploy", "Deploy"))
+        editor.add(loaded("review", "Second"))
         expect(editor.list().map((item) => item.id)).toEqual([Skill.ID.make("review"), Skill.ID.make("deploy")])
       })
 
       expect(yield* skill.list()).toEqual([info("review", "Second"), info("deploy", "Deploy")])
-      expect(yield* skill.get(Skill.ID.make("review"))).toEqual(info("review", "Second"))
+      expect(yield* skill.get(Skill.ID.make("review"))).toEqual({ ...info("review", "Second"), content: "# review" })
       expect(yield* skill.get(Skill.ID.make("missing"))).toBeUndefined()
     }),
   )
@@ -59,7 +59,7 @@ describe("Skill", () => {
     Effect.gen(function* () {
       const skill = yield* Skill.Service
       yield* skill.transform((editor) => {
-        editor.add(info("review", "Initial"))
+        editor.add(loaded("review", "Initial"))
         editor.update("review", (value) => {
           value.description = "Updated"
           value.id = Skill.ID.make("ignored")
@@ -67,7 +67,7 @@ describe("Skill", () => {
         editor.update("missing", () => {
           throw new Error("unreachable")
         })
-        editor.add(info("deploy", "Deploy"))
+        editor.add(loaded("deploy", "Deploy"))
         editor.remove("deploy")
       })
 
@@ -79,7 +79,7 @@ describe("Skill", () => {
     Effect.gen(function* () {
       const skill = yield* Skill.Service
       const original = info("review", "Initial")
-      yield* skill.transform((editor) => editor.add(original))
+      yield* skill.transform((editor) => editor.add({ ...original, content: "# review" }))
       const updated = yield* skill.transform((editor) =>
         editor.update("review", (value) => {
           value.description = "Updated"
@@ -104,7 +104,7 @@ describe("Skill", () => {
       )
       yield* Effect.yieldNow
 
-      yield* skill.transform((editor) => editor.add(info("review", "Visible")))
+      yield* skill.transform((editor) => editor.add(loaded("review", "Visible")))
       expect(yield* Deferred.await(updated).pipe(Effect.timeout("1 second"))).toEqual([info("review", "Visible")])
       yield* Fiber.interrupt(fiber)
     }),

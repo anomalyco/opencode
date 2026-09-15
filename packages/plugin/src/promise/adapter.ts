@@ -1,5 +1,6 @@
 import { Tool } from "@opencode/schema/tool"
 import type { Rpc } from "@opencode/schema/rpc"
+import type { Skill } from "@opencode/schema/skill"
 import type { RpcCallOptions, RpcEventPayload } from "@opencode/client/promise/api"
 import { Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
@@ -452,7 +453,18 @@ export function fromPromise(plugin: Plugin) {
           rpc: yield* rpcFromEffect(host.rpc, streams),
           skill: {
             list: adaptApiMethod(SkillEndpoints["skill.list"], host.skill.list),
-            transform: transform(host.skill),
+            transform: (callback) =>
+              register(
+                host.skill.transform((editor) =>
+                  callback({
+                    ...editor,
+                    add: (skill: Skill.Info & { readonly content?: string }, load?: () => Promise<string>) =>
+                      load
+                        ? editor.add(skill, () => Effect.promise(load))
+                        : editor.add({ ...skill, content: skill.content ?? "" }),
+                  }),
+                ),
+              ),
             reload: () => run(host.skill.reload()),
           },
           storage: {

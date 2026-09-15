@@ -814,9 +814,11 @@ await ctx.skill.transform((editor) => {
     id: "review",
     name: "Review",
     description: "Review the current changes",
-    location: "/workspace/.opencode/skills/review.md",
+    path: "/workspace/.opencode/skills/review.md",
     content: "Review the current changes for correctness and missing tests.",
   })
+  // Or pass a loader as the second argument to read the body only when the skill is used.
+  editor.add({ id: "remote", name: "Remote", path: "/skills/remote.md" }, async () => fetchBody())
   const review = editor.get("review")
   editor.update("review", (skill) => {
     skill.autoinvoke = true

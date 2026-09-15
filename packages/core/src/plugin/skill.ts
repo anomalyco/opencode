@@ -25,24 +25,20 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const reportContent = yield* reportContentWithDiagnostics(ctx.app)
     yield* ctx.skill.transform((editor) => {
-      editor.add(
-        Skill.Info.make({
-          id: Skill.ID.make("opencode"),
-          name: Skill.Name.make("OpenCode"),
-          description: OpencodeDescription,
-          path: AbsolutePath.make("/builtin/opencode.md"),
-          content: OpencodeContent,
-        }),
-      )
-      editor.add(
-        Skill.Info.make({
-          id: Skill.ID.make("report"),
-          name: Skill.Name.make("Report"),
-          description: REPORT_DESCRIPTION,
-          path: AbsolutePath.make("/builtin/report.md"),
-          content: reportContent,
-        }),
-      )
+      editor.add({
+        id: Skill.ID.make("opencode"),
+        name: Skill.Name.make("OpenCode"),
+        description: OpencodeDescription,
+        path: AbsolutePath.make("/builtin/opencode.md"),
+        content: OpencodeContent,
+      })
+      editor.add({
+        id: Skill.ID.make("report"),
+        name: Skill.Name.make("Report"),
+        description: REPORT_DESCRIPTION,
+        path: AbsolutePath.make("/builtin/report.md"),
+        content: reportContent,
+      })
     })
   }),
 })
