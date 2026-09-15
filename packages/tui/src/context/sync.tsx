@@ -28,7 +28,8 @@ import { useTuiStartup } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
+import { createDeltaBuffer } from "./delta-buffer"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
@@ -156,6 +157,34 @@ export const {
     const touchPart = (sessionID: string, partID: string) => {
       hydratingSessions.get(sessionID)?.parts.add(partID)
     }
+
+    // Streaming text/reasoning deltas are coalesced before being applied to the
+    // store. Applying each message.part.delta immediately re-renders the whole
+    // growing part on every token, which is O(n²) in the part's length and can
+    // freeze the TUI at high stream rates. Buffer the appends and flush on a
+    // short timer, bounding renders to ~30fps regardless of token rate.
+    // Authoritative full-part events (message.part.updated / message.part.removed
+    // / message.removed) drop the buffer so superseded deltas are never applied
+    // to the already-replaced text.
+    const DELTA_COALESCE_MS = 32
+    const deltaBuffer = createDeltaBuffer(
+      (flush) => {
+        setTimeout(flush, DELTA_COALESCE_MS)
+      },
+      (item) => {
+        setStore(
+          "part",
+          item.messageID,
+          produce((draft) => {
+            const result = search(draft, item.partID, (part) => part.id)
+            if (!result.found) return
+            const part = draft[result.index]
+            if (!("text" in part)) return
+            part.text = (part.text ?? "") + item.delta
+          }),
+        )
+      },
+    )
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
       if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
@@ -360,6 +389,7 @@ export const {
         }
         case "message.removed": {
           touchMessage(event.properties.sessionID, event.properties.messageID)
+          deltaBuffer.drop((item) => item.messageID === event.properties.messageID)
           const messages = store.message[event.properties.sessionID]
           const index = messages.findIndex((message) => message.id === event.properties.messageID)
           if (index !== -1) {
@@ -375,6 +405,10 @@ export const {
         }
         case "message.part.updated": {
           touchPart(event.properties.part.sessionID, event.properties.part.id)
+          deltaBuffer.drop(
+            (item) =>
+              item.messageID === event.properties.part.messageID && item.partID === event.properties.part.id,
+          )
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
             setStore("part", event.properties.part.messageID, [event.properties.part])
@@ -401,21 +435,21 @@ export const {
           const result = search(parts, event.properties.partID, (part) => part.id)
           if (!result.found) break
           touchPart(event.properties.sessionID, event.properties.partID)
-          setStore(
-            "part",
-            event.properties.messageID,
-            produce((draft) => {
-              const part = draft[result.index]
-              const field = event.properties.field as keyof typeof part
-              const existing = part[field] as string | undefined
-              ;(part[field] as string) = (existing ?? "") + event.properties.delta
-            }),
-          )
+          deltaBuffer.push({
+            kind: event.properties.field,
+            sessionID: event.properties.sessionID,
+            messageID: event.properties.messageID,
+            partID: event.properties.partID,
+            delta: event.properties.delta,
+          })
           break
         }
 
         case "message.part.removed": {
           touchPart(event.properties.sessionID, event.properties.partID)
+          deltaBuffer.drop(
+            (item) => item.messageID === event.properties.messageID && item.partID === event.properties.partID,
+          )
           const parts = store.part[event.properties.messageID]
           const result = search(parts, event.properties.partID, (part) => part.id)
           if (result.found) {
@@ -444,6 +478,8 @@ export const {
         }
       }
     })
+
+    onCleanup(() => deltaBuffer.drain())
 
     const exit = useExit()
     const args = useArgs()
