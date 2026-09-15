@@ -322,6 +322,13 @@ describe("session.message-v2.toModelMessage", () => {
   test("converts assistant tool completion into tool-call + tool-result messages with attachments", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
+    const imageModel: Provider.Model = {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        input: { ...model.capabilities.input, image: true },
+      },
+    }
 
     const input: SessionV1.WithParts[] = [
       {
@@ -371,7 +378,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, imageModel)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -406,6 +413,42 @@ describe("session.message-v2.toModelMessage", () => {
             },
             providerOptions: { openai: { tool: "meta" } },
           },
+        ],
+      },
+    ])
+
+    expect(ProviderTransform.message(await MessageV2.toModelMessages(input, model), model, {})).toMatchObject([
+      { role: "user" },
+      { role: "assistant" },
+      { role: "tool", content: [{ output: { type: "text", value: "ok" } }] },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: MessageV2.SYNTHETIC_ATTACHMENT_PROMPT },
+          {
+            type: "text",
+            text: 'ERROR: Cannot read "attachment.png" (this model does not support image input). Inform the user.',
+          },
+        ],
+      },
+    ])
+
+    const legacyModel: Provider.Model = {
+      ...model,
+      api: { ...model.api, npm: "@ai-sdk/openai-compatible" },
+      capabilities: { ...model.capabilities, attachment: true },
+    }
+    expect(
+      ProviderTransform.message(await MessageV2.toModelMessages(input, legacyModel), legacyModel, {}),
+    ).toMatchObject([
+      { role: "user" },
+      { role: "assistant" },
+      { role: "tool" },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: MessageV2.SYNTHETIC_ATTACHMENT_PROMPT },
+          { type: "file", mediaType: "image/png" },
         ],
       },
     ])
@@ -492,6 +535,93 @@ describe("session.message-v2.toModelMessage", () => {
         ],
       },
     })
+  })
+
+  test.each([
+    ["global.openai.gpt-6-astra", "@ai-sdk/amazon-bedrock", true],
+    ["global.openai.gpt-5.6-sol", "@ai-sdk/amazon-bedrock", true],
+    ["global.xai.grok-4.6", "@ai-sdk/amazon-bedrock", true],
+    ["moonshotai.kimi-k2.5", "@ai-sdk/amazon-bedrock", true],
+    ["nvidia.nemotron-nano-12b-v2", "@ai-sdk/amazon-bedrock", true],
+    ["qwen.qwen3-vl-235b-a22b", "@ai-sdk/amazon-bedrock", true],
+    ["global.anthropic.claude-sonnet-4-6", "@ai-sdk/amazon-bedrock", false],
+    ["amazon.nova-lite-v1:0", "@ai-sdk/amazon-bedrock", false],
+    ["us.meta.llama4-maverick-17b-instruct-v1:0", "@ai-sdk/amazon-bedrock", false],
+    ["openai.gpt-6-astra", "@ai-sdk/amazon-bedrock/mantle", false],
+  ])("places %s tool-result images correctly via %s", async (id, npm, hoist) => {
+    const bedrockModel: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make("custom-alias"),
+      providerID: ProviderV2.ID.make("amazon-bedrock"),
+      api: { id, npm, url: "https://bedrock-runtime.us-east-2.amazonaws.com" },
+      capabilities: {
+        ...model.capabilities,
+        attachment: true,
+        input: { ...model.capabilities.input, image: true },
+      },
+    }
+    const userID = "m-user-bedrock-image"
+    const assistantID = "m-assistant-bedrock-image"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [{ ...basePart(userID, "u1-bedrock-image"), type: "text", text: "read image" }],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-bedrock-image"),
+            type: "tool",
+            callID: "call-bedrock-image-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/example.png" },
+              output: "Image read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-bedrock-image-1"),
+                  type: "file",
+                  mime: "image/png",
+                  url: "data:image/png;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, bedrockModel)
+    expect(result).toHaveLength(hoist ? 4 : 3)
+    expect(result[2]).toMatchObject({
+      role: "tool",
+      content: [
+        {
+          output: hoist
+            ? { type: "text", value: "Image read successfully" }
+            : {
+                type: "content",
+                value: [
+                  { type: "text", text: "Image read successfully" },
+                  { type: "media", mediaType: "image/png", data: "Zm9v" },
+                ],
+              },
+        },
+      ],
+    })
+    if (hoist)
+      expect(result[3]).toMatchObject({
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from tool result:" },
+          { type: "file", mediaType: "image/png", data: "data:image/png;base64,Zm9v" },
+        ],
+      })
   })
 
   test("moves bedrock pdf tool-result media into a separate user message", async () => {
