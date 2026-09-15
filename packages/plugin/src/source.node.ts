@@ -2,7 +2,7 @@ import { registerHooks } from "node:module"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { localSource } from "./source.js"
-import { packageTarget } from "./source.package.js"
+import { missingPackageTarget } from "./source.package.js"
 import { Host } from "./host.js"
 
 let generation = Date.now()
@@ -26,7 +26,7 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
         try {
           return nextResolve(specifier, context)
         } catch (error) {
-          const target = packageTarget(specifier, fileURLToPath(context.parentURL))
+          const target = missingPackageTarget(specifier, fileURLToPath(context.parentURL))
           if (target) track(target, true)
           throw error
         }

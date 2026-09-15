@@ -4,7 +4,7 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { Host } from "./host.js"
 import { localSource } from "./source.js"
-import { packageTarget } from "./source.package.js"
+import { missingPackageTarget } from "./source.package.js"
 
 let generation = Date.now()
 
@@ -42,7 +42,7 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
         try {
           Bun.resolveSync(item.path, path.dirname(file))
         } catch {
-          const target = packageTarget(item.path, file)
+          const target = missingPackageTarget(item.path, file)
           if (target) track(target, true)
         }
         continue

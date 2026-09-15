@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs"
 import path from "node:path"
 
-export function packageTarget(specifier: string, importer: string) {
+export function missingPackageTarget(specifier: string, importer: string) {
   if (specifier.startsWith("#")) return undefined
   const parts = specifier.split("/")
   const name = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0]
