@@ -5,6 +5,7 @@ import {
   applyHomeSessionEvent,
   appendHomeSessionEvent,
   createHomeSessionIndexCache,
+  discoverHomeSessionDirectories,
   HOME_V2_SESSION_PAGE_LIMIT,
   loadHomeSessionIndex,
   homeSessionIndexSessions,
@@ -31,6 +32,19 @@ const session = (input: {
 })
 
 describe("Home V2 session index", () => {
+  test("discovers each unique session directory", () => {
+    const discovered: string[] = []
+    const sessions = parseHomeSessionIndex([
+      session({ id: "one", directory: "/repo/" }),
+      session({ id: "two", directory: "/repo" }),
+      session({ id: "three", directory: "/other" }),
+    ])
+
+    discoverHomeSessionDirectories(sessions, (directory) => discovered.push(directory))
+
+    expect(discovered).toEqual(["/repo/", "/other"])
+  })
+
   test("loads the Home index with one global V2 request", async () => {
     const calls: unknown[] = []
     const result = await loadHomeSessionIndex(async (input) => {

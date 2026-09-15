@@ -17,6 +17,7 @@ on:
 
 jobs:
   close:
+    if: github.repository == 'anomalyco/opencode'
     runs-on: ubuntu-latest
     timeout-minutes: 240
     permissions:
@@ -39,7 +40,7 @@ jobs:
             max_close="50"
           fi
 
-          args=("--threshold" "2" "--age-months" "1" "--sleep-ms" "20000" "--max-close" "$max_close")
+          args=("--repo" "${{ github.repository }}" "--threshold" "2" "--age-months" "1" "--sleep-ms" "20000" "--max-close" "$max_close")
 
           if [ "${{ github.event_name }}" = "schedule" ]; then
             args+=("--execute")

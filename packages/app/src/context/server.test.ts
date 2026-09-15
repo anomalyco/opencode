@@ -137,7 +137,101 @@ describe("createServerProjects", () => {
     })
   })
 
-  test("remove drops a project without recording it as recently closed", () => {
+  test("uses normalized paths for open and discover without changing the first spelling", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/repo/")
+      projects.open("/repo")
+      projects.discover("/repo")
+
+      expect(projects.list()).toEqual([{ worktree: "/repo/", expanded: true }])
+      dispose()
+    })
+  })
+
+  test("uses normalized paths when closing before discovery", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({
+        projects: {},
+        lastProject: {},
+        recentlyClosed: {},
+        dismissedProjects: { local: [] as string[] },
+      })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/repo")
+      projects.close("/repo/")
+      projects.discover("/repo")
+
+      expect(projects.list()).toEqual([])
+      expect(projects.recentlyClosed()).toEqual(["/repo/"])
+      expect(store.dismissedProjects.local).toEqual(["/repo/"])
+      dispose()
+    })
+  })
+
+  test("uses normalized paths when removing an active project", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/repo/")
+      projects.remove("/repo")
+
+      expect(projects.list()).toEqual([])
+      dispose()
+    })
+  })
+
+  test("discovers unknown projects without reopening user-closed paths", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.discover("/repo")
+      projects.discover("/repo/")
+      expect(projects.list()).toEqual([{ worktree: "/repo", expanded: true }])
+
+      projects.close("/repo")
+      projects.discover("/repo/")
+      expect(projects.list()).toEqual([])
+      expect(projects.recentlyClosed()).toEqual(["/repo"])
+      dispose()
+    })
+  })
+
+  test("keeps closed projects suppressed after recent history eviction until explicitly opened", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/repo")
+      projects.close("/repo")
+      for (let i = 1; i <= 20; i++) {
+        projects.open(`/p${i}`)
+        projects.close(`/p${i}`)
+      }
+
+      expect(projects.recentlyClosed()).not.toContain("/repo")
+      projects.discover("/repo/")
+      expect(projects.list()).toEqual([])
+
+      projects.open("/repo/")
+      projects.remove("/repo/")
+      projects.discover("/repo")
+      expect(projects.list()).toEqual([{ worktree: "/repo", expanded: true }])
+      dispose()
+    })
+  })
+
+  test("remove drops a project without suppressing future discovery", () => {
     createRoot((dispose) => {
       const [scope] = createSignal(ServerScope.local)
       const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
@@ -145,7 +239,8 @@ describe("createServerProjects", () => {
 
       projects.open("/repo/subdir")
       projects.remove("/repo/subdir")
-      expect(projects.list()).toEqual([])
+      projects.discover("/repo/subdir")
+      expect(projects.list()).toEqual([{ worktree: "/repo/subdir", expanded: true }])
       expect(projects.recentlyClosed()).toEqual([])
       dispose()
     })
@@ -200,6 +295,17 @@ describe("createServerProjects", () => {
 })
 
 describe("migrateCanonicalLocalServerState", () => {
+  test("seeds dismissed projects from legacy recently closed state", () => {
+    expect(
+      migrateCanonicalLocalServerState({
+        recentlyClosed: { local: ["/repo"] },
+      }),
+    ).toEqual({
+      recentlyClosed: { local: ["/repo"] },
+      dismissedProjects: { local: ["/repo"] },
+    })
+  })
+
   test("moves an existing canonical web bucket into local scope", () => {
     expect(
       migrateCanonicalLocalServerState(

@@ -105,6 +105,32 @@ describe("applyGlobalEvent", () => {
     expect(refreshCount).toBe(0)
   })
 
+  test("reports every project.updated event", () => {
+    const project = [{ id: "a", worktree: "/a" }] as Project[]
+    const updated: Project[] = []
+    const apply = (properties: Project) =>
+      applyGlobalEvent({
+        event: { type: "project.updated", properties },
+        project,
+        refresh() {},
+        onProjectUpdated(next) {
+          updated.push(next)
+        },
+        setGlobalProject(next) {
+          if (typeof next === "function") next(project)
+        },
+      })
+
+    apply({ id: "b", worktree: "/b" } as Project)
+    apply({ id: "b", worktree: "/b-renamed" } as Project)
+
+    expect(updated.map((item) => ({ id: item.id, worktree: item.worktree }))).toEqual([
+      { id: "b", worktree: "/b" },
+      { id: "b", worktree: "/b-renamed" },
+    ])
+    expect(project.find((item) => item.id === "b")?.worktree).toBe("/b-renamed")
+  })
+
   test("handles global.disposed by triggering refresh", () => {
     let refreshCount = 0
     applyGlobalEvent({
