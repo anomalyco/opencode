@@ -207,6 +207,21 @@ describe("Agent", () => {
       expect(Permission.evaluate("read", ".env.local", explore?.permissions ?? []).effect).toBe("ask")
       expect(Permission.evaluate("read", ".env.example", explore?.permissions ?? []).effect).toBe("allow")
       expect(Permission.evaluate("read", "src/index.ts", explore?.permissions ?? []).effect).toBe("allow")
+      for (const rules of [permissions, explore?.permissions ?? []]) {
+        expect(Permission.evaluate("external_directory", "/unrelated/reference/*", rules).effect).toBe("ask")
+        for (const directory of [
+          path.join(global.data, "shell"),
+          path.join(global.data, "tool-output"),
+          global.tmp,
+          global.config,
+        ]) {
+          expect(Permission.evaluate("external_directory", path.join(directory, "nested", "*"), rules).effect).toBe(
+            "allow",
+          )
+        }
+      }
+      expect(Permission.evaluate("edit", "notes.md", explore?.permissions ?? []).effect).toBe("deny")
+      expect(Permission.evaluate("shell", "echo hello", explore?.permissions ?? []).effect).toBe("deny")
       for (const item of agents) {
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }
