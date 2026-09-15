@@ -1,8 +1,7 @@
-import { For, Show, createEffect, createMemo, lazy, on, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode/ui/button"
-import { IconButton } from "@opencode/ui/icon-button"
 import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@/shell/notifications/toast"
 import fuzzysort from "fuzzysort"
@@ -10,8 +9,6 @@ import { DEFAULT_PALETTE_KEYBIND, formatKeybind, parseKeybind, useCommand } from
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { SettingsList } from "@/settings/list"
-
-const Icon = lazy(() => import("@opencode/ui/icon").then((module) => ({ default: module.Icon })))
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 const PALETTE_ID = "command.palette"
@@ -422,17 +419,9 @@ function SettingsKeybindsView(props: {
             autocomplete="off"
             autocapitalize="off"
             aria-label={language.t("settings.shortcuts.search.placeholder")}
+            showClearButton={!!store.filter}
+            onClearClick={() => setStore("filter", "")}
           />
-          <Show when={store.filter}>
-            <IconButton
-              type="button"
-              variant="ghost-muted"
-              size="small"
-              class="settings-tab-search-clear"
-              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
-              onClick={() => setStore("filter", "")}
-            />
-          </Show>
         </div>
       </div>
       <div class="settings-tab-body">
