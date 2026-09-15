@@ -6209,3 +6209,130 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
     expect(result.thinking).toBeUndefined()
   })
 })
+
+describe("ProviderTransform - Bedrock Mantle Anthropic", () => {
+  const mantleAnthropicModel = (apiId: string) =>
+    ({
+      id: `amazon-bedrock/${apiId}`,
+      providerID: "amazon-bedrock",
+      api: {
+        id: apiId,
+        url: "https://bedrock-mantle.us-east-1.api.aws/anthropic/v1",
+        npm: "@ai-sdk/amazon-bedrock/mantle-anthropic",
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0, output: 0 },
+      limit: { context: 200_000, output: 64_000 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("variants cover every adaptive effort with no structured-output fields", () => {
+    const variants = ProviderTransform.variants(mantleAnthropicModel("anthropic.claude-opus-5"))
+    expect(Object.keys(variants).sort()).toEqual(["high", "low", "max", "medium", "xhigh"])
+    expect(variants.high).toEqual({ thinking: { type: "adaptive", display: "summarized" }, effort: "high" })
+    // Mantle rejects output_config.format with a 400, so no variant may carry one.
+    expect(JSON.stringify(variants)).not.toInclude("format")
+  })
+
+  test("reasoningVariants maps models.dev effort options", () => {
+    const target = mantleAnthropicModel("anthropic.claude-opus-5")
+    const variants = ProviderTransform.reasoningVariants(
+      { reasoning_options: [{ type: "effort", values: ["low", "high"] }] } as any,
+      target,
+    )
+    expect(Object.keys(variants ?? {})).toEqual(["low", "high"])
+    expect(variants?.high).toEqual({ thinking: { type: "adaptive", display: "summarized" }, effort: "high" })
+  })
+
+  test("reasoningVariants maps models.dev budget_tokens options", () => {
+    const target = mantleAnthropicModel("anthropic.claude-haiku-4-5")
+    const variants = ProviderTransform.reasoningVariants(
+      { reasoning_options: [{ type: "budget_tokens", min: 1024 }] } as any,
+      target,
+    )
+    expect(Object.keys(variants ?? {}).sort()).toEqual(["high", "max"])
+    for (const value of Object.values(variants ?? {})) {
+      expect((value as any).thinking.type).toBe("enabled")
+      expect(typeof (value as any).thinking.budgetTokens).toBe("number")
+    }
+  })
+
+  test("providerOptions are written under the anthropic SDK key", () => {
+    const result = ProviderTransform.providerOptions(mantleAnthropicModel("anthropic.claude-opus-5"), {
+      effort: "high",
+    })
+    expect(result).toEqual({ anthropic: { effort: "high" } })
+  })
+
+  test("message remaps stored amazon-bedrock providerOptions to anthropic", () => {
+    const msgs = [
+      {
+        role: "user" as const,
+        content: [
+          {
+            type: "text" as const,
+            text: "hi",
+            providerOptions: { "amazon-bedrock": { cacheControl: { type: "ephemeral" } } },
+          },
+        ],
+      },
+    ]
+    const result = ProviderTransform.message(msgs, mantleAnthropicModel("anthropic.claude-opus-5"), {})
+    const part = (result[0].content as any[])[0]
+    expect(part.providerOptions.anthropic).toEqual({ cacheControl: { type: "ephemeral" } })
+    expect(part.providerOptions["amazon-bedrock"]).toBeUndefined()
+  })
+
+  test("message drops empty text parts and empty messages", () => {
+    const msgs = [
+      { role: "system" as const, content: "" },
+      {
+        role: "user" as const,
+        content: [
+          { type: "text" as const, text: "" },
+          { type: "text" as const, text: "hi" },
+        ],
+      },
+      { role: "assistant" as const, content: [{ type: "text" as const, text: "" }] },
+    ]
+    const result = ProviderTransform.message(msgs, mantleAnthropicModel("anthropic.claude-opus-5"), {})
+    expect(result.map((msg) => msg.role)).toEqual(["user"])
+    expect((result[0].content as any[]).map((part) => part.text)).toEqual(["hi"])
+  })
+
+  test("message skips manual cache breakpoints when automatic caching is configured", () => {
+    const msgs = () =>
+      [
+        { role: "system" as const, content: "You are a helpful assistant" },
+        { role: "user" as const, content: "Hello" },
+      ] as any[]
+    const model = mantleAnthropicModel("anthropic.claude-opus-5")
+
+    const automatic = ProviderTransform.message(msgs(), model, { cacheControl: { type: "ephemeral" } }) as any[]
+    expect(automatic.every((msg) => msg.providerOptions === undefined)).toBe(true)
+    // Control: without the option the manual breakpoints are still applied.
+    const manual = ProviderTransform.message(msgs(), model, {}) as any[]
+    expect(manual[0].providerOptions?.anthropic).toEqual({ cacheControl: { type: "ephemeral" } })
+  })
+
+  test("options omit OpenAI Responses-only fields", () => {
+    const result = ProviderTransform.options({
+      model: mantleAnthropicModel("anthropic.claude-opus-5"),
+      sessionID: "s1",
+    })
+    expect(result.store).toBeUndefined()
+    expect(result.reasoningSummary).toBeUndefined()
+    expect(result.include).toBeUndefined()
+  })
+})

@@ -53,6 +53,7 @@ function sdkKey(npm: string): string | undefined {
       return "bedrock"
     case "@ai-sdk/anthropic":
     case "@ai-sdk/google-vertex/anthropic":
+    case "@ai-sdk/amazon-bedrock/mantle-anthropic":
       return "anthropic"
     case "@ai-sdk/google-vertex":
       return "vertex"
@@ -167,7 +168,7 @@ function normalizeMessages(
 
   // Anthropic rejects messages with empty content - filter out empty string messages
   // and remove empty text/reasoning parts from array content
-  if (model.api.npm === "@ai-sdk/anthropic") {
+  if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock/mantle-anthropic") {
     msgs = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -467,7 +468,9 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   msgs = normalizeMessages(msgs, model, options)
   const usesAnthropicAutomaticCaching =
     options.cacheControl !== undefined &&
-    (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic")
+    (model.api.npm === "@ai-sdk/anthropic" ||
+      model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
+      model.api.npm === "@ai-sdk/amazon-bedrock/mantle-anthropic")
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
@@ -1029,6 +1032,8 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       )
     }
 
+    // Mantle serves the same Messages API, and accepts adaptive thinking with output_config.effort.
+    case "@ai-sdk/amazon-bedrock/mantle-anthropic":
     case "@ai-sdk/anthropic":
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
     case "@ai-sdk/google-vertex/anthropic":
@@ -1772,6 +1777,7 @@ function reasoningEffort(model: Provider.Model, effort: string) {
       return { reasoning: { effort } }
     case "@ai-sdk/anthropic":
     case "@ai-sdk/google-vertex/anthropic":
+    case "@ai-sdk/amazon-bedrock/mantle-anthropic":
       return anthropicEffort(model, effort) ?? { effort }
     case "@ai-sdk/google":
     case "@ai-sdk/google-vertex":
@@ -1866,6 +1872,7 @@ function reasoningBudget(model: Provider.Model, budget: number) {
       return { reasoning: { max_tokens: budget } }
     case "@ai-sdk/anthropic":
     case "@ai-sdk/google-vertex/anthropic":
+    case "@ai-sdk/amazon-bedrock/mantle-anthropic":
       return { thinking: { type: "enabled", budgetTokens: budget } }
     case "@ai-sdk/google":
     case "@ai-sdk/google-vertex":
