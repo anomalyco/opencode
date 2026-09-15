@@ -805,7 +805,17 @@ export const dict = {
   "settings.general.row.terminalFont.title": "Terminalskrifttype",
   "settings.general.row.terminalFont.description": "Tilpas den skrifttype, der bruges i terminalen",
   "settings.general.row.uiFont.title": "UI-skrifttype",
+<<<<<<< HEAD
   "settings.general.row.uiFont.description": "Tilpas skrifttypen, der bruges i hele brugergrænsefladen",
+||||||| parent of 32cbfa95c1 (feat: Added adjustable font size and line height support for desktop and web.)
+  "settings.general.row.uiFont.description": "Tilpas skrifttypen, der bruges i hele brugerfladen",
+=======
+  "settings.general.row.uiFont.description": "Tilpas skrifttypen, der bruges i hele brugerfladen",
+  "settings.general.row.fontSize.title": "Skriftstørrelse",
+  "settings.general.row.fontSize.description": "Tilpas den grundlæggende skriftstørrelse i hele appen",
+  "settings.general.row.lineHeight.title": "Linjehøjde",
+  "settings.general.row.lineHeight.description": "Tilpas linjehøjden for læsbar tekst og kode",
+>>>>>>> 32cbfa95c1 (feat: Added adjustable font size and line height support for desktop and web.)
   "settings.general.row.followup.title": "Opfølgningsadfærd",
   "settings.general.row.followup.description": "Vælg om opfølgende forespørgsler skal styre straks eller vente i kø",
   "settings.general.row.followup.option.queue": "Kø",

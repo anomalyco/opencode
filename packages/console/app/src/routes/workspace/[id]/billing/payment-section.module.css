@@ -70,7 +70,7 @@
       th,
       td {
         padding: var(--space-2) var(--space-3);
-        font-size: var(--font-size-xs);
+        font-size: var(--font-size-x-small);
       }
 
       th {

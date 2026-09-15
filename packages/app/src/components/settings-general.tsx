@@ -1,6 +1,7 @@
 import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { NumberStepper } from "@opencode-ai/ui/number-stepper"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { TextField } from "@opencode-ai/ui/text-field"
@@ -567,6 +568,38 @@ export const SettingsGeneral: Component = () => {
               autocapitalize="off"
               class="text-12-regular"
               style={{ "font-family": terminalFontFamily(settings.appearance.terminalFont()) }}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.fontSize.title")}
+          description={language.t("settings.general.row.fontSize.description")}
+        >
+          <div data-action="settings-font-size">
+            <NumberStepper
+              value={settings.appearance.fontSize()}
+              onChange={settings.appearance.setFontSize}
+              min={10}
+              max={24}
+              step={1}
+              format={(value) => value.toFixed(0)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.lineHeight.title")}
+          description={language.t("settings.general.row.lineHeight.description")}
+        >
+          <div data-action="settings-line-height">
+            <NumberStepper
+              value={settings.appearance.lineHeight()}
+              onChange={settings.appearance.setLineHeight}
+              min={1.2}
+              max={4}
+              step={0.1}
+              format={(value) => value.toFixed(1)}
             />
           </div>
         </SettingsRow>
