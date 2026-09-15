@@ -5,6 +5,7 @@ import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
+import { useSync } from "../../context/sync"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
@@ -13,6 +14,7 @@ const QUESTION_MODE = "question"
 
 export function QuestionPrompt(props: { request: QuestionRequest; directory?: string }) {
   const sdk = useSDK()
+  const sync = useSync()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
@@ -45,20 +47,36 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     return store.answers[store.tab]?.includes(value) ?? false
   })
 
+  // A restarted service loses its pending questions, so a failed settlement is
+  // rechecked against the live list and a request the server no longer knows
+  // is dismissed instead of rendering forever as an unanswerable prompt.
+  async function settle(request: Promise<{ error?: unknown }>) {
+    const result = await request
+    if (!result.error) return
+    const pending = await sdk.client.question.list({ directory: props.directory }).catch(() => undefined)
+    if (!pending?.data) return
+    if (pending.data.some((item) => item.id === props.request.id)) return
+    sync.question.dismiss(props.request.sessionID, props.request.id)
+  }
+
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
-    void sdk.client.question.reply({
-      requestID: props.request.id,
-      directory: props.directory,
-      answers,
-    })
+    void settle(
+      sdk.client.question.reply({
+        requestID: props.request.id,
+        directory: props.directory,
+        answers,
+      }),
+    )
   }
 
   function reject() {
-    void sdk.client.question.reject({
-      requestID: props.request.id,
-      directory: props.directory,
-    })
+    void settle(
+      sdk.client.question.reject({
+        requestID: props.request.id,
+        directory: props.directory,
+      }),
+    )
   }
 
   function pick(answer: string, custom: boolean = false) {
@@ -71,11 +89,13 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
       setStore("custom", inputs)
     }
     if (single()) {
-      void sdk.client.question.reply({
-        requestID: props.request.id,
-        directory: props.directory,
-        answers: [[answer]],
-      })
+      void settle(
+        sdk.client.question.reply({
+          requestID: props.request.id,
+          directory: props.directory,
+          answers: [[answer]],
+        }),
+      )
       return
     }
     setStore("tab", store.tab + 1)
