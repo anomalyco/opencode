@@ -160,7 +160,7 @@ export async function handler(
     if (
       authInfo &&
       opts.modelList === "lite" &&
-      ["deepseek-v4-flash", "deepseek-v4-pro"].includes(modelInfo.id) &&
+      ["deepseek-v4.1-flash", "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro"].includes(modelInfo.id) &&
       !allowedRegions?.includes("cn")
     )
       throw new RegionError(
@@ -252,6 +252,8 @@ export async function handler(
           })
           if (isNewInference) {
             headers.set("x-zen-model", model)
+            if (opts.modelList === "lite")
+              headers.set("x-zen-billing-source", billingSource === "lite" ? "go" : "credit")
           }
           headers.delete("host")
           headers.delete("content-length")
@@ -261,6 +263,7 @@ export async function handler(
             headers.delete("x-opencode-client")
             headers.delete("x-opencode-request")
             headers.delete("x-zen-model")
+            headers.delete("x-zen-billing-source")
           }
           return headers
         })(),
