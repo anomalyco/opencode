@@ -718,8 +718,7 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
   // Default off: strict providers 400 on unknown body fields, so only send
   // the key where compatibility explicitly allows it. Header-based affinity
   // (x-session-affinity, x-grok-conv-id, ...) is unaffected.
-  const supportsPromptCacheKey = request.model.compatibility?.supportsPromptCacheKey ?? false
-  const cacheKey = supportsPromptCacheKey ? ProviderShared.promptCacheKey(request) : undefined
+  const cacheKey = (request.model.compatibility?.supportsPromptCacheKey ?? false) ? ProviderShared.promptCacheKey(request) : undefined
   return {
     ...(supportsStore && options.store !== undefined ? { store: options.store } : {}),
     // For providers that support `store`, ensure stateless `store:false` is sent
