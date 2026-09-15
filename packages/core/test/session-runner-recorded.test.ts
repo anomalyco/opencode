@@ -62,7 +62,7 @@ const model = OpenAIChat.route
     auth: Auth.bearer(process.env.OPENAI_API_KEY ?? "fixture"),
     generation: { maxTokens: 20, temperature: 0 },
   })
-  .model({ id: "gpt-4o-mini" })
+  .model({ id: "gpt-4o-mini", compatibility: { supportsPromptCacheKey: true } })
 const models = Layer.mock(SessionRunnerModel.Service)({
   resolve: () =>
     Effect.succeed(
