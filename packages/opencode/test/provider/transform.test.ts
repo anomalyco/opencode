@@ -2747,7 +2747,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           {},
         )
         expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
-        expect(messages[1].providerOptions?.bedrock?.cachePoint).toEqual(cached ? { type: "default" } : undefined)
+        // This prompt is tiny (well under Bedrock's ~1024-token minimum), so the
+        // cache point is skipped regardless of model — see the dedicated
+        // "bedrock minimum cacheable size" suite for the caching-wiring coverage.
+        expect(messages[1].providerOptions?.bedrock?.cachePoint).toBeUndefined()
         const provider = createAmazonBedrock({
           apiKey: "test-key",
           region: "us-east-1",
@@ -2758,11 +2761,12 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
                 { role: "user", content: [{ text: "Think" }] },
                 {
                   role: "assistant",
-                  content: [{ text: "Earlier answer" }, ...(cached ? [{ cachePoint: { type: "default" } }] : [])],
+                  // Tiny prompt (< Bedrock's ~1024-token minimum) → no cache point.
+                  content: [{ text: "Earlier answer" }],
                 },
                 {
                   role: "user",
-                  content: [{ text: "Continue" }, ...(cached ? [{ cachePoint: { type: "default" } }] : [])],
+                  content: [{ text: "Continue" }],
                 },
               ])
               return Response.json({
@@ -3456,7 +3460,10 @@ describe("ProviderTransform.message - claude w/bedrock custom inference profile"
     const msgs = [
       {
         role: "user",
-        content: "Hello",
+        // Large enough to exceed Bedrock's minimum cacheable size (~1024 tokens);
+        // undersized prompts intentionally skip the cache point (see the
+        // "minimum cacheable size" suite below).
+        content: "Hello ".repeat(1200),
       },
     ] as any[]
 
@@ -3491,7 +3498,8 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
     const msgs = [
       {
         role: "system",
-        content: "You are a helpful assistant",
+        // Large enough to clear Bedrock's minimum cacheable size (~1024 tokens).
+        content: "You are a helpful assistant. ".repeat(300),
       },
       {
         role: "user",
@@ -3505,7 +3513,49 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
     expect(result[0].providerOptions?.bedrock).toEqual({
       cachePoint: { type: "default" },
     })
-    expect(result[0].content).toBe("You are a helpful assistant")
+    expect(result[0].content).toBe("You are a helpful assistant. ".repeat(300))
+  })
+})
+
+describe("ProviderTransform.message - bedrock minimum cacheable size", () => {
+  const bedrockModel = {
+    id: "amazon-bedrock/global.anthropic.claude-opus-4",
+    providerID: "amazon-bedrock",
+    api: {
+      id: "global.anthropic.claude-opus-4",
+      url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+      npm: "@ai-sdk/amazon-bedrock",
+    },
+    name: "Claude Opus 4",
+    capabilities: {},
+    options: {},
+    headers: {},
+  } as any
+
+  test("skips the cache point when the prompt is below the minimum (~1024 tokens)", () => {
+    // A tiny prompt — e.g. the first turn of a freshly forked session. Bedrock
+    // would reject a cache point here with HTTP 400 "nothing available to cache".
+    const msgs = [
+      { role: "system", content: "You are helpful" },
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+
+    for (const msg of result) {
+      expect(msg.providerOptions?.bedrock?.cachePoint).toBeUndefined()
+    }
+  })
+
+  test("adds the cache point once the prompt clears the minimum", () => {
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant. ".repeat(300) },
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+
+    expect(result.some((msg) => msg.providerOptions?.bedrock?.cachePoint?.type === "default")).toBe(true)
   })
 })
 
