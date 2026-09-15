@@ -46,3 +46,6 @@ data/knowledge.db
 # must be allow-listed explicitly instead of being silently hidden.
 # If a new runtime DB appears, add its explicit path above + re-run:
 #   git check-ignore -v <path>; git status --short
+
+# Local Playwright MCP run outputs (console logs + page snapshots) — never commit.
+.playwright-mcp/

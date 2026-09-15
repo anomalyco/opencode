@@ -17,6 +17,9 @@ export const Local = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean).annotate({
     description: "Enable or disable the MCP server on startup",
   }),
+  codemode: Schema.optional(Schema.Boolean).annotate({
+    description: "Expose MCP tools via codemode (true) or directly (false). Defaults to true.",
+  }),
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
   }),
@@ -52,6 +55,9 @@ export const Remote = Schema.Struct({
   }),
   oauth: Schema.optional(Schema.Union([OAuth, Schema.Literal(false)])).annotate({
     description: "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
+  }),
+  codemode: Schema.optional(Schema.Boolean).annotate({
+    description: "Expose MCP tools via codemode (true) or directly (false). Defaults to true.",
   }),
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",

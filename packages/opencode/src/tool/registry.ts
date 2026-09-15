@@ -267,7 +267,9 @@ const layer = Layer.effect(
       const filtered = items.filter(
         (item) => Permission.evaluate("task", item.name, agent.permission).action !== "deny",
       )
-      const list = filtered.toSorted((a, b) => a.name.localeCompare(b.name))
+      const list = filtered
+        .filter((item): item is Agent.Info => Boolean(item && typeof item.name === "string"))
+        .toSorted((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
       const description = list
         .map(
           (item) =>
@@ -305,7 +307,19 @@ const layer = Layer.effect(
       const codeModeDescription = filtered.some((tool) => tool.id === "execute")
         ? yield* describeCodeMode(input)
         : undefined
-      const visible = filtered.filter((tool) => tool.id !== "execute" || codeModeDescription)
+      const mcpTools = yield* mcp.tools()
+      const mcpDirectTools: Tool.Def[] = []
+      for (const [key, mcpTool] of Object.entries(mcpTools)) {
+        const converted = McpCatalog.convertTool(mcpTool.def, mcpTool.client, mcpTool.timeout)
+        mcpDirectTools.push({
+          id: key,
+          description: converted.description,
+          parameters: (converted as any).inputSchema ?? (converted as any).jsonSchema,
+          jsonSchema: (converted as any).jsonSchema ?? (converted as any).inputSchema,
+          execute: (converted as any).execute,
+        } as unknown as Tool.Def)
+      }
+      const visible = [...filtered.filter((tool) => tool.id !== "execute" || codeModeDescription), ...mcpDirectTools]
 
       return yield* Effect.forEach(
         visible,

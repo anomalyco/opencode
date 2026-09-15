@@ -321,7 +321,6 @@ function isDirectServer(value: Record<string, unknown>) {
 function normalizeServer(input: unknown, path: string[], diagnostics: Diagnostic[]) {
   const server = decodeValue(Server, input, path, diagnostics)
   if (server === undefined) return
-  if (server.codemode !== undefined) unsupported([...path, "codemode"], diagnostics)
   if (server.timeout && lowerTimeout(server.timeout) === undefined && Object.keys(server.timeout).length)
     unsupported([...path, "timeout"], diagnostics)
   const raw = decodeRecord(input)
@@ -372,8 +371,8 @@ function lowerServer(input: Schema.Schema.Type<typeof Server>) {
     enabled: input.disabled !== true,
   }
   delete result.disabled
-  delete result.codemode
   delete result.timeout
+  if (input.codemode !== undefined) result.codemode = input.codemode
 
   if (input.timeout) {
     const timeout = lowerTimeout(input.timeout)
