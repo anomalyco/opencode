@@ -1078,6 +1078,39 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
+    const LOOP_GUARD_CONSECUTIVE_IDENTICAL_TOOL_CALLS = 10
+
+    function canonicalize(value: unknown): string {
+      if (value === undefined) return "undefined"
+      if (value === null || typeof value !== "object") return JSON.stringify(value)
+      if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`
+      const entries = Object.entries(value as Record<string, unknown>)
+        .filter(([, v]) => v !== undefined)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalize(v)}`).join(",")}}`
+    }
+
+    function identicalToolCallLoop(
+      msgs: SessionV1.WithParts[],
+      userID: string,
+    ): { tool: string; count: number } | undefined {
+      const calls: { tool: string; signature: string }[] = []
+      for (const msg of msgs) {
+        if (msg.info.role !== "assistant" || msg.info.parentID !== userID) continue
+        for (const part of msg.parts) {
+          if (part.type !== "tool" || part.metadata?.providerExecuted || isOrphanedInterruptedTool(part)) continue
+          const input = "input" in part.state ? part.state.input : undefined
+          calls.push({ tool: part.tool, signature: `${part.tool}:${canonicalize(input)}` })
+        }
+      }
+      if (calls.length < LOOP_GUARD_CONSECUTIVE_IDENTICAL_TOOL_CALLS) return undefined
+      const tail = calls.slice(-LOOP_GUARD_CONSECUTIVE_IDENTICAL_TOOL_CALLS)
+      if (tail.every((call) => call.signature === tail[0].signature)) {
+        return { tool: tail[0].tool, count: tail.length }
+      }
+      return undefined
+    }
+
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
@@ -1126,6 +1159,21 @@ const layer = Layer.effect(
               })
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
+            break
+          }
+
+          const loopTrip = identicalToolCallLoop(msgs, lastUser.id)
+          if (loopTrip) {
+            const error = new NamedError.Unknown({
+              message: `Stopped: tool "${loopTrip.tool}" was called ${loopTrip.count} consecutive times with identical arguments. This looks like an agent loop; aborting to prevent unbounded token burn.`,
+              ref: "repeated-identical-tool-call",
+            }).toObject()
+            yield* Effect.logWarning("loop exit: repeated identical tool calls", {
+              "session.id": sessionID,
+              tool: loopTrip.tool,
+              count: loopTrip.count,
+            })
+            yield* events.publish(Session.Event.Error, { sessionID, error })
             break
           }
 
