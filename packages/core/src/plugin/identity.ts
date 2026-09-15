@@ -18,7 +18,7 @@ export function identity(model: { readonly provider: string; readonly name: stri
 export const Plugin = define({
   id: "opencode.prompt.identity",
   effect: Effect.fn("IdentityPlugin")(function* (ctx) {
-    const hook = (event: SessionHooks["context"] | SessionHooks["title"]) =>
+    const hook = (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
         const model =
           (yield* ctx.model.list()).data.find(
@@ -36,6 +36,5 @@ export const Plugin = define({
     yield* ctx.session.hook("context", hook)
     yield* ctx.session.hook("compaction", hook)
     yield* ctx.session.hook("generate", hook)
-    yield* ctx.session.hook("title", hook)
   }),
 })

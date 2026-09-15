@@ -69,18 +69,5 @@ it.effect("inserts the structured model block after the agent prompt", () =>
       identity("Test Provider", "unknown-model", "unknown-model"),
       "Initial context",
     ])
-
-    const title: SessionHooks["title"] = {
-      sessionID: Session.ID.make("ses_model_identity"),
-      model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("meta/muse-spark-1.1") }),
-      system: [SystemPart.make("You are a title generator.")],
-      messages: [],
-      options: {},
-    }
-    yield* hooks.trigger("session", "title", title)
-    expect(title.system.map((part) => part.text)).toEqual([
-      "You are a title generator.",
-      identity("Test Provider", "Muse Spark", "meta/muse-spark-1.1"),
-    ])
   }),
 )
