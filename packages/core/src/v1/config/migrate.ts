@@ -1,5 +1,6 @@
 export * as ConfigMigrateV1 from "./migrate"
 
+import { Option, Schema } from "effect"
 import { ConfigV1 } from "./config"
 import { ConfigAgentV1 } from "./agent"
 import { ConfigMCPV1 } from "./mcp"
@@ -28,8 +29,24 @@ const keys = new Set([
 ])
 
 export function isV1(input: unknown) {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return false
+  if (!isRecord(input)) return false
   return Object.keys(input).some((key) => keys.has(key))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+// Normalize only MCP: a legacy block can coexist with native v2 settings.
+export function normalizeMcp(input: unknown) {
+  if (!isRecord(input) || !isRecord(input.mcp)) return input
+  // Native timeout fields take precedence over a legacy server named `timeout`.
+  const timeout = input.mcp.timeout
+  if (isRecord(timeout) && ("startup" in timeout || "request" in timeout)) return input
+  const decoded = Schema.decodeUnknownOption(ConfigV1.Info.fields.mcp, { onExcessProperty: "ignore" })(input.mcp)
+  if (Option.isNone(decoded)) return input
+  const migrated = mcp({ mcp: decoded.value })
+  return migrated ? { ...input, mcp: migrated } : input
 }
 
 export function migrate(info: typeof ConfigV1.Info.Type) {
