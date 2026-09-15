@@ -67,7 +67,6 @@ type MessagePhase = Schema.Schema.Type<typeof MessagePhase>
 
 export const MessageMetadata = Schema.Struct({
   itemId: Schema.optional(Schema.String),
-  type: Schema.optional(Schema.Literal("message")),
   status: Schema.optional(Schema.String),
   phase: Schema.optional(MessagePhase),
 })
@@ -174,12 +173,12 @@ type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
 
 export const InputItem = Schema.Union([
   CompactionItem,
-  Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
-  Schema.Struct({ role: Schema.tag("developer"), content: Schema.String }),
+  Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("system"), content: Schema.String }),
+  Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({
+    type: Schema.tag("message"),
     role: Schema.tag("user"),
     content: Schema.Array(OpenResponsesInputContent),
-    type: Schema.optional(Schema.Literal("message")),
     id: Schema.optional(Schema.String),
     status: Schema.optional(Schema.String),
   }),
@@ -666,6 +665,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
         continue
       }
       input.push({
+        type: "message",
         role: "developer",
         content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(adapter.name, message)),
       })
@@ -675,7 +675,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
     if (message.role === "user") {
       const content = yield* Effect.forEach(message.content, (part) => lowerUserContent(part, request, adapter))
       if (content.length > 0)
-        input.push({ role: "user", content, type: metadata?.type, id: metadata?.itemId, status: metadata?.status })
+        input.push({ type: "message", role: "user", content, id: metadata?.itemId, status: metadata?.status })
       continue
     }
 
@@ -766,6 +766,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
               ? part.result.value
               : [{ type: "text", text: ProviderShared.toolResultText(part) }]
           input.push({
+            type: "message",
             role: "user",
             content: yield* Effect.forEach(content, (item) => lowerHostedToolResultContentItem(item, request, adapter)),
           })

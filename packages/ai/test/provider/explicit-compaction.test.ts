@@ -32,7 +32,7 @@ testEffect(
       if (new URL(request.url).pathname.endsWith("/compact")) {
         expect(JSON.parse(text)).toEqual({
           model: "overlaid",
-          input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+          input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] }],
           instructions: "request instructions",
           previous_response_id: "resp_previous",
         })
@@ -253,7 +253,7 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
       Effect.sync(() => {
         expect(JSON.parse(text)).toEqual({
           model: "fixture",
-          input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+          input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] }],
           service_tier: overlay?.service_tier ?? "flex",
           prompt_cache_key: overlay?.prompt_cache_key ?? "affinity",
           prompt_cache_retention: "24h",
@@ -394,7 +394,7 @@ for (const model of [
         if (new URL(request.url).pathname.endsWith("/responses/compact")) {
           expect(body).toEqual({
             model: model.id,
-            input: [{ role: "user", content: [{ type: "input_text", text: "original" }] }],
+            input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "original" }] }],
             instructions: "system",
           })
           return respond(
@@ -407,7 +407,7 @@ for (const model of [
           )
         }
         expect(new URL(request.url).pathname.endsWith("/responses")).toBe(true)
-        expect(body.input).toEqual([...output, { role: "user", content: [{ type: "input_text", text: "continue" }] }])
+        expect(body.input).toEqual([...output, { type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] }])
         return respond(sseEvents({ type: "response.completed", response: { id: "resp_1", output: [] } }), {
           headers: { "content-type": "text/event-stream" },
         })

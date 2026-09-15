@@ -263,9 +263,9 @@ describe("OpenAI Responses effort updates", () => {
 
       expect(prepared.body.reasoning).toEqual({ effort: "high" })
       expect(prepared.body.input).toEqual([
-        { role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
         { type: "configuration_update", reasoning: { effort: "low" } },
-        { role: "user", content: [{ type: "input_text", text: "After." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
       ])
     }),
   )
@@ -287,9 +287,9 @@ describe("OpenAI Responses effort updates", () => {
 
       expect(prepared.body.reasoning).toEqual({ effort: "medium" })
       expect(prepared.body.input).toEqual([
-        { role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
         { type: "configuration_update", reasoning: { effort: "xhigh" } },
-        { role: "user", content: [{ type: "input_text", text: "After." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
       ])
     }),
   )
@@ -404,9 +404,9 @@ describe("OpenAI Responses effort updates", () => {
         const body = JSON.parse(text)
         expect(body.reasoning).toEqual({ effort: "high" })
         expect(body.input).toEqual([
-          { role: "user", content: [{ type: "input_text", text: "Before." }] },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
           { type: "configuration_update", reasoning: { effort: "low" } },
-          { role: "user", content: [{ type: "input_text", text: "After." }] },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
           { type: "compaction_trigger" },
         ])
         return respond(sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }), {
@@ -426,8 +426,8 @@ describe("OpenAI Responses effort updates", () => {
       Effect.sync(() => {
         expect(new URL(request.url).pathname).toEndWith("/responses/compact")
         expect(JSON.parse(text).input).toEqual([
-          { role: "user", content: [{ type: "input_text", text: "Before." }] },
-          { role: "user", content: [{ type: "input_text", text: "After." }] },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
         ])
         return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
       }),
