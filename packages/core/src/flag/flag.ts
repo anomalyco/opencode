@@ -48,6 +48,9 @@ export const Flag = {
 
   OPENCODE_WORKSPACE_ID: process.env["OPENCODE_WORKSPACE_ID"],
   OPENCODE_EXPERIMENTAL_WORKSPACES: enabledByExperimental("OPENCODE_EXPERIMENTAL_WORKSPACES"),
+  OPENCODE_EXPERIMENTAL_HOT_RELOAD: Config.boolean("OPENCODE_EXPERIMENTAL_HOT_RELOAD").pipe(
+    Config.withDefault(false),
+  ),
 
   // Evaluated at access time (not module load) because tests, the CLI, and
   // external tooling set these env vars at runtime.

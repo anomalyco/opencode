@@ -103,13 +103,29 @@ const layer = Layer.effect(
       )
     }
 
-    const config = (yield* (yield* Config.Service).entries())
+    const configService = yield* Config.Service
+    const entries = yield* configService.entries()
+    const config = entries
       .filter((entry): entry is Config.Document => entry.type === "document")
       .flatMap((item) => item.info.watcher?.ignore ?? [])
-    if (location.vcs && (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER)) {
+    const projectWatched = location.vcs && (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER)
+    if (projectWatched) {
       yield* Effect.forkScoped(
         subscribe(location.directory, [...Ignore.PATTERNS, ...config, ...protecteds(location.directory)]),
       )
+    }
+
+    // Hot reload wants change events for config directories (global config
+    // dir and .opencode dirs) even when the project itself is not watched.
+    if (yield* Flag.OPENCODE_EXPERIMENTAL_HOT_RELOAD) {
+      for (const entry of entries) {
+        if (entry.type !== "directory") continue
+        const relative = path.relative(location.directory, entry.path)
+        const insideProject = !relative.startsWith("..") && !path.isAbsolute(relative)
+        if (projectWatched && insideProject) continue
+        if (!(yield* fs.isDir(entry.path))) continue
+        yield* Effect.forkScoped(subscribe(entry.path, [...Ignore.PATTERNS, ...config]))
+      }
     }
 
     if (location.vcs?.type === "git") {

@@ -122,6 +122,26 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     }
 
     function handleEvent(event: V2Event) {
+      // server.instance.disposed is a raw bus event outside the schema event
+      // union. Instance reloads (e.g. hot reload) dispose and rebuild server
+      // state, so refetch the location data that depends on it.
+      if ((event.type as string) === "server.instance.disposed") {
+        void Promise.allSettled([
+          result.location.agent.refresh(event.location),
+          result.location.command.refresh(event.location),
+          result.location.skill.refresh(event.location),
+          result.location.model.refresh(event.location),
+          result.location.provider.refresh(event.location),
+          result.location.integration.refresh(event.location),
+          result.location.reference.refresh(event.location),
+        ]).then((settled) => {
+          // These race the instance rebuild. Swallowing a rejection here leaves the
+          // TUI showing the stale skills and commands hot reload exists to replace.
+          for (const failure of settled.filter((item) => item.status === "rejected"))
+            console.error("Failed to refresh location data after instance reload", failure.reason)
+        })
+        return
+      }
       switch (event.type) {
         case "catalog.updated":
           void Promise.all([
