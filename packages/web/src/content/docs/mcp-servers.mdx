@@ -510,3 +510,37 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### SuperCompress
+
+Add the [SuperCompress](https://www.supercompress.dev) MCP server to compress large tool outputs, logs, diffs, and pasted files before they are sent to the model.
+
+```json title="opencode.json" {4-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "supercompress": {
+      "type": "local",
+      "command": ["npx", "-y", "-p", "supercompress-proxy", "supercompress-mcp"],
+      "enabled": true,
+      "timeout": 60000
+    }
+  }
+}
+```
+
+The `timeout` is raised above the 5 second default because the first run downloads the package through `npx`.
+
+The server exposes `compress_context`, `connect_account`, and `usage_summary`. The first time you compress, use the `connect_account` tool to link your SuperCompress account; it opens a browser sign-in and stores the key in `~/.supercompress`.
+
+```txt "use supercompress"
+Compress this build log down to what matters for the failing test. use supercompress
+```
+
+Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/).
+
+```md title="AGENTS.md"
+When a tool dump, log, or diff is large, call `supercompress_compress_context` with the dump as `context` and the current question as `query`. Never compress the question itself.
+```
