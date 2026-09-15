@@ -211,8 +211,7 @@ export function createHomeSessionsController(home: HomeController) {
         const [, setStore] = ctx.sync.child(session.directory)
         if ((await ctx.sdk.protocol) !== "v1") return
         await archiveHomeSession({
-          server: ServerConnection.key(conn),
-          session,
+          sessionID: session.id,
           archive: (sessionID) =>
             ctx.sdk.client.session.update({
               sessionID,
