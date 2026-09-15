@@ -57,6 +57,7 @@ type OpenApiResponse = {
 // server still decodes string query params at runtime.
 const QueryParameterSchemas: Record<string, OpenApiSchema> = {
   "GET /experimental/session start": { type: "number" },
+  "GET /provider connected": QueryBooleanOpenApi,
   "GET /experimental/session roots": QueryBooleanOpenApi,
   "GET /experimental/session archived": QueryBooleanOpenApi,
   "GET /find/file limit": { type: "integer", minimum: 1, maximum: 200 },
