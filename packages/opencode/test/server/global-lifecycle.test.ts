@@ -4,7 +4,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Npm } from "@opencode-ai/core/npm"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
-import { Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Account } from "@/account/account"
@@ -23,7 +23,22 @@ import { NpmTest } from "../fake/npm"
 import { tmpdirScoped } from "../fixture/fixture"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 
-const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+let bootstrapRun: Effect.Effect<void> = Effect.void
+const noopBootstrap = Layer.succeed(
+  InstanceBootstrap.Service,
+  InstanceBootstrap.Service.of({ run: Effect.suspend(() => bootstrapRun) }),
+)
+
+const setBootstrap = (run: Effect.Effect<void>) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      bootstrapRun = run
+    }),
+    () =>
+      Effect.sync(() => {
+        bootstrapRun = Effect.void
+      }),
+  )
 const unexpectedHttp = HttpClient.make((request) =>
   Effect.die(`unexpected http request: ${request.method} ${request.url}`),
 )
@@ -97,6 +112,42 @@ describe("reloadWhenSessionsIdle", () => {
 
       expect(disposed).toHaveLength(1)
       expect(yield* store.load({ directory: dir })).not.toBe(ctx)
+    }),
+  )
+
+  it.live("waits for a session on an instance that loaded while another was still booting", () =>
+    Effect.gen(function* () {
+      const slow = yield* tmpdirScoped({ git: true })
+      const fast = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const status = yield* SessionStatus.Service
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      yield* setBootstrap(
+        Effect.gen(function* () {
+          if ((yield* InstanceRef)?.directory !== slow) return
+          yield* Deferred.succeed(started, undefined)
+          yield* Deferred.await(release)
+        }),
+      )
+      const disposed = yield* collectGlobalDisposed()
+
+      yield* store.load({ directory: slow }).pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* Deferred.await(started)
+      const reload = yield* reloadWhenSessionsIdle().pipe(Effect.forkScoped({ startImmediately: true }))
+      const ctx = yield* store.load({ directory: fast })
+      yield* status.set(sessionID, { type: "busy" }).pipe(Effect.provideService(InstanceRef, ctx))
+      yield* Deferred.succeed(release, undefined)
+
+      yield* Effect.sleep("600 millis")
+      expect(disposed).toHaveLength(0)
+      expect(yield* store.load({ directory: fast })).toBe(ctx)
+
+      yield* status.set(sessionID, { type: "idle" }).pipe(Effect.provideService(InstanceRef, ctx))
+      yield* awaitWithTimeout(Fiber.join(reload), "reload did not run after the session went idle")
+
+      expect(disposed).toHaveLength(1)
+      expect(yield* store.load({ directory: fast })).not.toBe(ctx)
     }),
   )
 })

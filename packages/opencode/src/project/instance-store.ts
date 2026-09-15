@@ -124,11 +124,17 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
       ).pipe(Effect.withSpan("InstanceStore.load"))
     }
 
+    // An entry that appears while an earlier one is still booting must be
+    // returned too, so snapshot again after the await and repeat until stable.
     const list = Effect.fn("InstanceStore.list")(function* () {
-      const exits = yield* Effect.forEach([...cache.values()], (entry) =>
-        Deferred.await(entry.deferred).pipe(Effect.exit),
-      )
-      return exits.filter(Exit.isSuccess).map((exit) => exit.value)
+      while (true) {
+        const entries = [...cache.values()]
+        const exits = yield* Effect.forEach(entries, (entry) => Deferred.await(entry.deferred).pipe(Effect.exit))
+        const current = [...cache.values()]
+        if (current.length === entries.length && current.every((entry, index) => entry === entries[index])) {
+          return exits.filter(Exit.isSuccess).map((exit) => exit.value)
+        }
+      }
     })
 
     const reload = (input: LoadInput): Effect.Effect<InstanceContext> => {
