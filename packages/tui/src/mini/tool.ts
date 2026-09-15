@@ -125,6 +125,7 @@ type ToolName =
   | "lsp"
   | "webfetch"
   | "websearch"
+  | "devsearch"
   | "skill"
 
 type ToolRule = {
@@ -420,6 +421,13 @@ function runWebSearch(p: ToolProps): ToolInline {
   return {
     icon: "◈",
     title: p.input.query ? `${title} "${p.input.query}"` : title,
+  }
+}
+
+function runDevSearch(p: ToolProps): ToolInline {
+  return {
+    icon: "◈",
+    title: p.input.query ? `Developer Search "${p.input.query}"` : "Developer Search",
   }
 }
 
@@ -887,6 +895,15 @@ function scrollWebSearchStart(p: ToolProps): string {
   return `◈ ${title} "${query}"`
 }
 
+function scrollDevSearchStart(p: ToolProps): string {
+  const query = p.input.query ?? ""
+  if (!query) {
+    return "◈ Developer Search"
+  }
+
+  return `◈ Developer Search "${query}"`
+}
+
 const TOOL_RULES = {
   invalid: {
     view: {
@@ -1052,6 +1069,16 @@ const TOOL_RULES = {
     run: runWebSearch,
     scroll: {
       start: scrollWebSearchStart,
+    },
+  },
+  devsearch: {
+    view: {
+      output: false,
+      final: false,
+    },
+    run: runDevSearch,
+    scroll: {
+      start: scrollDevSearchStart,
     },
   },
   skill: {

@@ -25,6 +25,7 @@ const toolDisplays = new Set([
   "grep",
   "webfetch",
   "websearch",
+  "devsearch",
   "write",
   "edit",
   "subagent",

@@ -265,6 +265,31 @@ Use `websearch` when you need to find information (discovery), and `webfetch` wh
 
 ---
 
+### devsearch
+
+Search developer sources.
+
+:::note
+This tool is only available when the Firecrawl integration is connected, either through the `/connect` command or the `FIRECRAWL_API_KEY` environment variable. It is separate from `websearch` and does not take part in web search provider selection.
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "devsearch": "allow"
+  }
+}
+```
+
+Searches an index built for coding agents: repositories, GitHub issues, merged pull requests, READMEs, and curated documentation sites. Results include the matched passages, so the model gets the relevant documentation excerpt or issue thread rather than a page summary.
+
+:::tip
+Use `devsearch` for how a library or API behaves, what an error message means, or whether a bug was fixed. Use `websearch` for everything else.
+:::
+
+---
+
 ### question
 
 Ask the user questions during execution.
