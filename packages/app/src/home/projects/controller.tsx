@@ -6,7 +6,7 @@ import { type LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
-import { closeHomeProject, errorMessage, homeProjectDirectories } from "@/shell/layout/helpers"
+import { closeHomeProject, displayName, errorMessage, homeProjectDirectories } from "@/shell/layout/helpers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -17,6 +17,7 @@ import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
 import { SessionTransfer } from "@opencode/schema/session-transfer"
 import { useSshAuthenticate } from "@/servers/ssh/authenticate"
+import { revealProject } from "./reveal"
 
 export const HomeServersSchema = Schema.Struct({
   collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
@@ -43,7 +44,7 @@ export function createHomeProjectsController(home: HomeController) {
   }
 
   function canRevealProject(conn: ServerConnection.Any) {
-    return platform.platform === "desktop" && !!platform.openPath && ServerConnection.local(conn)
+    return platform.platform === "desktop" && !!platform.revealPath && ServerConnection.local(conn)
   }
 
   function choose(conn: ServerConnection.Any) {
@@ -167,13 +168,27 @@ export function createHomeProjectsController(home: HomeController) {
       },
       canReveal: canRevealProject,
       reveal: (conn: ServerConnection.Any, project: LocalProject) => {
-        if (!platform.openPath || !canRevealProject(conn)) return
-        platform.openPath(project.worktree).catch((cause: unknown) =>
-          showToast({
-            title: language.t("common.requestFailed"),
-            description: errorMessage(cause, language.t("common.requestFailed")),
-          }),
-        )
+        if (!platform.revealPath || !canRevealProject(conn)) return
+        const context = global.ensureServerCtx(conn)
+        void revealProject({
+          directory: project.worktree,
+          reveal: platform.revealPath,
+          remove: context.projects.remove,
+        })
+          .then((revealed) => {
+            if (revealed) return
+            showToast({
+              variant: "error",
+              title: language.t("home.project.missing.title"),
+              description: language.t("home.project.missing.description", { name: displayName(project) }),
+            })
+          })
+          .catch((cause: unknown) =>
+            showToast({
+              title: language.t("common.requestFailed"),
+              description: errorMessage(cause, language.t("common.requestFailed")),
+            }),
+          )
       },
     },
     utility: {

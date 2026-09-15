@@ -55,6 +55,14 @@ export const UpdateInput = Schema.Struct({
   commands: optional(Commands),
 }).annotate({ identifier: "Project.UpdateInput" })
 export interface UpdateInput extends Schema.Schema.Type<typeof UpdateInput> {}
+export const CheckInput = Schema.Struct({
+  directories: Schema.Array(AbsolutePath).check(Schema.isMaxLength(256)),
+}).annotate({ identifier: "Project.CheckInput" })
+export interface CheckInput extends Schema.Schema.Type<typeof CheckInput> {}
+export const CheckOutput = Schema.Struct({
+  directories: Schema.Array(AbsolutePath),
+}).annotate({ identifier: "Project.CheckOutput" })
+export interface CheckOutput extends Schema.Schema.Type<typeof CheckOutput> {}
 
 const Updated = ephemeral({ type: "project.updated", schema: Info.fields })
 export const Event = { Updated, Definitions: inventory(Updated) }

@@ -32,6 +32,12 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const UpdateInput = ProjectSchema.UpdateInput
 export type UpdateInput = ProjectSchema.UpdateInput
 
+export const CheckInput = ProjectSchema.CheckInput
+export type CheckInput = ProjectSchema.CheckInput
+
+export const CheckOutput = ProjectSchema.CheckOutput
+export type CheckOutput = ProjectSchema.CheckOutput
+
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Project.NotFoundError", {
   projectID: ID,
 }) {}
@@ -59,6 +65,7 @@ export const root = Effect.fn("Project.root")(function* (
 
 export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
+  readonly check: (input: CheckInput) => Effect.Effect<CheckOutput>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   /** Resolves and persists the owning Project. */
   readonly resolve: (input: AbsolutePath, options?: { readonly discovery?: boolean }) => Effect.Effect<Resolved>
@@ -361,7 +368,22 @@ const layer = Layer.effect(
       })
     })
 
-    return Service.of({ list, update, resolve })
+    const check = Effect.fn("Project.check")(function* (input: CheckInput) {
+      const checked = yield* Effect.forEach(
+        input.directories,
+        (directory) =>
+          fs.stat(directory).pipe(
+            Effect.map((info) => ({ directory, exists: info.type === "Directory" })),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed({ directory, exists: false })),
+            // Permission and transient mount failures do not prove the project was deleted.
+            Effect.catch(() => Effect.succeed({ directory, exists: true })),
+          ),
+        { concurrency: 16 },
+      )
+      return { directories: checked.filter((item) => item.exists).map((item) => item.directory) }
+    })
+
+    return Service.of({ list, check, update, resolve })
   }),
 )
 

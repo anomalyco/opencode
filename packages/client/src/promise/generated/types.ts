@@ -303,6 +303,8 @@ export type ProjectCommands = { start?: string }
 
 export type ProjectTime = { created: number; updated: number }
 
+export type ProjectCheckOutput2 = { directories: Array<string> }
+
 export type FormMetadata = { [x: string]: JsonValue }
 
 export type FormValue = string | number | boolean | Array<string>
@@ -1342,6 +1344,7 @@ export type ModelCompatibility = {
   maxTokensField?: ModelMaxTokensField
   requireFinishReason?: boolean
   requireAssistantAfterTool?: boolean
+  supportsPromptCacheKey?: boolean
 }
 
 export type ProviderInfo = {
@@ -4721,6 +4724,10 @@ export type CredentialRemoveInput = { readonly credentialID: { readonly credenti
 export type CredentialRemoveOutput = void
 
 export type ProjectListOutput = Array<Project>
+
+export type ProjectCheckInput = { readonly directories: { readonly directories: ReadonlyArray<string> }["directories"] }
+
+export type ProjectCheckOutput = ProjectCheckOutput2
 
 export type ProjectUpdateInput = {
   readonly projectID: { readonly projectID: string }["projectID"]
