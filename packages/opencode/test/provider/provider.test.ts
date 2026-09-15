@@ -333,6 +333,29 @@ it.instance("getModel throws ModelNotFoundError for invalid provider", () =>
   }),
 )
 
+it.instance("getModel resolves OpenRouter route-modifier suffixes against the base model", () =>
+  Effect.gen(function* () {
+    yield* set("OPENROUTER_API_KEY", "test-api-key")
+    const model = yield* Provider.use.getModel(
+      ProviderV2.ID.openrouter,
+      ModelV2.ID.make("openai/gpt-5.6-luna:floor"),
+    )
+    expect(String(model.id)).toBe("openai/gpt-5.6-luna:floor")
+    expect(model.api.id).toBe("openai/gpt-5.6-luna:floor")
+    expect(model.api.npm).toBe("@openrouter/ai-sdk-provider")
+  }),
+)
+
+it.instance("getModel throws ModelNotFoundError for unknown route-modifier base", () =>
+  Effect.gen(function* () {
+    yield* set("OPENROUTER_API_KEY", "test-api-key")
+    const exit = yield* Provider.use
+      .getModel(ProviderV2.ID.openrouter, ModelV2.ID.make("openai/nonexistent-model:floor"))
+      .pipe(Effect.exit)
+    expect(exit._tag).toBe("Failure")
+  }),
+)
+
 // Pure synchronous unit tests — no Effect runtime needed.
 
 test("parseModel correctly parses provider/model string", () => {
