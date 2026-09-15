@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
+import { INLINE_TOOL_ICON_WIDTH } from "../../../src/routes/session/message-parts"
+import { stringWidth } from "../../../src/util/string-width"
 import {
   InlineToolRow,
   executeCallSummary,
@@ -202,17 +204,53 @@ describe("TUI inline tool wrapping", () => {
 
   test("summarizes generic tool arguments on one line", () => {
     expect(
-      genericToolSummary("demo_search_catalog", {
-        query: "wireless keyboard",
-        limit: 8,
-        includeArchived: false,
-        filters: { category: "accessories" },
-      }),
+      genericToolSummary(
+        "demo_search_catalog",
+        {
+          query: "wireless keyboard",
+          limit: 8,
+          includeArchived: false,
+          filters: { category: "accessories" },
+        },
+        100,
+      ),
     ).toBe("demo_search_catalog [query=wireless keyboard, limit=8, includeArchived=false]")
-    expect(genericToolSummary("demo_get_weather", { city: "Tokyo", units: "celsius" })).toBe(
+    expect(genericToolSummary("demo_get_weather", { city: "Tokyo", units: "celsius" }, 100)).toBe(
       "demo_get_weather [city=Tokyo, units=celsius]",
     )
-    expect(genericToolSummary("demo_refresh", {})).toBe("demo_refresh")
+    expect(genericToolSummary("demo_refresh", {}, 100)).toBe("demo_refresh")
+  })
+
+  test.each([36, 72, 120])("keeps a 5000-character generic tool summary on one row at %i columns", async (width) => {
+    const input = { content: "0123456789".repeat(500) }
+    const frame = await renderFrame(
+      () => (
+        <InlineToolRow icon="✓" complete={true} pending="">
+          {genericToolSummary("ingest_document", input, width - 3 - INLINE_TOOL_ICON_WIDTH)}
+        </InlineToolRow>
+      ),
+      { width, height: 5 },
+    )
+    expect(frame.split("\n")).toHaveLength(1)
+    expect(frame).toStartWith("   ✓ ingest_document [content=")
+    expect(frame).toEndWith("…")
+    expect(stringWidth(frame)).toBe(width)
+    expect(input.content).toBe("0123456789".repeat(500))
+  })
+
+  test("truncates generic summaries by display width without splitting graphemes", () => {
+    expect(genericToolSummary("tool", { text: "中文测试" }, 18)).toBe("tool [text=中文测…")
+    expect(genericToolSummary("tool", { text: "👨‍👩‍👧‍👦".repeat(20) }, 16)).toBe("tool [text=👨‍👩‍👧‍👦👨‍👩‍👧‍👦…")
+    expect(genericToolSummary("tool", { text: "e\u0301".repeat(20) }, 14)).toBe("tool [text=e\u0301e\u0301…")
+  })
+
+  test("bounds the whole generic summary, including tool names and multiple arguments", () => {
+    expect(genericToolSummary("very_long_tool_name", {}, 8)).toBe("very_lo…")
+    expect(genericToolSummary("tool", { a: "123", b: "456", c: "789" }, 21)).toBe("tool [a=123, b=456, …")
+    expect(genericToolSummary("tool", { text: "first\nsecond\tthird" }, 100)).toBe("tool [text=first second third]")
+    expect(genericToolSummary("tool", {}, 4)).toBe("tool")
+    expect(genericToolSummary("tool", {}, 1)).toBe("…")
+    expect(genericToolSummary("tool", {}, 0)).toBe("")
   })
 
   test("ignores diagnostics with malformed nested ranges", () => {
