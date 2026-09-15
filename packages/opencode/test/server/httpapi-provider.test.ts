@@ -48,6 +48,11 @@ function providerList(input: unknown, key: "all" | "providers") {
   return input[key]
 }
 
+function connectedList(input: unknown) {
+  if (!isRecord(input) || !Array.isArray(input.connected)) return []
+  return input.connected
+}
+
 function providerByID(input: unknown, key: "all" | "providers", id: string) {
   return providerList(input, key).find((provider) => isRecord(provider) && provider.id === id)
 }
@@ -376,6 +381,51 @@ describe("provider HttpApi", () => {
       expect(hasNonZeroModelCost(configBody, "providers", "google")).toBe(true)
     }),
     { ...projectOptions, init: writeFunctionOptionsPlugin },
+  )
+
+  it.instance(
+    "memoizes the /provider payload between requests and refreshes it when credentials change",
+    Effect.gen(function* () {
+      const directory = (yield* TestInstance).directory
+      const googleAuth = JSON.stringify({
+        google: { type: "oauth", refresh: "dummy", access: "dummy", expires: 9999999999999 },
+      })
+      const headers = { "x-opencode-directory": directory }
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const previous = process.env.OPENCODE_AUTH_CONTENT
+          process.env.OPENCODE_AUTH_CONTENT = googleAuth
+          return previous
+        }),
+        (previous) =>
+          Effect.sync(() => {
+            if (previous === undefined) delete process.env.OPENCODE_AUTH_CONTENT
+            else process.env.OPENCODE_AUTH_CONTENT = previous
+          }),
+      )
+
+      const first = yield* request("/provider", { headers })
+      const second = yield* request("/provider", { headers })
+      expect(first.status).toBe(200)
+      expect(second.status).toBe(200)
+      const firstBody = yield* first.text
+      expect(yield* second.text).toBe(firstBody)
+      expect(connectedList(JSON.parse(firstBody))).toContain("google")
+
+      process.env.OPENCODE_AUTH_CONTENT = "{}"
+      const cleared = yield* request("/provider", { headers })
+      expect(cleared.status).toBe(200)
+      const clearedBody = yield* cleared.text
+      expect(clearedBody).not.toBe(firstBody)
+      expect(connectedList(JSON.parse(clearedBody))).not.toContain("google")
+
+      process.env.OPENCODE_AUTH_CONTENT = googleAuth
+      const restored = yield* request("/provider", { headers })
+      expect(restored.status).toBe(200)
+      expect(yield* restored.text).toBe(firstBody)
+    }),
+    projectOptions,
+    30000,
   )
 
   it.instance(

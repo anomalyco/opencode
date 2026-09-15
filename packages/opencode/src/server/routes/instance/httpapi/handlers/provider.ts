@@ -39,7 +39,20 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     const svc = yield* ProviderAuth.Service
     const authStore = yield* Auth.Service
 
-    const list = Effect.fn("ProviderHttpApi.list")(function* () {
+    // PERF: the provider list is expensive to build (models.dev catalog transform +
+    // deep clone + per-model schema validation) and to serialize (5MB+ JSON).
+    // Config, catalog, and connected providers are reference-stable between
+    // reloads, so they are memoized by identity; Auth.all() allocates a fresh
+    // object per call, so credentials are memoized by serialized value instead.
+    let listCache: {
+      config: unknown
+      all: unknown
+      connected: unknown
+      credentialsJSON: string
+      json: Uint8Array
+    } | undefined
+
+    const computeList = Effect.fn("ProviderHttpApi.list.compute")(function* () {
       const config = yield* cfg.get()
       const all = yield* ModelsDev.Service.use((s) => s.get())
       const disabled = new Set(config.disabled_providers ?? [])
@@ -54,11 +67,31 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
         mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
         connected,
       )
-      return {
+      const result = {
         all: Object.values(providers).map(Provider.toPublicInfo),
         default: Provider.defaultModelIDs(providers),
         connected: Object.keys(providers).filter((id) => id in connected || credentials[id]),
       }
+      const json = new TextEncoder().encode(JSON.stringify(result))
+      listCache = { config, all, connected, credentialsJSON: JSON.stringify(credentials), json }
+      return json
+    })
+
+    const list = Effect.fn("ProviderHttpApi.list")(function* () {
+      const config = yield* cfg.get()
+      const all = yield* ModelsDev.Service.use((s) => s.get())
+      const connected = yield* provider.list()
+      const credentialsJSON = JSON.stringify(yield* authStore.all().pipe(Effect.orDie))
+      const hit =
+        listCache !== undefined &&
+        listCache.config === config &&
+        listCache.all === all &&
+        listCache.connected === connected &&
+        listCache.credentialsJSON === credentialsJSON
+          ? listCache.json
+          : undefined
+      const json = hit ?? (yield* computeList())
+      return HttpServerResponse.uint8Array(json, { contentType: "application/json" })
     })
 
     const auth = Effect.fn("ProviderHttpApi.auth")(function* () {

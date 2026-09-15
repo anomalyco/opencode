@@ -111,6 +111,7 @@ import { workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { compressionLayer } from "./middleware/compression"
+import { slowRequestLogLayer } from "./middleware/slow-request-log"
 import { corsVaryFix } from "./middleware/cors-vary"
 import { errorLayer } from "./middleware/error"
 import { fenceLayer } from "./middleware/fence"
@@ -285,6 +286,7 @@ export function createRoutes(
     Layer.provide([
       errorLayer,
       compressionLayer,
+      slowRequestLogLayer,
       corsVaryFix,
       fenceLayer,
       cors(corsOptions),
