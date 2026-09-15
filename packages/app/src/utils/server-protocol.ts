@@ -10,10 +10,15 @@ function headers(server: ServerConnection.HttpBase) {
   }
 }
 
+// Cold-start Chromium network-service init (e.g. enumerating a large corporate CA store) can
+// stall a renderer's first fetch to the local sidecar for 15-20s+ even though the server itself
+// answers instantly — measured 19.5s on a locked-down corporate machine. A short timeout here
+// falsely triggers the "v2" default before the real (v1) health check ever completes. 60s matches
+// the sidecar's own SIDECAR_START_STALL_TIMEOUT in server.ts.
 async function probe(server: ServerConnection.HttpBase, fetch: typeof globalThis.fetch, path: string) {
   const response = await fetch(new URL(path, server.url), {
     headers: headers(server),
-    signal: AbortSignal.timeout(5_000),
+    signal: AbortSignal.timeout(60_000),
   })
   if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return
   const value: unknown = await response.json()
