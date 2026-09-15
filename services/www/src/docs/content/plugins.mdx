@@ -50,6 +50,9 @@ OpenCode also loads direct `.ts` and `.js` files and immediate plugin package di
     └── acme-package/
 ```
 
+Local files can import `@opencode/plugin` without installing it; OpenCode resolves the package at runtime. Other
+dependencies must be installed next to the plugin.
+
 Global plugins use the same discovery layout under the OpenCode config directory.
 
 ```text

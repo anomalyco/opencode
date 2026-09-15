@@ -143,8 +143,10 @@ function exitsWithin(process: Bun.Subprocess, milliseconds: number) {
   return Promise.race([process.exited.then(() => true), Bun.sleep(milliseconds).then(() => false)])
 }
 
+// A loose plugin file has no node_modules: the compiled executable must serve
+// its bundled SDK to this import.
 function pluginSource() {
-  return 'export default { id: "smoke", setup: async () => {} }\n'
+  return 'import { Plugin } from "@opencode/plugin"\nexport default Plugin.define({ id: "smoke", setup: async () => {} })\n'
 }
 
 async function pluginIDs(url: string, headers: HeadersInit) {
