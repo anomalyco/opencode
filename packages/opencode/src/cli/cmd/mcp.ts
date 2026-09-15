@@ -1,6 +1,6 @@
 import { cmd } from "./cmd"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { effectCmd } from "../effect-cmd"
+import { effectCmd, fail } from "../effect-cmd"
 import { Cause } from "effect"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -99,6 +99,7 @@ export const McpCommand = cmd({
     yargs
       .command(McpAddCommand)
       .command(McpListCommand)
+      .command(McpToolsCommand)
       .command(McpAuthCommand)
       .command(McpLogoutCommand)
       .command(McpDebugCommand)
@@ -164,6 +165,72 @@ export const McpListCommand = effectCmd({
     }
 
     prompts.outro(`${servers.length} server(s)`)
+  }),
+})
+
+export const McpToolsCommand = effectCmd({
+  command: "tools [name]",
+  describe: "list tools exposed by MCP servers",
+  builder: (yargs) =>
+    yargs.positional("name", {
+      describe: "name of the MCP server (shows tool descriptions when specified)",
+      type: "string",
+    }),
+  handler: Effect.fn("Cli.mcp.tools")(function* (args) {
+    const cfg = yield* Config.Service
+    const config = yield* cfg.get()
+    const servers = configuredServers(config)
+      .filter(([name]) => args.name === undefined || name === args.name)
+      .toSorted(([a], [b]) => a.localeCompare(b))
+
+    if (args.name !== undefined && servers.length === 0)
+      return yield* fail(`MCP server "${args.name}" not found. Run "opencode mcp list" to list configured servers.`)
+
+    UI.empty()
+    prompts.intro("MCP Tools")
+    if (servers.length === 0) {
+      prompts.log.warn("No MCP servers configured")
+      prompts.outro("Add servers with: opencode mcp add")
+      return
+    }
+
+    const mcp = yield* MCP.Service
+    const statuses = yield* mcp.status()
+    const results = yield* Effect.forEach(servers, ([name]) =>
+      Effect.gen(function* () {
+        const status = statuses[name]
+        if (status?.status === "connected") {
+          const tools = (yield* mcp.toolDefinitions(name)).toSorted((a, b) => a.name.localeCompare(b.name))
+          prompts.log.info(
+            `${name} · ${tools.length} tool(s)` +
+              (tools.length === 0 ? "\n  No tools exposed" : "") +
+              tools
+                .map((tool) => {
+                  const description = args.name === undefined ? "" : tool.description?.trim().replace(/\s+/g, " ")
+                  return `\n  ${tool.name}${description ? `\n    ${UI.Style.TEXT_DIM}${description}${UI.Style.TEXT_NORMAL}` : ""}`
+                })
+                .join(""),
+          )
+          return true
+        }
+        if (status?.status === "disabled") {
+          prompts.log.warn(`${name} · disabled`)
+          return args.name === undefined
+        }
+        if (status?.status === "needs_auth") {
+          prompts.log.warn(`${name} · needs authentication\n  Run: opencode mcp auth ${name}`)
+          return false
+        }
+        if (status?.status === "needs_client_registration") {
+          prompts.log.error(`${name} · needs client registration\n  ${status.error}`)
+          return false
+        }
+        prompts.log.error(`${name} · ${status?.status === "failed" ? `failed\n  ${status.error}` : "not initialized"}`)
+        return false
+      }),
+    )
+    prompts.outro(`${servers.length} server(s)`)
+    if (results.includes(false)) return yield* fail("Could not list tools from every requested MCP server.")
   }),
 })
 

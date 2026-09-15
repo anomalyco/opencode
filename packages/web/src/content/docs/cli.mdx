@@ -259,6 +259,26 @@ opencode mcp ls
 
 ---
 
+#### tools
+
+List the tools exposed by configured MCP servers, grouped by server.
+
+```bash
+opencode mcp tools
+```
+
+Specify a server name to include tool descriptions.
+
+```bash
+opencode mcp tools github
+```
+
+Disabled servers, authentication requirements, and connection failures are reported separately from empty tool lists. The command exits with a non-zero status if a requested server cannot be inspected. Disabled servers are reported without failing the command when listing all servers.
+
+This lists the tools exposed by each MCP server. An agent's permissions and tool configuration can further restrict which tools it can use.
+
+---
+
 #### auth
 
 Authenticate with an OAuth-enabled MCP server.
