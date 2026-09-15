@@ -47,6 +47,9 @@ export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   body: Schema.optional(JsonSchema),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  chunkTimeout: Schema.optional(Schema.Number).annotate({
+    description: "Abort the stream when no data chunk arrives within this many milliseconds.",
+  }),
 }) {}
 
 export namespace HttpOptions {
@@ -60,8 +63,9 @@ export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined
   const body = mergeJsonRecords(...items.map((item) => item?.body))
   const headers = mergeStringRecords(...items.map((item) => item?.headers))
   const query = mergeStringRecords(...items.map((item) => item?.query))
-  if (!body && !headers && !query) return undefined
-  return new HttpOptions({ body, headers, query })
+  const chunkTimeout = items.reduceRight((found, item) => found ?? item?.chunkTimeout, undefined as number | undefined)
+  if (!body && !headers && !query && chunkTimeout === undefined) return undefined
+  return new HttpOptions({ body, headers, query, chunkTimeout })
 }
 
 export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({

@@ -61,7 +61,7 @@ The `providers` object is keyed by the provider ID used in model references, suc
 | `env` | Ordered environment variable names that can provide the credential. |
 | `package` | Runtime provider package. |
 | `canonical` | Built-in provider ID whose catalog defaults this provider inherits. |
-| `settings` | JSON options passed to the runtime package. |
+| `settings` | JSON options passed to the runtime package, such as `baseURL` and `chunkTimeout`. |
 | `headers` | String-valued HTTP headers added to requests. |
 | `body` | JSON fields merged into request bodies. |
 | `models` | Models to add or override, keyed by the OpenCode model ID. |
@@ -86,7 +86,9 @@ models, and connection still apply.
 }
 ```
 
-`settings` is package-specific. A field only has an effect when the selected package supports it.
+`settings` is package-specific. A field only has an effect when the selected package supports it. Packages that
+support `chunkTimeout` abort a stream when no data chunk arrives within the given number of milliseconds, guarding
+against a stalled provider.
 
 ## Requests
 

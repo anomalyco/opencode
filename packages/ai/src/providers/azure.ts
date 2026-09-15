@@ -34,7 +34,6 @@ export type Settings = ProviderPackage.Settings &
     readonly queryParams?: Readonly<Record<string, string>>
     readonly useDeploymentBasedUrls?: boolean
   }
-
 const resourceBaseURL = (resourceName: string) => `https://${resourceName.trim()}.openai.azure.com/openai`
 
 const responsesRoute = OpenAIResponses.route.with({
@@ -150,17 +149,25 @@ const config = ({
   apiVersion,
   baseURL,
   body,
+  chunkTimeout,
   headers,
   queryParams,
   resourceName,
   useDeploymentBasedUrls,
   ...providerOptions
 }: Settings): Config => {
+  const http =
+    body === undefined && chunkTimeout === undefined
+      ? undefined
+      : {
+          body: body === undefined ? undefined : { ...body },
+          chunkTimeout,
+        }
   const common = {
     apiKey,
     apiVersion,
     headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    http,
     providerOptions,
     queryParams: queryParams === undefined ? undefined : { ...queryParams },
     useDeploymentBasedUrls,
