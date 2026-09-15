@@ -2,7 +2,7 @@ export * as PermissionV1 from "./permission"
 
 import { Schema } from "effect"
 export * from "@opencode-ai/schema/permission-v1"
-import { ID } from "@opencode-ai/schema/permission-v1"
+import { AutoLeaseID, ID } from "@opencode-ai/schema/permission-v1"
 
 export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionRejectedError", {}) {
   override get message() {
@@ -29,5 +29,12 @@ export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("Permiss
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Permission.NotFoundError", {
   requestID: ID,
 }) {}
+
+// Raised when renewing a lease that was already released or has expired. The
+// owner must acquire a new one instead of assuming auto mode is still active.
+export class AutoLeaseNotFoundError extends Schema.TaggedErrorClass<AutoLeaseNotFoundError>()(
+  "Permission.AutoLeaseNotFoundError",
+  { leaseID: AutoLeaseID },
+) {}
 
 export type Error = DeniedError | RejectedError | CorrectedError
