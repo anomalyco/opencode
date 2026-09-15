@@ -1,6 +1,6 @@
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { Effect, Schema } from "effect"
+import { Effect, Encoding, Result, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { InvalidCursorError, SessionNotFoundError, UnknownError } from "@opencode-ai/protocol/errors"
@@ -20,7 +20,9 @@ const cursor = {
     return Buffer.from(JSON.stringify({ id: message.id, order, direction })).toString("base64url")
   },
   decode(input: string) {
-    return decodeCursor(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
+    const decoded = Encoding.decodeBase64UrlString(input)
+    if (Result.isFailure(decoded)) throw decoded.failure
+    return decodeCursor(JSON.parse(decoded.success))
   },
 }
 

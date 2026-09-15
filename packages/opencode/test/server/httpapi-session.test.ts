@@ -491,6 +491,15 @@ describe("session HttpApi", () => {
           (yield* json<{ data: SessionMessage.Message[] }>(nextMessagePage)).data.map((message) => message.id),
         ).toEqual([firstMessage.id])
 
+        const malformedMessageCursor = yield* request(`/api/session/${session.id}/message?cursor=${messageCursor}!`, {
+          headers,
+        })
+        expect(malformedMessageCursor.status).toBe(400)
+        expect(yield* responseJson(malformedMessageCursor)).toMatchObject({
+          _tag: "InvalidCursorError",
+          message: "Invalid cursor",
+        })
+
         const legacyMessageCursor = Buffer.from(
           JSON.stringify({ id: secondMessage.id, time: 1, order: "desc", direction: "next" }),
         ).toString("base64url")
