@@ -828,6 +828,21 @@ about rules here](/docs/rules).
 
 ---
 
+### Custom instructions
+
+You can store Codex-style personalized instructions in the `customInstructions` option. Describe your role, the tools available on your machine, and how you like to work:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "customInstructions": "You are a senior TypeScript engineer. Prefer Bun APIs, explain tradeoffs briefly, and run typecheck before finishing."
+}
+```
+
+Global and project configs are merged: keep personal defaults in your global config and extend them per project. `customInstructions` applies to every new chat. [Learn more about rules here](/docs/rules).
+
+---
+
 ### Disabled providers
 
 You can disable providers that are loaded automatically through the `disabled_providers` option. This is useful when you want to prevent certain providers from being loaded even if their credentials are available.
