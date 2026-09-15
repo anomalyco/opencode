@@ -8,6 +8,7 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
+import { useDialog } from "../../ui/dialog"
 
 const QUESTION_MODE = "question"
 
@@ -17,6 +18,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
   const modeStack = useOpencodeModeStack()
+  const dialog = useDialog()
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -220,6 +222,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
           title: "Reject question",
           category: "Question",
           run() {
+            if (dialog.stack.length > 0) return
             reject()
           },
         },
@@ -250,7 +253,15 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         ...(confirm()
           ? [
               { key: "return", desc: "Submit answer", group: "Question", cmd: () => submit() },
-              { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
+              {
+                key: "escape",
+                desc: "Reject question",
+                group: "Question",
+                cmd: () => {
+                  if (dialog.stack.length > 0) return
+                  reject()
+                },
+              },
               ...tuiConfig.keybinds.get("app.exit"),
             ]
           : [
@@ -278,7 +289,15 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
               { key: "down", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
               { key: "j", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
               { key: "return", desc: "Select answer", group: "Question", cmd: () => selectOption() },
-              { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
+              {
+                key: "escape",
+                desc: "Reject question",
+                group: "Question",
+                cmd: () => {
+                  if (dialog.stack.length > 0) return
+                  reject()
+                },
+              },
               ...tuiConfig.keybinds.get("app.exit"),
             ]),
       ],
