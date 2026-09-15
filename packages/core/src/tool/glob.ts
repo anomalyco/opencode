@@ -6,6 +6,7 @@ import path from "path"
 import { makeLocationNode } from "../effect/app-node"
 import { FileSystem } from "../filesystem"
 import { Location } from "../location"
+import { LocationMutation } from "../location-mutation"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
 import { PermissionV2 } from "../permission"
@@ -41,6 +42,7 @@ const layer = Layer.effectDiscard(
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
     const permission = yield* PermissionV2.Service
+    const mutation = yield* LocationMutation.Service
 
     yield* tools
       .register({
@@ -59,6 +61,11 @@ const layer = Layer.effectDiscard(
           ],
           execute: (input, context) =>
             Effect.gen(function* () {
+              const source = {
+                type: "tool" as const,
+                messageID: context.assistantMessageID,
+                callID: context.toolCallID,
+              }
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
@@ -70,9 +77,19 @@ const layer = Layer.effectDiscard(
                 },
                 sessionID: context.sessionID,
                 agent: context.agent,
-                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+                source,
               })
-              const cwd = path.resolve(location.directory, input.path ?? ".")
+              const target = yield* mutation.resolve({ path: input.path ?? ".", kind: "directory" })
+              const external = target.externalDirectory
+              if (external) {
+                yield* permission.assert({
+                  ...LocationMutation.externalDirectoryPermission(external),
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source,
+                })
+              }
+              const cwd = target.canonical
               return yield* ripgrep
                 .glob({
                   cwd,
@@ -101,5 +118,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/glob",
   layer,
-  deps: [ToolRegistry.node, Ripgrep.node, Location.node, PermissionV2.node],
+  deps: [ToolRegistry.node, Ripgrep.node, Location.node, LocationMutation.node, PermissionV2.node],
 })
