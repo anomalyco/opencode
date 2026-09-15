@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { saveDraft, takeDraft } from "../../src/component/prompt/draft-stash"
+import { clearDraft, saveDraft, takeDraft } from "../../src/component/prompt/draft-stash"
 import { emptyPrompt } from "../../src/prompt/history"
 
 // The Prompt component stashes an unsent draft in onCleanup and takes it back
@@ -38,5 +38,17 @@ describe("prompt draft stash", () => {
     const second = draft("second")
     saveDraft("ses_a", second)
     expect(takeDraft("ses_a")).toBe(second)
+  })
+
+  test("late acknowledgement clears only an unchanged automatically restored draft", () => {
+    const restored = draft("retry me")
+    saveDraft("ses_retry", restored)
+    expect(clearDraft("ses_retry", restored.prompt)).toBe(true)
+    expect(takeDraft("ses_retry")).toBeUndefined()
+
+    const edited = draft("retry me with edits")
+    saveDraft("ses_retry", edited)
+    expect(clearDraft("ses_retry", restored.prompt)).toBe(false)
+    expect(takeDraft("ses_retry")).toBe(edited)
   })
 })

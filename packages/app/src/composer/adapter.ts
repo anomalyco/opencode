@@ -75,6 +75,12 @@ export type ComposerSession = {
   data: {
     location: { command: Pick<Data["location"]["command"], "list"> }
     session: {
+      mutate: <T>(
+        sessionID: string,
+        operation: (mutation: {
+          prompt: (input: Parameters<Data["session"]["prompt"]>[0]) => Promise<unknown>
+        }) => Promise<T>,
+      ) => Promise<T>
       prompt: (input: Parameters<Data["session"]["prompt"]>[0]) => Promise<unknown>
       setStatus: Data["session"]["setStatus"]
     }

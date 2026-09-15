@@ -37,6 +37,42 @@ export function recentModels(model: ModelPreferenceModel, recent: ModelPreferenc
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
 }
 
+export function createAgentSessionCommitTracker() {
+  type Commit =
+    | { status: "pending"; agent: string; token: object }
+    | { status: "known"; agent: string }
+    | { status: "indeterminate"; agent: string }
+  const commits = new Map<string, Commit>()
+
+  return {
+    start(sessionID: string, current: string | undefined, agent: string) {
+      const tracked = commits.get(sessionID)
+      if (tracked?.status !== "indeterminate" && (tracked?.agent ?? current) === agent) return
+      const token = {}
+      commits.set(sessionID, { status: "pending", agent, token })
+      return {
+        succeed() {
+          const active = commits.get(sessionID)
+          if (active?.status !== "pending" || active.token !== token) return
+          commits.set(sessionID, { status: "known", agent })
+        },
+        fail() {
+          const active = commits.get(sessionID)
+          if (active?.status !== "pending" || active.token !== token) return
+          commits.set(sessionID, { status: "indeterminate", agent })
+        },
+      }
+    },
+    observe(sessionID: string) {
+      const commit = commits.get(sessionID)
+      if (commit?.status === "known") commits.set(sessionID, { status: "indeterminate", agent: commit.agent })
+    },
+    delete(sessionID: string) {
+      commits.delete(sessionID)
+    },
+  }
+}
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
@@ -66,6 +102,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     function createAgent() {
+      const commits = createAgentSessionCommitTracker()
       const agents = createMemo(() =>
         (data.location.agent.list(location.ref) ?? []).filter((agent) => agent.mode !== "subagent" && !agent.hidden),
       )
@@ -91,6 +128,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           (first, second) => first.equals(second),
         )
       })
+      onCleanup(event.on("session.agent.selected", (evt) => commits.observe(evt.data.sessionID)))
+      onCleanup(event.on("session.deleted", (evt) => commits.delete(evt.data.sessionID)))
       return {
         list() {
           return agents()
@@ -123,6 +162,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (selected) model.set(selected)
           })
         },
+        trackSessionCommit: commits.start,
         move(direction: 1 | -1) {
           batch(() => {
             const current = this.current()
