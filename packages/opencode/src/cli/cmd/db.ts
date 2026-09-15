@@ -3,7 +3,9 @@ import { spawn } from "child_process"
 import { Database } from "@opencode-ai/core/database/database"
 import { Effect } from "effect"
 import { sql } from "drizzle-orm"
+import { cmd } from "./cmd"
 import { effectCmd } from "../effect-cmd"
+import { runDoctorCommand, runRepairCommand } from "./db-runner"
 
 const QueryCommand = effectCmd({
   command: "$0 [query]",
@@ -51,12 +53,67 @@ const PathCommand = effectCmd({
   }),
 })
 
+const DoctorCommand = cmd({
+  command: "doctor",
+  describe: "diagnose database health issues",
+  builder: (yargs: Argv) => {
+    return yargs.option("json", {
+      type: "boolean",
+      default: false,
+      describe: "Output in JSON format",
+    })
+  },
+  handler: async (args: { json: boolean }) => {
+    process.exitCode = (await runDoctorCommand(Database.path(), args)).exitCode
+  },
+})
+
+const RepairCommand = cmd({
+  command: "repair",
+  describe: "plan or apply database repairs",
+  builder: (yargs: Argv) => {
+    return yargs
+      .option("dry-run", {
+        type: "boolean",
+        default: false,
+        describe: "Generate repair plan without applying",
+      })
+      .option("apply", {
+        type: "boolean",
+        default: false,
+        describe: "Apply repairs (creates backup first)",
+      })
+      .option("json", {
+        type: "boolean",
+        default: false,
+        describe: "Output in JSON format",
+      })
+      .check((argv) => {
+        if (argv.dryRun && argv.apply) {
+          throw new Error("Cannot use both --dry-run and --apply")
+        }
+        if (!argv.dryRun && !argv.apply) {
+          throw new Error("Must specify either --dry-run or --apply")
+        }
+        return true
+      })
+  },
+  handler: async (args: {
+    dryRun?: boolean
+    "dry-run"?: boolean
+    apply: boolean
+    json: boolean
+  }) => {
+    process.exitCode = (await runRepairCommand(Database.path(), args)).exitCode
+  },
+})
+
 export const DbCommand = effectCmd({
   command: "db",
   describe: "database tools",
   instance: false,
   builder: (yargs: Argv) => {
-    return yargs.command(QueryCommand).command(PathCommand).demandCommand()
+    return yargs.command(QueryCommand).command(PathCommand).command(DoctorCommand).command(RepairCommand).demandCommand()
   },
   handler: Effect.fn("Cli.db")(function* () {}),
 })
