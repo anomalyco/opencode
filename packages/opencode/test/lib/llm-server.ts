@@ -609,6 +609,8 @@ function isTitleRequest(body: unknown): boolean {
   return JSON.stringify(body).includes("Generate a title for this conversation")
 }
 
+const isTitleHit = (hit: Hit): boolean => isTitleRequest(hit.body)
+
 namespace TestLLMServer {
   export interface Service {
     readonly url: string
@@ -622,6 +624,7 @@ namespace TestLLMServer {
     readonly reason: (value: string, opts?: { text?: string; usage?: Usage }) => Effect.Effect<void>
     readonly fail: (message?: unknown) => Effect.Effect<void>
     readonly error: (status: number, body: unknown) => Effect.Effect<void>
+    readonly titleError: (status: number, body: unknown) => Effect.Effect<void>
     readonly hang: Effect.Effect<void>
     readonly hold: (value: string, wait: PromiseLike<unknown>) => Effect.Effect<void>
     readonly reset: Effect.Effect<void>
@@ -669,6 +672,14 @@ export class TestLLMServer extends Context.Service<TestLLMServer, TestLLMServer.
         return first.item
       }
 
+      const pullMatch = (hit: Hit) => {
+        const index = list.findIndex((entry) => entry.match && entry.match(hit))
+        if (index === -1) return
+        const first = list[index]
+        list = [...list.slice(0, index), ...list.slice(index + 1)]
+        return first.item
+      }
+
       const handle = Effect.fn("TestLLMServer.handle")(function* (mode: "chat" | "responses") {
         const req = yield* HttpServerRequest.HttpServerRequest
         const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
@@ -676,6 +687,16 @@ export class TestLLMServer extends Context.Service<TestLLMServer, TestLLMServer.
         if (isTitleRequest(body)) {
           hits = [...hits, current]
           yield* notify()
+          const override = pullMatch(current)
+          if (override) {
+            if (override.type !== "sse") return fail(override)
+            if (mode === "responses") return send(responses(override, modelFrom(body)))
+            if (override.reset) {
+              yield* reset(override)
+              return HttpServerResponse.empty()
+            }
+            return send(override)
+          }
           const auto: Sse = { type: "sse", head: [role()], tail: [textLine("E2E Title"), finishLine("stop")] }
           if (mode === "responses") return send(responses(auto, modelFrom(body)))
           return send(auto)
@@ -749,6 +770,9 @@ export class TestLLMServer extends Context.Service<TestLLMServer, TestLLMServer.
         }),
         error: Effect.fn("TestLLMServer.error")(function* (status: number, body: unknown) {
           queue(httpError(status, body))
+        }),
+        titleError: Effect.fn("TestLLMServer.titleError")(function* (status: number, body: unknown) {
+          queueMatch(isTitleHit, httpError(status, body))
         }),
         hang: Effect.gen(function* () {
           queue(reply().hang().item())
