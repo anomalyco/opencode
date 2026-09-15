@@ -1262,6 +1262,16 @@ function cloudflareGatewayNpm(providerID: string, modelID: string) {
   return undefined
 }
 
+// Providers whose models default to a dedicated first-party SDK instead of the
+// generic OpenAI-compatible client, which misroutes some hosted model families.
+const PROVIDER_NPM_OVERRIDE: Record<string, string> = {
+  "github-copilot": "@ai-sdk/github-copilot",
+}
+
+function npmOverrideForProvider(providerID: string) {
+  return PROVIDER_NPM_OVERRIDE[providerID]
+}
+
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
     id: ModelV2.ID.make(model.id),
@@ -1274,6 +1284,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
       npm:
         cloudflareGatewayNpm(provider.id, model.id) ??
         model.provider?.npm ??
+        npmOverrideForProvider(provider.id) ??
         provider.npm ??
         "@ai-sdk/openai-compatible",
     },
@@ -1495,6 +1506,7 @@ const layer = Layer.effect(
             const apiID = model.id ?? existingModel?.api.id ?? modelID
             const apiNpm =
               model.provider?.npm ??
+              npmOverrideForProvider(providerID) ??
               provider.npm ??
               existingModel?.api.npm ??
               // Config-defined gateway models bypass fromModelsDevModel, so resolve the
