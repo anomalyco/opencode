@@ -405,7 +405,12 @@ test("executes a selected slash command after creating its worktree", async ({ p
         item: { type: "user", payload: { text: expanded }, delivery: "steer" },
       },
     })
-    await route.fulfill({ status: 204, headers })
+    await route.fulfill({
+      status: 200,
+      headers,
+      contentType: "application/json",
+      body: JSON.stringify({ data: { type: "prompt", inboxID: "msg_workspace_review" } }),
+    })
   })
   const editor = page.locator('[data-component="composer-editor"]')
   await editor.fill("/review")

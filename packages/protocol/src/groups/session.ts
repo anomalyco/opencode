@@ -30,6 +30,7 @@ import {
   UnknownError,
 } from "../errors.js"
 import { Agent } from "@opencode/schema/agent"
+import { Command } from "@opencode/schema/command"
 import { Skill } from "@opencode/schema/skill"
 import { Model } from "@opencode/schema/model"
 import { Permission } from "@opencode/schema/permission"
@@ -395,10 +396,13 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
           name: Schema.String,
+          id: SessionMessage.ID.pipe(Schema.optional).annotate({
+            description: "Message ID for input the command admits, so its resulting work can be correlated.",
+          }),
           ...PromptInput.Prompt.fields,
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
         }),
-        success: HttpApiSchema.NoContent,
+        success: Schema.Struct({ data: Command.Outcome }),
         error: [SessionNotFoundError, CommandNotFoundError, CommandExecutionError],
       })
         .middleware(sessionLocationMiddleware)
@@ -406,7 +410,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           OpenApi.annotations({
             identifier: "session.command",
             summary: "Run command",
-            description: "Execute a slash command callback immediately.",
+            description:
+              "Execute a slash command callback. Returns whether the command finished immediately or admitted session input whose execution continues after this request.",
           }),
         ),
     )
@@ -539,9 +544,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         error: [SessionNotFoundError, SessionBusyError],
       })
         .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({ identifier: "session.revert.commit", summary: "Commit staged revert" }),
-        ),
+        .annotateMerge(OpenApi.annotations({ identifier: "session.revert.commit", summary: "Commit staged revert" })),
     )
     .add(
       HttpApiEndpoint.get("session.context", "/api/session/:sessionID/context", {

@@ -656,6 +656,7 @@ describe("acp event behavior", () => {
           { signal },
         )
         submitted.resolve()
+        return "prompt"
       },
     })
 
@@ -668,6 +669,81 @@ describe("acp event behavior", () => {
       const response = await withTimeout(result, "cancelled turn did not terminate")
       expect(response).toMatchObject({ stopReason: "cancelled" })
       expect(fixture.requests.filter((request) => request.path.endsWith("/interrupt"))).toHaveLength(1)
+    } finally {
+      await fixture.stop()
+    }
+  })
+
+  test("cancelling command work in a child interrupts the child and the parent's follow-up run", async () => {
+    const control: TurnControl = { cancelled: false, admission: new AbortController() }
+    const childOutput = Promise.withResolvers<void>()
+    const interrupted: string[] = []
+    const state = { childRunning: false, parentRunning: false }
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(
+          durableEvent("session.created", { sessionID: "ses_sub", ...childSession("ses_sub", "ses_owner", "Audit") }),
+        )
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_sub", inboxID: id }))
+        send(durableEvent("session.execution.started", { sessionID: "ses_sub" }))
+        send(
+          ephemeralEvent("session.text.delta", {
+            sessionID: "ses_sub",
+            assistantMessageID: "msg_sub",
+            ordinal: 0,
+            delta: "working",
+          }),
+        )
+        state.childRunning = true
+      },
+      onInterrupt({ sessionID, send }) {
+        interrupted.push(sessionID)
+        if (sessionID === "ses_sub") {
+          if (!state.childRunning) return false
+          state.childRunning = false
+          send(durableEvent("session.execution.interrupted", { sessionID, reason: "user" }))
+          // The subagent job reports into the idle parent, which wakes for a follow-up run.
+          state.parentRunning = true
+          send(durableEvent("session.execution.started", { sessionID: "ses_owner" }))
+          return true
+        }
+        if (!state.parentRunning) return false
+        state.parentRunning = false
+        send(durableEvent("session.execution.interrupted", { sessionID, reason: "user" }))
+        return true
+      },
+    })
+    const result = streamTurn({
+      client: fixture.client,
+      connection: {
+        sessionUpdate: async (update) => {
+          if (update.update.sessionUpdate === "agent_message_chunk") childOutput.resolve()
+        },
+        requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+      },
+      sessionID: "ses_owner",
+      cwd: "/workspace",
+      start: { type: "input", id: "input_sub" },
+      writeTextFile: false,
+      control,
+      submit: async (signal) => {
+        await fixture.client.session.prompt({ sessionID: "ses_owner", id: "input_sub", text: "/audit" }, { signal })
+        return "prompt"
+      },
+    })
+
+    try {
+      await withTimeout(childOutput.promise, "child output was not observed")
+      control.cancelled = true
+      control.admission.abort()
+      // The service issues the parent interrupt alongside the abort.
+      await fixture.client.session.interrupt({ sessionID: "ses_owner" })
+
+      const response = await withTimeout(result, "cancelled subagent turn did not terminate")
+      expect(response).toMatchObject({ stopReason: "cancelled" })
+      expect(interrupted).toContain("ses_sub")
+      expect(interrupted.indexOf("ses_sub")).toBeLessThan(interrupted.lastIndexOf("ses_owner"))
+      expect(state).toEqual({ childRunning: false, parentRunning: false })
     } finally {
       await fixture.stop()
     }
@@ -694,10 +770,9 @@ describe("acp event behavior", () => {
       writeTextFile: false,
       control,
       submit: (signal) =>
-        fixture.client.session.prompt(
-          { sessionID: "ses_cancel_admission", id: "input_cancel_admission", text: "cancel me" },
-          { signal },
-        ),
+        fixture.client.session
+          .prompt({ sessionID: "ses_cancel_admission", id: "input_cancel_admission", text: "cancel me" }, { signal })
+          .then(() => "prompt" as const),
     })
 
     try {
@@ -782,7 +857,9 @@ function turn(input: {
     control: { cancelled: false, admission: new AbortController() },
     childSessionUpdate: input.childSessionUpdate,
     submit: (signal) =>
-      input.fixture.client.session.prompt({ sessionID: input.sessionID, id: input.inboxID, text: "hello" }, { signal }),
+      input.fixture.client.session
+        .prompt({ sessionID: input.sessionID, id: input.inboxID, text: "hello" }, { signal })
+        .then(() => "prompt" as const),
   })
 }
 

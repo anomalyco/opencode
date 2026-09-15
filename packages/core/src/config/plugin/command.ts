@@ -11,6 +11,7 @@ import { Effect, Option, PubSub, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
+import { Command } from "../../command.js"
 import { Location } from "../../location.js"
 import { Session } from "../../session.js"
 import { SubagentJob } from "../../session/subagent-job.js"
@@ -104,9 +105,10 @@ export const Plugin = define({
                     agent: selected.id,
                     model: model ?? selected.info?.model ?? parent.model,
                   })
-                  yield* sessions.prompt({
+                  const admitted = yield* sessions.prompt({
                     ...input.prompt,
                     sessionID: child.id,
+                    id: input.messageID,
                     text: ["You are a subagent spawned by another session.", text].join("\n"),
                     resume: false,
                   })
@@ -119,20 +121,22 @@ export const Plugin = define({
                   }
                   yield* subagents.start(recovery)
                   yield* subagents.background(recovery)
-                  return
+                  return Command.prompted(admitted)
                 }
                 if (agent !== undefined) {
                   const session = yield* ctx.session.get({ sessionID: input.sessionID })
                   if (session.agent !== agent) yield* ctx.session.switchAgent({ sessionID: input.sessionID, agent })
                 }
                 if (model !== undefined) yield* ctx.session.switchModel({ sessionID: input.sessionID, model })
-                yield* ctx.session.prompt({
+                const admitted = yield* ctx.session.prompt({
                   ...input.prompt,
                   sessionID: input.sessionID,
+                  id: input.messageID,
                   text,
                   delivery: input.delivery,
                 })
-              }).pipe(Effect.asVoid),
+                return Command.prompted(admitted)
+              }),
           })
         }
       }

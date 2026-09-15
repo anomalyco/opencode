@@ -98,7 +98,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
       start: { type: "input", id },
       writeTextFile: false,
       control: { cancelled: false, admission: new AbortController() },
-      submit: () => client.session.prompt({ sessionID: "ses_test", id, text: "hi" }),
+      submit: () => client.session.prompt({ sessionID: "ses_test", id, text: "hi" }).then(() => "prompt" as const),
     })
 
     expect(updates).toEqual([
@@ -122,7 +122,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
   }
 })
 
-test("acp action resolves without prompt lifecycle events", async () => {
+test("acp immediate admission resolves without prompt lifecycle events", async () => {
   const encoder = new TextEncoder()
   const server = Bun.serve({
     port: 0,
@@ -150,9 +150,8 @@ test("acp action resolves without prompt lifecycle events", async () => {
       cwd: "/workspace",
       start: { type: "input", id: "msg_action" },
       writeTextFile: false,
-      action: true,
       control: { cancelled: false, admission: new AbortController() },
-      submit: async () => {},
+      submit: async () => "immediate",
     })
 
     expect(response).toMatchObject({ stopReason: "end_turn" })

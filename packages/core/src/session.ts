@@ -186,12 +186,13 @@ export interface Interface {
   readonly command: (input: {
     sessionID: SessionSchema.ID
     command: string
+    id?: SessionMessage.ID
     text: string
     files?: PromptInput.Prompt["files"]
     agents?: PromptInput.Prompt["agents"]
     skills?: PromptInput.Prompt["skills"]
     delivery?: SessionInbox.Delivery
-  }) => Effect.Effect<void, NotFoundError | Command.NotFoundError | Command.ExecutionError>
+  }) => Effect.Effect<Command.Outcome, NotFoundError | Command.NotFoundError | Command.ExecutionError>
   readonly shell: (
     input: Parameters<Session.Handle["shell"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["shell"]>

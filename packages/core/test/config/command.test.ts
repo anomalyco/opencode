@@ -105,7 +105,7 @@ describe("ConfigCommandPlugin.Plugin", () => {
                 Effect.sync(() => {
                   prompts.push({ text: input.text, delivery: input.delivery })
                   return SessionInbox.User.make({
-                    id: SessionMessage.ID.make("msg_test"),
+                    id: input.id ?? SessionMessage.ID.make("msg_test"),
                     sessionID: input.sessionID,
                     time: { created: DateTime.makeUnsafe(0) },
                     type: "user",
@@ -129,6 +129,7 @@ describe("ConfigCommandPlugin.Plugin", () => {
           name: "explain",
           invocation: {
             sessionID: Session.ID.make("ses_test"),
+            messageID: SessionMessage.ID.make("msg_explain"),
             prompt: { text: item.input },
             delivery: "queue",
           },
@@ -176,7 +177,7 @@ Review files`,
                   Effect.sync(() => {
                     prompts.push({ text: input.text, files: input.files, delivery: input.delivery })
                     return SessionInbox.User.make({
-                      id: SessionMessage.ID.make("msg_test"),
+                      id: input.id ?? SessionMessage.ID.make("msg_test"),
                       sessionID: input.sessionID,
                       time: { created: DateTime.makeUnsafe(0) },
                       type: "user",
@@ -210,6 +211,7 @@ Review files`,
             name: "nested/docs",
             invocation: {
               sessionID: Session.ID.make("ses_test"),
+              messageID: SessionMessage.ID.make("msg_docs"),
               prompt: { text: "details", files: [{ uri: "file:///tmp/context.md" }] },
               delivery: "queue",
             },
@@ -236,6 +238,7 @@ Review files`,
             name: "review",
             invocation: {
               sessionID: Session.ID.make("ses_test"),
+              messageID: SessionMessage.ID.make("msg_latest"),
               prompt: { text: "latest" },
               delivery: "steer",
             },

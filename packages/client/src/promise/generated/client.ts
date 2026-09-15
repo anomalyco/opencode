@@ -690,24 +690,25 @@ export function make(options: ClientOptions) {
           requestOptions,
         ).then((value) => value.data),
       command: (input: SessionCommandInput, requestOptions?: RequestOptions) =>
-        request<SessionCommandOutput>(
+        request<{ readonly data: SessionCommandOutput }>(
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/command`,
             body: {
               name: input["name"],
+              id: input["id"],
               text: input["text"],
               files: input["files"],
               agents: input["agents"],
               skills: input["skills"],
               delivery: input["delivery"],
             },
-            successStatus: 204,
+            successStatus: 200,
             declaredStatuses: [400, 401, 404, 500],
-            empty: true,
+            empty: false,
           },
           requestOptions,
-        ),
+        ).then((value) => value.data),
       skill: (input: SessionSkillInput, requestOptions?: RequestOptions) =>
         request<SessionSkillOutput>(
           {

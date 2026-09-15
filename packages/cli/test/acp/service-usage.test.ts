@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { ChildSessionUpdatesCapability } from "../../src/acp/event"
 import { makeACPFixture, makeSession, secondModel, type FixtureContext, type FixtureRequest } from "./service-fixture"
 
 describe("acp service prompt routing and usage", () => {
@@ -12,7 +13,7 @@ describe("acp service prompt routing and usage", () => {
           return Response.json({ data: makeSession("ses_routes") })
         }
         if (request.method === "POST" && request.path === "/api/session/ses_routes/command") {
-          return new Response(null, { status: 204 })
+          return Response.json({ data: { type: "immediate" } })
         }
         if (request.method === "POST" && request.path === "/api/session/ses_routes/compact") {
           const id = requestID(request)
@@ -42,12 +43,148 @@ describe("acp service prompt routing and usage", () => {
     const compact = fixture.requests.find((request) => request.path === "/api/session/ses_routes/compact")
     expect(command?.body).toMatchObject({
       name: "review",
+      id: expect.stringMatching(/^msg_/),
       text: "now",
       files: [],
       delivery: "steer",
     })
     expect(compact?.body).toMatchObject({ id: expect.any(String) })
     expect(fixture.requests.some((request) => request.path === "/api/session/ses_routes/prompt")).toBe(false)
+  })
+
+  test("keeps a command prompt pending until its admitted work completes", async () => {
+    const gate = Promise.withResolvers<void>()
+    await using fixture = makeACPFixture({
+      fetch(request, context) {
+        if (request.method === "POST" && request.path === "/api/session") {
+          return Response.json({ data: makeSession("ses_cmd") })
+        }
+        if (request.method === "POST" && request.path === "/api/session/ses_cmd/command") {
+          const id = requestID(request)
+          context.send({
+            id: `evt_${id}`,
+            type: "session.inbox.delivered",
+            data: { sessionID: "ses_cmd", inboxID: id },
+          })
+          void gate.promise.then(() => {
+            context.send({
+              id: "evt_text",
+              type: "session.text.delta",
+              data: { sessionID: "ses_cmd", assistantMessageID: "msg_assistant", ordinal: 0, delta: "REVIEWED" },
+            })
+            context.send({ id: "evt_done", type: "session.execution.succeeded", data: { sessionID: "ses_cmd" } })
+          })
+          return Response.json({ data: { type: "prompt", inboxID: id } })
+        }
+        if (request.method === "GET" && request.path === "/api/session/ses_cmd/message/msg_assistant") {
+          return new Response(null, { status: 404 })
+        }
+        return undefined
+      },
+    })
+    const session = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+
+    let settled = false
+    const pending = fixture.service
+      .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "/review" }] })
+      .finally(() => {
+        settled = true
+      })
+    await Bun.sleep(50)
+    expect(settled).toBe(false)
+    expect(fixture.updates.some((item) => item.update.sessionUpdate === "agent_message_chunk")).toBe(false)
+
+    gate.resolve()
+    const response = await pending
+    expect(response.stopReason).toBe("end_turn")
+    expect(
+      fixture.updates.flatMap((item) =>
+        item.update.sessionUpdate === "agent_message_chunk" && item.update.content.type === "text"
+          ? [item.update.content.text]
+          : [],
+      ),
+    ).toEqual(["REVIEWED"])
+  })
+
+  test("follows command work admitted to a child session until the parent completes", async () => {
+    const childUpdates: unknown[] = []
+    await using fixture = makeACPFixture({
+      fetch(request, context) {
+        if (request.method === "POST" && request.path === "/api/session") {
+          return Response.json({ data: makeSession("ses_parent") })
+        }
+        if (request.method === "POST" && request.path === "/api/session/ses_parent/command") {
+          const id = requestID(request)
+          context.send({
+            id: "evt_child_created",
+            type: "session.created",
+            data: { sessionID: "ses_child", parentID: "ses_parent", title: "Audit" },
+          })
+          context.send({
+            id: `evt_${id}`,
+            type: "session.inbox.delivered",
+            data: { sessionID: "ses_child", inboxID: id },
+          })
+          context.send({
+            id: "evt_child_text",
+            type: "session.text.delta",
+            data: { sessionID: "ses_child", assistantMessageID: "msg_child", ordinal: 0, delta: "child work" },
+          })
+          context.send({ id: "evt_child_done", type: "session.execution.succeeded", data: { sessionID: "ses_child" } })
+          context.send({
+            id: "evt_parent_text",
+            type: "session.text.delta",
+            data: { sessionID: "ses_parent", assistantMessageID: "msg_parent", ordinal: 0, delta: "summary" },
+          })
+          context.send({
+            id: "evt_parent_done",
+            type: "session.execution.succeeded",
+            data: { sessionID: "ses_parent" },
+          })
+          return Response.json({ data: { type: "prompt", inboxID: id } })
+        }
+        if (request.method === "GET" && request.path === "/api/session/ses_parent/message/msg_parent") {
+          return new Response(null, { status: 404 })
+        }
+        return undefined
+      },
+      connection: {
+        extNotification: async (_method, params) => {
+          childUpdates.push(params)
+        },
+      },
+      commands: [{ name: "audit", description: "Audit in a subagent" }],
+    })
+    await fixture.service.initialize({
+      protocolVersion: 1,
+      clientCapabilities: { _meta: { [ChildSessionUpdatesCapability]: true } },
+      clientInfo: { name: "test", version: "0" },
+    })
+    const session = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+
+    const response = await fixture.service.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "/audit" }],
+    })
+
+    expect(response.stopReason).toBe("end_turn")
+    expect(
+      fixture.updates.flatMap((item) =>
+        item.update.sessionUpdate === "agent_message_chunk" && item.update.content.type === "text"
+          ? [item.update.content.text]
+          : [],
+      ),
+    ).toEqual(["summary"])
+    expect(childUpdates).toContainEqual(
+      expect.objectContaining({
+        childSessionId: "ses_child",
+        type: "update",
+        update: expect.objectContaining({
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "child work" },
+        }),
+      }),
+    )
   })
 
   test("returns turn usage and publishes current context usage with cumulative session cost", async () => {

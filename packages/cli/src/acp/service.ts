@@ -52,6 +52,7 @@ import {
   ChildSessionUpdatesCapability,
   replayMessages,
   streamTurn,
+  type Admission,
   type ChildSessionUpdate,
   type TurnControl,
   type TurnStart,
@@ -327,7 +328,6 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         cwd: state.cwd,
         start: prepared.start,
         writeTextFile: capabilities.writeTextFile,
-        action: prepared.command !== undefined,
         control,
         connectionSignal: input.connection.signal,
         sessionSignal: state.abort.signal,
@@ -362,7 +362,12 @@ function preparePrompt(catalog: Catalog, prompt: PromptRequest["prompt"], messag
   return { start, text, files, synthetic, slash, command }
 }
 
-async function submitPrompt(client: OpenCodeClient, session: Attached, prompt: PreparedPrompt, signal: AbortSignal) {
+async function submitPrompt(
+  client: OpenCodeClient,
+  session: Attached,
+  prompt: PreparedPrompt,
+  signal: AbortSignal,
+): Promise<Admission> {
   if (prompt.synthetic.length > 0) {
     await client.session.synthetic({
       sessionID: session.id,
@@ -372,23 +377,30 @@ async function submitPrompt(client: OpenCodeClient, session: Attached, prompt: P
       resume: false,
     })
   }
-  if (prompt.start.type === "compaction") return client.session.compact({ sessionID: session.id, id: prompt.start.id })
+  if (prompt.start.type === "compaction") {
+    await client.session.compact({ sessionID: session.id, id: prompt.start.id })
+    return "prompt"
+  }
   if (prompt.command) {
-    return client.session.command(
+    // The command admits any resulting input under the turn's start ID so the stream can follow it.
+    const outcome = await client.session.command(
       {
         sessionID: session.id,
         name: prompt.command.name,
+        id: prompt.start.id,
         text: prompt.slash?.args ?? "",
         files: prompt.files,
         delivery: "steer",
       },
       { signal },
     )
+    return outcome.type
   }
-  return client.session.prompt(
+  await client.session.prompt(
     { sessionID: session.id, id: prompt.start.id, text: prompt.text, files: prompt.files, delivery: "steer" },
     { signal },
   )
+  return "prompt"
 }
 
 function turnStart(messageID: string, slash: PreparedPrompt["slash"]): TurnStart {

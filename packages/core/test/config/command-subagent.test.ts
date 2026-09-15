@@ -13,6 +13,7 @@ import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
@@ -83,12 +84,18 @@ describe("command subagents", () => {
         const gate = yield* llm.gate()
 
         // This must return while the child's model is still blocked.
-        yield* sessions.command({ sessionID: parent.id, command: "review", text: "changes" })
+        const outcome = yield* sessions.command({
+          sessionID: parent.id,
+          command: "review",
+          id: SessionMessage.ID.make("msg_review"),
+          text: "changes",
+        })
         yield* gate.started
         const children = (yield* sessions.list({ parentID: parent.id })).data
         expect(children).toHaveLength(1)
         const child = children[0]
         if (!child) return yield* Effect.die("Expected a child session")
+        expect(outcome).toEqual({ type: "prompt", inboxID: SessionMessage.ID.make("msg_review") })
         expect(child).toMatchObject({ agent: fixture.agent, model: { id: fixture.model }, title: "Review code" })
         expect(yield* sessions.get(parent.id)).toMatchObject({ agent: "build", model: parentModel })
         expect(yield* sessions.context(parent.id)).toEqual([])

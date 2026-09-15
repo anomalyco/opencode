@@ -1,4 +1,5 @@
 import type { AgentSideConnection, PromptResponse, SessionUpdate } from "@agentclientprotocol/sdk"
+import type { Command } from "@opencode/schema/command"
 import type {
   EventSubscribeOutput,
   OpenCodeClient,
@@ -36,6 +37,9 @@ export type TurnStart =
   | { readonly type: "input"; readonly id: string }
   | { readonly type: "skill"; readonly id: string }
   | { readonly type: "compaction"; readonly id: string }
+
+/** `prompt` submissions admitted work under the start ID; `immediate` submissions have none to follow. */
+export type Admission = Command.Outcome["type"]
 
 export const ChildSessionUpdatesCapability = "opencode/child-session-updates"
 export const ChildSessionUpdateMethod = "opencode/session/child_update"
@@ -76,8 +80,7 @@ export async function streamTurn(input: {
   readonly cwd: string
   readonly start: TurnStart
   readonly writeTextFile: boolean
-  readonly action?: boolean
-  readonly submit: (signal: AbortSignal) => Promise<unknown>
+  readonly submit: (signal: AbortSignal) => Promise<Admission>
   readonly control: TurnControl
   readonly childSessionUpdate?: (update: ChildSessionUpdate) => Promise<void>
   readonly connectionSignal?: AbortSignal
@@ -112,6 +115,14 @@ export async function streamTurn(input: {
         ...value,
       })
       .catch(() => {})
+  }
+
+  // Command-spawned subagents run while the invoking Session is idle, so cancelling the prompt
+  // must interrupt them directly. Sessions that start after cancellation are interrupted on start.
+  const interruptChildren = async () => {
+    await Promise.all(
+      [...openChildren].map((sessionID) => input.client.session.interrupt({ sessionID }).catch(() => {})),
+    )
   }
 
   const updateSession = async (value: SessionUpdate, child: ChildSession | undefined, mode: "turn" | "background") => {
@@ -178,9 +189,10 @@ export async function streamTurn(input: {
       if (!started) continue
 
       if (event.type === "session.execution.started") {
-        if (child) {
-          await notifyChild(child, { type: "status", status: "running" })
+        if (mode === "turn" && control.cancelled) {
+          await input.client.session.interrupt({ sessionID: event.data.sessionID }).catch(() => {})
         }
+        if (child) await notifyChild(child, { type: "status", status: "running" })
         continue
       }
 
@@ -342,11 +354,15 @@ export async function streamTurn(input: {
     input.sessionSignal?.removeEventListener("abort", connectionAbort)
     await stream.return?.(undefined).catch(() => {})
   }
+  const onCancel = () => void interruptChildren()
+  control.admission.signal.addEventListener("abort", onCancel, { once: true })
   try {
-    await input.submit(control.admission.signal).catch((error) => {
+    const admission = await input.submit(control.admission.signal).catch((error): Admission => {
       if (!control.cancelled) throw error
+      // The request may have been admitted before the abort reached the server; keep observing.
+      return "prompt"
     })
-    if (input.action) {
+    if (admission === "immediate") {
       streamController.abort()
       await completed.catch(() => {})
       return response(undefined, undefined, "succeeded", control.cancelled, undefined)
@@ -384,6 +400,7 @@ export async function streamTurn(input: {
     await completed.catch(() => {})
     throw error
   } finally {
+    control.admission.signal.removeEventListener("abort", onCancel)
     if (!handedOff) await closeStream()
   }
 }

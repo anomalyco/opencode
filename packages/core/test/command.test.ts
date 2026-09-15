@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Command } from "@opencode/core/command"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { Effect } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -16,7 +17,10 @@ describe("Command", () => {
         editor.add({
           name: "goal",
           description: "Manage the session goal",
-          execute: (input) => Effect.sync(() => calls.push(input)),
+          execute: (input) =>
+            Effect.sync(() => {
+              calls.push(input)
+            }),
         })
       })
 
@@ -25,11 +29,55 @@ describe("Command", () => {
       )
       const invocation = {
         sessionID: Session.ID.make("ses_test"),
+        messageID: SessionMessage.ID.make("msg_goal"),
         prompt: { text: "ship it", files: [{ uri: "file:///tmp/plan.md" }] },
         delivery: "steer" as const,
       }
-      yield* command.execute({ name: "goal", invocation })
+      expect(yield* command.execute({ name: "goal", invocation })).toEqual({ type: "immediate" })
       expect(calls).toEqual([invocation])
+    }),
+  )
+
+  it.effect("returns prompt outcomes admitted with the invocation message ID", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      yield* command.transform((editor) => {
+        editor.add({
+          name: "ask",
+          execute: (input) => Effect.succeed({ type: "prompt" as const, inboxID: input.messageID }),
+        })
+        editor.add({
+          name: "stray",
+          execute: () => Effect.succeed({ type: "prompt" as const, inboxID: SessionMessage.ID.make("msg_other") }),
+        })
+        editor.add({
+          name: "junk",
+          execute: () => Effect.succeed(true as unknown as Command.Outcome),
+        })
+      })
+      const invocation = {
+        sessionID: Session.ID.make("ses_test"),
+        messageID: SessionMessage.ID.make("msg_ask"),
+        prompt: { text: "" },
+        delivery: "steer" as const,
+      }
+
+      expect(yield* command.execute({ name: "ask", invocation })).toEqual({
+        type: "prompt",
+        inboxID: invocation.messageID,
+      })
+      const error = yield* command.execute({ name: "stray", invocation }).pipe(Effect.flip)
+      expect(error).toMatchObject({
+        _tag: "Command.ExecutionError",
+        command: "stray",
+        message: "Command admitted msg_other instead of the invocation message ID msg_ask",
+      })
+      const junk = yield* command.execute({ name: "junk", invocation }).pipe(Effect.flip)
+      expect(junk).toMatchObject({
+        _tag: "Command.ExecutionError",
+        command: "junk",
+        message: "Command returned an invalid outcome (boolean)",
+      })
     }),
   )
 
@@ -60,6 +108,7 @@ describe("Command", () => {
           name: "fail",
           invocation: {
             sessionID: Session.ID.make("ses_test"),
+            messageID: SessionMessage.ID.make("msg_fail"),
             prompt: { text: "" },
             delivery: "steer",
           },

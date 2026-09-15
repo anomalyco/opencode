@@ -419,22 +419,45 @@ Read the commands available at a location.
 const commands = await ctx.command.list()
 ```
 
-Register commands with a transform. The executor receives the session, prompt attachments, and requested delivery mode.
+Register commands with a transform. The executor receives the session, a message ID for any input it admits, prompt attachments, and the requested delivery mode.
 
 ```ts
 await ctx.command.transform((editor) => {
   editor.add({
     name: "security-review",
     description: "Review changes for security issues",
-    execute: async ({ sessionID, prompt, delivery }) => {
-      await ctx.session.prompt({
+    execute: async ({ sessionID, messageID, prompt, delivery }) => {
+      const admitted = await ctx.session.prompt({
         ...prompt,
         sessionID,
+        id: messageID,
         text: `Review these changes for security issues.\n\n${prompt.text}`,
         delivery,
       })
+      return { type: "prompt", inboxID: admitted.id }
     },
   })
+})
+```
+
+#### Outcomes
+
+Return an outcome so clients know whether the command finished or started model work they should follow.
+
+| Outcome                                | Meaning                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `undefined` or `{ type: "immediate" }` | The command finished inside the request. Clients complete the slash command right away.          |
+| `{ type: "prompt", inboxID }`          | The command admitted session input. Clients keep the slash command open until that work settles. |
+
+Admit with `id: messageID` and echo it as `inboxID`; a different `inboxID` fails the command. The input may go to the invoking session or to a child session it creates.
+
+```ts
+editor.add({
+  name: "clear-scratch",
+  description: "Delete the scratch directory",
+  execute: async () => {
+    await ctx.storage.remove("scratch")
+  },
 })
 ```
 
@@ -447,6 +470,7 @@ await ctx.command.reload()
 #### Reference
 
 Schemas: [`Command.Info`](/api#schema-Command.Info),
+[`Command.Outcome`](/api#schema-Command.Outcome),
 [`Session.Inbox.Delivery`](/api#schema-Session.Inbox.Delivery)
 
 ```ts
@@ -463,14 +487,17 @@ interface CommandEditor {
 interface CommandDefinition {
   name: string
   description?: string
-  execute(input: CommandInvocation): Promise<void>
+  execute(input: CommandInvocation): Promise<CommandOutcome | void>
 }
 
 interface CommandInvocation {
   sessionID: string
+  messageID: string
   prompt: PromptInput
   delivery: "steer" | "queue"
 }
+
+type CommandOutcome = { type: "immediate" } | { type: "prompt"; inboxID: string }
 ```
 
 ### Integrations

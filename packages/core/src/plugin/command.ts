@@ -3,6 +3,7 @@ export * as CommandPlugin from "./command.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
+import { Command } from "../command.js"
 import { Location } from "../location.js"
 import { Mcp } from "../mcp/index.js"
 import PROMPT_INITIALIZE from "./command/initialize.txt"
@@ -34,10 +35,11 @@ export const Plugin = define({
             .prompt({
               ...input.prompt,
               sessionID: input.sessionID,
+              id: input.messageID,
               text: append(PROMPT_INITIALIZE.replace("${path}", location.project.directory), input.prompt.text),
               delivery: input.delivery,
             })
-            .pipe(Effect.asVoid),
+            .pipe(Effect.map(Command.prompted)),
       })
       editor.add({
         name: "review",
@@ -47,10 +49,11 @@ export const Plugin = define({
             .prompt({
               ...input.prompt,
               sessionID: input.sessionID,
+              id: input.messageID,
               text: append(PROMPT_REVIEW.replace("${path}", location.project.directory), input.prompt.text),
               delivery: input.delivery,
             })
-            .pipe(Effect.asVoid),
+            .pipe(Effect.map(Command.prompted)),
       })
       for (const prompt of loaded.prompts) {
         editor.add({
@@ -67,16 +70,18 @@ export const Plugin = define({
                 ),
               })
               if (!result) return yield* Effect.fail(new Error(`MCP prompt not found: ${prompt.server}:${prompt.name}`))
-              yield* ctx.session.prompt({
+              const admitted = yield* ctx.session.prompt({
                 ...input.prompt,
                 sessionID: input.sessionID,
+                id: input.messageID,
                 text: result.messages
                   .map((message) => promptMessageText(message.content))
                   .join("\n")
                   .trim(),
                 delivery: input.delivery,
               })
-            }).pipe(Effect.asVoid),
+              return Command.prompted(admitted)
+            }),
         })
       }
     })

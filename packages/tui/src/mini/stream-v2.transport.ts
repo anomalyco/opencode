@@ -1754,7 +1754,8 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
 
     input.trace?.write("send.command", { sessionID: input.sessionID, messageID, command: command.name, delivery })
-    return client.session.command(
+    // Command outcomes are not inbox items; the event stream observes any admitted work.
+    await client.session.command(
       {
         sessionID: input.sessionID,
         name: command.name,

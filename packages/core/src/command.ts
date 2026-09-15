@@ -4,6 +4,7 @@ import { Command } from "@opencode/schema/command"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Bus } from "./bus.js"
@@ -11,10 +12,21 @@ import { State } from "./state.js"
 
 export const Info = Command.Info
 export type Info = Command.Info
+export const Outcome = Command.Outcome
+export type Outcome = Command.Outcome
 export { Event } from "@opencode/schema/command"
+
+export function prompted(admitted: { readonly id: SessionMessage.ID }): Outcome {
+  return { type: "prompt", inboxID: admitted.id }
+}
 
 export interface Invocation {
   readonly sessionID: Session.ID
+  /**
+   * Identity for the input this command admits. Commands that prompt a Session must admit
+   * with this ID and report it in their outcome so clients can follow the resulting work.
+   */
+  readonly messageID: SessionMessage.ID
   readonly prompt: PromptInput.Prompt
   readonly delivery: SessionInbox.Delivery
 }
@@ -22,7 +34,8 @@ export interface Invocation {
 export interface Definition {
   readonly name: string
   readonly description?: string
-  readonly execute: (input: Invocation) => Effect.Effect<void, unknown>
+  /** Resolve with an Outcome to report admitted work; `void` means the command finished immediately. */
+  readonly execute: (input: Invocation) => Effect.Effect<Outcome | void, unknown>
 }
 
 export type Editor = {
@@ -45,7 +58,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly execute: (input: {
     readonly name: string
     readonly invocation: Invocation
-  }) => Effect.Effect<void, NotFoundError | ExecutionError>
+  }) => Effect.Effect<Outcome, NotFoundError | ExecutionError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
@@ -82,10 +95,25 @@ export const layer = Layer.effect(
         const definition = state.get().get(input.name)
         if (!definition)
           return yield* new NotFoundError({ command: input.name, message: `Command not found: ${input.name}` })
-        return yield* definition.execute(input.invocation).pipe(
+        const outcome = yield* definition.execute(input.invocation).pipe(
           Effect.tapError((error) => Effect.logError("command execution failed", { command: input.name, error })),
           Effect.mapError((error) => new ExecutionError({ command: input.name, message: errorMessage(error) })),
         )
+        if (outcome === undefined) return { type: "immediate" as const }
+        // Plugin callbacks cross a JavaScript boundary; only a well-formed outcome is reportable.
+        if (!isOutcome(outcome))
+          return yield* new ExecutionError({
+            command: input.name,
+            message: `Command returned an invalid outcome (${typeof outcome})`,
+          })
+        // Clients follow the invocation ID, so a command that admitted under another ID (typically by
+        // omitting `id: messageID` from its prompt) would leave them waiting forever. Fail loudly instead.
+        if (outcome.type === "prompt" && outcome.inboxID !== input.invocation.messageID)
+          return yield* new ExecutionError({
+            command: input.name,
+            message: `Command admitted ${outcome.inboxID} instead of the invocation message ID ${input.invocation.messageID}`,
+          })
+        return outcome
       }),
     })
   }),
@@ -96,6 +124,8 @@ export const node = makeLocationNode({
   layer,
   deps: [Bus.node],
 })
+
+const isOutcome = Schema.is(Outcome)
 
 function errorMessage(error: unknown) {
   if (error instanceof Error) return error.message

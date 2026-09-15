@@ -315,10 +315,11 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.command",
         Effect.fn(function* (ctx) {
-          yield* session
+          const outcome = yield* session
             .command({
               sessionID: ctx.params.sessionID,
               command: ctx.payload.name,
+              id: ctx.payload.id,
               text: ctx.payload.text,
               files: ctx.payload.files,
               agents: ctx.payload.agents,
@@ -344,7 +345,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 ),
               ),
             )
-          return HttpApiSchema.NoContent.make()
+          return { data: outcome }
         }),
       )
       .handle(

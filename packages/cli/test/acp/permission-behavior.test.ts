@@ -547,7 +547,10 @@ function startTurn(fixture: Fixture, connection: Connection, sessionID: string, 
     start: { type: "input", id: inboxID },
     writeTextFile: true,
     control: { cancelled: false, admission: new AbortController() },
-    submit: (signal) => fixture.client.session.prompt({ sessionID, id: inboxID, text: "hello" }, { signal }),
+    submit: (signal) =>
+      fixture.client.session
+        .prompt({ sessionID, id: inboxID, text: "hello" }, { signal })
+        .then(() => "prompt" as const),
   })
 }
 

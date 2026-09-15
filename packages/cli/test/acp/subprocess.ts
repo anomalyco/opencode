@@ -46,6 +46,7 @@ type Waiter = {
 
 export type AcpProcess = {
   readonly request: <T>(method: string, params?: unknown) => Promise<JsonRpcResponse<T>>
+  readonly notify: (method: string, params?: unknown) => Promise<void>
   readonly waitForNotification: <T>(
     method: string,
     predicate: (params: T) => boolean,
@@ -64,7 +65,15 @@ description: Verifier compatibility skill.
 # Verifier Skill
 `
 
-export async function createAcpFixture(options: { readonly skill?: string } = {}) {
+export type FixtureOptions = {
+  readonly skill?: string
+  /** Extra opencode.json entries merged over the verifier config. */
+  readonly config?: Record<string, unknown>
+  /** Produce the scripted completion text; awaiting here holds the model response. */
+  readonly respond?: (request: unknown) => string | Promise<string>
+}
+
+export async function createAcpFixture(options: FixtureOptions = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-cli-acp-"))
   const home = path.join(root, "workspace")
   const config = path.join(root, "config")
@@ -84,15 +93,19 @@ export async function createAcpFixture(options: { readonly skill?: string } = {}
       if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/chat/completions") {
         return new Response("Not found", { status: 404 })
       }
-      requests.push(await request.json().catch(() => undefined))
-      return new Response(completion("accepted"), {
+      const body = await request.json().catch(() => undefined)
+      requests.push(body)
+      return new Response(completion(await (options.respond?.(body) ?? "accepted")), {
         headers: { "content-type": "text/event-stream" },
       })
     },
   })
   await Bun.write(
     path.join(config, "opencode.json"),
-    JSON.stringify(verifierConfig(`http://127.0.0.1:${llm.port}/v1`, options.skill ? skills : undefined)),
+    JSON.stringify({
+      ...verifierConfig(`http://127.0.0.1:${llm.port}/v1`, options.skill ? skills : undefined),
+      ...options.config,
+    }),
   )
   await Bun.write(models, "{}")
 
@@ -305,6 +318,12 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
       const response = await take((message) => isResponse(message) && message.id === id, 20_000, `${method} response`)
       if (!isResponse<T>(response)) throw new Error(`Invalid ACP response: ${JSON.stringify(response)}`)
       return response
+    },
+    async notify(method: string, params?: unknown) {
+      if (inputClosed) throw new Error("ACP stdin is closed")
+      const notification: JsonRpcNotification<unknown> = { jsonrpc: "2.0", method, params }
+      await child.stdin.write(encoder.encode(`${JSON.stringify(notification)}\n`))
+      await child.stdin.flush()
     },
     async waitForNotification<T>(method: string, predicate: (params: T) => boolean, timeoutMs = 20_000) {
       const notification = await take(
