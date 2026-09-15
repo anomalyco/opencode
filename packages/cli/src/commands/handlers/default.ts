@@ -16,7 +16,7 @@ export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     const requestedServer = Option.getOrUndefined(input.server)
-    if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
+    if (requestedServer === undefined && requestedDirectory !== undefined) process.chdir(requestedDirectory)
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
     const serviceStarts = yield* Queue.unbounded<{
@@ -78,6 +78,7 @@ export default Runtime.handler(Commands, (input) =>
         prompt: Option.getOrUndefined(input.prompt),
         auto: input.auto || input.yolo || input.dangerouslySkipPermissions,
       },
+      directory: requestedServer === undefined ? undefined : requestedDirectory,
       config: {
         path: config.path,
         get: () => runPromise(config.get()),
