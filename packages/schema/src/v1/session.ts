@@ -243,6 +243,7 @@ export const StepFinishPart = Schema.Struct({
   reason: Schema.String,
   snapshot: Schema.optional(Schema.String),
   cost: Schema.Finite,
+  responseModelID: Schema.optional(Schema.String),
   tokens: Schema.Struct({
     total: Schema.optional(Schema.Finite),
     input: Schema.Finite,
@@ -461,6 +462,7 @@ export const Assistant = Schema.Struct({
   parentID: MessageID,
   modelID: Model.ID,
   providerID: Provider.ID,
+  responseModelID: Schema.optional(Schema.String),
   mode: Schema.String,
   agent: Schema.String,
   path: Schema.Struct({
