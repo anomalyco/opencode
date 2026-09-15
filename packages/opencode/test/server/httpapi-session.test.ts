@@ -845,6 +845,66 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "clears the archived timestamp when time is sent without it",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "unarchive" })
+        const path = pathFor(SessionPaths.update, { sessionID: session.id })
+
+        const archived = yield* requestJson<Session.Info>(path, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ time: { archived: 1 } }),
+        })
+        expect(archived.time.archived).toBe(1)
+
+        // Clients clear the field by omitting it; JSON.stringify drops
+        // undefined-valued properties, so the body arrives as {"time":{}}.
+        const cleared = yield* requestJson<Session.Info>(path, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ time: {} }),
+        })
+        expect(cleared.time.archived).toBeUndefined()
+
+        // Re-read so a stale value written to the row would surface here.
+        const reread = yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: session.id }), {
+          headers,
+        })
+        expect(reread.time.archived).toBeUndefined()
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "leaves the archived timestamp untouched when time is absent",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "archived" })
+        const path = pathFor(SessionPaths.update, { sessionID: session.id })
+
+        yield* requestJson<Session.Info>(path, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ time: { archived: 1 } }),
+        })
+
+        const renamed = yield* requestJson<Session.Info>(path, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ title: "renamed" }),
+        })
+        expect(renamed.title).toBe("renamed")
+        expect(renamed.time.archived).toBe(1)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "uses project-scoped path and directory precedence",
     () =>
       Effect.gen(function* () {
