@@ -37,14 +37,19 @@ export const reloadWhenSessionsIdle = Effect.fn("Server.reloadWhenSessionsIdle")
   const store = yield* InstanceStore.Service
   const status = yield* SessionStatus.Service
   const config = yield* Config.Service
+  let deferred = false
   while (true) {
     const instances = yield* store.list()
     const active = yield* Effect.forEach(instances, (ctx) =>
       status.list().pipe(Effect.provideService(InstanceRef, ctx)),
     )
-    if (!active.some((sessions) => sessions.size > 0)) break
+    const sessions = active.reduce((count, item) => count + item.size, 0)
+    if (sessions === 0) break
+    if (!deferred) yield* Effect.logInfo("deferring reload until sessions are idle", { sessions })
+    deferred = true
     yield* Effect.sleep(IDLE_POLL_INTERVAL)
   }
+  if (deferred) yield* Effect.logInfo("sessions idle, reloading")
   yield* config.invalidate()
   yield* disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true })
 })

@@ -19,6 +19,7 @@ export interface LoadInput {
 
 export interface Interface {
   readonly load: (input: LoadInput) => Effect.Effect<InstanceContext>
+  /** Loaded instances only: entries still booting are awaited, entries whose boot failed are omitted. */
   readonly list: () => Effect.Effect<InstanceContext[]>
   readonly reload: (input: LoadInput) => Effect.Effect<InstanceContext>
   readonly dispose: (ctx: InstanceContext) => Effect.Effect<void>
