@@ -45,6 +45,49 @@ describe("LocationMutation", () => {
     ),
   )
 
+  it.live("strips trailing newlines from path arguments", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, "hello.txt")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "hello"))
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "hello.txt\n" })
+
+        expect(target).toMatchObject({
+          canonical: yield* Effect.promise(() => fs.realpath(targetPath)),
+          resource: "hello.txt",
+        })
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("keeps intentional leading spaces in path arguments", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const targetPath = path.join(directory, " draft.md")
+        yield* Effect.promise(() => fs.writeFile(targetPath, "hello"))
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: " draft.md" })
+
+        expect(target).toMatchObject({
+          canonical: yield* Effect.promise(() => fs.realpath(targetPath)),
+          resource: " draft.md",
+        })
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("keeps the original path in PathError after sanitizing newlines", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip((yield* LocationMutation.Service).resolve({ path: "../outside.txt\n" }))
+        expect(error).toMatchObject({
+          _tag: "LocationMutation.PathError",
+          reason: "relative_escape",
+          path: "../outside.txt\n",
+        })
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("resolves an active relative prospective file target", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
