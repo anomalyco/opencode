@@ -13,7 +13,10 @@ export function terminalWebSocketURL(input: {
   authToken?: boolean
 }) {
   const isV1 = input.protocol === "v1"
-  const next = new URL(`${input.url}${isV1 ? `/pty/${input.id}/connect` : `/api/pty/${input.id}/connect`}`)
+  const next = new URL(input.url)
+  next.pathname = `${next.pathname.replace(/\/+$/, "")}${
+    isV1 ? `/pty/${input.id}/connect` : `/api/pty/${input.id}/connect`
+  }`
   if (isV1) {
     next.searchParams.set("directory", input.directory)
   } else {
