@@ -9,6 +9,7 @@ import type { MessageV2 } from "../message-v2"
 import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "../system"
+import { AutoReasoning } from "../auto-reasoning"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Record } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
@@ -77,10 +78,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     system.push(header, rest.join("\n"))
   }
 
-  const variant =
-    !input.small && input.model.variants && input.user.model.variant
-      ? input.model.variants[input.user.model.variant]
-      : {}
+  const variant = resolveVariant(input)
   const base = input.small
     ? ProviderTransform.smallOptions(input.model)
     : ProviderTransform.options({
@@ -204,6 +202,12 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     },
   }
 })
+
+function resolveVariant(input: Pick<PrepareInput, "small" | "model" | "user" | "messages">) {
+  if (input.small || !input.model.variants || !input.user.model.variant) return {}
+  if (input.user.model.variant === AutoReasoning.VARIANT) return AutoReasoning.autoVariant(input.model, input.messages)
+  return input.model.variants[input.user.model.variant]
+}
 
 function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user">) {
   const disabled = Permission.disabled(

@@ -1540,7 +1540,7 @@ test("models.dev reasoning options replace generated variants and unsupported to
     },
   })
   expect(models.empty.variants).toEqual({})
-  expect(Object.keys(models.fallback.variants ?? {})).toEqual(["none", "low", "medium", "high", "xhigh"])
+  expect(Object.keys(models.fallback.variants ?? {})).toEqual(["none", "low", "medium", "high", "xhigh", "auto"])
   expect(models.override.variants).toEqual({
     high: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
   })
@@ -1572,6 +1572,7 @@ test("MERGE Gateway exposes declared effort variants without model-specific hand
     high: { reasoningEffort: "high" },
     xhigh: { reasoningEffort: "xhigh" },
     max: { reasoningEffort: "max" },
+    auto: {},
   })
 })
 

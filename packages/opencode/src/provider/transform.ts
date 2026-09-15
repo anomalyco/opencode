@@ -774,6 +774,20 @@ function googleThinkingVariants(model: Provider.Model): Record<string, Record<st
   )
 }
 
+// Variant that asks opencode to classify the current turn and pick an effort
+// variant per request instead of honoring a fixed reasoning setting. Applied
+// where the model is assembled so the generated effort map stays provider-pure.
+export const AUTO_VARIANT = "auto"
+
+export function withAutoVariant(variants: Record<string, Record<string, any>>): Record<string, Record<string, any>> {
+  // Auto only makes sense when there is a real choice of efforts to pick from.
+  // Any stale auto is dropped when config disabled enough concrete variants.
+  // Appended last so existing "first variant" defaults stay unchanged.
+  const concrete = Object.fromEntries(Object.entries(variants).filter(([key]) => key !== AUTO_VARIANT))
+  if (Object.keys(concrete).length < 2) return concrete
+  return { ...concrete, [AUTO_VARIANT]: {} }
+}
+
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 

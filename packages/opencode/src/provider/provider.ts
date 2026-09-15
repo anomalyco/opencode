@@ -1311,7 +1311,9 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     variants: {},
   }
 
-  const variants = ProviderTransform.reasoningVariants(model, base) ?? ProviderTransform.variants(base)
+  const variants = ProviderTransform.withAutoVariant(
+    ProviderTransform.reasoningVariants(model, base) ?? ProviderTransform.variants(base),
+  )
 
   return {
     ...base,
@@ -1571,7 +1573,7 @@ const layer = Layer.effect(
                 : ProviderTransform.variants(parsedModel)
             const merged = mergeDeep(variants, model.variants ?? {})
             parsedModel.variants = mapValues(
-              pickBy(merged, (v) => !v.disabled),
+              ProviderTransform.withAutoVariant(pickBy(merged, (v) => !v.disabled)),
               (v) => omit(v, ["disabled"]),
             )
             parsed.models[modelID] = parsedModel
@@ -1709,6 +1711,9 @@ const layer = Layer.effect(
                 pickBy(merged, (v) => !v.disabled),
                 (v) => omit(v, ["disabled"]),
               )
+            }
+            if (model.variants) {
+              model.variants = mapValues(ProviderTransform.withAutoVariant(model.variants), (v) => v)
             }
           }
 
