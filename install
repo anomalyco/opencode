@@ -65,7 +65,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-INSTALL_DIR=$HOME/.opencode/bin
+# Resolve the installation directory in the priority order documented in the
+# README: $OPENCODE_INSTALL_DIR, $XDG_BIN_DIR, $HOME/bin, then the default.
+if [ -n "${OPENCODE_INSTALL_DIR:-}" ]; then
+    INSTALL_DIR=$OPENCODE_INSTALL_DIR
+elif [ -n "${XDG_BIN_DIR:-}" ]; then
+    INSTALL_DIR=$XDG_BIN_DIR
+elif [ -d "$HOME/bin" ] || mkdir -p "$HOME/bin" 2>/dev/null; then
+    INSTALL_DIR=$HOME/bin
+else
+    INSTALL_DIR=$HOME/.opencode/bin
+fi
 mkdir -p "$INSTALL_DIR"
 
 # If --binary is provided, skip all download/detection logic
