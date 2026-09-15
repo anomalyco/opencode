@@ -974,6 +974,7 @@ type MiniCommandInput = {
   model?: string
   agent?: string
   prompt?: string
+  auto?: boolean
   replay?: boolean
   replayLimit?: number
   demo?: boolean
@@ -1007,7 +1008,7 @@ export async function runMini(input: MiniCommandInput) {
     replay: input.replay ?? true,
     "replay-limit": input.replayLimit,
     replayLimit: input.replayLimit,
-    auto: false,
+    auto: input.auto ?? false,
     yolo: false,
     "dangerously-skip-permissions": false,
     dangerouslySkipPermissions: false,
