@@ -593,11 +593,11 @@ describe("OpenAI Chat route", () => {
               index: 0,
               id: "call_1",
               function: { name: "lookup", arguments: '{"query"' },
-              extra_content: { google: { thought_signature: "tool_sig" } },
             },
           ],
         }),
         deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
+        deltaChunk({ tool_calls: [{ index: 0, extra_content: { google: { thought_signature: "tool_sig_late" } } }] }),
         deltaChunk({}, "tool_calls"),
       )
       const response = yield* LLMClient.generate(
@@ -606,7 +606,7 @@ describe("OpenAI Chat route", () => {
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
 
-      const signatureMetadata = { google: { thoughtSignature: "tool_sig" } }
+      const signatureMetadata = { google: { thoughtSignature: "tool_sig_late" } }
       expect(response.events).toEqual([
         { type: "step-start", index: 0 },
         { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata: signatureMetadata },
