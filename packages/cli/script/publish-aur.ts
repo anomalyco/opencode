@@ -18,7 +18,14 @@ const dryRun = process.argv.includes("--dry-run")
 const pkgver = Script.version.replaceAll("-", ".")
 const license = Bun.file(path.join(dir, "..", "..", "LICENSE"))
 const shim = `#!/bin/sh
-exec "$(dirname "$0")/opencode" "$@"
+TARGET="$0"
+while [ -L "$TARGET" ]; do
+  DIR="$(cd -P "$(dirname "$TARGET")" >/dev/null 2>&1 && pwd)"
+  TARGET="$(readlink "$TARGET")"
+  [[ $TARGET != /* ]] && TARGET="$DIR/$TARGET"
+done
+DIR="$(cd -P "$(dirname "$TARGET")" >/dev/null 2>&1 && pwd)"
+exec "$DIR/opencode" "$@"
 `
 
 await rm(outdir, { recursive: true, force: true })
