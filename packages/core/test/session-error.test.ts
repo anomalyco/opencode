@@ -192,7 +192,7 @@ describe("toSessionError", () => {
     expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false, false, false, false, false, false])
   })
 
-  test("retries transport failures unless the provider accepted or rejected the request", () => {
+  test("retries accepted transport reads but not accepted writes or rejected requests", () => {
     const retryable = [
       llm(new TransportError({ message: "http transport", transport: "http", operation: "request" })),
       llm(
@@ -213,8 +213,6 @@ describe("toSessionError", () => {
           phase: "send",
         }),
       ),
-    ]
-    const ineligible = [
       llm(
         new TransportError({
           message: "response interrupted",
@@ -222,6 +220,17 @@ describe("toSessionError", () => {
           operation: "read",
           delivery: "accepted",
           phase: "receive",
+        }),
+      ),
+    ]
+    const ineligible = [
+      llm(
+        new TransportError({
+          message: "accepted write failed",
+          transport: "websocket",
+          operation: "write",
+          delivery: "accepted",
+          phase: "send",
         }),
       ),
       llm(
@@ -236,7 +245,7 @@ describe("toSessionError", () => {
       ),
     ]
 
-    expect(retryable.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true])
+    expect(retryable.map(SessionRunnerRetry.isRetryable)).toEqual([true, true, true, true])
     expect(ineligible.map(SessionRunnerRetry.isRetryable)).toEqual([false, false])
   })
 
