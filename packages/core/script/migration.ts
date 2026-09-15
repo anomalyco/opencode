@@ -20,12 +20,14 @@ const args = parseArgs({
   },
 })
 
-if (args.values.check) {
-  await check()
-  process.exit(0)
-}
+if (import.meta.main) {
+  if (args.values.check) {
+    await check()
+    process.exit(0)
+  }
 
-await generate()
+  await generate()
+}
 
 async function generate() {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-core-migration-"))
@@ -105,10 +107,11 @@ export default { ...config, out: ${JSON.stringify(output)} }
   )
 }
 
-async function generatedMigrations(directory: string) {
+export async function generatedMigrations(directory: string) {
+  // Bun.Glob yields platform separators (backslashes on Windows); path.dirname
+  // resolves both on their native platform.
   return (await Array.fromAsync(new Bun.Glob("*/migration.sql").scan({ cwd: directory })))
-    .map((file) => file.split("/")[0])
-    .filter((name): name is string => name !== undefined)
+    .map((file) => path.dirname(file))
     .sort()
 }
 
