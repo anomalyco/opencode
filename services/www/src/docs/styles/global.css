@@ -62,7 +62,7 @@ body {
   color: var(--foreground);
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.875rem;
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1.8em;
   letter-spacing: 0.02em;
 }
