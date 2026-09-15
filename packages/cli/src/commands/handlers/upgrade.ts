@@ -29,7 +29,7 @@ export default Runtime.handler(
     log.info(`From ${OPENCODE_VERSION} → ${version}`)
     const progress = spinner()
     progress.start("Upgrading...")
-    yield* updater.upgrade(method, target).pipe(
+    yield* updater.upgrade(method, target, { pin: Option.isSome(input.target) }).pipe(
       Effect.tap(() => Effect.sync(() => progress.stop("Upgrade complete"))),
       Effect.tapCause(() => Effect.sync(() => progress.stop("Upgrade failed", 1))),
     )

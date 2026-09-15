@@ -45,8 +45,10 @@ export default Runtime.handler(
     )
     shell.forEach((file) => log.info(`  Shell PATH: ${file}`))
     if (removal) log.info(`  Package: ${removal.command.join(" ")}`)
+    if (removal?.note) log.info(removal.note)
     if (method === "curl") log.info(`  Binary (manual removal): ${process.execPath}`)
-    if (!method) log.warn("Could not detect the installation method. Remove the installation manually after cleanup.")
+    if (!method || (method === "mise" && !removal))
+      log.warn("Could not identify an installation to remove. Remove the installation manually after cleanup.")
 
     if (input.dryRun) {
       log.warn("Dry run - no changes made")

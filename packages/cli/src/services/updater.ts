@@ -1,13 +1,13 @@
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
-import { Context, Duration, Effect, FileSystem, Layer, Ref, Schedule } from "effect"
+import { Context, Duration, Effect, FileSystem, Layer, Match, Option, Ref, Schedule, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
 import { action, parseReleaseVersion, type Policy } from "./updater-action"
 
-export const methods = ["curl", "npm", "pnpm", "bun", "yarn"] as const
+export const methods = ["curl", "npm", "pnpm", "bun", "yarn", "mise"] as const
 export type Method = (typeof methods)[number]
 export type RunResult = { readonly type: "available" | "installed"; readonly version: string }
 export type CheckResult = RunResult | { readonly type: "unavailable"; readonly message: string }
@@ -18,11 +18,30 @@ export interface Interface {
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
-  readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
-  readonly removal: (method: Method) =>
-    | { readonly command: ReadonlyArray<string>; readonly run: Effect.Effect<void, Error> }
+  readonly upgrade: (
+    method: Method,
+    version: string,
+    options?: { readonly pin?: boolean },
+  ) => Effect.Effect<void, Error>
+  readonly removal: (
+    method: Method,
+  ) =>
+    | { readonly command: ReadonlyArray<string>; readonly run: Effect.Effect<void, Error>; readonly note?: string }
     | undefined
 }
+
+const MiseTools = Schema.fromJsonString(
+  Schema.Array(
+    Schema.Struct({
+      version: Schema.String,
+      requested_version: Schema.String,
+      install_path: Schema.String,
+      installed: Schema.Boolean,
+      active: Schema.Boolean,
+      source: Schema.Struct({ type: Schema.String, path: Schema.String }),
+    }),
+  ),
+)
 
 export const pollUpdates = Effect.fnUntraced(function* (input: {
   readonly check: Effect.Effect<unknown>
@@ -61,8 +80,9 @@ const make = Effect.gen(function* () {
   const appProcess = yield* AppProcess.Service
   const installedVersion = yield* Ref.make(OPENCODE_VERSION)
   const channel = OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")
+  const executable = yield* fs.realPath(process.execPath).pipe(Effect.orElseSucceed(() => process.execPath))
+  const mise = miseInstallation(executable)
   const installedPackage = yield* Effect.gen(function* () {
-    const executable = yield* fs.realPath(process.execPath)
     const directory = path.dirname(path.dirname(executable))
     const manifest: { name: string; bin?: Record<string, string> } = yield* fs
       .readFileString(path.join(directory, "package.json"))
@@ -101,6 +121,7 @@ const make = Effect.gen(function* () {
   })
 
   const method = Effect.fnUntraced(function* () {
+    if (mise) return "mise"
     const binary = path.join(
       global.home,
       ".opencode",
@@ -125,16 +146,30 @@ const make = Effect.gen(function* () {
   })
 
   const removal = (method: Method) => {
-    if (method === "curl" || !installedPackage) return undefined
-    const commands = {
-      npm: ["npm", "uninstall", "--global", installedPackage],
-      pnpm: ["pnpm", "remove", "--global", installedPackage],
-      bun: ["bun", "remove", "--global", installedPackage],
-      yarn: ["yarn", "global", "remove", installedPackage],
-    }
-    const command = commands[method]
+    const command = Match.value(method).pipe(
+      Match.when("curl", () => undefined),
+      Match.when("mise", () => {
+        if (!mise || !parseReleaseVersion(mise.version)) return undefined
+        return ["mise", "uninstall", `${mise.tool}@${mise.version}`]
+      }),
+      Match.whenOr("npm", "pnpm", "bun", "yarn", (method) => {
+        if (!installedPackage) return undefined
+        return {
+          npm: ["npm", "uninstall", "--global", installedPackage],
+          pnpm: ["pnpm", "remove", "--global", installedPackage],
+          bun: ["bun", "remove", "--global", installedPackage],
+          yarn: ["yarn", "global", "remove", installedPackage],
+        }[method]
+      }),
+      Match.exhaustive,
+    )
+    if (!command) return
     return {
       command,
+      note:
+        method === "mise"
+          ? "Only this installed version will be removed. Mise config entries are kept; remove them with mise to prevent reinstallation."
+          : undefined,
       run: exec(command, "5 minutes").pipe(
         Effect.flatMap((result) =>
           result.code === 0
@@ -172,15 +207,91 @@ const make = Effect.gen(function* () {
       fs.remove(directory, { recursive: true, force: true }).pipe(Effect.ignore),
     )
 
-  const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
+  const miseCurrent = Effect.fnUntraced(function* (name: string) {
+    const result = yield* exec(["mise", "ls", "--current", "--json", name])
+    const tools = Option.getOrUndefined(Schema.decodeUnknownOption(MiseTools)(result.stdout))
+    const tool = tools?.length === 1 ? tools[0] : undefined
+    if (
+      result.code !== 0 ||
+      !tool?.installed ||
+      !tool.active ||
+      !path.isAbsolute(tool.install_path) ||
+      !path.isAbsolute(tool.source.path) ||
+      !["mise.toml", ".tool-versions"].includes(tool.source.type)
+    )
+      return yield* Effect.fail(new Error("Could not identify the active mise configuration for this installation."))
+    return tool
+  })
+
+  const upgradeMise = Effect.fnUntraced(function* (version: string, packageName: string, pin: boolean) {
+    if (!mise) return yield* Effect.fail(new Error("The running executable is not a recognized mise installation."))
+    const tool = yield* miseCurrent(mise.tool)
+    const directory = yield* fs.realPath(tool.install_path).pipe(Effect.orElseSucceed(() => undefined))
+    if (directory !== mise.directory || tool.version !== mise.version)
+      return yield* Effect.fail(
+        new Error(
+          "The active mise version does not own the running executable. Restart OpenCode from the selecting config.",
+        ),
+      )
+    if (mise.package && mise.package !== packageName)
+      return yield* Effect.fail(
+        new Error(`Reinstall npm:${packageName}@${version} with mise to migrate from ${mise.tool}.`),
+      )
+    const source = yield* fs.stat(tool.source.path).pipe(Effect.orElseSucceed(() => undefined))
+    if (source?.type !== "File")
+      return yield* Effect.fail(
+        new Error("The selecting mise config file no longer exists. Refusing to create a config."),
+      )
+
+    const fuzzy = /^(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?$/.test(tool.requested_version)
+    if (tool.requested_version !== "latest" && !fuzzy && !parseReleaseVersion(tool.requested_version))
+      return yield* Effect.fail(
+        new Error(`Unsupported mise version request: ${tool.requested_version}. Use mise to update this selection.`),
+      )
+    const requested = Match.value({ pin, fuzzy, version: tool.requested_version }).pipe(
+      Match.when({ pin: true }, () => version),
+      Match.when({ version: "latest" }, () => "latest"),
+      Match.when({ fuzzy: true }, (request) =>
+        version.split(".").slice(0, request.version.split(".").length).join("."),
+      ),
+      Match.orElse(() => version),
+    )
+    const run = Effect.fnUntraced(function* (command: string[]) {
+      const result = yield* exec(command, "5 minutes")
+      if (result.code !== 0) return yield* Effect.fail(new Error(result.stderr.trim() || "Failed to update with mise"))
+    })
+    if (!pin && fuzzy) yield* run(["mise", "install", `${mise.tool}@${version}`])
+    yield* run([
+      "mise",
+      "use",
+      "--path",
+      tool.source.path,
+      requested === version ? "--pin" : "--fuzzy",
+      `${mise.tool}@${requested}`,
+    ])
+    const selected = yield* miseCurrent(mise.tool)
+    if (
+      selected.version !== version ||
+      selected.source.path !== tool.source.path ||
+      selected.requested_version !== requested
+    )
+      return yield* Effect.fail(
+        new Error(
+          `Mise did not select ${version} in ${tool.source.path}. Check the mise version request and lockfile.`,
+        ),
+      )
+  })
+
+  const upgrade = Effect.fnUntraced(function* (method: Method, input: string, options?: { readonly pin?: boolean }) {
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
     const version = input.trim().replace(/^v/, "")
     const packageName = (yield* release()).package
+    if (method === "mise") return yield* upgradeMise(version, packageName, options?.pin ?? false)
     const target = `${packageName}@${version}`
     if (installedPackage && packageName !== installedPackage && (method === "pnpm" || method === "yarn")) {
       return yield* Effect.fail(new Error(`Reinstall ${target} with ${method} to migrate from ${installedPackage}.`))
     }
-    const commands: Record<Exclude<Method, "bun" | "curl">, string[]> = {
+    const commands: Record<Exclude<Method, "bun" | "curl" | "mise">, string[]> = {
       // Keep the old package: uninstalling it can unlink the replacement command.
       npm: [
         "npm",
@@ -301,6 +412,27 @@ const make = Effect.gen(function* () {
 })
 
 export const layer = Layer.effect(Service, make)
+
+function miseInstallation(executable: string) {
+  const parts = executable.split(path.sep)
+  const tools = {
+    opencode: "opencode",
+    "npm-opencode-cli": "npm:@opencode/cli",
+    "npm-opencode-cli-node": "npm:@opencode/cli-node",
+    "npm-opencode-ai-cli": "npm:@opencode-ai/cli",
+    "npm-opencode-ai-cli-node": "npm:@opencode-ai/cli-node",
+  }
+  const index = parts.findIndex((part, index) => part === "installs" && Object.hasOwn(tools, parts[index + 1]))
+  if (index < 0 || !parts[index + 2] || parts.length <= index + 3) return
+  const tool = Object.entries(tools).find(([name]) => name === parts[index + 1])?.[1]
+  if (!tool) return
+  return {
+    tool,
+    package: tool.startsWith("npm:") ? tool.slice(4) : undefined,
+    version: parts[index + 2],
+    directory: parts.slice(0, index + 3).join(path.sep),
+  }
+}
 
 export * as Updater from "./updater"
 export { action, type Action, type Policy } from "./updater-action"
