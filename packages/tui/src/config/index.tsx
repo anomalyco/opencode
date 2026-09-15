@@ -54,6 +54,10 @@ export const Plugin = Schema.Union([
   }),
 ])
 
+/** VCS review scopes plus the last session turn, which only exists while a session is open. */
+export const DiffSource = Schema.Union([Vcs.Mode, Schema.Literal("turn")])
+export type DiffSource = Schema.Schema.Type<typeof DiffSource>
+
 export const Cursor = Schema.Struct({
   style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
     description: "Cursor shape. Use 'default' to preserve the terminal setting",
@@ -109,8 +113,9 @@ export const Info = Schema.Struct({
   ).annotate({ description: "System notification and sound settings" }),
   diffs: Schema.optional(
     Schema.Struct({
-      source: Schema.optional(Vcs.Mode).annotate({
-        description: "Initial diff source; defaults to 'branch' (branch and uncommitted changes)",
+      source: Schema.optional(DiffSource).annotate({
+        description:
+          "Initial diff source; defaults to 'branch' (branch and uncommitted changes). 'turn' shows the last session turn and falls back to 'branch' outside a session",
       }),
       wrap: Schema.optional(Schema.Literals(["word", "none"])).annotate({
         description: "Line wrapping behavior in diff output",
