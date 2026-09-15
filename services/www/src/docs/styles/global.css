@@ -16,8 +16,8 @@
 
 :root {
   color-scheme: dark;
-  --background: #090909;
-  --foreground: #ffffff;
+  --background: #000000;
+  --foreground: #efefef;
   --muted: #929292;
   --border: #303030;
   --surface: #101010;
