@@ -30,6 +30,36 @@ export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 export const RETRY_MAX_RETRIES = 5
 
+/**
+ * Overrides for the retry schedule, supplied by `experimental.retry` in the
+ * config. Every field falls back to the constant above, so an absent or empty
+ * object reproduces the default schedule exactly.
+ */
+export type Tuning = {
+  maxRetries?: number
+  initialDelayMs?: number
+  backoffFactor?: number
+  jitterFactor?: number
+  maxDelayMs?: number
+  maxDelayNoHeadersMs?: number
+}
+
+function resolve(tuning?: Tuning) {
+  return {
+    maxRetries: tuning?.maxRetries ?? RETRY_MAX_RETRIES,
+    initialDelayMs: tuning?.initialDelayMs ?? RETRY_INITIAL_DELAY,
+    backoffFactor: tuning?.backoffFactor ?? RETRY_BACKOFF_FACTOR,
+    jitterFactor: tuning?.jitterFactor ?? RETRY_JITTER_FACTOR,
+    // Normalized here so policy() and delay() read the same ceiling. Config
+    // validation also bounds this, but a plugin config hook mutates the loaded
+    // config without revalidation, so it cannot be the only guard.
+    maxDelayMs: Math.min(tuning?.maxDelayMs ?? RETRY_MAX_DELAY, RETRY_MAX_DELAY),
+    maxDelayNoHeadersMs: tuning?.maxDelayNoHeadersMs ?? RETRY_MAX_DELAY_NO_HEADERS,
+  }
+}
+
+type Limits = ReturnType<typeof resolve>
+
 const RETRYABLE_MESSAGE_PATTERNS = [
   /429|500|502|503|504|524/i,
   /rate increased too quickly|rate limit|rate-limit|rate_limit|too many requests/i,
@@ -40,11 +70,17 @@ const RETRYABLE_MESSAGE_PATTERNS = [
   /\btry again (?:later|in\b)|\b(?:currently|temporarily) at capacity\b/i,
 ]
 
-function cap(ms: number) {
-  return Math.min(ms, RETRY_MAX_DELAY)
+function cap(ms: number, limits: Limits) {
+  // A tuned backoffFactor or jitterFactor can overflow the exponential to
+  // Infinity, and Infinity * 0 jitter is NaN. Duration.millis turns NaN and
+  // negatives alike into an immediate retry, so every delay is pinned to a
+  // finite, non-negative value here rather than at each return site.
+  if (!Number.isFinite(ms)) return limits.maxDelayMs
+  return Math.min(Math.max(ms, 0), limits.maxDelayMs)
 }
 
-export function delay(attempt: number, error?: SessionV1.APIError, random = Math.random()) {
+export function delay(attempt: number, error?: SessionV1.APIError, random = Math.random(), tuning?: Tuning) {
+  const limits = resolve(tuning)
   if (error) {
     const headers = error.data.responseHeaders
     if (headers) {
@@ -52,7 +88,7 @@ export function delay(attempt: number, error?: SessionV1.APIError, random = Math
       if (retryAfterMs) {
         const parsedMs = Number.parseFloat(retryAfterMs)
         if (!Number.isNaN(parsedMs)) {
-          return cap(parsedMs)
+          return cap(parsedMs, limits)
         }
       }
 
@@ -61,25 +97,25 @@ export function delay(attempt: number, error?: SessionV1.APIError, random = Math
         const parsedSeconds = Number.parseFloat(retryAfter)
         if (!Number.isNaN(parsedSeconds)) {
           // convert seconds to milliseconds
-          return cap(Math.ceil(parsedSeconds * 1000))
+          return cap(Math.ceil(parsedSeconds * 1000), limits)
         }
         // Try parsing as HTTP date format
         const parsed = Date.parse(retryAfter) - Date.now()
         if (!Number.isNaN(parsed) && parsed > 0) {
-          return cap(Math.ceil(parsed))
+          return cap(Math.ceil(parsed), limits)
         }
       }
 
-      return cap(exponential(attempt, random))
+      return cap(exponential(attempt, random, limits), limits)
     }
   }
 
-  return cap(Math.min(exponential(attempt, random), RETRY_MAX_DELAY_NO_HEADERS))
+  return cap(Math.min(exponential(attempt, random, limits), limits.maxDelayNoHeadersMs), limits)
 }
 
-function exponential(attempt: number, random: number) {
-  const base = RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
-  return Math.ceil(base + base * RETRY_JITTER_FACTOR * random)
+function exponential(attempt: number, random: number, limits: Limits) {
+  const base = limits.initialDelayMs * Math.pow(limits.backoffFactor, attempt - 1)
+  return Math.ceil(base + base * limits.jitterFactor * random)
 }
 
 export function retryable(error: Err, provider: string) {
@@ -182,17 +218,25 @@ function parseJSON(value: unknown) {
 
 export function policy(opts: {
   provider: string
+  tuning?: Tuning
   parse: (error: unknown) => Err
   set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
 }) {
+  const limits = resolve(opts.tuning)
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
-      if (meta.attempt > RETRY_MAX_RETRIES) return Cause.done(meta.attempt)
+      // A negative limit means retry for as long as the error stays retryable.
+      if (limits.maxRetries >= 0 && meta.attempt > limits.maxRetries) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
-        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+        const wait = delay(
+          meta.attempt,
+          SessionV1.APIError.isInstance(error) ? error : undefined,
+          Math.random(),
+          opts.tuning,
+        )
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({
           attempt: meta.attempt,
