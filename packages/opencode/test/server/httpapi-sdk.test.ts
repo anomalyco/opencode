@@ -408,6 +408,27 @@ describe("HttpApi SDK", () => {
     ),
   )
 
+  httpapi(
+    "routes configured SDK directory with URL-sensitive characters",
+    withProject("raw", { setup: (dir) => writeStandardFiles(path.join(dir, "space # \u2603 %25")) }, ({ directory }) =>
+      Effect.gen(function* () {
+        const special = path.join(directory, "space # \u2603 %25")
+        let request: Request | undefined
+        const sdk = yield* client("raw", special, {
+          onRequest: (value) => (request = value),
+        })
+        const found = yield* call(() => sdk.v2.fs.find({ query: "hello", type: "file" }))
+        const url = new URL(request!.url)
+
+        expect(found.response.status).toBe(200)
+        expect(found.data).toMatchObject({ data: [{ path: "hello.txt", type: "file" }] })
+        expect(url.searchParams.get("directory")).toBe(special)
+        expect(url.searchParams.get("location[directory]")).toBe(special)
+        expect(request!.headers.has("x-opencode-directory")).toBe(false)
+      }),
+    ),
+  )
+
   serverPathParity("matches generated SDK global and control behavior", (serverPath) =>
     Effect.gen(function* () {
       const sdk = yield* client(serverPath)
