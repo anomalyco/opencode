@@ -347,6 +347,24 @@ test("parseModel handles model IDs with slashes", () => {
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
 
+test("parseModel strips trailing slash from model string", () => {
+  const result = Provider.parseModel("lmstudio/qwen3-4b/")
+  expect(String(result.providerID)).toBe("lmstudio")
+  expect(String(result.modelID)).toBe("qwen3-4b")
+})
+
+test("parseModel strips trailing slash from provider/model string", () => {
+  const result = Provider.parseModel("anthropic/claude-sonnet-4/")
+  expect(String(result.providerID)).toBe("anthropic")
+  expect(String(result.modelID)).toBe("claude-sonnet-4")
+})
+
+test("parseModel strips multiple trailing slashes", () => {
+  const result = Provider.parseModel("anthropic/claude-sonnet-4//")
+  expect(String(result.providerID)).toBe("anthropic")
+  expect(String(result.modelID)).toBe("claude-sonnet-4")
+})
+
 it.instance("defaultModel returns first available model when no config set", () =>
   Effect.gen(function* () {
     yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")

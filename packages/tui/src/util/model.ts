@@ -1,7 +1,7 @@
 import type { Provider } from "@opencode-ai/sdk/v2"
 
 export function parse(value: string) {
-  const [providerID, ...modelID] = value.split("/")
+  const [providerID, ...modelID] = value.replace(/\/+$/, "").split("/")
   return { providerID, modelID: modelID.join("/") }
 }
 
