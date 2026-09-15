@@ -8,6 +8,174 @@ import * as prompts from "@clack/prompts"
 import { EOL } from "os"
 import { Effect } from "effect"
 
+const formats = ["json", "usage-json", "usage-csv"] as const
+
+type Usage = {
+  input: number
+  output: number
+  reasoning: number
+  cache: {
+    read: number
+    write: number
+  }
+}
+
+type UsageMessage = {
+  info: {
+    role: "user" | "assistant"
+    providerID?: string
+    modelID?: string
+    time: {
+      created: number
+      completed?: number
+    }
+  }
+  parts: SessionV1.Part[]
+}
+
+export type UsageExport = ReturnType<typeof usage>
+
+export function usage(session: Pick<Session.Info, "id" | "parentID" | "time">, messages: UsageMessage[]) {
+  const tokens: Usage = {
+    input: 0,
+    output: 0,
+    reasoning: 0,
+    cache: { read: 0, write: 0 },
+  }
+  const models = new Map<string, { steps: number; cost: number; tokens: Usage }>()
+  const tools = new Map<string, { calls: number; completed: number; errors: number }>()
+  let steps = 0
+  let cost = 0
+  let assistants = 0
+  let unfinished = 0
+  let missing = 0
+
+  for (const message of messages) {
+    if (message.info.role === "assistant") {
+      assistants++
+      if (message.info.time.completed === undefined) unfinished++
+      if (!message.parts.some((part) => part.type === "step-finish")) missing++
+    }
+    for (const part of message.parts) {
+      if (part.type === "tool") {
+        const current = tools.get(part.tool) ?? { calls: 0, completed: 0, errors: 0 }
+        current.calls++
+        if (part.state.status === "completed") current.completed++
+        if (part.state.status === "error") current.errors++
+        tools.set(part.tool, current)
+      }
+      if (part.type !== "step-finish") continue
+      steps++
+      cost += part.cost
+      add(tokens, part.tokens)
+      if (message.info.role !== "assistant") continue
+      const key = `${message.info.providerID}/${message.info.modelID}`
+      const current = models.get(key) ?? {
+        steps: 0,
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      }
+      current.steps++
+      current.cost += part.cost
+      add(current.tokens, part.tokens)
+      models.set(key, current)
+    }
+  }
+
+  return {
+    schemaVersion: 1,
+    scope: "exported_session_steps" as const,
+    sessionID: session.id,
+    parentID: session.parentID,
+    includesChildren: false,
+    time: {
+      created: session.time.created,
+      updated: session.time.updated,
+    },
+    steps,
+    assistantMessages: assistants,
+    unfinishedAssistantMessages: unfinished,
+    assistantMessagesWithoutUsage: missing,
+    cost,
+    tokens: {
+      ...tokens,
+      processed: processed(tokens),
+    },
+    models: [...models].map(([model, value]) => ({
+      model,
+      ...value,
+      tokens: { ...value.tokens, processed: processed(value.tokens) },
+    })),
+    tools: [...tools].map(([tool, value]) => ({ tool, ...value })),
+  }
+}
+
+export function usageCsv(report: UsageExport) {
+  const header = [
+    "schema_version",
+    "scope",
+    "session_id",
+    "parent_id",
+    "includes_children",
+    "time_created",
+    "time_updated",
+    "steps",
+    "assistant_messages",
+    "unfinished_assistant_messages",
+    "assistant_messages_without_usage",
+    "cost",
+    "tokens_input",
+    "tokens_output",
+    "tokens_reasoning",
+    "tokens_cache_read",
+    "tokens_cache_write",
+    "tokens_processed",
+    "models",
+    "tools",
+  ]
+  const row = [
+    report.schemaVersion,
+    report.scope,
+    report.sessionID,
+    report.parentID ?? "",
+    report.includesChildren,
+    report.time.created,
+    report.time.updated,
+    report.steps,
+    report.assistantMessages,
+    report.unfinishedAssistantMessages,
+    report.assistantMessagesWithoutUsage,
+    report.cost,
+    report.tokens.input,
+    report.tokens.output,
+    report.tokens.reasoning,
+    report.tokens.cache.read,
+    report.tokens.cache.write,
+    report.tokens.processed,
+    report.models.map((item) => item.model).join(";"),
+    JSON.stringify(report.tools),
+  ]
+  return `${header.join(",")}\n${row.map(csv).join(",")}\n`
+}
+
+function add(total: Usage, value: Usage) {
+  total.input += value.input
+  total.output += value.output
+  total.reasoning += value.reasoning
+  total.cache.read += value.cache.read
+  total.cache.write += value.cache.write
+}
+
+function processed(value: Usage) {
+  return value.input + value.output + value.reasoning + value.cache.read + value.cache.write
+}
+
+function csv(value: string | number | boolean) {
+  const text = String(value)
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text
+  return /[",\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe
+}
+
 function redact(kind: string, id: string, value: string) {
   return value.trim() ? `[redacted:${kind}:${id}]` : value
 }
@@ -221,7 +389,7 @@ function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] })
 
 export const ExportCommand = effectCmd({
   command: "export [sessionID]",
-  describe: "export session data as JSON",
+  describe: "export session data",
   builder: (yargs) =>
     yargs
       .positional("sessionID", {
@@ -231,13 +399,22 @@ export const ExportCommand = effectCmd({
       .option("sanitize", {
         describe: "redact sensitive transcript and file data",
         type: "boolean",
+      })
+      .option("format", {
+        describe: "output transcript JSON or structured usage",
+        choices: formats,
+        default: "json" as const,
       }),
   handler: Effect.fn("Cli.export")(function* (args) {
     return yield* run(args)
   }),
 })
 
-const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; sanitize?: boolean }) {
+const run = Effect.fn("Cli.export.body")(function* (args: {
+  sessionID?: string
+  sanitize?: boolean
+  format: (typeof formats)[number]
+}) {
   const svc = yield* Session.Service
   let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
   process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
@@ -284,8 +461,13 @@ const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; 
     const sessionInfo = yield* svc.get(sessionID!)
     const messages = yield* svc.messages({ sessionID: sessionInfo.id })
 
-    const exportData = { info: sessionInfo, messages }
+    if (args.format !== "json") {
+      const report = usage(sessionInfo, messages)
+      process.stdout.write(args.format === "usage-csv" ? usageCsv(report) : JSON.stringify(report, null, 2) + EOL)
+      return
+    }
 
+    const exportData = { info: sessionInfo, messages }
     process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
     process.stdout.write(EOL)
   }).pipe(Effect.catchCause(() => fail(`Session not found: ${sessionID!}`)))
