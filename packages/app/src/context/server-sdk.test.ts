@@ -4,14 +4,14 @@ import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import type { Event } from "@opencode-ai/sdk/v2/client"
 
 describe("resumeStreamAfterPageShow", () => {
-  test("restarts a stream only after a back-forward cache restore", () => {
+  test("restarts a stream after any page show", () => {
     let starts = 0
     const start = () => starts++
 
-    resumeStreamAfterPageShow({ persisted: false } as PageTransitionEvent, start)
-    resumeStreamAfterPageShow({ persisted: true } as PageTransitionEvent, start)
+    resumeStreamAfterPageShow(start)
+    resumeStreamAfterPageShow(start)
 
-    expect(starts).toBe(1)
+    expect(starts).toBe(2)
   })
 })
 
