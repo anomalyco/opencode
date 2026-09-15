@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">Agen coding AI open source.</p>
+<p align="center">Agen pemrograman AI sumber terbuka.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -50,16 +50,16 @@
 # YOLO
 curl -fsSL https://opencode.ai/install | bash
 
-# Manajer paket
+# Pengelola paket
 npm i -g opencode-ai@latest        # atau bun/pnpm/yarn
 scoop install opencode             # Windows
 choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS dan Linux (disarankan, selalu diperbarui)
-brew install opencode              # macOS dan Linux (formula brew resmi, jarang diperbarui)
+brew install opencode              # macOS dan Linux (formula resmi Homebrew, lebih jarang diperbarui)
 sudo pacman -S opencode            # Arch Linux (Stabil)
 paru -S opencode-bin               # Arch Linux (Terbaru dari AUR)
 mise use -g opencode               # OS apa pun
-nix run nixpkgs#opencode           # atau github:anomalyco/opencode untuk branch dev terbaru
+nix run nixpkgs#opencode           # atau github:anomalyco/opencode untuk cabang dev terbaru
 ```
 
 > [!TIP]
@@ -89,7 +89,7 @@ Skrip instalasi mengikuti urutan prioritas berikut untuk jalur instalasi:
 
 1. `$OPENCODE_INSTALL_DIR` - Direktori instalasi kustom
 2. `$XDG_BIN_DIR` - Jalur yang mematuhi XDG Base Directory Specification
-3. `$HOME/bin` - Direktori binari pengguna standar (jika ada atau dapat dibuat)
+3. `$HOME/bin` - Direktori biner standar pengguna (jika ada atau dapat dibuat)
 4. `$HOME/.opencode/bin` - Opsi default
 
 ```bash
@@ -103,13 +103,13 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 OpenCode menyertakan dua agen bawaan yang dapat Anda alihkan menggunakan tombol `Tab`.
 
 - **build** - Agen default dengan akses penuh untuk pekerjaan pengembangan
-- **plan** - Agen read-only untuk analisis dan eksplorasi kode
+- **plan** - Agen hanya-baca untuk analisis dan eksplorasi kode
   - Menolak pengeditan file secara default
   - Meminta izin sebelum menjalankan perintah bash
   - Ideal untuk mengeksplorasi basis kode yang tidak dikenal atau merencanakan perubahan
 
 Termasuk juga subagen **general** untuk pencarian kompleks dan tugas multi-langkah.
-Ini digunakan secara internal dan dapat dipanggil menggunakan `@general` dalam pesan.
+Subagen ini digunakan secara internal dan dapat dipanggil menggunakan `@general` dalam pesan.
 
 Pelajari lebih lanjut tentang [agen](https://opencode.ai/docs/agents).
 
@@ -119,12 +119,12 @@ Untuk informasi lebih lanjut tentang cara mengonfigurasi OpenCode, [**kunjungi d
 
 ### Berkontribusi
 
-Jika Anda tertarik untuk berkontribusi pada OpenCode, silakan baca [dokumentasi kontribusi](./CONTRIBUTING.md) kami sebelum mengirimkan pull request.
+Jika Anda tertarik untuk berkontribusi pada OpenCode, silakan baca [dokumentasi kontribusi kami](./CONTRIBUTING.md) sebelum mengirimkan pull request.
 
 ### Membangun dengan OpenCode
 
-Jika Anda mengerjakan proyek yang terkait dengan OpenCode dan menggunakan "opencode" sebagai bagian dari namanya, misalnya "opencode-dashboard" atau "opencode-mobile", harap tambahkan catatan ke README Anda untuk mengklarifikasi bahwa proyek tersebut tidak dibangun oleh tim OpenCode dan tidak berafiliasi dengan kami dengan cara apa pun.
+Jika Anda mengerjakan proyek yang terkait dengan OpenCode dan menggunakan "opencode" sebagai bagian dari namanya, misalnya "opencode-dashboard" atau "opencode-mobile", harap tambahkan catatan pada README Anda untuk menjelaskan bahwa proyek tersebut tidak dibuat oleh tim OpenCode dan sama sekali tidak berafiliasi dengan kami.
 
 ---
 
-**Bergabung dengan komunitas kami** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Bergabunglah dengan komunitas kami** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
