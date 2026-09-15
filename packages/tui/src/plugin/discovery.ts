@@ -52,9 +52,10 @@ export async function discoverPluginTargets(directories: string[]) {
   ).flat()
 }
 
-export function deduplicatePluginTargets<
-  const Target extends { readonly entry: string | { readonly package: string } },
->(targets: readonly Target[], directory: string) {
+export function mergePluginTargets<const Target extends { readonly entry: string | { readonly package: string } }>(
+  targets: readonly Target[],
+  directory: string,
+) {
   return [
     ...targets
       .reduce((result, target) => {
