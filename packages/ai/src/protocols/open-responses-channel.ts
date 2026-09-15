@@ -168,6 +168,10 @@ export const transport = <Body>(options: Options): Transport<Body, Prepared, str
                 }
               })
             : undefined
+        if (input.webSocket && !channel)
+          yield* Effect.logWarning(`${options.name} does not offer WebSocket for this endpoint; using HTTP`, {
+            url: parts.url,
+          })
         return {
           http: {
             request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
@@ -179,8 +183,7 @@ export const transport = <Body>(options: Options): Transport<Body, Prepared, str
       }),
     execute: (prepared, request, runtime, executeOptions) =>
       Effect.gen(function* () {
-        if (!executeOptions?.webSocket || !prepared.channel)
-          return yield* http.execute(prepared.http, request, runtime, executeOptions)
+        if (!executeOptions?.webSocket || !prepared.channel) return yield* http.execute(prepared.http, request, runtime)
         let fallbackHttp: HttpContext | undefined
         const exchange: WebSocketChannelExchange = {
           id: request.id ?? "request",

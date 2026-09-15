@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { ConfigProvider, Effect, Layer, Ref, Schema, Stream } from "effect"
+import { ConfigProvider, Effect, Layer, Logger, Ref, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
   LLM,
@@ -1199,13 +1199,14 @@ describe("OpenAI Responses route", () => {
         },
       ]
 
-      const unavailable = yield* Ref.make(0)
+      const warnings: string[] = []
+      const logger = Logger.make((entry) => {
+        if (entry.logLevel !== "Warn") return
+        warnings.push(String(Array.isArray(entry.message) ? entry.message[0] : entry.message))
+      })
       yield* Effect.forEach(cases, (item) =>
         LLMClient.generate(LLM.request({ model: item.model, prompt: "Say hello." }), {
-          webSocket: {
-            execute: () => Effect.die("unexpected WebSocket request"),
-            unavailable: Ref.update(unavailable, (value) => value + 1),
-          },
+          webSocket: { execute: () => Effect.die("unexpected WebSocket request") },
         }).pipe(
           Effect.provide(
             dynamicResponse((input) =>
@@ -1218,8 +1219,10 @@ describe("OpenAI Responses route", () => {
             ),
           ),
         ),
+      ).pipe(Effect.provide(Logger.layer([logger])))
+      expect(warnings).toEqual(
+        cases.map(() => "Azure OpenAI Responses does not offer WebSocket for this endpoint; using HTTP"),
       )
-      expect(yield* Ref.get(unavailable)).toBe(cases.length)
     }),
   )
 

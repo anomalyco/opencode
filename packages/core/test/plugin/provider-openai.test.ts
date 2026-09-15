@@ -270,8 +270,7 @@ describe("OpenAIPlugin", () => {
       const defaulted = yield* prepare()
       const disabled = yield* prepare("http")
 
-      expect(prepared.options.webSocket?.execute).toBe(executor.execute)
-      expect(prepared.options.webSocket?.unavailable).toBeDefined()
+      expect(prepared.options.webSocket).toBe(executor)
       expect(prepared.options.http).toBeUndefined()
       expect(defaulted.options.webSocket).toBeUndefined()
       expect(disabled.options.webSocket).toBeUndefined()

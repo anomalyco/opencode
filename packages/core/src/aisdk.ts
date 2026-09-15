@@ -342,14 +342,7 @@ function modelFromLanguage(info: Info, language: LanguageModelV3) {
     model: (input) =>
       LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
-    // AI SDK packages own their HTTP client, so a session WebSocket executor is never used here.
-    streamPrepared: (prepared, _request, _runtime, options) =>
-      Stream.unwrap(
-        Effect.as(
-          options?.webSocket?.unavailable ?? Effect.void,
-          streamLanguage(language, prepared as LanguageModelV3CallOptions),
-        ),
-      ),
+    streamPrepared: (prepared) => streamLanguage(language, prepared as LanguageModelV3CallOptions),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
