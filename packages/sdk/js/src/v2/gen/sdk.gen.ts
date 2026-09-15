@@ -217,6 +217,8 @@ import type {
   SessionSummarizeResponses,
   SessionTodoErrors,
   SessionTodoResponses,
+  SessionTodoUpdateErrors,
+  SessionTodoUpdateResponses,
   SessionUnrevertErrors,
   SessionUnrevertResponses,
   SessionUnshareErrors,
@@ -233,6 +235,7 @@ import type {
   SyncStealErrors,
   SyncStealResponses,
   TextPartInput,
+  Todo,
   ToolIdsErrors,
   ToolIdsResponses,
   ToolListErrors,
@@ -3661,6 +3664,45 @@ export class Session2 extends HeyApiClient {
       url: "/session/{sessionID}/todo",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Update session todos
+   *
+   * Replace the todo list for a specific session. Used for manual todo management by the user.
+   */
+  public todoUpdate<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      body?: Array<Todo>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<SessionTodoUpdateResponses, SessionTodoUpdateErrors, ThrowOnError>({
+      url: "/session/{sessionID}/todo",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
