@@ -998,7 +998,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
     else messages.push({ role: "user", content })
   }
 
-  return messages
+  return ProviderShared.trimAssistantPrefill(messages)
 })
 
 const resolveOptions = Effect.fn("AnthropicMessages.resolveOptions")(function* (request: LLMRequest) {
