@@ -46,6 +46,7 @@ function makeSessionService() {
 function createHarness(
   requestPermission: (params: RequestPermissionRequest) => Promise<RequestPermissionResponse> = () =>
     Promise.resolve({ outcome: { outcome: "selected", optionId: "once" } }),
+  sessions: Record<string, { id: string; directory: string; parentID?: string }> = {},
 ) {
   const replies: PermissionReplyParams[] = []
   const requests: RequestPermissionRequest[] = []
@@ -60,6 +61,7 @@ function createHarness(
     },
     session: {
       message: () => Promise.resolve({ data: undefined }),
+      get: (input: { sessionID: string }) => Promise.resolve({ data: sessions[input.sessionID] }),
     },
   } as unknown as OpencodeClient
   const connection = {
@@ -327,6 +329,35 @@ describe("acp permissions", () => {
         locations: [{ path: "/tmp/outside" }],
       },
     })
+  })
+
+  it("routes a child permission through its root ACP session", async () => {
+    const harness = createHarness(undefined, {
+      ses_child: { id: "ses_child", directory: "/child", parentID: "ses_root" },
+    })
+    await createSession(harness.session, "ses_root", "/root")
+
+    harness.subscription.handle(permissionAsked("ses_child", "perm_child"))
+
+    await pollUntil(() => harness.replies.length === 1, "child permission was never replied")
+
+    expect(harness.requests[0]?.sessionId).toBe("ses_root")
+    expect(harness.replies).toEqual([{ requestID: "perm_child", reply: "once", directory: "/child" }])
+  })
+
+  it("routes a nested child permission through its root ACP session", async () => {
+    const harness = createHarness(undefined, {
+      ses_child: { id: "ses_child", directory: "/child", parentID: "ses_parent" },
+      ses_parent: { id: "ses_parent", directory: "/parent", parentID: "ses_root" },
+    })
+    await createSession(harness.session, "ses_root", "/root")
+
+    harness.subscription.handle(permissionAsked("ses_child", "perm_nested"))
+
+    await pollUntil(() => harness.replies.length === 1, "nested child permission was never replied")
+
+    expect(harness.requests[0]?.sessionId).toBe("ses_root")
+    expect(harness.replies).toEqual([{ requestID: "perm_nested", reply: "once", directory: "/child" }])
   })
 
   it("rejects non-selected outcomes", async () => {
