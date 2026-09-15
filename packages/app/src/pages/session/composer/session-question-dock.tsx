@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, onCleanup, onMount, type Component } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
@@ -102,6 +102,12 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   })
   const customLabel = () => language.t("ui.messagePart.option.typeOwnAnswer")
   const customPlaceholder = () => language.t("ui.question.custom.placeholder")
+
+  // Track IME composition explicitly: on some platforms (e.g. Safari) `compositionend`
+  // fires before the confirming Enter keydown, so `event.isComposing` alone is not enough.
+  // Same pattern as `isImeComposing` in `components/prompt-input.tsx`.
+  const [composing, setComposing] = createSignal(false)
+  const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
   const last = createMemo(() => store.tab >= total() - 1)
   const collapse = useSpring(() => (store.minimized ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
@@ -324,6 +330,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (event.defaultPrevented) return
 
     if (event.key === "Escape") {
+      // Let IME composition (e.g. Esc to dismiss candidates) finish instead of rejecting.
+      if (isImeComposing(event)) return
       event.preventDefault()
       void reject()
       return
@@ -331,7 +339,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
     const mod = (event.metaKey || event.ctrlKey) && !event.altKey
     if (mod && event.key === "Enter") {
-      if (event.repeat) return
+      if (event.repeat || isImeComposing(event)) return
       event.preventDefault()
       next()
       return
@@ -614,6 +622,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                   rows={1}
                   disabled={sending()}
                   onKeyDown={(e) => {
+                    // Ignore Enter/Escape used to confirm or cancel IME composition
+                    // (e.g. Japanese kana-kanji conversion), otherwise focus jumps
+                    // out of the input to the option card. See #49154.
+                    if (isImeComposing(e)) return
                     if (e.key === "Escape") {
                       e.preventDefault()
                       setStore("editing", false)
@@ -625,6 +637,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                     e.preventDefault()
                     commitCustom()
                   }}
+                  onCompositionStart={() => setComposing(true)}
+                  onCompositionEnd={() => setComposing(false)}
                   onInput={(e) => {
                     customUpdate(e.currentTarget.value)
                     resizeInput(e.currentTarget)
