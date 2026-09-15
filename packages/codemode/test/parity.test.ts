@@ -443,15 +443,9 @@ describe("Error values and instanceof", () => {
     ])
   })
 
-  test("errors serialize as {} like JSON.stringify; name and message are not enumerable", async () => {
-    expect(await value(`return new Error("m")`)).toEqual({})
-    expect(await value(`return JSON.stringify(new Error("m"))`)).toBe("{}")
-    expect(
-      await value(`try { throw new Error("m") } catch (e) { return { message: e.message, text: String(e) } }`),
-    ).toEqual({
-      message: "m",
-      text: "Error: m",
-    })
+  test("errors serialize as { name, message } by brand; neither is enumerable", async () => {
+    expect(await value(`return new Error("m")`)).toEqual({ name: "Error", message: "m" })
+    expect(await value(`return JSON.stringify(new Error("m"))`)).toBe('{"name":"Error","message":"m"}')
     expect(
       await value(
         `try { throw new Error("m") } catch (e) { return [Object.keys(e), e.name, e.hasOwnProperty("message")] }`,

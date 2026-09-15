@@ -521,7 +521,7 @@ describe("URL and URI helpers", () => {
       cannotParse: false,
       parsed: "https://example.test/users",
       invalidIsTypeError: true,
-      boundary: ["https://example.test/a", {}],
+      boundary: ["https://example.test/a", "q=one"],
       json: '{"url":"https://example.test/a","params":{}}',
     })
   })
@@ -715,9 +715,8 @@ describe("Set", () => {
     ).toBe(6)
   })
 
-  test("sets serialize as {} like JSON.stringify; spread to cross as an array", async () => {
-    expect(await value(`return { s: new Set([1, "a"]) }`)).toEqual({ s: {} })
-    expect(await value(`return [...new Set([1, "a", { n: 1 }])]`)).toEqual([1, "a", { n: 1 }])
+  test("sets cross the boundary as arrays; JSON.stringify keeps {} like JS", async () => {
+    expect(await value(`return { s: new Set([1, "a", { n: 1 }, undefined]) }`)).toEqual({ s: [1, "a", { n: 1 }, null] })
     expect(await value(`return JSON.stringify(new Set([1]))`)).toBe("{}")
   })
 })
@@ -838,8 +837,9 @@ describe("Uint8Array", () => {
     ])
   })
 
-  test("serializes by index like JSON.stringify; encode to cross as text", async () => {
-    expect(await value(`return new Uint8Array([7, 8])`)).toEqual({ "0": 7, "1": 8 })
+  test("cannot cross the tool boundary; the error says how to encode it", async () => {
+    expect((await error(`return new Uint8Array(1)`)).message).toContain("pass text instead")
+    expect((await error(`return { deep: [new Uint8Array(1)] }`)).message).toContain("bytes.toBase64()")
     expect(await value(`return new Uint8Array([7, 8]).toBase64()`)).toBe("Bwg=")
   })
 })

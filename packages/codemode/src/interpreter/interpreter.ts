@@ -42,7 +42,7 @@ import type {
   YieldExpression,
 } from "acorn"
 import { Cause, Deferred, Effect, Exit } from "effect"
-import { fromJson, hostSafe, type Json, toJson } from "../data.js"
+import { fromJson, type Json, toBoundary } from "../data.js"
 import { ToolReference, type ToolRuntime } from "../tool-runtime.js"
 import {
   type AstNode,
@@ -299,7 +299,7 @@ export class Interpreter<R> {
   ): Effect.Effect<unknown, unknown, R> {
     const ctx = this
     return Effect.gen(function* () {
-      const json = yield* Effect.forEach(args, (arg) => toJson(ctx, arg, hostSafe))
+      const json = yield* Effect.forEach(args, (arg) => toBoundary(ctx, arg))
       return fromJson(ctx, yield* run(json))
     })
   }

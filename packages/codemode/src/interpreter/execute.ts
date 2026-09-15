@@ -4,7 +4,7 @@ import { Cause, Effect, Scope } from "effect"
 // pass-through on workerd (the compiler is ~11 MiB and can't init there).
 import { transpile } from "#transpile"
 import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result } from "../codemode.js"
-import { hostSafe, toJson } from "../data.js"
+import { toBoundary } from "../data.js"
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
 import { createBuiltins } from "./intrinsics.js"
@@ -43,7 +43,7 @@ export const executeProgram = <R>(
           const program = parseProgram(code)
           const pending = new Pending<R>(scope, builtins.Promise)
           const ctx = new Interpreter<R>({ tools, pending, builtins, logs, globals })
-          const result = (yield* toJson(ctx, yield* ctx.run(program), hostSafe)) ?? null
+          const result = (yield* toBoundary(ctx, yield* ctx.run(program))) ?? null
           returned = { value: result, pending }
           const warnings = yield* pending.interrupt()
           return {

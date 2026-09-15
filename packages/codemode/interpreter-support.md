@@ -19,13 +19,16 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       TypeScript is transpiled first; the emitted JavaScript must still use the supported subset.
 - [x] Top-level `await` and `return` through the program's implicit async-function scope.
 - [x] Explicit `return`, final top-level expression as a REPL-style result, and `null` when no value is produced.
-- [x] The host boundary is `JSON.stringify`. The program result and tool arguments cross as exactly what
-      `JSON.stringify` would serialize: `toJSON` is honored, functions and `undefined` properties vanish,
-      `undefined` array elements and non-finite numbers become `null`, and Map, Set, RegExp, URLSearchParams,
-      promises, generators, errors, and extension handles serialize as `{}`. A cyclic value throws the same
-      `TypeError`. A bare `undefined` result is `null`. Tool results come back the way `JSON.parse(JSON.stringify(result))`
-      would. The one difference from `JSON.stringify`: own `__proto__` keys are dropped when crossing to the host,
-      so merging tool inputs or results cannot replace a prototype; in-program `JSON.stringify` still emits the key.
+- [x] The host boundary is `JSON.stringify` plus a short table. The program result and tool arguments cross as
+      what `JSON.stringify` would serialize: `toJSON` is honored, functions and `undefined` properties vanish,
+      `undefined` array elements and non-finite numbers become `null`, a cyclic value throws the same `TypeError`,
+      and Map, RegExp, generators, and extension handles serialize as `{}`. A bare `undefined` result is `null`.
+      Tool results come back the way `JSON.parse(JSON.stringify(result))` would. The table, where a value cannot
+      be JSON but what the program meant is clear: a promise is awaited (a rejection fails the program), a Set
+      crosses as an array, a URLSearchParams as its query string, an Error as `{ name, message, ...own }`, a
+      Uint8Array is rejected with a hint to encode as text, and own `__proto__` keys are dropped so merging tool
+      inputs or results cannot replace a prototype. In-program `JSON.stringify` keeps JS behavior except for the
+      Error form and a promise, which is a `TypeError` with an await hint rather than a silent `{}`.
 - [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, and Uint8Array values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
@@ -423,8 +426,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 
 ## Uint8Array
 
-The only binary type. Bytes stay inside the program or cross to extensions as copies; at the tool boundary they
-serialize by index like `JSON.stringify`, so encode as text first (`TextDecoder`, `toBase64`, `toHex`).
+The only binary type. Bytes stay inside the program or cross to extensions as copies; the tool boundary rejects them
+with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 
 - [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`,
       and `fromHex`. Lengths are capped like arrays.
