@@ -4,6 +4,7 @@ import { Integration } from "@opencode/core/integration"
 import { WebSearch } from "@opencode/core/websearch"
 import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode/core/plugin/websearch/firecrawl"
+import { WebSearchLinkup } from "@opencode/core/plugin/websearch/linkup"
 import { WebSearchParallel } from "@opencode/core/plugin/websearch/parallel"
 import { WebSearchTavily } from "@opencode/core/plugin/websearch/tavily"
 import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
@@ -35,6 +36,7 @@ describe("built-in web search providers", () => {
     WebSearchExa.Plugin,
     WebSearchParallel.Plugin,
     WebSearchFirecrawl.Plugin,
+    WebSearchLinkup.Plugin,
     WebSearchTavily.Plugin,
     WebSearchTinyFish.Plugin,
   ].forEach((plugin) => {
@@ -278,6 +280,78 @@ describe("built-in web search providers", () => {
         headers: { authorization: "Bearer tavily-secret", "x-client-name": "opencode2" },
       })
       expect(requests[1]?.headers["x-tavily-access-mode"]).toBeUndefined()
+    }),
+  )
+
+  it.effect("registers Linkup and sends its key in the authorization header", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          results: [
+            {
+              type: "text",
+              name: "Effect",
+              url: "https://effect.website",
+              content: "Effect documentation",
+              favicon: "https://effect.website/favicon.ico",
+            },
+            {
+              type: "image",
+              name: "Effect logo",
+              url: "https://effect.website/logo.png",
+            },
+          ],
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchLinkup.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* integrations.get(Integration.ID.make("linkup"))).toMatchObject({
+        id: "linkup",
+        name: "Linkup",
+        methods: [{ type: "key" }, { type: "env", names: ["LINKUP_API_KEY"] }],
+      })
+      const query = {
+        query: "effect typescript",
+        providerID: WebSearch.ID.make("linkup"),
+      }
+      expect(yield* websearch.query(query)).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("linkup"),
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation",
+              time: {},
+            },
+          ],
+        }),
+      )
+      expect(requests[0]).toMatchObject({
+        url: WebSearchLinkup.endpoint,
+        body: {
+          q: "effect typescript",
+          depth: "standard",
+          outputType: "searchResults",
+          maxResults: 8,
+          includeImages: false,
+        },
+      })
+      expect(requests[0]?.headers.authorization).toBeUndefined()
+
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("linkup"),
+        key: "linkup-secret",
+      })
+      const output = yield* websearch.query(query)
+      expect(requests[1]).toMatchObject({
+        headers: { authorization: "Bearer linkup-secret" },
+      })
+      expect(JSON.stringify(output)).not.toContain("linkup-secret")
     }),
   )
 
