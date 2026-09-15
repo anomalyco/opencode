@@ -58,6 +58,12 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   let announced = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
+  // Retained across polls: a contender that fails while a second contender is
+  // still starting must not have its error discarded (see the contenders.size
+  // check below) — otherwise a persistent failure (e.g. every candidate port
+  // rejected, a native module that fails to load) is silently masked until the
+  // overall timeout, surfacing only as a generic "Timed out" error.
+  let lastFailure: Error | undefined
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
       if (announced) return
@@ -116,11 +122,12 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
     const finished = [...contenders].filter(contenderFinished)
     const failure = finished.map(contenderFailure).find((error): error is Error => error !== undefined)
+    if (failure !== undefined) lastFailure = failure
     if (finished.some((item) => item.child.exitCode === 0)) {
       spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
     }
     finished.forEach((item) => contenders.delete(item))
-    if (failure !== undefined && contenders.size === 0) return yield* Effect.fail(failure)
+    if (lastFailure !== undefined && contenders.size === 0) return yield* Effect.fail(lastFailure)
     // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
     if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
       yield* announce("missing")
@@ -136,7 +143,9 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     Effect.ensuring(Effect.sync(() => contenders.forEach((contender) => contender.release()))),
   )
   if (Option.isNone(found))
-    return yield* Effect.fail(new Error("Timed out waiting for the background service to start"))
+    return yield* Effect.fail(
+      lastFailure ?? new Error("Timed out waiting for the background service to start"),
+    )
   return found.value.endpoint
 })
 
