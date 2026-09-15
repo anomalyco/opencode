@@ -36,7 +36,8 @@ export function DialogModel(props: { providerID?: string }) {
         return [
           {
             key: item,
-            value: { providerID: provider.id, modelID: model.id },
+            // `section` keeps this row distinct from the same model under its provider group
+            value: { providerID: provider.id, modelID: model.id, section: category },
             title: model.name ?? item.modelID,
             description: provider.name,
             category,
@@ -84,22 +85,6 @@ export function DialogModel(props: { providerID?: string }) {
               onSelect(provider.id, model)
             },
           })),
-          filter((option) => {
-            if (!showSections) return true
-            if (
-              favorites.some(
-                (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
-              )
-            )
-              return false
-            if (
-              recents.some(
-                (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
-              )
-            )
-              return false
-            return true
-          }),
           (options) => sortModelOptions(options, props.providerID !== undefined),
         ),
       ),
