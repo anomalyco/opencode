@@ -380,7 +380,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             return sdk.languageModel(modelID)
           }
 
-          const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
+          const crossRegionPrefixes = ["global.", "us.", "us-gov.", "eu.", "jp.", "apac.", "au."]
           if (crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))) {
             return sdk.languageModel(modelID)
           }
@@ -395,18 +395,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
           switch (regionPrefix) {
             case "us": {
-              const modelRequiresPrefix = [
-                "nova-micro",
-                "nova-lite",
-                "nova-pro",
-                "nova-premier",
-                "nova-2",
-                "claude",
-                "deepseek.r1",
-              ].some((m) => modelID.includes(m))
               const isGovCloud = region.startsWith("us-gov")
-              if (modelRequiresPrefix && !isGovCloud) {
-                modelID = `${regionPrefix}.${modelID}`
+              const modelRequiresPrefix = isGovCloud
+                ? ["claude", "grok", "nemotron"].some((m) => modelID.includes(m))
+                : ["nova-micro", "nova-lite", "nova-pro", "nova-premier", "nova-2", "claude", "deepseek.r1", "grok"].some(
+                    (m) => modelID.includes(m),
+                  )
+              if (modelRequiresPrefix) {
+                modelID = isGovCloud ? `us-gov.${modelID}` : `${regionPrefix}.${modelID}`
               }
               break
             }
