@@ -98,7 +98,7 @@ for (const theme of ["light", "dark"] as const) {
       const refreshed = page.waitForResponse(
         (response) =>
           new URL(response.url()).pathname === "/api/worktree" &&
-          new URL(response.url()).searchParams.get("location[directory]") === root &&
+          new URL(response.url()).searchParams.get("projectID") === projectID &&
           response.request().method() === "GET",
       )
       view.worktrees.push({ directory: workspace, strategy: "git" })
@@ -228,7 +228,7 @@ async function openSession(page: Page, directory: string, worktrees = [...invent
   const loaded = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/worktree" &&
-      new URL(response.url()).searchParams.get("location[directory]") === root &&
+      new URL(response.url()).searchParams.get("projectID") === projectID &&
       response.request().method() === "GET",
   )
   await page.goto(

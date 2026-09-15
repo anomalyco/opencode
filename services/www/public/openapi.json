@@ -11371,34 +11371,12 @@
         "operationId": "worktree.list",
         "parameters": [
           {
-            "name": "location",
+            "name": "projectID",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "type": "string"
             },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "required": true
           }
         ],
         "security": [],
@@ -11414,18 +11392,11 @@
             }
           },
           "400": {
-            "description": "WorktreeError | InvalidRequestError",
+            "description": "InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/WorktreeErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
                 }
               }
             }
@@ -11439,46 +11410,25 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Discover worktrees through the requested location's strategies and return its project's inventory.",
+        "description": "Return the project's saved worktree inventory without loading configuration or running discovery.",
         "summary": "List worktrees"
       },
       "post": {
         "tags": ["worktree"],
         "operationId": "worktree.create",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "200": {
@@ -11517,9 +11467,19 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Create a local worktree using the location's registered strategy and directory defaults, then run the project's setup script.",
+        "description": "Load the project's canonical configuration, create a local worktree using its selected strategy, then run the project's setup script.",
         "summary": "Create worktree",
         "requestBody": {
           "content": {
@@ -11535,38 +11495,7 @@
       "delete": {
         "tags": ["worktree"],
         "operationId": "worktree.remove",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "204": {
@@ -11598,9 +11527,19 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Remove a managed worktree from the requested location's project using its recorded strategy.",
+        "description": "Load the project's canonical configuration and remove a saved worktree using its recorded strategy.",
         "summary": "Remove worktree",
         "requestBody": {
           "content": {
@@ -11618,38 +11557,7 @@
       "post": {
         "tags": ["worktree"],
         "operationId": "worktree.refresh",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "204": {
@@ -11681,10 +11589,37 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Discover worktrees from the requested location and reconcile the shared project inventory.",
-        "summary": "Refresh worktrees"
+        "description": "Load the project's canonical configuration, discover worktrees across known checkout roots using all available strategies, and reconcile saved state.",
+        "summary": "Refresh worktrees",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["projectID"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/vcs": {
@@ -19053,7 +18988,7 @@
       "Worktree.CreateInput": {
         "type": "object",
         "properties": {
-          "strategy": {
+          "projectID": {
             "type": "string"
           },
           "from": {
@@ -19069,6 +19004,7 @@
             "type": "string"
           }
         },
+        "required": ["projectID"],
         "additionalProperties": false
       },
       "Worktree.Directory": {
@@ -19103,6 +19039,9 @@
       "Worktree.RemoveInput": {
         "type": "object",
         "properties": {
+          "projectID": {
+            "type": "string"
+          },
           "directory": {
             "type": "string"
           },
@@ -19110,7 +19049,7 @@
             "type": "boolean"
           }
         },
-        "required": ["directory", "force"],
+        "required": ["projectID", "directory", "force"],
         "additionalProperties": false
       },
       "WorktreeErrorEncoded": {
@@ -19243,7 +19182,7 @@
     },
     {
       "name": "worktree",
-      "description": "Location-scoped worktree management routes."
+      "description": "Project-based worktree management routes."
     },
     {
       "name": "vcs",

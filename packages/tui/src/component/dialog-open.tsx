@@ -1,4 +1,4 @@
-import { batch, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
+import { batch, createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
 import path from "path"
 import { useTerminalDimensions } from "@opentui/solid"
@@ -120,19 +120,24 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
     pending = creation()
     setCreation(undefined)
   }
-  const [worktrees] = createResource(
-    () => (view().type === "worktrees" ? view() : undefined),
-    () =>
-      client.api.worktree
-        .list({
-          location: {
-            directory: data.project.get(projectID()!)!.canonical,
-          },
-        })
-        .catch((error: unknown) => {
-          toast.show({ title: "Loading worktrees failed", message: errorMessage(error), variant: "error" })
-          return []
-        }),
+  const [worktrees, worktreeActions] = createResource(projectID, (projectID) =>
+    client.api.worktree.list({ projectID }).catch((error: unknown) => {
+      toast.show({ title: "Loading worktrees failed", message: errorMessage(error), variant: "error" })
+      return []
+    }),
+  )
+
+  const refreshed = new Set<string>()
+  createEffect(() => {
+    const id = projectID()
+    if (!id || worktrees.latest === undefined || refreshed.has(id)) return
+    refreshed.add(id)
+    void client.api.worktree.refresh({ projectID: id }).catch(() => undefined)
+  })
+  onCleanup(
+    client.event.on("worktree.updated", (event) => {
+      if (event.data.projectID === projectID()) void worktreeActions.refetch()
+    }),
   )
 
   const [matched] = createResource(
@@ -441,9 +446,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             setCreating(true)
             void client.api.worktree
               .create({
-                location: {
-                  directory: data.project.get(id)!.canonical,
-                },
+                projectID: id,
                 ...(value.trim() ? { name: value.trim() } : {}),
               })
               .then((created) => {

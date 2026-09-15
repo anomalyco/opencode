@@ -60,13 +60,11 @@ describe("worktree creation", () => {
           }),
         ).toBe("/created")
         expect(await requests.find((request) => request.method === "POST")?.json()).toEqual({
-          strategy: "git",
+          projectID: project.id,
           from: input.canonical,
           branch: "clone-only",
         })
-        expect(requests.find((request) => request.method === "POST")?.url).toBe(
-          `http://localhost:3000/api/worktree?location%5Bdirectory%5D=${encodeURIComponent(input.directory)}`,
-        )
+        expect(requests.find((request) => request.method === "POST")?.url).toBe("http://localhost:3000/api/worktree")
         expect(
           requests
             .filter((request) => request.method === "GET")

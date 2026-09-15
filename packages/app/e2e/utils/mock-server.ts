@@ -297,7 +297,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             })),
           ]),
         worktreeCreate: (ctx) => {
-          const input = record(ctx.payload) ? ctx.payload : {}
+          const input = ctx.payload
           return Effect.succeed({
             directory: `${typeof input.directory === "string" ? input.directory : config.directory}/${
               typeof input.name === "string" ? input.name : "copy"

@@ -31,6 +31,7 @@ import { ConfigToolOutputPlugin } from "../config/plugin/tool-output.js"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch.js"
 import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
 import { Worktree } from "../worktree.js"
+import { WorktreeStrategies } from "../worktree/strategies.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
@@ -141,6 +142,7 @@ const services = [
   Watcher.Service,
   WellKnown.Service,
   Worktree.Service,
+  WorktreeStrategies.Service,
 ] as const
 
 export type Requirements = Context.Service.Identifier<(typeof services)[number]>
@@ -191,11 +193,13 @@ export const requirements = LayerNode.group([
   Watcher.node,
   WellKnown.node,
   Worktree.node,
+  WorktreeStrategies.node,
 ])
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
 
 const pre = [
+  ConfigWorktreePlugin.Plugin,
   BrowserPlugin,
   ConfigMcpPlugin.Plugin,
   McpCodeModeExclusionPlugin.Plugin,
@@ -243,7 +247,6 @@ const post = [
   ConfigSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   ConfigWebSearchPlugin.Plugin,
-  ConfigWorktreePlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 

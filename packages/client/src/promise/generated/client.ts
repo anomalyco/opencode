@@ -1952,33 +1952,32 @@ export function make(options: ClientOptions) {
         ),
     },
     worktree: {
-      list: (input?: WorktreeListInput, requestOptions?: RequestOptions) =>
+      list: (input: WorktreeListInput, requestOptions?: RequestOptions) =>
         request<WorktreeListOutput>(
           {
             method: "GET",
             path: `/api/worktree`,
-            query: { location: input?.["location"] },
+            query: { projectID: input["projectID"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
         ),
-      create: (input?: WorktreeCreateInput, requestOptions?: RequestOptions) =>
+      create: (input: WorktreeCreateInput, requestOptions?: RequestOptions) =>
         request<WorktreeCreateOutput>(
           {
             method: "POST",
             path: `/api/worktree`,
-            query: { location: input?.["location"] },
             body: {
-              strategy: input?.["strategy"],
-              from: input?.["from"],
-              branch: input?.["branch"],
-              directory: input?.["directory"],
-              name: input?.["name"],
+              projectID: input["projectID"],
+              from: input["from"],
+              branch: input["branch"],
+              directory: input["directory"],
+              name: input["name"],
             },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1988,22 +1987,21 @@ export function make(options: ClientOptions) {
           {
             method: "DELETE",
             path: `/api/worktree`,
-            query: { location: input["location"] },
-            body: { directory: input["directory"], force: input["force"] },
+            body: { projectID: input["projectID"], directory: input["directory"], force: input["force"] },
             successStatus: 204,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: true,
           },
           requestOptions,
         ),
-      refresh: (input?: WorktreeRefreshInput, requestOptions?: RequestOptions) =>
+      refresh: (input: WorktreeRefreshInput, requestOptions?: RequestOptions) =>
         request<WorktreeRefreshOutput>(
           {
             method: "POST",
             path: `/api/worktree/refresh`,
-            query: { location: input?.["location"] },
+            body: { projectID: input["projectID"] },
             successStatus: 204,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: true,
           },
           requestOptions,

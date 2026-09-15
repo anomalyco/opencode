@@ -30,6 +30,7 @@ import { Workspace } from "../workspace.js"
 import { Vcs } from "../vcs.js"
 import { WebSearch } from "../websearch.js"
 import { Worktree } from "../worktree.js"
+import { WorktreeStrategies } from "../worktree/strategies.js"
 import { Generate } from "../generate.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
@@ -71,6 +72,8 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const persistentPty = yield* PersistentPty.Service
   const locations = yield* LocationServiceMap.Service
   const worktrees = yield* Worktree.Service
+  const worktreeStrategies = yield* WorktreeStrategies.Service
+  const currentWorktreeStrategies = location.workspaceID ? undefined : worktreeStrategies
   const locationInfo = () =>
     new Location.Info({
       directory: location.directory,
@@ -90,21 +93,6 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const response = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
 
-  const atWorktree = <A, E>(
-    ref: Location.Ref | undefined,
-    run: (service: Worktree.Interface) => Effect.Effect<A, E>,
-  ) => {
-    if (ref?.workspaceID) return Effect.fail(new Worktree.UnsupportedLocationError({ directory: ref.directory }))
-    if (!ref || isCurrentLocation(ref)) return run(worktrees)
-    return Effect.gen(function* () {
-      // Defer this import: Plugin's construction depends on this host. Same-location setup calls never wait on themselves.
-      const { Plugin } = yield* Effect.promise(() => import("../plugin.js"))
-      const plugins = yield* Plugin.Service
-      const target = yield* Worktree.Service
-      yield* plugins.awaitActivation
-      return yield* run(target)
-    }).pipe(Effect.provide(locations.get(ref)))
-  }
   const decodeWorktree = Schema.decodeUnknownEffect(Worktree.Info)
   const decodeWorktrees = Schema.decodeUnknownEffect(Schema.Array(Worktree.ListEntry))
 
@@ -507,13 +495,13 @@ export const make = Effect.fn("PluginHost.make")(function* (
         }),
     },
     worktree: {
-      list: (input) => atWorktree(locationRef(input), (service) => service.list()),
-      create: (input) => atWorktree(locationRef(input), (service) => service.create(input)),
-      refresh: (input) => atWorktree(locationRef(input), (service) => service.refresh()).pipe(Effect.asVoid),
-      remove: (input) => atWorktree(locationRef(input), (service) => service.remove(input)),
-      reload: worktrees.reload,
+      list: worktrees.list,
+      create: (input) => worktrees.create(input, currentWorktreeStrategies),
+      refresh: (input) => worktrees.refresh(input, currentWorktreeStrategies).pipe(Effect.asVoid),
+      remove: (input) => worktrees.remove(input, currentWorktreeStrategies),
+      reload: worktreeStrategies.reload,
       transform: (callback) =>
-        worktrees.transform((editor) =>
+        worktreeStrategies.transform((editor) =>
           callback({
             add: (definition) =>
               editor.add({
@@ -577,6 +565,7 @@ export const requirements = LayerNode.group([
   Vcs.node,
   WebSearch.node,
   Worktree.node,
+  WorktreeStrategies.node,
   Generate.node,
   Permission.node,
   PluginHooks.node,

@@ -1433,21 +1433,20 @@ const EndpointReferenceList = (raw: RawClient["server.reference"]) => (input?: R
 
 const adaptGroupReference = (raw: RawClient["server.reference"]) => ({ list: EndpointReferenceList(raw) })
 
-const EndpointWorktreeList = (raw: RawClient["server.worktree"]) => (input?: WorktreeListInput) =>
+const EndpointWorktreeList = (raw: RawClient["server.worktree"]) => (input: WorktreeListInput) =>
   preserveEffect<WorktreeListOutput>()(
-    raw["worktree.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["worktree.list"]({ query: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input?: WorktreeCreateInput) =>
+const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input: WorktreeCreateInput) =>
   preserveEffect<WorktreeCreateOutput>()(
     raw["worktree.create"]({
-      query: { location: input?.["location"] },
       payload: {
-        strategy: input?.["strategy"],
-        from: input?.["from"],
-        branch: input?.["branch"],
-        directory: input?.["directory"],
-        name: input?.["name"],
+        projectID: input["projectID"],
+        from: input["from"],
+        branch: input["branch"],
+        directory: input["directory"],
+        name: input["name"],
       },
     }).pipe(Effect.mapError(mapClientError)),
   )
@@ -1455,14 +1454,13 @@ const EndpointWorktreeCreate = (raw: RawClient["server.worktree"]) => (input?: W
 const EndpointWorktreeRemove = (raw: RawClient["server.worktree"]) => (input: WorktreeRemoveInput) =>
   preserveEffect<WorktreeRemoveOutput>()(
     raw["worktree.remove"]({
-      query: { location: input["location"] },
-      payload: { directory: input["directory"], force: input["force"] },
+      payload: { projectID: input["projectID"], directory: input["directory"], force: input["force"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
-const EndpointWorktreeRefresh = (raw: RawClient["server.worktree"]) => (input?: WorktreeRefreshInput) =>
+const EndpointWorktreeRefresh = (raw: RawClient["server.worktree"]) => (input: WorktreeRefreshInput) =>
   preserveEffect<WorktreeRefreshOutput>()(
-    raw["worktree.refresh"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["worktree.refresh"]({ payload: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
 const adaptGroupWorktree = (raw: RawClient["server.worktree"]) => ({
