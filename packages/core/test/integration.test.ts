@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Cause, Clock, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
@@ -672,5 +672,18 @@ describe("Integration", () => {
           else process.env.INTEGRATION_TEST_ACME_KEY = previous
         }),
     )
+  })
+})
+
+describe("AuthorizationError", () => {
+  test("reports the underlying cause message", () => {
+    expect(new Integration.AuthorizationError({ cause: new Error("Request failed: 401") }).message).toBe(
+      "Request failed: 401",
+    )
+  })
+
+  test("falls back when the cause carries no message", () => {
+    expect(new Integration.AuthorizationError({ cause: new Error() }).message).toBe("Authorization failed")
+    expect(new Integration.AuthorizationError({ cause: undefined }).message).toBe("Authorization failed")
   })
 })
