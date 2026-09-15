@@ -670,12 +670,16 @@ const layer = Layer.effect(
       }
 
       const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
-      if (
-        current.agent !== info.agent ||
-        current.model?.providerID !== info.model.providerID ||
-        current.model?.id !== info.model.modelID ||
-        (current.model?.variant === "default" ? undefined : current.model?.variant) !== info.model.variant
-      ) {
+      const hasNoStoredModel = current.model == null
+      const storedModelDiffers =
+        current.model != null &&
+        (current.model.providerID !== info.model.providerID ||
+          current.model.id !== info.model.modelID ||
+          (current.model.variant === "default" ? undefined : current.model.variant) !== info.model.variant)
+      // A model-less prompt (no input.model) resolves from the agent fallback;
+      // never let that overwrite a model the user explicitly stored on the session.
+      const wouldClobberStoredModel = input.model == null && storedModelDiffers
+      if ((current.agent !== info.agent || storedModelDiffers || hasNoStoredModel) && !wouldClobberStoredModel) {
         yield* sessions.setAgentModel({
           sessionID: input.sessionID,
           agent: info.agent,
