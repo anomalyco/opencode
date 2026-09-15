@@ -1,4 +1,4 @@
-import { Formatter, Logger, type LogLevel } from "effect"
+import { DateTime, Formatter, Logger, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global"
 import { runID } from "./shared"
@@ -7,7 +7,7 @@ function formatter(id: string = runID) {
   return Logger.map(Logger.formatStructured, (output) => {
     const messages = Array.isArray(output.message) ? output.message : [output.message]
     return [
-      ["timestamp", output.timestamp],
+      ["timestamp", DateTime.formatIsoOffset(DateTime.makeZonedUnsafe(output.timestamp))],
       ["level", output.level],
       ["run", id],
       ...messages.flatMap((value) => (plain(value) ? flatten(value) : [["message", value] as const])),
