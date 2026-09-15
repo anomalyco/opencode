@@ -13,7 +13,7 @@ export const ReferenceGroup = HttpApiGroup.make("server.reference")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.reference.list",
+          identifier: "reference.list",
           summary: "List references",
           description: "List references available in the requested location.",
         }),
