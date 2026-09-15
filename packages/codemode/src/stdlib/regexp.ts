@@ -3,7 +3,7 @@ import type { Builtins } from "../interpreter/intrinsics.js"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { syntaxError, typeError } from "../interpreter/model.js"
 import { define, defineAccessor, getOwn, Arr, Obj, RegExpObj, record, set } from "../interpreter/objects.js"
-import type { Runner } from "../interpreter/runner.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
 const flagProperties = [
@@ -82,8 +82,8 @@ const toLength = (value: unknown): number => {
 }
 
 // RegExp constructs identically with or without new, like JS.
-export const regexpGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const regexpGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const proto = builtins.RegExp
   const regexp = constructor<R>(builtins, proto, {
     name: "RegExp",

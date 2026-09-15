@@ -148,6 +148,6 @@ export const make = <const Provided extends Record<string, unknown> = {}>(
   }
   return {
     catalog: prepared.catalog,
-    execute: (code) => executeProgram(code, prepared, limits, options, (host) => extensionGlobals(host, extensions)),
+    execute: (code) => executeProgram(code, prepared, limits, options, (ctx) => extensionGlobals(ctx, extensions)),
   }
 }

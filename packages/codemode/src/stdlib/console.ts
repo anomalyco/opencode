@@ -16,14 +16,14 @@ import {
   URLSearchParamsObj,
 } from "../interpreter/objects.js"
 import { containsOpaqueReference, containsRuntimeReference, isRuntimeReference } from "../interpreter/references.js"
-import type { Runner } from "../interpreter/runner.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 import { coerceToString } from "./value.js"
 
 const consoleMethods = ["log", "info", "debug", "warn", "error", "dir", "table"]
 
 /** Captured console: every method appends one formatted line to `logs`. */
-export const consoleGlobal = <R>(runner: Runner<R>, logs: Array<string>) => {
-  const builtins = runner.builtins
+export const consoleGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const console = new Obj(builtins.Object)
   methods(
     builtins,
@@ -33,7 +33,7 @@ export const consoleGlobal = <R>(runner: Runner<R>, logs: Array<string>) => {
         name,
         0,
         (_, args) => {
-          logs.push(formatConsoleMessage(builtins, name, args))
+          ctx.logs.push(formatConsoleMessage(builtins, name, args))
           return undefined
         },
       ],

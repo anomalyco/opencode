@@ -4,7 +4,8 @@ import { checkArrayLength, checkStringLength, MAX_ARRAY_LENGTH } from "../interp
 import { invalidData, rangeError, typeError } from "../interpreter/model.js"
 import { get, Arr, GeneratorObj, Obj } from "../interpreter/objects.js"
 import { describeValue, rejectCircularInsertion } from "../interpreter/references.js"
-import { applyCollectionCallback, preserveConsumerError, type Runner } from "../interpreter/runner.js"
+import { applyCollectionCallback, preserveConsumerError } from "../interpreter/callback.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 import { compareText } from "../tool-runtime.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
@@ -20,13 +21,13 @@ const arrayLikeSource = (source: unknown): { readonly length: number; readonly s
   )
 }
 
-const arrayFrom = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<unknown, unknown, R> => {
+const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<unknown>): Effect.Effect<unknown, unknown, R> => {
   const source = args[0]
-  const proto = runner.builtins.Array
+  const proto = ctx.builtins.Array
   const apply =
-    args.length < 2 || args[1] === undefined ? undefined : applyCollectionCallback(runner, args[1], "Array.from")
+    args.length < 2 || args[1] === undefined ? undefined : applyCollectionCallback(ctx, args[1], "Array.from")
   return Effect.gen(function* () {
-    const cursor = yield* runner.iterate(source)
+    const cursor = yield* ctx.iterate(source)
     if (cursor === undefined) {
       if (source instanceof GeneratorObj) {
         throw typeError("Array.from expects a synchronous iterable or array-like value.")
@@ -51,7 +52,7 @@ const arrayFrom = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<un
 }
 
 export const sortArray = <R>(
-  runner: Runner<R>,
+  ctx: Interpreter<R>,
   target: Array<unknown>,
   comparator: unknown,
   name: string,
@@ -59,7 +60,7 @@ export const sortArray = <R>(
   if (comparator === undefined) {
     return Effect.sync(() => [...target].sort((a, b) => compareText(coerceToString(a), coerceToString(b))))
   }
-  const apply = applyCollectionCallback(runner, comparator, name)
+  const apply = applyCollectionCallback(ctx, comparator, name)
   const mergeSort = (items: Array<unknown>): Effect.Effect<Array<unknown>, unknown, R> => {
     if (items.length <= 1) return Effect.succeed(items)
     const midpoint = Math.floor(items.length / 2)
@@ -84,8 +85,8 @@ export const sortArray = <R>(
 }
 
 // Array constructs identically with or without new, like JS.
-export const arrayGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const proto = builtins.Array
   const wrap = (items: Array<unknown>) => new Arr(proto, items)
   const construct = (args: Array<unknown>, into: Obj): Arr => {
@@ -105,7 +106,7 @@ export const arrayGlobal = <R>(runner: Runner<R>) => {
   methods(builtins, array, [
     ["isArray", 1, (_, args) => args[0] instanceof Arr],
     ["of", 0, (_, args) => wrap([...args])],
-    ["from", 1, (_, args) => arrayFrom(runner, args)],
+    ["from", 1, (_, args) => arrayFrom(ctx, args)],
   ])
 
   const self = (thisValue: unknown, name: string) => receiver(Arr, thisValue, `Array.prototype.${name}`)
@@ -131,7 +132,7 @@ export const arrayGlobal = <R>(runner: Runner<R>) => {
     length,
     (thisValue, args) => {
       const target = self(thisValue, name)
-      return body(target.items, target, applyCollectionCallback(runner, args[0], `Array.${name}`), args)
+      return body(target.items, target, applyCollectionCallback(ctx, args[0], `Array.${name}`), args)
     },
   ]
 
@@ -238,7 +239,7 @@ export const arrayGlobal = <R>(runner: Runner<R>) => {
         const length = items.length
         const holeCount = Array.from({ length }, (_, index) => Object.hasOwn(items, index)).filter((o) => !o).length
         const itemCount = length - holeCount
-        return Effect.map(sortArray(runner, items, args[0], "Array.sort"), (sorted) => {
+        return Effect.map(sortArray(ctx, items, args[0], "Array.sort"), (sorted) => {
           sorted.slice(0, itemCount).forEach((item, index) => {
             items[index] = item
           })
@@ -253,7 +254,7 @@ export const arrayGlobal = <R>(runner: Runner<R>) => {
       "toSorted",
       1,
       (thisValue, args) =>
-        Effect.map(sortArray(runner, self(thisValue, "toSorted").items, args[0], "Array.toSorted"), wrap),
+        Effect.map(sortArray(ctx, self(thisValue, "toSorted").items, args[0], "Array.toSorted"), wrap),
     ],
     ["toReversed", 0, (thisValue) => wrap([...self(thisValue, "toReversed").items].reverse())],
     [

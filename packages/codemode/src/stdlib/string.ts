@@ -5,7 +5,8 @@ import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { invalidData, rangeError, typeError } from "../interpreter/model.js"
 import { Arr, PromiseObj, RegExpObj, record } from "../interpreter/objects.js"
 import { containsOpaqueReference, typeofValue } from "../interpreter/references.js"
-import { applyCollectionCallback, isSupportedCallback, type Runner } from "../interpreter/runner.js"
+import { applyCollectionCallback, isSupportedCallback } from "../interpreter/callback.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 import { matchToValue, toHostRegex } from "./regexp.js"
 import { coerceToNumber, coerceToString, coercion } from "./value.js"
 
@@ -26,13 +27,13 @@ const replaceAllNeedsGlobal = (pattern: RegExp) => {
 }
 
 const replaceWithCallback = <R>(
-  runner: Runner<R>,
+  ctx: Interpreter<R>,
   value: string,
   name: "replace" | "replaceAll",
   args: Array<unknown>,
 ): Effect.Effect<unknown, unknown, R> => {
-  const builtins = runner.builtins
-  const apply = applyCollectionCallback(runner, args[1], `String.${name}`)
+  const builtins = ctx.builtins
+  const apply = applyCollectionCallback(ctx, args[1], `String.${name}`)
   const matches: Array<{ readonly match: string; readonly offset: number; readonly args: Array<unknown> }> = []
   const collect = (...callbackArgs: Array<unknown>): string => {
     const match = callbackArgs[0]
@@ -76,12 +77,12 @@ const replaceWithCallback = <R>(
   })
 }
 
-export const stringGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const stringGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const string = constructor<R>(builtins, builtins.String, {
     name: "String",
     length: 1,
-    call: coercion(runner, "String").call,
+    call: coercion(ctx, "String").call,
   })
   const codeUnits = (name: string, op: (...codes: Array<number>) => string): Method => [
     name,
@@ -131,7 +132,7 @@ export const stringGlobal = <R>(runner: Runner<R>) => {
   ]
   const replace = (name: "replace" | "replaceAll") =>
     simple(name, 2, (value, args) => {
-      if (isSupportedCallback(args[1])) return replaceWithCallback(runner, value, name, args)
+      if (isSupportedCallback(args[1])) return replaceWithCallback(ctx, value, name, args)
       if (typeofValue(args[1]) === "function") {
         throw typeError(
           `String.${name} cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => tools.ns.tool(match).`,

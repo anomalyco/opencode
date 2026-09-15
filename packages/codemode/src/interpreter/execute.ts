@@ -8,17 +8,16 @@ import { toData } from "../data.js"
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
 import { createBuiltins } from "./intrinsics.js"
-import type { Host } from "./globals.js"
 import { PendingThrow } from "./model.js"
 import { Pending } from "./promises.js"
-import { Runtime } from "./runtime.js"
+import { Interpreter } from "./interpreter.js"
 
 export const executeProgram = <R>(
   code: string,
   prepared: ToolRuntime.Prepared<R>,
   limits: ResolvedExecutionLimits,
   hooks: ToolRuntime.ToolCallHooks<R>,
-  extraGlobals?: (host: Host<R>) => ReadonlyArray<readonly [string, unknown]>,
+  globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, unknown]>,
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
     return Effect.succeed({
@@ -43,15 +42,7 @@ export const executeProgram = <R>(
         Effect.gen(function* () {
           const program = parseProgram(code)
           const pending = new Pending<R>(scope, builtins.Promise)
-          const value = yield* new Runtime<R>(
-            tools.execute,
-            tools.search,
-            tools.keys,
-            pending,
-            builtins,
-            logs,
-            extraGlobals,
-          ).run(program)
+          const value = yield* new Interpreter<R>({ tools, pending, builtins, logs, globals }).run(program)
           const result = toData(value, "Execution result", "result") as DataValue
           returned = { value: result, pending }
           const warnings = yield* pending.interrupt()

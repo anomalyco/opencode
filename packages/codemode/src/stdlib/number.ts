@@ -1,14 +1,14 @@
 import { constructor, constants, methods } from "../interpreter/native.js"
 import { rangeError, typeError } from "../interpreter/model.js"
-import type { Runner } from "../interpreter/runner.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 import { coercion, coerceToString } from "./value.js"
 
-export const numberGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const numberGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const number = constructor<R>(builtins, builtins.Number, {
     name: "Number",
     length: 1,
-    call: coercion(runner, "Number").call,
+    call: coercion(ctx, "Number").call,
   })
   constants(number, {
     MAX_SAFE_INTEGER: Number.MAX_SAFE_INTEGER,
@@ -81,12 +81,12 @@ export const numberGlobal = <R>(runner: Runner<R>) => {
   return number
 }
 
-export const booleanGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const booleanGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const boolean = constructor<R>(builtins, builtins.Boolean, {
     name: "Boolean",
     length: 1,
-    call: coercion(runner, "Boolean").call,
+    call: coercion(ctx, "Boolean").call,
   })
   const self = (thisValue: unknown, name: string): boolean => {
     if (typeof thisValue === "boolean") return thisValue

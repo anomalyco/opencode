@@ -30,13 +30,14 @@ import {
   set,
 } from "../interpreter/objects.js"
 import { containsOpaqueReference, describeValue, rejectCircularInsertion } from "../interpreter/references.js"
-import { preserveConsumerError, type Runner } from "../interpreter/runner.js"
+import { preserveConsumerError } from "../interpreter/callback.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 import { ToolReference } from "../tool-runtime.js"
 import { groupBy } from "./collections.js"
 import { coerceToString } from "./value.js"
 
 // ToObject for enumeration.
-export const enumerableSource = <R>(runner: Runner<R>, label: string, value: unknown, node?: AstNode): Obj => {
+export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: unknown, node?: AstNode): Obj => {
   if (value === null || value === undefined) {
     throw typeError(`${label} cannot convert ${describeValue(value)} to an object.`, node)
   }
@@ -49,12 +50,12 @@ export const enumerableSource = <R>(runner: Runner<R>, label: string, value: unk
       node,
     )
   }
-  if (typeof value === "string") return new Arr(runner.builtins.Array, [...value])
+  if (typeof value === "string") return new Arr(ctx.builtins.Array, [...value])
   if (value instanceof Obj) return value
-  return new Obj(runner.builtins.Object)
+  return new Obj(ctx.builtins.Object)
 }
 
-export const objectAssign = <R>(runner: Runner<R>, args: Array<unknown>): unknown => {
+export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<unknown>): unknown => {
   const target = args[0]
   // JS would box a primitive target; wrappers and primitives cannot hold fields here.
   if (!(target instanceof Obj)) {
@@ -63,7 +64,7 @@ export const objectAssign = <R>(runner: Runner<R>, args: Array<unknown>): unknow
   const seen = new Set<object>()
   for (const source of args.slice(1)) {
     if (source === null || source === undefined) continue
-    const from = enumerableSource(runner, "Object.assign(...)", source)
+    const from = enumerableSource(ctx, "Object.assign(...)", source)
     for (const key of enumerableKeys(from)) {
       rejectCircularInsertion(target, getOwn(from, key), "Object.assign result", seen)
       if (!set(target, key, getOwn(from, key))) {
@@ -75,10 +76,10 @@ export const objectAssign = <R>(runner: Runner<R>, args: Array<unknown>): unknow
   return target
 }
 
-const objectFromEntries = <R>(runner: Runner<R>, source: unknown): Effect.Effect<Obj, unknown, R> => {
-  const out = new Obj(runner.builtins.Object)
+const objectFromEntries = <R>(ctx: Interpreter<R>, source: unknown): Effect.Effect<Obj, unknown, R> => {
+  const out = new Obj(ctx.builtins.Object)
   return Effect.gen(function* () {
-    const cursor = yield* runner.iterate(source)
+    const cursor = yield* ctx.iterate(source)
     if (cursor === undefined) {
       throw typeError("Object.fromEntries expects a synchronous iterable of entries.")
     }
@@ -118,11 +119,8 @@ const propertyKey = (value: unknown): PropertyKey =>
 
 // Object constructs identically with or without new, like JS. Only `keys` copies its result into the
 // program; `values`, `entries`, `assign`, and `fromEntries` hand back the program's own values.
-export const objectGlobal = <R>(
-  runner: Runner<R>,
-  toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>,
-) => {
-  const builtins = runner.builtins
+export const objectGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const construct = (args: Array<unknown>): unknown => {
     const first = args[0]
     if (first === null || first === undefined) return new Obj(builtins.Object)
@@ -143,8 +141,8 @@ export const objectGlobal = <R>(
         toProgram(
           builtins,
           args[0] instanceof ToolReference
-            ? [...toolKeys(args[0].path)]
-            : keys(enumerableSource(runner, "Object.keys(...)", args[0])),
+            ? [...ctx.tools.keys(args[0].path)]
+            : keys(enumerableSource(ctx, "Object.keys(...)", args[0])),
           "Object.keys result",
         ),
     ],
@@ -154,7 +152,7 @@ export const objectGlobal = <R>(
       (_, args) =>
         new Arr(
           builtins.Array,
-          entries(enumerableSource(runner, "Object.values(...)", args[0])).map((entry) => entry[1]),
+          entries(enumerableSource(ctx, "Object.values(...)", args[0])).map((entry) => entry[1]),
         ),
     ],
     [
@@ -163,12 +161,10 @@ export const objectGlobal = <R>(
       (_, args) =>
         new Arr(
           builtins.Array,
-          entries(enumerableSource(runner, "Object.entries(...)", args[0])).map(
-            (entry) => new Arr(builtins.Array, entry),
-          ),
+          entries(enumerableSource(ctx, "Object.entries(...)", args[0])).map((entry) => new Arr(builtins.Array, entry)),
         ),
     ],
-    ["hasOwn", 2, (_, args) => hasOwn(enumerableSource(runner, "Object.hasOwn(...)", args[0]), propertyKey(args[1]))],
+    ["hasOwn", 2, (_, args) => hasOwn(enumerableSource(ctx, "Object.hasOwn(...)", args[0]), propertyKey(args[1]))],
     [
       "is",
       2,
@@ -179,10 +175,10 @@ export const objectGlobal = <R>(
         return Object.is(args[0], args[1])
       },
     ],
-    ["assign", 2, (_, args) => objectAssign(runner, args)],
-    ["fromEntries", 1, (_, args) => objectFromEntries(runner, args[0])],
+    ["assign", 2, (_, args) => objectAssign(ctx, args)],
+    ["fromEntries", 1, (_, args) => objectFromEntries(ctx, args[0])],
   ])
-  define(object, "groupBy", groupBy(runner, "Object"), hidden)
+  define(object, "groupBy", groupBy(ctx, "Object"), hidden)
   methods(builtins, builtins.Object, [
     [
       "hasOwnProperty",

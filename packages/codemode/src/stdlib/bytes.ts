@@ -4,14 +4,14 @@ import { constructor, methods, prototypeFrom, receiver, requiresNew } from "../i
 import { rangeError, syntaxError, typeError } from "../interpreter/model.js"
 import { defineAccessor, get, Arr, Bytes, Obj } from "../interpreter/objects.js"
 import { describeValue } from "../interpreter/references.js"
-import type { Runner } from "../interpreter/runner.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
 /** The bytes a Uint8Array, array, or other iterable of numbers describes; the host array clamps each value. */
-const collectBytes = <R>(runner: Runner<R>, source: unknown, name: string): Effect.Effect<Uint8Array, unknown, R> => {
+const collectBytes = <R>(ctx: Interpreter<R>, source: unknown, name: string): Effect.Effect<Uint8Array, unknown, R> => {
   if (source instanceof Bytes) return Effect.succeed(new Uint8Array(source.bytes))
   return Effect.gen(function* () {
-    const cursor = yield* runner.iterate(source)
+    const cursor = yield* ctx.iterate(source)
     if (cursor === undefined) {
       throw typeError(
         `${name} expects a Uint8Array, an array, or an iterable of numbers, received ${describeValue(source)}.`,
@@ -27,10 +27,10 @@ const collectBytes = <R>(runner: Runner<R>, source: unknown, name: string): Effe
   })
 }
 
-const constructBytes = <R>(runner: Runner<R>, args: Array<unknown>, proto: Obj) => {
+const constructBytes = <R>(ctx: Interpreter<R>, args: Array<unknown>, proto: Obj) => {
   const source = args[0]
   if (source !== null && typeof source === "object") {
-    return Effect.map(collectBytes(runner, source, "new Uint8Array(...)"), (bytes) => new Bytes(proto, bytes))
+    return Effect.map(collectBytes(ctx, source, "new Uint8Array(...)"), (bytes) => new Bytes(proto, bytes))
   }
   const length = source === undefined ? 0 : coerceToNumber(source)
   if (!Number.isInteger(length) || length < 0) throw rangeError(`Invalid typed array length: ${coerceToString(source)}`)
@@ -38,15 +38,15 @@ const constructBytes = <R>(runner: Runner<R>, args: Array<unknown>, proto: Obj) 
   return Effect.succeed(new Bytes(proto, new Uint8Array(length)))
 }
 
-export const uint8ArrayGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const proto = builtins.Uint8Array
   const wrap = (bytes: Uint8Array) => new Bytes(proto, bytes)
   const uint8Array = constructor<R>(builtins, proto, {
     name: "Uint8Array",
     length: 3,
     call: requiresNew("Uint8Array"),
-    construct: (args, newTarget) => constructBytes(runner, args, prototypeFrom(newTarget, proto)),
+    construct: (args, newTarget) => constructBytes(ctx, args, prototypeFrom(newTarget, proto)),
   })
   const decode = (name: string, args: Array<unknown>, from: (text: string) => Uint8Array) => {
     if (typeof args[0] !== "string") throw typeError(`Uint8Array.${name} expects a string.`)
@@ -57,7 +57,7 @@ export const uint8ArrayGlobal = <R>(runner: Runner<R>) => {
     }
   }
   methods(builtins, uint8Array, [
-    ["from", 1, (_, args) => Effect.map(collectBytes(runner, args[0], "Uint8Array.from"), wrap)],
+    ["from", 1, (_, args) => Effect.map(collectBytes(ctx, args[0], "Uint8Array.from"), wrap)],
     ["of", 0, (_, args) => wrap(Uint8Array.from(args, coerceToNumber))],
     ["fromBase64", 1, (_, args) => decode("fromBase64", args, (text) => Uint8Array.fromBase64(text))],
     ["fromHex", 1, (_, args) => decode("fromHex", args, (text) => Uint8Array.fromHex(text))],
@@ -102,7 +102,7 @@ export const uint8ArrayGlobal = <R>(runner: Runner<R>) => {
       (thisValue, args) => {
         const target = self(thisValue, "set")
         const offset = optNumber("set", args[1], "offset") ?? 0
-        return Effect.map(collectBytes(runner, args[0], "Uint8Array.set"), (source) => {
+        return Effect.map(collectBytes(ctx, args[0], "Uint8Array.set"), (source) => {
           if (!Number.isInteger(offset) || offset < 0 || source.length + offset > target.bytes.length) {
             throw rangeError("Uint8Array.set: the source does not fit at that offset.")
           }
@@ -185,8 +185,8 @@ export const uint8ArrayGlobal = <R>(runner: Runner<R>) => {
   return uint8Array
 }
 
-export const textEncoderGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const textEncoderGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const proto = builtins.TextEncoder
   const encoder = new TextEncoder()
   defineAccessor(proto, "encoding", () => "utf-8")
@@ -213,8 +213,8 @@ export class TextDecoderObj extends Obj {
 // The WHATWG labels for UTF-8, the only encoding CodeMode decodes.
 const utf8Labels = new Set(["unicode-1-1-utf-8", "unicode11utf8", "unicode20utf8", "utf-8", "utf8", "x-unicode20utf8"])
 
-export const textDecoderGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const textDecoderGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const proto = builtins.TextDecoder
   const self = (thisValue: unknown, name: string) =>
     receiver(TextDecoderObj, thisValue, `TextDecoder.prototype.${name}`)

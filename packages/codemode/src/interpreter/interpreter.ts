@@ -43,7 +43,7 @@ import type {
 } from "acorn"
 import { Cause, Deferred, Effect, Exit } from "effect"
 import { toProgram } from "../data.js"
-import { ToolReference } from "../tool-runtime.js"
+import { ToolReference, type ToolRuntime } from "../tool-runtime.js"
 import {
   type AstNode,
   AsyncIteratorSymbol,
@@ -63,7 +63,7 @@ import {
 import { checkStringLength } from "./limits.js"
 import { locate, materialize } from "./errors.js"
 import type { Builtins } from "./intrinsics.js"
-import { globals, type Host } from "./globals.js"
+import { globals } from "./globals.js"
 import {
   assign,
   Callable,
@@ -88,7 +88,7 @@ import {
   remove,
   set,
 } from "./objects.js"
-import { preserveConsumerError, type Runner } from "./runner.js"
+import { preserveConsumerError } from "./callback.js"
 import { Pending, resolvePromise, resolvePromiseValue } from "./promises.js"
 import { containsOpaqueReference, describeValue, rejectCircularInsertion, typeofValue } from "./references.js"
 import { ScopeStack } from "./scope.js"
@@ -250,35 +250,46 @@ type GeneratorState = {
 }
 
 /** One program execution: the tool bridge, promise scheduler, captured logs, and the global scope built once. */
-export class Runtime<R> {
-  readonly runner: Runner<R>
+export class Interpreter<R> {
+  readonly tools: ToolRuntime<R>
+  readonly pending: Pending<R>
+  readonly builtins: Builtins
+  readonly logs: Array<string>
   private readonly root: Frame<R>
 
-  constructor(
-    readonly executeTool: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
-    readonly search: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
-    readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>,
-    readonly pending: Pending<R>,
-    readonly builtins: Builtins,
-    readonly logs: Array<string> = [],
-    extraGlobals: (host: Host<R>) => ReadonlyArray<readonly [string, unknown]> = () => [],
-  ) {
+  constructor(options: {
+    readonly tools: ToolRuntime<R>
+    readonly pending: Pending<R>
+    readonly builtins: Builtins
+    readonly logs?: Array<string>
+    readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, unknown]>
+  }) {
+    this.tools = options.tools
+    this.pending = options.pending
+    this.builtins = options.builtins
+    this.logs = options.logs ?? []
     const globalScope = new Map<string, Binding>()
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
     this.root = new Frame(this, new ScopeStack([globalScope]))
-    this.runner = {
-      call: (callable, thisValue, args) => this.root.call(callable, thisValue, args),
-      await: (promise) => this.root.await(promise),
-      iterate: (value) => this.root.iterate(value),
-      builtins,
-    }
-    for (const [name, value] of [...globals(this), ...extraGlobals(this)]) {
+    for (const [name, value] of [...globals(this), ...(options.globals?.(this) ?? [])]) {
       globalScope.set(name, { mutable: false, value })
     }
   }
 
   run(program: Program): Effect.Effect<unknown, unknown, R> {
     return this.root.run(program)
+  }
+
+  call(callable: unknown, thisValue: unknown, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
+    return this.root.call(callable, thisValue, args)
+  }
+
+  await(promise: PromiseObj): Effect.Effect<unknown, unknown, never> {
+    return this.root.await(promise)
+  }
+
+  iterate(value: unknown) {
+    return this.root.iterate(value)
   }
 }
 
@@ -290,7 +301,7 @@ class Frame<R> {
   private generatorAsync = false
 
   constructor(
-    private readonly runtime: Runtime<R>,
+    private readonly ctx: Interpreter<R>,
     private scopes: ScopeStack,
     /** Nested call depth; resets when an await resumes, since the continuation runs from the job queue. */
     private depth = 0,
@@ -323,7 +334,7 @@ class Frame<R> {
       }
 
       // The implicit async body adopts returned promises before copy-out.
-      value = yield* resolvePromiseValue(self.runtime.runner, value)
+      value = yield* resolvePromiseValue(self.ctx, value)
       return value
     }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
@@ -333,12 +344,12 @@ class Frame<R> {
     path: ReadonlyArray<string>,
     args: Array<unknown>,
   ): Effect.Effect<PromiseObj, never, R> {
-    return this.runtime.pending.create(Effect.suspend(() => this.runtime.executeTool(path, args)))
+    return this.ctx.pending.create(Effect.suspend(() => this.ctx.tools.execute(path, args)))
   }
 
   // Fiber exits make settlement idempotent; yielding prevents inline continuation.
   await(promise: PromiseObj): Effect.Effect<unknown, unknown, never> {
-    const pending = this.runtime.pending
+    const pending = this.ctx.pending
     return Effect.suspend(() => {
       pending.markObserved(promise)
       return Effect.flatMap(pending.await(promise), (exit) => Effect.andThen(Effect.yieldNow, exit))
@@ -417,7 +428,7 @@ class Frame<R> {
     name = node.type === "ArrowFunctionExpression" ? "" : (node.id?.name ?? ""),
   ): Fn {
     return new Fn(
-      this.runtime.builtins.Function,
+      this.ctx.builtins.Function,
       name,
       node.params,
       node.body,
@@ -696,7 +707,7 @@ class Frame<R> {
   }
 
   private awaitValue(value: unknown): Effect.Effect<unknown, unknown, R> {
-    return Effect.flatMap(resolvePromise(this.runtime.runner, this.runtime.pending, value), (promise) =>
+    return Effect.flatMap(resolvePromise(this.ctx, value), (promise) =>
       Effect.ensuring(
         this.await(promise),
         Effect.sync(() => (this.depth = 0)),
@@ -737,7 +748,7 @@ class Frame<R> {
                   ? value.bytes.values()
                   : undefined
     if (iterator !== undefined) {
-      const proto = this.runtime.builtins.Array
+      const proto = this.ctx.builtins.Array
       return Effect.succeed({
         next: Effect.sync(() => {
           const step = iterator.next()
@@ -862,9 +873,9 @@ class Frame<R> {
 
   // for...in over null/undefined iterates nothing, like JS.
   private enumerableKeys(value: unknown, node: AstNode): Array<string> {
-    if (value instanceof ToolReference) return [...this.runtime.toolKeys(value.path)]
+    if (value instanceof ToolReference) return [...this.ctx.tools.keys(value.path)]
     if (value === null || value === undefined) return []
-    return keys(enumerableSource(this.runtime.runner, "for...in", value, node))
+    return keys(enumerableSource(this.ctx, "for...in", value, node))
   }
 
   private evaluateForInStatement(
@@ -969,7 +980,7 @@ class Frame<R> {
           return Effect.failCause(cause)
         }
 
-        const caught = materialize(self.runtime.runner, Cause.squash(cause))
+        const caught = materialize(self.ctx, Cause.squash(cause))
         const parameter = handler.param
         self.scopes.push()
         return Effect.gen(function* () {
@@ -1056,7 +1067,7 @@ class Frame<R> {
         const consumed = new Set<PropertyKey>()
         for (const property of pattern.properties) {
           if (property.type === "RestElement") {
-            const rest = new Obj(self.runtime.builtins.Object)
+            const rest = new Obj(self.ctx.builtins.Object)
             assign(rest, value, consumed)
             yield* self.declarePattern(property.argument, rest, mutable, property, initialize)
             continue
@@ -1115,7 +1126,7 @@ class Frame<R> {
         const consumed = new Set<PropertyKey>()
         for (const property of pattern.properties) {
           if (property.type === "RestElement") {
-            const rest = new Obj(self.runtime.builtins.Object)
+            const rest = new Obj(self.ctx.builtins.Object)
             assign(rest, value, consumed)
             yield* self.assignPattern(property.argument, rest, property)
             continue
@@ -1160,7 +1171,7 @@ class Frame<R> {
           if (element === null) continue
           yield* consume(
             element.type === "RestElement" ? element.argument : element,
-            element.type === "RestElement" ? new Arr(self.runtime.builtins.Array) : undefined,
+            element.type === "RestElement" ? new Arr(self.ctx.builtins.Array) : undefined,
             element,
           )
           if (element.type === "RestElement") return
@@ -1177,7 +1188,7 @@ class Frame<R> {
             done = next.done
             if (!done) rest.push(next.value)
           }
-          yield* consume(element.argument, new Arr(self.runtime.builtins.Array, rest), element)
+          yield* consume(element.argument, new Arr(self.ctx.builtins.Array, rest), element)
           return
         }
         const consumed = consume(element, step.done ? undefined : step.value, pattern)
@@ -1204,8 +1215,8 @@ class Frame<R> {
     switch (node.type) {
       case "Literal": {
         const regex = node.regex
-        if (regex) return Effect.sync(() => constructRegExp(this.runtime.builtins, [regex.pattern, regex.flags]))
-        return Effect.sync(() => toProgram(this.runtime.builtins, node.value, "Literal"))
+        if (regex) return Effect.sync(() => constructRegExp(this.ctx.builtins, [regex.pattern, regex.flags]))
+        return Effect.sync(() => toProgram(this.ctx.builtins, node.value, "Literal"))
       }
       case "Identifier":
         return Effect.sync(() => this.scopes.get(node.name, node))
@@ -1295,7 +1306,7 @@ class Frame<R> {
       const rhs = yield* self.evaluateExpression(node.right)
       if (operator === "instanceof") return instanceofValue(lhs, rhs, node)
       return toProgram(
-        self.runtime.builtins,
+        self.ctx.builtins,
         self.applyBinaryOperator(operator, lhs, rhs, node),
         "Binary expression result",
       )
@@ -1418,7 +1429,7 @@ class Frame<R> {
         default:
           throw typeError(`Unsupported unary operator '${operator}'.`, node)
       }
-      return toProgram(this.runtime.builtins, result, "Unary expression result")
+      return toProgram(this.ctx.builtins, result, "Unary expression result")
     })
   }
 
@@ -1441,7 +1452,7 @@ class Frame<R> {
           const current = self.scopes.get(name, left)
           const rightValue = yield* self.evaluateExpression(node.right)
           const next = toProgram(
-            self.runtime.builtins,
+            self.ctx.builtins,
             self.applyCompoundAssignment(operator, current, rightValue, node),
             "Assignment result",
           )
@@ -1455,7 +1466,7 @@ class Frame<R> {
           Effect.map(self.evaluateExpression(node.right), (rightValue) => {
             if (operator === "=") return { write: true, next: rightValue, result: rightValue }
             const next = toProgram(
-              self.runtime.builtins,
+              self.ctx.builtins,
               self.applyCompoundAssignment(operator, current, rightValue, node),
               "Assignment result",
             )
@@ -1630,7 +1641,7 @@ class Frame<R> {
     return Effect.flatMap(CallSite, (site) => {
       const depth = Math.max(self.depth, site.depth) + 1
       if (depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
-      const invocation = new Frame(this.runtime, new ScopeStack([...fn.capturedScopes, new Map()]), depth)
+      const invocation = new Frame(this.ctx, new ScopeStack([...fn.capturedScopes, new Map()]), depth)
       const run = Effect.gen(function* () {
         // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
         const paramScope = invocation.scopes.current()
@@ -1643,7 +1654,7 @@ class Frame<R> {
           if (parameter.type === "RestElement") {
             yield* invocation.declarePattern(
               parameter.argument,
-              new Arr(self.runtime.builtins.Array, args.slice(index)),
+              new Arr(self.ctx.builtins.Array, args.slice(index)),
               true,
               parameter,
               true,
@@ -1664,8 +1675,8 @@ class Frame<R> {
       })
       if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn.async))
       if (!fn.async) return run
-      return this.runtime.pending.createWithSelf((self) =>
-        Effect.flatMap(run, (value) => resolvePromiseValue(invocation.runtime.runner, value, self)),
+      return this.ctx.pending.createWithSelf((self) =>
+        Effect.flatMap(run, (value) => resolvePromiseValue(invocation.ctx, value, self)),
       )
     })
   }
@@ -1678,7 +1689,7 @@ class Frame<R> {
     const state: GeneratorState = { started: false, completed: false, draining: false, pending: [], pendingIndex: 0 }
     invocation.generatorState = state
     invocation.generatorAsync = asynchronous
-    const builtins = this.runtime.builtins
+    const builtins = this.ctx.builtins
     const result = (value: unknown, done: boolean) => record(builtins.Object, { value, done })
     const request = (kind: GeneratorRequestKind, value: unknown) => {
       const request = { kind, value, response: Deferred.makeUnsafe<unknown, unknown>() }
@@ -1690,7 +1701,7 @@ class Frame<R> {
         if (state.draining) return Deferred.await(request.response)
         state.draining = true
         return Effect.andThen(
-          this.runtime.pending.fork(
+          this.ctx.pending.fork(
             invocation
               .completeGeneratorRequests(state, true)
               .pipe(Effect.ensuring(Effect.sync(() => (state.draining = false)))),
@@ -1738,7 +1749,7 @@ class Frame<R> {
           yield* invocation.completeGeneratorRequests(state, asynchronous)
           state.completed = true
         })
-        return Effect.andThen(this.runtime.pending.fork(body), Deferred.await(request.response))
+        return Effect.andThen(this.ctx.pending.fork(body), Deferred.await(request.response))
       }
       return Deferred.await(request.response)
     }
@@ -1752,7 +1763,7 @@ class Frame<R> {
 
   private completeGeneratorRequests(state: GeneratorState, asynchronous: boolean): Effect.Effect<void, never, R> {
     const self = this
-    const result = (value: unknown, done: boolean) => record(self.runtime.builtins.Object, { value, done })
+    const result = (value: unknown, done: boolean) => record(self.ctx.builtins.Object, { value, done })
     return Effect.gen(function* () {
       while (true) {
         const pending = self.dequeueGeneratorRequest(state)
@@ -1816,10 +1827,7 @@ class Frame<R> {
   private suspendGenerator(value: unknown, node: AstNode): Effect.Effect<unknown, unknown, R> {
     const state = this.generatorState
     if (!state?.active) throw typeError("Generator has no active request.", node)
-    Deferred.doneUnsafe(
-      state.active.response,
-      Exit.succeed(record(this.runtime.builtins.Object, { value, done: false })),
-    )
+    Deferred.doneUnsafe(state.active.response, Exit.succeed(record(this.ctx.builtins.Object, { value, done: false })))
     state.active = undefined
     return Effect.flatMap(this.takeGeneratorRequest(state), (request) => {
       state.active = request
@@ -1913,14 +1921,14 @@ class Frame<R> {
   }
 
   private evaluateObjectExpression(node: ObjectExpression): Effect.Effect<Obj, unknown, R> {
-    const objectValue = new Obj(this.runtime.builtins.Object)
+    const objectValue = new Obj(this.ctx.builtins.Object)
     const self = this
     return Effect.gen(function* () {
       for (const property of node.properties) {
         if (property.type === "SpreadElement") {
           const spread = yield* self.evaluateExpression(property.argument)
           if (spread === null || spread === undefined) continue
-          assign(objectValue, enumerableSource(self.runtime.runner, "Object spread", spread, property))
+          assign(objectValue, enumerableSource(self.ctx, "Object spread", spread, property))
           continue
         }
 
@@ -1979,7 +1987,7 @@ class Frame<R> {
           values.push(yield* self.evaluateExpression(element))
         }
       }
-      return new Arr(self.runtime.builtins.Array, values)
+      return new Arr(self.ctx.builtins.Array, values)
     })
   }
 
@@ -2002,7 +2010,7 @@ class Frame<R> {
 
         if (index < expressions.length) {
           const raw = yield* self.evaluateExpression(expressions[index])
-          output += coerceToString(toProgram(self.runtime.builtins, raw, "Template interpolation"))
+          output += coerceToString(toProgram(self.ctx.builtins, raw, "Template interpolation"))
           checkStringLength(output.length)
         }
       }
@@ -2053,7 +2061,7 @@ class Frame<R> {
       if (objectValue instanceof Obj) return { target: objectValue, key, receiver: objectValue }
 
       // Primitives read through their wrapper prototype without being boxed; strings own length and indexes.
-      const builtins = self.runtime.builtins
+      const builtins = self.ctx.builtins
       if (typeof objectValue === "string") {
         if (key === "length") return { value: objectValue.length }
         const index = typeof key === "symbol" ? undefined : parseArrayIndex(key)

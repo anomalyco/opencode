@@ -2,12 +2,11 @@ import { Effect } from "effect"
 import { fn, type Method, methods, receiver } from "./native.js"
 import { AsyncIteratorSymbol, type GeneratorRequestKind, IteratorSymbol } from "./model.js"
 import { define, hidden, GeneratorObj } from "./objects.js"
-import type { Pending } from "./promises.js"
-import type { Runner } from "./runner.js"
+import type { Interpreter } from "./interpreter.js"
 
 /** `next`/`return`/`throw` on the generator prototypes; async generators answer with promises. */
-export const generatorGlobals = <R>(runner: Runner<R>, pending: Pending<R>): void => {
-  const builtins = runner.builtins
+export const generatorGlobals = <R>(ctx: Interpreter<R>): void => {
+  const builtins = ctx.builtins
   const install = (asynchronous: boolean) => {
     const proto = asynchronous ? builtins.AsyncGenerator : builtins.Generator
     const label = asynchronous ? "AsyncGenerator" : "Generator"
@@ -17,7 +16,7 @@ export const generatorGlobals = <R>(runner: Runner<R>, pending: Pending<R>): voi
       (thisValue: unknown, args: Array<unknown>) => {
         const generator = receiver(GeneratorObj, thisValue, `${label}.prototype.${kind}`)
         const requested = generator.request(kind, args[0]) as Effect.Effect<unknown, unknown, R>
-        return generator.asynchronous ? pending.create(requested) : requested
+        return generator.asynchronous ? ctx.pending.create(requested) : requested
       },
     ]
     methods(builtins, proto, [request("next"), request("return"), request("throw")])
