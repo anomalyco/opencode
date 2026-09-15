@@ -14,31 +14,32 @@ import { EOL } from "os"
 import path from "path"
 import { which } from "@opencode-ai/core/util/which"
 
-function pagerCmd(): string[] {
-  const lessOptions = ["-R", "-S"]
+const LESS_OPTIONS = ["-R", "-S"]
+
+function pagerCmd(): string[] | undefined {
   if (process.platform !== "win32") {
-    return ["less", ...lessOptions]
+    return ["less", ...LESS_OPTIONS]
   }
 
   // user could have less installed via other options
   const lessOnPath = which("less")
   if (lessOnPath) {
-    if (Filesystem.stat(lessOnPath)?.size) return [lessOnPath, ...lessOptions]
+    if (Filesystem.stat(lessOnPath)?.size) return [lessOnPath, ...LESS_OPTIONS]
   }
 
   if (Flag.OPENCODE_GIT_BASH_PATH) {
     const less = path.join(Flag.OPENCODE_GIT_BASH_PATH, "..", "..", "usr", "bin", "less.exe")
-    if (Filesystem.stat(less)?.size) return [less, ...lessOptions]
+    if (Filesystem.stat(less)?.size) return [less, ...LESS_OPTIONS]
   }
 
   const git = which("git")
   if (git) {
     const less = path.join(git, "..", "..", "usr", "bin", "less.exe")
-    if (Filesystem.stat(less)?.size) return [less, ...lessOptions]
+    if (Filesystem.stat(less)?.size) return [less, ...LESS_OPTIONS]
   }
 
-  // Fall back to Windows built-in more (via cmd.exe)
-  return ["cmd", "/c", "more"]
+  // No pager found, fall back to in-process pager.
+  return undefined
 }
 
 export const SessionCommand = cmd({
@@ -94,7 +95,17 @@ export const SessionListCommand = effectCmd({
 
     if (shouldPaginate) {
       yield* Effect.promise(async () => {
-        const proc = Process.spawn(pagerCmd(), {
+        const cmd = pagerCmd()
+
+        // in-process pager (fallback)
+        if (cmd === undefined) {
+          const { default: pager } = await import("less-pager-mini")
+          await pager(output, LESS_OPTIONS)
+          return
+        }
+
+        // local pager
+        const proc = Process.spawn(cmd, {
           stdin: "pipe",
           stdout: "inherit",
           stderr: "inherit",
