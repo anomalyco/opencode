@@ -2606,8 +2606,8 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
   )
 }
 
-function input(input: Record<string, unknown>, omit?: string[]): string {
-  const primitives = Object.entries(input).filter(([key, value]) => {
+function input(input: Record<string, unknown> | null | undefined, omit?: string[]): string {
+  const primitives = Object.entries(input ?? {}).filter(([key, value]) => {
     if (omit?.includes(key)) return false
     return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
   })

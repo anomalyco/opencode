@@ -504,11 +504,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const mcp = {
       isEnabled(name: string) {
-        const status = sync.data.mcp[name]
+        const status = sync.data.mcp?.[name]
         return status?.status === "connected"
       },
       async toggle(name: string) {
-        const status = sync.data.mcp[name]
+        const status = sync.data.mcp?.[name]
         if (status?.status === "connected") {
           // Disable: disconnect the MCP
           await sdk.client.mcp.disconnect({ name })

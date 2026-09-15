@@ -134,7 +134,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         .discover()
         .then((themes) => {
           setCustomThemes(
-            Object.entries(themes).reduce<Record<string, ThemeJson>>((result, [name, theme]) => {
+            Object.entries(themes ?? {}).reduce<Record<string, ThemeJson>>((result, [name, theme]) => {
               if (isTheme(theme)) result[name] = theme
               return result
             }, {}),
@@ -263,7 +263,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         if (theme) return resolveTheme(theme, store.mode)
       }
 
-      return resolveTheme(store.themes.opencode, store.mode)
+      return resolveTheme(store.themes.opencode ?? DEFAULT_THEMES.opencode, store.mode)
     })
 
     createEffect(() => renderer.setBackgroundColor(values().background))

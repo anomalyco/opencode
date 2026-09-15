@@ -96,7 +96,7 @@ function normalizePack(pack: TuiAttentionSoundPack): RegisteredSoundPack | undef
     name: pack.name?.trim() || undefined,
     builtin: false,
     sounds: Object.fromEntries(
-      Object.entries(pack.sounds).filter(
+      Object.entries(pack.sounds ?? {}).filter(
         (item): item is [TuiAttentionSoundName, string] =>
           Schema.is(AttentionSoundName)(item[0]) && typeof item[1] === "string" && item[1].trim().length > 0,
       ),
