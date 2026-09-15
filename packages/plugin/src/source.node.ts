@@ -2,6 +2,7 @@ import { registerHooks } from "node:module"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { localSource } from "./source.js"
+import { packageTarget } from "./source.package.js"
 import { Host } from "./host.js"
 
 let generation = Date.now()
@@ -21,7 +22,15 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
         specifier.startsWith("./") || specifier.startsWith("../")
           ? new URL(specifier, context.parentURL)
           : localSource(specifier, path.dirname(fileURLToPath(context.parentURL)))
-      if (!local) return nextResolve(specifier, context)
+      if (!local) {
+        try {
+          return nextResolve(specifier, context)
+        } catch (error) {
+          const target = packageTarget(specifier, fileURLToPath(context.parentURL))
+          if (target) track(target, true)
+          throw error
+        }
+      }
       if (fileURLToPath(local).split(path.sep).includes("node_modules")) return nextResolve(specifier, context)
       const resolved = (() => {
         try {

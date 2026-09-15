@@ -89,6 +89,30 @@ test("renamed exports, failed loads, and new dependencies recover without cached
   expect((await sources.read(entry.href)).module).toMatchObject({ default: 3 })
 })
 
+test("a missing package dependency reloads when it is installed", async () => {
+  let changes = 0
+  const watcher = createSourceWatcher(() => {
+    changes++
+  })
+  using _watcher = { [Symbol.dispose]: watcher.dispose }
+  await using sources = await fixture(watcher.wait)
+  const entry = new URL("tui.ts", sources.url)
+  await Bun.write(entry, 'export { default } from "example"')
+  await expect(sources.read(entry.href)).rejects.toThrow("example")
+
+  const count = changes
+  await Bun.write(new URL("node_modules/example/package.json", sources.url), '{"type":"module","main":"index.js"}')
+  await Bun.write(new URL("node_modules/example/index.js", sources.url), 'export default "installed"')
+  const deadline = Date.now() + 3000
+  while (Date.now() < deadline) {
+    if (changes > count) break
+    await Bun.sleep(10)
+  }
+
+  expect(changes).toBeGreaterThan(count)
+  expect((await sources.read(entry.href)).module).toMatchObject({ default: "installed" })
+})
+
 test("shared runtime and ordinary package identities survive plugin generations", async () => {
   await using sources = await fixture()
   const entry = new URL("tui.ts", sources.url)
@@ -221,9 +245,16 @@ test.each(["", "?mode=plugin", "?mode=plugin#section"])(
       assert.equal(updated.state, external.default)
       assert.equal(watched.includes(fileURLToPath(library)), false)
       assert.equal(new URL(updated.source).pathname, helper.pathname)
-      assert.equal(new URL(updated.source).searchParams.get("mode"), suffix ? "plugin" : null)
-      assert.equal(new URL(updated.source).hash, suffix.includes("#") ? "#section" : "")
-      console.log("node graph reload passed")
+       assert.equal(new URL(updated.source).searchParams.get("mode"), suffix ? "plugin" : null)
+       assert.equal(new URL(updated.source).hash, suffix.includes("#") ? "#section" : "")
+       const missing = new URL("./missing.mjs", import.meta.url)
+       await writeFile(missing, 'export { default } from "later"')
+       await assert.rejects(sources.read(missing.href), /later/)
+       await mkdir(new URL("./node_modules/later", import.meta.url), { recursive: true })
+       await writeFile(new URL("./node_modules/later/package.json", import.meta.url), '{"type":"module","main":"index.js"}')
+       await writeFile(new URL("./node_modules/later/index.js", import.meta.url), 'export default "installed"')
+       assert.equal((await sources.read(missing.href)).module.default, "installed")
+       console.log("node graph reload passed")
     } finally { sources.dispose() }
   `,
     )
