@@ -4,6 +4,7 @@ import { ShellSelect } from "@opencode/core/shell/select"
 import { FSUtil } from "@opencode/util/fs-util"
 import { which } from "@opencode/core/util/which"
 import fs from "node:fs/promises"
+import { spawnSync } from "node:child_process"
 import { tmpdir } from "./fixture/tmpdir"
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
@@ -118,6 +119,16 @@ describe("shell", () => {
       await withShell(path.win32.basename(shell), async () => {
         expect(ShellSelect.resolve({ priority: "config" })).toBe(shell)
       })
+    })
+
+    test("does not resolve known shells that are not installed", async () => {
+      // The app-execution-alias fallback may only return a bare name for a shell where.exe
+      // can actually find; a known-but-absent shell must still fall back.
+      for (const name of ["zsh", "ksh"]) {
+        if (which(name)) continue
+        if (spawnSync("where.exe", [name], { stdio: "ignore", windowsHide: true }).status === 0) continue
+        expect(ShellSelect.resolve({ priority: "config" }, name)).not.toBe(name)
+      }
     })
   }
 })
