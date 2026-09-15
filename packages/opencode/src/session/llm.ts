@@ -369,7 +369,12 @@ const live: Layer.Layer<
 
             // Adapter seam: both runtimes expose the same LLMEvent stream. Native
             // already returns one; AI SDK streams are converted here.
-            const state = LLMAISDK.adapterState()
+            const state = LLMAISDK.adapterState({
+              parseReasoningTags:
+                input.model.providerID === "ollama" &&
+                input.model.api.npm === "@ai-sdk/openai-compatible" &&
+                input.model.capabilities.reasoning,
+            })
             return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
               e instanceof Error ? e : new Error(String(e)),
             ).pipe(
