@@ -377,7 +377,7 @@ export function getToolInfo(
         title: i18n.t("ui.tool.patch"),
         subtitle:
           Array.isArray(input.files) && input.files.length
-            ? `${input.files.length} ${i18n.plural("ui.common.file", input.files.length)}`
+            ? i18n.plural("ui.common.fileCount", input.files.length)
             : undefined,
       }
     case "todowrite":

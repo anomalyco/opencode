@@ -112,7 +112,9 @@ export const SettingsProjectGeneral: Component<{
                     return (
                       <button
                         type="button"
-                        aria-label={language.t("dialog.project.edit.color.select", { color })}
+                        aria-label={language.t("dialog.project.edit.color.select", {
+                          color: language.t(`common.color.${color}`),
+                        })}
                         aria-pressed={selected()}
                         class="project-settings-color"
                         classList={{ "project-settings-color--selected": selected() }}

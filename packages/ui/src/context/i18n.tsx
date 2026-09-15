@@ -9,16 +9,23 @@ export type UiPluralCategory = PluralCategory
 export type UiI18nPluralLookupKey = PluralLookupKey
 export type UiI18nLocaleKey = LocaleKey
 type UiTranslationKey<Value extends string> = Value extends UiI18nPluralLookupKey ? never : Value
+export type UiI18nOrdinaryKey = UiTranslationKey<UiI18nKey>
 
 export type UiI18nParams = Record<string, string | number | boolean>
 export type UiTranslate = <Value extends string>(key: UiTranslationKey<Value>, params?: UiI18nParams) => string
 
-export type UiI18n = {
+export type UiI18nSource = {
   locale: Accessor<string>
   layoutLocale?: Accessor<string>
   t: UiTranslate
   plural: (key: UiI18nPluralKey, count: number, params?: UiI18nParams) => string
   pluralForm?: (key: UiI18nPluralKey, category: UiPluralCategory, params?: UiI18nParams) => string
+}
+
+export type UiI18n = UiI18nSource & {
+  /** Preserve runtime-generated English copy while using the keyed dictionary for every other locale. */
+  tDynamic: (key: UiI18nOrdinaryKey, source: string, params?: UiI18nParams) => string
+  listSeparator: (index: number, count: number) => string
 }
 
 const rules = new Map<string, Intl.PluralRules>()
@@ -36,6 +43,21 @@ export function pluralKey(key: UiI18nPluralKey, category: UiPluralCategory) {
   return `${key}.${category}` as UiI18nPluralLookupKey
 }
 
+export function localizedListSeparator(locale: string, index: number, count: number) {
+  if (index <= 0 || index >= count) return ""
+  const parts = new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).formatToParts(
+    Array.from({ length: count }, (_, item) => String(item)),
+  )
+  const current = parts.findIndex((part) => part.type === "element" && part.value === String(index))
+  const previous = parts.findLastIndex(
+    (part, partIndex) => partIndex < current && part.type === "element" && part.value === String(index - 1),
+  )
+  return parts
+    .slice(previous + 1, current)
+    .map((part) => part.value)
+    .join("")
+}
+
 function resolveTemplate(text: string, params?: UiI18nParams) {
   if (!params) return text
   return text.replace(/{{\s*([^}]+?)\s*}}/g, (_, rawKey) => {
@@ -45,7 +67,16 @@ function resolveTemplate(text: string, params?: UiI18nParams) {
   })
 }
 
-const fallback: UiI18n = {
+export function createUiI18n(source: UiI18nSource): UiI18n {
+  return {
+    ...source,
+    tDynamic: (key, value, params) =>
+      source.locale().toLowerCase().split("-")[0] === "en" ? resolveTemplate(value, params) : source.t(key, params),
+    listSeparator: (index, count) => localizedListSeparator(source.locale(), index, count),
+  }
+}
+
+const fallbackSource: UiI18nSource = {
   locale: () => "en",
   t: (key, params) => {
     const value = en[key as UiI18nKey] ?? String(key)
@@ -59,13 +90,15 @@ const fallback: UiI18n = {
     return resolveTemplate(value, params)
   },
 }
+const fallback = createUiI18n(fallbackSource)
 
 const Context = createContext<UiI18n>(fallback)
 
-function UiI18nProvider(props: ParentProps<{ value: UiI18n }>) {
+function UiI18nProvider(props: ParentProps<{ value: UiI18nSource }>) {
+  const value = createUiI18n(props.value)
   return (
-    <I18nProvider locale={(props.value.layoutLocale ?? props.value.locale)()}>
-      <Context.Provider value={props.value}>{props.children}</Context.Provider>
+    <I18nProvider locale={(value.layoutLocale ?? value.locale)()}>
+      <Context.Provider value={value}>{props.children}</Context.Provider>
     </I18nProvider>
   )
 }
