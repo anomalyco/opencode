@@ -582,6 +582,7 @@ export const ShellTool = Tool.define(
       if (meta.length > 0) {
         output += "\n\n<shell_metadata>\n" + meta.join("\n") + "\n</shell_metadata>"
       }
+      output += `\n\nWorking directory: ${input.cwd}`
       return {
         title: input.command,
         metadata: {
