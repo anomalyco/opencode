@@ -601,6 +601,12 @@ export function AppInterface(props: {
                     </PermissionProvider>
                   </TabsProvider>
                 )}
+                base={(() => {
+                  const bp = window.__OPENCODE_BASE_PATH__?.replace(/\/$/, "")
+                  if (bp) return bp
+                  const baseUri = new URL(document.baseURI).pathname.replace(/\/+$/, "")
+                  return baseUri && baseUri !== "/" ? baseUri : undefined
+                })()}
               >
                 <Routes serverScoped={props.serverScoped} />
               </Dynamic>
