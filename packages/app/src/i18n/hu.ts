@@ -748,6 +748,7 @@ export const dict = {
   "session.question.progress": "{{current}}/{{total}} kérdések",
   "session.question.minimize": "Minimalizálja a kérdést",
   "session.question.restore": "Kérdés visszaállítása",
+  "session.question.build": "Válaszolj, és folytasd a Build ügynökkel",
   "session.question.pending.one": "{{count}} függőben lévő kérdés",
   "session.question.pending.other": "{{count}} függőben lévő kérdések",
   "session.followupDock.summary.one": "{{count}} sorba állított üzenet",

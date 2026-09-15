@@ -754,6 +754,7 @@ export const dict: Record<string, string> = {
   "session.question.progress": "{{current}}གི་{{total}}དྲི་བ།",
   "session.question.minimize": "དྲི་བ་ཉུང་སུ་བཟོ།",
   "session.question.restore": "དྲི་བ་སླར་གསོ་འབད།",
+  "session.question.build": "ལན་སྤྲོད་དེ་ Build ལས་ཚབ་དང་མཉམ་དུ་འཕྲོ་མཐུད།",
   "session.question.pending.one": "{{count}} བསྒུག་པའི་དྲི་བ།",
   "session.question.pending.other": "{{count}} སྒུག་པའི་དྲི་བ།",
   "session.followupDock.summary.one": "{{count}} གྲལ་ཐིག་ཅན་གྱི་འཕྲིན་འཕྲིན།",

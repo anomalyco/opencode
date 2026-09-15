@@ -785,6 +785,7 @@ export const dict = {
   "session.todo.expand": "Proširi",
   "session.question.minimize": "Minimiziraj pitanje",
   "session.question.restore": "Vrati pitanje",
+  "session.question.build": "Odgovori i nastavi s agentom Build",
   "session.question.pending.one": "{{count}} pitanje na čekanju",
   "session.question.pending.few": "{{count}} pitanja na čekanju",
   "session.question.pending.other": "{{count}} pitanja na čekanju",

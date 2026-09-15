@@ -1,9 +1,12 @@
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Fiber, Queue } from "effect"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Effect, Fiber, Layer, Queue } from "effect"
 import { QuestionTool } from "../../src/tool/question"
 import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Session } from "../../src/session/session"
+import { Provider } from "../../src/provider/provider"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
 import { testEffect } from "../lib/effect"
@@ -20,8 +23,33 @@ const ctx = {
   ask: () => Effect.void,
 }
 
+const sessionWrites: { agent: string; text: string }[] = []
+
+const session = Layer.mock(Session.Service, {
+  get: () => Effect.succeed({ parentID: undefined } as unknown as Session.Info),
+  messages: () =>
+    Effect.succeed([
+      { info: { role: "user", model: { providerID: "test", modelID: "test" } } },
+    ] as unknown as SessionV1.WithParts[]),
+  updateMessage: (msg) => {
+    sessionWrites.push({ agent: (msg as SessionV1.User).agent, text: "" })
+    return Effect.succeed(msg)
+  },
+  updatePart: (part) => {
+    const last = sessionWrites.at(-1)
+    if (last && "text" in part && typeof part.text === "string") last.text = part.text
+    return Effect.succeed(part)
+  },
+})
+
+const provider = Layer.mock(Provider.Service, {})
+
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([Question.node, EventV2Bridge.node, Truncate.node, Agent.node])),
+  Layer.mergeAll(
+    LayerNode.compile(LayerNode.group([Question.node, EventV2Bridge.node, Truncate.node, Agent.node])),
+    session,
+    provider,
+  ),
 )
 
 const pending = Effect.fn("QuestionToolTest.pending")(function* (question: Question.Interface) {
@@ -87,6 +115,36 @@ describe("tool.question", () => {
 
       const result = yield* Fiber.join(fiber)
       expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
+    }),
+  )
+
+  it.instance("should switch to the requested agent when the user answers with one", () =>
+    Effect.gen(function* () {
+      sessionWrites.length = 0
+      const question = yield* Question.Service
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      const questions = [
+        {
+          question: "Ready to implement?",
+          header: "Implement",
+          options: [
+            { label: "Yes", description: "Start implementing" },
+            { label: "No", description: "Keep planning" },
+          ],
+        },
+      ]
+
+      const fiber = yield* tool.execute({ questions }, { ...ctx, agent: "plan" }).pipe(Effect.forkScoped)
+      const item = yield* pending(question)
+      yield* question.reply({ requestID: item.id, answers: [["Yes"]], agent: "build" })
+
+      const result = yield* Fiber.join(fiber)
+      expect(result.title).toBe("Switching to build agent")
+      expect(result.output).toContain("They chose to continue in the build agent")
+      expect(sessionWrites).toHaveLength(1)
+      expect(sessionWrites[0].agent).toBe("build")
+      expect(sessionWrites[0].text).toContain("build agent")
     }),
   )
 

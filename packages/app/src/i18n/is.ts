@@ -744,6 +744,7 @@ export const dict = {
   "session.question.progress": "{{current}} af {{total}} spurningum",
   "session.question.minimize": "Lágmarka spurninguna",
   "session.question.restore": "Endurheimta spurningu",
+  "session.question.build": "Svara og haltu áfram með Build-fulltrúa",
   "session.question.pending.one": "{{count}} spurning í bið",
   "session.question.pending.other": "{{count}} spurningar í bið",
   "session.followupDock.summary.one": "{{count}} skilaboð í biðröð",

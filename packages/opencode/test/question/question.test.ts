@@ -29,6 +29,7 @@ const listEffect = Question.Service.use((svc) => svc.list())
 const replyEffect = Effect.fn("QuestionTest.reply")(function* (input: {
   requestID: QuestionID
   answers: ReadonlyArray<Question.Answer>
+  agent?: string
 }) {
   const question = yield* Question.Service
   yield* question.reply(input)
@@ -149,7 +150,40 @@ it.instance(
         answers: [["Option 1"]],
       })
 
-      expect(yield* Fiber.join(fiber)).toEqual([["Option 1"]])
+      expect((yield* Fiber.join(fiber)).answers).toEqual([["Option 1"]])
+    }),
+  { git: true },
+)
+
+it.instance(
+  "reply - resolves the pending ask with the requested agent",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
+        questions: [
+          {
+            question: "What would you like to do?",
+            header: "Action",
+            options: [
+              { label: "Option 1", description: "First option" },
+              { label: "Option 2", description: "Second option" },
+            ],
+          },
+        ],
+      }).pipe(Effect.forkScoped)
+
+      const pending = yield* waitForPending(1)
+
+      yield* replyEffect({
+        requestID: pending[0].id,
+        answers: [["Option 1"]],
+        agent: "build",
+      })
+
+      const result = yield* Fiber.join(fiber)
+      expect(result.answers).toEqual([["Option 1"]])
+      expect(result.agent).toBe("build")
     }),
   { git: true },
 )
@@ -313,7 +347,7 @@ it.instance(
         answers: [["Build"], ["Dev"]],
       })
 
-      expect(yield* Fiber.join(fiber)).toEqual([["Build"], ["Dev"]])
+      expect((yield* Fiber.join(fiber)).answers).toEqual([["Build"], ["Dev"]])
     }),
   { git: true },
 )

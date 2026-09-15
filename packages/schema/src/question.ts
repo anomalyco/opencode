@@ -64,6 +64,9 @@ export const Reply = Schema.Struct({
   answers: Schema.Array(Answer).annotate({
     description: "User answers in order of questions (each answer is an array of selected labels)",
   }),
+  agent: Schema.String.pipe(optional).annotate({
+    description: "Agent to continue the session with after the answers are submitted",
+  }),
 }).annotate({ identifier: "QuestionV2.Reply" })
 export interface Reply extends Schema.Schema.Type<typeof Reply> {}
 

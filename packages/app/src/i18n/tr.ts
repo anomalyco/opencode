@@ -789,6 +789,7 @@ export const dict = {
   "session.todo.expand": "Genişlet",
   "session.question.minimize": "Soruyu küçült",
   "session.question.restore": "Soruyu geri yükle",
+  "session.question.build": "Yanıtla ve Build ajanıyla devam et",
   "session.question.pending.one": "{{count}} bekleyen soru",
   "session.question.pending.other": "{{count}} bekleyen soru",
   "session.followupDock.summary.one": "{{count}} sıradaki mesaj",

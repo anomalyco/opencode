@@ -721,6 +721,7 @@ export const dict = {
   "session.todo.expand": "توسيع",
   "session.question.minimize": "تصغير السؤال",
   "session.question.restore": "استعادة السؤال",
+  "session.question.build": "أجب وتابع مع وكيل Build",
   "session.question.pending.one": "{{count}} سؤال معلق",
   "session.question.pending.zero": "عدد الأسئلة المعلقة: {{count}}",
   "session.question.pending.two": "عدد الأسئلة المعلقة: {{count}}",

@@ -739,6 +739,7 @@ export const dict = {
   "session.question.progress": "{{current}} daripada {{total}} soalan",
   "session.question.minimize": "Minimumkan soalan",
   "session.question.restore": "Pulihkan soalan",
+  "session.question.build": "Jawab dan teruskan dengan ejen Build",
   "session.question.pending.one": "{{count}} soalan belum dijawab",
   "session.question.pending.other": "{{count}} soalan belum dijawab",
   "session.followupDock.summary.one": "{{count}} mesej dalam giliran",

@@ -813,6 +813,7 @@ export const dict = {
   "session.question.progress": "{{current}} з {{total}} запитань",
   "session.question.minimize": "Згорнути запитання",
   "session.question.restore": "Відновити запитання",
+  "session.question.build": "Дайте відповідь і продовжте з агентом Build",
   "session.question.pending.one": "{{count}} запитання очікує відповіді",
   "session.question.pending.few": "{{count}} запитання очікують відповіді",
   "session.question.pending.many": "{{count}} запитань очікують відповіді",

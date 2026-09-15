@@ -744,6 +744,7 @@ export const dict = {
   "session.question.progress": "{{current}} аз {{total}} саволҳо",
   "session.question.minimize": "Саволро кам кунед",
   "session.question.restore": "Саволро барқарор кунед",
+  "session.question.build": "Ҷавоб диҳед ва бо агента Build идома диҳед",
   "session.question.pending.one": "{{count}} саволи интизорӣ",
   "session.question.pending.other": "{{count}} саволҳои интизорӣ",
   "session.followupDock.summary.one": "{{count}} паёми навбатӣ",

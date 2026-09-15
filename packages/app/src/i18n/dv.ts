@@ -753,6 +753,7 @@ export const dict = {
   "session.question.progress": "{{current}} ގެ {{total}} ސުވާލުތަކެވެ",
   "session.question.minimize": "ސުވާލު އެންމެ ކުޑަކުރުން",
   "session.question.restore": "ސުވާލު އަލުން އާލާކުރުން",
+  "session.question.build": "ޖަވާބު ދީ ބިލްޑް އޭޖެންޓާއެކު ކުރިއަށްގެންދޭށެވެ",
   "session.question.pending.one": "{{count}} ކުރިއަށް އޮތް ސުވާލު",
   "session.question.pending.other": "{{count}} ކުރިއަށް އޮތް ސުވާލުތައް",
   "session.followupDock.summary.one": "{{count}} ކިއު ކޮށްފައިވާ މެސެޖެކެވެ",

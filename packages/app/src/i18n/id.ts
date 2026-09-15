@@ -809,6 +809,7 @@ export const dict = {
   "session.question.progress": "{{current}} dari {{total}} pertanyaan",
   "session.question.minimize": "Minimalkan pertanyaan",
   "session.question.restore": "Pulihkan pertanyaan",
+  "session.question.build": "Jawab dan lanjutkan dengan agen Build",
   "session.question.pending.one": "{{count}} pertanyaan tertunda",
   "session.question.pending.other": "{{count}} pertanyaan tertunda",
   "session.followupDock.summary.one": "{{count}} pesan dalam antrean",
