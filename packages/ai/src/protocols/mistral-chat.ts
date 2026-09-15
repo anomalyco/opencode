@@ -717,10 +717,19 @@ const finishEvents = Effect.fn("MistralChat.finishEvents")(function* (state: Par
     })
   const events: LLMEvent[] = []
   const closed = closeActive(state, events)
-  const lifecycle = closed.completedTools.length > 0 ? Lifecycle.stepStart(closed.lifecycle, events) : closed.lifecycle
-  events.push(...closed.completedTools)
+  // Late tool deltas accumulate in `tools` and finalize once here with complete
+  // arguments; finalizing per frame would emit partial input for split calls.
+  // Incomplete (length/content-filter) finishes still drop unconfirmed tools.
+  const incomplete = state.finishReason?.normalized === "length" || state.finishReason?.normalized === "content-filter"
+  const late =
+    !incomplete && Object.keys(closed.tools).length > 0
+      ? yield* ToolStream.finishAll(ADAPTER, closed.tools)
+      : undefined
+  const completedTools = late ? [...closed.completedTools, ...late.events] : closed.completedTools
+  const lifecycle = completedTools.length > 0 ? Lifecycle.stepStart(closed.lifecycle, events) : closed.lifecycle
+  events.push(...completedTools)
   const reason =
-    state.finishReason.normalized === "stop" && closed.completedTools.some(LLMEvent.is.toolCall)
+    state.finishReason.normalized === "stop" && completedTools.some(LLMEvent.is.toolCall)
       ? { ...state.finishReason, normalized: "tool-calls" as const }
       : state.finishReason
   Lifecycle.finish(lifecycle, events, { reason, usage: closed.usage })

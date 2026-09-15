@@ -1078,9 +1078,13 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       )
 
     // Filtering or truncation terminates the response without confirming pending tool calls.
-    // Late frames after a complete finish finalize newly absorbed tool calls here too.
+    // Late tool deltas accumulate in `tools` and finalize once in `finishEvents`;
+    // finalizing per frame would emit partial input for identity-first splits.
     const finished =
-      finishReason !== undefined && !incompleteTools && Object.keys(tools).length > 0
+      finishReason !== undefined &&
+      !incompleteTools &&
+      state.finishReason === undefined &&
+      Object.keys(tools).length > 0
         ? yield* ToolStream.finishAll(ADAPTER, tools)
         : undefined
 
@@ -1115,10 +1119,17 @@ const finishEvents = Effect.fn("OpenAIChat.finishEvents")(function* (state: Pars
       }),
     })
   const events: LLMEvent[] = []
+  const incomplete = state.finishReason?.normalized === "length" || state.finishReason?.normalized === "content-filter"
+  const late =
+    state.finishReason !== undefined && !incomplete && Object.keys(state.tools).length > 0
+      ? yield* ToolStream.finishAll(ADAPTER, state.tools)
+      : undefined
   const toolCallEvents =
     state.finishReason === undefined && Object.keys(state.tools).length > 0
       ? (yield* ToolStream.finishAll(ADAPTER, state.tools)).events
-      : state.toolCallEvents
+      : late
+        ? [...state.toolCallEvents, ...late.events]
+        : state.toolCallEvents
   const hasToolCalls = toolCallEvents.length > 0
   const reason = state.finishReason
     ? {

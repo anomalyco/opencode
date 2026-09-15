@@ -678,6 +678,47 @@ describe("Mistral Chat", () => {
     }),
   )
 
+  it.effect("finalizes a late tool call with complete arguments", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              chunk({}, "stop"),
+              chunk({
+                tool_calls: [
+                  { index: 0, id: "Ab12Cd34E", function: { name: "lookup", arguments: '{"city":"Paris"}' } },
+                ],
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([{ id: "Ab12Cd34E", name: "lookup", input: { city: "Paris" } }])
+    }),
+  )
+
+  it.effect("accumulates split argument deltas of a late tool call before finishing", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              chunk({}, "stop"),
+              chunk({
+                tool_calls: [{ index: 0, id: "Ab12Cd34E", function: { name: "lookup", arguments: '{"city":' } }],
+              }),
+              chunk({ tool_calls: [{ index: 0, function: { arguments: '"Paris"}' } }] }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([{ id: "Ab12Cd34E", name: "lookup", input: { city: "Paris" } }])
+    }),
+  )
+
   it.effect("uses environment bearer auth and custom package settings", () =>
     LLMClient.generate(
       LLM.request({

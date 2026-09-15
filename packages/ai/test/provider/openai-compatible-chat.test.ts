@@ -593,6 +593,27 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("accumulates split argument deltas of a late tool call before finishing", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              deltaChunk({
+                tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"city":' } }],
+              }),
+              deltaChunk({ tool_calls: [{ index: 0, function: { arguments: '"Paris"}' } }] }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { city: "Paris" } }])
+    }),
+  )
+
   it.effect("still drops unconfirmed tool calls after a content-filter finish", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
