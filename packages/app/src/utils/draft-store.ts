@@ -22,7 +22,10 @@ function blobUrl(id: string, blob: Blob) {
 }
 
 async function blobID(blob: Blob) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
+  const bytes = crypto.subtle
+    ? new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()))
+    : crypto.getRandomValues(new Uint8Array(16))
+  const id = Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("")
   return id
