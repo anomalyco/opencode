@@ -62,12 +62,14 @@ export const ApplyPatchTool = Tool.define(
         type: "add" | "update" | "delete" | "move"
         movePath?: string
         diff: string
+        patch: string
         additions: number
         deletions: number
         bom: boolean
       }> = []
 
       let totalDiff = ""
+      let totalPatch = ""
 
       for (const hunk of hunks) {
         const filePath = path.resolve(instance.directory, hunk.path)
@@ -79,7 +81,8 @@ export const ApplyPatchTool = Tool.define(
             const newContent =
               hunk.contents.length === 0 || hunk.contents.endsWith("\n") ? hunk.contents : `${hunk.contents}\n`
             const next = Bom.split(newContent)
-            const diff = trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, next.text))
+            const patch = createTwoFilesPatch(filePath, filePath, oldContent, next.text)
+            const diff = trimDiff(patch)
 
             let additions = 0
             let deletions = 0
@@ -94,12 +97,14 @@ export const ApplyPatchTool = Tool.define(
               newContent: next.text,
               type: "add",
               diff,
+              patch,
               additions,
               deletions,
               bom: next.bom,
             })
 
             totalDiff += diff + "\n"
+            totalPatch += patch + "\n"
             break
           }
 
@@ -130,7 +135,8 @@ export const ApplyPatchTool = Tool.define(
               return yield* Effect.fail(new Error(`apply_patch verification failed: ${error}`))
             }
 
-            const diff = trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, newContent))
+            const patch = createTwoFilesPatch(filePath, filePath, oldContent, newContent)
+            const diff = trimDiff(patch)
 
             let additions = 0
             let deletions = 0
@@ -149,12 +155,14 @@ export const ApplyPatchTool = Tool.define(
               type: hunk.move_path ? "move" : "update",
               movePath,
               diff,
+              patch,
               additions,
               deletions,
               bom,
             })
 
             totalDiff += diff + "\n"
+            totalPatch += patch + "\n"
             break
           }
 
@@ -169,7 +177,8 @@ export const ApplyPatchTool = Tool.define(
               ),
             )
             const contentToDelete = source.text
-            const deleteDiff = trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
+            const deletePatch = createTwoFilesPatch(filePath, filePath, contentToDelete, "")
+            const deleteDiff = trimDiff(deletePatch)
 
             const deletions = contentToDelete.split("\n").length
 
@@ -179,12 +188,14 @@ export const ApplyPatchTool = Tool.define(
               newContent: "",
               type: "delete",
               diff: deleteDiff,
+              patch: deletePatch,
               additions: 0,
               deletions,
               bom: source.bom,
             })
 
             totalDiff += deleteDiff + "\n"
+            totalPatch += deletePatch + "\n"
             break
           }
         }
@@ -210,6 +221,7 @@ export const ApplyPatchTool = Tool.define(
         metadata: {
           filepath: relativePaths.join(", "),
           diff: totalDiff,
+          patch: totalPatch,
           files,
         },
       })
@@ -296,6 +308,7 @@ export const ApplyPatchTool = Tool.define(
         title: output,
         metadata: {
           diff: totalDiff,
+          patch: totalPatch,
           files,
           diagnostics,
         },

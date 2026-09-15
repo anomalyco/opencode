@@ -37,6 +37,7 @@ type AskInput = {
   always: string[]
   metadata: {
     diff: string
+    patch: string
     filepath: string
     files: Array<{
       filePath: string
@@ -217,6 +218,30 @@ describe("tool.apply_patch freeform", () => {
       yield* execute({ patchText }, ctx)
 
       expect(yield* readText(target)).toBe("line1\nchanged2\nline3\nchanged4\n")
+    }),
+  )
+
+  it.instance("adds untrimmed patch metadata while preserving trimmed diff", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx, calls } = makeCtx()
+      const target = path.join(test.directory, "indented.txt")
+      yield* writeText(target, "  old\n")
+
+      const patchText = "*** Begin Patch\n*** Update File: indented.txt\n@@\n-  old\n+  new\n*** End Patch"
+
+      const result = yield* execute({ patchText }, ctx)
+
+      expect(result.metadata.diff).toContain("-old")
+      expect(result.metadata.diff).not.toContain("-  old")
+      expect(result.metadata.patch).toContain("-  old")
+      expect(result.metadata.patch).toContain("+  new")
+      expect(calls[0]?.metadata.diff).toContain("-old")
+      expect(calls[0]?.metadata.diff).not.toContain("-  old")
+      expect(calls[0]?.metadata.patch).toContain("-  old")
+      expect(calls[0]?.metadata.patch).toContain("+  new")
+      expect(calls[0]?.metadata.files[0]?.patch).toContain("-old")
+      expect(calls[0]?.metadata.files[0]?.patch).not.toContain("-  old")
     }),
   )
 

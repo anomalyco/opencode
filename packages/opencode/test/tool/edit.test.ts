@@ -27,6 +27,8 @@ const ctx = {
   ask: () => Effect.void,
 }
 
+type AskInput = Parameters<Tool.Context["ask"]>[0]
+
 afterEach(async () => {
   await disposeAllInstances()
 })
@@ -152,6 +154,35 @@ describe("tool.edit", () => {
 
         expect(result.output).toContain("Edit applied successfully")
         expect(yield* load(filepath)).toBe("new content here")
+      }),
+    )
+
+    it.instance("adds untrimmed patch metadata while preserving trimmed diff", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "existing.txt")
+        yield* put(filepath, "  old content\n")
+        const asks: AskInput[] = []
+
+        const result = yield* run(
+          { filePath: filepath, oldString: "old content", newString: "new content" },
+          {
+            ...ctx,
+            ask: (input) =>
+              Effect.sync(() => {
+                asks.push(input)
+              }),
+          },
+        )
+
+        expect(result.metadata.diff).toContain("-old content")
+        expect(result.metadata.diff).not.toContain("-  old content")
+        expect(result.metadata.patch).toContain("-  old content")
+        expect(result.metadata.patch).toContain("+  new content")
+        expect(asks[0]?.metadata.diff).toContain("-old content")
+        expect(asks[0]?.metadata.diff).not.toContain("-  old content")
+        expect(asks[0]?.metadata.patch).toContain("-  old content")
+        expect(asks[0]?.metadata.patch).toContain("+  new content")
       }),
     )
 
