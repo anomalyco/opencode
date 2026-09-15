@@ -1,5 +1,8 @@
-import { describe, expect, test } from "bun:test"
-import { parsePluginSpecifier } from "../../src/plugin/shared"
+import { afterEach, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { checkPluginCompatibility, parsePluginSpecifier } from "../../src/plugin/shared"
 
 describe("parsePluginSpecifier", () => {
   test("parses standard npm package without version", () => {
@@ -84,5 +87,45 @@ describe("parsePluginSpecifier", () => {
       pkg: "@opencode/acme",
       version: "latest",
     })
+  })
+})
+
+describe("checkPluginCompatibility", () => {
+  const dirs: string[] = []
+
+  afterEach(async () => {
+    await Promise.all(dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })))
+  })
+
+  async function tmpPlugin(json?: string) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-plugin-"))
+    dirs.push(dir)
+    if (json !== undefined) await fs.writeFile(path.join(dir, "package.json"), json)
+    return dir
+  }
+
+  test("throws when package.json cannot be read", async () => {
+    const dir = await tmpPlugin()
+    await expect(checkPluginCompatibility(dir, "1.18.0")).rejects.toThrow(/Unable to read plugin package\.json/)
+  })
+
+  test("throws when package.json is malformed", async () => {
+    const dir = await tmpPlugin("{ not json")
+    await expect(checkPluginCompatibility(dir, "1.18.0")).rejects.toThrow(/Unable to read plugin package\.json/)
+  })
+
+  test("throws when engines.opencode is unsatisfied", async () => {
+    const dir = await tmpPlugin(JSON.stringify({ name: "acme", engines: { opencode: ">=99.0.0" } }))
+    await expect(checkPluginCompatibility(dir, "1.18.0")).rejects.toThrow(/Plugin requires opencode >=99\.0\.0/)
+  })
+
+  test("passes when engines.opencode is satisfied", async () => {
+    const dir = await tmpPlugin(JSON.stringify({ name: "acme", engines: { opencode: ">=1.0.0" } }))
+    await expect(checkPluginCompatibility(dir, "1.18.0")).resolves.toBeUndefined()
+  })
+
+  test("skips the gate for major version 0 builds", async () => {
+    const dir = await tmpPlugin()
+    await expect(checkPluginCompatibility(dir, "0.0.0-dev")).resolves.toBeUndefined()
   })
 })
