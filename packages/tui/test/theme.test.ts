@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TerminalColors } from "@opentui/core"
@@ -68,14 +68,24 @@ test("terminalMode does not derive mode from ANSI slot zero", () => {
   expect(terminalMode(terminalColors(null, ["#000000"]))).toBeUndefined()
 })
 
-test("custom theme precedence follows directory order", async () => {
+test("custom theme discovery follows directory order and skips malformed files", async () => {
   await using tmp = await tmpdir()
   const global = path.join(tmp.path, "global")
   const project = path.join(tmp.path, "project")
-  await mkdir(path.join(global, "themes"), { recursive: true })
-  await mkdir(path.join(project, "themes"), { recursive: true })
-  await writeFile(path.join(global, "themes", "custom.json"), JSON.stringify({ source: "global" }))
-  await writeFile(path.join(project, "themes", "custom.json"), JSON.stringify({ source: "project" }))
+  const globalTheme = path.join(global, "themes", "custom.json")
+  const projectTheme = path.join(project, "themes", "custom.json")
+  await mkdir(path.dirname(globalTheme), { recursive: true })
+  await mkdir(path.dirname(projectTheme), { recursive: true })
+  await writeFile(globalTheme, JSON.stringify({ source: "global" }))
+  await writeFile(projectTheme, JSON.stringify({ source: "project" }))
+  expect(await discoverThemes([global, project])).toEqual({ custom: { source: "project" } })
 
-  await expect(discoverThemes([global, project])).resolves.toEqual({ custom: { source: "project" } })
+  await writeFile(projectTheme, "{")
+  const warn = spyOn(console, "warn").mockImplementation(() => {})
+  try {
+    expect(await discoverThemes([global, project])).toEqual({ custom: { source: "global" } })
+    expect(warn.mock.calls[0]?.[1]).toMatchObject({ file: projectTheme, error: expect.any(SyntaxError) })
+  } finally {
+    warn.mockRestore()
+  }
 })
