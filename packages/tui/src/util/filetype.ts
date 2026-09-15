@@ -118,6 +118,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".tfvars": "terraform-vars",
   ".hcl": "hcl",
   ".nix": "nix",
+  ".odin": "odin",
   ".typ": "typst",
   ".typc": "typst",
 }
