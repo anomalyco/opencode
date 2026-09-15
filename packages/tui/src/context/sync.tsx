@@ -28,7 +28,7 @@ import { useTuiStartup } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
@@ -165,6 +165,101 @@ export const {
           .relative(path.resolve(project.data.instance.path.worktree), project.data.instance.path.directory)
           .replaceAll("\\", "/"),
       }
+    }
+
+    // Recovery for missed question.asked / permission.asked SSE events.
+    // The `*.asked` events fire once at ask time and are not replayed; if the
+    // TUI misses them (e.g. mid-stream delivery race), the agent blocks silently.
+    // Mirrors the CLI transport's recoverQuestion (stream.transport.ts:556-598):
+    // poll the list endpoint every 250ms until the pending request appears in
+    // the store, no tool part for the session is still running, or the cap is
+    // reached.
+    //
+    // One poller per (kind, session) so N parallel tool parts share a single
+    // loop (a 30s bash command polls GET /permission 120× total, not 120×N).
+    // Bounded by MAX_RECOVERY_ATTEMPTS so a wedged or GC'd part can't poll
+    // forever (120 × 250ms = 30s; the reviewer's "~30–60s" guidance).
+    const recovering = new Map<string, AbortController>()
+    const MAX_RECOVERY_ATTEMPTS = 120
+    function recoverPending(
+      kind: "question" | "permission",
+      sessionID: string,
+      _partID: string,
+      _messageID: string,
+    ) {
+      const key = `${kind}:${sessionID}`
+      if (recovering.has(key)) return
+      const ctrl = new AbortController()
+      recovering.set(key, ctrl)
+      ;(async () => {
+        try {
+          let attempts = 0
+          while (!ctrl.signal.aborted && attempts < MAX_RECOVERY_ATTEMPTS) {
+            attempts++
+            if ((store[kind][sessionID]?.length ?? 0) > 0) return
+            // Stop once no tool part for this session is still running. If the
+            // parts array is absent (GC'd, late seeding, or a message.part.removed
+            // between ticks) we can't tell — keep polling, bounded by the cap so
+            // a wedged part can't poll forever (the bug the reviewer flagged).
+            let anyRunning = false
+            for (const parts of Object.values(store.part)) {
+              for (const p of parts) {
+                if (p.type === "tool" && p.sessionID === sessionID && p.state.status === "running") {
+                  anyRunning = true
+                  break
+                }
+              }
+              if (anyRunning) break
+            }
+            if (!anyRunning) return
+            try {
+              // Use the v1 global endpoints (GET /question, GET /permission),
+              // NOT the v2 session-scoped ones. The v2 endpoints return empty
+              // even when a question is pending server-side (the question is
+              // stored in the global pending map, not per-session). The CLI
+              // transport uses the same v1 endpoints (stream.transport.ts:568).
+              if (kind === "question") {
+                const res = await sdk.client.question.list()
+                const all = (res as { data?: QuestionRequest[] }).data ?? []
+                const list = all.filter((r) => r.sessionID === sessionID)
+                if ((store.question[sessionID]?.length ?? 0) > 0) return
+                if (list.length > 0) {
+                  batch(() => {
+                    const existing = store.question[sessionID] ?? []
+                    const merged = [...existing]
+                    for (const req of list) {
+                      if (!merged.some((r) => r.id === req.id)) merged.push(req)
+                    }
+                    setStore("question", sessionID, merged)
+                  })
+                  return
+                }
+              } else {
+                const res = await sdk.client.permission.list()
+                const all = (res as { data?: PermissionRequest[] }).data ?? []
+                const list = all.filter((r) => r.sessionID === sessionID)
+                if ((store.permission[sessionID]?.length ?? 0) > 0) return
+                if (list.length > 0) {
+                  batch(() => {
+                    const existing = store.permission[sessionID] ?? []
+                    const merged = [...existing]
+                    for (const req of list) {
+                      if (!merged.some((r) => r.id === req.id)) merged.push(req)
+                    }
+                    setStore("permission", sessionID, merged)
+                  })
+                  return
+                }
+              }
+            } catch {
+              // ignore — retry on next tick
+            }
+            await new Promise((resolve) => setTimeout(resolve, 250))
+          }
+        } finally {
+          recovering.delete(key)
+        }
+      })()
     }
 
     function listSessions() {
@@ -378,20 +473,49 @@ export const {
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
             setStore("part", event.properties.part.messageID, [event.properties.part])
-            break
+          } else {
+            const result = search(parts, event.properties.part.id, (part) => part.id)
+            if (result.found) {
+              setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
+            } else {
+              setStore(
+                "part",
+                event.properties.part.messageID,
+                produce((draft) => {
+                  draft.splice(result.index, 0, event.properties.part)
+                }),
+              )
+            }
           }
-          const result = search(parts, event.properties.part.id, (part) => part.id)
-          if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
-            break
+
+          // Recovery: the question.asked / permission.asked SSE events are
+          // unreliable and can be missed mid-stream (see issue #43196). The CLI
+          // transport recovers by polling question.list when it sees a question
+          // tool part running with no question in state (stream.transport.ts:920).
+          // Mirror that here: if a tool part is running and we have no pending
+          // question/permission for its session, poll the list endpoints until it
+          // appears. Without this, the TUI never shows the prompt and the agent
+          // blocks silently until the user interrupts. recoverPending is keyed
+          // per (kind, session) and self-capped, so N parallel parts share one
+          // loop and a read-only tool that never asks still stops after 30s.
+          const part = event.properties.part
+          if (part.type === "tool" && part.state?.status === "running") {
+            const sessionID = part.sessionID
+            if (part.tool === "question" && !(store.question[sessionID]?.length)) {
+              void recoverPending("question", sessionID, part.id, part.messageID)
+            }
+            // Permission recovery: only in non-auto mode. In auto mode,
+            // permission.asked is auto-replied and never stored, so polling
+            // permission.list would loop forever. The CLI doesn't recover
+            // permissions at all; this is a TUI-only supplement for normal mode.
+            if (
+              part.tool !== "question" &&
+              permission.mode !== "auto" &&
+              !(store.permission[sessionID]?.length)
+            ) {
+              void recoverPending("permission", sessionID, part.id, part.messageID)
+            }
           }
-          setStore(
-            "part",
-            event.properties.part.messageID,
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.part)
-            }),
-          )
           break
         }
 
@@ -555,6 +679,11 @@ export const {
       void bootstrap()
     })
 
+    onCleanup(() => {
+      for (const ctrl of recovering.values()) ctrl.abort()
+      recovering.clear()
+    })
+
     const result = {
       data: store,
       set: setStore,
@@ -598,11 +727,30 @@ export const {
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
-            const [session, messages, todo, diff] = await Promise.all([
+            const [session, messages, todo, diff, questions, permissions] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
               sdk.client.session.messages({ sessionID, limit: 100 }),
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
+              // Use v1 global endpoints (GET /question, GET /permission) and
+              // filter to this session client-side. The v2 session-scoped
+              // endpoints return empty even when a question is pending.
+              sdk.client.question
+                .list()
+                .then((r) => ({
+                  data: ((r as { data?: QuestionRequest[] }).data ?? []).filter(
+                    (q) => q.sessionID === sessionID,
+                  ),
+                }))
+                .catch(() => ({ data: [] as QuestionRequest[] })),
+              sdk.client.permission
+                .list()
+                .then((r) => ({
+                  data: ((r as { data?: PermissionRequest[] }).data ?? []).filter(
+                    (p) => p.sessionID === sessionID,
+                  ),
+                }))
+                .catch(() => ({ data: [] as PermissionRequest[] })),
             ])
             setStore(
               produce((draft) => {
@@ -610,6 +758,20 @@ export const {
                 if (match.found) draft.session[match.index] = session.data!
                 if (!match.found) draft.session.splice(match.index, 0, session.data!)
                 draft.todo[sessionID] = todo.data ?? []
+                const questionList = (questions.data ?? []) as unknown as QuestionRequest[]
+                const existingQuestions = draft.question[sessionID] ?? []
+                const mergedQuestions = [...existingQuestions]
+                for (const req of questionList) {
+                  if (!mergedQuestions.some((r) => r.id === req.id)) mergedQuestions.push(req)
+                }
+                draft.question[sessionID] = mergedQuestions
+                const permissionList = (permissions.data ?? []) as unknown as PermissionRequest[]
+                const existingPermissions = draft.permission[sessionID] ?? []
+                const mergedPermissions = [...existingPermissions]
+                for (const req of permissionList) {
+                  if (!mergedPermissions.some((r) => r.id === req.id)) mergedPermissions.push(req)
+                }
+                draft.permission[sessionID] = mergedPermissions
                 const currentMessages = draft.message[sessionID] ?? []
                 const infos = (messages.data ?? []).flatMap((message) => {
                   if (!tracker.messages.has(message.info.id)) return [message.info]

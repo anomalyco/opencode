@@ -69,6 +69,23 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       queue.push(event)
       const elapsed = Date.now() - last
 
+      // Blocking prompts must flush immediately — never coalesce with the 16ms batch
+      const eventType = event.payload.type
+      if (
+        eventType === "question.asked" ||
+        eventType === "question.replied" ||
+        eventType === "question.rejected" ||
+        eventType === "permission.asked" ||
+        eventType === "permission.replied"
+      ) {
+        if (timer) {
+          clearTimeout(timer)
+          timer = undefined
+        }
+        flush()
+        return
+      }
+
       if (timer) return
       // If we just flushed recently (within 16ms), batch this with future events
       // Otherwise, process immediately to avoid latency
