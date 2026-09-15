@@ -804,12 +804,12 @@ it.effect("classifies retryable AI SDK failures with retry-after details", () =>
 it.effect("classifies data-only AI SDK provider codes", () =>
   Effect.gen(function* () {
     const data = {
-      error: { code: "api_error", metadata: { requestId: "data-request", retryable: true } },
+      error: { code: "rate_limit_error", metadata: { requestId: "data-request", retryable: true } },
       trace: { region: "test-region" },
     }
     const cause = apiCallError({ statusCode: 400, data })
     const error = yield* streamFailure(cause)
-    expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
+    expect(error.reason).toMatchObject({ _tag: "RateLimit" })
     expect(error.reason.http?.status).toBe(400)
     expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
     expect(error.reason.body).toBe(JSON.stringify(data))
