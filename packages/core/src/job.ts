@@ -142,9 +142,14 @@ function snapshot(job: Active): Info {
   }
 }
 
-function errorText(error: unknown) {
-  if (error instanceof Error) return error.message
-  return String(error)
+function errorText(cause: Cause.Cause<unknown>) {
+  const render = (error: Error): string => {
+    const message = error.message || error.name || "Unknown error"
+    if (!(error.cause instanceof Error)) return message
+    const detail = render(error.cause)
+    return detail === message || detail.startsWith(`${message}\n`) ? detail : `${message}\nCaused by: ${detail}`
+  }
+  return Cause.prettyErrors(cause).map(render).join("\n") || "Unknown error"
 }
 
 function incrementSession(input: Map<SessionSchema.ID, number>, sessionID: SessionSchema.ID) {
@@ -205,7 +210,7 @@ export const make = Effect.gen(function* () {
             status,
             completed_at,
             ...(Exit.isSuccess(exit) ? { output: exit.value } : {}),
-            ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
+            ...(Exit.isFailure(exit) ? { error: errorText(exit.cause) } : {}),
           },
         }
         if (status !== "cancelled") yield* persistBackground(next)
