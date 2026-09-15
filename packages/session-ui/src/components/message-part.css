@@ -738,7 +738,7 @@
     gap: 16px;
     flex: 1;
     min-height: 0;
-    padding: 12px 12px 0;
+    padding: 12px;
   }
 
   [data-slot="permission-header"] {
@@ -818,21 +818,17 @@
   [data-slot="permission-footer"] {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     flex-shrink: 0;
-    padding: 32px 8px 8px;
-    margin-top: -24px;
+    padding: 0;
   }
 
   [data-slot="permission-footer-actions"] {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 8px;
-
-    [data-component="button"] {
-      padding-left: 12px;
-      padding-right: 12px;
-    }
   }
 }
 
