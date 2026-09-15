@@ -2,14 +2,12 @@ import { Server } from "@/server/server"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
-import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { ServerAuth } from "@/server/auth"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Effect } from "effect"
-import { awaitSessionsIdle, disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { reloadWhenSessionsIdle } from "@/server/global-lifecycle"
 
 Heap.start()
 
@@ -63,18 +61,9 @@ export const rpc = {
   },
   async reload() {
     // SIGUSR2 arrives from desktop environments on theme changes, so a reload
-    // can land mid-run. Swapping config in disposes every instance, which
-    // cancels the session that is currently working — wait for it to finish
-    // instead. Signals that arrive while waiting join the pending reload.
+    // can land mid-run. Signals that arrive while one is pending join it.
     if (!reloading) {
-      reloading = AppRuntime.runPromise(
-        Effect.gen(function* () {
-          yield* awaitSessionsIdle()
-          const cfg = yield* Config.Service
-          yield* cfg.invalidate()
-          yield* disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true })
-        }),
-      ).finally(() => {
+      reloading = AppRuntime.runPromise(reloadWhenSessionsIdle()).finally(() => {
         reloading = undefined
       })
     }
