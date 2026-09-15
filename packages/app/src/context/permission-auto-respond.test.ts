@@ -104,6 +104,45 @@ describe("autoRespondsPermission", () => {
 
     expect(autoRespondsPermission(autoAccept, sessions, permission("child"), directory)).toBe(true)
   })
+
+  test("inherits an ancestor's directory-scoped auto-accept across a grandchild", () => {
+    const directory = "/tmp/project"
+    // root → child → grandchild lineage
+    const sessions = [
+      session({ id: "root" }),
+      session({ id: "child", parentID: "root" }),
+      session({ id: "grandchild", parentID: "child" }),
+    ]
+    const autoAccept = {
+      [`${base64Encode(directory)}/root`]: true,
+    }
+
+    expect(autoRespondsPermission(autoAccept, sessions, permission("grandchild"), directory)).toBe(true)
+  })
+
+  test("inherits a root session's legacy auto-accept key from a grandchild", () => {
+    const sessions = [
+      session({ id: "root" }),
+      session({ id: "child", parentID: "root" }),
+      session({ id: "grandchild", parentID: "child" }),
+    ]
+
+    expect(autoRespondsPermission({ root: true }, sessions, permission("grandchild"), "/tmp/project")).toBe(true)
+  })
+
+  test("requires approval for a grandchild with no ancestor override", () => {
+    const sessions = [
+      session({ id: "root" }),
+      session({ id: "child", parentID: "root" }),
+      session({ id: "grandchild", parentID: "child" }),
+      session({ id: "unrelated" }),
+    ]
+    const autoAccept = {
+      unrelated: true,
+    }
+
+    expect(autoRespondsPermission(autoAccept, sessions, permission("grandchild"), "/tmp/project")).toBe(false)
+  })
 })
 
 describe("isDirectoryAutoAccepting", () => {
