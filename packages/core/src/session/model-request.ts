@@ -320,15 +320,24 @@ export const layer = Layer.effect(
       // which transport actually carries the request, so both hook families are always offered.
       const webSocket =
         input.webSocket === "session" && model.transport === "websocket"
-          ? transport.bind(session.id, (connect) =>
-              hooks
-                .trigger("session", "experimental.ws.handshake", {
-                  ...scope,
-                  url: connect.url,
-                  headers: connect.headers,
-                })
-                .pipe(Effect.map((event) => ({ url: event.url, headers: event.headers }))),
-            )
+          ? transport.bind(session.id, {
+              handshake: (connect) =>
+                hooks
+                  .trigger("session", "experimental.ws.handshake", {
+                    ...scope,
+                    url: connect.url,
+                    headers: connect.headers,
+                  })
+                  .pipe(Effect.map((event) => ({ url: event.url, headers: event.headers }))),
+              send: (frame, mode) =>
+                hooks
+                  .trigger("session", "experimental.ws.send", { ...scope, mode, frame })
+                  .pipe(Effect.map((event) => event.frame)),
+              receive: (frame) =>
+                hooks
+                  .trigger("session", "experimental.ws.receive", { ...scope, frame })
+                  .pipe(Effect.map((event) => event.frame)),
+            })
           : undefined
 
       return {

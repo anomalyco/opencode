@@ -99,6 +99,33 @@ export interface SessionWebSocketHandshake {
   headers: Record<string, string>
 }
 
+/**
+ * Outbound frame about to be written to the Session's socket, after the provider driver has built
+ * it. Replacing `frame` sends the replacement verbatim; the driver still tracks state from the
+ * provider's replies, so a rewrite that changes protocol meaning is on the plugin. Experimental.
+ */
+export interface SessionWebSocketSend {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly kind: SessionRequestKind
+  /** `"incremental"` frames carry only what changed since the provider's last checkpoint. */
+  readonly mode: "full" | "incremental"
+  frame: string
+}
+
+/**
+ * Inbound frame read from the Session's socket, before the provider driver observes it. Replacing
+ * `frame` hands the replacement to the driver verbatim. Experimental.
+ */
+export interface SessionWebSocketReceive {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly kind: SessionRequestKind
+  frame: string
+}
+
 export type SessionRetryDecision = { retry: false } | { retry: true; delay: number }
 
 export interface SessionRetry {
@@ -120,6 +147,8 @@ export interface SessionHooks {
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
   readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
 }
 
