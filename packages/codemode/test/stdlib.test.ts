@@ -237,7 +237,7 @@ describe("RegExp", () => {
     ).toEqual(["1", "22"])
   })
 
-  test("lastIndex is writable and exec coerces its stored value", async () => {
+  test("lastIndex is writable and stores a number", async () => {
     expect(
       await value(`
         const pattern = /(?:ab|cd)\\d?/g
@@ -247,40 +247,112 @@ describe("RegExp", () => {
         pattern.lastIndex = 0
         return [stored, match[0], match.index, pattern.lastIndex]
       `),
-    ).toEqual([["12", "string"], "ab4", 17, 0])
-    expect((await error(`delete /a/.lastIndex`)).message).toContain("Cannot delete property 'lastIndex'")
+    ).toEqual([[12, "number"], "ab4", 17, 0])
+    // lastIndex is a prototype accessor, so delete is a no-op rather than a TypeError.
+    expect(await value(`const re = /a/; return [delete re.lastIndex, re.lastIndex]`)).toEqual([true, 0])
   })
 
-  test("exec coerces CodeMode data objects assigned to lastIndex", async () => {
+  test("a non-numeric lastIndex runs from 0; non-global exec and test leave it alone", async () => {
     expect(
       await value(`
         const pattern = /a/g
         pattern.lastIndex = {}
-        const stored = pattern.lastIndex
         const match = pattern.exec("ba")
         pattern.lastIndex = 10
         const missed = pattern.exec("a")
-        return [stored, match.index, pattern.lastIndex, missed]
+        const plain = /a/
+        plain.lastIndex = 5
+        return [match.index, pattern.lastIndex, missed, plain.exec("ba").index, plain.test("ba"), plain.lastIndex]
       `),
-    ).toEqual([{}, 1, 0, null])
+    ).toEqual([1, 0, null, 1, true, 5])
   })
 
-  test("non-global exec and test coerce and preserve lastIndex", async () => {
+  test("String methods read and update lastIndex like exec", async () => {
     expect(
       await value(`
-        const execPattern = /a/
-        const execIndex = {}
-        execPattern.lastIndex = execIndex
-        const match = execPattern.exec("ba")
-
-        const testPattern = /a/
-        const testIndex = {}
-        testPattern.lastIndex = testIndex
-        const matched = testPattern.test("ba")
-
-        return [match.index, execPattern.lastIndex === execIndex, matched, testPattern.lastIndex === testIndex]
+        const re = /a/y
+        re.exec("aa")
+        re.lastIndex = 0
+        return ["aa".replace(re, "b"), re.lastIndex]
       `),
-    ).toEqual([1, true, true, true])
+    ).toEqual(["ba", 1])
+    expect(
+      await value(`
+        const re = /a/g
+        re.exec("aaa")
+        return ["aaa".match(re), re.lastIndex]
+      `),
+    ).toEqual([["a", "a", "a"], 0])
+    expect(
+      await value(`
+        const re = /a/g
+        re.lastIndex = 2
+        return ["aaa".replace(re, () => "b"), re.lastIndex]
+      `),
+    ).toEqual(["bbb", 0])
+    expect(
+      await value(`
+        const re = /a/g
+        re.lastIndex = 2
+        return ["aaa".replaceAll(re, "b"), re.lastIndex]
+      `),
+    ).toEqual(["bbb", 0])
+    expect(
+      await value(`
+        const re = /a/y
+        re.lastIndex = 1
+        const m = "baa".match(re)
+        return [m.index, re.lastIndex]
+      `),
+    ).toEqual([1, 2])
+  })
+
+  test("split, search, and matchAll leave lastIndex unchanged like JS", async () => {
+    expect(
+      await value(`
+        const re = /a/y
+        re.lastIndex = 2
+        return ["banana".split(re), re.lastIndex]
+      `),
+    ).toEqual([["b", "n", "n", ""], 2])
+    expect(
+      await value(`
+        const re = /a/g
+        re.lastIndex = 2
+        return ["banana".search(re), re.lastIndex]
+      `),
+    ).toEqual([1, 2])
+    expect(
+      await value(`
+        const re = /a/y
+        re.lastIndex = 2
+        return ["banana".search(re), re.lastIndex]
+      `),
+    ).toEqual([-1, 2])
+    expect(
+      await value(`
+        const re = /a/g
+        re.lastIndex = 2
+        return ["banana".matchAll(re).map((m) => m.index), re.lastIndex]
+      `),
+    ).toEqual([[3, 5], 2])
+    expect(
+      await value(`
+        const re = /a/gy
+        re.lastIndex = 1
+        return ["banana".matchAll(re).map((m) => m.index), re.lastIndex]
+      `),
+    ).toEqual([[1], 1])
+  })
+
+  test("String methods leave lastIndex untouched without g or y", async () => {
+    expect(
+      await value(`
+        const re = /a/
+        re.lastIndex = 5
+        return ["aaa".replace(re, "b"), "aaa".match(re).index, "aaa".split(re), "aaa".search(re), re.lastIndex]
+      `),
+    ).toEqual(["baa", 0, ["", "", "", ""], 0, 5])
   })
 
   test("an unmatched string pattern returns null", async () => {

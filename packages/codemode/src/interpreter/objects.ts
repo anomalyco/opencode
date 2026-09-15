@@ -136,7 +136,6 @@ export class RegExpObj extends Obj {
   constructor(proto: Obj, pattern: string, flags: string) {
     super(proto)
     this.regex = new RegExp(pattern, flags)
-    define(this, "lastIndex", 0, { writable: true, enumerable: false, configurable: false })
   }
 }
 

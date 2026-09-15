@@ -192,7 +192,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Prefix and postfix `++` and `--`.
 - [x] Plain, arithmetic, bitwise, and logical assignment operators.
 - [x] Property deletion on plain data objects and arrays, including computed and optional forms; deleting an array index
-      creates a hole without changing its length. Deleting a non-configurable property (`length`, `lastIndex`) or
+      creates a hole without changing its length. Deleting a non-configurable property (`length`) or
       assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode.
 - [ ] Operators, `switch` discriminants, template interpolation, and coercion helpers such as `String` and `isNaN`
       applied to functions and namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
@@ -394,7 +394,9 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       `unicodeSets`, and `dotAll`.
 - [x] Captures, named groups, match `.index` and `.input`, and stateful global matching.
 - [x] Integration with supported String methods, including function replacers.
-- [x] Writable `lastIndex`.
+- [x] Writable `lastIndex`, shared by `exec`, `test`, and the String methods. It is a prototype accessor that stores
+      a number, so `re.lastIndex = "12"` reads back `12`, `delete` is a no-op, and `hasOwnProperty("lastIndex")` is
+      `false`.
 - [x] Match `indices` metadata for the `d` flag, including named groups on `exec`, `match`, and `matchAll` results.
 - [x] `RegExp.escape`.
 

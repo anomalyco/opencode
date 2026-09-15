@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import type { Builtins } from "../interpreter/intrinsics.js"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { syntaxError, typeError } from "../interpreter/model.js"
-import { define, defineAccessor, getOwn, Arr, Obj, RegExpObj, record, set } from "../interpreter/objects.js"
+import { define, defineAccessor, Arr, Obj, RegExpObj, record } from "../interpreter/objects.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
@@ -75,12 +75,6 @@ export const constructRegExp = (builtins: Builtins, args: Array<unknown>, proto:
   }
 }
 
-const toLength = (value: unknown): number => {
-  const number = coerceToNumber(value)
-  if (Number.isNaN(number) || number <= 0) return 0
-  return Math.min(Math.floor(number), Number.MAX_SAFE_INTEGER)
-}
-
 // RegExp constructs identically with or without new, like JS.
 export const regexpGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
@@ -105,18 +99,22 @@ export const regexpGlobal = <R>(ctx: Interpreter<R>) => {
   const self = (thisValue: unknown, name: string) => receiver(RegExpObj, thisValue, `RegExp.prototype.${name}`)
   defineAccessor(proto, "source", (thisValue) => self(thisValue, "source").regex.source)
   defineAccessor(proto, "flags", (thisValue) => self(thisValue, "flags").regex.flags)
+  // The host regex holds the only lastIndex, so exec/test and the String methods share one counter.
+  defineAccessor(
+    proto,
+    "lastIndex",
+    (thisValue) => self(thisValue, "lastIndex").regex.lastIndex,
+    (thisValue, value) => {
+      self(thisValue, "lastIndex").regex.lastIndex = coerceToNumber(value)
+    },
+  )
   for (const name of flagProperties) defineAccessor(proto, name, (thisValue) => self(thisValue, name).regex[name])
-  // exec/test run the host regex from the program-visible lastIndex and write it back only when g or y is set.
   const run = (name: "exec" | "test"): Method => [
     name,
     1,
     (thisValue, args) => {
       const value = self(thisValue, name)
-      const input = coerceToString(args[0])
-      const stateful = value.regex.global || value.regex.sticky
-      value.regex.lastIndex = toLength(getOwn(value, "lastIndex"))
-      const matched = value.regex.exec(input)
-      if (stateful) set(value, "lastIndex", value.regex.lastIndex)
+      const matched = value.regex.exec(coerceToString(args[0]))
       if (name === "test") return matched !== null
       return matched === null ? null : matchToValue(builtins, matched)
     },
