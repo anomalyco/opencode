@@ -2733,7 +2733,8 @@ export type QuestionsListOutput = {
 export type QuestionsReplyInput = {
   readonly sessionID: { readonly sessionID: string; readonly requestID: string }["sessionID"]
   readonly requestID: { readonly sessionID: string; readonly requestID: string }["requestID"]
-  readonly answers: { readonly answers: ReadonlyArray<ReadonlyArray<string>> }["answers"]
+  readonly answers: { readonly answers: ReadonlyArray<ReadonlyArray<string>>; readonly agent?: string }["answers"]
+  readonly agent?: { readonly answers: ReadonlyArray<ReadonlyArray<string>>; readonly agent?: string }["agent"]
 }
 
 export type QuestionsReplyOutput = void

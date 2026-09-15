@@ -728,6 +728,7 @@ export const dict = {
   "session.question.progress": "{{current}} ከ{{total}} ጥያቄዎች",
   "session.question.minimize": "ጥያቄን አሳንስ",
   "session.question.restore": "ጥያቄን ወደነበረበት መልስ",
+  "session.question.build": "መልሱ እና በBuild ወኪል ይቀጥሉ",
   "session.question.pending.one": "{{count}} በመጠባበቅ ላይ ያለ ጥያቄ",
   "session.question.pending.other": "{{count}} በመጠባበቅ ላይ ያሉ ጥያቄዎች",
   "session.followupDock.summary.one": "{{count}}የተሰለፈ መልእክት",

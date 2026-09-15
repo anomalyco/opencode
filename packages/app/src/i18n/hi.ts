@@ -751,6 +751,7 @@ export const dict = {
   "session.question.progress": "{{total}} प्रश्नों में से {{current}}",
   "session.question.minimize": "प्रश्न छोटा करें",
   "session.question.restore": "प्रश्न पुनर्स्थापित करें",
+  "session.question.build": "उत्तर दें और Build एजेंट में जारी रखें",
   "session.question.pending.one": "{{count}} लंबित प्रश्न",
   "session.question.pending.other": "{{count}} लंबित प्रश्न",
   "session.followupDock.summary.one": "कतार में {{count}} संदेश",

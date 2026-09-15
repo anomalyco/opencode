@@ -945,6 +945,62 @@ it.instance("loop continues when finish is stop but assistant has tool parts", (
   }),
 )
 
+it.instance("question answered with an agent continues the session in that agent", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const question = yield* Question.Service
+    const session = yield* sessions.create({
+      title: "Plan hand-off",
+      agent: "plan",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "plan",
+      noReply: true,
+      parts: [{ type: "text", text: "plan the change" }],
+    })
+    yield* llm.tool("question", {
+      questions: [
+        {
+          question: "Ready to implement?",
+          header: "Implement",
+          options: [
+            { label: "Yes", description: "Start implementing" },
+            { label: "No", description: "Keep planning" },
+          ],
+        },
+      ],
+    })
+    yield* llm.text("implemented")
+
+    const fiber = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkScoped)
+    const request = yield* pollWithTimeout(
+      Effect.gen(function* () {
+        return (yield* question.list())[0]
+      }),
+      "question never became pending",
+    )
+    yield* question.reply({ requestID: request.id, answers: [["Yes"]], agent: "build" })
+
+    const result = yield* Fiber.join(fiber)
+    expect(yield* llm.calls).toBe(2)
+    expect(result.info.agent).toBe("build")
+    expect(result.parts.some((part) => part.type === "text" && part.text === "implemented")).toBe(true)
+
+    const msgs = yield* MessageV2.filterCompactedEffect(session.id)
+    const synthetic = msgs.find(
+      (msg) =>
+        msg.info.role === "user" &&
+        msg.info.agent === "build" &&
+        msg.parts.some((part) => part.type === "text" && part.synthetic === true),
+    )
+    expect(synthetic?.info.role).toBe("user")
+  }),
+)
+
 it.instance("failed subtask preserves metadata on error tool state", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig((url) => ({

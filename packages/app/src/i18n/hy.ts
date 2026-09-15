@@ -746,6 +746,7 @@ export const dict = {
   "session.question.progress": "{{current}}՝ {{total}} հարցից",
   "session.question.minimize": "Նվազագույնի հասցնել հարցը",
   "session.question.restore": "Վերականգնել հարցը",
+  "session.question.build": "Պատասխանել և շարունակել Build գործակալում",
   "session.question.pending.one": "{{count}} առկախ հարց",
   "session.question.pending.other": "{{count}} առկախ հարցեր",
   "session.followupDock.summary.one": "{{count}} հերթագրված հաղորդագրություն",

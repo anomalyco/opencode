@@ -3021,6 +3021,7 @@ export class Question extends HeyApiClient {
       directory?: string
       workspace?: string
       answers?: Array<QuestionAnswer>
+      agent?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3033,6 +3034,7 @@ export class Question extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "answers" },
+            { in: "body", key: "agent" },
           ],
         },
       ],

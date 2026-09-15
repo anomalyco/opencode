@@ -738,6 +738,7 @@ export const dict = {
   "session.question.progress": "{{current}} នៃសំណួរ {{total}}",
   "session.question.minimize": "បង្រួមសំណួរ",
   "session.question.restore": "ស្ដារសំណួរ",
+  "session.question.build": "ឆ្លើយ និងបន្តជាមួយភ្នាក់ងារ Build",
   "session.question.pending.one": "{{count}} សំណួរដែលមិនទាន់សម្រេច",
   "session.question.pending.other": "{{count}} សំណួរមិនទាន់សម្រេច",
   "session.followupDock.summary.one": "សារដែលបានតម្រង់ជួរ {{count}}",
