@@ -6,6 +6,9 @@ import { Command } from "@/command"
 import { Permission } from "@/permission"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
+import { registeredAdapters } from "@/control-plane/adapters"
+import { Workspace } from "@/control-plane/workspace"
+import { WorkspaceAdapterRuntime } from "@/control-plane/workspace-adapter-runtime"
 import { SessionCompaction } from "@/session/compaction"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -58,6 +61,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
+    const workspaceSvc = yield* Workspace.Service
     const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
 
@@ -152,8 +156,42 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       )
     })
 
+    // OPENCODE_NEW_SESSION_WORKSPACE=<adapter type>: bind every new top-level
+    // session to a FRESH workspace of that type (per-tab CoW overlay isolation,
+    // fork feature). Skipped when the payload already carries a parentID
+    // (subagents/children share the parent's workspace) or when no adapter of
+    // that type is registered (plugin absent — trunk session, not an error).
+    // An explicit workspaceID in the payload routes the session into that
+    // workspace's directory (parity with the ?workspace= query routing).
+    const defaultWorkspace = Effect.fn("SessionHttpApi.defaultWorkspace")(function* (
+      payload?: Session.CreateInput,
+    ) {
+      const instance = yield* InstanceState.context
+
+      if (payload?.workspaceID) {
+        const existing = yield* workspaceSvc.get(payload.workspaceID)
+        if (!existing) return payload
+        const target = yield* WorkspaceAdapterRuntime.target(existing).pipe(Effect.orDie)
+        if (target.type !== "local") return payload
+        return { ...payload, directory: target.directory }
+      }
+
+      const type = process.env.OPENCODE_NEW_SESSION_WORKSPACE?.trim()
+      if (!type || payload?.parentID) return payload
+      // getAdapter throws on unknown types; check registration instead so a
+      // missing plugin (fresh boot, wrong type name) degrades to a trunk session
+      if (!registeredAdapters(instance.project.id).some(([t]) => t === type)) return payload
+      const info = yield* workspaceSvc
+        .create({ type, branch: null, projectID: instance.project.id })
+        .pipe(Effect.orDie)
+      const target = yield* WorkspaceAdapterRuntime.target(info).pipe(Effect.orDie)
+      if (target.type !== "local") return payload
+      return { ...payload, directory: target.directory, workspaceID: info.id }
+    })
+
     const create = Effect.fn("SessionHttpApi.create")(function* (ctx: { payload?: Session.CreateInput }) {
-      return yield* shareSvc.create(ctx.payload)
+      const payload = yield* defaultWorkspace(ctx.payload)
+      return yield* shareSvc.create(payload)
     })
 
     const createRaw = Effect.fn("SessionHttpApi.createRaw")(function* (ctx: {
