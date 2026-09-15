@@ -1224,4 +1224,12 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "创建持久化项目图标失败",
   "error.childStore.storeCreateFailed": "创建存储失败",
   "terminal.connectionLost.abnormalClose": "WebSocket 异常关闭：{{code}}",
+  "settings.general.row.customTheme.title": "Custom theme URL",
+  "settings.general.row.customTheme.description":
+    "Load a private theme from a URL. Make sure the URL serves the theme JSON with permissive CORS headers.",
+  "settings.general.row.customTheme.placeholder": "https://example.com/theme.json",
+  "settings.general.row.customTheme.load": "Load",
+  "settings.general.row.customTheme.remove": "Remove",
+  "settings.general.row.customTheme.error.network": "Couldn't reach that URL.",
+  "settings.general.row.customTheme.error.invalid": "That URL didn't return a valid theme.",
 } satisfies Partial<Record<Keys, string>>

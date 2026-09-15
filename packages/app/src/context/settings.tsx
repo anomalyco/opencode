@@ -1,6 +1,9 @@
 import { createStore, reconcile } from "solid-js/store"
-import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { useTheme } from "@opencode-ai/ui/theme/context"
+import { loadThemeFromUrl } from "@opencode-ai/ui/theme/loader"
+import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import { persisted } from "@/utils/persist"
 import { usePlatform } from "@/context/platform"
 
@@ -39,6 +42,8 @@ export interface Settings {
     agentVisibilityInitialized?: boolean
     newInterfaceNoticeDismissed?: boolean
     shouldDisplayTabsToast?: boolean
+    customThemeUrl?: string
+    customThemeCache?: DesktopTheme
   }
   appearance: {
     fontSize: number
@@ -230,6 +235,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const platform = usePlatform()
+    const theme = useTheme()
     const [store, setStore, settingsInit, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
     const [launch, setLaunch, , launchReady] = persisted(
       "app-version.v1",
@@ -247,6 +253,58 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
+    const customThemeUrl = createMemo(() => store.general?.customThemeUrl)
+    const customThemeCache = createMemo(() => store.general?.customThemeCache)
+    const [customThemeError, setCustomThemeError] = createSignal<"network" | "invalid" | "collision" | undefined>(
+      undefined,
+    )
+    const [customThemeLoading, setCustomThemeLoading] = createSignal(false)
+
+    async function loadCustomTheme(url: string) {
+      setCustomThemeLoading(true)
+      setCustomThemeError(undefined)
+      const result = await loadThemeFromUrl(url)
+      setCustomThemeLoading(false)
+      if (!result.ok) {
+        setCustomThemeError(result.error)
+        return result
+      }
+      if (theme.ids().includes(result.theme.id)) {
+        setCustomThemeError("collision")
+        return { ok: false, error: "collision" } as const
+      }
+      theme.registerTheme(result.theme)
+      theme.setTheme(result.theme.id)
+      setStore("general", "customThemeUrl", url)
+      setStore("general", "customThemeCache", result.theme)
+      return result
+    }
+
+    function removeCustomTheme() {
+      theme.setTheme("oc-2")
+      setStore("general", "customThemeUrl", undefined)
+      setStore("general", "customThemeCache", undefined)
+      setCustomThemeError(undefined)
+    }
+
+    onMount(() => {
+      const cache = store.general?.customThemeCache
+      const url = store.general?.customThemeUrl
+      if (cache) theme.registerTheme(cache)
+      if (!url) return
+      void loadThemeFromUrl(url).then((result) => {
+        if (!result.ok) return
+        if (cache && result.theme.id === cache.id) {
+          setStore("general", "customThemeCache", result.theme)
+          if (theme.themeId() === result.theme.id) theme.registerTheme(result.theme)
+          return
+        }
+        if (theme.ids().includes(result.theme.id)) return
+        theme.registerTheme(result.theme)
+        setStore("general", "customThemeCache", result.theme)
+      })
+    })
+
     const sunset = oldInterfaceSunset
     const [oldInterfaceRetired, setOldInterfaceRetired] = createSignal(sunset ? Date.now() >= sunset.getTime() : false)
     const layoutTransitionClassified = createMemo(() => typeof store.general?.layoutTransitionEligible === "boolean")
@@ -421,6 +479,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
         },
+        customThemeUrl,
+        customThemeCache,
+        customThemeError,
+        customThemeLoading,
+        loadCustomTheme,
+        removeCustomTheme,
         mobileTitlebarPosition: withFallback(
           () => store.general?.mobileTitlebarPosition,
           defaultSettings.general.mobileTitlebarPosition,
