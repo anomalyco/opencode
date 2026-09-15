@@ -20,6 +20,10 @@ import {
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
+  normalizePickerPath,
+  splitPickerPath,
+  pickerTabTargetDirectory,
+  pickerTabCompletions,
 } from "./directory-picker-domain"
 
 test("maps server directory entries into Pierre paths", () => {
@@ -95,9 +99,7 @@ test("preserves POSIX case while matching Windows drives case-insensitively", ()
 })
 
 test("displays paths using the selected server path format", () => {
-  expect(displayPickerPath("C:/Users/luke/repos", "C:/Users/luke/repos", "C:/Users/luke")).toBe(
-    "C:\\Users\\luke\\repos",
-  )
+  expect(displayPickerPath("C:/Users/luke/repos", "C:/Users/luke/repos", "C:/Users/luke")).toBe("C:/Users/luke/repos")
   expect(displayPickerPath("C:/Users/luke/repos", "C:\\Users\\luke\\repos", "C:/Users/luke")).toBe(
     "C:\\Users\\luke\\repos",
   )
@@ -307,4 +309,180 @@ test("returns absolute directories and relative files", () => {
   expect(selectedTreePath("/home/luke/repo", "src/index.ts", "file")).toBe("src/index.ts")
   expect(selectedTreePath("/home/luke/repo/src", "index.ts", "file", "/home/luke/repo")).toBe("src/index.ts")
   expect(selectedTreePath("/home/luke/repo", "src/", "file")).toBeUndefined()
+})
+
+test("resolves directory suggestion as the native project path", () => {
+  const directory = pickerMode("directory")
+  expect(directory.result("/home/luke/projects/myapp", "", true)).toBe("/home/luke/projects/myapp")
+  expect(directory.result("C:/Users/luke/projects", "", true)).toBe("C:\\Users\\luke\\projects")
+  expect(directory.result("//Server/Share/repo", "", true)).toBe("\\\\Server\\Share\\repo")
+  expect(directory.result("/home/luke/projects/myapp", "", false)).toBeUndefined()
+})
+
+test("resolves file suggestion through query scoping and selection", () => {
+  const file = pickerMode("file", "/home/luke/repos")
+  const query = pickerFileSearchQuery("/home/luke/repos", "/home/luke/repos/src/index.ts", "/home/luke")
+  expect(query).toBe("src/index.ts")
+  expect(file.selection("/home/luke/repos", query)).toBe("src/index.ts")
+  expect(file.result("/home/luke/repos", query)).toBe("src/index.ts")
+})
+
+test("preserves forward-slash input style on Windows paths", () => {
+  // User typed forward slashes → display preserves them
+  expect(displayPickerPath("C:/Users/luke/projects", "C:/Users/luke/pro", "C:/Users/luke")).toBe(
+    "C:/Users/luke/projects",
+  )
+  expect(displayPickerPath("C:/Users/luke/projects", "C:/Users/luke/projects", "C:/Users/luke")).toBe(
+    "C:/Users/luke/projects",
+  )
+})
+
+test("preserves backslash input style on Windows paths", () => {
+  // User typed backslashes → display preserves them
+  expect(displayPickerPath("C:/Users/luke/projects", "C:\\Users\\luke\\pro", "C:/Users/luke")).toBe(
+    "C:\\Users\\luke\\projects",
+  )
+  expect(displayPickerPath("C:/Users/luke/projects", "C:\\Users\\luke\\projects", "C:/Users/luke")).toBe(
+    "C:\\Users\\luke\\projects",
+  )
+})
+
+test("defaults to backslash display for empty input on Windows", () => {
+  // Empty input (initial navigation) → backslash on Windows
+  expect(displayPickerPath("C:/Users/luke/projects", "", "C:/Users/luke")).toBe("C:\\Users\\luke\\projects")
+})
+
+test("preserves UNC path separator style from input", () => {
+  // UNC paths without a tilde-convertible home keep their separators
+  expect(displayPickerPath("//Server/Share/repo", "//Server/Share/repo", "//Other")).toBe("//Server/Share/repo")
+  expect(displayPickerPath("//Server/Share/repo", "\\\\Server\\Share\\repo", "//Other")).toBe(
+    "\\\\Server\\Share\\repo",
+  )
+})
+
+test("normalizes backslash input to forward slash for internal search", () => {
+  // normalizePickerPath always converts \ to /
+  expect(normalizePickerPath("C:\\Users\\luke\\projects")).toBe("C:/Users/luke/projects")
+  expect(normalizePickerPath("C:/Users/luke/projects")).toBe("C:/Users/luke/projects")
+  expect(normalizePickerPath("\\\\Server\\Share\\repo")).toBe("//Server/Share/repo")
+})
+
+test("pickerAbsoluteInput resolves Windows backslash relative paths", () => {
+  expect(pickerAbsoluteInput("src\\components", "C:/Users/luke", "C:/Users/luke/repo")).toBe(
+    "C:/Users/luke/repo/src/components",
+  )
+  expect(pickerAbsoluteInput("C:\\Users\\luke\\projects", "C:/Users/luke", "C:/Users/luke/repo")).toBe(
+    "C:/Users/luke/projects",
+  )
+})
+
+test("splitPickerPath decomposes path into directory head and completion tail", () => {
+  expect(splitPickerPath("")).toEqual({ head: "", tail: "" })
+  expect(splitPickerPath("~")).toEqual({ head: "~/", tail: "" })
+  expect(splitPickerPath("~/")).toEqual({ head: "~/", tail: "" })
+  expect(splitPickerPath("~/Doc")).toEqual({ head: "~/", tail: "Doc" })
+  expect(splitPickerPath("~/Documents/")).toEqual({ head: "~/Documents/", tail: "" })
+  expect(splitPickerPath("~/Documents/wo")).toEqual({ head: "~/Documents/", tail: "wo" })
+  expect(splitPickerPath("/")).toEqual({ head: "/", tail: "" })
+  expect(splitPickerPath("/usr/loc")).toEqual({ head: "/usr/", tail: "loc" })
+  expect(splitPickerPath("C:\\Users\\luke\\")).toEqual({ head: "C:\\Users\\luke\\", tail: "" })
+  expect(splitPickerPath("C:\\Users\\luke\\Do")).toEqual({ head: "C:\\Users\\luke\\", tail: "Do" })
+  expect(splitPickerPath("src/co")).toEqual({ head: "src/", tail: "co" })
+  expect(splitPickerPath("co")).toEqual({ head: "", tail: "co" })
+})
+
+test("pickerTabTargetDirectory determines the absolute directory to list for Tab", () => {
+  expect(pickerTabTargetDirectory({ input: "", home: "/home/luke", base: "/home/luke" })).toBe("/home/luke")
+  expect(pickerTabTargetDirectory({ input: "~", home: "/home/luke" })).toBe("/home/luke")
+  expect(pickerTabTargetDirectory({ input: "~/Doc", home: "/home/luke" })).toBe("/home/luke")
+  expect(pickerTabTargetDirectory({ input: "~/Documents/w", home: "/home/luke" })).toBe("/home/luke/Documents")
+  expect(pickerTabTargetDirectory({ input: "/usr/loc", home: "/home/luke" })).toBe("/usr")
+  expect(pickerTabTargetDirectory({ input: "C:\\Users\\luke\\Do", home: "C:/Users/luke" })).toBe("C:/Users/luke")
+  expect(pickerTabTargetDirectory({ input: "src/co", home: "/home/luke", base: "/home/luke/repo" })).toBe(
+    "/home/luke/repo/src",
+  )
+})
+
+test("pickerTabCompletions completes folders up to next slash and supports cycling", () => {
+  const homeDirs = ["Documents", "Downloads", "Desktop", "Music", "Pictures"]
+
+  // Prefix match in home directory (no trailing slash added)
+  expect(
+    pickerTabCompletions({
+      input: "~/Doc",
+      home: "/home/luke",
+      directories: homeDirs,
+    }),
+  ).toEqual(["~/Documents"])
+
+  // Multiple matches returned in alphabetical order for cycling
+  expect(
+    pickerTabCompletions({
+      input: "~/D",
+      home: "/home/luke",
+      directories: homeDirs,
+    }),
+  ).toEqual(["~/Desktop", "~/Documents", "~/Downloads"])
+
+  // When user adds trailing slash, expands all child folders
+  const docDirs = ["work", "personal", "archive"]
+  expect(
+    pickerTabCompletions({
+      input: "~/Documents/",
+      home: "/home/luke",
+      directories: docDirs,
+    }),
+  ).toEqual(["~/Documents/archive", "~/Documents/personal", "~/Documents/work"])
+
+  // Prefix inside subfolder
+  expect(
+    pickerTabCompletions({
+      input: "~/Documents/w",
+      home: "/home/luke",
+      directories: docDirs,
+    }),
+  ).toEqual(["~/Documents/work"])
+
+  // Windows backslash path preserves backslashes without trailing slash
+  expect(
+    pickerTabCompletions({
+      input: "C:\\Users\\luke\\D",
+      home: "C:/Users/luke",
+      directories: homeDirs,
+    }),
+  ).toEqual(["C:\\Users\\luke\\Desktop", "C:\\Users\\luke\\Documents", "C:\\Users\\luke\\Downloads"])
+
+  // Multi-step tab navigation:
+  // 1. Single match completes folder without trailing slash
+  const dir1Children = ["Dir2"]
+  const firstStep = pickerTabCompletions({
+    input: "/Dir1/Di",
+    home: "/home/luke",
+    directories: dir1Children,
+  })
+  expect(firstStep).toEqual(["/Dir1/Dir2"])
+
+  // 2. When user adds slash (or re-presses tab), targets /Dir1/Dir2/ to explore subdirectories
+  const nextTarget = pickerTabTargetDirectory({
+    input: `${firstStep[0]}/`,
+    home: "/home/luke",
+  })
+  expect(nextTarget).toBe("/Dir1/Dir2")
+
+  const dir2Children = ["subA", "subB"]
+  const secondStep = pickerTabCompletions({
+    input: `${firstStep[0]}/`,
+    home: "/home/luke",
+    directories: dir2Children,
+  })
+  expect(secondStep).toEqual(["/Dir1/Dir2/subA", "/Dir1/Dir2/subB"])
+
+  // Tilde alone expands all home directories
+  expect(
+    pickerTabCompletions({
+      input: "~",
+      home: "/home/luke",
+      directories: ["Desktop", "Documents"],
+    }),
+  ).toEqual(["~/Desktop", "~/Documents"])
 })

@@ -317,8 +317,64 @@ function pickerTilde(absolute: string, home: string) {
 
 export function displayPickerPath(path: string, input: string, home: string) {
   const value = trimPickerPath(path)
-  if (/^[A-Za-z]:\//.test(trimPickerPath(home)) || /^[A-Za-z]:\//.test(value)) return value.replaceAll("/", "\\")
+  const isWindows =
+    /^[A-Za-z]:\//.test(trimPickerPath(home)) ||
+    /^[A-Za-z]:\//.test(value) ||
+    value.startsWith("//")
+  if (isWindows) {
+    // Preserve the user's separator style from their input so completion
+    // does not silently replace displayed separators. Empty input defaults
+    // to backslash (existing Windows behaviour for initial navigation).
+    if (input.length > 0 && !input.includes("\\")) return value
+    return value.replaceAll("/", "\\")
+  }
   return pickerTilde(value, home) || value
+}
+
+export function splitPickerPath(input: string) {
+  const trimmed = cleanPickerInput(input)
+  if (trimmed === "~") return { head: "~/", tail: "" }
+  const lastSlash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"))
+  if (lastSlash === -1) {
+    return { head: "", tail: trimmed }
+  }
+  return {
+    head: trimmed.slice(0, lastSlash + 1),
+    tail: trimmed.slice(lastSlash + 1),
+  }
+}
+
+export function pickerTabTargetDirectory(args: { input: string; home: string; base?: string }) {
+  const { head } = splitPickerPath(args.input)
+  const target = head || (args.input.startsWith("~") ? "~" : "")
+  if (!target) {
+    return args.base ? trimPickerPath(args.base) : trimPickerPath(args.home)
+  }
+  return pickerAbsoluteInput(target, args.home, args.base || args.home)
+}
+
+export function pickerTabCompletions(args: {
+  input: string
+  home: string
+  base?: string
+  directories: string[]
+}): string[] {
+  const { head, tail } = splitPickerPath(args.input)
+  const isWindows =
+    /^[A-Za-z]:\//.test(trimPickerPath(args.home)) ||
+    (args.base ? /^[A-Za-z]:\//.test(trimPickerPath(args.base)) : false) ||
+    head.includes("\\")
+  const sep = head.includes("\\") || (isWindows && !head.includes("/")) ? "\\" : "/"
+
+  const needle = tail.toLowerCase()
+  const matching = args.directories
+    .filter((name) => !needle || name.toLowerCase().startsWith(needle))
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+
+  const candidates = matching
+
+  const prefix = head || (args.input.startsWith("~") ? `~${sep}` : "")
+  return candidates.map((name) => `${prefix}${name}`)
 }
 
 export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string | undefined; home: () => string }) {
