@@ -1,10 +1,5 @@
-import { execFile, spawn } from "node:child_process"
-import { readFile, rm } from "node:fs/promises"
-import { platform, release, tmpdir } from "node:os"
-import path from "node:path"
-import { promisify } from "node:util"
-
-const exec = promisify(execFile)
+import { spawn } from "node:child_process"
+import { platform, release } from "node:os"
 
 function command(command: string, args: string[] = [], input?: string) {
   return new Promise<Buffer>((resolve, reject) => {
@@ -27,28 +22,30 @@ function writeOsc52(text: string) {
   process.stdout.write(process.env.TMUX ? sequence + passthrough : process.env.STY ? passthrough : sequence)
 }
 
+// AppleScript's `the clipboard as "PNGf"` coercion costs time in proportion to the image size.
+const readImage = `ObjC.import('AppKit')
+function toPng(data) {
+  return $.NSBitmapImageRep.imageRepWithData(data).representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $())
+}
+function png() {
+  const pb = $.NSPasteboard.generalPasteboard
+  const direct = pb.dataForType('public.png')
+  if (!direct.isNil()) return direct
+  const tiff = pb.dataForType('public.tiff')
+  if (!tiff.isNil()) return toPng(tiff)
+  const jpeg = pb.dataForType('public.jpeg')
+  if (jpeg.isNil()) return jpeg
+  return toPng(jpeg)
+}
+const data = png()
+data.isNil() ? '' : data.base64EncodedStringWithOptions(0)`
+
 export async function read() {
   if (platform() === "darwin") {
-    const file = path.join(tmpdir(), "opencode-clipboard.png")
-    try {
-      await exec("osascript", [
-        "-e",
-        'set imageData to the clipboard as "PNGf"',
-        "-e",
-        `set fileRef to open for access POSIX file "${file}" with write permission`,
-        "-e",
-        "set eof fileRef to 0",
-        "-e",
-        "write imageData to fileRef",
-        "-e",
-        "close access fileRef",
-      ])
-      return { data: (await readFile(file)).toString("base64"), mime: "image/png" }
-    } catch {
-      // Fall through to text clipboard.
-    } finally {
-      await rm(file, { force: true }).catch(() => {})
-    }
+    const image = await command("osascript", ["-l", "JavaScript", "-e", readImage])
+      .then((output) => output.toString().trim())
+      .catch(() => "")
+    if (image) return { data: image, mime: "image/png" }
   }
 
   if (platform() === "win32" || release().includes("WSL")) {
