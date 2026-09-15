@@ -668,12 +668,9 @@ describe("SubagentTool", () => {
           })
 
           const failures = [
-            ["not-a-ref", 'Invalid model reference: not-a-ref. Use "providerID/id#variant".'],
-            [
-              "test/missing",
-              "Model test/missing is not available. List available models with tools.opencode.models() in the execute tool.",
-            ],
-            ["test/override#slow", 'Unknown variant "slow" for test/override. Available: fast.'],
+            ["not-a-ref", 'Invalid model "not-a-ref". Use "provider/model" or "provider/model#variant".'],
+            ["test/missing", 'Model "test/missing" is not available. Use the models tool to see what is available.'],
+            ["test/override#slow", 'Variant "slow" is not available for "test/override". Available: fast.'],
           ] as const
           for (const [model, message] of failures) {
             expect(yield* call(`call-${model}`, { model })).toEqual({

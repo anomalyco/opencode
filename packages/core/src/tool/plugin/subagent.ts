@@ -32,7 +32,7 @@ export const Input = Schema.Struct({
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
-      'Run the subagent on a specific model, as "providerID/id" or "providerID/id#variant". Omit to use the agent\'s configured model, then the current session\'s model. List available models with `tools.opencode.models()` in the execute tool.',
+      'Only pass this when the user explicitly asks for a specific model. Format "provider/model" or "provider/model#variant", for example "anthropic/claude-sonnet-4-5" or "openai/gpt-5#high". Otherwise omit it and the subagent uses the agent\'s configured model, or your own. Use the models tool to find the reference for a requested model.',
   }),
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description:
@@ -72,18 +72,19 @@ export const Plugin = {
     const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
       const ref = yield* Effect.try({
         try: () => Model.Ref.parse(input),
-        catch: () => new ToolFailure({ message: `Invalid model reference: ${input}. Use "providerID/id#variant".` }),
+        catch: () =>
+          new ToolFailure({ message: `Invalid model "${input}". Use "provider/model" or "provider/model#variant".` }),
       })
       const model = (yield* models.available()).find(
         (model) => model.providerID === ref.providerID && model.id === ref.id,
       )
       if (model === undefined)
         return yield* new ToolFailure({
-          message: `Model ${ref.providerID}/${ref.id} is not available. List available models with tools.opencode.models() in the execute tool.`,
+          message: `Model "${ref.providerID}/${ref.id}" is not available. Use the models tool to see what is available.`,
         })
       if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
         return yield* new ToolFailure({
-          message: `Unknown variant "${ref.variant}" for ${ref.providerID}/${ref.id}. Available: ${model.variants.map((variant) => variant.id).join(", ") || "none"}.`,
+          message: `Variant "${ref.variant}" is not available for "${ref.providerID}/${ref.id}". Available: ${model.variants.map((variant) => variant.id).join(", ") || "none"}.`,
         })
       return ref
     })

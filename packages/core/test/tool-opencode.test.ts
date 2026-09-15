@@ -47,7 +47,7 @@ it.effect("lists available models through the opencode namespace", () =>
     ])
 
     const filtered = yield* run(
-      'const list = await tools.opencode.models({ providerID: "other" }); return list.models.map((model) => model.id)',
+      'const list = await tools.opencode.models({ provider: "other" }); return list.models.map((model) => model.id)',
     )
     expect(filtered.content).toEqual([{ type: "text", text: JSON.stringify(["beta"], null, 2) }])
   }),
