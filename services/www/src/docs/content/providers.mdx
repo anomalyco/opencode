@@ -65,7 +65,7 @@ The `providers` object is keyed by the provider ID used in model references, suc
 | `headers` | String-valued HTTP headers added to requests. |
 | `body` | JSON fields merged into request bodies. |
 | `models` | Models to add or override, keyed by the OpenCode model ID. |
-| `websocket` | Provider-level WebSocket policy for supported routes. |
+| `transport` | Provider-level session transport, `"http"` or `"websocket"`. |
 | `compaction` | Local or provider [compaction](/compaction) policy. |
 
 ## Endpoint
@@ -231,7 +231,7 @@ ID sent to the provider.
 | `cost` | Input, output, and optional cache pricing per million tokens. |
 | `limit` | Context, input, and output token limits. |
 | `disabled` | Removes the model from selection when `true`. |
-| `websocket` | Model-level WebSocket policy; overrides the provider policy. |
+| `transport` | Model-level session transport; overrides the provider value. |
 | `compaction` | Model-level [compaction](/compaction) policy; overrides the provider policy. |
 
 See [Models](/models) for selection, defaults, capabilities, limits, costs, and variants.
@@ -561,9 +561,9 @@ sessions.
   "$schema": "https://opencode.ai/config.json",
   "providers": {
     "openai": {
-      "websocket": false,
+      "transport": "http",
       "models": {
-        "gpt-5.5": { "websocket": true },
+        "gpt-5.5": { "transport": "websocket" },
       },
     },
   },
@@ -573,8 +573,9 @@ sessions.
 WebSocket behavior follows these rules:
 
 - Built-in providers opt supported models in according to their own policy.
-- `websocket: true` enables a supported provider or model; `false` disables it.
+- `transport: "websocket"` enables a provider or model; `"http"` disables it.
 - A model value overrides its provider value.
+- `"websocket"` on a route without a WebSocket channel logs a warning and falls back to HTTP.
 - OpenAI provider compaction uses the same connection.
 - xAI continues from stored responses only. With its default `store: false`, each step is sent in full over the reused
   connection.

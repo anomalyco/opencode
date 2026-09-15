@@ -316,17 +316,24 @@ export const layer = Layer.effect(
               return HttpClientResponse.fromWeb(sent, after.response)
             }).pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))))
         : undefined
-      // HTTP hooks must observe every request, so they keep the provider on HTTP.
+      // HTTP hooks must observe every request, so they keep the provider on HTTP. The route decides
+      // whether it has a WebSocket channel; one without a channel warns and falls back to HTTP.
       const webSocket =
-        input.webSocket === "session" &&
-        !hasHttpHooks &&
-        model.capabilities.responsesWebsockets === true &&
-        model.websocket
+        input.webSocket === "session" && !hasHttpHooks && model.transport === "websocket"
+          ? {
+              ...transport.bind(session.id),
+              unavailable: Effect.logWarning("session websocket not offered by route; using http", {
+                sessionTransport: "websocket",
+                model: `${model.ref.providerID}/${model.ref.id}`,
+                route: request.model.route.id,
+              }),
+            }
+          : undefined
 
       return {
         event: shaped,
         request,
-        options: { ...(http ? { http } : {}), ...(webSocket ? { webSocket: transport.bind(session.id) } : {}) },
+        options: { ...(http ? { http } : {}), ...(webSocket ? { webSocket } : {}) },
         retry: (event: Parameters<Prepared["retry"]>[0]) =>
           hooks.trigger("session", "retry", event).pipe(Effect.asVoid),
         // Permission.assert and the question tool throw declines as defects so tools cannot

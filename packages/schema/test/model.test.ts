@@ -83,11 +83,10 @@ describe("Model.Info", () => {
 })
 
 describe("Model.Capabilities", () => {
-  test("decodes optional Responses WebSocket support", () => {
-    const decode = Schema.decodeUnknownSync(Model.Capabilities)
-    const base = { tools: true, input: ["text"], output: ["text"] }
-
-    expect(decode(base)).toEqual(base)
-    expect(decode({ ...base, responsesWebsockets: true })).toEqual({ ...base, responsesWebsockets: true })
+  test("decodes the optional transport preference", () => {
+    const model = Model.Info.default(Provider.ID.openai, Model.ID.make("gpt-5.4-mini"))
+    expect(Schema.encodeSync(Model.Info)({ ...model, transport: undefined })).not.toHaveProperty("transport")
+    expect(Schema.decodeUnknownSync(Model.Info)({ ...model, transport: "websocket" }).transport).toBe("websocket")
+    expect(() => Schema.decodeUnknownSync(Model.Info)({ ...model, transport: "sse" })).toThrow()
   })
 })

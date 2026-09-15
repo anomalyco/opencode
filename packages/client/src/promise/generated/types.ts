@@ -206,12 +206,9 @@ export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
 
 export type ProviderCompaction = { mode: "local" } | { mode: "provider"; threshold?: number }
 
-export type ModelCapabilities = {
-  tools: boolean
-  input: Array<string>
-  output: Array<string>
-  responsesWebsockets?: boolean
-}
+export type ProviderTransport = "http" | "websocket"
+
+export type ModelCapabilities = { tools: boolean; input: Array<string>; output: Array<string> }
 
 export type ModelVariant = {
   id: string
@@ -1355,7 +1352,7 @@ export type ProviderInfo = {
   activation: "auto" | "enabled" | "disabled"
   package: string
   compaction?: ProviderCompaction
-  websocket?: boolean
+  transport?: ProviderTransport
   settings?: { [x: string]: any }
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
@@ -1818,7 +1815,7 @@ export type ModelInfo = {
   compatibility?: ModelCompatibility
   package?: string
   compaction?: ProviderCompaction
-  websocket?: boolean
+  transport?: ProviderTransport
   settings?: { [x: string]: any }
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
@@ -2049,7 +2046,7 @@ export type ConfigEntry =
         providers?: {
           [x: string]: {
             compaction?: ProviderCompaction
-            websocket?: boolean
+            transport?: ProviderTransport
             canonical?: string
             name?: string
             env?: Array<string>
@@ -2060,7 +2057,7 @@ export type ConfigEntry =
             models?: {
               [x: string]: {
                 compaction?: ProviderCompaction
-                websocket?: boolean
+                transport?: ProviderTransport
                 modelID?: string
                 family?: string
                 name?: string

@@ -167,10 +167,7 @@ export const AzurePlugin = define({
                 draft.settings.baseURL,
                 resolveResourceName(draft.settings, resourceName) ?? resourceName,
               )
-            if (responsesWebSocketCapable(item.provider, draft)) {
-              draft.capabilities.responsesWebsockets = true
-              draft.websocket = true
-            }
+            if (responsesWebSocketCapable(item.provider, draft)) draft.transport = "websocket"
           })
         }
       }
