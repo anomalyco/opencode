@@ -13,6 +13,14 @@ export const AddPayload = Schema.Struct({
   config: ConfigMCPV1.Info,
 })
 
+export const SavePayload = Schema.Struct({
+  config: ConfigMCPV1.Info,
+})
+
+export const RemoveResponse = Schema.Struct({
+  success: Schema.Literal(true),
+})
+
 export const StatusMap = Schema.Record(Schema.String, MCP.Status)
 export const AuthStartResponse = Schema.Struct({
   authorizationUrl: Schema.String,
@@ -31,6 +39,8 @@ export class UnsupportedOAuthError extends Schema.ErrorClass<UnsupportedOAuthErr
 
 export const McpPaths = {
   status: "/mcp",
+  test: "/mcp/test",
+  server: "/mcp/:name",
   auth: "/mcp/:name/auth",
   authCallback: "/mcp/:name/auth/callback",
   authAuthenticate: "/mcp/:name/auth/authenticate",
@@ -62,6 +72,44 @@ export const McpApi = HttpApi.make("mcp")
             identifier: "mcp.add",
             summary: "Add MCP server",
             description: "Dynamically add a new Model Context Protocol (MCP) server to the system.",
+          }),
+        ),
+        HttpApiEndpoint.post("test", McpPaths.test, {
+          query: WorkspaceRoutingQuery,
+          payload: AddPayload,
+          success: described(MCP.TestResult, "MCP connection test result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.test",
+            summary: "Test MCP connection",
+            description:
+              "Test a Model Context Protocol (MCP) server configuration without saving it. Reports reachability, auth status, discovered tools, and any error.",
+          }),
+        ),
+        HttpApiEndpoint.put("save", McpPaths.server, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          payload: SavePayload,
+          success: described(StatusMap, "MCP server saved to config"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.save",
+            summary: "Save MCP server",
+            description:
+              "Create or update a Model Context Protocol (MCP) server in the persisted config, keeping CLI and Desktop in sync.",
+          }),
+        ),
+        HttpApiEndpoint.delete("remove", McpPaths.server, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(RemoveResponse, "MCP server removed from config"),
+          error: McpServerNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.remove",
+            summary: "Remove MCP server",
+            description: "Remove a Model Context Protocol (MCP) server from the persisted config.",
           }),
         ),
         HttpApiEndpoint.post("authStart", McpPaths.auth, {

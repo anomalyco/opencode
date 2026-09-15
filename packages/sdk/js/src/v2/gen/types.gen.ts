@@ -2414,14 +2414,25 @@ export type McpStatus =
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
 
-export type McpUnsupportedOAuthError = {
-  error: string
+export type McpAuthStatus = "authenticated" | "expired" | "not_authenticated"
+
+export type McpTestResult = {
+  status: McpStatus
+  reachable: boolean
+  authStatus: McpAuthStatus
+  tools: Array<string>
+  instructions?: string
+  error?: string
 }
 
 export type McpServerNotFoundError = {
   _tag: "McpServerNotFoundError"
   name: string
   message: string
+}
+
+export type McpUnsupportedOAuthError = {
+  error: string
 }
 
 export type Project = {
@@ -8493,6 +8504,107 @@ export type McpAddResponses = {
 }
 
 export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
+
+export type McpTestData = {
+  body?: {
+    name: string
+    config: McpLocalConfig | McpRemoteConfig
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/test"
+}
+
+export type McpTestErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type McpTestError = McpTestErrors[keyof McpTestErrors]
+
+export type McpTestResponses = {
+  /**
+   * MCP connection test result
+   */
+  200: McpTestResult
+}
+
+export type McpTestResponse = McpTestResponses[keyof McpTestResponses]
+
+export type McpRemoveData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/{name}"
+}
+
+export type McpRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * McpServerNotFoundError
+   */
+  404: McpServerNotFoundError
+}
+
+export type McpRemoveError = McpRemoveErrors[keyof McpRemoveErrors]
+
+export type McpRemoveResponses = {
+  /**
+   * MCP server removed from config
+   */
+  200: {
+    success: true
+  }
+}
+
+export type McpRemoveResponse = McpRemoveResponses[keyof McpRemoveResponses]
+
+export type McpSaveData = {
+  body?: {
+    config: McpLocalConfig | McpRemoteConfig
+  }
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/mcp/{name}"
+}
+
+export type McpSaveErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type McpSaveError = McpSaveErrors[keyof McpSaveErrors]
+
+export type McpSaveResponses = {
+  /**
+   * MCP server saved to config
+   */
+  200: {
+    [key: string]: McpStatus
+  }
+}
+
+export type McpSaveResponse = McpSaveResponses[keyof McpSaveResponses]
 
 export type McpAuthRemoveData = {
   body?: never
