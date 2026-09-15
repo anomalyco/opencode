@@ -32,7 +32,7 @@ export const Input = Schema.Struct({
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
-      'Run the subagent on a specific model, as "providerID/id" or "providerID/id#variant". Omit to use the agent\'s configured model, then the current session\'s model. Discover models with the opencode model_list tool.',
+      'Run the subagent on a specific model, as "providerID/id" or "providerID/id#variant". Omit to use the agent\'s configured model, then the current session\'s model. List available models with `tools.opencode.models()` in the execute tool.',
   }),
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description:
@@ -79,7 +79,7 @@ export const Plugin = {
       )
       if (model === undefined)
         return yield* new ToolFailure({
-          message: `Unknown model: ${ref.providerID}/${ref.id}. Use the opencode model_list tool to see available models.`,
+          message: `Model ${ref.providerID}/${ref.id} is not available. List available models with tools.opencode.models() in the execute tool.`,
         })
       if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
         return yield* new ToolFailure({

@@ -669,7 +669,10 @@ describe("SubagentTool", () => {
 
           const failures = [
             ["not-a-ref", 'Invalid model reference: not-a-ref. Use "providerID/id#variant".'],
-            ["test/missing", "Unknown model: test/missing. Use the opencode model_list tool to see available models."],
+            [
+              "test/missing",
+              "Model test/missing is not available. List available models with tools.opencode.models() in the execute tool.",
+            ],
             ["test/override#slow", 'Unknown variant "slow" for test/override. Available: fast.'],
           ] as const
           for (const [model, message] of failures) {

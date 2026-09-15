@@ -24,11 +24,11 @@ export const MoveInput = Schema.Struct({
 
 const MoveOutput = Schema.Struct({ sessionID: Session.ID, directory: AbsolutePath })
 
-export const ModelListInput = Schema.Struct({
+export const ModelsInput = Schema.Struct({
   providerID: Schema.optionalKey(Schema.String).annotate({ description: "Only list models from this provider." }),
 })
 
-const ModelListOutput = Schema.Struct({ models: Schema.Array(Model.Info) })
+const ModelsOutput = Schema.Struct({ models: Schema.Array(Model.Info) })
 
 export const Plugin = {
   id: "opencode.tools",
@@ -93,11 +93,11 @@ export const Plugin = {
             ),
         })
         draft.add({
-          name: "model_list",
+          name: "models",
           description:
             'List the models available in this OpenCode instance. Reference a model as "providerID/id" or "providerID/id#variant" wherever a model is accepted, such as the subagent tool.',
-          input: ModelListInput,
-          output: ModelListOutput,
+          input: ModelsInput,
+          output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },
           execute: (input) =>
             ctx.model.list().pipe(
