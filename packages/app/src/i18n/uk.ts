@@ -859,6 +859,8 @@ export const dict = {
   "session.header.reveal.finder": "Показати у Finder",
   "session.header.reveal.fileExplorer": "Показати у Файловому провіднику",
   "session.header.reveal.containingFolder": "Відкрити папку розташування",
+  "session.file.openInApp": "Відкрити в {{app}}",
+
   "session.header.open.fileManager": "Файловий менеджер",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
