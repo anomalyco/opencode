@@ -2,17 +2,32 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
-import { Deferred, Effect, Layer, Context } from "effect"
+import { Cause, Context, Deferred, Effect, Layer } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
 
 export const Event = PermissionV1.Event
 
+// A reviewer sees the effective rule decision and may replace it. This is the
+// interception point the `permission.ask` plugin hook needs — without it the hook
+// is declared in @opencode-ai/plugin but never invoked.
+export type PermissionReviewer = (
+  input: PermissionV1.Request,
+  // `status` is whatever the hook left behind, so it is typed as an unvalidated
+  // string rather than the union: plugins are external, untyped JavaScript, and
+  // an unrecognised value must not be able to read as a decision.
+  output: { status: string; message?: string },
+) => Effect.Effect<void>
+
+/** deny beats ask beats allow; anything else is not a decision at all. */
+const strictness = (status: string) => (status === "deny" ? 2 : status === "ask" ? 1 : status === "allow" ? 0 : -1)
+
 export interface Interface {
   readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
+  readonly setReviewer: (fn: PermissionReviewer) => Effect.Effect<void>
 }
 
 interface PendingEntry {
@@ -43,6 +58,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    let reviewer: PermissionReviewer | undefined // registered once by the plugin layer
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
@@ -81,9 +97,70 @@ const layer = Layer.effect(
         needsAsk = true
       }
 
+      const id = request.id ?? PermissionV1.ID.ascending()
+
+      // The reviewer may replace the effective decision. It sees the id the real
+      // request will carry, and copies of the mutable fields: a hook must not be
+      // able to rewrite the request the user is about to be shown, nor the
+      // patterns an "always" answer persists.
+      if (reviewer) {
+        const review: { status: string; message?: string } = { status: needsAsk ? "ask" : "allow" }
+        const before = review.status
+        yield* reviewer(
+          {
+            id,
+            sessionID: request.sessionID,
+            permission: request.permission,
+            patterns: [...request.patterns],
+            metadata: { ...request.metadata },
+            always: [...request.always],
+            tool: request.tool,
+          },
+          review,
+        ).pipe(
+          // A hook that throws must not take the permission check down with it:
+          // `trigger` runs hooks through Effect.promise, so a rejection arrives as a
+          // defect. Treat it like a hook that answered nonsense — keep the rules'
+          // decision, discarding whatever the hook wrote before it failed.
+          Effect.catchCause((cause) =>
+            Cause.hasInterrupts(cause)
+              ? Effect.failCause(cause)
+              : Effect.gen(function* () {
+                  // Every hook shares one `review`, so a failure can follow a decision an
+                  // earlier hook already made. Discard what the failing hook left behind
+                  // only when keeping it would be more permissive than the rules were.
+                  if (strictness(review.status) <= strictness(before)) {
+                    review.status = before
+                    review.message = undefined
+                  }
+                  yield* Effect.logWarning("permission.ask hook failed; keeping the safer decision", {
+                    cause: Cause.pretty(cause),
+                    permission: request.permission,
+                  })
+                }),
+          ),
+        )
+        if (review.status === "deny") {
+          // No rule matched: inventing one here would send the user looking
+          // through their config for something that is not there. The reason
+          // carries the explanation instead.
+          return yield* new PermissionV1.DeniedError({
+            ruleset: [],
+            reason: review.message ?? "A plugin denied this permission request.",
+          })
+        }
+        // Any other value is a misbehaving hook, not a decision: keep what the
+        // rules decided rather than failing open to allow.
+        if (review.status === "ask" || review.status === "allow") needsAsk = review.status === "ask"
+        else
+          yield* Effect.logWarning("permission.ask hook returned an unknown status; keeping the rule decision", {
+            status: review.status,
+            permission: request.permission,
+          })
+      }
+
       if (!needsAsk) return
 
-      const id = request.id ?? PermissionV1.ID.ascending()
       const info: PermissionV1.Request = {
         id,
         sessionID: request.sessionID,
@@ -171,7 +248,8 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.info)
     })
 
-    return Service.of({ ask, reply, list })
+    const setReviewer = (fn: PermissionReviewer) => Effect.sync(() => { reviewer = fn })
+    return Service.of({ ask, reply, list, setReviewer })
   }),
 )
 
