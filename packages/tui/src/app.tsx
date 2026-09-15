@@ -84,7 +84,7 @@ import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
-import { destroyRenderer } from "./util/renderer"
+import { destroyRenderer, terminalReset } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
 registerOpencodeSpinner()
@@ -186,6 +186,9 @@ function isVersionGreater(left: string, right: string) {
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const global = yield* Global.Service
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
+  // Ensure terminal modes are restored even when the process exits without
+  // going through the scoped renderer teardown (e.g. an uncaught error).
+  process.on("exit", terminalReset)
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
       const renderer = yield* Effect.acquireRelease(
@@ -360,7 +363,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
       process.exitCode = 1
     }
-    if (result.epilogue) process.stdout.write(result.epilogue + "\n")
+    if (result.epilogue) {
+      // After leaving the alternate screen the cursor position depends on the
+      // terminal emulator (Apple Terminal restores it to the top-left corner),
+      // so the epilogue can overprint restored shell content. Start from a
+      // clean screen for a consistent result.
+      process.stdout.write("\x1b[2J\x1b[H")
+      process.stdout.write(result.epilogue + "\n")
+    }
   })
 })
 
