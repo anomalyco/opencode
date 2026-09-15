@@ -109,6 +109,7 @@ function clonePrompt(prompt: RunPrompt): RunPrompt {
     parts: structuredClone(prompt.parts),
     ...(prompt.mode ? { mode: prompt.mode } : {}),
     ...(prompt.command ? { command: prompt.command } : {}),
+    ...(prompt.steer ? { steer: prompt.steer } : {}),
   }
 }
 
@@ -1158,9 +1159,24 @@ export function createPromptState(input: PromptInput): PromptState {
     if (input.state().phase === "idle" && event.name.toLowerCase() === "escape") {
       input.onInputClear()
     }
+    if (
+      event.name.toLowerCase() === "return" &&
+      event.ctrl &&
+      !event.meta &&
+      !event.shift &&
+      !event.super &&
+      input.state().phase === "running"
+    ) {
+      const text = area && !area.isDestroyed ? area.plainText : draft.text
+      if (text.trim().length > 0) {
+        event.preventDefault()
+        syncDraft()
+        submitPrompt(clonePrompt(draft), { steer: true })
+      }
+    }
   }
 
-  const submitPrompt = (next: RunPrompt) => {
+  const submitPrompt = (next: RunPrompt, opts?: { steer?: boolean }) => {
     if (!area || area.isDestroyed) {
       draft = clonePrompt(next)
     }
@@ -1199,6 +1215,11 @@ export function createPromptState(input: PromptInput): PromptState {
       : parsed?.type === "command"
         ? { ...next, command: parsed.command }
         : next
+    if (opts?.steer) {
+      submit.steer = true
+    } else {
+      delete submit.steer
+    }
     const shellMode = next.mode === "shell"
 
     resetDraft()

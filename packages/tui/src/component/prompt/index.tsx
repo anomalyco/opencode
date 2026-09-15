@@ -358,6 +358,24 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Steer prompt",
+        name: "prompt.steer",
+        category: "Prompt",
+        hidden: true,
+        run: async (ctx?: CommandContext<Renderable, KeyEvent>) => {
+          if (!input.focused) return false
+          if (auto()?.visible) return false
+          if (status().type === "idle") return false
+          if (!store.prompt.input.trim() && input.plainText.trim() === "") return false
+          ctx?.event.preventDefault()
+          ctx?.event.stopPropagation()
+          const handled = await submit(true)
+          if (!handled) return false
+
+          dialog.clear()
+        },
+      },
+      {
         title: "Remove editor context",
         name: "prompt.editor_context.clear",
         category: "Prompt",
@@ -808,6 +826,15 @@ export function Prompt(props: PromptProps) {
   useBindings(() => {
     return {
       target: inputTarget,
+      enabled: inputTarget() !== undefined && !props.disabled && status().type !== "idle" && !auto()?.visible,
+      priority: 1,
+      bindings: tuiConfig.keybinds.get("prompt.steer"),
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled && store.prompt.input !== "",
       bindings: tuiConfig.keybinds.get("prompt.clear"),
     }
@@ -928,7 +955,7 @@ export function Prompt(props: PromptProps) {
   })
 
   let submitting = false
-  async function submit() {
+  async function submit(steer = false) {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
     // a second call slips past the empty-input check before the first call
@@ -938,13 +965,13 @@ export function Prompt(props: PromptProps) {
     if (submitting) return false
     submitting = true
     try {
-      return await submitInner()
+      return await submitInner(steer)
     } finally {
       submitting = false
     }
   }
 
-  async function submitInner() {
+  async function submitInner(steer = false) {
     workspace.clearNotice()
 
     // IME: double-defer may fire before onContentChange flushes the last
@@ -1021,6 +1048,13 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = res.data.id
+    }
+
+    // Codex-like steer: interrupt the active turn so the new prompt sends
+    // immediately instead of queueing behind it. V1 has no delivery param,
+    // so steer is an abort-then-prompt. Idle steer behaves like a normal submit.
+    if (steer && sessionID && status().type !== "idle") {
+      await sdk.client.session.abort({ sessionID }).catch(() => {})
     }
 
     const inputText = expandTrackedPastedText(
