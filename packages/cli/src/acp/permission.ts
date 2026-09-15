@@ -148,6 +148,7 @@ function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyA
     case "webfetch":
       return stringValue(input.url)
     case "websearch":
+    case "devsearch":
       return stringValue(input.query)
     case "grep":
     case "glob":
