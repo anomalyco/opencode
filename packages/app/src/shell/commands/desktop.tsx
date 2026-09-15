@@ -3,15 +3,24 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useCommand, type CommandOption } from "./command"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { DialogSsh } from "@/servers/ssh/dialog"
+import { useUpdaterAction } from "@/shell/updates/action"
 
 export function DesktopCommands() {
   const command = useCommand()
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
+  const updater = useUpdaterAction()
 
   command.register("desktop", () => {
     const commands: CommandOption[] = []
+    if (platform.platform === "desktop")
+      commands.push({
+        id: "app.checkForUpdates",
+        title: language.t("desktop.menu.checkForUpdates"),
+        hidden: true,
+        onSelect: () => void updater.check(),
+      })
     if (platform.sshServers)
       commands.push({
         id: "server.ssh.add",
