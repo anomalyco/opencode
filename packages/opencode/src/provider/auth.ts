@@ -176,7 +176,7 @@ const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.
         }
       }
 
-      const result = yield* Effect.promise(() => method.authorize(input.inputs))
+      const result = yield* Effect.tryPromise(() => Promise.resolve(method.authorize(input.inputs)))
       pending.set(input.providerID, result)
       return {
         url: result.url,
@@ -195,7 +195,7 @@ const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.
         return yield* new OauthCodeMissing({ providerID: input.providerID })
       }
 
-      const result = yield* Effect.promise(() =>
+      const result = yield* Effect.tryPromise(() =>
         match.method === "code" ? match.callback(input.code!) : match.callback(),
       )
       if (!result || result.type !== "success") return yield* new OauthCallbackFailed({})
