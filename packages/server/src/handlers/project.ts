@@ -7,6 +7,7 @@ import { ProjectNotFoundError } from "@opencode/protocol/errors"
 export const ProjectHandler = HttpApiBuilder.group(Api, "server.project", (handlers) =>
   handlers
     .handle("project.list", () => Project.Service.use((project) => project.list()))
+    .handle("project.check", (ctx) => Project.Service.use((project) => project.check(ctx.payload)))
     .handle("project.update", (ctx) =>
       Project.Service.use((project) =>
         project.update({ ...ctx.payload, projectID: ctx.params.projectID }).pipe(

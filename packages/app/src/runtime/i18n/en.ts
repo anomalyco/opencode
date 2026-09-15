@@ -719,6 +719,8 @@ export const dict = {
   "home.projects": "Projects",
   "home.projects.all": "All projects",
   "home.project.add": "Add project",
+  "home.project.missing.title": "Project folder not found",
+  "home.project.missing.description": "{{name}} was removed because its folder no longer exists.",
   "home.recentlyClosed": "Recently closed",
   "home.server.collapse": "Collapse server projects",
   "home.server.expand": "Expand server projects",

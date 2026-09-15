@@ -12,6 +12,7 @@ export const globalProjectNode = makeGlobalNode({
       const database = yield* Database.Service
       return Project.Service.of({
         list: () => Effect.succeed([]),
+        check: (input) => Effect.succeed(input),
         update: () => Effect.die("not implemented"),
         resolve: (directory) => {
           const project = { id: Project.ID.global, directory, canonical: directory }

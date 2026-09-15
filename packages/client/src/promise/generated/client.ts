@@ -142,6 +142,8 @@ import type {
   CredentialRemoveInput,
   CredentialRemoveOutput,
   ProjectListOutput,
+  ProjectCheckInput,
+  ProjectCheckOutput,
   ProjectUpdateInput,
   ProjectUpdateOutput,
   FormRequestListInput,
@@ -1346,6 +1348,18 @@ export function make(options: ClientOptions) {
       list: (requestOptions?: RequestOptions) =>
         request<ProjectListOutput>(
           { method: "GET", path: `/api/project`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ),
+      check: (input: ProjectCheckInput, requestOptions?: RequestOptions) =>
+        request<ProjectCheckOutput>(
+          {
+            method: "POST",
+            path: `/api/project/check`,
+            body: { directories: input["directories"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
           requestOptions,
         ),
       update: (input: ProjectUpdateInput, requestOptions?: RequestOptions) =>

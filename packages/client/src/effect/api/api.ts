@@ -1669,6 +1669,10 @@ export interface CredentialApi<E = never> {
 export type ProjectListOutput = ReadonlyArray<Project.Info>
 export type ProjectListOperation<E = never> = () => Effect.Effect<ProjectListOutput, E>
 
+export type ProjectCheckInput = { readonly directories: ReadonlyArray<AbsolutePath> }
+export type ProjectCheckOutput = Project.CheckOutput
+export type ProjectCheckOperation<E = never> = (input: ProjectCheckInput) => Effect.Effect<ProjectCheckOutput, E>
+
 export type ProjectUpdateInput = {
   readonly projectID: Project.ID
   readonly canonical?: AbsolutePath | undefined
@@ -1681,6 +1685,7 @@ export type ProjectUpdateOperation<E = never> = (input: ProjectUpdateInput) => E
 
 export interface ProjectApi<E = never> {
   readonly list: ProjectListOperation<E>
+  readonly check: ProjectCheckOperation<E>
   readonly update: ProjectUpdateOperation<E>
 }
 

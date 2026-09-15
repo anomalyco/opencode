@@ -162,6 +162,19 @@ function createServerController(
       .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
       .map((worktree) => enrich({ worktree, expanded: false }))
   })
+  createEffect(() => {
+    if (sdk.connection.status() !== "connected") return
+    const directories = projects.list().map((project) => project.worktree)
+    if (directories.length === 0) return
+    void sdk.api.project
+      .check({ directories })
+      .then((result) => {
+        const available = new Set(result.directories.map(pathKey))
+        directories.filter((directory) => !available.has(pathKey(directory))).forEach(projects.remove)
+      })
+      // Older remote servers may not expose directory checks yet; retain their projects.
+      .catch(() => undefined)
+  })
 
   const isLocal =
     (conn?.type === "sidecar" && conn.variant === "base") || (conn?.type === "http" && isLocalHost(conn.http.url))

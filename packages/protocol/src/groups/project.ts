@@ -19,6 +19,18 @@ export const ProjectGroup = HttpApiGroup.make("server.project")
     ),
   )
   .add(
+    HttpApiEndpoint.post("project.check", `${root}/check`, {
+      payload: Project.CheckInput,
+      success: Project.CheckOutput,
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "project.check",
+        summary: "Check project directories",
+        description: "Return the project directories that currently exist on this server.",
+      }),
+    ),
+  )
+  .add(
     HttpApiEndpoint.patch("project.update", `${root}/:projectID`, {
       params: { projectID: Project.ID },
       payload: UpdatePayload,

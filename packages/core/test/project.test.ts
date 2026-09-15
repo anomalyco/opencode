@@ -69,6 +69,23 @@ describe("Project.list", () => {
   )
 })
 
+describe("Project.check", () => {
+  it.live("returns only directories that exist", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const project = yield* Project.Service
+      const missing = abs(path.join(tmp.path, "missing"))
+
+      expect(yield* project.check({ directories: [abs(tmp.path), missing] })).toEqual({
+        directories: [abs(tmp.path)],
+      })
+    }),
+  )
+})
+
 describe("Project.update", () => {
   it.effect("updates and clears project metadata", () =>
     Effect.gen(function* () {

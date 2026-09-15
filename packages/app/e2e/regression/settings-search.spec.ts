@@ -30,6 +30,19 @@ function projectList(count: number) {
   }))
 }
 
+async function persistProjects(page: Page, projects: ReturnType<typeof projectList>) {
+  await page.evaluate((projects) => {
+    const value = JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")
+    localStorage.setItem(
+      "opencode.global.dat:server",
+      JSON.stringify({
+        ...value,
+        projects: { ...value.projects, local: projects.map((project) => ({ worktree: project.canonical })) },
+      }),
+    )
+  }, projects)
+}
+
 function ui(page: Page) {
   const settings = page.getByTestId("settings-screen")
   return {
@@ -50,6 +63,14 @@ test.use({ viewport: { width: 1280, height: 900 } })
 test.beforeEach(async ({ page }) => {
   await mockOpenCodeServer(page, config)
   await page.route("https://api.github.com/**", (route) => route.fulfill({ json: [] }))
+  await page.addInitScript((directory) => {
+    const value = JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")
+    if (value.projects?.local) return
+    localStorage.setItem(
+      "opencode.global.dat:server",
+      JSON.stringify({ ...value, projects: { ...value.projects, local: [{ worktree: directory, expanded: true }] } }),
+    )
+  }, directory)
   await page.goto("/")
   if ((page.viewportSize()?.width ?? 1280) < 800) await page.getByRole("button", { name: "Tabs", exact: true }).click()
   await page.getByRole("button", { name: "Settings", exact: true }).click()
@@ -172,9 +193,22 @@ test("Models and Shortcuts autofocus their filters on normal navigation", async 
   await expect(result).toBeFocused()
 })
 
+test("Shortcuts search keeps focus while filtering", async ({ page }) => {
+  const view = ui(page)
+  await view.settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
+  const search = view.settings.getByRole("searchbox", { name: "Search shortcuts", exact: true })
+  await search.press("p")
+  await expect(search).toBeFocused()
+  await page.keyboard.type("alette")
+  await expect(search).toHaveValue("palette")
+  await expect(view.settings.getByText("Command palette", { exact: true })).toBeVisible()
+})
+
 for (const count of [7, 8]) {
   test(`Projects search uses the full list threshold with ${count} projects`, async ({ page }) => {
-    await page.route("**/api/project", (route) => route.fulfill({ json: projectList(count) }))
+    const inventory = projectList(count)
+    await page.route("**/api/project", (route) => route.fulfill({ json: inventory }))
+    await persistProjects(page, inventory)
     await page.reload()
     const view = ui(page)
     await view.search.fill("OpenCode")
@@ -208,24 +242,14 @@ for (const count of [7, 8]) {
   })
 }
 
-test("Projects search focuses when the qualifying inventory arrives after opening", async ({ page }) => {
-  const inventory = Promise.withResolvers<void>()
-  await page.route("**/api/project", async (route) => {
-    await inventory.promise
-    await route.fulfill({ json: projectList(8) })
-  })
-  const requested = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/project")
+test("Projects search focuses with a qualifying persisted inventory", async ({ page }) => {
+  const projects = projectList(8)
+  await page.route("**/api/project", (route) => route.fulfill({ json: projects }))
+  await persistProjects(page, projects)
   await page.reload()
-  await requested
   const view = ui(page)
   const search = view.settings.getByRole("searchbox", { name: "Search projects", exact: true })
-  try {
-    await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
-    await expect(view.settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
-    await expect(search).toHaveCount(0)
-  } finally {
-    inventory.resolve()
-  }
+  await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
   await expect(search).toBeFocused()
   await expect(view.settings.getByRole("button", { name: /^OpenCode / })).toHaveCount(8)
 })
@@ -265,11 +289,13 @@ test("qualified project results preserve query and selection on return", async (
 })
 
 test("returning from a project restores a scrolled result list", async ({ page }) => {
+  const projects = projectList(30)
   await page.route("**/api/project", (route) =>
     route.fulfill({
-      json: projectList(30),
+      json: projects,
     }),
   )
+  await persistProjects(page, projects)
   await page.reload()
   const view = ui(page)
   await view.search.fill("OpenCode")
@@ -371,14 +397,17 @@ test("multi-server results navigate to the named server and hide search in neste
       body: Buffer.from(await response.arrayBuffer()),
     })
   })
-  await page.addInitScript(
-    (server) =>
-      localStorage.setItem(
-        "opencode.global.dat:server",
-        JSON.stringify({ list: [{ type: "http", displayName: "Build server", http: { url: server } }] }),
-      ),
-    server,
-  )
+  await page.addInitScript((server) => {
+    const value = JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")
+    localStorage.setItem(
+      "opencode.global.dat:server",
+      JSON.stringify({
+        ...value,
+        list: [{ type: "http", displayName: "Build server", http: { url: server } }],
+        projects: { ...value.projects, [server]: [{ worktree: "/remote/opencode", expanded: true }] },
+      }),
+    )
+  }, server)
   await page.reload()
   const view = ui(page)
   await view.search.fill("MCPs")
@@ -392,6 +421,13 @@ test("multi-server results navigate to the named server and hide search in neste
   await view.search.fill("Build server models")
   await view.results.getByRole("option").click()
   await expect(view.settings.getByRole("searchbox", { name: "Search models", exact: true })).toBeFocused()
+  await view.settings.getByRole("button", { name: "Back to settings", exact: true }).click()
+  await view.search.fill("Build server projects")
+  await view.results.getByRole("option").click()
+  await expect(view.settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
+  await expect(view.settings.getByRole("button", { name: "Add project", exact: true })).toBeVisible()
+  await expect(view.settings.locator('[data-component="settings-list"][data-variant="catalog"]')).toBeVisible()
+  await expect(view.settings.getByRole("button", { name: "OpenCode", exact: true })).toBeVisible()
   await view.settings.getByRole("button", { name: "Back to settings", exact: true }).click()
   await view.search.fill("Build server OpenCode name")
   await expect(view.results.getByRole("option")).toHaveCount(1)
