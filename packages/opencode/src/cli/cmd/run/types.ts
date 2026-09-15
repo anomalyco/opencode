@@ -56,6 +56,7 @@ export type RunResource = RunResourceMap[string]
 
 export type RunInput = {
   sdk: OpencodeClient
+  sdkOptions?: { baseUrl: string; fetch?: typeof fetch; headers?: RequestInit["headers"] }
   directory: string
   sessionID: string
   sessionTitle?: string

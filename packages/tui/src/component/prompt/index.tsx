@@ -1070,7 +1070,8 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
-      sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
+      (sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1)) ||
+        ["telegram", "tg"].includes(inputText.split("\n")[0].split(" ")[0].slice(1)))
     ) {
       move.startSubmit()
       // Parse command from first line, preserve multi-line content in arguments
