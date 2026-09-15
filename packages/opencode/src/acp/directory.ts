@@ -117,6 +117,9 @@ export const loaderLayer = Layer.effect(
         const ctx = yield* store.load({ directory })
         return yield* Effect.gen(function* () {
           const providers = yield* provider.list()
+          // ACP snapshots are cached per directory for the process lifetime, so
+          // wait for MCP prompts to settle before capturing the command list.
+          yield* command.ready()
           const [agents, defaultAgent, commands, defaultModel] = yield* Effect.all(
             [agent.list(), agent.defaultInfo(), command.list(), provider.defaultModel().pipe(Effect.option)],
             { concurrency: "unbounded" },
