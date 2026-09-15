@@ -33,6 +33,15 @@ export type SessionNotFoundError = {
 export const isSessionNotFoundError = (value: unknown): value is SessionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SessionNotFoundError"
 
+export type AttachmentNotFoundError = {
+  readonly _tag: "AttachmentNotFoundError"
+  readonly sessionID: string
+  readonly attachmentID?: string | undefined
+  readonly message: string
+}
+export const isAttachmentNotFoundError = (value: unknown): value is AttachmentNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AttachmentNotFoundError"
+
 export type ConflictError = {
   readonly _tag: "ConflictError"
   readonly message: string
@@ -40,6 +49,14 @@ export type ConflictError = {
 }
 export const isConflictError = (value: unknown): value is ConflictError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
+
+export type UnknownError = {
+  readonly _tag: "UnknownError"
+  readonly message: string
+  readonly ref?: string | undefined
+}
+export const isUnknownError = (value: unknown): value is UnknownError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnknownError"
 
 export type ServiceUnavailableError = {
   readonly _tag: "ServiceUnavailableError"
@@ -57,14 +74,6 @@ export type MessageNotFoundError = {
 }
 export const isMessageNotFoundError = (value: unknown): value is MessageNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MessageNotFoundError"
-
-export type UnknownError = {
-  readonly _tag: "UnknownError"
-  readonly message: string
-  readonly ref?: string | undefined
-}
-export const isUnknownError = (value: unknown): value is UnknownError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnknownError"
 
 export type ProviderNotFoundError = {
   readonly _tag: "ProviderNotFoundError"
@@ -390,6 +399,7 @@ export type SessionsPromptInput = {
       readonly files?: ReadonlyArray<{
         readonly uri: string
         readonly name?: string
+        readonly mime?: string
         readonly description?: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
       }>
@@ -408,6 +418,7 @@ export type SessionsPromptInput = {
       readonly files?: ReadonlyArray<{
         readonly uri: string
         readonly name?: string
+        readonly mime?: string
         readonly description?: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
       }>
@@ -426,6 +437,7 @@ export type SessionsPromptInput = {
       readonly files?: ReadonlyArray<{
         readonly uri: string
         readonly name?: string
+        readonly mime?: string
         readonly description?: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
       }>
@@ -444,6 +456,7 @@ export type SessionsPromptInput = {
       readonly files?: ReadonlyArray<{
         readonly uri: string
         readonly name?: string
+        readonly mime?: string
         readonly description?: string
         readonly source?: { readonly start: number; readonly end: number; readonly text: string }
       }>
