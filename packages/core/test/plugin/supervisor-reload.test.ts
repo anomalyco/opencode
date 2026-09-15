@@ -246,6 +246,44 @@ describe("PluginSupervisor reload", () => {
     )
   })
 
+  it.live("applies configured options to a discovered plugin spelled with different separators", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const root = path.join(directory.path, ".opencode/plugins/greeter")
+      yield* Effect.promise(async () => {
+        await Bun.write(
+          path.join(root, "index.ts"),
+          `export default {
+            id: "greeter",
+            async setup(ctx) {
+              await ctx.command.transform((editor) => editor.add({ name: "greet-" + ctx.options.name, execute: async () => {} }))
+            },
+          }`,
+        )
+        // Forward slashes and a trailing separator spell the discovered directory differently on every platform.
+        await Bun.write(
+          path.join(directory.path, ".opencode/opencode.json"),
+          JSON.stringify({
+            plugins: [{ package: root.replaceAll(path.sep, "/") + "/", options: { name: "configured" } }],
+          }),
+        )
+      })
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const commands = yield* Command.Service
+        yield* plugins.awaitActivation
+
+        expect(yield* commands.get("greet-configured")).toBeDefined()
+        expect(yield* commands.get("greet-undefined")).toBeUndefined()
+        expect((yield* plugins.list()).filter((plugin) => plugin.state.status === "failed")).toEqual([])
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+    }),
+  )
+
   it.live("keeps the running generation when an updated local plugin fails to import", () =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()
