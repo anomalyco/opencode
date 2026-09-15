@@ -64,6 +64,27 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 
+#### Install Script Options
+
+Pass options to the install script with `bash -s --`:
+
+```bash
+# Install without modifying your shell configuration
+curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+
+# Install a specific version
+curl -fsSL https://opencode.ai/install | bash -s -- --version 1.0.180
+```
+
+| Option                    | Description                                        |
+| ------------------------- | -------------------------------------------------- |
+| `-h, --help`              | Show the available options and examples.           |
+| `-v, --version <version>` | Install a specific version.                        |
+| `-b, --binary <path>`     | Install a local binary instead of downloading one. |
+| `--no-modify-path`        | Leave shell configuration files unchanged.         |
+
+If you use `--no-modify-path`, add the installation directory to `PATH` yourself to run `opencode` by name.
+
 ### Desktop App (BETA)
 
 OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
@@ -84,18 +105,7 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 #### Installation Directory
 
-The install script respects the following priority order for the installation path:
-
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
-
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
+The install script installs OpenCode to `$HOME/.opencode/bin`. It does not currently support overriding this directory with `OPENCODE_INSTALL_DIR` or `XDG_BIN_DIR`.
 
 ### Agents
 
