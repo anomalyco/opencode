@@ -45,6 +45,11 @@ const completedOutput = (sessionID: Session.ID) =>
   `<subagent sessionID="${sessionID}" state="completed">\n${childText}\n</subagent>`
 const childModel = Model.Ref.make({ id: Model.ID.make("child"), providerID: Provider.ID.make("test") })
 const parentModel = Model.Ref.make({ id: Model.ID.make("parent"), providerID: Provider.ID.make("test") })
+const overrideModel = Model.Ref.make({
+  id: Model.ID.make("override"),
+  providerID: Provider.ID.make("test"),
+  variant: Model.VariantID.make("fast"),
+})
 const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
 const outputSessionID = (value: unknown) =>
@@ -107,7 +112,7 @@ const executionNode = makeGlobalNode({
 const subagentPluginSupervisor = makeLocationNode({
   name: "test/subagent-plugins",
   layer: Layer.effectDiscard(registerToolPlugin(SubagentTool.Plugin)),
-  deps: [Agent.node, Config.node, Permission.node, Session.node, Job.node, Tool.node],
+  deps: [Agent.node, Config.node, Model.node, Permission.node, Session.node, Job.node, Tool.node],
 })
 
 const nodes = LayerNode.group([
@@ -155,6 +160,13 @@ const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
     yield* Plugin.Service.use((plugins) => plugins.awaitActivation).pipe(Effect.provide(locations.get(location)))
+    yield* Provider.Service.use((providers) =>
+      providers.transform((editor) => {
+        editor.models.update(overrideModel.providerID, overrideModel.id, (model) => {
+          model.variants = [{ id: Model.VariantID.make("fast") }]
+        })
+      }),
+    ).pipe(Effect.provide(locations.get(location)))
     yield* Agent.Service.use((agents) =>
       agents.transform((editor) => {
         // The caller identity used by executeTool; subagent permission asserts against it.
@@ -610,6 +622,62 @@ describe("SubagentTool", () => {
             agent: "fallback",
             model: childModel,
           })
+        }),
+      ),
+    ),
+  )
+
+  it.live("runs the child on an explicitly requested model", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const call = (id: string, input: Record<string, unknown>) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call" as const,
+                id,
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "review", prompt: "review this", ...input },
+              },
+            })
+
+          // The requested model beats the agent's configured model.
+          const spawned = yield* call("call-override", { model: "test/override#fast" })
+          expect(spawned).toMatchObject({ status: "completed", metadata: { status: "completed" } })
+          const child = yield* sessions.get(outputSessionID(spawned.metadata))
+          expect(child).toMatchObject({ agent: "reviewer", model: overrideModel })
+
+          // Continuing with a model switches the existing child even when the agent is unchanged.
+          const continued = yield* call("call-override-continue", { sessionID: child.id, model: "test/override" })
+          expect(continued).toMatchObject({ status: "completed", metadata: { sessionID: child.id } })
+          expect((yield* sessions.get(child.id)).model).toEqual({
+            id: overrideModel.id,
+            providerID: overrideModel.providerID,
+            variant: Model.VariantID.make("default"),
+          })
+
+          const failures = [
+            ["not-a-ref", 'Invalid model "not-a-ref". Use "provider/model" or "provider/model#variant".'],
+            ["test/missing", 'Model "test/missing" is not available. Use the models tool to see what is available.'],
+            ["test/override#slow", 'Variant "slow" is not available for "test/override". Available: fast.'],
+          ] as const
+          for (const [model, message] of failures) {
+            expect(yield* call(`call-${model}`, { model })).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message },
+            })
+          }
         }),
       ),
     ),
