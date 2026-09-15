@@ -691,7 +691,7 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
       ProviderShared.encodeJson(event),
     )
   const finished =
-    !incomplete && Object.keys(withTools.tools).length > 0
+    state.finishReason === undefined && !incomplete && Object.keys(withTools.tools).length > 0
       ? yield* ToolStream.finishAll(ADAPTER, withTools.tools)
       : undefined
   return [

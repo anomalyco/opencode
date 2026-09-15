@@ -575,6 +575,30 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("absorbs reasoning after a terminal chunk", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "stop"), deltaChunk({ reasoning_content: "late" })))),
+      )
+
+      expect(response.reasoning).toBe("late")
+    }),
+  )
+
+  it.effect("drops malformed tool deltas after a terminal chunk", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(deltaChunk({}, "stop"), deltaChunk({ tool_calls: [{ index: 1, function: { arguments: "{}" } }] })),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toEqual([])
+    }),
+  )
+
   it.effect("finishes a tool call absorbed after a terminal chunk", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

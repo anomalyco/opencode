@@ -668,12 +668,17 @@ describe("Mistral Chat", () => {
         Effect.flip,
       )
       expect(missingFinish.message).toContain("without finish_reason")
+    }),
+  )
 
+  it.effect("absorbs content after a terminal chunk", () =>
+    Effect.gen(function* () {
       const lateContent = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(sseEvents(chunk({}, "stop"), chunk({ content: [{ type: "text", text: "late" }] }))),
         ),
       )
+
       expect(lateContent.text).toBe("late")
     }),
   )
@@ -709,6 +714,27 @@ describe("Mistral Chat", () => {
               chunk({
                 tool_calls: [{ index: 0, id: "Ab12Cd34E", function: { name: "lookup", arguments: '{"city":' } }],
               }),
+              chunk({ tool_calls: [{ index: 0, function: { arguments: '"Paris"}' } }] }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([{ id: "Ab12Cd34E", name: "lookup", input: { city: "Paris" } }])
+    }),
+  )
+
+  it.effect("defers repeated terminal finalization for split late tool calls", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              chunk({}, "stop"),
+              chunk({
+                tool_calls: [{ index: 0, id: "Ab12Cd34E", function: { name: "lookup", arguments: '{"city":' } }],
+              }),
+              chunk({ content: [{ type: "text", text: "!" }] }, "stop"),
               chunk({ tool_calls: [{ index: 0, function: { arguments: '"Paris"}' } }] }),
             ),
           ),
