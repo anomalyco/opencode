@@ -13,6 +13,7 @@ import type {
 import { Effect, Ref, Schema, Semaphore } from "effect"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { CodeModeCatalog } from "./catalog.js"
+import { CodeModeWeb } from "./web.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -226,7 +227,7 @@ function runtime(
     })
   }
   const tools = renderTools(root)
-  return CodeMode.make<typeof tools>({ tools, hooks })
+  return CodeMode.make<typeof tools>({ tools, extensions: [CodeModeWeb.extension], hooks })
 }
 
 function getNode<T>(root: Node<T>, path: string) {
