@@ -18,11 +18,15 @@ const it = testEffect(PluginTestLayer)
 test("formats the model identity part", () => {
   expect(
     IdentityPlugin.identity({
+      provider: "OpenAI",
       name: "GPT-4o mini",
       ref: Model.Ref.make({ providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-4o-mini") }),
     }),
-  ).toBe("You are powered by GPT-4o mini (openai/gpt-4o-mini).")
+  ).toBe(["# Your Model", "- Provider: OpenAI", "- Name: GPT-4o mini", "- ID: openai/gpt-4o-mini"].join("\n"))
 })
+
+const identity = (provider: string, name: string, id: string) =>
+  ["# Your Model", `- Provider: ${provider}`, `- Name: ${name}`, `- ID: test/${id}`].join("\n")
 
 const context = (id: string): SessionHooks["context"] => ({
   sessionID: Session.ID.make("ses_model_identity"),
@@ -34,13 +38,16 @@ const context = (id: string): SessionHooks["context"] => ({
   options: {},
 })
 
-it.effect("inserts the catalog display name after the agent prompt", () =>
+it.effect("inserts the structured model block after the agent prompt", () =>
   Effect.gen(function* () {
     const catalog = yield* Provider.Service
     const hooks = yield* PluginHooks.Service
     const plugins = yield* Plugin.Service
     const pluginHost = yield* PluginHost.make(plugins)
     yield* catalog.transform((editor) => {
+      editor.update(Provider.ID.make("test"), (provider) => {
+        provider.name = "Test Provider"
+      })
       editor.models.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
         model.name = "Muse Spark"
       })
@@ -51,7 +58,7 @@ it.effect("inserts the catalog display name after the agent prompt", () =>
     yield* hooks.trigger("session", "context", named)
     expect(named.system.map((part) => part.text)).toEqual([
       "Agent prompt",
-      "You are powered by Muse Spark (test/meta/muse-spark-1.1).",
+      identity("Test Provider", "Muse Spark", "meta/muse-spark-1.1"),
       "Initial context",
     ])
 
@@ -59,7 +66,7 @@ it.effect("inserts the catalog display name after the agent prompt", () =>
     yield* hooks.trigger("session", "context", fallback)
     expect(fallback.system.map((part) => part.text)).toEqual([
       "Agent prompt",
-      "You are powered by unknown-model (test/unknown-model).",
+      identity("Test Provider", "unknown-model", "unknown-model"),
       "Initial context",
     ])
 
@@ -73,7 +80,7 @@ it.effect("inserts the catalog display name after the agent prompt", () =>
     yield* hooks.trigger("session", "title", title)
     expect(title.system.map((part) => part.text)).toEqual([
       "You are a title generator.",
-      "You are powered by Muse Spark (test/meta/muse-spark-1.1).",
+      identity("Test Provider", "Muse Spark", "meta/muse-spark-1.1"),
     ])
   }),
 )

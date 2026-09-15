@@ -37,7 +37,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
-import { host, modelHost } from "./plugin/host"
+import { host, modelHost, noProviders } from "./plugin/host"
 
 let requests: LLMRequest[] = []
 let selectedSmall: Model.Info | undefined
@@ -52,7 +52,7 @@ const smallModel = LanguageModel.make({
   provider: "test",
   route: OpenAIChat.route,
 })
-const titleIdentity = "You are powered by title-model (test/title-model)."
+const titleIdentity = ["# Your Model", "- Provider: test", "- Name: title-model", "- ID: test/title-model"].join("\n")
 const cost = [
   {
     input: Money.USDPerMillionTokens.make(1),
@@ -208,6 +208,7 @@ const enableIdentity = Effect.gen(function* () {
   const hooks = yield* PluginHooks.Service
   const pluginHost = host({
     model: modelHost(models),
+    provider: noProviders,
     session: { hook: (name, callback) => hooks.register("session", name, callback) },
   })
   yield* IdentityPlugin.Plugin.effect(pluginHost)

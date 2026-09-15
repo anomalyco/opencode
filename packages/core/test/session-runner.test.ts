@@ -89,7 +89,7 @@ import { promptLocationNode } from "./fixture/prompt-location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
-import { agentHost, modelHost, host } from "./plugin/host"
+import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
 const emptyCodeMode = `\n\n${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}`
@@ -120,9 +120,11 @@ const testModel = (id: string, limit: ModelLimit = defaultModelLimit) => {
 }
 const model = testModel("fake-model")
 const defaultSystem = SessionSystemPrompt.make([])
-const fakeIdentity = "You are powered by fake-model (fake/fake-model)."
-const replacementIdentity = "You are powered by replacement (fake/replacement)."
-const gptIdentity = "You are powered by gpt-5 (openai/gpt-5)."
+const identity = (providerID: string, id: string) =>
+  ["# Your Model", `- Provider: ${providerID}`, `- Name: ${id}`, `- ID: ${providerID}/${id}`].join("\n")
+const fakeIdentity = identity("fake", "fake-model")
+const replacementIdentity = identity("fake", "replacement")
+const gptIdentity = identity("openai", "gpt-5")
 const replacementModel = testModel("replacement")
 const compactModel = testModel("compact", { context: 4_000, output: 50 })
 const fullOutputModel = testModel("full-output", { context: 262_144, output: 262_144 })
@@ -519,6 +521,7 @@ const setup = Effect.gen(function* () {
   const pluginHost = host({
     agent: agentHost(agents),
     model: modelHost(models),
+    provider: noProviders,
     session: { hook: (name, callback) => hooks.register("session", name, callback) },
   })
   yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), {

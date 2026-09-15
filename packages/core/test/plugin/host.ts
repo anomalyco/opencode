@@ -252,6 +252,14 @@ export function providerHost(providers: Provider.Interface): Plugin.Context["pro
   }
 }
 
+/** Empty catalog for hosts that only need provider lookups to fall back. */
+export const noProviders: Plugin.Context["provider"] = {
+  list: () => Effect.succeed(located([])),
+  get: () => Effect.die("unused provider.get"),
+  transform: () => Effect.die("unused provider.transform"),
+  reload: () => Effect.die("unused provider.reload"),
+}
+
 export function modelHost(models: Model.Interface): Plugin.Context["model"] {
   return {
     list: () => models.available().pipe(Effect.map(located)),
