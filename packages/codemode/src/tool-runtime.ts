@@ -1,6 +1,6 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
 import { fromData, toData, ToolRuntimeError } from "./data.js"
-import type { Prototypes } from "./interpreter/intrinsics.js"
+import type { Builtins } from "./interpreter/intrinsics.js"
 import { toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
@@ -309,7 +309,7 @@ export type ToolRuntime<R = never> = {
 /** Per-execution call state over tools prepared once for the runtime. */
 export const make = <R>(
   prepared: Prepared<R>,
-  prototypes: Prototypes,
+  builtins: Builtins,
   maxToolCalls: number | undefined,
   hooks?: ToolCallHooks<R>,
 ): ToolRuntime<R> => {
@@ -375,7 +375,7 @@ export const make = <R>(
             }),
           )
           return yield* Effect.try({
-            try: () => fromData(prototypes, decodeToolOutput(tool, raw), `Result from tool '${name}'`),
+            try: () => fromData(builtins, decodeToolOutput(tool, raw), `Result from tool '${name}'`),
             catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
           })
         }),

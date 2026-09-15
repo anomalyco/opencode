@@ -19,13 +19,13 @@ import { errorTypes } from "./intrinsics.js"
 import { constants, constructor, native } from "./native.js"
 import { AsyncIteratorSymbol, IteratorSymbol, typeError } from "./model.js"
 import { generatorGlobals } from "./generators.js"
-import { promiseGlobal, type PromiseRuntime } from "./promises.js"
+import { promiseGlobal, type Pending } from "./promises.js"
 import type { Runner } from "./runner.js"
 
 /** What the built-in globals need from the interpreter that owns them. */
 export type Host<R> = {
   readonly runner: Runner<R>
-  readonly promises: PromiseRuntime<R>
+  readonly pending: Pending<R>
   readonly search: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
   readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
   readonly logs: Array<string>
@@ -37,7 +37,7 @@ const functionGlobal = <R>(runner: Runner<R>) => {
     Effect.sync(() => {
       throw typeError("The Function constructor is not supported; write the function inline.")
     })
-  return constructor<R>(runner.prototypes, runner.prototypes.Function, {
+  return constructor<R>(runner.builtins, runner.builtins.Function, {
     name: "Function",
     length: 1,
     call: reject,
@@ -46,7 +46,7 @@ const functionGlobal = <R>(runner: Runner<R>) => {
 }
 
 const symbolGlobal = <R>(runner: Runner<R>) => {
-  const symbol = native<R>(runner.prototypes, {
+  const symbol = native<R>(runner.builtins, {
     name: "Symbol",
     call: () =>
       Effect.sync(() => {
@@ -64,7 +64,7 @@ type Factory = <R>(host: Host<R>) => unknown
 const table: Record<string, Factory> = {
   tools: () => new ToolReference([]),
   search: (host) =>
-    native(host.runner.prototypes, { name: "search", call: (_, args) => host.search(args), callback: false }),
+    native(host.runner.builtins, { name: "search", call: (_, args) => host.search(args), callback: false }),
   undefined: () => undefined,
   NaN: () => NaN,
   Infinity: () => Infinity,
@@ -74,7 +74,7 @@ const table: Record<string, Factory> = {
   Math: (host) => mathGlobal(host.runner),
   JSON: (host) => jsonGlobal(host.runner),
   console: (host) => consoleGlobal(host.runner, host.logs),
-  Promise: (host) => promiseGlobal(host.runner, host.promises),
+  Promise: (host) => promiseGlobal(host.runner, host.pending),
   Symbol: (host) => symbolGlobal(host.runner),
   Number: (host) => numberGlobal(host.runner),
   String: (host) => stringGlobal(host.runner),
@@ -107,6 +107,6 @@ export const globalNames: ReadonlySet<string> = new Set(Object.keys(table))
 
 /** The immutable global bindings of every program, in declaration order. */
 export const globals = <R>(host: Host<R>): ReadonlyArray<readonly [string, unknown]> => {
-  generatorGlobals(host.runner, host.promises)
+  generatorGlobals(host.runner, host.pending)
   return Object.entries(table).map(([name, factory]) => [name, factory(host)] as const)
 }

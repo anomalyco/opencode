@@ -1,23 +1,23 @@
 import { Effect } from "effect"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { rangeError } from "../interpreter/model.js"
-import { ProgramDate, ProgramObject } from "../interpreter/objects.js"
+import { DateObj, Obj } from "../interpreter/objects.js"
 import { type Runner, toPrimitive, toPrimitiveNumber } from "../interpreter/runner.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
-const constructDate = <R>(runner: Runner<R>, args: Array<unknown>, proto: ProgramObject) => {
-  if (args.length === 0) return Effect.succeed(new ProgramDate(proto, Date.now()))
+const constructDate = <R>(runner: Runner<R>, args: Array<unknown>, proto: Obj) => {
+  if (args.length === 0) return Effect.succeed(new DateObj(proto, Date.now()))
   if (args.length === 1) {
     const arg = args[0]
-    if (arg instanceof ProgramDate) return Effect.succeed(new ProgramDate(proto, arg.time))
+    if (arg instanceof DateObj) return Effect.succeed(new DateObj(proto, arg.time))
     return Effect.map(toPrimitive(runner, arg, "default"), (value) =>
       typeof value === "string"
-        ? new ProgramDate(proto, Date.parse(value))
-        : new ProgramDate(proto, new Date(coerceToNumber(value)).getTime()),
+        ? new DateObj(proto, Date.parse(value))
+        : new DateObj(proto, new Date(coerceToNumber(value)).getTime()),
     )
   }
   const parts = args.map((arg) => coerceToNumber(arg))
-  return Effect.succeed(new ProgramDate(proto, new Date(...(parts as [number, number])).getTime()))
+  return Effect.succeed(new DateObj(proto, new Date(...(parts as [number, number])).getTime()))
 }
 
 type Getter = keyof {
@@ -67,27 +67,27 @@ const setters: ReadonlyArray<readonly [Setter, number]> = [
 ]
 
 export const dateGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const proto = protos.Date
-  const date = constructor<R>(protos, proto, {
+  const builtins = runner.builtins
+  const proto = builtins.Date
+  const date = constructor<R>(builtins, proto, {
     name: "Date",
     length: 7,
     // ISO instead of the host's locale string: date strings are deterministic and must not leak the host timezone.
     call: () => Effect.sync(() => new Date().toISOString()),
     construct: (args, newTarget) => constructDate(runner, args, prototypeFrom(newTarget, proto)),
   })
-  methods(protos, date, [
+  methods(builtins, date, [
     ["now", 0, () => Date.now()],
     ["parse", 1, (_, args) => Date.parse(coerceToString(args[0]))],
     ["UTC", 7, (_, args) => Date.UTC(...(args.map((arg) => coerceToNumber(arg)) as Parameters<typeof Date.UTC>))],
   ])
 
-  const self = (thisValue: unknown, name: string) => receiver(ProgramDate, thisValue, `Date.prototype.${name}`)
-  const iso = (value: ProgramDate) => {
+  const self = (thisValue: unknown, name: string) => receiver(DateObj, thisValue, `Date.prototype.${name}`)
+  const iso = (value: DateObj) => {
     if (!Number.isFinite(value.time)) throw rangeError("Invalid time value.")
     return new Date(value.time).toISOString()
   }
-  methods(protos, proto, [
+  methods(builtins, proto, [
     ["getTime", 0, (thisValue) => self(thisValue, "getTime").time],
     ["valueOf", 0, (thisValue) => self(thisValue, "valueOf").time],
     ["toISOString", 0, (thisValue) => iso(self(thisValue, "toISOString"))],
