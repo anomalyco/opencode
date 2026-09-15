@@ -107,7 +107,6 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       list: () => Effect.die("unused permission.list"),
       get: () => Effect.die("unused permission.get"),
       reply: () => Effect.die("unused permission.reply"),
-      rules: () => Effect.die("unused permission.rules"),
     },
     plugin: overrides.plugin ?? {
       list: () => Effect.die("unused plugin.list"),
@@ -168,7 +167,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       prompt: overrides.session?.prompt ?? (() => Effect.die("unused session.prompt")),
       generate: overrides.session?.generate ?? (() => Effect.die("unused session.generate")),
       command: overrides.session?.command ?? (() => Effect.die("unused session.command")),
-      rename: overrides.session?.rename ?? (() => Effect.die("unused session.rename")),
+      update: overrides.session?.update ?? (() => Effect.die("unused session.update")),
       move: overrides.session?.move ?? (() => Effect.die("unused session.move")),
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
