@@ -73,7 +73,7 @@ export const toData = (
   boundary = true,
 ): unknown => copy(value, label, undefinedAs, 0, new Set(), undefined, boundary)
 
-// "program" and "data" build program objects; "json" and "result" build ordinary objects for the host.
+// "program" and "data" build program objects; "json" and "result" build ordinary objects for the ctx.
 type Mode = "program" | "data" | "json" | "result"
 
 const copy = (

@@ -19,30 +19,30 @@ import {
   applyCollectionCallback,
   isSupportedCallback,
   preserveConsumerError,
-  type Runner,
   toPrimitiveNumber,
   toPrimitiveString,
-} from "../interpreter/runner.js"
+} from "../interpreter/callback.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 
-const coerceGroupByPropertyKey = <R>(runner: Runner<R>, value: unknown): Effect.Effect<string, unknown, R> => {
+const coerceGroupByPropertyKey = <R>(ctx: Interpreter<R>, value: unknown): Effect.Effect<string, unknown, R> => {
   if (value instanceof PromiseObj) return Effect.succeed("[object Promise]")
   if (!isWrapper(value) && isRuntimeReference(value)) {
     throw invalidData(`Object.groupBy callback must return a data value, received ${describeValue(value)}.`)
   }
-  return toPrimitiveString(runner, value)
+  return toPrimitiveString(ctx, value)
 }
 
 /** `Map.groupBy` and `Object.groupBy`: the same iteration, keyed into a Map or a data object. */
-export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
-  fn<R>(runner.builtins, "groupBy", 2, (_, args) => {
-    const builtins = runner.builtins
+export const groupBy = <R>(ctx: Interpreter<R>, namespace: "Map" | "Object") =>
+  fn<R>(ctx.builtins, "groupBy", 2, (_, args) => {
+    const builtins = ctx.builtins
     const source = args[0]
     if (source === null || source === undefined) {
       throw typeError(`${namespace}.groupBy expects an iterable collection.`)
     }
-    const apply = applyCollectionCallback(runner, args[1], `${namespace}.groupBy`)
+    const apply = applyCollectionCallback(ctx, args[1], `${namespace}.groupBy`)
     return Effect.gen(function* () {
-      const cursor = yield* runner.iterate(source)
+      const cursor = yield* ctx.iterate(source)
       if (cursor === undefined) {
         throw typeError(`${namespace}.groupBy expects an iterable collection.`)
       }
@@ -70,7 +70,7 @@ export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
         const item = step.value
         const key = yield* preserveConsumerError(
           cursor,
-          Effect.flatMap(apply([item, index]), (value) => coerceGroupByPropertyKey(runner, value)),
+          Effect.flatMap(apply([item, index]), (value) => coerceGroupByPropertyKey(ctx, value)),
         )
         const group = getOwn(result, key)
         if (group === undefined) define(result, key, new Arr(builtins.Array, [item]))
@@ -80,11 +80,11 @@ export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
     })
   })
 
-const constructMap = <R>(runner: Runner<R>, init: unknown, proto: Obj) => {
+const constructMap = <R>(ctx: Interpreter<R>, init: unknown, proto: Obj) => {
   const target = new MapObj(proto)
   if (init === undefined || init === null) return Effect.succeed(target)
   return Effect.gen(function* () {
-    const cursor = yield* runner.iterate(init)
+    const cursor = yield* ctx.iterate(init)
     if (cursor === undefined) {
       throw typeError("new Map(...) expects an iterable of [key, value] pairs or no argument.")
     }
@@ -104,11 +104,11 @@ const constructMap = <R>(runner: Runner<R>, init: unknown, proto: Obj) => {
   })
 }
 
-const constructSet = <R>(runner: Runner<R>, init: unknown, proto: Obj) => {
+const constructSet = <R>(ctx: Interpreter<R>, init: unknown, proto: Obj) => {
   const target = new SetObj(proto)
   if (init === undefined || init === null) return Effect.succeed(target)
   return Effect.gen(function* () {
-    const cursor = yield* runner.iterate(init)
+    const cursor = yield* ctx.iterate(init)
     if (cursor === undefined) {
       throw typeError("new Set(...) expects a synchronous iterable or no argument.")
     }
@@ -120,15 +120,15 @@ const constructSet = <R>(runner: Runner<R>, init: unknown, proto: Obj) => {
   })
 }
 
-export const mapGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const mapGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const proto = builtins.Map
   const map = constructor<R>(builtins, proto, {
     name: "Map",
     call: requiresNew("Map"),
-    construct: (args, newTarget) => constructMap(runner, args[0], prototypeFrom(newTarget, proto)),
+    construct: (args, newTarget) => constructMap(ctx, args[0], prototypeFrom(newTarget, proto)),
   })
-  define(map, "groupBy", groupBy(runner, "Map"), hidden)
+  define(map, "groupBy", groupBy(ctx, "Map"), hidden)
   const self = (thisValue: unknown, name: string) => receiver(MapObj, thisValue, `Map.prototype.${name}`)
   const wrap = (items: Array<unknown>) => new Arr(builtins.Array, items)
   defineAccessor(proto, "size", (thisValue) => receiver(MapObj, thisValue, "Map.prototype.size").map.size)
@@ -165,7 +165,7 @@ export const mapGlobal = <R>(runner: Runner<R>) => {
       1,
       (thisValue, args) => {
         const target = self(thisValue, "forEach")
-        const apply = applyCollectionCallback(runner, args[0], "Map.forEach")
+        const apply = applyCollectionCallback(ctx, args[0], "Map.forEach")
         return Effect.gen(function* () {
           for (const [key, item] of Array.from(target.map.entries())) yield* apply([item, key, target])
           return undefined
@@ -183,7 +183,7 @@ type SetRecord<R> = {
 }
 
 const loadSetRecord = <R>(
-  runner: Runner<R>,
+  ctx: Interpreter<R>,
   source: unknown,
   name: string,
 ): Effect.Effect<SetRecord<R>, unknown, R> => {
@@ -205,7 +205,7 @@ const loadSetRecord = <R>(
     throw typeError(`Set.${name} expects a Set-like object.`)
   }
   return Effect.gen(function* () {
-    const size = yield* toPrimitiveNumber(runner, get(source, "size"))
+    const size = yield* toPrimitiveNumber(ctx, get(source, "size"))
     if (Number.isNaN(size)) {
       throw typeError(`Set.${name} received a Set-like object with an invalid size.`)
     }
@@ -216,9 +216,9 @@ const loadSetRecord = <R>(
     }
     return {
       size: Math.max(Math.trunc(size), 0),
-      has: (item: unknown) => Effect.map(runner.call(has, source, [item]), Boolean),
+      has: (item: unknown) => Effect.map(ctx.call(has, source, [item]), Boolean),
       keys: () =>
-        Effect.flatMap(runner.call(keys, source, []), (result) => {
+        Effect.flatMap(ctx.call(keys, source, []), (result) => {
           if (result instanceof Arr) return Effect.succeed(result.items)
           throw typeError(`Set.${name} expected 'keys' to return an iterator.`)
         }),
@@ -227,15 +227,15 @@ const loadSetRecord = <R>(
 }
 
 const setOperation = <R>(
-  runner: Runner<R>,
+  ctx: Interpreter<R>,
   target: SetObj,
   name: string,
   source: unknown,
 ): Effect.Effect<unknown, unknown, R> =>
   Effect.gen(function* () {
-    const other = yield* loadSetRecord(runner, source, name)
+    const other = yield* loadSetRecord(ctx, source, name)
     const copy = () => {
-      const result = new SetObj(runner.builtins.Set)
+      const result = new SetObj(ctx.builtins.Set)
       for (const item of target.set.values()) result.set.add(item)
       return result
     }
@@ -245,7 +245,7 @@ const setOperation = <R>(
       return result
     }
     if (name === "intersection") {
-      const result = new SetObj(runner.builtins.Set)
+      const result = new SetObj(ctx.builtins.Set)
       if (target.set.size <= other.size) {
         for (const item of target.set.values()) {
           if (yield* other.has(item)) result.set.add(item)
@@ -302,20 +302,20 @@ const setOperation = <R>(
     return true
   })
 
-export const setGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const setGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const proto = builtins.Set
   const set = constructor<R>(builtins, proto, {
     name: "Set",
     call: requiresNew("Set"),
-    construct: (args, newTarget) => constructSet(runner, args[0], prototypeFrom(newTarget, proto)),
+    construct: (args, newTarget) => constructSet(ctx, args[0], prototypeFrom(newTarget, proto)),
   })
   const self = (thisValue: unknown, name: string) => receiver(SetObj, thisValue, `Set.prototype.${name}`)
   const wrap = (items: Array<unknown>) => new Arr(builtins.Array, items)
   const operation = (name: string): Method => [
     name,
     1,
-    (thisValue, args) => setOperation(runner, self(thisValue, name), name, args[0]),
+    (thisValue, args) => setOperation(ctx, self(thisValue, name), name, args[0]),
   ]
   defineAccessor(proto, "size", (thisValue) => receiver(SetObj, thisValue, "Set.prototype.size").set.size)
   methods(builtins, proto, [
@@ -350,7 +350,7 @@ export const setGlobal = <R>(runner: Runner<R>) => {
       1,
       (thisValue, args) => {
         const target = self(thisValue, "forEach")
-        const apply = applyCollectionCallback(runner, args[0], "Set.forEach")
+        const apply = applyCollectionCallback(ctx, args[0], "Set.forEach")
         return Effect.gen(function* () {
           for (const item of Array.from(target.set.values())) yield* apply([item, item, target])
           return undefined

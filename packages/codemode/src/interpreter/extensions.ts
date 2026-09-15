@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { MAX_VALUE_DEPTH } from "../data.js"
 import type { Extension } from "../extension.js"
 import { coerceToString } from "../stdlib/value.js"
-import type { Host } from "./globals.js"
+import type { Interpreter } from "./interpreter.js"
 import { createErrorValue, isErrorType } from "./intrinsics.js"
 import { Throw, typeError } from "./model.js"
 import { constructor, fn } from "./native.js"
@@ -45,10 +45,10 @@ const ownPrototypeKeys = new Set(["constructor"])
  * a program promise. Prototypes, constructors, and handle identity are all per run.
  */
 export const extensionGlobals = <R>(
-  host: Host<R>,
+  ctx: Interpreter<R>,
   extensions: ReadonlyArray<Extension>,
 ): ReadonlyArray<readonly [string, unknown]> => {
-  const builtins = host.runner.builtins
+  const builtins = ctx.builtins
   const classes = new Set(extensions.flatMap((extension) => Object.values(extension.globals)).filter(isClass))
   // Host prototype object → this run's program prototype, so an instance wraps as its most-derived exposed class.
   const protoOf = new Map<object, Obj>()
@@ -170,7 +170,7 @@ export const extensionGlobals = <R>(
       return Effect.fail(thrown(reason))
     }
     if (!(result instanceof Promise)) return Effect.succeed(fromHost(result, label))
-    return host.pending.create(
+    return ctx.pending.create(
       Effect.map(Effect.tryPromise({ try: () => result, catch: thrown }), (settled) => fromHost(settled, label)),
     )
   }

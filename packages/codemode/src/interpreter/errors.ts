@@ -7,7 +7,7 @@ import { containsRuntimeReference } from "./references.js"
 import { createErrorValue, type ErrorType, isErrorType } from "./intrinsics.js"
 import { constructor, methods, prototypeFrom, receiver } from "./native.js"
 import { type Callable, define, get, hidden, type Native, Arr, ErrorObj, Obj } from "./objects.js"
-import { type Runner } from "./runner.js"
+import type { Interpreter } from "./interpreter.js"
 import { coerceToString } from "../stdlib/value.js"
 
 export const normalizeError = (error: unknown): Diagnostic => {
@@ -89,9 +89,9 @@ export const locate = (error: unknown, node?: AstNode): unknown => {
 }
 
 /** The program value a handler receives for a failure; one failure always yields the same value. */
-export const materialize = <R>(runner: Runner<R>, thrown: unknown): unknown => {
+export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): unknown => {
   if (thrown instanceof Throw) return thrown.value
-  const builtins = runner.builtins
+  const builtins = ctx.builtins
   if (thrown instanceof PendingThrow) {
     if (thrown.value === undefined) {
       thrown.value = createErrorValue(builtins[thrown.type], thrown.message)
@@ -115,42 +115,42 @@ const errorToString = (self: Obj): string => {
 }
 
 export const createAggregateErrorValue = <R>(
-  runner: Runner<R>,
+  ctx: Interpreter<R>,
   errors: Array<unknown>,
   message: string,
-  proto: Obj = runner.builtins.AggregateError,
+  proto: Obj = ctx.builtins.AggregateError,
 ) => {
   const value = createErrorValue(proto, message)
-  define(value, "errors", new Arr(runner.builtins.Array, errors), { ...hidden })
+  define(value, "errors", new Arr(ctx.builtins.Array, errors), { ...hidden })
   return value
 }
 
 const constructAggregateErrorValue = <R>(
-  runner: Runner<R>,
+  ctx: Interpreter<R>,
   args: Array<unknown>,
   proto: Obj,
 ): Effect.Effect<ErrorObj, unknown, R> =>
   Effect.gen(function* () {
-    const cursor = yield* runner.iterate(args[0])
+    const cursor = yield* ctx.iterate(args[0])
     if (cursor === undefined) throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
     const errors: Array<unknown> = []
     while (true) {
       const step = yield* cursor.next
       if (step.done) {
-        return createAggregateErrorValue(runner, errors, args[1] === undefined ? "" : coerceToString(args[1]), proto)
+        return createAggregateErrorValue(ctx, errors, args[1] === undefined ? "" : coerceToString(args[1]), proto)
       }
       errors.push(step.value)
     }
   })
 
 /** An error constructor such as `Error` or `TypeError`; callable with or without `new`, like JS. */
-export const errorGlobal = <R>(type: ErrorType, runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const prototype = builtins[type]
   const construct = (args: Array<unknown>, newTarget: Callable) => {
     const proto = prototypeFrom(newTarget, prototype)
     return type === "AggregateError"
-      ? constructAggregateErrorValue(runner, args, proto)
+      ? constructAggregateErrorValue(ctx, args, proto)
       : Effect.sync(() => createErrorValue(proto, args[0] === undefined ? undefined : coerceToString(args[0])))
   }
   const ctor: Native<R> = constructor<R>(builtins, prototype, {

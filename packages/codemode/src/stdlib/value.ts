@@ -15,7 +15,7 @@ import {
   URLObj,
   URLSearchParamsObj,
 } from "../interpreter/objects.js"
-import type { Runner } from "../interpreter/runner.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 
 export const compoundOperators = new Set(["+=", "-=", "*=", "/=", "%=", "**=", "&=", "|=", "^=", "<<=", ">>=", ">>>="])
 
@@ -57,7 +57,7 @@ export const coerceToNumber = (value: unknown): number => {
 
 export type Coercion = "Number" | "String" | "Boolean" | "parseInt" | "parseFloat" | "isFinite" | "isNaN"
 
-const coerce = <R>(runner: Runner<R>, name: Coercion, args: Array<unknown>): unknown => {
+const coerce = <R>(ctx: Interpreter<R>, name: Coercion, args: Array<unknown>): unknown => {
   // Native: Number() is 0 and String() is "", unlike their undefined-argument forms; the
   // other coercers match native through the undefined-argument path below.
   if (args.length === 0) {
@@ -74,7 +74,7 @@ const coerce = <R>(runner: Runner<R>, name: Coercion, args: Array<unknown>): unk
     if (name === "parseInt") return parseInt(coerceToString(raw))
     return parseFloat(coerceToString(raw))
   }
-  const value = toProgram(runner.builtins, raw, `${name} input`)
+  const value = toProgram(ctx.builtins, raw, `${name} input`)
   if (name === "Number") return coerceToNumber(value)
   if (name === "Boolean") return Boolean(value)
   if (name === "isFinite") return Number.isFinite(coerceToNumber(value))
@@ -91,7 +91,5 @@ const coerce = <R>(runner: Runner<R>, name: Coercion, args: Array<unknown>): unk
 }
 
 /** A global coercion function such as `Number` or `parseInt`. */
-export const coercion = <R>(runner: Runner<R>, name: Coercion, length = 1): Native<R> =>
-  fn(runner.builtins, name, length, (_, args) =>
-    toProgram(runner.builtins, coerce(runner, name, args), `${name} result`),
-  )
+export const coercion = <R>(ctx: Interpreter<R>, name: Coercion, length = 1): Native<R> =>
+  fn(ctx.builtins, name, length, (_, args) => toProgram(ctx.builtins, coerce(ctx, name, args), `${name} result`))

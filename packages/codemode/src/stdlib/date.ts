@@ -2,15 +2,16 @@ import { Effect } from "effect"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { rangeError } from "../interpreter/model.js"
 import { DateObj, Obj } from "../interpreter/objects.js"
-import { type Runner, toPrimitive, toPrimitiveNumber } from "../interpreter/runner.js"
+import { toPrimitive, toPrimitiveNumber } from "../interpreter/callback.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
-const constructDate = <R>(runner: Runner<R>, args: Array<unknown>, proto: Obj) => {
+const constructDate = <R>(ctx: Interpreter<R>, args: Array<unknown>, proto: Obj) => {
   if (args.length === 0) return Effect.succeed(new DateObj(proto, Date.now()))
   if (args.length === 1) {
     const arg = args[0]
     if (arg instanceof DateObj) return Effect.succeed(new DateObj(proto, arg.time))
-    return Effect.map(toPrimitive(runner, arg, "default"), (value) =>
+    return Effect.map(toPrimitive(ctx, arg, "default"), (value) =>
       typeof value === "string"
         ? new DateObj(proto, Date.parse(value))
         : new DateObj(proto, new Date(coerceToNumber(value)).getTime()),
@@ -66,15 +67,15 @@ const setters: ReadonlyArray<readonly [Setter, number]> = [
   ["setUTCFullYear", 3],
 ]
 
-export const dateGlobal = <R>(runner: Runner<R>) => {
-  const builtins = runner.builtins
+export const dateGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
   const proto = builtins.Date
   const date = constructor<R>(builtins, proto, {
     name: "Date",
     length: 7,
     // ISO instead of the host's locale string: date strings are deterministic and must not leak the host timezone.
     call: () => Effect.sync(() => new Date().toISOString()),
-    construct: (args, newTarget) => constructDate(runner, args, prototypeFrom(newTarget, proto)),
+    construct: (args, newTarget) => constructDate(ctx, args, prototypeFrom(newTarget, proto)),
   })
   methods(builtins, date, [
     ["now", 0, () => Date.now()],
@@ -114,7 +115,7 @@ export const dateGlobal = <R>(runner: Runner<R>) => {
           // Native setters read the current time before argument coercion, whose callbacks may mutate the Date.
           const hosted = new Date(target.time)
           return Effect.map(
-            Effect.forEach(args.slice(0, length), (arg) => toPrimitiveNumber(runner, arg), {
+            Effect.forEach(args.slice(0, length), (arg) => toPrimitiveNumber(ctx, arg), {
               concurrency: 1,
             }),
             (values) => {

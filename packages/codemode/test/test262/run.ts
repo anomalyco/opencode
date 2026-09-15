@@ -5,7 +5,7 @@ import path from "node:path"
 import { Cause, Effect } from "effect"
 import { materialize } from "../../src/interpreter/errors.js"
 import { executeProgram } from "../../src/interpreter/execute.js"
-import type { Host } from "../../src/interpreter/globals.js"
+import type { Interpreter } from "../../src/interpreter/interpreter.js"
 import { Throw } from "../../src/interpreter/model.js"
 import { createErrorValue } from "../../src/interpreter/intrinsics.js"
 import { constructor, fn, methods } from "../../src/interpreter/native.js"
@@ -42,8 +42,8 @@ export const run = async (file: string): Promise<Outcome> => {
   // work instead, so drain explicitly.
   const drain = meta.flags?.includes("async") ? "\nfor (let i = 0; i < 100; i++) await null" : ""
   const result = await Effect.runPromise(
-    executeProgram(`"use strict";\n${source}${drain}`, prepared, limits, {}, (host) =>
-      harness(host, (error) => {
+    executeProgram(`"use strict";\n${source}${drain}`, prepared, limits, {}, (ctx) =>
+      harness(ctx, (error) => {
         done ??= { error }
       }),
     ),
@@ -64,8 +64,11 @@ export const run = async (file: string): Promise<Outcome> => {
   return { status: "pass" }
 }
 
-const harness = <R>(host: Host<R>, onDone: (error: unknown) => void): ReadonlyArray<readonly [string, unknown]> => {
-  const builtins = host.runner.builtins
+const harness = <R>(
+  ctx: Interpreter<R>,
+  onDone: (error: unknown) => void,
+): ReadonlyArray<readonly [string, unknown]> => {
+  const builtins = ctx.builtins
   const test262Prototype = new Obj(builtins.Object)
   define(test262Prototype, "name", "Test262Error", hidden)
   const test262 = (args: Array<unknown>) =>
@@ -122,11 +125,11 @@ const harness = <R>(host: Host<R>, onDone: (error: unknown) => void): ReadonlyAr
       3,
       (_, args) => {
         const expected = args[0] instanceof Callable ? String(get(args[0], "name")) : show(args[0])
-        return host.runner.call(args[1], undefined, []).pipe(
+        return ctx.call(args[1], undefined, []).pipe(
           Effect.matchCauseEffect({
             onFailure: (cause) => {
               if (cause.reasons.some(Cause.isInterruptReason)) return Effect.failCause(cause)
-              const thrown = materialize(host.runner, Cause.squash(cause))
+              const thrown = materialize(ctx, Cause.squash(cause))
               if (!(thrown instanceof Obj)) return fail(`${prefix(args[2])}Thrown value was not an object!`)
               const actual = get(thrown, "constructor")
               if (actual === args[0]) return Effect.void
