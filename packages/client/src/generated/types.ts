@@ -1759,17 +1759,37 @@ export type MessagesListInput = {
     readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly cursor?: string | undefined
+    readonly index?: number | undefined
+    readonly around?: string | undefined
   }["limit"]
   readonly order?: {
     readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly cursor?: string | undefined
+    readonly index?: number | undefined
+    readonly around?: string | undefined
   }["order"]
   readonly cursor?: {
     readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly cursor?: string | undefined
+    readonly index?: number | undefined
+    readonly around?: string | undefined
   }["cursor"]
+  readonly index?: {
+    readonly limit?: number | undefined
+    readonly order?: "asc" | "desc" | undefined
+    readonly cursor?: string | undefined
+    readonly index?: number | undefined
+    readonly around?: string | undefined
+  }["index"]
+  readonly around?: {
+    readonly limit?: number | undefined
+    readonly order?: "asc" | "desc" | undefined
+    readonly cursor?: string | undefined
+    readonly index?: number | undefined
+    readonly around?: string | undefined
+  }["around"]
 }
 
 export type MessagesListOutput = {
@@ -1925,6 +1945,8 @@ export type MessagesListOutput = {
       }
   >
   readonly cursor: { readonly previous?: string | null; readonly next?: string | null }
+  readonly total: number
+  readonly startIndex?: number | null
 }
 
 export type ModelsListInput = {
