@@ -34,7 +34,7 @@ import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -84,13 +84,30 @@ const info = (row: typeof MessageTable.$inferSelect) =>
     sessionID: row.session_id,
   }) as Info
 
-const part = (row: typeof PartTable.$inferSelect) =>
-  ({
+const decodeToolInputJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
+
+// Pre-1.18 tool parts could persist state.input as a JSON string. HTTP encode
+// requires an object, so hydrate coerces legacy strings before they leave the DB.
+function coerceToolInput(input: unknown) {
+  if (input !== null && typeof input === "object" && !Array.isArray(input)) return input as Record<string, unknown>
+  if (typeof input !== "string") return {}
+  const parsed = Option.getOrUndefined(decodeToolInputJson(input))
+  if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>
+  return {}
+}
+
+export function fromPartRow(row: typeof PartTable.$inferSelect) {
+  const next = {
     ...row.data,
     id: row.id,
     sessionID: row.session_id,
     messageID: row.message_id,
-  }) as Part
+  } as Part
+  if (next.type === "tool" && typeof (next.state as { input: unknown }).input === "string") {
+    next.state = { ...next.state, input: coerceToolInput(next.state.input) } as typeof next.state
+  }
+  return next
+}
 
 const older = (row: Cursor) =>
   or(lt(MessageTable.time_created, row.time), and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)))
@@ -108,7 +125,7 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
         .all()
         .pipe(Effect.orDie)
       for (const row of partRows) {
-        const next = part(row)
+        const next = fromPartRow(row)
         const list = partByMessage.get(row.message_id)
         if (list) list.push(next)
         else partByMessage.set(row.message_id, [next])
@@ -499,7 +516,7 @@ export function parts(messageID: MessageID) {
       .orderBy(PartTable.id)
       .all()
       .pipe(Effect.orDie)
-    return rows.map(part)
+    return rows.map(fromPartRow)
   })
 }
 
