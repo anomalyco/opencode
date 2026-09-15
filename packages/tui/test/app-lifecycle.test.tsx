@@ -126,3 +126,65 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     mock.restore()
   }
 })
+
+test("fatal startup errors set a nonzero exit after scoped cleanup", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const core = await import("@opentui/core")
+  await mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+  const events = createEventSource()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/config")
+      return json(
+        {
+          name: "ConfigRemoteAuthError",
+          data: {
+            url: "https://example.com",
+            remote: "https://config.example.com/opencode.json",
+          },
+        },
+        { status: 400 },
+      )
+    return undefined
+  })
+  let disposes = 0
+  const originalWrite = process.stderr.write.bind(process.stderr)
+  const originalExitCode = process.exitCode ?? 0
+  let stderr = ""
+
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += String(chunk)
+    return true
+  }) as typeof process.stderr.write
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        url: "http://test",
+        directory,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        fetch: calls.fetch,
+        events: events.source,
+        args: {},
+        pluginHost: {
+          async start() {},
+          async dispose() {
+            disposes++
+          },
+        },
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
+    )
+
+    await task
+    expect(stderr).toContain("Run `opencode auth login https://example.com` to re-authenticate.")
+    expect(stderr).not.toContain("Unexpected server error")
+    expect(process.exitCode).toBe(1)
+    expect(setup.renderer.isDestroyed).toBe(true)
+    expect(disposes).toBe(1)
+  } finally {
+    process.stderr.write = originalWrite
+    process.exitCode = originalExitCode
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    mock.restore()
+  }
+})
