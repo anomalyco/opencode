@@ -1226,6 +1226,10 @@ export const dict = {
   "settings.updates.action.checkNow": "Check now",
   "settings.updates.action.checking": "Checking…",
   "settings.updates.action.downloading": "Downloading…",
+  "settings.updates.action.download": "Download OpenCode",
+  "settings.updates.migration.title": "Move from Beta to Stable",
+  "settings.updates.migration.description":
+    "For now, OpenCode Beta is moving to OpenCode Stable. Download version {{version}}, then install OpenCode from the disk image to continue receiving updates.",
   "settings.updates.action.installing": "Installing…",
   "settings.updates.toast.latest.title": "You're up to date",
   "settings.updates.toast.latest.description": "You're running the latest version of OpenCode.",

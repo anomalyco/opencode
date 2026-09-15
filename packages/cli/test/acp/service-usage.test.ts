@@ -41,7 +41,7 @@ describe("acp service prompt routing and usage", () => {
     const command = fixture.requests.find((request) => request.path === "/api/session/ses_routes/command")
     const compact = fixture.requests.find((request) => request.path === "/api/session/ses_routes/compact")
     expect(command?.body).toMatchObject({
-      command: "review",
+      name: "review",
       text: "now",
       files: [],
       delivery: "steer",

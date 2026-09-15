@@ -267,8 +267,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
 
   const updateVersion = () => {
     const state = platform.updater?.state()
-    if (state?.status !== "ready") return
-    return state.version
+    return state?.status === "ready" || state?.status === "download-required" ? state.version : undefined
   }
 
   async function exportDebugLogs() {
