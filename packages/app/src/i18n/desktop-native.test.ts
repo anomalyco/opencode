@@ -29,6 +29,7 @@ describe("desktop native translations", () => {
       "Українська",
       "Bosanski",
       "العربية",
+      "עברית",
       "Norsk",
       "Português (Brasil)",
       "ไทย",
