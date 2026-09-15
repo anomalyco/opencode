@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { HttpClientResponse } from "effect/unstable/http"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -124,6 +124,53 @@ describe("session messages endpoint", () => {
       }),
     ),
     { git: true },
+  )
+
+  it.instance(
+    "returns persisted output formats",
+    withoutWatcher(
+      Effect.gen(function* () {
+        const session = yield* sessionScoped
+        const service = yield* SessionNs.Service
+        const formats = [
+          { type: "text" as const },
+          {
+            type: "json_schema" as const,
+            schema: { type: "object", properties: { answer: { type: "string" } } },
+            retryCount: 2,
+          },
+        ]
+
+        yield* Effect.forEach(formats, (format, index) =>
+          Effect.gen(function* () {
+            const id = MessageID.ascending()
+            yield* service.updateMessage({
+              id,
+              sessionID: session.id,
+              role: "user",
+              time: { created: Date.now() + index },
+              agent: "test",
+              model,
+              format: Schema.decodeUnknownSync(SessionV1.Format)(format),
+            })
+            yield* service.updatePart({
+              id: PartID.ascending(),
+              sessionID: session.id,
+              messageID: id,
+              type: "text",
+              text: `m${index}`,
+            })
+          }),
+        )
+
+        const res = yield* request(`/session/${session.id}/message`)
+        expect(res.status).toBe(200)
+        const body = yield* json<SessionV1.WithParts[]>(res)
+        expect(body.map((item) => item.info.role === "user" && item.info.format)).toEqual(formats)
+      }),
+    ),
+    { git: true },
+    60_000,
   )
 
   it.instance(
