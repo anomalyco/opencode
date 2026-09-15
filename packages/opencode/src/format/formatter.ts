@@ -373,6 +373,16 @@ export const pint: Info = {
   },
 }
 
+export const pursTidy: Info = {
+  name: "purs-tidy",
+  extensions: [".purs"],
+  async enabled() {
+    const match = which("purs-tidy")
+    if (!match) return false
+    return [match, "format-in-place", "$FILE"]
+  },
+}
+
 export const ormolu: Info = {
   name: "ormolu",
   extensions: [".hs"],
