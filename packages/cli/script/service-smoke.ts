@@ -33,7 +33,7 @@ const processes: Array<ReturnType<typeof Bun.spawn>> = []
 const errors: Array<Promise<string>> = []
 let failure: unknown
 try {
-  await fs.mkdir(path.join(root, ".opencode"))
+  await fs.mkdir(path.join(root, ".opencode", "plugins"), { recursive: true })
   spawnService()
   spawnService()
   const registration = await waitForRegistration()
@@ -54,7 +54,6 @@ try {
   if (tokenOpenApi.status !== 200) throw new Error("Compiled application rejected query authentication")
   if ((await pluginIDs(info.url, headers)).includes("smoke")) throw new Error("Smoke plugin existed before creation")
   const plugin = path.join(root, ".opencode", "plugins", "smoke.ts")
-  await fs.mkdir(path.dirname(plugin), { recursive: true })
   await fs.writeFile(plugin, pluginSource())
   await waitForPlugin(info.url, headers)
 
