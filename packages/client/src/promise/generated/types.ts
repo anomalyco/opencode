@@ -1342,6 +1342,7 @@ export type ModelCompatibility = {
   maxTokensField?: ModelMaxTokensField
   requireFinishReason?: boolean
   requireAssistantAfterTool?: boolean
+  supportsPromptCacheKey?: boolean
 }
 
 export type ProviderInfo = {
