@@ -1,6 +1,6 @@
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
-import { Effect, Latch } from "effect"
+import { Effect, Fiber, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
 import { Global } from "@opencode/util/global"
@@ -203,17 +203,19 @@ export type TuiInput = {
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const log = input.log ?? (() => {})
   const global = yield* Global.Service
+  const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
+  const api = OpenCode.make(options)
+  const locationFiber = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
+    Effect.map((response) => response.location),
+    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
+    Effect.forkChild({ startImmediately: true }),
+  )
+  const pluginDirectoriesFiber = yield* Effect.promise(() =>
+    localPluginDirectories(process.cwd(), global.config),
+  ).pipe(Effect.forkChild({ startImmediately: true }))
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
     terminalSuspend: process.platform !== "win32",
   })
-  const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
-  const api = OpenCode.make(options)
-  const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
-    Effect.map((response) => response.location),
-    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
-  )
-  const directory = location.directory
-  const pluginDirectories = yield* Effect.promise(() => localPluginDirectories(process.cwd(), global.config))
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const managed = input.server.service
   const service = managed
@@ -284,11 +286,16 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         () => Effect.sync(() => process.off("SIGHUP", onSighup)),
       )
       renderer.once("destroy", () => shutdown.openUnsafe())
-      yield* Effect.tryPromise(async () => {
-        const mode = handoff?.mode ?? (await renderer.waitForThemeMode(1000)) ?? "dark"
-        if (renderer.isDestroyed) return
+      const mode = handoff?.mode ?? (yield* Effect.tryPromise(() => renderer.waitForThemeMode(1000))) ?? "dark"
+      const [location, pluginDirectories] = yield* Effect.all([
+        Fiber.join(locationFiber),
+        Fiber.join(pluginDirectoriesFiber),
+      ])
+      const directory = location.directory
+      if (renderer.isDestroyed) return { epilogue: exit.epilogue, reason: exit.reason }
 
-        await render(() => {
+      yield* Effect.tryPromise(() =>
+        render(() => {
           return (
             <LogProvider log={log}>
               <ExitProvider
@@ -446,12 +453,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               </ExitProvider>
             </LogProvider>
           )
-        }, renderer)
-        if (handoff) {
-          renderer.once(CliRenderEvents.FRAME, handoff.complete)
-          renderer.requestRender()
-        }
-      })
+        }, renderer),
+      )
+      if (handoff) {
+        renderer.once(CliRenderEvents.FRAME, handoff.complete)
+        renderer.requestRender()
+      }
       yield* shutdown.await
       return { epilogue: exit.epilogue, reason: exit.reason }
     }),
