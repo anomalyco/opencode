@@ -315,6 +315,19 @@ const writeConfig = Effect.fn("test.writeConfig")(function* (dir: string, config
   )
 })
 
+const writeSkill = Effect.fn("test.writeSkill")(function* (dir: string, name: string, content: string) {
+  yield* writeText(
+    path.join(dir, ".opencode", "skill", name, "SKILL.md"),
+    `---
+name: ${name}
+description: ${name} test skill.
+---
+
+${content}
+`,
+  )
+})
+
 const useServerConfig = Effect.fn("test.useServerConfig")(function* (config: (url: string) => Partial<ConfigV1.Info>) {
   const { directory: dir } = yield* TestInstance
   const llm = yield* TestLLMServer
@@ -1841,6 +1854,96 @@ unix(
         expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("configured")
       }),
     ),
+  30_000,
+)
+
+it.instance(
+  "skill command consumes chained leading skill commands",
+  () =>
+    Effect.gen(function* () {
+      const { dir, llm } = yield* useServerConfig(providerCfg)
+      yield* writeSkill(dir, "skill-a", "Skill A body.")
+      yield* writeSkill(dir, "skill-b", "Skill B body.")
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
+      yield* llm.text("done")
+
+      const result = yield* prompt.command({
+        sessionID: chat.id,
+        command: "skill-a",
+        arguments: "/skill-b build routing",
+      })
+
+      expect(result.info.role).toBe("assistant")
+      const inputs = yield* llm.inputs
+      const body = JSON.stringify(inputs.at(-1)?.messages)
+      expect(body).toContain("Skill A body.")
+      expect(body).toContain("Skill B body.")
+      expect(body).toContain("build routing")
+    }),
+  30_000,
+)
+
+it.instance(
+  "skill command leaves unknown chained slash command as text",
+  () =>
+    Effect.gen(function* () {
+      const { dir, llm } = yield* useServerConfig(providerCfg)
+      yield* writeSkill(dir, "skill-a", "Skill A body.")
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
+      yield* llm.text("done")
+
+      const result = yield* prompt.command({
+        sessionID: chat.id,
+        command: "skill-a",
+        arguments: "/unknown-skill build routing",
+      })
+
+      expect(result.info.role).toBe("assistant")
+      const inputs = yield* llm.inputs
+      const body = JSON.stringify(inputs.at(-1)?.messages)
+      expect(body).toContain("Skill A body.")
+      expect(body).toContain("/unknown-skill build routing")
+    }),
+  30_000,
+)
+
+it.instance(
+  "non-skill command keeps skill-looking arguments as text",
+  () =>
+    Effect.gen(function* () {
+      const { dir, llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        command: {
+          plain: {
+            template: "Plain command: $ARGUMENTS",
+          },
+        },
+      }))
+      yield* writeSkill(dir, "skill-b", "Skill B body.")
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({})
+      yield* llm.text("done")
+
+      const result = yield* prompt.command({
+        sessionID: chat.id,
+        command: "plain",
+        arguments: "/skill-b build routing",
+      })
+
+      expect(result.info.role).toBe("assistant")
+      const inputs = yield* llm.inputs
+      const body = JSON.stringify(inputs.at(-1)?.messages)
+      expect(body).toContain("Plain command: /skill-b build routing")
+      expect(body).not.toContain("Skill B body.")
+    }),
   30_000,
 )
 
