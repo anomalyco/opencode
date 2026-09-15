@@ -366,6 +366,14 @@ const layer = Layer.effect(
           if (integration?.connections.length) return true
           return record.provider.integrationID === undefined && !integration
         })
+        if (
+          cached?.records === records &&
+          cached.value.available.length === available.length &&
+          cached.value.available.every((record, index) => record === available[index])
+        ) {
+          cached = { ...cached, access }
+          return cached.value
+        }
         const value = freeze({ records, available, providers: available.map((record) => record.provider) }, true)
         cached = { records, access, value }
         return value

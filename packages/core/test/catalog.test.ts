@@ -148,6 +148,43 @@ describe("Provider and Model", () => {
     }).pipe(Effect.scoped, Effect.provide(localProviderLayer))
   })
 
+  it.effect("reuses materialized models when the active credential changes", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const providerID = Provider.ID.make("switchable")
+      const integrationID = Integration.ID.make(providerID)
+      yield* integrations.transform((editor) => editor.update(integrationID, () => {}))
+      yield* providers.transform((editor) =>
+        editor.add({
+          info: Provider.Info.empty(providerID),
+          models: Array.from({ length: 1_000 }, (_, index) =>
+            Model.Info.default(providerID, Model.ID.make(`model-${index}`)),
+          ),
+        }),
+      )
+      expect(yield* models.available()).toEqual([])
+
+      const first = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "first" }),
+      })
+      const materialized = yield* models.available()
+      expect(materialized).toHaveLength(1_000)
+
+      yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "second" }),
+      })
+      expect(yield* models.available()).toBe(materialized)
+
+      yield* credentials.activate(first.id)
+      expect(yield* models.available()).toBe(materialized)
+    }),
+  )
+
   it.effect("derives availability from a provider's integration", () => {
     const integrationID = Integration.ID.make("gateway")
     const providerID = Provider.ID.make("remote")
