@@ -25,7 +25,6 @@ export const Plugin = define({
             (model) => model.providerID === event.model.providerID && model.id === event.model.id,
           ) ?? Model.Info.default(event.model.providerID, event.model.id)
         const provider = (yield* ctx.provider.list()).data.find((provider) => provider.id === event.model.providerID)
-        // Insert after the agent prompt so family-prompt overrides of the first part preserve it.
         event.system.splice(
           1,
           0,
