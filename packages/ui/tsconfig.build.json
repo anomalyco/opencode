@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": false,
+    // Publish declarations so consumer compiler options do not typecheck our TSX implementation.
+    "declaration": true,
+    "emitDeclarationOnly": true
+  },
+  "include": ["src"],
+  "exclude": ["**/*.stories.*", "**/*.test.*", "**/*.mdx"]
+}

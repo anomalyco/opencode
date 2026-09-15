@@ -11,6 +11,7 @@ export const LOCALES = [
   "ja",
   "pl",
   "ru",
+  "uk",
   "ar",
   "no",
   "br",
@@ -41,6 +42,7 @@ const LABEL = {
   ja: "日本語",
   pl: "Polski",
   ru: "Русский",
+  uk: "Українська",
   ar: "العربية",
   no: "Norsk",
   br: "Português (Brasil)",
@@ -61,6 +63,7 @@ const TAG = {
   ja: "ja",
   pl: "pl",
   ru: "ru",
+  uk: "uk",
   ar: "ar",
   no: "no",
   br: "pt-BR",
@@ -81,6 +84,7 @@ const DOCS = {
   ja: "ja",
   pl: "pl",
   ru: "ru",
+  uk: "uk",
   ar: "ar",
   no: "nb",
   br: "pt-br",
@@ -104,6 +108,7 @@ const DOCS_SEGMENT = new Set([
   "ru",
   "th",
   "tr",
+  "uk",
   "zh-cn",
   "zh-tw",
 ])
@@ -124,9 +129,38 @@ const DOCS_LOCALE = {
   ru: "ru",
   th: "th",
   tr: "tr",
+  uk: "uk",
   "zh-cn": "zh",
   "zh-tw": "zht",
 } as const satisfies Record<string, Locale>
+
+// Heading IDs from the localized Go documentation.
+const GO_USAGE_LIMITS = {
+  en: "usage-limits",
+  zh: "使用限制",
+  zht: "使用限制",
+  ko: "사용-한도",
+  de: "nutzungslimits",
+  es: "límites-de-uso",
+  fr: "limites-dutilisation",
+  it: "limiti-di-utilizzo",
+  da: "forbrugsgrænser",
+  ja: "利用制限",
+  pl: "limity-użycia",
+  ru: "лимиты-использования",
+  uk: "usage-limits",
+  ar: "حدود-الاستخدام",
+  no: "bruksgrenser",
+  br: "limites-de-uso",
+  th: "usage-limits",
+  tr: "kullanım-limitleri",
+} satisfies Record<Locale, string>
+
+export function goUsageLimits(locale: Locale) {
+  // No Ukrainian Go docs yet; the explicit English path overrides the locale cookie.
+  if (locale === "uk") return "/docs/en/go/#usage-limits"
+  return docs(locale, `/docs/go/#${GO_USAGE_LIMITS[locale]}`)
+}
 
 function suffix(pathname: string) {
   const index = pathname.search(/[?#]/)
@@ -239,6 +273,7 @@ function match(input: string): Locale | null {
   if (value.startsWith("ja")) return "ja"
   if (value.startsWith("pl")) return "pl"
   if (value.startsWith("ru")) return "ru"
+  if (value.startsWith("uk")) return "uk"
   if (value.startsWith("ar")) return "ar"
   if (value.startsWith("tr")) return "tr"
   if (value.startsWith("th")) return "th"

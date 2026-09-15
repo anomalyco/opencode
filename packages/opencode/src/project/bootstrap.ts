@@ -1,34 +1,58 @@
+import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { Plugin } from "../plugin"
 import { Format } from "../format"
-import { LSP } from "../lsp"
-import { File } from "../file"
+import { LSP } from "@/lsp/lsp"
 import { Snapshot } from "../snapshot"
-import { Project } from "./project"
-import { Vcs } from "./vcs"
-import { Bus } from "../bus"
-import { Command } from "../command"
-import { Instance } from "./instance"
-import { Log } from "@/util/log"
-import { FileWatcher } from "@/file/watcher"
+import * as Project from "./project"
+import * as Vcs from "./vcs"
+import { InstanceState } from "@/effect/instance-state"
 import { ShareNext } from "@/share/share-next"
-import * as Effect from "effect/Effect"
+import { Effect, Layer } from "effect"
+import { Config } from "@/config/config"
+import { Service } from "./bootstrap-service"
 
-export const InstanceBootstrap = Effect.gen(function* () {
-  Log.Default.info("bootstrapping", { directory: Instance.directory })
-  yield* Plugin.Service.use((svc) => svc.init())
-  yield* ShareNext.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* Format.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* LSP.Service.use((svc) => svc.init())
-  yield* File.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* FileWatcher.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* Vcs.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
-  yield* Snapshot.Service.use((svc) => svc.init()).pipe(Effect.forkDetach)
+export { Service } from "./bootstrap-service"
+export type { Interface } from "./bootstrap-service"
 
-  yield* Bus.Service.use((svc) =>
-    svc.subscribeCallback(Command.Event.Executed, async (payload) => {
-      if (payload.properties.name === Command.Default.INIT) {
-        Project.setInitialized(Instance.project.id)
-      }
-    }),
-  )
-}).pipe(Effect.withSpan("InstanceBootstrap"))
+const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    // Yield each bootstrap dep at layer init so `run` itself has R = never.
+    // InstanceStore imports only the lightweight tag from bootstrap-service.ts,
+    // so it can depend on bootstrap without importing this implementation graph.
+    const config = yield* Config.Service
+    const format = yield* Format.Service
+    const lsp = yield* LSP.Service
+    const plugin = yield* Plugin.Service
+    const project = yield* Project.Service
+    const shareNext = yield* ShareNext.Service
+    const snapshot = yield* Snapshot.Service
+    const vcs = yield* Vcs.Service
+
+    const run = Effect.gen(function* () {
+      const ctx = yield* InstanceState.context
+      yield* Effect.logInfo("bootstrapping", { directory: ctx.directory })
+      // everything depends on config so eager load it for nice traces
+      yield* config.get()
+      // Plugin can mutate config so it has to be initialized before anything else.
+      yield* plugin.init()
+      // Each service self-manages its own slow work via Effect.forkScoped against
+      // its per-instance state scope. We just await materialization here.
+      yield* Effect.forEach(
+        [lsp, shareNext, format, vcs, snapshot, project],
+        (s) => s.init().pipe(Effect.catchCause((cause) => Effect.logWarning("init failed", { cause }))),
+        { concurrency: "unbounded", discard: true },
+      ).pipe(Effect.withSpan("InstanceBootstrap.init"))
+    }).pipe(Effect.withSpan("InstanceBootstrap"))
+
+    return Service.of({ run })
+  }),
+)
+
+export const node = makeGlobalNode({
+  service: Service,
+  layer: layer,
+  deps: [Config.node, Format.node, LSP.node, Plugin.node, Project.node, ShareNext.node, Snapshot.node, Vcs.node],
+})
+
+export * as InstanceBootstrap from "./bootstrap"

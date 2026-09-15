@@ -284,7 +284,7 @@
   }
 
   [data-component="content"] {
-    padding: 6rem 5rem;
+    padding: 3rem 5rem 6rem;
 
     @media (max-width: 60rem) {
       padding: 4rem 1.5rem;
@@ -316,60 +316,31 @@
 
   /* Download Hero Section */
   [data-component="download-hero"] {
-    /* display: grid; */
-    display: none;
-    grid-template-columns: 260px 1fr;
+    display: grid;
+    grid-template-columns: 255px 1fr;
     gap: 4rem;
-    padding-bottom: 2rem;
+    padding: 4px;
+    border: 1px solid var(--color-border-weak);
+    border-radius: 8px;
     margin-bottom: 4rem;
 
     @media (max-width: 50rem) {
       grid-template-columns: 1fr;
-      gap: 1.5rem;
-      padding-bottom: 2rem;
+      gap: 0;
       margin-bottom: 2rem;
     }
 
-    [data-component="hero-icon"] {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-
-      @media (max-width: 40rem) {
-        display: none;
-      }
-
-      [data-slot="icon-placeholder"] {
-        width: 120px;
-        height: 120px;
-        background: var(--color-background-weak);
-        border: 1px solid var(--color-border-weak);
-        border-radius: 24px;
+    [data-component="hero-video"] {
+      video {
+        display: block;
+        width: 100%;
+        aspect-ratio: 1;
+        object-fit: cover;
+        border-radius: 4px;
 
         @media (max-width: 50rem) {
-          width: 80px;
-          height: 80px;
+          aspect-ratio: 16 / 9;
         }
-      }
-
-      img {
-        width: 120px;
-        height: 120px;
-        border-radius: 24px;
-        box-shadow:
-          0 1.467px 2.847px 0 rgba(0, 0, 0, 0.42),
-          0 0.779px 1.512px 0 rgba(0, 0, 0, 0.34),
-          0 0.324px 0.629px 0 rgba(0, 0, 0, 0.24);
-
-        @media (max-width: 50rem) {
-          width: 80px;
-          height: 80px;
-          border-radius: 16px;
-        }
-      }
-
-      @media (max-width: 50rem) {
-        justify-content: flex-start;
       }
     }
 
@@ -377,6 +348,11 @@
       display: flex;
       flex-direction: column;
       justify-content: center;
+      padding-right: 3rem;
+
+      @media (max-width: 50rem) {
+        padding: 1.5rem;
+      }
 
       h1 {
         font-size: 1.5rem;

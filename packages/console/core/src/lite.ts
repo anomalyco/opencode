@@ -11,11 +11,10 @@ export namespace LiteData {
   export const productID = fn(z.void(), () => Resource.ZEN_LITE_PRICE.product)
   export const priceID = fn(z.void(), () => Resource.ZEN_LITE_PRICE.price)
   export const priceInr = fn(z.void(), () => Resource.ZEN_LITE_PRICE.priceInr)
-  export const firstMonthCoupon = fn(z.string(), (email) => {
-    const invitees = Resource.ZEN_LITE_COUPON_FIRST_MONTH_100_INVITEES.value.split(",")
-    return invitees.includes(email)
-      ? Resource.ZEN_LITE_PRICE.firstMonth100Coupon
-      : Resource.ZEN_LITE_PRICE.firstMonth50Coupon
-  })
+  export const firstMonth100Coupon = Resource.ZEN_LITE_PRICE.firstMonth100Coupon
+  export const firstMonth50Coupon = Resource.ZEN_LITE_PRICE.firstMonth50Coupon
+  export const threeMonths100Coupon = Resource.ZEN_LITE_PRICE.threeMonths100Coupon
+  export const sixMonths100Coupon = Resource.ZEN_LITE_PRICE.sixMonths100Coupon
+  export const twelveMonths100Coupon = Resource.ZEN_LITE_PRICE.twelveMonths100Coupon
   export const planName = fn(z.void(), () => "lite")
 }

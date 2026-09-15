@@ -8,6 +8,14 @@
   }
 }
 
+@utility hover-reveal {
+  @apply opacity-0 transition-opacity;
+
+  @media (hover: none) {
+    opacity: 1;
+  }
+}
+
 @utility badge-mask {
   -webkit-mask-image: radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px);
   mask-image: radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px);

@@ -68,12 +68,12 @@ nix run nixpkgs#opencode           # eller github:anomalyco/opencode for nyeste 
 
 OpenCode findes også som desktop-app. Download direkte fra [releases-siden](https://github.com/anomalyco/opencode/releases) eller [opencode.ai/download](https://opencode.ai/download).
 
-| Platform              | Download                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, eller AppImage        |
+| Platform              | Download                           |
+| --------------------- | ---------------------------------- |
+| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
+| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
+| Windows               | `opencode-desktop-windows-x64.exe` |
+| Linux                 | `.deb`, `.rpm`, eller AppImage     |
 
 ```bash
 # macOS (Homebrew)
@@ -88,13 +88,13 @@ Installationsscriptet bruger følgende prioriteringsrækkefølge for installatio
 
 1. `$OPENCODE_INSTALL_DIR` - Tilpasset installationsmappe
 2. `$XDG_BIN_DIR` - Sti der følger XDG Base Directory Specification
-3. `$HOME/bin` - Standard bruger-bin-mappe (hvis den findes eller kan oprettes)
+3. `$HOME/bin` - Standard bruger-bin-mappe (hvis den findes)
 4. `$HOME/.opencode/bin` - Standard fallback
 
 ```bash
 # Eksempler
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=$HOME/.local/bin bash
+curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=$HOME/.local/bin bash -s -- --no-modify-path
 ```
 
 ### Agents
@@ -123,18 +123,6 @@ Hvis du vil bidrage til OpenCode, så læs vores [contributing docs](./CONTRIBUT
 ### Bygget på OpenCode
 
 Hvis du arbejder på et projekt der er relateret til OpenCode og bruger "opencode" som en del af navnet; f.eks. "opencode-dashboard" eller "opencode-mobile", så tilføj en note i din README, der tydeliggør at projektet ikke er bygget af OpenCode-teamet og ikke er tilknyttet os på nogen måde.
-
-### FAQ
-
-#### Hvordan adskiller dette sig fra Claude Code?
-
-Det minder meget om Claude Code i forhold til funktionalitet. Her er de vigtigste forskelle:
-
-- 100% open source
-- Ikke låst til en udbyder. Selvom vi anbefaler modellerne via [OpenCode Zen](https://opencode.ai/zen); kan OpenCode bruges med Claude, OpenAI, Google eller endda lokale modeller. Efterhånden som modeller udvikler sig vil forskellene mindskes og priserne falde, så det er vigtigt at være provider-agnostic.
-- LSP-support out of the box
-- Fokus på TUI. OpenCode er bygget af neovim-brugere og skaberne af [terminal.shop](https://terminal.shop); vi vil skubbe grænserne for hvad der er muligt i terminalen.
-- Klient/server-arkitektur. Det kan f.eks. lade OpenCode køre på din computer, mens du styrer den eksternt fra en mobilapp. Det betyder at TUI-frontend'en kun er en af de mulige clients.
 
 ---
 

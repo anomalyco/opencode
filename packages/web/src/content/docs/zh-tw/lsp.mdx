@@ -3,7 +3,7 @@ title: LSP 伺服器
 description: OpenCode 與您的 LSP 伺服器整合。
 ---
 
-OpenCode 與您的語言伺服器協定（LSP）整合，協助 LLM 與您的程式碼庫進行互動。它利用診斷資訊向 LLM 提供回饋。
+OpenCode 可以與語言伺服器協定（LSP）伺服器整合，將診斷資訊作為 agent 的回饋。
 
 ---
 
@@ -47,7 +47,7 @@ OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
 | yaml-ls            | .yaml, .yml                                                         | 自動安裝 Red Hat yaml-language-server                 |
 | zls                | .zig, .zon                                                          | 需要 `zig` 指令可用                                   |
 
-當偵測到上述檔案副檔名且滿足相應要求時，LSP 伺服器會自動啟用。
+LSP 預設關閉。啟用後，當偵測到上述檔案副檔名且滿足相應要求時，伺服器會啟動。
 
 :::note
 您可以將 `OPENCODE_DISABLE_LSP_DOWNLOAD` 環境變數設定為 `true` 來停用 LSP 伺服器的自動下載。
@@ -57,16 +57,35 @@ OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
 
 ## 工作原理
 
-當 OpenCode 開啟一個檔案時，它會：
+啟用 LSP 且 OpenCode 開啟檔案時，它會：
 
 1. 將檔案副檔名與所有已啟用的 LSP 伺服器進行比對。
 2. 如果對應的 LSP 伺服器尚未執行，則自動啟動它。
 
 ---
 
+## 最佳實踐
+
+LSP 可以透過語言伺服器診斷幫助 agent 發現並修復問題。這對某些專案很有用，但不一定總是帶來淨收益。
+
+語言伺服器可能與專案不同步、佔用較多記憶體、隨版本或專案表現不同，並拖慢 agent 工作流程。在許多專案中，更好的做法是讓 agent 直接執行 lint、typecheck 或其他診斷類 CLI 工具，這樣錯誤會回到 agent 循環，同時避免這些取捨。將這些指令記錄在 `AGENTS.md` 或 skills 等指示檔中，讓 agent 知道該執行什麼。當您的專案能從額外的語言伺服器回饋中受益時再啟用 LSP。
+
+---
+
 ## 設定
 
-您可以透過 OpenCode 設定檔中的 `lsp` 部分來自訂 LSP 伺服器。
+您可以透過 OpenCode 設定檔中的 `lsp` 部分來啟用並自訂 LSP 伺服器。
+
+要啟用所有內建 LSP 伺服器，請將 `lsp` 設定為 `true`。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": true
+}
+```
+
+使用物件可以在保持內建伺服器啟用的同時設定覆寫項或自訂伺服器。
 
 ```json title="opencode.json"
 {
@@ -135,7 +154,7 @@ OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
 
 ### 停用 LSP 伺服器
 
-要全域停用**所有** LSP 伺服器，將 `lsp` 設定為 `false`：
+如果省略 `lsp`，所有 LSP 伺服器都會被停用。如果另一個設定啟用了 LSP，可將 `lsp` 設定為 `false` 來停用所有 LSP 伺服器：
 
 ```json title="opencode.json" {3}
 {

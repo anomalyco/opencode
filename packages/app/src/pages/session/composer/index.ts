@@ -1,2 +1,4 @@
 export { SessionComposerRegion } from "./session-composer-region"
-export { createSessionComposerState } from "./session-composer-state"
+export { createPromptInputController, createPromptProjectControls } from "./session-composer-controls"
+export { createSessionComposerController } from "./session-composer-state"
+export { createSessionComposerRegionController } from "./session-composer-region-controller"

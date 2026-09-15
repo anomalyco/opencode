@@ -1,33 +1,30 @@
-import z from "zod"
 import path from "path"
-import { Effect, Option } from "effect"
-import * as Stream from "effect/Stream"
-import { Tool } from "./tool"
-import DESCRIPTION from "./glob.txt"
-import { Ripgrep } from "../file/ripgrep"
-import { Instance } from "../project/instance"
+import { Effect, Schema } from "effect"
+import { InstanceState } from "@/effect/instance-state"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { AppFileSystem } from "../filesystem"
+import DESCRIPTION from "./glob.txt"
+import * as Tool from "./tool"
+
+export const Parameters = Schema.Struct({
+  pattern: Schema.String.annotate({ description: "The glob pattern to match files against" }),
+  path: Schema.optional(Schema.String).annotate({
+    description: `The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.`,
+  }),
+})
 
 export const GlobTool = Tool.define(
   "glob",
   Effect.gen(function* () {
-    const rg = yield* Ripgrep.Service
-    const fs = yield* AppFileSystem.Service
-
+    const fs = yield* FSUtil.Service
+    const ripgrep = yield* Ripgrep.Service
     return {
       description: DESCRIPTION,
-      parameters: z.object({
-        pattern: z.string().describe("The glob pattern to match files against"),
-        path: z
-          .string()
-          .optional()
-          .describe(
-            `The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.`,
-          ),
-      }),
+      parameters: Parameters,
       execute: (params: { pattern: string; path?: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const ins = yield* InstanceState.context
           yield* ctx.ask({
             permission: "glob",
             patterns: [params.pattern],
@@ -38,40 +35,25 @@ export const GlobTool = Tool.define(
             },
           })
 
-          let search = params.path ?? Instance.directory
-          search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
-          yield* assertExternalDirectoryEffect(ctx, search, { kind: "directory" })
+          let search = params.path ?? ins.directory
+          search = path.isAbsolute(search) ? search : path.resolve(ins.directory, search)
+          const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (info?.type === "File") {
+            throw new Error(`glob path must be a directory: ${search}`)
+          }
+          yield* assertExternalDirectoryEffect(ctx, search, {
+            bypass: false,
+            kind: "directory",
+          })
 
           const limit = 100
-          let truncated = false
-          const files = yield* rg.files({ cwd: search, glob: [params.pattern] }).pipe(
-            Stream.mapEffect((file) =>
-              Effect.gen(function* () {
-                const full = path.resolve(search, file)
-                const info = yield* fs.stat(full).pipe(Effect.catch(() => Effect.succeed(undefined)))
-                const mtime =
-                  info?.mtime.pipe(
-                    Option.map((d) => d.getTime()),
-                    Option.getOrElse(() => 0),
-                  ) ?? 0
-                return { path: full, mtime }
-              }),
-            ),
-            Stream.take(limit + 1),
-            Stream.runCollect,
-            Effect.map((chunk) => [...chunk]),
-          )
-
-          if (files.length > limit) {
-            truncated = true
-            files.length = limit
-          }
-          files.sort((a, b) => b.mtime - a.mtime)
+          const files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit })
+          const truncated = files.length === limit
 
           const output = []
           if (files.length === 0) output.push("No files found")
           if (files.length > 0) {
-            output.push(...files.map((f) => f.path))
+            output.push(...files.map((file) => path.resolve(search, file.path)))
             if (truncated) {
               output.push("")
               output.push(
@@ -81,7 +63,7 @@ export const GlobTool = Tool.define(
           }
 
           return {
-            title: path.relative(Instance.worktree, search),
+            title: path.relative(ins.worktree, search),
             metadata: {
               count: files.length,
               truncated,

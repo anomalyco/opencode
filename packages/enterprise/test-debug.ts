@@ -37,4 +37,4 @@ async function test() {
   await Share.remove({ id: shareInfo.id, secret: shareInfo.secret })
 }
 
-test()
+void test()

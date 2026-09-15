@@ -4,7 +4,8 @@ import { Font } from "@opencode-ai/ui/font"
 import { MetaProvider } from "@solidjs/meta"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
-import { I18nProvider, type UiI18nParams } from "@opencode-ai/ui/context"
+import { I18nProvider } from "@opencode-ai/ui/context"
+import { pluralCategory, pluralKey, type UiI18nParams, type UiI18nPluralKey } from "@opencode-ai/ui/context/i18n"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
 import { createEffect, createMemo, Suspense, type ParentProps } from "solid-js"
@@ -62,13 +63,15 @@ function UiI18nBridge(props: ParentProps) {
     const text = value ?? String(key)
     return resolveTemplate(text, params)
   }
+  const plural = (key: UiI18nPluralKey, count: number, params?: UiI18nParams) =>
+    t(pluralKey(key, pluralCategory(locale(), count)), { ...params, count })
 
   createEffect(() => {
     if (typeof document !== "object") return
     document.documentElement.lang = locale()
   })
 
-  return <I18nProvider value={{ locale, t }}>{props.children}</I18nProvider>
+  return <I18nProvider value={{ locale, t, plural }}>{props.children}</I18nProvider>
 }
 
 export default function App() {

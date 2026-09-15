@@ -273,6 +273,12 @@ export default function Enterprise() {
               <li>
                 <Faq question={i18n.t("enterprise.faq.q4")}>{i18n.t("enterprise.faq.a4")}</Faq>
               </li>
+              <li>
+                <Faq question={i18n.t("enterprise.faq.q5")}>
+                  {i18n.t("enterprise.faq.a5.before")} <a href="https://trust.opencode.ai">trust.opencode.ai</a>{" "}
+                  {i18n.t("enterprise.faq.a5.after")}
+                </Faq>
+              </li>
             </ul>
           </section>
         </div>

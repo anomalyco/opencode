@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "bedrock-converse/streams-a-tool-call",
+    "recordedAt": "2026-04-28T21:18:46.929Z",
+    "tags": ["prefix:bedrock-converse", "provider:amazon-bedrock", "protocol:bedrock-converse", "tool"]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/us.amazon.nova-micro-v1%3A0/converse-stream",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"modelId\":\"us.amazon.nova-micro-v1:0\",\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"Call get_weather with city exactly Paris.\"}]}],\"system\":[{\"text\":\"Call tools exactly as requested.\"}],\"inferenceConfig\":{\"maxTokens\":80,\"temperature\":0},\"toolConfig\":{\"tools\":[{\"toolSpec\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"inputSchema\":{\"json\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}}],\"toolChoice\":{\"tool\":{\"name\":\"get_weather\"}}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/vnd.amazon.eventstream"
+        },
+        "body": "AAAAuQAAAFL9kIXUCzpldmVudC10eXBlBwAMbWVzc2FnZVN0YXJ0DTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2NyIsInJvbGUiOiJhc3Npc3RhbnQifWf51EkAAAEMAAAAV56BJZoLOmV2ZW50LXR5cGUHABFjb250ZW50QmxvY2tTdGFydA06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAFZXZlbnR7ImNvbnRlbnRCbG9ja0luZGV4IjowLCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTk9QUVJTVFUiLCJzdGFydCI6eyJ0b29sVXNlIjp7Im5hbWUiOiJnZXRfd2VhdGhlciIsInRvb2xVc2VJZCI6InRvb2x1c2VfNmExcFB2bmM5OUdMS08zS0drVUEyTiJ9fX2LR7PFAAAA4gAAAFfCOY+BCzpldmVudC10eXBlBwARY29udGVudEJsb2NrRGVsdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwiZGVsdGEiOnsidG9vbFVzZSI6eyJpbnB1dCI6IntcImNpdHlcIjpcIlBhcmlzXCJ9In19LCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTiJ9RkW+2gAAAIcAAABW5OxHKgs6ZXZlbnQtdHlwZQcAEGNvbnRlbnRCbG9ja1N0b3ANOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwicCI6ImFiYyJ9y6nrtwAAAK4AAABRtlmf/As6ZXZlbnQtdHlwZQcAC21lc3NhZ2VTdG9wDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSUyIsInN0b3BSZWFzb24iOiJ0b29sX3VzZSJ9MTlQawAAAOIAAABOplInQQs6ZXZlbnQtdHlwZQcACG1ldGFkYXRhDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsibWV0cmljcyI6eyJsYXRlbmN5TXMiOjM1NX0sInAiOiJhYmNkZWZnaGlqayIsInVzYWdlIjp7ImlucHV0VG9rZW5zIjo0MTksIm91dHB1dFRva2VucyI6MTYsInNlcnZlclRvb2xVc2FnZSI6e30sInRvdGFsVG9rZW5zIjo0MzV9fU1tVJc=",
+        "bodyEncoding": "base64"
+      }
+    }
+  ]
+}

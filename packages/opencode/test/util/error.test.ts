@@ -1,38 +1,16 @@
 import { describe, expect, test } from "bun:test"
-import { errorData, errorFormat, errorMessage } from "../../src/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
+import { MessageError } from "../../src/session/message-error"
 
 describe("util.error", () => {
-  test("formats native Error instances", () => {
-    const err = new Error("boom")
-    expect(errorMessage(err)).toBe("boom")
-    expect(errorFormat(err)).toContain("boom")
+  test("schema-backed named errors are real NamedError instances", () => {
+    const error = new MessageError.AuthError({ providerID: "anthropic", message: "boom" })
 
-    const data = errorData(err)
-    expect(data.type).toBe("Error")
-    expect(data.message).toBe("boom")
-    expect(String(data.formatted)).toContain("boom")
+    expect(error).toBeInstanceOf(NamedError)
+    expect(error.toObject()).toEqual({ name: "ProviderAuthError", data: { providerID: "anthropic", message: "boom" } })
   })
 
-  test("extracts message from record-like values", () => {
-    const err = { message: "bad input", code: "E_BAD" }
-    expect(errorMessage(err)).toBe("bad input")
-
-    const data = errorData(err)
-    expect(data.message).toBe("bad input")
-    expect(data.code).toBe("E_BAD")
-  })
-
-  test("handles opaque throwables with custom toString", () => {
-    const err = {
-      toString() {
-        return "ResolveMessage: Cannot resolve module"
-      },
-    }
-
-    expect(errorMessage(err)).toBe("ResolveMessage: Cannot resolve module")
-
-    const data = errorData(err)
-    expect(data.message).toBe("ResolveMessage: Cannot resolve module")
-    expect(String(data.formatted)).toContain("ResolveMessage")
+  test("named errors without fields serialize data", () => {
+    expect(new MessageError.OutputLengthError({}).toObject()).toEqual({ name: "MessageOutputLengthError", data: {} })
   })
 })

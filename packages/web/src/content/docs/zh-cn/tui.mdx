@@ -352,24 +352,63 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 配置
 
-您可以通过 OpenCode 配置文件自定义 TUI 行为。
+您可以通过 `tui.json`（或 `tui.jsonc`）自定义 TUI 行为。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "leader_timeout": 2000,
+  "keybinds": {
+    "leader": "ctrl+x",
+    "command_list": "ctrl+p"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": false
+  },
+  "diff_style": "auto",
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "./sounds/error.mp3"
     }
   }
 }
 ```
 
+这与 `opencode.json` 是分开的；`opencode.json` 用于配置服务器和运行时行为。
+
+`keybinds` 会与内置默认值合并，因此你只需要配置想要修改的快捷键。
+
 ### 选项
 
-- `scroll_acceleration` - 启用 macOS 风格的滚动加速，实现平滑、自然的滚动体验。启用后，快速滚动时速度会增加，慢速移动时保持精确。**此设置优先于 `scroll_speed`，启用时会覆盖它。**
-- `scroll_speed` - 控制使用滚动命令时 TUI 的滚动速度（最小值：`1`）。默认为 `3`。**注意：如果 `scroll_acceleration.enabled` 设置为 `true`，则此设置会被忽略。**
+- `theme` - 设置 UI 主题。[了解更多](/docs/themes)。
+- `keybinds` - 自定义键盘快捷键。[了解更多](/docs/keybinds)。
+- `leader_timeout` - 控制按下 leader key 后 OpenCode 等待后续按键的时间。默认为 `2000`。
+- `scroll_acceleration.enabled` - 启用 macOS 风格的滚动加速，让滚动更平滑自然。启用后，快速滚动时速度会增加，慢速移动时仍保持精确。**此设置优先于 `scroll_speed`，启用时会覆盖它。**
+- `scroll_speed` - 控制使用滚动命令时 TUI 的滚动速度（最小值：`0.001`，支持小数）。默认为 `3`。**注意：如果 `scroll_acceleration.enabled` 设置为 `true`，则此设置会被忽略。**
+- `diff_style` - 控制 diff 的显示方式。`"auto"` 会根据终端宽度自适应，`"stacked"` 始终显示单列布局。
+- `mouse` - 在 TUI 中启用或禁用鼠标捕获（默认：`true`）。禁用后，终端原生的鼠标选择和滚动行为会保留下来。
+- `attention` - 配置 TUI 桌面通知和声音。默认禁用。
+
+使用 `OPENCODE_TUI_CONFIG` 可以加载自定义的 TUI 配置文件路径。
+
+### Attention
+
+当 OpenCode 需要你处理问题、批准权限请求、查看会话错误，或想告知会话已完成时，TUI 可以通过声音和桌面通知提醒你。设置 `attention.enabled` 后会启用这些提醒；内置事件触发时会播放声音。桌面通知只会在终端窗口未聚焦时发送，并且不会用于 subagent 事件。
+
+- `enabled` - 开启 Attention 的所有通知和声音。默认为 `false`。
+- `notifications` - 启用 Attention 后，允许 TUI 通过终端发送桌面通知。默认为 `true`。
+- `sound` - 启用 Attention 后，允许播放提示音。默认为 `true`。
+- `volume` - 默认提示音音量，范围从 `0` 到 `1`。默认为 `0.4`。
+- `sound_pack` - 要使用的 sound pack ID。默认为 `opencode.default`。
+- `sounds` - 为 `default`、`question`、`permission`、`error`、`done` 或 `subagent_done` 指定自定义声音文件。路径可以是绝对路径、`file://` URL，或相对于 `tui.json` 的路径。
 
 ---
 

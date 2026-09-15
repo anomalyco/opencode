@@ -17,6 +17,7 @@ import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.j
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { AuthTable } from "@opencode-ai/console-core/schema/auth.sql.js"
 import { Identifier } from "@opencode-ai/console-core/identifier.js"
+import { isAllowedAuthorizationRedirect } from "./auth-redirect.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -26,6 +27,7 @@ export const subjects = createSubjects({
   account: z.object({
     accountID: z.string(),
     email: z.string(),
+    newAccount: z.boolean().optional(),
   }),
   user: z.object({
     userID: z.string(),
@@ -40,6 +42,17 @@ const MY_THEME: Theme = {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const requestURL = new URL(request.url)
+    if (requestURL.pathname === "/authorize") {
+      const redirectURI = requestURL.searchParams.get("redirect_uri")
+      if (
+        redirectURI !== null &&
+        !isAllowedAuthorizationRedirect(requestURL.searchParams.get("client_id") ?? "", redirectURI)
+      ) {
+        return new Response("Unauthorized client", { status: 400 })
+      }
+    }
+
     const result = await issuer({
       theme: MY_THEME,
       providers: {
@@ -101,6 +114,7 @@ export default {
         namespace: env.AuthStorage,
       }),
       subjects,
+      allow: ({ clientID, redirectURI }) => Promise.resolve(isAllowedAuthorizationRedirect(clientID, redirectURI)),
       async success(ctx, response) {
         console.log(response)
 
@@ -142,6 +156,7 @@ export default {
         }
 
         // Get account
+        let newAccount = false
         const accountID = await (async () => {
           const matches = await Database.use(async (tx) =>
             tx
@@ -166,6 +181,7 @@ export default {
           if (!accountID) {
             console.log("creating account for", email)
             accountID = await Account.create({})
+            newAccount = true
           }
 
           await Database.use(async (tx) =>
@@ -215,7 +231,7 @@ export default {
             await Workspace.create({ name: "Default" })
           }
         })
-        return ctx.subject("account", accountID, { accountID, email })
+        return ctx.subject("account", accountID, { accountID, email, newAccount })
       },
     }).fetch(request, env, ctx)
     return result

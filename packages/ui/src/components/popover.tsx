@@ -106,7 +106,7 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
       ref={(el: HTMLElement | undefined) => setState("contentRef", el)}
       data-component="popover-content"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
       style={local.style}

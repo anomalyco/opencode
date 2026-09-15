@@ -1,23 +1,19 @@
-import type {
-  Message,
-  Part,
-  PermissionRequest,
-  QuestionRequest,
-  SessionStatus,
-  SnapshotFileDiff,
-  Todo,
-} from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, PermissionRequest, QuestionRequest, SessionStatus, Todo } from "@opencode-ai/sdk/v2/client"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
+import type { SessionMessageInfo } from "@opencode-ai/client/promise"
 
 export const SESSION_CACHE_LIMIT = 40
 
 type SessionCache = {
   session_status: Record<string, SessionStatus | undefined>
-  session_diff: Record<string, SnapshotFileDiff[] | undefined>
+  session_diff: Record<string, FileDiffInfo[] | undefined>
   todo: Record<string, Todo[] | undefined>
   message: Record<string, Message[] | undefined>
+  session_message: Record<string, SessionMessageInfo[] | undefined>
   part: Record<string, Part[] | undefined>
   permission: Record<string, PermissionRequest[] | undefined>
   question: Record<string, QuestionRequest[] | undefined>
+  part_text_accum_delta: Record<string, string | undefined>
 }
 
 export function dropSessionCaches(store: SessionCache, sessionIDs: Iterable<string>) {
@@ -27,12 +23,16 @@ export function dropSessionCaches(store: SessionCache, sessionIDs: Iterable<stri
   for (const key of Object.keys(store.part)) {
     const parts = store.part[key]
     if (!parts?.some((part) => stale.has(part?.sessionID ?? ""))) continue
+    for (const part of parts) {
+      delete store.part_text_accum_delta[part.id]
+    }
     delete store.part[key]
   }
 
   for (const sessionID of stale) {
     delete store.message[sessionID]
     delete store.todo[sessionID]
+    delete store.session_message[sessionID]
     delete store.session_diff[sessionID]
     delete store.session_status[sessionID]
     delete store.permission[sessionID]

@@ -68,12 +68,12 @@ nix run nixpkgs#opencode           # або github:anomalyco/opencode для н�
 
 OpenCode також доступний як десктопний застосунок. Завантажуйте напряму зі [сторінки релізів](https://github.com/anomalyco/opencode/releases) або [opencode.ai/download](https://opencode.ai/download).
 
-| Платформа             | Завантаження                          |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm` або AppImage           |
+| Платформа             | Завантаження                       |
+| --------------------- | ---------------------------------- |
+| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
+| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
+| Windows               | `opencode-desktop-windows-x64.exe` |
+| Linux                 | `.deb`, `.rpm` або AppImage        |
 
 ```bash
 # macOS (Homebrew)
@@ -88,13 +88,13 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 1. `$OPENCODE_INSTALL_DIR` - Користувацький каталог встановлення
 2. `$XDG_BIN_DIR` - Шлях, сумісний зі специфікацією XDG Base Directory
-3. `$HOME/bin` - Стандартний каталог користувацьких бінарників (якщо існує або його можна створити)
+3. `$HOME/bin` - Стандартний каталог користувацьких бінарників (якщо існує)
 4. `$HOME/.opencode/bin` - Резервний варіант за замовчуванням
 
 ```bash
 # Приклади
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=$HOME/.local/bin bash
+curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=$HOME/.local/bin bash -s -- --no-modify-path
 ```
 
 ### Агенти
@@ -124,18 +124,6 @@ OpenCode містить два вбудовані агенти, між яким�
 
 Якщо ви працюєте над проєктом, пов'язаним з OpenCode, і використовуєте "opencode" у назві, наприклад "opencode-dashboard" або "opencode-mobile", додайте примітку до свого README.
 Уточніть, що цей проєкт не створений командою OpenCode і жодним чином не афілійований із нами.
-
-### FAQ
-
-#### Чим це відрізняється від Claude Code?
-
-За можливостями це дуже схоже на Claude Code. Ось ключові відмінності:
-
-- 100% open source
-- Немає прив'язки до конкретного провайдера. Ми рекомендуємо моделі, які надаємо через [OpenCode Zen](https://opencode.ai/zen), але OpenCode також працює з Claude, OpenAI, Google і навіть локальними моделями. З розвитком моделей різниця між ними зменшуватиметься, а ціни падатимуть, тому незалежність від провайдера має значення.
-- Підтримка LSP з коробки
-- Фокус на TUI. OpenCode створено користувачами neovim та авторами [terminal.shop](https://terminal.shop); ми й надалі розширюватимемо межі можливого в терміналі.
-- Клієнт-серверна архітектура. Наприклад, це дає змогу запускати OpenCode на вашому комп'ютері й керувати ним віддалено з мобільного застосунку, тобто TUI-фронтенд - лише один із можливих клієнтів.
 
 ---
 

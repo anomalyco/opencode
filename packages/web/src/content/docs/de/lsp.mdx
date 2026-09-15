@@ -3,7 +3,7 @@ title: LSP Server
 description: OpenCode lässt sich in Ihren LSP-Server integrieren.
 ---
 
-OpenCode lässt sich in Ihr Language Server Protocol (LSP) integrieren, um die Interaktion von LLM mit Ihrer Codebasis zu unterstützen. Es verwendet Diagnosefunktionen, um dem LLM Feedback zu geben.
+OpenCode kann sich in Language Server Protocol (LSP)-Server integrieren, um Diagnosen als Feedback für den Agenten zu verwenden.
 
 ---
 
@@ -46,7 +46,7 @@ OpenCode verfügt über mehrere integrierte LSP-Server für gängige Sprachen:
 | yaml-ls            | .yaml, .yml                                                         | Installiert den Red Hat yaml-language-server automatisch                  |
 | zls                | .zig, .zon                                                          | `zig`-Befehl verfügbar                                                    |
 
-LSP-Server werden automatisch aktiviert, wenn eine der oben genannten Dateierweiterungen erkannt wird und die Anforderungen erfüllt sind.
+LSP ist standardmäßig deaktiviert. Wenn es aktiviert ist, starten Server, sobald eine der oben genannten Dateierweiterungen erkannt wird und die Anforderungen erfüllt sind.
 
 :::note
 Sie können LSP-Server-Downloads automatisch deaktivieren, indem Sie die Umgebungsvariable `OPENCODE_DISABLE_LSP_DOWNLOAD` auf `true` setzen.
@@ -56,16 +56,35 @@ Sie können LSP-Server-Downloads automatisch deaktivieren, indem Sie die Umgebun
 
 ## Funktionsweise
 
-Wenn OpenCode eine Datei öffnet, geschieht Folgendes:
+Wenn LSP aktiviert ist und OpenCode eine Datei öffnet, geschieht Folgendes:
 
 1. Überprüft die Dateierweiterung anhand aller aktivierten LSP-Server.
 2. Startet den entsprechenden LSP-Server, falls er noch nicht ausgeführt wird.
 
 ---
 
+## Bewährte Praktiken
+
+LSP kann dem Agenten helfen, Probleme zu finden und zu beheben, indem es Diagnosen von Sprachservern bereitstellt. Das ist in einigen Projekten nützlich, aber nicht immer ein klarer Vorteil.
+
+Sprachserver können aus dem Sync geraten, viel Speicher verwenden, je nach Version oder Projekt unterschiedlich arbeiten und Agent-Workflows verlangsamen. In vielen Projekten ist es besser, wenn der Agent lint, typecheck oder andere diagnostische CLI-Tools direkt ausführt, damit Fehler in die Agent-Schleife zurückfließen, ohne diese Kompromisse einzugehen. Dokumentieren Sie diese Befehle in Instruktionsdateien wie `AGENTS.md` oder Skills, damit der Agent weiß, was er ausführen soll. Aktivieren Sie LSP, wenn Ihr Projekt von zusätzlichem Sprachserver-Feedback profitiert.
+
+---
+
 ## Konfiguration
 
-Sie können LSP-Server über den Abschnitt `lsp` in Ihrer OpenCode-Konfiguration anpassen.
+Sie können LSP-Server über den Abschnitt `lsp` in Ihrer OpenCode-Konfiguration aktivieren und anpassen.
+
+Um alle integrierten LSP-Server zu aktivieren, setzen Sie `lsp` auf `true`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": true
+}
+```
+
+Verwenden Sie ein Objekt, um integrierte Server aktiviert zu lassen und gleichzeitig Überschreibungen oder benutzerdefinierte Server zu konfigurieren.
 
 ```json title="opencode.json"
 {
@@ -134,7 +153,7 @@ Die Initialisierungsoptionen variieren je nach LSP-Server. Überprüfen Sie die 
 
 ### Deaktivieren von LSP-Servern
 
-Um **alle** LSP-Server global zu deaktivieren, setzen Sie `lsp` auf `false`:
+Wenn `lsp` ausgelassen wird, sind alle LSP-Server deaktiviert. Um alle LSP-Server zu deaktivieren, nachdem sie durch eine andere Konfiguration aktiviert wurden, setzen Sie `lsp` auf `false`:
 
 ```json title="opencode.json" {3}
 {
