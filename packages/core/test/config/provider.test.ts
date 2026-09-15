@@ -527,6 +527,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
                         reasoningField: "vendor_reasoning",
                         maxTokensField: "max_completion_tokens",
                         requireFinishReason: false,
+                        supportsThinkingBlockBinding: false,
                       },
                       capabilities: { tools: true, input: ["text"], output: ["text"] },
                       disabled: true,
@@ -625,6 +626,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           reasoningField: "vendor_reasoning",
           maxTokensField: "max_completion_tokens",
           requireFinishReason: false,
+          supportsThinkingBlockBinding: false,
         })
         expect(model.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
         expect(model.enabled).toBe(false)
