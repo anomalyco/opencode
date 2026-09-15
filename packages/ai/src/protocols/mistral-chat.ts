@@ -656,15 +656,11 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
   }
   const events: LLMEvent[] = []
   const usage = mapUsage(event.usage) ?? state.usage
-  if (state.finishReason) {
-    if (hasLateContent(event))
-      return yield* ProviderShared.eventError(
-        ADAPTER,
-        "Mistral Chat received content after the finish reason",
-        ProviderShared.encodeJson(event),
-      )
-    return [{ ...state, usage }, events] as const
-  }
+  // Trailing deltas after a terminal `finish_reason` are real model output:
+  // absorb them into the stream instead of failing the response. The single
+  // terminal finish event is emitted once at stream end, so late content still
+  // precedes it.
+  if (state.finishReason && !hasLateContent(event)) return [{ ...state, usage }, events] as const
   const choice = event.choices?.[0]
   const withContent = choice?.delta?.content == null ? state : appendContent(state, events, choice.delta.content)
   const withTools = yield* appendTools(withContent, events, choice?.delta?.tool_calls ?? [])
@@ -685,7 +681,10 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
     })
   }
   const incomplete = finishReason.normalized === "length" || finishReason.normalized === "content-filter"
-  if (!incomplete && Object.keys(withTools.pendingTools).length > 0)
+  // Only the first terminal arrival rejects unidentifiable tool deltas; late
+  // frames after a finish absorb malformed tool identities silently instead of
+  // failing the response.
+  if (state.finishReason === undefined && !incomplete && Object.keys(withTools.pendingTools).length > 0)
     return yield* ProviderShared.eventError(
       ADAPTER,
       "Mistral Chat tool call delta is missing a name",
@@ -699,7 +698,7 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
     {
       ...withTools,
       tools: finished?.tools ?? withTools.tools,
-      completedTools: finished?.events ?? withTools.completedTools,
+      completedTools: finished ? [...withTools.completedTools, ...finished.events] : withTools.completedTools,
       usage,
       finishReason,
     },

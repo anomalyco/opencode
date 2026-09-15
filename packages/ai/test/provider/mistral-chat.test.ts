@@ -673,9 +673,8 @@ describe("Mistral Chat", () => {
         Effect.provide(
           fixedResponse(sseEvents(chunk({}, "stop"), chunk({ content: [{ type: "text", text: "late" }] }))),
         ),
-        Effect.flip,
       )
-      expect(lateContent.message).toContain("content after the finish reason")
+      expect(lateContent.text).toBe("late")
     }),
   )
 

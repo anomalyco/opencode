@@ -988,15 +988,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       reasoning !== undefined ||
       (Array.isArray(delta?.reasoning_details) && delta.reasoning_details.length > 0) ||
       toolDeltas.some((tool) => Boolean(tool.id) || Boolean(tool.function?.name) || Boolean(tool.function?.arguments))
-    if (state.finishReason !== undefined) {
-      if (hasLateContent)
-        return yield* ProviderShared.eventError(
-          ADAPTER,
-          "OpenAI Chat received content after the finish reason",
-          ProviderShared.encodeJson(event),
-        )
-      return [{ ...state, usage }, events] as const
-    }
+    // Trailing deltas after a terminal `finish_reason` are real model output:
+    // some OpenAI-compatible providers emit a last content or reasoning chunk
+    // after the finish chunk. Absorb them into the stream instead of failing
+    // the response; the single terminal finish event is emitted once at stream
+    // end, so late content still precedes it.
+    if (state.finishReason !== undefined && !hasLateContent) return [{ ...state, usage }, events] as const
 
     const reasoningField = state.reasoningField ?? reasoning?.field
     const detailDelta = Array.isArray(delta?.reasoning_details) ? delta.reasoning_details : undefined
@@ -1081,11 +1078,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       )
 
     // Filtering or truncation terminates the response without confirming pending tool calls.
+    // Late frames after a complete finish finalize newly absorbed tool calls here too.
     const finished =
-      finishReason !== undefined &&
-      !incompleteTools &&
-      state.finishReason === undefined &&
-      Object.keys(tools).length > 0
+      finishReason !== undefined && !incompleteTools && Object.keys(tools).length > 0
         ? yield* ToolStream.finishAll(ADAPTER, tools)
         : undefined
 
@@ -1094,7 +1089,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         providerMetadataKey: state.providerMetadataKey,
         tools: finished?.tools ?? tools,
         pendingTools,
-        toolCallEvents: finished?.events ?? state.toolCallEvents,
+        toolCallEvents: finished ? [...state.toolCallEvents, ...finished.events] : state.toolCallEvents,
         usage,
         finishReason,
         lifecycle,
