@@ -292,6 +292,10 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       await window.api.setDisplayBackend(backend)
     },
 
+    getKeepAwakeEnabled: () => window.api.getKeepAwakeEnabled(),
+
+    setKeepAwakeEnabled: (enabled) => window.api.setKeepAwakeEnabled(enabled),
+
     webviewZoom,
 
     windowFullscreen,
