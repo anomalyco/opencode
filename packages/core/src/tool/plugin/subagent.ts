@@ -32,7 +32,7 @@ export const Input = Schema.Struct({
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
-      'Only pass this when the user explicitly asks for a specific model. Format "provider/model" or "provider/model#variant". Include a variant only when the user asks for one; otherwise the model\'s default applies. Omit entirely to use the agent\'s configured model, or your own. Use the models tool to find the reference for a requested model.',
+      'Set only when the user explicitly requests a model, and add "#variant" only when they request a variant too. Format "provider/model" or "provider/model#variant". Omitted, the subagent uses the agent\'s configured model, or your own. Use the models tool to find the reference for a requested model.',
   }),
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description:
