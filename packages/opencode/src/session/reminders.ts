@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { Agent } from "@/agent/agent"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
+import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
@@ -51,7 +52,8 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
   if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
     const ctx = yield* InstanceState.context
-    const plan = Session.plan(input.session, ctx)
+    const config = yield* Config.Service
+    const plan = Session.plan(input.session, ctx, (yield* config.get()).plans_directory)
     const exists = yield* fsys.existsSafe(plan)
     const part = yield* sessions.updatePart({
       id: PartID.ascending(),
@@ -70,7 +72,8 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   if (input.agent.name !== "plan" || assistantMessage?.info.agent === "plan") return input.messages
 
   const ctx = yield* InstanceState.context
-  const plan = Session.plan(input.session, ctx)
+  const config = yield* Config.Service
+  const plan = Session.plan(input.session, ctx, (yield* config.get()).plans_directory)
   const exists = yield* fsys.existsSafe(plan)
   if (!exists) yield* fsys.ensureDir(path.dirname(plan)).pipe(Effect.catch(Effect.die))
   const part = yield* sessions.updatePart({

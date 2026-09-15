@@ -30,6 +30,10 @@ const paths = {
 
 export const Path = paths
 
+export function expandTilde(input: string) {
+  return input.startsWith("~") ? path.join(Path.home, input.slice(1)) : input
+}
+
 Flock.setGlobal({ state })
 
 await Promise.all([
