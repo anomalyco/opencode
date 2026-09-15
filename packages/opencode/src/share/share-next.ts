@@ -19,6 +19,8 @@ import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { EventV2 } from "@opencode-ai/core/event"
+import { SessionAdvisor } from "@/session/advisor"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 
 const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
 
@@ -59,7 +61,7 @@ type Data =
     }
   | {
       type: "part"
-      data: SDK.Part
+      data: typeof SessionV1.Part.Type
     }
   | {
       type: "session_diff"
@@ -128,15 +130,18 @@ const layer = Layer.effect(
         if (!share) return
 
         const s = yield* InstanceState.get(state)
+        const projected = data.map(
+          (item): Data => (item.type === "part" ? { ...item, data: SessionAdvisor.forShare(item.data) } : item),
+        )
         const existing = s.queue.get(sessionID)
         if (existing) {
-          for (const item of data) {
+          for (const item of projected) {
             existing.set(key(item), item)
           }
           return
         }
 
-        const next = new Map(data.map((item) => [key(item), item]))
+        const next = new Map(projected.map((item) => [key(item), item]))
         s.queue.set(sessionID, next)
         yield* flush(sessionID).pipe(
           Effect.delay(1000),
@@ -192,7 +197,7 @@ const layer = Layer.effect(
           }),
         )
         yield* watch(MessageV2.Event.PartUpdated, (data) =>
-          sync(data.part.sessionID, [{ type: "part", data: structuredClone(data.part) as SDK.Part }]),
+          sync(data.part.sessionID, [{ type: "part", data: structuredClone(data.part) }]),
         )
         yield* watch(Session.Event.Diff, (data) =>
           sync(data.sessionID, [{ type: "session_diff", data: structuredClone(data.diff) as SDK.SnapshotFileDiff[] }]),

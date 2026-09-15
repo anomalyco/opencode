@@ -9,6 +9,7 @@ import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { SessionAdvisor } from "../../src/session/advisor"
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderV2.ID.make("test")
@@ -60,6 +61,341 @@ const model: Provider.Model = {
   headers: {},
   release_date: "2026-01-01",
 }
+
+function advisorHistoryFixture(
+  result: SessionAdvisor.Result = { type: "advisor_redacted_result", encryptedContent: "opaque-fixture" },
+) {
+  const anthropic: Provider.Model = {
+    ...model,
+    id: ModelV2.ID.make("claude-sonnet-4-6"),
+    providerID: ProviderV2.ID.make("anthropic"),
+    api: { id: "claude-sonnet-4-6", npm: "@ai-sdk/anthropic", url: "https://api.anthropic.com/v1" },
+  }
+  const origin = { version: 1, providerID: "anthropic", executorModelID: anthropic.api.id, endpoint: anthropic.api.url }
+  const info = (id: string) => assistantInfo(id, "user", undefined, { providerID: "anthropic", modelID: anthropic.id })
+  const first: SessionV1.WithParts = {
+    info: info("msg_first"),
+    parts: [
+      {
+        ...basePart("msg_first", "advisor"),
+        type: "tool",
+        tool: "advisor",
+        callID: "srv_previous",
+        metadata: {
+          providerExecuted: true,
+          opencodeAdvisor: {
+            ...origin,
+            model: "claude-opus-4-6",
+            maxUses: 3,
+            state: "completed",
+            result,
+          },
+        },
+        state: {
+          status: "completed",
+          input: {},
+          output: "Encrypted advice",
+          title: "Advisor",
+          metadata: {},
+          time: { start: 0, end: 1 },
+        },
+      },
+      {
+        ...basePart("msg_first", "read"),
+        type: "tool",
+        tool: "read",
+        callID: "local_read",
+        state: {
+          status: "completed",
+          input: { filePath: "pool.ts" },
+          output: "Fixture contents",
+          title: "Read",
+          metadata: {},
+          time: { start: 0, end: 1 },
+        },
+      },
+      {
+        ...basePart("msg_first", "step_a"),
+        type: "step-finish",
+        reason: "tool-calls",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        metadata: {
+          opencodeAdvisor: {
+            ...origin,
+            interrupted: false,
+            entries: [
+              { type: "part", partID: "prt_advisor" },
+              { type: "part", partID: "prt_read" },
+            ],
+          },
+        },
+      },
+    ],
+  }
+  const second: SessionV1.WithParts = {
+    info: info("msg_second"),
+    parts: [
+      { ...basePart("msg_second", "after"), type: "text", text: "Continue." },
+      {
+        ...basePart("msg_second", "step_b"),
+        type: "step-finish",
+        reason: "stop",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        metadata: {
+          opencodeAdvisor: {
+            ...origin,
+            interrupted: false,
+            entries: [
+              { type: "advisor-result", callID: "srv_previous" },
+              { type: "part", partID: "prt_after" },
+            ],
+          },
+        },
+      },
+    ],
+  }
+
+  return { first, second, anthropic }
+}
+
+test("replays an advisor result in its receiving response after intervening local output", async () => {
+  const { first, second, anthropic } = advisorHistoryFixture()
+  expect(await MessageV2.toModelMessages([first, second], anthropic)).toMatchObject([
+    {
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolName: "advisor", toolCallId: "srv_previous", providerExecuted: true },
+        { type: "tool-call", toolName: "read", toolCallId: "local_read" },
+      ],
+    },
+    {
+      role: "tool",
+      content: [{ type: "tool-result", toolCallId: "local_read", output: { type: "text", value: "Fixture contents" } }],
+    },
+    {
+      role: "assistant",
+      content: [
+        {
+          type: "tool-result",
+          toolName: "advisor",
+          toolCallId: "srv_previous",
+          output: { type: "json", value: { type: "advisor_redacted_result", encryptedContent: "opaque-fixture" } },
+        },
+        { type: "text", text: "Continue." },
+      ],
+    },
+  ])
+})
+
+test("projects encrypted advisor history into a marker when switching providers", async () => {
+  const fixture = advisorHistoryFixture()
+  const before = JSON.stringify([fixture.first, fixture.second])
+  const messages = await MessageV2.toModelMessages([fixture.first, fixture.second], model)
+  const text = JSON.stringify(messages)
+  expect(text).not.toContain("opaque-fixture")
+  expect(text).not.toContain('"toolName":"advisor"')
+  expect(text).toContain("advice is encrypted")
+  expect(text).toContain("Fixture contents")
+  expect(JSON.stringify([fixture.first, fixture.second])).toBe(before)
+})
+
+test("preserves an advisor provider error as structured history", async () => {
+  const fixture = advisorHistoryFixture({ type: "advisor_tool_result_error", errorCode: "overloaded" })
+  const messages = await MessageV2.toModelMessages([fixture.first, fixture.second], fixture.anthropic)
+  expect(messages[2]).toMatchObject({
+    role: "assistant",
+    content: [
+      {
+        type: "tool-result",
+        output: { type: "error-json", value: { type: "advisor_tool_result_error", errorCode: "overloaded" } },
+      },
+      { type: "text", text: "Continue." },
+    ],
+  })
+})
+
+test("does not resurrect an advisor call removed by a history transform", async () => {
+  const fixture = advisorHistoryFixture()
+  fixture.first.parts = fixture.first.parts.filter((part) => part.type !== "tool" || part.tool !== "advisor")
+  const messages = await MessageV2.toModelMessages([fixture.first, fixture.second], fixture.anthropic)
+  const text = JSON.stringify(messages)
+  expect(text).not.toContain("opaque-fixture")
+  expect(text).not.toContain('"toolName":"advisor"')
+  expect(text).toContain(SessionAdvisor.unavailable)
+})
+
+test("falls back to ordinary conversion when a ledger references parts that no longer resolve", async () => {
+  // Session.fork used to copy ledgers verbatim while renumbering parts; simulate that shape.
+  const fixture = advisorHistoryFixture({ type: "advisor_result", text: "Use bounded concurrency." })
+  fixture.first.parts = fixture.first.parts.map((part) => ({ ...part, id: PartID.make(`${part.id}_copy`) }))
+  const messages = await MessageV2.toModelMessages([fixture.first, fixture.second], fixture.anthropic)
+  const text = JSON.stringify(messages)
+  expect(text).not.toContain(SessionAdvisor.unavailable)
+  expect(text).toContain("Fixture contents")
+  expect(text).toContain('"toolCallId":"local_read"')
+  expect(text).toContain("Use bounded concurrency.")
+  expect(text).not.toContain('"toolName":"advisor"')
+})
+
+test("remaps ledger part references when parts are copied under new ids", () => {
+  const fixture = advisorHistoryFixture()
+  const ids = new Map(fixture.first.parts.map((part) => [part.id, PartID.make(`${part.id}_new`)] as const))
+  const step = fixture.first.parts.find((part) => part.type === "step-finish")!
+  const remapped = SessionAdvisor.remap(step, ids)
+  expect(SessionAdvisor.response(remapped)?.entries).toEqual([
+    { type: "part", partID: PartID.make("prt_advisor_new") },
+    { type: "part", partID: PartID.make("prt_read_new") },
+  ])
+  expect(SessionAdvisor.remap(fixture.first.parts[0], ids)).toBe(fixture.first.parts[0])
+})
+
+test("keeps completed advice as text when its receipt is missing", async () => {
+  const fixture = advisorHistoryFixture({ type: "advisor_result", text: "Use bounded concurrency." })
+  // Drop the receiving response entirely (crash before step-finish, revert, compaction fallback).
+  const messages = await MessageV2.toModelMessages([fixture.first], fixture.anthropic)
+  const text = JSON.stringify(messages)
+  expect(text).toContain("Use bounded concurrency.")
+  expect(text).not.toContain(SessionAdvisor.unavailable)
+  expect(text).not.toContain('"toolName":"advisor"')
+  expect(text).toContain('"toolCallId":"local_read"')
+})
+
+test("skips errored ledgered assistant messages like the ordinary converter", async () => {
+  const fixture = advisorHistoryFixture()
+  fixture.first.info = { ...fixture.first.info, error: { name: "UnknownError", data: { message: "boom" } } } as never
+  const messages = await MessageV2.toModelMessages([fixture.first, fixture.second], fixture.anthropic)
+  const text = JSON.stringify(messages)
+  expect(text).not.toContain('"toolCallId":"local_read"')
+  expect(text).not.toContain('"type":"tool-call","toolCallId":"srv_previous"')
+  // The receipt without a replayed call renders as a marker rather than a dangling tool-result.
+  expect(text).not.toContain('"type":"tool-result","toolCallId":"srv_previous"')
+  expect(text).toContain("Continue.")
+})
+
+test("emits every tool result before injected user media in a ledgered response", async () => {
+  const fixture = advisorHistoryFixture()
+  const media = (name: string, callID: string): SessionV1.Part => ({
+    ...basePart("msg_first", name),
+    type: "tool",
+    tool: "read",
+    callID,
+    state: {
+      status: "completed",
+      input: { filePath: `${name}.png` },
+      output: "image",
+      title: "Read",
+      metadata: {},
+      time: { start: 0, end: 1 },
+      attachments: [
+        {
+          id: PartID.make(`prt_${name}_file`),
+          sessionID: SessionID.make("session"),
+          messageID: MessageID.make("msg_first"),
+          type: "file",
+          mime: "image/png",
+          url: "data:image/png;base64,AAAA",
+        },
+      ],
+    },
+  })
+  fixture.first.parts = [
+    fixture.first.parts[0],
+    media("img_a", "read_a"),
+    media("img_b", "read_b"),
+    {
+      ...fixture.first.parts[2],
+      metadata: {
+        opencodeAdvisor: {
+          ...((fixture.first.parts[2] as { metadata?: Record<string, unknown> }).metadata!.opencodeAdvisor as object),
+          entries: [
+            { type: "part", partID: "prt_advisor" },
+            { type: "part", partID: "prt_img_a" },
+            { type: "part", partID: "prt_img_b" },
+          ],
+        },
+      },
+    } as SessionV1.Part,
+  ]
+  const roles = (await MessageV2.toModelMessages([fixture.first, fixture.second], model)).map((m) => m.role)
+  // assistant, then all tool results, then any injected user media, then the next assistant turn
+  const firstUser = roles.indexOf("user")
+  const lastTool = roles.lastIndexOf("tool")
+  expect(lastTool).toBeGreaterThan(-1)
+  if (firstUser !== -1) expect(firstUser).toBeGreaterThan(lastTool)
+})
+
+test("replays two consultations from one response in ledger order", async () => {
+  const fixture = advisorHistoryFixture({ type: "advisor_result", text: "First." })
+  const origin = (fixture.first.parts[0] as unknown as { metadata: { opencodeAdvisor: Record<string, unknown> } })
+    .metadata.opencodeAdvisor
+  const second: SessionV1.Part = {
+    ...basePart("msg_first", "advisor_b"),
+    type: "tool",
+    tool: "advisor",
+    callID: "srv_second",
+    metadata: {
+      providerExecuted: true,
+      opencodeAdvisor: { ...origin, result: { type: "advisor_result", text: "Second." } },
+    },
+    state: {
+      status: "completed",
+      input: {},
+      output: "Second.",
+      title: "Advisor",
+      metadata: {},
+      time: { start: 0, end: 1 },
+    },
+  }
+  const step: SessionV1.Part = {
+    ...basePart("msg_first", "step_a"),
+    type: "step-finish",
+    reason: "stop",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    metadata: {
+      opencodeAdvisor: {
+        version: 1,
+        providerID: "anthropic",
+        executorModelID: fixture.anthropic.api.id,
+        endpoint: fixture.anthropic.api.url,
+        interrupted: false,
+        entries: [
+          { type: "part", partID: "prt_advisor" },
+          { type: "part", partID: "prt_advisor_b" },
+          { type: "advisor-result", callID: "srv_previous" },
+          { type: "advisor-result", callID: "srv_second" },
+          { type: "part", partID: "prt_done" },
+        ],
+      },
+    },
+  }
+  fixture.first.parts = [
+    fixture.first.parts[0],
+    second,
+    { ...basePart("msg_first", "done"), type: "text", text: "Done." },
+    step,
+  ]
+  const [message] = await MessageV2.toModelMessages([fixture.first], fixture.anthropic)
+  expect(message).toMatchObject({
+    role: "assistant",
+    content: [
+      { type: "tool-call", toolCallId: "srv_previous", providerExecuted: true },
+      { type: "tool-call", toolCallId: "srv_second", providerExecuted: true },
+      { type: "tool-result", toolCallId: "srv_previous", output: { value: { text: "First." } } },
+      { type: "tool-result", toolCallId: "srv_second", output: { value: { text: "Second." } } },
+      { type: "text", text: "Done." },
+    ],
+  })
+})
+
+test("keeps cross-response advisor exchanges together when choosing a retained tail", () => {
+  const fixture = advisorHistoryFixture()
+  expect(SessionAdvisor.tailStart([fixture.first, fixture.second], 1)).toBe(0)
+  fixture.first.parts = fixture.first.parts.filter((part) => part.type !== "tool" || part.tool !== "advisor")
+  expect(SessionAdvisor.tailStart([fixture.first, fixture.second], 1)).toBe(1)
+})
 
 function userInfo(id: string): SessionV1.User {
   return {

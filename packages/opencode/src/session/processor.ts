@@ -18,13 +18,17 @@ import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { Advisor } from "@opencode-ai/schema/advisor"
+import { ConfigAdvisor } from "@opencode-ai/core/config/advisor"
+import { SessionAdvisor } from "./advisor"
+import { AdvisorUsage } from "./advisor-usage"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
@@ -51,6 +55,7 @@ type Input = {
   assistantMessage: SessionV1.Assistant
   sessionID: SessionID
   model: Provider.Model
+  advisorRun?: SessionAdvisor.Run
 }
 
 export interface Interface {
@@ -94,8 +99,28 @@ const layer = Layer.effect(
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
     const database = yield* Database.Service
+    const provider = yield* Provider.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
+      const advisorRun = input.advisorRun
+      let advisor: Advisor.Settings | undefined
+      let tracking = false
+      let rawFinishReason: string | undefined
+      let prices: Record<string, Provider.Model> = {}
+      let resultSeen = false
+      let nativeProgress = false
+      let pricingNotice = false
+      const entries: SessionAdvisor.Entry[] = []
+      const steps = new Map<
+        number,
+        { id: PartID; cost: number; entries: SessionAdvisor.Entry[]; usage?: SessionAdvisor.Usage }
+      >()
+      const origin = {
+        version: 1 as const,
+        providerID: input.model.providerID,
+        executorModelID: input.model.api.id,
+        endpoint: input.model.api.url || SessionAdvisor.endpoint,
+      }
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
       // may execute tools internally before emitting start-step events,
       // so capturing inside the event handler can be too late.
@@ -123,10 +148,20 @@ const layer = Layer.effect(
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
         const done = ctx.toolcalls[toolCallID]?.done
         delete ctx.toolcalls[toolCallID]
+        advisorRun?.pending.delete(toolCallID)
         if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
       })
 
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
+        const owner = advisorRun?.pending.get(toolCallID)
+        if (!ctx.toolcalls[toolCallID] && owner?.sessionID === ctx.sessionID) {
+          ctx.toolcalls[toolCallID] = {
+            partID: owner.partID,
+            messageID: owner.messageID,
+            sessionID: owner.sessionID,
+            done: yield* Deferred.make<void>(),
+          }
+        }
         const call = ctx.toolcalls[toolCallID]
         if (!call) return undefined
         const part = yield* session.getPart({
@@ -136,6 +171,7 @@ const layer = Layer.effect(
         })
         if (!part || part.type !== "tool") {
           delete ctx.toolcalls[toolCallID]
+          advisorRun?.pending.delete(toolCallID)
           return undefined
         }
         return { call, part }
@@ -249,6 +285,7 @@ const layer = Layer.effect(
           messageID: part.messageID,
           sessionID: part.sessionID,
         }
+        if (tracking) entries.push({ type: "part", partID: part.id })
         return { call: ctx.toolcalls[input.id], part }
       })
 
@@ -289,6 +326,7 @@ const layer = Layer.effect(
               metadata: value.providerMetadata,
             }
             yield* session.updatePart(ctx.reasoningMap[value.id])
+            if (tracking) entries.push({ type: "part", partID: ctx.reasoningMap[value.id].id })
             return
 
           case "reasoning-delta":
@@ -334,7 +372,11 @@ const layer = Layer.effect(
             }
             yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
-            yield* updateToolCall(value.id, (match) => ({
+            const definition: SessionAdvisor.Call | undefined =
+              value.name === "advisor" && value.providerExecuted && advisor
+                ? { ...origin, ...advisor, state: "pending" }
+                : undefined
+            const updated = yield* updateToolCall(value.id, (match) => ({
               ...match,
               tool: value.name,
               state:
@@ -346,9 +388,23 @@ const layer = Layer.effect(
                       time: { start: Date.now() },
                     },
               metadata: match.metadata?.providerExecuted
-                ? { ...value.providerMetadata, providerExecuted: true }
+                ? {
+                    ...value.providerMetadata,
+                    providerExecuted: true,
+                    ...(definition ? { opencodeAdvisor: definition } : {}),
+                  }
                 : value.providerMetadata,
             }))
+            if (definition && updated) {
+              nativeProgress = true
+              advisorRun?.pending.set(value.id, {
+                sessionID: ctx.sessionID,
+                messageID: updated.messageID,
+                partID: updated.id,
+                definition,
+              })
+              return
+            }
 
             const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
               Effect.provideService(Database.Service, database),
@@ -382,6 +438,50 @@ const layer = Layer.effect(
 
           case "tool-result": {
             const toolCall = yield* readToolCall(value.id)
+            const native = toolCall && SessionAdvisor.call(toolCall.part)
+            if (toolCall && native && value.providerExecuted && !Schema.is(SessionAdvisor.Result)(value.result.value)) {
+              // A provider result this build cannot interpret ends the consultation without replayable advice.
+              nativeProgress = true
+              yield* session.updatePart({
+                ...toolCall.part,
+                metadata: { ...toolCall.part.metadata, opencodeAdvisor: { ...native, state: "abandoned" } },
+                state: {
+                  status: "error",
+                  input: toolCall.part.state.input,
+                  error: "Advisor returned a result this version of OpenCode does not recognize.",
+                  metadata: {},
+                  time: {
+                    start: "time" in toolCall.part.state ? toolCall.part.state.time.start : Date.now(),
+                    end: Date.now(),
+                  },
+                },
+              })
+              yield* settleToolCall(value.id)
+              return
+            }
+            if (toolCall && native && value.providerExecuted && Schema.is(SessionAdvisor.Result)(value.result.value)) {
+              nativeProgress = true
+              const result = value.result.value
+              if (result.type !== "advisor_tool_result_error") resultSeen = true
+              yield* session.updatePart({
+                ...toolCall.part,
+                metadata: { ...toolCall.part.metadata, opencodeAdvisor: { ...native, state: "completed", result } },
+                state: {
+                  status: "completed",
+                  input: toolCall.part.state.input,
+                  title: "Advisor",
+                  output: SessionAdvisor.display(result),
+                  metadata: {},
+                  time: {
+                    start: "time" in toolCall.part.state ? toolCall.part.state.time.start : Date.now(),
+                    end: Date.now(),
+                  },
+                },
+              })
+              entries.push({ type: "advisor-result", callID: value.id })
+              yield* settleToolCall(value.id)
+              return
+            }
             if (!toolCall && value.result.type === "error") return
             if (value.result.type === "error") {
               yield* failToolCall(value.id, value.result.value)
@@ -422,6 +522,7 @@ const layer = Layer.effect(
             throw new Error(value.message)
 
           case "step-start":
+            resultSeen = false
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
             yield* session.updatePart({
               id: PartID.ascending(),
@@ -454,19 +555,58 @@ const layer = Layer.effect(
               usage: value.usage ?? new Usage({}),
               metadata: value.providerMetadata,
             })
+            const previous = steps.get(value.index)
+            const advisorUsage = tracking
+              ? (AdvisorUsage.calculate(value.providerMetadata, advisor?.model ?? "", prices) ??
+                previous?.usage ??
+                (resultSeen ? { complete: false, cost: 0, iterations: [] } : undefined))
+              : undefined
+            const step = {
+              id: previous?.id ?? PartID.ascending(),
+              cost: usage.cost + (advisorUsage?.cost ?? 0),
+              entries: entries.length ? [...entries] : (previous?.entries ?? []),
+              usage: advisorUsage,
+            }
+            steps.set(value.index, step)
+            const reason = value.providerMetadata?.opencode?.rawFinishReason
+            rawFinishReason = typeof reason === "string" ? reason : undefined
             ctx.assistantMessage.finish = value.reason
-            ctx.assistantMessage.cost += usage.cost
+            ctx.assistantMessage.cost += step.cost - (previous?.cost ?? 0)
             ctx.assistantMessage.tokens = usage.tokens
             yield* session.updatePart({
-              id: PartID.ascending(),
+              id: step.id,
               reason: value.reason,
               snapshot: completedSnapshot,
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.assistantMessage.sessionID,
               type: "step-finish",
               tokens: usage.tokens,
-              cost: usage.cost,
+              cost: step.cost,
+              ...(tracking
+                ? {
+                    metadata: {
+                      opencodeAdvisor: {
+                        ...origin,
+                        entries: step.entries,
+                        rawFinishReason,
+                        interrupted: false,
+                        usage: advisorUsage,
+                      } satisfies SessionAdvisor.Response,
+                    },
+                  }
+                : {}),
             })
+            if (advisorUsage && !advisorUsage.complete && !pricingNotice) {
+              pricingNotice = true
+              yield* events.publish(Session.Event.Error, {
+                sessionID: ctx.sessionID,
+                error: {
+                  name: "UnknownError",
+                  data: { message: "Advisor usage could not be fully priced; displayed cost is partial." },
+                },
+              })
+            }
+            entries.length = 0
             yield* session.updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
               const patch = yield* snapshot.patch(ctx.snapshot)
@@ -507,6 +647,7 @@ const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            if (tracking) entries.push({ type: "part", partID: ctx.currentText.id })
             yield* session.updatePart(ctx.currentText)
             return
 
@@ -582,28 +723,44 @@ const layer = Layer.effect(
         }
         ctx.reasoningMap = {}
 
+        const preserveAdvisor =
+          !aborted &&
+          !ctx.assistantMessage.error &&
+          !ctx.blocked &&
+          (rawFinishReason === "pause_turn" || ctx.assistantMessage.finish === "tool-calls")
         yield* Effect.forEach(
-          Object.values(ctx.toolcalls),
+          Object.entries(ctx.toolcalls)
+            .filter(([id]) => !preserveAdvisor || !advisorRun?.pending.has(id))
+            .map(([, call]) => call),
           (call) => Deferred.await(call.done).pipe(Effect.timeout("250 millis"), Effect.ignore),
           { concurrency: "unbounded" },
         )
 
         for (const toolCallID of Object.keys(ctx.toolcalls)) {
+          if (preserveAdvisor && advisorRun?.pending.has(toolCallID)) continue
           const match = yield* readToolCall(toolCallID)
           if (!match) continue
           const part = match.part
           const end = Date.now()
           const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
+          const native = SessionAdvisor.call(part)
+          // The result may have landed right before the interrupt; never downgrade a completed consultation.
+          if (native?.state === "completed" || native?.state === "abandoned") {
+            advisorRun?.pending.delete(toolCallID)
+            continue
+          }
           yield* session.updatePart({
             ...part,
+            ...(native ? { metadata: { ...part.metadata, opencodeAdvisor: { ...native, state: "abandoned" } } } : {}),
             state: {
               ...part.state,
               status: "error",
-              error: "Tool execution aborted",
+              error: native ? SessionAdvisor.interrupted : "Tool execution aborted",
               metadata: { ...metadata, interrupted: true },
               time: { start: "time" in part.state ? part.state.time.start : end, end },
             },
           })
+          advisorRun?.pending.delete(toolCallID)
         }
         ctx.toolcalls = {}
         ctx.assistantMessage.time.completed = Date.now()
@@ -639,6 +796,20 @@ const layer = Layer.effect(
       })
 
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
+        advisor =
+          streamInput.purpose === "foreground" &&
+          Permission.evaluate("advisor", "*", streamInput.agent.permission, streamInput.permission ?? []).action ===
+            "allow"
+            ? ConfigAdvisor.tryResolve(streamInput.agent.advisor)
+            : undefined
+        // A request that replays a pending call already triggers the consultation server-side; once the
+        // response has started, a retry would run it again and bill it again.
+        const carried = (advisorRun?.pending.size ?? 0) > 0
+        tracking = advisor !== undefined || carried
+        if (tracking) {
+          const catalog = yield* provider.getProvider(streamInput.model.providerID)
+          prices = Object.fromEntries(Object.values(catalog.models).map((model) => [model.api.id, model]))
+        }
         yield* Effect.logInfo("process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
@@ -654,7 +825,10 @@ const layer = Layer.effect(
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
+              Stream.tap((event) => {
+                if (carried) nativeProgress = true
+                return handleEvent(event)
+              }),
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
@@ -671,8 +845,9 @@ const layer = Layer.effect(
               (cause) => !Cause.hasInterruptsOnly(cause),
               (cause) => Effect.fail(Cause.squash(cause)),
             ),
-            Effect.retry(
-              SessionRetry.policy({
+            Effect.retry({
+              while: () => !nativeProgress,
+              schedule: SessionRetry.policy({
                 provider: input.model.providerID,
                 parse,
                 set: (info) => {
@@ -685,7 +860,7 @@ const layer = Layer.effect(
                   })
                 },
               }),
-            ),
+            }),
             Effect.catch(halt),
             Effect.ensuring(cleanup()),
           )
@@ -726,6 +901,7 @@ export const node = LayerNode.make({
     Image.node,
     EventV2Bridge.node,
     Database.node,
+    Provider.node,
   ],
 })
 

@@ -4,6 +4,7 @@ import { Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { ConfigProvider } from "./provider"
 import { PositiveInt } from "../schema"
+import { Advisor } from "@opencode-ai/schema/advisor"
 
 export const Color = Schema.Union([
   Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
@@ -12,6 +13,7 @@ export const Color = Schema.Union([
 
 export class Info extends Schema.Class<Info>("ConfigV2.Agent")({
   model: Schema.String.pipe(Schema.optional),
+  advisor: Advisor.Input.pipe(Schema.optional),
   variant: Schema.String.pipe(Schema.optional),
   request: ConfigProvider.Request.pipe(Schema.optional),
   system: Schema.String.pipe(Schema.optional),
