@@ -10,7 +10,7 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Effect, Ref, Schema, Semaphore } from "effect"
+import { Effect, Exit, Ref, Schema, Semaphore } from "effect"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { CodeModeCatalog } from "./catalog.js"
 
@@ -82,9 +82,9 @@ export const create = (
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
         const lock = Semaphore.makeUnsafe(1)
-        const updateCalls = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
+        const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
           lock.withPermit(
-            Ref.updateAndGet(calls, update).pipe(Effect.flatMap((toolCalls) => context.progress({ toolCalls }))),
+            Ref.updateAndGet(calls, update).pipe(Effect.tap((toolCalls) => context.progress({ toolCalls }))),
           )
         const result = yield* runtime(
           inventory,
@@ -103,27 +103,22 @@ export const create = (
               const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
               return text === "" ? null : text
             }),
-          {
-            onToolCallStart: ({ index, name, input }) => {
-              const shown = displayInput(input)
-              return updateCalls((items) => {
-                const next = [...items]
-                next[index] = { tool: name, status: "running", ...(shown ? { input: shown } : {}) }
-                return next
-              })
-            },
-            onToolCallEnd: ({ index, name, input, outcome }) => {
-              const shown = displayInput(input)
-              return updateCalls((items) => {
-                const next = [...items]
-                next[index] = {
-                  ...(items[index] ?? { tool: name, ...(shown ? { input: shown } : {}) }),
-                  status: outcome === "success" ? "completed" : "error",
-                }
-                return next
-              })
-            },
-          },
+          // Calls appear in start order and settle in place.
+          (call, run) =>
+            Effect.gen(function* () {
+              const shown = displayInput(call.type === "tool" ? call.input : call.args)
+              const entry = { tool: call.name, ...(shown ? { input: shown } : {}) }
+              const index = (yield* record((items) => [...items, { ...entry, status: "running" }])).length - 1
+              return yield* run.pipe(
+                Effect.onExit((exit) =>
+                  record((items) => {
+                    const next = [...items]
+                    next[index] = { ...entry, status: Exit.isSuccess(exit) ? "completed" : "error" }
+                    return next
+                  }),
+                ),
+              )
+            }),
         ).execute(code)
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -204,7 +199,7 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 function runtime(
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>,
-  hooks?: CodeMode.ToolCallHooks,
+  onCall?: CodeMode.CallHook["onCall"],
 ) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
@@ -219,7 +214,7 @@ function runtime(
     })
   }
   const tools = renderTools(root)
-  return CodeMode.make<typeof tools>({ tools, ...hooks })
+  return CodeMode.make<typeof tools>({ tools, onCall })
 }
 
 function getNode<T>(root: Node<T>, path: string) {

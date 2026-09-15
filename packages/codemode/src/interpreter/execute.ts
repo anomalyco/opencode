@@ -16,7 +16,7 @@ export const executeProgram = <R>(
   code: string,
   prepared: ToolRuntime.Prepared<R>,
   limits: ResolvedExecutionLimits,
-  hooks: ToolRuntime.ToolCallHooks<R>,
+  hook: ToolRuntime.CallHook<R>,
   globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, unknown]>,
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
@@ -30,7 +30,7 @@ export const executeProgram = <R>(
   // Allocate execution state inside suspension so reused Effects never share it.
   return Effect.suspend(() => {
     const builtins = createBuiltins()
-    const tools = ToolRuntime.make(prepared, limits.maxToolCalls, hooks)
+    const tools = ToolRuntime.make(prepared, limits.maxToolCalls, hook.onCall)
     const logs: Array<string> = []
     const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
     // Set only after copy-out so timeouts cannot report invalid values as completed.

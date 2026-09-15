@@ -7,7 +7,7 @@ import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime
 import type { Tools } from "./tools.js"
 
 /** A tool call admitted during an execution. */
-export type { ToolCall, ToolCallEnded, ToolCallHooks, ToolCallStarted, ToolDescription } from "./tool-runtime.js"
+export type { Call, CallHook, ToolCall, ToolDescription } from "./tool-runtime.js"
 /** Signature-construction helpers for host-owned catalog instructions. */
 export { searchSignature, toolExpression } from "./tool-runtime.js"
 
@@ -34,7 +34,7 @@ export type ResolvedExecutionLimits = {
 }
 
 /** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
-export type Options<Provided extends Record<string, unknown> = {}> = ToolRuntime.ToolCallHooks<Services<Provided>> & {
+export type Options<Provided extends Record<string, unknown> = {}> = ToolRuntime.CallHook<Services<Provided>> & {
   /** Explicit tools exposed to the program as `tools`. */
   tools?: Provided & Tools<Services<Provided>>
   /** Host functions exposed as globals; see `Extension.make`. */
