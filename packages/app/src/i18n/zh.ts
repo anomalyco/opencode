@@ -125,6 +125,7 @@ export const dict = {
   "theme.scheme.dark": "深色",
 
   "command.sidebar.toggle": "切换侧边栏",
+  "command.direction.toggle": "Toggle layout direction",
 
   "command.project.open": "打开项目",
   "command.project.previous": "上一个项目",

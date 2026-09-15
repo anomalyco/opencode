@@ -127,6 +127,7 @@ export const dict = {
   "theme.scheme.dark": "Koyu",
 
   "command.sidebar.toggle": "Kenar çubuğunu aç/kapat",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Proje aç",
   "command.project.previous": "Önceki proje",
   "command.project.next": "Sonraki proje",

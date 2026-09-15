@@ -116,6 +116,7 @@ export const dict = {
   "theme.scheme.light": "އަލި",
   "theme.scheme.dark": "އަނދިރި",
   "command.sidebar.toggle": "ސައިޑްބާ ޓޮގްލް ކުރާށެވެ",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "އޯޕަން ޕްރޮޖެކްޓް",
   "command.project.previous": "ކުރީގެ މަޝްރޫޢު",
   "command.project.next": "ދެން އޮތް މަޝްރޫޢެވެ",
