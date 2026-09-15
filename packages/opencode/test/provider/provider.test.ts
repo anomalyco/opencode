@@ -810,6 +810,35 @@ it.instance("getSmallModel skips inferred models for Azure Cognitive Services", 
 )
 
 it.instance(
+  "Azure uses the DeepSeek adapter for DeepSeek models",
+  Effect.gen(function* () {
+    yield* set("AZURE_API_KEY", "test-key")
+    const provider = yield* Provider.Service
+    const deepseek = yield* provider.getModel(ProviderV2.ID.azure, ModelV2.ID.make("deepseek-v4-pro"))
+    const chat = yield* provider.getModel(ProviderV2.ID.azure, ModelV2.ID.make("gpt-4o"))
+    const deepseekLanguage = yield* provider.getLanguage(deepseek)
+    const chatLanguage = yield* provider.getLanguage(chat)
+    expect((deepseekLanguage as { provider: string }).provider).toBe("azure.deepseek")
+    expect((deepseekLanguage as { modelId: string }).modelId).toBe("production-deployment")
+    expect((chatLanguage as { provider: string }).provider).toBe("azure.chat")
+  }),
+  {
+    config: {
+      provider: {
+        azure: {
+          npm: "@ai-sdk/azure",
+          options: { apiKey: "test-key", baseURL: "https://test.openai.azure.com/openai" },
+          models: {
+            "deepseek-v4-pro": { id: "production-deployment", options: { useCompletionUrls: true } },
+            "gpt-4o": { options: { useCompletionUrls: true } },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "getSmallModel respects config small_model override",
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")

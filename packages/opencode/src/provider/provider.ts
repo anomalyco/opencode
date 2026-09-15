@@ -157,7 +157,12 @@ type CustomDep = {
   get: (key: string) => Effect.Effect<string | undefined>
 }
 
-function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
+function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean, model?: Model) {
+  if (
+    sdk.deepseek &&
+    [modelID, model?.id, model?.name, model?.family].some((value) => value?.toLowerCase().includes("deepseek"))
+  )
+    return sdk.deepseek(modelID)
   if (useChat && sdk.chat) return sdk.chat(modelID)
   if (sdk.responses) return sdk.responses(modelID)
   if (sdk.messages) return sdk.messages(modelID)
@@ -268,8 +273,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>, model?: Model) {
+          return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]), model)
         },
         options: {
           resourceName: resource,
@@ -288,8 +293,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const resourceName = yield* dep.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>, model?: Model) {
+          return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]), model)
         },
         options: {
           baseURL: resourceName
