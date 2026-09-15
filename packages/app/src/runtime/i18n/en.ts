@@ -109,6 +109,8 @@ export const dict = {
   "command.browser.open": "Open browser",
   "command.browser.reload": "Reload browser page",
   "command.tab.close": "Close tab",
+  "command.tab.previous": "Previous tab",
+  "command.tab.next": "Next tab",
   "command.tab.reopenClosed": "Reopen closed tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",

@@ -11,6 +11,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { DraftTabItem, TabNavItem } from "@/shell/titlebar/tab-nav"
 import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useCommand } from "@/shell/commands/command"
 import { useTabs } from "@/shell/tabs/tabs"
 import { createTabComposerState } from "@/composer/persistence"
@@ -242,6 +243,7 @@ export function TitlebarTabStrip(props: {
   const global = useGlobal()
   const language = useLanguage()
   const command = useCommand()
+  const platform = usePlatform()
   const vertical = () => props.orientation === "vertical"
   let listRef!: HTMLDivElement
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
@@ -251,18 +253,23 @@ export function TitlebarTabStrip(props: {
   command.register("titlebar-tab-cycle", () => [
     {
       id: `tab.prev`,
-      category: "tab",
-      title: "",
-      keybind: `mod+option+ArrowLeft,ctrl+shift+tab`,
-      hidden: true,
+      category: language.t("command.category.view"),
+      title: language.t("command.tab.previous"),
+      // Shift+[ produces "{" in macOS keyboard events.
+      keybind:
+        platform.os === "macos"
+          ? "cmd+shift+[,cmd+shift+{,mod+option+ArrowLeft,ctrl+shift+tab"
+          : "mod+option+ArrowLeft,ctrl+shift+tab",
       onSelect: () => selectAdjacentTab(-1),
     },
     {
       id: `tab.next`,
-      category: "tab",
-      title: "",
-      keybind: `mod+option+ArrowRight,ctrl+tab`,
-      hidden: true,
+      category: language.t("command.category.view"),
+      title: language.t("command.tab.next"),
+      keybind:
+        platform.os === "macos"
+          ? "cmd+shift+],cmd+shift+},mod+option+ArrowRight,ctrl+tab"
+          : "mod+option+ArrowRight,ctrl+tab",
       onSelect: () => selectAdjacentTab(1),
     },
   ])
