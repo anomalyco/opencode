@@ -272,6 +272,43 @@ it.instance(
   },
 )
 
+it.instance(
+  "Bedrock: Australia region prefixes Claude family (Opus/Sonnet/Haiku) with au.",
+  () =>
+    Effect.gen(function* () {
+      yield* set("AWS_PROFILE", "default")
+      yield* set("AWS_BEARER_TOKEN_BEDROCK", "")
+      const provider = yield* Provider.Service
+      const opus = yield* provider.getLanguage(
+        yield* provider.getModel(
+          ProviderV2.ID.amazonBedrock,
+          ModelV2.ID.make("anthropic.claude-opus-4-6-20251101-v1:0"),
+        ),
+      )
+      const sonnet = yield* provider.getLanguage(
+        yield* provider.getModel(
+          ProviderV2.ID.amazonBedrock,
+          ModelV2.ID.make("anthropic.claude-sonnet-4-6-20251101-v1:0"),
+        ),
+      )
+      expect((opus as { modelId: string }).modelId).toBe("au.anthropic.claude-opus-4-6-20251101-v1:0")
+      expect((sonnet as { modelId: string }).modelId).toBe("au.anthropic.claude-sonnet-4-6-20251101-v1:0")
+    }),
+  {
+    config: {
+      provider: {
+        "amazon-bedrock": {
+          options: { region: "ap-southeast-2" },
+          models: {
+            "anthropic.claude-opus-4-6-20251101-v1:0": { name: "Claude Opus 4.6" },
+            "anthropic.claude-sonnet-4-6-20251101-v1:0": { name: "Claude Sonnet 4.6" },
+          },
+        },
+      },
+    },
+  },
+)
+
 // Cross-region inference profile prefix handling.
 // Models from models.dev may come with prefixes already (e.g. us., eu., global.).
 // These should NOT be double-prefixed when passed to the SDK.

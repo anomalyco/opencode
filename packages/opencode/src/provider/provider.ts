@@ -431,10 +431,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             case "ap": {
               const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
               const isTokyoRegion = region === "ap-northeast-1"
-              if (
-                isAustraliaRegion &&
-                ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
-              ) {
+              // Australia (ap-southeast-2/4) uses the au. cross-region inference prefix for the
+              // Claude family (Opus, Sonnet, Haiku). Match the whole family rather than pinning
+              // specific versions so new models don't silently fall through to the apac. prefix.
+              if (isAustraliaRegion && modelID.includes("claude")) {
                 regionPrefix = "au"
                 modelID = `${regionPrefix}.${modelID}`
               } else if (isTokyoRegion) {
