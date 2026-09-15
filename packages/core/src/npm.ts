@@ -2,6 +2,7 @@ export * as Npm from "./npm"
 
 import path from "path"
 import npa from "npm-package-arg"
+import semver from "semver"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "./fs-util"
@@ -112,24 +113,70 @@ const layer = Layer.effect(
         }),
       )
 
+    // Dist-tag specs ("@latest", "@dev", ...) point at a moving target. A bare
+    // existence check would pin whatever version was current at first install,
+    // so compare the cached version against the registry before reusing it.
+    // Returns true when the cache is stale and a reinstall is needed; any
+    // registry or read failure conservatively keeps the cached copy.
+    const isDistTagOutdated = Effect.fn("Npm.isDistTagOutdated")(function* (dir: string, name: string, target: string) {
+      const decodePackage = Schema.decodeUnknownOption(Schema.Struct({ version: Schema.String }))
+      const json = yield* afs.readJson(path.join(target, "package.json")).pipe(Effect.option)
+      if (Option.isNone(json)) return true
+      const decoded = decodePackage(json.value)
+      const cachedVersion = Option.isSome(decoded) ? decoded.value.version : undefined
+      if (!cachedVersion) return true
+
+      // Resolve the registry from the same npm config `reify` uses so custom
+      // registries and enterprise mirrors are honored.
+      const base = yield* NpmConfig.registry(dir)
+      const encoded = name.includes("/") ? name.replace("/", "%2f") : name
+      const res = yield* Effect.promise(() =>
+        fetch(`${base}/${encoded}/latest`, {
+          headers: { Accept: "application/vnd.npm.install-v1+json" },
+          signal: AbortSignal.timeout(10_000),
+        }).catch(() => undefined),
+      )
+      if (!res?.ok) return false
+      const data = yield* Effect.promise(() =>
+        res
+          .json()
+          .catch(() => undefined)
+          .then((data) => data as { version?: string } | undefined),
+      )
+      const latestVersion = data?.version
+      if (!latestVersion) return false
+      // Semver-equivalent spellings ("v1.0.0", "1.0.0+build") must not trigger
+      // pointless reinstalls.
+      if (semver.valid(latestVersion) && semver.valid(cachedVersion)) {
+        return !semver.eq(latestVersion, cachedVersion)
+      }
+      return latestVersion !== cachedVersion
+    })
+
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const dir = directory(pkg)
-      const name = (() => {
+      const parsed = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(pkg)
         } catch {
-          return pkg
+          return undefined
         }
       })()
+      const name = parsed?.name ?? pkg
+      const target = path.join(dir, "node_modules", name)
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+      if (yield* afs.existsSafe(target)) {
+        if (parsed?.type === "tag") {
+          if (!(yield* isDistTagOutdated(dir, name, target))) return resolveEntryPoint(name, target)
+        } else {
+          return resolveEntryPoint(name, target)
+        }
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
-        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        const result = resolveEntryPoint(name, target)
         if (result.entrypoint) return result
         return yield* new InstallFailedError({ add: [pkg], dir })
       }
