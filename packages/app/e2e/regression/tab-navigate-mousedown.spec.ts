@@ -432,7 +432,7 @@ for (const profile of [
   })
 }
 
-test("dedicated experimental settings control vertical tab details", async ({ page }) => {
+test("general settings control vertical tab details", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA }) => {
@@ -452,12 +452,9 @@ test("dedicated experimental settings control vertical tab details", async ({ pa
   await expect(settings).toBeVisible()
   await expect(settings.getByRole("tablist").getByText("OpenCode Desktop", { exact: true })).toHaveCount(0)
   await expect(settings.getByRole("tablist").getByText(/^v\d+\./)).toHaveCount(0)
-  await settings.getByRole("tab", { name: "Appearance" }).click()
-  await expect(settings.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible()
-  await expect(settings.locator('[data-action="settings-tab-layout"]')).toHaveCount(0)
+  await settings.getByRole("tab", { name: "Preferences" }).click()
+  await expect(settings.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible()
   await expect(settings.getByRole("switch", { name: "Show project names", exact: true })).toHaveCount(0)
-  await settings.getByRole("tab", { name: "Experimental", exact: true }).click()
-  await expect(settings.getByRole("heading", { name: "Experimental", level: 2, exact: true })).toBeVisible()
 
   const layout = settings.locator('[data-action="settings-tab-layout"]')
   await expect(layout).toContainText("Horizontal")
@@ -469,6 +466,8 @@ test("dedicated experimental settings control vertical tab details", async ({ pa
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
   const projectNames = page.locator('[data-slot="vertical-tabs-sidebar"] [data-slot="tab-project"]')
   await expect(projectNames).toHaveCount(0)
+  await settings.getByRole("tab", { name: "Experimental", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Experimental", level: 2, exact: true })).toBeVisible()
   const projectNameSwitch = settings.getByRole("switch", { name: "Show project names", exact: true })
   await settings.locator('[data-action="settings-show-project-name"] [data-slot="switch-control"]').click()
   await expect(projectNameSwitch).toBeChecked()
