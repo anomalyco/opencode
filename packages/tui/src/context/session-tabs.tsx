@@ -35,8 +35,10 @@ type TabsState = {
 }
 
 type PersistedState = {
-  global: TabsState
-  cwd: Record<string, TabsState>
+  servers?: Record<string, { global: TabsState; cwd: Record<string, TabsState> }>
+  // The managed local server continues using the legacy fields.
+  global?: TabsState
+  cwd?: Record<string, TabsState>
 }
 
 type ScrollAnchor = {
@@ -68,10 +70,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
     // mutating in place, which per-row animations and drag state depend on.
     const [store, updateStore] = storage.store<PersistedState>("tabs", {
-      initial: {
-        global: empty(),
-        cwd: {},
-      },
+      initial: { servers: {} },
       key: "sessionID",
     })
     const fallback = empty()
@@ -99,13 +98,20 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     })
 
     function state() {
-      if (config.tabs.scope === "cwd") return store.cwd[paths.cwd] ?? fallback
-      return store.global
+      const server = client.server === "local" ? store : store.servers?.[client.server]
+      if (!server) return fallback
+      if (config.tabs.scope === "cwd") return server.cwd?.[paths.cwd] ?? fallback
+      return server.global ?? fallback
     }
 
     function update(mutation: (draft: TabsState) => void) {
       const scope = config.tabs.scope
-      void updateStore((draft) => mutation(scope === "cwd" ? (draft.cwd[paths.cwd] ??= empty()) : draft.global)).catch(
+      void updateStore((draft) => {
+        const server =
+          client.server === "local" ? draft : ((draft.servers ??= {})[client.server] ??= { global: empty(), cwd: {} })
+        server.cwd ??= {}
+        mutation(scope === "cwd" ? (server.cwd[paths.cwd] ??= empty()) : (server.global ??= empty()))
+      }).catch(
         // Failed writes lose only tab layout, but silence would hide tabs resetting every launch.
         (error) => console.error("Failed to persist session tabs", error),
       )
