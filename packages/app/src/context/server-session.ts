@@ -29,6 +29,8 @@ const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 const initialMessagePageSize = 20
 const historyMessagePageSize = 200
+// SessionMessagesQuery in @opencode-ai/protocol rejects anything above this.
+const messagePageMax = 200
 const sessionInfoLimit = 2_048
 const emptyIDs: ReadonlySet<string> = new Set()
 
@@ -536,14 +538,19 @@ export function createServerSession(
 
   const fetchMessages = async (sessionID: string, limit: number, before?: string, onAttempt?: () => void) => {
     if (messageApi && (await options?.protocol) !== "v1") {
+      const pageSize = Math.min(Math.max(limit, 1), messagePageMax)
       const request = (cursor?: string) =>
         (options?.retry ?? retry)(() => {
           onAttempt?.()
-          return messageApi.list(cursor ? { sessionID, limit, cursor } : { sessionID, limit, order: "desc" })
+          return messageApi.list(
+            cursor ? { sessionID, limit: pageSize, cursor } : { sessionID, limit: pageSize, order: "desc" },
+          )
         })
       const first = await request(before)
       const pages = [first]
-      while (pages.at(-1)?.cursor.next && needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) {
+      while (pages.at(-1)?.cursor.next) {
+        const underfilled = limit > messagePageMax && pages.reduce((total, page) => total + page.data.length, 0) < limit
+        if (!underfilled && !needsOlderTurnRoot(pages.flatMap((page) => page.data).toReversed())) break
         const response = await request(pages.at(-1)!.cursor.next ?? undefined)
         pages.push(response)
         if (!response.data.length) break
