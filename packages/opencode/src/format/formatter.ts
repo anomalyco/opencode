@@ -4,9 +4,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { which } from "@opencode-ai/core/util/which"
 
-export interface Context extends Pick<InstanceContext, "directory" | "worktree"> {
-  experimentalOxfmt: boolean
-}
+export type Context = Pick<InstanceContext, "directory" | "worktree">
 
 export interface Info {
   name: string
@@ -89,9 +87,31 @@ export const oxfmt: Info = {
   environment: {
     BUN_BE_BUN: "1",
   },
-  extensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
+  extensions: [
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".tsx",
+    ".mts",
+    ".cts",
+    ".json",
+    ".jsonc",
+    ".html",
+    ".vue",
+    ".css",
+    ".scss",
+    ".less",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".md",
+    ".mdx",
+    ".graphql",
+    ".gql",
+  ],
   async enabled(context) {
-    if (!context.experimentalOxfmt) return false
     const items = await Filesystem.findUp("package.json", context.directory, context.worktree)
     for (const item of items) {
       const json = await Filesystem.readJson<{
