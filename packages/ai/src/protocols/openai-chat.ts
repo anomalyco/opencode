@@ -988,15 +988,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       reasoning !== undefined ||
       (Array.isArray(delta?.reasoning_details) && delta.reasoning_details.length > 0) ||
       toolDeltas.some((tool) => Boolean(tool.id) || Boolean(tool.function?.name) || Boolean(tool.function?.arguments))
-    if (state.finishReason !== undefined) {
-      if (hasLateContent)
-        return yield* ProviderShared.eventError(
-          ADAPTER,
-          "OpenAI Chat received content after the finish reason",
-          ProviderShared.encodeJson(event),
-        )
-      return [{ ...state, usage }, events] as const
-    }
+    // Trailing deltas after a terminal `finish_reason` are real model output:
+    // some OpenAI-compatible providers emit a last content or reasoning chunk
+    // after the finish chunk. Absorb them into the stream instead of failing
+    // the response; the single terminal finish event is emitted once at stream
+    // end, so late content still precedes it.
+    if (state.finishReason !== undefined && !hasLateContent) return [{ ...state, usage }, events] as const
 
     const reasoningField = state.reasoningField ?? reasoning?.field
     const detailDelta = Array.isArray(delta?.reasoning_details) ? delta.reasoning_details : undefined
@@ -1081,6 +1078,8 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       )
 
     // Filtering or truncation terminates the response without confirming pending tool calls.
+    // Late tool deltas accumulate in `tools` and finalize once in `finishEvents`;
+    // finalizing per frame would emit partial input for identity-first splits.
     const finished =
       finishReason !== undefined &&
       !incompleteTools &&
@@ -1094,7 +1093,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         providerMetadataKey: state.providerMetadataKey,
         tools: finished?.tools ?? tools,
         pendingTools,
-        toolCallEvents: finished?.events ?? state.toolCallEvents,
+        toolCallEvents: finished ? [...state.toolCallEvents, ...finished.events] : state.toolCallEvents,
         usage,
         finishReason,
         lifecycle,
@@ -1120,10 +1119,17 @@ const finishEvents = Effect.fn("OpenAIChat.finishEvents")(function* (state: Pars
       }),
     })
   const events: LLMEvent[] = []
+  const incomplete = state.finishReason?.normalized === "length" || state.finishReason?.normalized === "content-filter"
+  const late =
+    state.finishReason !== undefined && !incomplete && Object.keys(state.tools).length > 0
+      ? yield* ToolStream.finishAll(ADAPTER, state.tools)
+      : undefined
   const toolCallEvents =
     state.finishReason === undefined && Object.keys(state.tools).length > 0
       ? (yield* ToolStream.finishAll(ADAPTER, state.tools)).events
-      : state.toolCallEvents
+      : late
+        ? [...state.toolCallEvents, ...late.events]
+        : state.toolCallEvents
   const hasToolCalls = toolCallEvents.length > 0
   const reason = state.finishReason
     ? {

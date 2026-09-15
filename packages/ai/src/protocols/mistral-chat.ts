@@ -656,15 +656,11 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
   }
   const events: LLMEvent[] = []
   const usage = mapUsage(event.usage) ?? state.usage
-  if (state.finishReason) {
-    if (hasLateContent(event))
-      return yield* ProviderShared.eventError(
-        ADAPTER,
-        "Mistral Chat received content after the finish reason",
-        ProviderShared.encodeJson(event),
-      )
-    return [{ ...state, usage }, events] as const
-  }
+  // Trailing deltas after a terminal `finish_reason` are real model output:
+  // absorb them into the stream instead of failing the response. The single
+  // terminal finish event is emitted once at stream end, so late content still
+  // precedes it.
+  if (state.finishReason && !hasLateContent(event)) return [{ ...state, usage }, events] as const
   const choice = event.choices?.[0]
   const withContent = choice?.delta?.content == null ? state : appendContent(state, events, choice.delta.content)
   const withTools = yield* appendTools(withContent, events, choice?.delta?.tool_calls ?? [])
@@ -685,21 +681,24 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
     })
   }
   const incomplete = finishReason.normalized === "length" || finishReason.normalized === "content-filter"
-  if (!incomplete && Object.keys(withTools.pendingTools).length > 0)
+  // Only the first terminal arrival rejects unidentifiable tool deltas; late
+  // frames after a finish absorb malformed tool identities silently instead of
+  // failing the response.
+  if (state.finishReason === undefined && !incomplete && Object.keys(withTools.pendingTools).length > 0)
     return yield* ProviderShared.eventError(
       ADAPTER,
       "Mistral Chat tool call delta is missing a name",
       ProviderShared.encodeJson(event),
     )
   const finished =
-    !incomplete && Object.keys(withTools.tools).length > 0
+    state.finishReason === undefined && !incomplete && Object.keys(withTools.tools).length > 0
       ? yield* ToolStream.finishAll(ADAPTER, withTools.tools)
       : undefined
   return [
     {
       ...withTools,
       tools: finished?.tools ?? withTools.tools,
-      completedTools: finished?.events ?? withTools.completedTools,
+      completedTools: finished ? [...withTools.completedTools, ...finished.events] : withTools.completedTools,
       usage,
       finishReason,
     },
@@ -718,10 +717,19 @@ const finishEvents = Effect.fn("MistralChat.finishEvents")(function* (state: Par
     })
   const events: LLMEvent[] = []
   const closed = closeActive(state, events)
-  const lifecycle = closed.completedTools.length > 0 ? Lifecycle.stepStart(closed.lifecycle, events) : closed.lifecycle
-  events.push(...closed.completedTools)
+  // Late tool deltas accumulate in `tools` and finalize once here with complete
+  // arguments; finalizing per frame would emit partial input for split calls.
+  // Incomplete (length/content-filter) finishes still drop unconfirmed tools.
+  const incomplete = state.finishReason?.normalized === "length" || state.finishReason?.normalized === "content-filter"
+  const late =
+    !incomplete && Object.keys(closed.tools).length > 0
+      ? yield* ToolStream.finishAll(ADAPTER, closed.tools)
+      : undefined
+  const completedTools = late ? [...closed.completedTools, ...late.events] : closed.completedTools
+  const lifecycle = completedTools.length > 0 ? Lifecycle.stepStart(closed.lifecycle, events) : closed.lifecycle
+  events.push(...completedTools)
   const reason =
-    state.finishReason.normalized === "stop" && closed.completedTools.some(LLMEvent.is.toolCall)
+    state.finishReason.normalized === "stop" && completedTools.some(LLMEvent.is.toolCall)
       ? { ...state.finishReason, normalized: "tool-calls" as const }
       : state.finishReason
   Lifecycle.finish(lifecycle, events, { reason, usage: closed.usage })
