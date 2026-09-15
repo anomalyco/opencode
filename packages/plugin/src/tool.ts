@@ -17,6 +17,14 @@ export type ToolContext = {
   abort: AbortSignal
   metadata(input: { title?: string; metadata?: { [key: string]: any } }): void
   ask(input: AskInput): Promise<void>
+  /**
+   * Present an interactive question popup (the same modal the `question`
+   * tool uses) and wait for the user's answer. Resolves with one label list
+   * per question, **in the same order as `input.questions`** (callers zip them
+   * by index); for a `multiple: true` question the list holds all selected
+   * labels. Rejects if the user dismisses the modal.
+   */
+  question(input: QuestionInput): Promise<ReadonlyArray<QuestionAnswer>>
 }
 
 type AskInput = {
@@ -25,6 +33,30 @@ type AskInput = {
   always: string[]
   metadata: { [key: string]: any }
 }
+
+export type QuestionOption = {
+  label: string
+  description: string
+}
+
+export type QuestionInfo = {
+  question: string
+  header: string
+  options: ReadonlyArray<QuestionOption>
+  multiple?: boolean
+  custom?: boolean
+  /**
+   * Pre-fills the custom answer field with this text, so callers can present
+   * proposed content for the user to review and edit before submitting.
+   */
+  default?: string
+}
+
+export type QuestionInput = {
+  questions: ReadonlyArray<QuestionInfo>
+}
+
+export type QuestionAnswer = ReadonlyArray<string>
 
 export type ToolAttachment = {
   type: "file"
