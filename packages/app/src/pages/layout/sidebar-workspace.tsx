@@ -131,7 +131,7 @@ const WorkspaceHeader = (props: {
         openOnDblClick={false}
       />
     </Show>
-    <div class="flex items-center justify-center shrink-0 overflow-hidden w-0 opacity-0 transition-all duration-200 group-hover/workspace:w-3.5 group-hover/workspace:opacity-100 group-focus-within/workspace:w-3.5 group-focus-within/workspace:opacity-100">
+    <div class="flex items-center justify-center shrink-0 overflow-hidden w-0 opacity-0 transition-[width,opacity] duration-200 group-hover/workspace:w-3.5 group-hover/workspace:opacity-100 group-focus-within/workspace:w-3.5 group-focus-within/workspace:opacity-100">
       <Icon name={props.open() ? "chevron-down" : "chevron-right"} size="small" class="text-icon-base" />
     </div>
   </div>
