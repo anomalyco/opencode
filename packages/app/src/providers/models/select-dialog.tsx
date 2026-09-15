@@ -456,7 +456,7 @@ function ModelSelectorPopoverView(props: {
                 <For each={groups()}>
                   {(group) => (
                     <Menu.Group>
-                      <Menu.GroupLabel class="gap-2 px-3">
+                      <Menu.GroupLabel class="sticky top-0 z-10 gap-2 bg-v2-background-bg-layer-01 px-3">
                         <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
                       </Menu.GroupLabel>
                       <Menu.RadioGroup value={props.current}>
