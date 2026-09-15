@@ -2166,33 +2166,32 @@ export interface ReferenceApi<E = never> {
   readonly list: ReferenceListOperation<E>
 }
 
-export type WorktreeListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type WorktreeListInput = { readonly projectID: Project.ID }
 export type WorktreeListOutput = Worktree.List
-export type WorktreeListOperation<E = never> = (input?: WorktreeListInput) => Effect.Effect<WorktreeListOutput, E>
+export type WorktreeListOperation<E = never> = (input: WorktreeListInput) => Effect.Effect<WorktreeListOutput, E>
 
 export type WorktreeCreateInput = {
-  readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly strategy?: Worktree.StrategyID | undefined
+  readonly projectID: Project.ID
   readonly from?: AbsolutePath | undefined
   readonly branch?: string | undefined
   readonly directory?: AbsolutePath | undefined
   readonly name?: string | undefined
 }
 export type WorktreeCreateOutput = Worktree.Info
-export type WorktreeCreateOperation<E = never> = (input?: WorktreeCreateInput) => Effect.Effect<WorktreeCreateOutput, E>
+export type WorktreeCreateOperation<E = never> = (input: WorktreeCreateInput) => Effect.Effect<WorktreeCreateOutput, E>
 
 export type WorktreeRemoveInput = {
-  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly projectID: Project.ID
   readonly directory: AbsolutePath
   readonly force: boolean
 }
 export type WorktreeRemoveOutput = void
 export type WorktreeRemoveOperation<E = never> = (input: WorktreeRemoveInput) => Effect.Effect<WorktreeRemoveOutput, E>
 
-export type WorktreeRefreshInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type WorktreeRefreshInput = { readonly projectID: Project.ID }
 export type WorktreeRefreshOutput = void
 export type WorktreeRefreshOperation<E = never> = (
-  input?: WorktreeRefreshInput,
+  input: WorktreeRefreshInput,
 ) => Effect.Effect<WorktreeRefreshOutput, E>
 
 export interface WorktreeApi<E = never> {

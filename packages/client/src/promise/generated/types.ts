@@ -6065,44 +6065,41 @@ export type ReferenceListInput = {
 
 export type ReferenceListOutput = { location: LocationPublicRef; data: Array<ReferenceInfo> }
 
-export type WorktreeListInput = {
-  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
-}
+export type WorktreeListInput = { readonly projectID: { readonly projectID: string }["projectID"] }
 
 export type WorktreeListOutput = WorktreeList
 
 export type WorktreeCreateInput = {
-  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
-  readonly strategy?: {
-    readonly strategy?: string
+  readonly projectID: {
+    readonly projectID: string
     readonly from?: string
     readonly branch?: string
     readonly directory?: string
     readonly name?: string
-  }["strategy"]
+  }["projectID"]
   readonly from?: {
-    readonly strategy?: string
+    readonly projectID: string
     readonly from?: string
     readonly branch?: string
     readonly directory?: string
     readonly name?: string
   }["from"]
   readonly branch?: {
-    readonly strategy?: string
+    readonly projectID: string
     readonly from?: string
     readonly branch?: string
     readonly directory?: string
     readonly name?: string
   }["branch"]
   readonly directory?: {
-    readonly strategy?: string
+    readonly projectID: string
     readonly from?: string
     readonly branch?: string
     readonly directory?: string
     readonly name?: string
   }["directory"]
   readonly name?: {
-    readonly strategy?: string
+    readonly projectID: string
     readonly from?: string
     readonly branch?: string
     readonly directory?: string
@@ -6113,16 +6110,14 @@ export type WorktreeCreateInput = {
 export type WorktreeCreateOutput = WorktreeInfo
 
 export type WorktreeRemoveInput = {
-  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
-  readonly directory: { readonly directory: string; readonly force: boolean }["directory"]
-  readonly force: { readonly directory: string; readonly force: boolean }["force"]
+  readonly projectID: { readonly projectID: string; readonly directory: string; readonly force: boolean }["projectID"]
+  readonly directory: { readonly projectID: string; readonly directory: string; readonly force: boolean }["directory"]
+  readonly force: { readonly projectID: string; readonly directory: string; readonly force: boolean }["force"]
 }
 
 export type WorktreeRemoveOutput = void
 
-export type WorktreeRefreshInput = {
-  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
-}
+export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: string }["projectID"] }
 
 export type WorktreeRefreshOutput = void
 

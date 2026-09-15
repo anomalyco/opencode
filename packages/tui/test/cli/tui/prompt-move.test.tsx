@@ -28,7 +28,7 @@ test.each([
   { name: "an uncached session in a linked worktree", directory: linked, worktree: linked },
   { name: "a session in a linked worktree subdirectory", directory: `${linked}/packages/tui`, worktree: linked },
   { name: "the home/default location", directory: `${clone}/packages/tui`, home: true },
-])("passes the current location and uses server worktree defaults for $name", async (input) => {
+])("passes the current project and uses server worktree defaults for $name", async (input) => {
   const fixture = await renderMove(input)
   try {
     await fixture.data.project.sync()
@@ -45,9 +45,13 @@ test.each([
 
     await fixture.create()
 
-    expect(fixture.requests).toEqual([{ payload: { name: "fresh" }, directory: input.directory }])
+    expect(fixture.requests).toEqual([
+      { payload: { projectID: "proj_test", name: "fresh" }, directory: null },
+    ])
     expect(fixture.data.location.info({ directory: created })?.project.canonical).toBe(clone)
-    expect(fixture.reads.locations.filter((directory) => directory === input.directory)).toHaveLength(input.home ? 3 : 1)
+    expect(fixture.reads.locations.filter((directory) => directory === input.directory)).toHaveLength(
+      input.home ? 3 : 1,
+    )
     expect(fixture.reads.session).toBe(input.home ? 0 : 1)
     expect(fixture.moves).toEqual([])
     if (!input.home) expect(fixture.route.data).toEqual({ type: "home", location: { directory: created } })
@@ -70,11 +74,11 @@ test.each([
 
     const frame = await fixture.create()
 
-    expect(fixture.reads.worktrees).toEqual([selected.directory])
+    expect(fixture.reads.worktrees).toEqual(["proj_test"])
     expect(frame).toContain(clone)
     expect(frame.indexOf(clone)).toBeLessThan(frame.indexOf(main))
     expect(fixture.requests).toEqual([
-      { payload: { name: "fresh" }, directory: `${clone}/packages/tui` },
+      { payload: { projectID: "proj_test", name: "fresh" }, directory: null },
     ])
     expect(fixture.data.location.info(selected)?.project.canonical).toBe(clone)
     expect(fixture.moves).toEqual([])
@@ -91,7 +95,9 @@ test.each([false, true])("selecting a workspace opens Home without moving a sess
     await fixture.app.mockInput.typeText("linked")
     await fixture.app.waitForFrame((frame) => frame.includes(linked) && !frame.includes(clone))
     fixture.app.mockInput.pressEnter()
-    await fixture.app.waitFor(() => fixture.route.data.type === "home" && fixture.route.data.location?.directory === linked)
+    await fixture.app.waitFor(
+      () => fixture.route.data.type === "home" && fixture.route.data.location?.directory === linked,
+    )
     expect(fixture.route.data).toEqual({ type: "home", location: { directory: linked } })
     expect(fixture.moves).toEqual([])
     expect(fixture.requests).toEqual([])
@@ -102,7 +108,7 @@ test.each([false, true])("selecting a workspace opens Home without moving a sess
   }
 })
 
-test("removal uses the current configuration location, not the destination directory", async () => {
+test("removal sends project ownership and the destination without a configuration location", async () => {
   const fixture = await renderMove({ directory: clone, home: true })
   try {
     await fixture.move.open()
@@ -113,7 +119,28 @@ test("removal uses the current configuration location, not the destination direc
     await fixture.app.waitForFrame((frame) => frame.includes("again to confirm"))
     fixture.app.mockInput.pressKey("d", { ctrl: true })
     await fixture.app.waitFor(() => fixture.removals.length === 1)
-    expect(fixture.removals).toEqual([{ payload: { directory: linked, force: false }, directory: clone }])
+    expect(fixture.removals).toEqual([
+      { payload: { projectID: "proj_test", directory: linked, force: false }, directory: null },
+    ])
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+test("refresh explicitly scans the project and preserves the worktree filter", async () => {
+  const fixture = await renderMove({ directory: clone, home: true })
+  try {
+    await fixture.move.open()
+    await fixture.app.waitFor(() => fixture.reads.refresh.length === 1)
+    await fixture.app.waitForFrame((frame) => frame.includes("Worktrees") && frame.includes(linked))
+    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof InputRenderable)
+    await fixture.app.mockInput.typeText("linked")
+    await fixture.app.waitForFrame((frame) => frame.includes(linked) && !frame.includes(clone))
+    fixture.app.mockInput.pressKey("r", { ctrl: true })
+    await fixture.app.waitFor(() => fixture.reads.refresh.length === 2)
+    expect(fixture.reads.refresh).toEqual([{ projectID: "proj_test" }, { projectID: "proj_test" }])
+    const frame = await fixture.app.waitForFrame((frame) => frame.includes(linked) && !frame.includes(clone))
+    expect(frame).toContain("linked")
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -177,7 +204,10 @@ test("does not open creation when the selected Home location lookup fails", asyn
 
     expect(fixture.requests).toEqual([])
     expect(fixture.moves).toEqual([])
-    expect(fixture.toast.currentToast).toMatchObject({ message: "Unable to determine current project", variant: "error" })
+    expect(fixture.toast.currentToast).toMatchObject({
+      message: "Unable to determine current project",
+      variant: "error",
+    })
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -195,7 +225,7 @@ async function renderMove(input: {
   const requests: unknown[] = []
   const removals: unknown[] = []
   const moves: unknown[] = []
-  const reads = { session: 0, locations: [] as string[], worktrees: [] as string[] }
+  const reads = { session: 0, locations: [] as string[], worktrees: [] as string[], refresh: [] as unknown[] }
   const calls = createFetch(async (url, request) => {
     if (url.pathname === "/api/location") {
       const directory = url.searchParams.get("location[directory]") ?? launch
@@ -235,10 +265,10 @@ async function renderMove(input: {
     }
     if (url.pathname === "/api/worktree") {
       if (request.method === "GET") {
-        const directory = url.searchParams.get("location[directory]") ?? launch
-        reads.worktrees.push(directory)
+        const projectID = url.searchParams.get("projectID") ?? ""
+        reads.worktrees.push(projectID)
         return json(
-          directory === launch && input.launchProjectID
+          projectID === input.launchProjectID
             ? [{ directory: launch }]
             : [{ directory: main }, { directory: clone }, { directory: linked, strategy: "git" }],
         )
@@ -255,7 +285,10 @@ async function renderMove(input: {
         return new Response(null, { status: 204 })
       }
     }
-    if (url.pathname === "/api/worktree/refresh") return new Response(null, { status: 204 })
+    if (url.pathname === "/api/worktree/refresh") {
+      reads.refresh.push(await request.json())
+      return new Response(null, { status: 204 })
+    }
     if (url.pathname === "/api/session/ses_clone/move") {
       moves.push(await request.json())
       return new Response(null, { status: 204 })

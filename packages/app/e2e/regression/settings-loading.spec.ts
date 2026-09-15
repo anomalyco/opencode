@@ -1,12 +1,15 @@
 import { expect, test } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import type { OpenCodeEvent } from "@opencode/client/promise"
 
 const directory = "C:/Projects/settings-demo"
 const sandboxes = Array.from({ length: 12 }, (_, index) => `${directory}/workspace-${index + 1}`)
+const events: OpenCodeEvent[] = []
 
 test.use({ viewport: { width: 1440, height: 1000 }, colorScheme: "dark" })
 
 test.beforeEach(async ({ page }) => {
+  events.length = 0
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -40,6 +43,7 @@ test.beforeEach(async ({ page }) => {
       time: { created: 1700000000000, updated: 1700000000000 },
     })),
     pageMessages: () => ({ items: [] }),
+    events: () => events.splice(0),
   })
   await page.addInitScript((directory) => {
     localStorage.setItem(
@@ -50,6 +54,31 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/")
   await page.getByRole("button", { name: "Settings", exact: true }).click()
   await expect(page.getByTestId("settings-screen").getByRole("tab", { name: "Preferences" })).toBeVisible()
+})
+
+test("an inventory event updates the open all-project worktree list", async ({ page }) => {
+  const discovered = `${directory}/discovered-workspace`
+  const inventory = [{ directory }, ...sandboxes.map((directory) => ({ directory, strategy: "git" }))]
+  await page.route(
+    (url) => url.pathname === "/api/worktree",
+    (route) => route.fulfill({ json: inventory }),
+  )
+  const settings = page.getByTestId("settings-screen")
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
+  await expect(settings.getByText(sandboxes[0], { exact: true })).toBeVisible()
+  const listed = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
+  )
+  inventory.push({ directory: discovered, strategy: "git" })
+  events.push({
+    id: "evt_settings_worktree_updated",
+    created: Date.now(),
+    type: "worktree.updated",
+    data: { projectID: "proj_settings_demo" },
+  })
+  expect((await listed).ok()).toBe(true)
+  await expect(settings.getByText(discovered, { exact: true })).toBeVisible()
 })
 
 test("settings has its own route and returns through app history", async ({ page }) => {
@@ -223,7 +252,7 @@ test("workspaces opens without waiting for inventory or sessions", async ({ page
   const requested = page.waitForRequest(
     (request) =>
       new URL(request.url()).pathname === "/api/worktree" &&
-      new URL(request.url()).searchParams.get("location[directory]") === directory &&
+      new URL(request.url()).searchParams.get("projectID") === "proj_settings_demo" &&
       request.method() === "GET",
   )
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
@@ -252,7 +281,7 @@ test("workspaces opens without waiting for inventory or sessions", async ({ page
   refresh.resolve()
 })
 
-test("worktree deletion sends the project location separately from the target", async ({ page }) => {
+test("worktree deletion sends the project ID and target without a location", async ({ page }) => {
   const removed = new Set<string>()
   await page.route(
     (url) => url.pathname === "/api/worktree",
@@ -284,8 +313,8 @@ test("worktree deletion sends the project location separately from the target", 
   )
   await remove.click()
   const request = await deleting
-  expect(new URL(request.url()).searchParams.get("location[directory]")).toBe(directory)
-  expect(request.postDataJSON()).toEqual({ directory: sandboxes[0], force: true })
+  expect(new URL(request.url()).searchParams.has("location[directory]")).toBe(false)
+  expect(request.postDataJSON()).toEqual({ projectID: "proj_settings_demo", directory: sandboxes[0], force: true })
   await expect(settings.getByText(sandboxes[0], { exact: true })).toHaveCount(0)
   await expect(settings.getByText("11 worktrees", { exact: true })).toBeVisible()
 })

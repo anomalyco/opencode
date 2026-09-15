@@ -26,8 +26,7 @@ import { Plugin } from "./plugin.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { InstancePlugins } from "./plugin/instance.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
-import { WorktreeRefresh } from "./worktree/refresh.js"
-import { Worktree } from "./worktree.js"
+import { WorktreeStrategies } from "./worktree/strategies.js"
 import { Pty } from "./pty.js"
 import { Shell } from "./shell.js"
 import { ShellSelect } from "./shell/select.js"
@@ -74,8 +73,7 @@ const nodes = [
   PluginHooks.node,
   InstancePlugins.node,
   PluginSupervisor.node,
-  WorktreeRefresh.node,
-  Worktree.node,
+  WorktreeStrategies.node,
   FileSystemSearch.node,
   FileSystem.node,
   ShellSelect.node,

@@ -873,7 +873,7 @@ describe("V2 mini transport", () => {
     )
       await Bun.sleep(0)
 
-    expect(client.session.message).toHaveBeenCalledWith(
+    expect(client.session.message.get).toHaveBeenCalledWith(
       { sessionID: "ses_child", messageID: "msg_child_source" },
       { signal: expect.any(AbortSignal) },
     )

@@ -215,7 +215,7 @@ export const SettingsWorkspaces: Component<{
       }
       const removed = await context.sdk.api.worktree
         .remove({
-          location: { directory: workspace.project.worktree },
+          projectID: workspace.project.id,
           directory: workspace.directory,
           force,
         })
@@ -243,7 +243,7 @@ export const SettingsWorkspaces: Component<{
       })
       clearWorkspaceTerminals(workspace.directory, platform, context.sdk.scope)
       await queryClient.invalidateQueries({
-        queryKey: worktreeInventoryKey(context.sdk.scope, workspace.project.worktree),
+        queryKey: worktreeInventoryKey(context.sdk.scope, workspace.project.id),
       })
       await queryClient.invalidateQueries({ queryKey: [context.sdk.scope, "settings-workspace-inventory"] })
     } finally {
