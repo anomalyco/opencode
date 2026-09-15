@@ -13,6 +13,7 @@ import type {
 import { Effect, Ref, Schema, Semaphore } from "effect"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { CodeModeCatalog } from "./catalog.js"
+import { CodeModeWeb } from "./web.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -59,8 +60,8 @@ export type Inventory = {
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
-  "Run JavaScript in a confined Code Mode runtime to orchestrate tool calls and compose their results.",
-  "Imports, direct filesystem access, and timers are unavailable. Do not use `fetch`; all external access goes through `tools`.",
+  "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+  "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable; all other external access goes through `tools`.",
   "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
@@ -219,7 +220,7 @@ function runtime(
     })
   }
   const tools = renderTools(root)
-  return CodeMode.make<typeof tools>({ tools, ...hooks })
+  return CodeMode.make<typeof tools>({ tools, extensions: [CodeModeWeb.extension], ...hooks })
 }
 
 function getNode<T>(root: Node<T>, path: string) {
