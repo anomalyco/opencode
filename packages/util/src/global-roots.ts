@@ -14,6 +14,6 @@ export function roots(app: string) {
     cache: path.join(cache!, app),
     config: path.join(config!, app),
     state: path.join(state!, app),
-    tmp: path.join(os.tmpdir(), app),
+    tmp: path.join(process.env.XDG_RUNTIME_DIR || os.tmpdir(), app),
   }
 }

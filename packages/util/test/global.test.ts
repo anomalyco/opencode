@@ -19,6 +19,7 @@ describe("global", () => {
         XDG_CACHE_HOME: directories[1],
         XDG_CONFIG_HOME: directories[2],
         XDG_STATE_HOME: directories[3],
+        XDG_RUNTIME_DIR: "",
         TMPDIR: directories[4],
       },
       stderr: "pipe",
@@ -70,6 +71,7 @@ describe("global", () => {
         XDG_CACHE_HOME: directories[1],
         XDG_CONFIG_HOME: directories[2],
         XDG_STATE_HOME: directories[3],
+        XDG_RUNTIME_DIR: "",
         TMPDIR: directories[4],
       },
       stdout: "pipe",
@@ -77,7 +79,9 @@ describe("global", () => {
     })
 
     expect(result.exitCode, result.stderr.toString()).toBe(0)
-    expect(result.stdout.toString()).toBe(fs.realpathSync(path.join(directories[4], "opencode")))
+    const temporary = result.stdout.toString()
+    expect(path.dirname(temporary)).toBe(fs.realpathSync(directories[4]))
+    expect(path.basename(temporary)).toMatch(/^opencode-.{6}$/)
     const created = [
       path.join(directories[0], "opencode"),
       path.join(directories[1], "opencode", "bin"),
@@ -85,7 +89,7 @@ describe("global", () => {
       path.join(directories[3], "opencode"),
       path.join(directories[0], "opencode", "log"),
       path.join(directories[0], "opencode", "repos"),
-      path.join(directories[4], "opencode"),
+      temporary,
     ]
     created.forEach((directory) => expect(fs.statSync(directory).isDirectory()).toBe(true))
     fs.rmSync(root, { recursive: true, force: true })
