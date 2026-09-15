@@ -263,6 +263,40 @@ describe("tool.shell permissions", () => {
     }),
   )
 
+  if (process.platform !== "win32") {
+    const redirOps = [
+      { label: "stdout", target: "echo BYPASS > /tmp/oc-redirect-test.txt", glob: "/tmp/*" },
+      { label: "append", target: "echo BYPASS >> /tmp/oc-redirect-test.txt", glob: "/tmp/*" },
+      { label: "stderr", target: "ls 2>/etc/opencode-stderr-test", glob: "/etc/*" },
+      { label: "stderr-append", target: "ls 2>>/etc/opencode-stderr-test", glob: "/etc/*" },
+      { label: "stdin", target: "cat </etc/opencode-stdin-test", glob: "/etc/*" },
+      { label: "both", target: "echo BYPASS &>/tmp/oc-redirect-both.txt", glob: "/tmp/*" },
+    ] as const
+    for (const op of redirOps) {
+      it.live(`asks for external_directory permission for ${op.label} redirection targets`, () =>
+        Effect.gen(function* () {
+          const tmp = yield* tmpdirScoped()
+          yield* runIn(
+            tmp,
+            Effect.gen(function* () {
+              const err = new Error("stop after permission")
+              const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+              expect(
+                yield* fail(
+                  { command: op.target },
+                  capture(requests, err),
+                ),
+              ).toMatchObject({ message: err.message })
+              const extDirReq = requests.find((r) => r.permission === "external_directory")
+              expect(extDirReq).toBeDefined()
+              expect(extDirReq!.patterns).toContain(op.glob)
+            }),
+          )
+        }),
+      )
+    }
+  }
+
   for (const item of ps) {
     it.live(`parses PowerShell conditionals for permission prompts [${item.label}]`, () =>
       withShell(
