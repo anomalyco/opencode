@@ -881,6 +881,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Rensa aviseringar",
   "sidebar.empty.title": "Inga projekt öppna",
   "sidebar.empty.description": "Öppna ett projekt för att komma igång",
+  "sidebar.history.runningChat": "Körs: {{title}}",
   "debugBar.ariaLabel": "Utvecklingsprestandadiagnostik",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

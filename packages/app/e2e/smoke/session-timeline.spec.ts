@@ -3,7 +3,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { fixture, pageMessages } from "./session-timeline.fixture"
 import { trackPageErrors, expectNoSmokeErrors } from "../utils/errors"
 import { mockOpenCodeServer } from "../utils/mock-server"
-import { APP_READY_TIMEOUT, expectAppVisible, expectSessionTitle } from "../utils/waits"
+import { APP_READY_TIMEOUT, expectAppVisible, expectSessionTitle, switchHistorySession } from "../utils/waits"
 
 const forbiddenText = ["Load details", "Show earlier steps"]
 
@@ -143,7 +143,7 @@ test.describe("smoke: session timeline", () => {
 
     await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.targetID}`)
     await expectSessionTitle(page, fixture.expected.targetTitle)
-    await switchTitlebarSession(page, fixture.sourceID, fixture.expected.sourceTitle)
+    await switchHistorySession(page, fixture.sourceID, fixture.expected.sourceTitle)
 
     const destination = fixture.messages[fixture.targetID].map((message) => message.info.id)
     const last = fixture.expected.targetMessageIDs.at(-1)!
@@ -216,7 +216,7 @@ test.describe("smoke: session timeline", () => {
       { destination, last },
     )
 
-    await switchTitlebarSession(page, fixture.targetID, fixture.expected.targetTitle)
+    await switchHistorySession(page, fixture.targetID, fixture.expected.targetTitle)
     await page.waitForFunction(() =>
       (
         window as Window & { __sessionTabPaint?: { samples: Array<{ ids: string[] }> } }
@@ -301,7 +301,7 @@ test.describe("smoke: session timeline", () => {
       { destination, last },
     )
 
-    await switchTitlebarSession(page, fixture.targetID, fixture.expected.targetTitle)
+    await switchHistorySession(page, fixture.targetID, fixture.expected.targetTitle)
     await page.waitForFunction(() =>
       (window as Window & { __coldTabSamples?: Array<{ destination: boolean }> }).__coldTabSamples?.some(
         (sample) => sample.destination,
@@ -725,14 +725,6 @@ async function selectHomeProject(page: Page, projectName: string) {
 async function navigateToSession(page: Page, directory: string, sessionId: string, expectedTitle: string) {
   await page.goto(`/${base64Encode(directory)}/session/${sessionId}`)
   await expectSessionTitle(page, expectedTitle)
-}
-
-async function switchTitlebarSession(page: Page, sessionID: string, title: string) {
-  const href = `/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`
-  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
-  await expect(tab).toBeVisible()
-  await tab.click()
-  await expectSessionTitle(page, title)
 }
 
 async function expectSessionReady(page: Page) {

@@ -768,6 +768,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Ryd notifikationer",
   "sidebar.empty.title": "Ingen åbne projekter",
   "sidebar.empty.description": "Åbn et projekt for at komme i gang",
+  "sidebar.history.runningChat": "Kører: {{title}}",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Desktop",

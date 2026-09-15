@@ -880,6 +880,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Огоҳиҳоро тоза кунед",
   "sidebar.empty.title": "Ягон лоиҳа кушода нест",
   "sidebar.empty.description": "Барои оғоз кардани лоиҳа лоиҳа кушоед",
+  "sidebar.history.runningChat": "Иҷро шуда истодааст: {{title}}",
   "debugBar.ariaLabel": "Ташхиси самаранокии рушд",
   "debugBar.na": "не",
   "debugBar.nav.label": "NAV",
