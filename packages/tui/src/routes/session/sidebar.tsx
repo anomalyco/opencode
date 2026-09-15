@@ -46,9 +46,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           >
             {withTimestampedFallback(session())}
           </title_shimmer>
-          <Show when={session().location.workspaceID}>
-            <text fg={theme.text.subdued}>{session().location.workspaceID}</text>
-          </Show>
         </box>
         <scrollbox
           flexGrow={1}

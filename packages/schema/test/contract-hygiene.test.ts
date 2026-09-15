@@ -98,7 +98,7 @@ describe("contract hygiene", () => {
           admittedSeq: 3,
           id: "msg_pending",
           sessionID: "ses_pending",
-          timeCreated: 1,
+          time: { created: 1 },
           type: "user",
           payload: { text: "hello" },
           delivery: "steer",
@@ -107,7 +107,7 @@ describe("contract hygiene", () => {
     ).toEqual({
       id: "msg_pending",
       sessionID: "ses_pending",
-      timeCreated: 1,
+      time: { created: 1 },
       type: "user",
       payload: { text: "hello" },
       delivery: "steer",
@@ -213,7 +213,7 @@ describe("contract hygiene", () => {
 
   test("all session inbox item types accept both delivery modes", () => {
     const decode = Schema.decodeUnknownSync(SessionInbox.Info)
-    const base = { id: "msg_inbox", sessionID: "ses_inbox", timeCreated: 1 }
+    const base = { id: "msg_inbox", sessionID: "ses_inbox", time: { created: 1 } }
     const move = {
       location: { directory: "/project" },
       projectID: "global",

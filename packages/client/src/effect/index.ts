@@ -8,7 +8,6 @@ export { OpenCode } from "./client.js"
 export type {
   AgentApi,
   AppApi,
-  CatalogApi,
   CommandApi,
   ConfigApi,
   EventApi,

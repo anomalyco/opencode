@@ -369,7 +369,7 @@ export async function streamTurn(input: {
     }
     const assistant = assistantMessageID
       ? await input.client.session
-          .message({ sessionID: input.sessionID, messageID: assistantMessageID })
+          .message.get({ sessionID: input.sessionID, messageID: assistantMessageID })
           .catch(() => undefined)
       : undefined
     return response(

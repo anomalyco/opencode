@@ -14,7 +14,7 @@ import { DialogIntegration } from "./dialog-integration"
 import { useLocation } from "../context/location"
 
 function statusError(status: McpServer["status"]) {
-  if (status.status === "failed") return status.error
+  if (status.status === "failed" || status.status === "needs_auth") return status.error
   return undefined
 }
 
@@ -53,7 +53,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   const [detail, setDetail] = createSignal<McpServer | undefined>(
     props.details && initial?.status.status === "failed" ? initial : undefined,
   )
-  const [loading, setLoading] = createSignal<string | null>(null)
+  const [loading, setLoading] = createSignal<ReadonlySet<string>>(new Set())
 
   const statusColor = (status: McpServer["status"]) => {
     if (status.status === "connected") return theme.text.feedback.success.default
@@ -71,7 +71,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   const options = createMemo(() => {
     const loadingMcp = loading()
     return servers().map((server) => {
-      const pending = loadingMcp === server.name || server.status.status === "pending"
+      const pending = loadingMcp.has(server.name) || server.status.status === "pending"
       return {
         value: server.name,
         title: server.name,
@@ -110,18 +110,24 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   // Auth-gated servers enter the integration flow; other inactive states retry the connection.
   // The mcp.status.changed event refreshes the list, so no manual sync is needed.
   const toggle = (name: string) => {
-    if (loading() !== null) return
+    if (loading().has(name)) return
     const server = servers().find((entry) => entry.name === name)
     if (!server || server.status.status === "pending") return
     if (server.status.status === "needs_auth" && server.integrationID) {
       select(name)
       return
     }
-    setLoading(name)
+    setLoading((prev) => new Set(prev).add(name))
     const target = current()
-    const input = { server: name, location: { directory: target.directory, workspace: target.workspaceID } }
+    const input = { server: name, location: { directory: target.directory } }
     const call = server.status.status === "connected" ? client.api.mcp.disconnect(input) : client.api.mcp.connect(input)
-    void call.catch(toast.error).finally(() => setLoading(null))
+    void call.catch(toast.error).finally(() =>
+      setLoading((prev) => {
+        const next = new Set(prev)
+        next.delete(name)
+        return next
+      }),
+    )
   }
 
   return (
@@ -157,7 +163,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
           <DialogErrorDetails
             title={`MCP server: ${server().name}`}
             error={statusError(server().status) ?? "Unknown MCP connection error"}
-            context={`Status: failed\nConfiguration: mcp.servers.${server().name}${
+            context={`Status: ${server().status.status}\nConfiguration: mcp.servers.${server().name}${
               server().integrationID ? `\nIntegration: ${server().integrationID}` : ""
             }`}
             onBack={() => {

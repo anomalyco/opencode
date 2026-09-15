@@ -1104,7 +1104,7 @@ describe("SessionExecution interrupt continuation", () => {
       yield* execution.resume(sessionID).pipe(Effect.forkScoped)
       yield* Deferred.await(draining)
 
-      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
       // The successor drain is steer-scoped: queued next-turn work stays parked.
@@ -1136,7 +1136,7 @@ describe("SessionExecution interrupt continuation", () => {
       yield* execution.resume(sessionID).pipe(Effect.forkScoped)
       yield* Deferred.await(draining)
 
-      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
       expect(drains).toEqual(["input"])
@@ -1159,7 +1159,7 @@ describe("SessionExecution interrupt continuation", () => {
       )
       const execution = Context.get(context, SessionExecution.Service)
 
-      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
       expect(drains).toEqual([{ force: false, promotable: "steer" }])
@@ -1188,7 +1188,7 @@ describe("SessionExecution interrupt continuation", () => {
       yield* execution.resume(sessionID).pipe(Effect.forkScoped)
       yield* Deferred.await(draining)
 
-      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
       // Control work is housekeeping, not next-turn input: continue runs it.
@@ -1214,7 +1214,7 @@ describe("SessionExecution interrupt continuation", () => {
       )
       const execution = Context.get(context, SessionExecution.Service)
 
-      yield* execution.interrupt(sessionID, { continue: true })
+      yield* execution.interrupt(sessionID, { resume: true })
       yield* execution.awaitIdle(sessionID)
 
       // The queued prompt is next in line; the compaction behind it waits its turn.

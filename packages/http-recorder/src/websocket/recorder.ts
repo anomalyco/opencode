@@ -374,7 +374,7 @@ const makeRecordingWebSocketConstructor = (
   return (url, protocols) => {
     const sequence = nextSequence++
     const requestedProtocols = normalizeProtocols(protocols)
-    const native = Reflect.apply(upstream, undefined, [url, protocols])
+    const native = upstream(url, protocols)
     const events: WebSocketEvent[] = []
     let opened = false
     let failed = false
@@ -439,12 +439,15 @@ const makeRecordingWebSocketConstructor = (
       get: (target, property) => {
         if (property === "send")
           return (data: string | ArrayBufferLike | Blob | ArrayBufferView) => {
+            // oxlint-disable-next-line no-restricted-globals -- The socket implementation's overloaded send signature is erased by the proxy boundary.
             Reflect.apply(target.send, target, [data])
             appendEvent("client", data)
           }
+        // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property access.
         const value: unknown = Reflect.get(target, property, target)
         return typeof value === "function" ? value.bind(target) : value
       },
+      // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property assignment.
       set: (target, property, value) => Reflect.set(target, property, value, target),
     })
   }

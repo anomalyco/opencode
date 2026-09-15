@@ -3,7 +3,7 @@ import { Effect, Option } from "effect"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { handlePromptErrors, requireInteractive } from "../../../ui/prompt"
-import { createClient, loadIntegrations, location, request } from "./shared"
+import { createClient, loadIntegrations, request } from "./shared"
 import { chooseCredential, chooseIntegration } from "./account"
 
 export default Runtime.handler(
@@ -35,7 +35,7 @@ const logout = Effect.fn("cli.auth.logout.run")(function* (input: {
   const credentialID = yield* chooseCredential(integration, "log out", input.credential)
   const progress = spinner()
   progress.start("Removing credential...")
-  yield* request((signal) => client.credential.remove({ credentialID, location }, { signal })).pipe(
+  yield* request((signal) => client.credential.remove({ credentialID }, { signal })).pipe(
     Effect.tap(() => Effect.sync(() => progress.stop(`Removed account from ${integration.name}`))),
     Effect.tapCause(() => Effect.sync(() => progress.stop("Failed to remove credential", 1))),
   )

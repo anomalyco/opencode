@@ -102,7 +102,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
         : props.context.data.location.default()
     },
     undefined,
-    { equals: (a, b) => a.directory === b.directory && a.workspaceID === b.workspaceID },
+    { equals: (a, b) => a.directory === b.directory },
   )
   const baseKey = createMemo(() =>
     JSON.stringify([locationKey(location()), props.context.data.location.vcs.info(location())?.branch.current]),

@@ -54,7 +54,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               : ctx.query
           const page = yield* session.list({
             ...query,
-            workspaceID: query.workspace,
             limit: ctx.query.limit ?? DefaultSessionsLimit,
           })
           const sessions = page.data
@@ -185,7 +184,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.view",
         Effect.fn(function* (ctx) {
           yield* session
-            .view({ sessionID: ctx.params.sessionID, idle: ctx.payload.idle })
+            .view({ sessionID: ctx.params.sessionID, idle: DateTime.toEpochMillis(ctx.payload.idle) })
             .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
@@ -210,7 +209,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.fork",
         Effect.fn(function* (ctx) {
           return {
-            data: yield* session.fork({ sessionID: ctx.params.sessionID, boundary: ctx.payload.boundary }).pipe(
+            data: yield* session.fork({ sessionID: ctx.params.sessionID, before: ctx.payload.before }).pipe(
               Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Session.MessageNotFoundError", missingMessage),
               Effect.catchTag(
@@ -260,7 +259,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             .move({
               sessionID: ctx.params.sessionID,
               directory: ctx.payload.directory,
-              workspaceID: ctx.payload.workspaceID,
               delivery: ctx.payload.delivery,
             })
             .pipe(
@@ -320,7 +318,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           yield* session
             .command({
               sessionID: ctx.params.sessionID,
-              command: ctx.payload.command,
+              command: ctx.payload.name,
               text: ctx.payload.text,
               files: ctx.payload.files,
               agents: ctx.payload.agents,
@@ -355,8 +353,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           yield* session
             .skill({
               sessionID: ctx.params.sessionID,
-              id: ctx.payload.id,
-              skill: ctx.payload.skill,
+              skill: ctx.payload.id,
               resume: ctx.payload.resume,
             })
             .pipe(
@@ -594,7 +591,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.interrupt",
         Effect.fn(function* (ctx) {
-          return { interrupted: yield* session.interrupt(ctx.params.sessionID, { continue: ctx.query.continue }) }
+          return { interrupted: yield* session.interrupt(ctx.params.sessionID, { resume: ctx.query.resume }) }
         }),
       )
       .handle(

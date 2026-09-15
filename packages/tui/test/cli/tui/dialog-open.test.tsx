@@ -242,7 +242,6 @@ test("loads Git worktrees only when drilling into a project or its associated di
   const root = path.resolve("/tmp/opencode/project")
   const current = path.resolve("/tmp/opencode/current-branch")
   const other = path.resolve("/tmp/opencode/other-branch")
-  const workspaceID = "ws_worktree"
   let requests = 0
   const fixture = await renderOpen(
     (url) => {
@@ -260,18 +259,17 @@ test("loads Git worktrees only when drilling into a project or its associated di
       if (url.pathname === "/api/location")
         return json({
           directory: current,
-          workspaceID,
           project: { id: "proj_git", directory: current, canonical: root },
         })
       if (url.pathname !== "/api/worktree") return undefined
-      expect(url.searchParams.get("location[directory]")).toBe(root)
-      expect(url.searchParams.get("location[workspace]")).toBe(workspaceID)
+      expect(url.searchParams.get("projectID")).toBe("proj_git")
+      expect(url.searchParams.has("location[directory]")).toBe(false)
       requests++
       return json([{ directory: other, strategy: "git" }, { directory: root }, { directory: current, strategy: "git" }])
     },
     async ({ data, location }) => {
-      await data.location.sync({ directory: current, workspaceID })
-      location.set({ directory: current, workspaceID })
+      await data.location.sync({ directory: current })
+      location.set({ directory: current })
     },
   )
 
@@ -311,7 +309,7 @@ test("loads Git worktrees only when drilling into a project or its associated di
     await fixture.app.mockInput.typeText("other-branch")
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitFor(() => fixture.route.data.type === "home")
-    expect(fixture.route.data).toEqual({ type: "home", location: { directory: other, workspaceID } })
+    expect(fixture.route.data).toEqual({ type: "home", location: { directory: other } })
   } finally {
     await fixture.dispose()
   }
@@ -364,39 +362,6 @@ test("does not show or trigger worktree navigation for non-Git and global direct
   }
 })
 
-test("keeps session directory targets distinct across workspaces", async () => {
-  const directory = "/tmp/opencode/archive"
-  const fixture = await renderOpen((url) => {
-    if (url.pathname === "/api/project") return json([])
-    if (url.pathname !== "/api/session") return undefined
-    return json({
-      data: ["ws_first", "ws_second"].map((workspaceID, index) => ({
-        id: `ses_${workspaceID}`,
-        projectID: "proj_archive",
-        title: `Archived session ${index}`,
-        location: { directory, workspaceID },
-        cost: 0,
-        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        time: { created: 1, updated: 2 - index },
-      })),
-      cursor: {},
-    })
-  })
-  try {
-    await fixture.app.waitForFrame((frame) => frame.includes("Archived session"))
-    await fixture.app.mockInput.typeText("archive")
-    const frame = await fixture.app.waitForFrame((frame) => frame.includes(directory))
-    expect(frame.split("\n").filter((line) => line.includes(directory))).toHaveLength(2)
-    fixture.app.mockInput.pressArrow("down")
-    fixture.app.mockInput.pressEnter()
-    await fixture.app.waitFor(() => fixture.route.data.type === "home")
-    expect(fixture.route.data).toEqual({ type: "home", location: { directory, workspaceID: "ws_second" } })
-    expect(fixture.location.ref).toEqual({ directory, workspaceID: "ws_second" })
-  } finally {
-    await fixture.dispose()
-  }
-})
-
 test("does not show the previous project's worktrees while loading another project", async () => {
   const pending = Promise.withResolvers<Response>()
   const fixture = await renderOpen((url) => {
@@ -412,9 +377,9 @@ test("does not show the previous project's worktrees while loading another proje
         })),
       )
     if (url.pathname !== "/api/worktree") return undefined
-    if (url.searchParams.get("location[directory]") === "/tmp/opencode/Alpha")
+    if (url.searchParams.get("projectID") === "proj_Alpha")
       return json([{ directory: "/tmp/opencode/alpha-checkout", strategy: "git" }])
-    return pending.promise
+    return pending.promise.then((response) => response.clone())
   })
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Alpha") && frame.includes("Beta"))
@@ -442,11 +407,10 @@ test("does not show the previous project's worktrees while loading another proje
   }
 })
 
-test.each(["", "search-ui"])("creates a worktree named '%s' and opens it in the current workspace", async (name) => {
+test.each(["", "search-ui"])("creates a worktree named '%s' by project and opens its local directory", async (name) => {
   const projectID = "proj_git_create"
   const root = path.resolve("/tmp/opencode/project")
   const created = path.resolve("/tmp/opencode/created-branch")
-  const workspaceID = "ws_create"
   let payload: unknown
   const fixture = await renderOpen(
     async (url, request) => {
@@ -462,17 +426,20 @@ test.each(["", "search-ui"])("creates a worktree named '%s' and opens it in the 
           },
         ])
       if (url.pathname === "/api/location")
-        return json({ directory: root, workspaceID, project: { id: projectID, directory: root, canonical: root } })
+        return json({ directory: root, project: { id: projectID, directory: root, canonical: root } })
       if (url.pathname !== "/api/worktree") return undefined
-      expect(url.searchParams.get("location[directory]")).toBe(root)
-      expect(url.searchParams.get("location[workspace]")).toBe(workspaceID)
-      if (request.method === "GET") return json([{ directory: root }])
+      expect(url.searchParams.has("location[directory]")).toBe(false)
+      expect(url.searchParams.has("location[workspace]")).toBe(false)
+      if (request.method === "GET") {
+        expect(url.searchParams.get("projectID")).toBe(projectID)
+        return json([{ directory: root }])
+      }
       payload = await request.json()
       return json({ directory: created })
     },
     async ({ data, location }) => {
-      await data.location.sync({ directory: root, workspaceID })
-      location.set({ directory: root, workspaceID })
+      await data.location.sync({ directory: root })
+      location.set({ directory: root })
     },
   )
 
@@ -509,9 +476,9 @@ test.each(["", "search-ui"])("creates a worktree named '%s' and opens it in the 
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitFor(() => fixture.route.data.type === "home")
 
-    expect(payload).toEqual(name ? { name } : {})
-    expect(fixture.route.data).toEqual({ type: "home", location: { directory: created, workspaceID } })
-    expect(fixture.location.ref).toEqual({ directory: created, workspaceID })
+    expect(payload).toEqual({ projectID, ...(name ? { name } : {}) })
+    expect(fixture.route.data).toEqual({ type: "home", location: { directory: created } })
+    expect(fixture.location.ref).toEqual({ directory: created })
   } finally {
     await fixture.dispose()
   }

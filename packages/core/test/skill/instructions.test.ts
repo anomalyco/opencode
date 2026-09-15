@@ -14,20 +14,20 @@ const effect = Skill.Info.make({
   id: Skill.ID.make("effect"),
   name: Skill.Name.make("Effect"),
   description: "Build applications with Effect",
-  location: AbsolutePath.make(path.resolve("/skills/effect/SKILL.md")),
+  path: AbsolutePath.make(path.resolve("/skills/effect/SKILL.md")),
   content: "Effect guidance",
 })
 const hidden = Skill.Info.make({
   id: Skill.ID.make("hidden"),
   name: Skill.Name.make("Hidden"),
-  location: AbsolutePath.make(path.resolve("/skills/hidden/SKILL.md")),
+  path: AbsolutePath.make(path.resolve("/skills/hidden/SKILL.md")),
   content: "Undescribed guidance",
 })
 const denied = Skill.Info.make({
   id: Skill.ID.make("denied"),
   name: Skill.Name.make("Denied"),
   description: "Must not be advertised",
-  location: AbsolutePath.make(path.resolve("/skills/denied/SKILL.md")),
+  path: AbsolutePath.make(path.resolve("/skills/denied/SKILL.md")),
   content: "Denied guidance",
 })
 const manual = Skill.Info.make({
@@ -35,7 +35,7 @@ const manual = Skill.Info.make({
   name: Skill.Name.make("Manual"),
   description: "Load only when explicitly selected",
   autoinvoke: false,
-  location: AbsolutePath.make(path.resolve("/skills/manual/SKILL.md")),
+  path: AbsolutePath.make(path.resolve("/skills/manual/SKILL.md")),
   content: "Manual guidance",
 })
 
@@ -85,7 +85,7 @@ describe("SkillInstructions", () => {
       id: Skill.ID.make("debugging"),
       name: Skill.Name.make("Debugging"),
       description: "Diagnose hard bugs",
-      location: AbsolutePath.make(path.resolve("/skills/debugging/SKILL.md")),
+      path: AbsolutePath.make(path.resolve("/skills/debugging/SKILL.md")),
       content: "Debugging guidance",
     })
     let skills = [effect]

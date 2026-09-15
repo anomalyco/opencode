@@ -4,9 +4,13 @@ import { Schema } from "effect"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Money } from "./money.js"
+import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
 export type ID = typeof ID.Type
+
+const Updated = ephemeral({ type: "model.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
 
 export const VariantID = Schema.String.pipe(Schema.brand("Model.VariantID"))
 export type VariantID = typeof VariantID.Type

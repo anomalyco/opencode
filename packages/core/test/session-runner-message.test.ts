@@ -202,6 +202,44 @@ Recent work
     ])
   })
 
+  describe("model-switched", () => {
+    const ref = (variant?: string) =>
+      Model.Ref.make({
+        id: Model.ID.make("model"),
+        providerID: Provider.ID.make("provider"),
+        ...(variant === undefined ? {} : { variant: Model.VariantID.make(variant) }),
+      })
+    const switched = (to: Model.Ref, previous?: Model.Ref) =>
+      SessionMessage.ModelSelected.make({
+        id: id("model"),
+        type: "model-switched",
+        model: to,
+        previous,
+        time: { created },
+      })
+
+    test("records a same-model effort switch as an effort update", () => {
+      expect(toLLMMessages([switched(ref("low"), ref("high"))], ref("low"))).toEqual([
+        Message.effort({ effort: "low", previous: "high" }),
+      ])
+    })
+
+    test("maps the default variant and no variant to the model default effort", () => {
+      expect(toLLMMessages([switched(ref("low"), ref())], ref("low"))).toEqual([Message.effort({ effort: "low" })])
+      expect(toLLMMessages([switched(ref("default"), ref("max"))], ref())).toEqual([
+        Message.effort({ previous: "max" }),
+      ])
+    })
+
+    test("ignores switches that are not effort changes on the requested model", () => {
+      const other = Model.Ref.make({ id: Model.ID.make("other"), providerID: Provider.ID.make("provider") })
+      expect(toLLMMessages([switched(ref("low"))], ref("low"))).toEqual([])
+      expect(toLLMMessages([switched(ref("low"), other)], ref("low"))).toEqual([])
+      expect(toLLMMessages([switched(ref("thinking"), ref("high"))], ref("thinking"))).toEqual([])
+      expect(toLLMMessages([switched(ref("low"), ref("high"))], other)).toEqual([])
+    })
+  })
+
   test("lowers text attachments after the prompt in one user message", () => {
     const file = FileAttachment.make({
       data: Base64.make(Buffer.from("export const value = 1").toString("base64")),

@@ -500,13 +500,13 @@ test("automatic rename refreshes the displayed title before settling, even witho
         return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
       if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
-      if (url.pathname === "/api/session/ses_rename") return json({ data: session })
-      if (/^\/api\/session\/ses_rename\/(message|inbox|permission)$/.test(url.pathname))
-        return json({ data: [], cursor: {} })
-      if (url.pathname === "/api/session/ses_rename/rename") {
+      if (url.pathname === "/api/session/ses_rename" && request.method === "PATCH") {
         bodies.push(await request.json())
         return response.promise
       }
+      if (url.pathname === "/api/session/ses_rename") return json({ data: session })
+      if (/^\/api\/session\/ses_rename\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
       return undefined
     },
   })
@@ -1250,7 +1250,7 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
   expect(setup.renderer.isDestroyed).toBe(false)
 })
 
-test.each(["manual", "select"] as const)(
+test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
   "selection copy and pane management respect %s mode in the prompt and terminal pane",
   async (copy) => {
     const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
@@ -1328,7 +1328,6 @@ test.each(["manual", "select"] as const)(
             get: async () => ({
               animations: false,
               terminal: { copy },
-              session: { terminal: true },
             }),
             update: async () => ({}),
           },

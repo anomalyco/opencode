@@ -51,7 +51,7 @@ const execution = Layer.succeed(
     interrupt: (sessionID, options) =>
       Effect.sync(() => {
         interruptCalls.push(sessionID)
-        interruptContinuations.push(options?.continue)
+        interruptContinuations.push(options?.resume)
         return activeSessions.delete(sessionID)
       }),
     wake: (sessionID) =>
@@ -211,7 +211,7 @@ describe("Session.prompt", () => {
       interruptContinuations.length = 0
       wakeCalls.length = 0
 
-      yield* session.interrupt(sessionID, { continue: true })
+      yield* session.interrupt(sessionID, { resume: true })
 
       expect(interruptCalls).toEqual([sessionID])
       expect(interruptContinuations).toEqual([true])

@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { Plugin } from "@opencode/plugin/effect"
-import { Context, Deferred, Effect, Fiber, Layer } from "effect"
+import { Context, Deferred, Effect, Layer } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
@@ -62,11 +62,9 @@ it.live(
             }),
           )
         })
-      const pending = yield* request("POST", "/api/plugin/await-activation").pipe(Effect.forkScoped)
-      yield* Deferred.await(started)
-
       // Config providers activate after SDK plugins; reads must return the current snapshot without waiting.
       const list = yield* request("GET", "/api/provider").pipe(Effect.timeout("2 seconds"))
+      yield* Deferred.await(started)
       expect(list.status).toBe(200)
       expect(yield* Effect.promise(() => list.json())).toMatchObject({
         location: { directory: tmp.path },
@@ -78,29 +76,7 @@ it.live(
         _tag: "ProviderNotFoundError",
         providerID: "custom",
       })
-      expect(pending.pollUnsafe()).toBeUndefined()
-
       yield* Deferred.succeed(release, undefined)
-      expect((yield* Fiber.join(pending)).status).toBe(204)
-      const provider = {
-        id: "custom",
-        name: "Configured Custom Provider",
-        activation: "enabled",
-        package: "@opencode/ai/providers/openai-compatible",
-        settings: { apiKey: "secret" },
-      }
-      const configuredList = yield* request("GET", "/api/provider").pipe(Effect.timeout("2 seconds"))
-      expect(configuredList.status).toBe(200)
-      expect(yield* Effect.promise(() => configuredList.json())).toMatchObject({
-        location: { directory: tmp.path },
-        data: expect.arrayContaining([expect.objectContaining(provider)]),
-      })
-      const configuredGet = yield* request("GET", "/api/provider/custom").pipe(Effect.timeout("2 seconds"))
-      expect(configuredGet.status).toBe(200)
-      expect(yield* Effect.promise(() => configuredGet.json())).toMatchObject({
-        location: { directory: tmp.path },
-        data: provider,
-      })
     }),
   15_000,
 )

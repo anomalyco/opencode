@@ -3,6 +3,7 @@ export * as Provider from "./provider.js"
 import { Effect, Schema } from "effect"
 import { Integration } from "./integration.js"
 import { optional, PositiveInt, statics } from "./schema.js"
+import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Provider.ID"),
@@ -21,6 +22,9 @@ export const ID = Schema.String.pipe(
   })),
 )
 export type ID = typeof ID.Type
+
+const Updated = ephemeral({ type: "provider.updated", schema: {} })
+export const Event = { Updated, Definitions: inventory(Updated) }
 
 export const Package = Schema.String
 export type Package = typeof Package.Type

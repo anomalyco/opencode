@@ -37,7 +37,7 @@ export type Settings = ProviderPackage.Settings &
   }
 
 const fromRequest = Effect.fn("GoogleVertex.fromRequest")(function* (request: LLMRequest) {
-  const body = yield* Gemini.protocol.body.from(request)
+  const { serviceTier: _, ...body } = yield* Gemini.protocol.body.from(request)
   // Vertex's native REST schema rejects `id` on FunctionCall/FunctionResponse parts with HTTP 400,
   // unlike AI Studio, so history minted there cannot be lowered verbatim.
   const contents = body.contents.map((content) => ({
@@ -75,6 +75,10 @@ const route = Route.make({
     return `/${model.startsWith("endpoints/") ? model : `models/${model}`}:streamGenerateContent?alt=sse`
   }),
   auth: Auth.none,
+  headers: ({ request }): Record<string, string> => {
+    const serviceTier = request.providerOptions?.serviceTier
+    return typeof serviceTier === "string" ? { "x-vertex-ai-llm-shared-request-type": serviceTier } : {}
+  },
   framing: Framing.sse,
 })
 

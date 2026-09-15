@@ -135,8 +135,10 @@ describe("Git trees", () => {
           await Promise.all(paths.map((file) => Bun.write(path.join(project, file), "two\n")))
           await Bun.write(path.join(source.gitDirectory, "info", "exclude"), exitCode === 0 ? `${paths[1]}\n` : "")
           if (exitCode === 128) await Bun.write(path.join(source.gitDirectory, "config"), "[broken\n")
+          // A broken config makes git exit before reading stdin, so piping a Buffer races an EPIPE on the writer.
+          const stdin = exitCode === 128 ? Bun.file("/dev/null") : Buffer.from(paths.join("\0") + "\0")
           const result =
-            await $`git --git-dir ${source.gitDirectory} --work-tree ${source.worktree} check-ignore --no-index --stdin -z < ${Buffer.from(paths.join("\0") + "\0")}`
+            await $`git --git-dir ${source.gitDirectory} --work-tree ${source.worktree} check-ignore --no-index --stdin -z < ${stdin}`
               .cwd(project)
               .quiet()
               .nothrow()

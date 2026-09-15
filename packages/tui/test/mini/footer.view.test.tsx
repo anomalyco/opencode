@@ -14,7 +14,6 @@ import {
   RunCommandMenuBody,
   RunModelSelectBody,
   RunSettingsBody,
-  RunSkillSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
 } from "../../src/mini/footer.command"
@@ -836,7 +835,6 @@ test("direct command panel renders grouped actions without catalog commands", as
   const [commands] = createSignal<RunCommand[] | undefined>([
     command({ name: "review", description: "Review code" }),
     command({ name: "deploy", description: "Deploy prompt", source: "mcp" }),
-    command({ name: "internal", description: "Skill command", source: "skill" }),
   ])
   const [subagents] = createSignal([])
   const [variants] = createSignal(["high", "minimal"])
@@ -856,7 +854,6 @@ test("direct command panel renders grouped actions without catalog commands", as
           onAgent={() => {}}
           onModel={() => {}}
           onEditor={() => {}}
-          onSkill={() => {}}
           onSubagent={() => {}}
           onQueued={() => {}}
           onVariant={() => {}}
@@ -884,14 +881,11 @@ test("direct command panel renders grouped actions without catalog commands", as
     expect(frame).toContain("Search")
     expect(frame).toContain("Session")
     expect(frame).toContain("Agent")
-    expect(frame).toContain("Prompt")
     expect(frame).toContain("Open editor")
     expect(frame).toContain("/editor")
     expect(frame).toContain("Show status")
     expect(frame).toContain("Compact session")
     expect(frame).toContain("/compact")
-    expect(frame).toContain("Skills")
-    expect(frame).toContain("/skills")
     expect(frame.match(/\bAgent\b/g)?.length).toBe(1)
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
@@ -1054,93 +1048,6 @@ test.each([false, true])("settings change preferences and preview the work spinn
   }
 })
 
-test("direct skill panel renders searchable skill list", async () => {
-  const [commands] = createSignal<RunCommand[] | undefined>([
-    command({ name: "review", description: "Review code" }),
-    command({ name: "internal", description: "Skill command", source: "skill" }),
-    command({ name: "formatter", description: "Apply formatter fixes", source: "skill" }),
-  ])
-  const selected: string[] = []
-
-  const app = await testRender(
-    () => (
-      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
-        <RunSkillSelectBody
-          theme={() => RUN_THEME_FALLBACK.footer}
-          commands={commands}
-          onClose={() => {}}
-          onSelect={(name) => {
-            selected.push(name)
-          }}
-        />
-      </box>
-    ),
-    {
-      width: 100,
-      height: RUN_COMMAND_PANEL_ROWS,
-    },
-  )
-
-  try {
-    await app.renderOnce()
-    const frame = app.captureCharFrame()
-
-    expect(frame).toContain("Skills")
-    expect(frame).toContain("Search")
-    expect(frame).toContain("internal")
-    expect(frame).not.toContain("/internal")
-    expect(frame).toContain("formatter")
-    expect(frame).toContain("Apply formatter fixes")
-    expect(frame).not.toContain("review")
-    await app.mockInput.typeText("format")
-    await app.renderOnce()
-    expect(app.captureCharFrame()).not.toContain("internal")
-    app.mockInput.pressEnter()
-    expect(selected).toEqual(["formatter"])
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
-test("direct skill panel truncates long descriptions from the end", async () => {
-  const [commands] = createSignal<RunCommand[] | undefined>([
-    command({
-      name: "terminal-control",
-      description:
-        "Control and test terminal applications, REPLs, interactive CLIs, shell processes, OpenTUI applications, or other terminal-backed workflows.",
-      source: "skill",
-    }),
-  ])
-
-  const app = await testRender(
-    () => (
-      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
-        <RunSkillSelectBody
-          theme={() => RUN_THEME_FALLBACK.footer}
-          commands={commands}
-          onClose={() => {}}
-          onSelect={() => {}}
-        />
-      </box>
-    ),
-    {
-      width: 100,
-      height: RUN_COMMAND_PANEL_ROWS,
-    },
-  )
-
-  try {
-    await app.renderOnce()
-    const frame = app.captureCharFrame()
-
-    expect(frame).toContain("terminal-control")
-    expect(frame).toContain("Control and test terminal applications")
-    expect(frame).not.toMatch(/application(?:…|\.\.\.)ocess/)
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
 test("direct command panel shows subagent entry when available", async () => {
   const [commands] = createSignal<RunCommand[] | undefined>([])
   const [subagents] = createSignal([subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })])
@@ -1160,7 +1067,6 @@ test("direct command panel shows subagent entry when available", async () => {
           onAgent={() => {}}
           onModel={() => {}}
           onEditor={() => {}}
-          onSkill={() => {}}
           onSubagent={() => {}}
           onQueued={() => {}}
           onVariant={() => {}}
@@ -1211,7 +1117,6 @@ test("direct command panel keeps completed subagents available", async () => {
           onAgent={() => {}}
           onModel={() => {}}
           onEditor={() => {}}
-          onSkill={() => {}}
           onSubagent={() => {}}
           onQueued={() => {}}
           onVariant={() => {}}
@@ -1627,35 +1532,6 @@ test("direct footer submits slash autocomplete selections without dispatching sh
   }
 })
 
-test("direct footer slash autocomplete keeps a real skills command", async () => {
-  const submits: RunPrompt[] = []
-  const app = await renderFooter({
-    commands: [
-      command({ name: "skills", description: "Run the real skills command" }),
-      command({ name: "formatter", description: "Apply formatter fixes", source: "skill" }),
-    ],
-    onSubmit(prompt) {
-      submits.push(prompt)
-      return true
-    },
-  })
-
-  try {
-    await app.renderOnce()
-    "/skills".split("").forEach((key) => app.mockInput.pressKey(key))
-    await app.renderOnce()
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-
-    expect(submits).toEqual([
-      { text: "/skills ", parts: [], command: { name: "skills", arguments: "" }, delivery: "steer" },
-    ])
-    expect(app.captureCharFrame()).not.toContain("Apply formatter fixes")
-  } finally {
-    app.cleanup()
-  }
-})
-
 test("direct footer closes settings with ctrl-c instead of arming exit", async () => {
   const app = await renderFooter({ height: 20 })
 
@@ -1677,188 +1553,11 @@ test("direct footer closes settings with ctrl-c instead of arming exit", async (
 })
 
 test("selectedCommand validates the bound command and refreshes its arguments", () => {
-  expect(selectedCommand("/opencode-ts", { name: "opencode-ts", arguments: "", source: "skill" })).toEqual({
-    name: "opencode-ts",
-    arguments: "",
-    source: "skill",
-  })
   expect(selectedCommand("/deploy prod", { name: "deploy", arguments: "" })).toEqual({
     name: "deploy",
     arguments: "prod",
   })
   expect(selectedCommand("/other", { name: "deploy", arguments: "" })).toBeUndefined()
-})
-
-test("direct footer tags skill slash submissions with their catalog source", async () => {
-  const submits: RunPrompt[] = []
-  const app = await renderFooter({
-    commands: [command({ name: "formatter", description: "Apply formatter fixes", source: "skill" })],
-    onSubmit(prompt) {
-      submits.push(prompt)
-      return true
-    },
-  })
-
-  try {
-    await app.renderOnce()
-    "/formatter src".split("").forEach((key) => app.mockInput.pressKey(key))
-    await app.renderOnce()
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-
-    expect(submits).toEqual([
-      {
-        text: "/formatter src",
-        parts: [],
-        command: { name: "formatter", arguments: "src", source: "skill" },
-        delivery: "steer",
-      },
-    ])
-  } finally {
-    app.cleanup()
-  }
-})
-
-test("direct footer submits a selected leading skill as a prompt attachment", async () => {
-  const submits: RunPrompt[] = []
-  const app = await renderFooter({
-    commands: [command({ name: "formatter", description: "Apply formatter fixes", source: "skill" })],
-    onSubmit(prompt) {
-      submits.push(prompt)
-      return true
-    },
-  })
-
-  try {
-    await app.renderOnce()
-    "/forma".split("").forEach((key) => app.mockInput.pressKey(key))
-    await app.renderOnce()
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-    "src".split("").forEach((key) => app.mockInput.pressKey(key))
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-
-    expect(submits).toEqual([
-      {
-        text: "/formatter src",
-        parts: [
-          {
-            type: "skill",
-            id: "formatter",
-            source: { start: 0, end: 10, value: "/formatter" },
-          },
-        ],
-        delivery: "steer",
-      },
-    ])
-  } finally {
-    app.cleanup()
-  }
-})
-
-test("direct footer preserves a selected skill after wide text", async () => {
-  const submits: RunPrompt[] = []
-  const app = await renderFooter({
-    commands: [command({ name: "formatter", description: "Apply formatter fixes", source: "skill" })],
-    onSubmit(prompt) {
-      submits.push(prompt)
-      return true
-    },
-  })
-
-  try {
-    await app.renderOnce()
-    "中 /forma".split("").forEach((key) => app.mockInput.pressKey(key))
-    await app.renderOnce()
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-
-    expect(submits[0]?.parts).toEqual([
-      {
-        type: "skill",
-        id: "formatter",
-        source: { start: 3, end: 13, value: "/formatter" },
-      },
-    ])
-  } finally {
-    app.cleanup()
-  }
-})
-
-// OpenTUI currently segfaults Bun while tearing down this composer-to-skill-panel transition.
-// Re-enable after the upstream renderer teardown fix lands.
-test.skip("direct footer skill picker inserts an editable bound skill command", async () => {
-  const submits: RunPrompt[] = []
-  const app = await renderFooter({
-    commands: [command({ name: "new", description: "Skill named new", source: "skill" })],
-    onSubmit(prompt) {
-      submits.push(prompt)
-      return true
-    },
-  })
-
-  try {
-    await app.renderOnce()
-    "/skills".split("").forEach((key) => app.mockInput.pressKey(key))
-    await app.renderOnce()
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-
-    expect(app.captureCharFrame()).toContain("Skill named new")
-
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-
-    expect(submits).toEqual([])
-    expect(app.captureCharFrame()).toContain("/new")
-
-    "task".split("").forEach((key) => app.mockInput.pressKey(key))
-    await app.renderOnce()
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-
-    expect(submits).toEqual([
-      { text: "/new task", parts: [], command: { name: "new", arguments: "task", source: "skill" } },
-    ])
-  } finally {
-    app.cleanup()
-  }
-})
-
-// OpenTUI currently segfaults Bun while tearing down this skill-panel close transition.
-// Re-enable after the upstream renderer teardown fix lands.
-test.skip("direct footer clears the synthetic skills draft when the panel closes", async () => {
-  const submits: RunPrompt[] = []
-  const app = await renderFooter({
-    commands: [command({ name: "formatter", description: "Apply formatter fixes", source: "skill" })],
-    onSubmit(prompt) {
-      submits.push(prompt)
-      return true
-    },
-  })
-
-  try {
-    await app.renderOnce()
-    "/skills".split("").forEach((key) => app.mockInput.pressKey(key))
-    await app.renderOnce()
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-
-    expect(app.captureCharFrame()).toContain("Apply formatter fixes")
-
-    app.mockInput.pressKey("c", { ctrl: true })
-    await app.renderOnce()
-    app.mockInput.pressEnter()
-    await app.renderOnce()
-
-    expect(submits).toEqual([])
-    expect(app.captureCharFrame()).not.toContain("/skills")
-  } finally {
-    app.cleanup()
-  }
 })
 
 test("direct footer counts queued and steering work while running", async () => {

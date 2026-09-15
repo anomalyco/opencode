@@ -1264,6 +1264,8 @@
 [data-component="write-tool"],
 [data-component="apply-patch-tool"] {
   > [data-component="collapsible"].tool-collapsible {
+    /* Only file lists with a tool title reserve space for its sticky row. */
+    --sticky-accordion-offset: calc(32px + var(--tool-content-gap));
     gap: 0px;
   }
 
@@ -1285,7 +1287,7 @@
     position: sticky;
     top: var(--sticky-accordion-top, 0px);
     z-index: 20;
-    height: calc(32px + var(--tool-content-gap));
+    height: var(--sticky-accordion-offset);
     padding-bottom: var(--tool-content-gap);
     background-color: var(--v2-background-bg-base);
   }

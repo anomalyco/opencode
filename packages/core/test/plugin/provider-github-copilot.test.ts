@@ -5,7 +5,6 @@ import { Session } from "@opencode/core/session"
 import { Location } from "@opencode/core/location"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode/core/catalog"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
@@ -297,16 +296,19 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("rewrites models.dev fallback models to the GitHub Copilot package", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
       const aisdk = yield* AISDK.Service
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(Provider.ID.githubCopilot, () => {})
-        catalog.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"), (model) => {
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.githubCopilot, (provider) => {
+          provider.activation = "enabled"
+        })
+        editor.models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"), (model) => {
           model.package = Provider.aisdk("@ai-sdk/openai-compatible")
         })
       })
       yield* addPlugin()
-      const fallback = required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol")))
+      const fallback = required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol")))
       expect(fallback.package).toBe(Provider.aisdk("@ai-sdk/github-copilot"))
 
       const resolved = yield* ModelResolver.fromCatalogModel(fallback, undefined, {
@@ -481,14 +483,17 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("disables gpt-5-chat-latest before Copilot language selection", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(Provider.ID.make("github-copilot"), () => {})
-        catalog.model.update(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5-chat-latest"), () => {})
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.githubCopilot, (provider) => {
+          provider.activation = "enabled"
+        })
+        editor.models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"), () => {})
       })
       yield* addPlugin()
       expect(
-        required(yield* catalog.model.get(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5-chat-latest")))
+        required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest")))
           .enabled,
       ).toBe(false)
     }),
@@ -496,14 +501,15 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("does not disable gpt-5-chat-latest for non-Copilot providers", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(Provider.ID.make("custom-copilot"), () => {})
-        catalog.model.update(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest"), () => {})
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.make("custom-copilot"), () => {})
+        editor.models.update(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest"), () => {})
       })
       yield* addPlugin()
       expect(
-        required(yield* catalog.model.get(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest")))
+        required(yield* models.get(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest")))
           .enabled,
       ).toBe(true)
     }),

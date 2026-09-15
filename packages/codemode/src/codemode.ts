@@ -1,5 +1,8 @@
 import { Effect, Schema } from "effect"
+import type { Extension } from "./extension.js"
 import { executeProgram } from "./interpreter/execute.js"
+import { extensionGlobals } from "./interpreter/extensions.js"
+import { globalNames } from "./interpreter/globals.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
 
@@ -34,6 +37,8 @@ export type ResolvedExecutionLimits = {
 export type Options<Provided extends Record<string, unknown> = {}> = ToolRuntime.ToolCallHooks<Services<Provided>> & {
   /** Explicit tools exposed to the program as `tools`. */
   tools?: Provided & Tools<Services<Provided>>
+  /** Host classes and functions exposed as globals; see `Extension.make`. */
+  extensions?: ReadonlyArray<Extension>
   /** Resource limits enforced on each execution. */
   limits?: ExecutionLimits
 }
@@ -133,8 +138,16 @@ export const make = <const Provided extends Record<string, unknown> = {}>(
 ): Runtime<Services<Provided>> => {
   const prepared = ToolRuntime.prepare((options.tools ?? {}) as Tools<Services<Provided>>)
   const limits = resolveExecutionLimits(options.limits)
+  const extensions = options.extensions ?? []
+  const bound = new Set(globalNames)
+  for (const extension of extensions) {
+    for (const name of Object.keys(extension.globals)) {
+      if (bound.has(name)) throw new TypeError(`Extension "${extension.name}" global "${name}" is already defined.`)
+      bound.add(name)
+    }
+  }
   return {
     catalog: prepared.catalog,
-    execute: (code) => executeProgram(code, prepared, limits, options),
+    execute: (code) => executeProgram(code, prepared, limits, options, (host) => extensionGlobals(host, extensions)),
   }
 }

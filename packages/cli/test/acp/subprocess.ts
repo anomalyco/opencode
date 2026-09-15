@@ -68,6 +68,7 @@ export async function createAcpFixture(options: { readonly skill?: string } = {}
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-cli-acp-"))
   const home = path.join(root, "workspace")
   const config = path.join(root, "config")
+  const models = path.join(root, "models.json")
   const skills = path.join(root, "skills")
   await Promise.all([fs.mkdir(home, { recursive: true }), fs.mkdir(config, { recursive: true })])
   if (options.skill) {
@@ -93,6 +94,7 @@ export async function createAcpFixture(options: { readonly skill?: string } = {}
     path.join(config, "opencode.json"),
     JSON.stringify(verifierConfig(`http://127.0.0.1:${llm.port}/v1`, options.skill ? skills : undefined)),
   )
+  await Bun.write(models, "{}")
 
   const processes = new Set<AcpProcess>()
   return {
@@ -106,7 +108,7 @@ export async function createAcpFixture(options: { readonly skill?: string } = {}
           OPENCODE_CONFIG: undefined,
           OPENCODE_CONFIG_CONTENT: undefined,
           OPENCODE_DISABLE_AUTOUPDATE: "true",
-          OPENCODE_MODELS_PATH: undefined,
+          OPENCODE_MODELS_PATH: models,
           ...extraEnv,
         }),
       })

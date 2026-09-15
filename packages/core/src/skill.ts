@@ -35,7 +35,7 @@ export const available = (skills: ReadonlyArray<Info>, agent: Agent.Info) =>
   skills.filter((skill) => Permission.evaluate("skill", skill.id, agent.permissions).effect !== "deny")
 
 export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
-  const directory = path.dirname(skill.location)
+  const directory = path.dirname(skill.path)
   return [
     `<skill_content name="${skill.name}">`,
     `# Skill: ${skill.name}`,
@@ -54,9 +54,9 @@ export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
 }
 
 export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interface, skill: Info) {
-  const directory = path.dirname(skill.location)
+  const directory = path.dirname(skill.path)
   const files =
-    path.basename(skill.location) === "SKILL.md"
+    path.basename(skill.path) === "SKILL.md"
       ? (yield* fs.scan("**/*", { cwd: directory, absolute: true, include: "file", dot: true }))
           .filter((file) => path.basename(file) !== "SKILL.md")
           .toSorted()

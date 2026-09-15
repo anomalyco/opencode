@@ -1,7 +1,7 @@
 import { HttpRecorder } from "@opencode/http-recorder"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { Auth, LLMClient, type LLMClientService, RequestExecutor } from "@opencode/ai/route"
-import { Catalog } from "@opencode/core/catalog"
+import { Model } from "@opencode/core/model"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
@@ -44,7 +44,7 @@ import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { permissionLayer } from "./lib/permission"
-import { agentHost, catalogHost, host } from "./plugin/host"
+import { agentHost, modelHost, host } from "./plugin/host"
 
 const cassetteName = "session-runner/openai-chat-streams-text"
 const cassetteDirectory = path.resolve(import.meta.dir, "fixtures/recordings")
@@ -85,19 +85,12 @@ const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
 })
 const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
 const config = Config.testLayer()
-const promptCatalog = Layer.mock(Catalog.Service, {
-  provider: {
-    get: () => Effect.undefined,
-    all: () => Effect.succeed([]),
-    available: () => Effect.succeed([]),
-  },
-  model: {
-    get: () => Effect.undefined,
-    all: () => Effect.succeed([]),
-    available: () => Effect.succeed([]),
-    default: () => Effect.undefined,
-    small: () => Effect.undefined,
-  },
+const promptModels = Layer.mock(Model.Service, {
+  get: () => Effect.undefined,
+  all: () => Effect.succeed([]),
+  available: () => Effect.succeed([]),
+  default: () => Effect.undefined,
+  small: () => Effect.undefined,
 })
 const runnerLayer = (llmClient: Layer.Layer<LLMClientService>) =>
   AppNodeBuilder.build(SessionRunnerLLM.node, [
@@ -141,7 +134,7 @@ const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
       SessionProjector.node,
       SessionStore.node,
       Agent.node,
-      Catalog.node,
+      Model.node,
       PluginHooks.node,
       Tool.node,
       SessionRunnerModel.node,
@@ -159,7 +152,7 @@ const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
       LocationServiceMap.node.replace(promptLocationNode),
       LayerNodePlatform.llmClient.replace(llmClient),
       Permission.node.replace(permission),
-      Catalog.node.replace(promptCatalog),
+      Model.node.replace(promptModels),
       SessionRunnerModel.node.replace(models),
       InstructionBuiltIns.node.replace(systemContext),
       InstructionDiscovery.node.replace(instructionContext),
@@ -180,7 +173,7 @@ describe("SessionRunnerLLM recorded", () => {
   it.effect("executes one recorded prompt through the recorded HTTP transport", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
-      const catalog = yield* Catalog.Service
+      const models = yield* Model.Service
       const hooks = yield* PluginHooks.Service
       yield* agents.transform((editor) =>
         editor.update(Agent.ID.make("build"), (agent) => {
@@ -190,7 +183,7 @@ describe("SessionRunnerLLM recorded", () => {
       )
       const pluginHost = host({
         agent: agentHost(agents),
-        catalog: catalogHost(catalog),
+        model: modelHost(models),
         session: { hook: (name, callback) => hooks.register("session", name, callback) },
       })
       yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), { discard: true })

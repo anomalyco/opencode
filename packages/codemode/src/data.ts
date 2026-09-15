@@ -13,6 +13,7 @@ import {
   ProgramDate,
   ProgramError,
   ProgramGenerator,
+  ProgramHandle,
   ProgramMap,
   ProgramObject,
   ProgramPromise,
@@ -22,7 +23,7 @@ import {
   ProgramURLSearchParams,
 } from "./interpreter/objects.js"
 
-const MAX_VALUE_DEPTH = 32
+export const MAX_VALUE_DEPTH = 32
 
 export class ToolRuntimeError extends Error {
   constructor(
@@ -58,9 +59,18 @@ export const fromData = (protos: Prototypes, value: unknown, label: string): unk
  * non-finite numbers become null, and array holes become null. `undefined` object properties are
  * dropped ("json") or become null ("result", for program results where the consumer must never see
  * undefined); a bare `undefined` follows the same rule.
+ *
+ * At the host boundary (tool arguments and program results) `__proto__` keys are dropped and values
+ * `JSON.stringify` would flatten to `{}` cross in a useful form instead: a Set as an array, a RegExp
+ * and URLSearchParams as their strings. `JSON.stringify` itself passes `boundary: false` to keep JS
+ * behavior.
  */
-export const toData = (value: unknown, label: string, undefinedAs: "json" | "result" = "json"): unknown =>
-  copy(value, label, undefinedAs, 0, new Set())
+export const toData = (
+  value: unknown,
+  label: string,
+  undefinedAs: "json" | "result" = "json",
+  boundary = true,
+): unknown => copy(value, label, undefinedAs, 0, new Set(), undefined, boundary)
 
 // "program" and "data" build program objects; "json" and "result" build ordinary objects for the host.
 type Mode = "program" | "data" | "json" | "result"
@@ -72,8 +82,9 @@ const copy = (
   depth: number,
   seen: Set<object>,
   protos?: Prototypes,
+  boundary = true,
 ): unknown => {
-  const next = (item: unknown) => copy(item, label, mode, depth + 1, seen, protos)
+  const next = (item: unknown) => copy(item, label, mode, depth + 1, seen, protos, boundary)
   if (depth > MAX_VALUE_DEPTH) {
     throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
   }
@@ -91,6 +102,16 @@ const copy = (
   }
   if ((value instanceof Callable || value instanceof ProgramGenerator) && mode !== "program") {
     throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
+  }
+  if (value instanceof ProgramHandle && mode !== "program") {
+    throw new ToolRuntimeError(
+      "InvalidDataValue",
+      `${label} contains a ${value.instance.constructor.name}, which only extension functions accept.`,
+    )
+  }
+  // Host-produced input never holds program objects; one arriving here would come back as a host object.
+  if (value instanceof ProgramObject && mode === "data") {
+    throw new ToolRuntimeError("InvalidDataValue", `${label} must be host data, not a program value.`)
   }
 
   if (protos !== undefined && mode === "program") {
@@ -116,6 +137,17 @@ const copy = (
   if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : null
   if (value instanceof ProgramURL) return value.url.href
   if (value instanceof URL) return value.href
+  if (boundary && protos === undefined) {
+    if (value instanceof ProgramRegExp) return String(value.regex)
+    if (value instanceof ProgramURLSearchParams) return value.params.toString()
+    if (value instanceof ProgramSet) {
+      if (seen.has(value)) throw new ToolRuntimeError("InvalidDataValue", `${label} contains a circular value.`)
+      seen.add(value)
+      const copied = Array.from(value.set, (item) => next(item) ?? null)
+      seen.delete(value)
+      return copied
+    }
+  }
   // Remaining wrappers and their host counterparts serialize as empty objects, like JSON.stringify.
   if (
     isWrapper(value) ||
@@ -145,6 +177,7 @@ const copy = (
       defineHost(copied, "message", next(get(value, "message")))
     }
     for (const [key, item] of entries(value)) {
+      if (boundary && key === "__proto__") continue
       const copiedItem = next(item)
       if (copiedItem === undefined && mode === "json") continue
       defineHost(copied, key, copiedItem)
@@ -180,6 +213,7 @@ const copy = (
   }
   const copied: Record<string, unknown> = {}
   for (const [key, item] of Object.entries(value)) {
+    if (boundary && key === "__proto__") continue
     const copiedItem = next(item)
     if (copiedItem === undefined && mode === "json") continue
     defineHost(copied, key, copiedItem)

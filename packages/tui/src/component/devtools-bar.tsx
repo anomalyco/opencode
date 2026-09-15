@@ -54,10 +54,10 @@ export function DevToolsBar() {
   )
   const groups = createMemo(() => DevTools.data().filter((group) => group.id !== "theme-performance"))
   const [server] = createResource(connected, async () => {
-    const [health, info] = await Promise.all([client.api.health.get(), client.api.server.get()])
+    const status = await client.api.server.status()
     return {
-      health,
-      address: info.urls[0] ? new URL(info.urls[0]).host : "Unknown",
+      health: status,
+      address: status.urls[0] ? new URL(status.urls[0]).host : "Unknown",
     }
   })
   const close = () => {
@@ -150,7 +150,7 @@ export function DevToolsBar() {
     const sessionLocation =
       info?.location ??
       (location.current
-        ? { directory: location.current.directory, workspaceID: location.current.workspaceID }
+        ? { directory: location.current.directory }
         : undefined)
     const details = server()
     const backend = {

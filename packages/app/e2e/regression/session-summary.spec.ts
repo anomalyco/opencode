@@ -235,11 +235,11 @@ test("catalog submenus show project plugins and skills, refresh on reopen, and d
       json: {
         location: { directory: fixture.directory },
         data: [
-          { id: "find-skills", name: "find-skills", location: "/skills/find/SKILL.md", content: "Find skills" },
+          { id: "find-skills", name: "find-skills", path: "/skills/find/SKILL.md", content: "Find skills" },
           {
             id: "review-animations",
             name: "review-animations",
-            location: "/skills/review/SKILL.md",
+            path: "/skills/review/SKILL.md",
             content: "Review animations",
           },
         ],

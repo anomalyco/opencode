@@ -31,14 +31,14 @@ describe("mini command", () => {
     const initial = Bun.serve({
       port: 0,
       fetch() {
-        return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
+        return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
       },
     })
     const replacement = Bun.serve({
       port: 0,
       fetch(request) {
         authorization.push(request.headers.get("authorization"))
-        return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
+        return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
       },
     })
     const controller = new AbortController()
@@ -57,7 +57,7 @@ describe("mini command", () => {
       })
       const client = await connection.reconnect?.(controller.signal)
       if (!client) throw new Error("Expected a replacement client")
-      await client.health.get()
+      await client.server.status()
 
       expect(client).not.toBe(connection.sdk)
       expect(signal).toBe(controller.signal)
@@ -147,8 +147,8 @@ describe("mini command", () => {
       async fetch(request) {
         const url = new URL(request.url)
         requests.push(url.pathname)
-        if (url.pathname === "/api/health")
-          return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
+        if (url.pathname === "/api/status")
+          return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
         if (url.pathname === "/api/location")
           return Response.json({ directory: process.cwd(), project: { id: "global", directory: process.cwd() } })
         if (url.pathname === "/api/session") {
@@ -190,7 +190,7 @@ describe("mini command", () => {
       port: 0,
       fetch(request) {
         if (new URL(request.url).pathname === "/api/session") return new Response("boom", { status: 500 })
-        return Response.json({ healthy: true, version: "incompatible", pid: process.pid })
+        return Response.json({ version: "incompatible", pid: process.pid, urls: [] })
       },
     })
 

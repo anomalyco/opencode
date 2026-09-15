@@ -5,7 +5,6 @@ test("exposes every standard HTTP API group", () => {
   const client = OpenCode.make({ baseUrl: "http://localhost:3000" })
 
   expect(Object.keys(client)).toEqual([
-    "health",
     "server",
     "location",
     "agent",
@@ -31,7 +30,6 @@ test("exposes every standard HTTP API group", () => {
     "shell",
     "reference",
     "worktree",
-    "workspace",
     "vcs",
     "debug",
     "migration",
@@ -54,7 +52,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
   expect(client.experimental.persistentPty.read).toBeFunction()
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
-  expect(Object.keys(client.project)).toEqual(["list", "update", "current"])
+  expect(Object.keys(client.project)).toEqual(["list", "update"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
 })
 
@@ -194,19 +192,19 @@ test("websearch.query uses the public HTTP contract", async () => {
   expect(await request?.json()).toEqual({ query: "opencode", providerID: "exa" })
 })
 
-test("server.get uses the public HTTP contract", async () => {
+test("server.status uses the public HTTP contract", async () => {
   let request: Request | undefined
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async (input) => {
       request = input instanceof Request ? input : new Request(input)
-      return Response.json({ urls: ["http://192.168.1.10:4096"] })
+      return Response.json({ version: "2.0.0", pid: 1, urls: ["http://192.168.1.10:4096"] })
     },
   })
 
-  expect(await client.server.get()).toEqual({ urls: ["http://192.168.1.10:4096"] })
+  expect(await client.server.status()).toEqual({ version: "2.0.0", pid: 1, urls: ["http://192.168.1.10:4096"] })
   expect(request?.method).toBe("GET")
-  expect(request?.url).toBe("http://localhost:3000/api/server")
+  expect(request?.url).toBe("http://localhost:3000/api/status")
 })
 
 test("experimental wellknown integration add uses the public HTTP contract", async () => {
@@ -241,12 +239,10 @@ test("credential.activate uses the public HTTP contract", async () => {
     },
   })
 
-  await client.credential.activate({ credentialID: "cred_work", location: { directory: "/tmp/project" } })
+  await client.credential.activate({ credentialID: "cred_work" })
 
   expect(request?.method).toBe("POST")
-  expect(request?.url).toBe(
-    "http://localhost:3000/api/credential/cred_work/activate?location%5Bdirectory%5D=%2Ftmp%2Fproject",
-  )
+  expect(request?.url).toBe("http://localhost:3000/api/credential/cred_work/activate")
 })
 
 test("integration connections optionally submit a form answer", async () => {
@@ -336,7 +332,7 @@ test("file.read returns binary content from the public HTTP contract", async () 
   )
 })
 
-test("all worktree operations use location-based routes without a project parameter", async () => {
+test("all worktree operations require a project ID", async () => {
   const requests: Request[] = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
@@ -344,86 +340,75 @@ test("all worktree operations use location-based routes without a project parame
       const request = input instanceof Request ? input : new Request(input, init)
       requests.push(request)
       if (request.method === "GET") return Response.json([{ directory: "/tmp/project" }])
-      if (request.method === "POST" && !request.url.endsWith("/refresh"))
+      if (request.method === "POST" && new URL(request.url).pathname === "/api/worktree")
         return Response.json({ directory: "/tmp/worktrees/api" })
+      if (request.method === "POST") return new Response(null, { status: 204 })
       return new Response(null, { status: 204 })
     },
   })
 
-  expect(await client.worktree.list()).toEqual([{ directory: "/tmp/project" }])
+  expect(await client.worktree.list({ projectID: "project" })).toEqual([{ directory: "/tmp/project" }])
   expect(
     await client.worktree.create({
-      strategy: "git",
+      projectID: "project",
       directory: "/tmp/worktrees",
       name: "api",
     }),
   ).toEqual({ directory: "/tmp/worktrees/api" })
   await client.worktree.remove({
+    projectID: "project",
     directory: "/tmp/worktrees/api",
     force: false,
   })
-  await client.worktree.refresh()
+  await client.worktree.refresh({ projectID: "project" })
 
   expect(requests.map((request) => [request.method, request.url])).toEqual([
-    ["GET", "http://localhost:3000/api/worktree"],
+    ["GET", "http://localhost:3000/api/worktree?projectID=project"],
     ["POST", "http://localhost:3000/api/worktree"],
     ["DELETE", "http://localhost:3000/api/worktree"],
     ["POST", "http://localhost:3000/api/worktree/refresh"],
   ])
   expect(await requests[1]?.json()).toEqual({
-    strategy: "git",
+    projectID: "project",
     directory: "/tmp/worktrees",
     name: "api",
   })
-  expect(await requests[2]?.json()).toEqual({ directory: "/tmp/worktrees/api", force: false })
+  expect(await requests[2]?.json()).toEqual({ projectID: "project", directory: "/tmp/worktrees/api", force: false })
+  expect(await requests[3]?.json()).toEqual({ projectID: "project" })
 })
 
-test("worktree operations send the configuration location separately from their payload", async () => {
+test("worktree operations use the explicit project even with default location headers", async () => {
   const requests: Request[] = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
+    headers: { "x-opencode-directory": "/unrelated" },
     fetch: async (input, init) => {
       const request = new Request(input, init)
       requests.push(request)
       if (request.method === "GET") return Response.json([{ directory: "/configured/task", strategy: "git" }])
-      if (request.method === "DELETE" || new URL(request.url).pathname.endsWith("/refresh"))
-        return new Response(null, { status: 204 })
+      if (request.method === "DELETE") return new Response(null, { status: 204 })
+      if (new URL(request.url).pathname.endsWith("/refresh")) return new Response(null, { status: 204 })
       return Response.json({ directory: "/configured/task" })
     },
   })
-  expect(await client.worktree.create({ location: { directory: "/repo/nested" }, name: "task" })).toEqual({
+  expect(await client.worktree.create({ projectID: "project", name: "task" })).toEqual({
     directory: "/configured/task",
   })
-  expect(requests[0]?.url).toBe("http://localhost:3000/api/worktree?location%5Bdirectory%5D=%2Frepo%2Fnested")
-  expect(await requests[0]?.json()).toEqual({ name: "task" })
+  expect(requests[0]?.url).toBe("http://localhost:3000/api/worktree")
+  expect(await requests[0]?.json()).toEqual({ projectID: "project", name: "task" })
   await client.worktree.remove({
-    location: { directory: "/repo/nested" },
+    projectID: "project",
     directory: "/configured/task",
     force: true,
   })
-  await client.worktree.refresh({ location: { directory: "/repo/nested" } })
-  expect(requests[1]?.url).toBe("http://localhost:3000/api/worktree?location%5Bdirectory%5D=%2Frepo%2Fnested")
-  expect(await requests[1]?.json()).toEqual({ directory: "/configured/task", force: true })
-  expect(requests[2]?.url).toBe("http://localhost:3000/api/worktree/refresh?location%5Bdirectory%5D=%2Frepo%2Fnested")
-  expect(await client.worktree.list({ location: { directory: "/repo/nested" } })).toEqual([
+  await client.worktree.refresh({ projectID: "project" })
+  expect(requests[1]?.url).toBe("http://localhost:3000/api/worktree")
+  expect(await requests[1]?.json()).toEqual({ projectID: "project", directory: "/configured/task", force: true })
+  expect(requests[2]?.url).toBe("http://localhost:3000/api/worktree/refresh")
+  expect(await client.worktree.list({ projectID: "project" })).toEqual([
     { directory: "/configured/task", strategy: "git" },
   ])
-  expect(requests[3]?.url).toBe("http://localhost:3000/api/worktree?location%5Bdirectory%5D=%2Frepo%2Fnested")
-})
-
-test("workspace.destroy returns the transition result", async () => {
-  let request: Request | undefined
-  const client = OpenCode.make({
-    baseUrl: "http://localhost:3000",
-    fetch: async (input, init) => {
-      request = input instanceof Request ? input : new Request(input, init)
-      return Response.json({ destroyed: false })
-    },
-  })
-
-  expect(await client.workspace.destroy({ workspaceID: "wrk_missing" })).toEqual({ destroyed: false })
-  expect(request?.method).toBe("DELETE")
-  expect(request?.url).toBe("http://localhost:3000/api/workspace/wrk_missing")
+  expect(requests[3]?.url).toBe("http://localhost:3000/api/worktree?projectID=project")
 })
 
 test("shell list and remove use the public HTTP contract", async () => {
@@ -506,17 +491,17 @@ test("session instructions methods use the public HTTP contract", async () => {
   expect(requests).toEqual([
     {
       method: "GET",
-      url: "http://localhost:3000/api/session/ses_test/instructions/entries",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries",
       body: undefined,
     },
     {
       method: "PUT",
-      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries/review-notes",
       body: { value: { text: "Check the diff", priority: 1 } },
     },
     {
       method: "DELETE",
-      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries/review-notes",
       body: undefined,
     },
   ])
@@ -528,7 +513,7 @@ test("session.inbox.list uses the public HTTP contract", async () => {
     {
       id: "msg_pending",
       sessionID: "ses_test",
-      timeCreated: 1_717_171_717_000,
+      time: { created: 1_717_171_717_000 },
       type: "user",
       payload: { text: "Fix the failing tests" },
       delivery: "steer",
@@ -701,7 +686,7 @@ test("event.subscribe reports heartbeat comments as stream activity", async () =
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
-test("event transport passes through ordinary health requests", async () => {
+test("event transport passes through ordinary status requests", async () => {
   const requests: string[] = []
   const event = { id: "evt_connected", created: 1, type: "server.connected", data: {} }
   const client = OpenCode.make({
@@ -714,12 +699,16 @@ test("event transport passes through ordinary health requests", async () => {
           headers: { "content-type": "text/event-stream" },
         })
       }
-      return Response.json({ healthy: true, version: "2.0.0", pid: 1 })
+      return Response.json({ version: "2.0.0", pid: 1, urls: ["http://localhost:3000"] })
     },
   })
   await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
-  await expect(client.health.get()).resolves.toEqual({ healthy: true, version: "2.0.0", pid: 1 })
-  expect(requests).toEqual(["/api/event", "/api/health"])
+  await expect(client.server.status()).resolves.toEqual({
+    version: "2.0.0",
+    pid: 1,
+    urls: ["http://localhost:3000"],
+  })
+  expect(requests).toEqual(["/api/event", "/api/status"])
 })
 
 test("event.subscribe terminates on malformed Promise SSE data", async () => {
@@ -874,7 +863,7 @@ test("session methods use the public HTTP contract", async () => {
   const log = []
   for await (const item of client.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
   const interrupted = await client.session.interrupt({ sessionID: "ses_test", continue: true })
-  const message = await client.session.message({ sessionID: "ses_test", messageID: "msg_model" })
+  const message = await client.session.message.get({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
   expect(page.data[0].time).toMatchObject({ idle: 1_717_171_717_002, viewed: 1_717_171_717_001 })
@@ -898,7 +887,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/generate"],
     ["POST", "http://localhost:3000/api/session/ses_test/synthetic"],
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
-    ["POST", "http://localhost:3000/api/session/ses_test/wait"],
+    ["POST", "http://localhost:3000/api/experimental/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
     ["GET", "http://localhost:3000/api/experimental/session/ses_test/log?after=0"],
     ["POST", "http://localhost:3000/api/session/ses_test/interrupt?continue=true"],
@@ -984,7 +973,7 @@ const admission = {
     type: "user",
     data: { text: "Hello" },
     delivery: "steer",
-    timeCreated: 1_717_171_717_000,
+    time: { created: 1_717_171_717_000 },
   },
 }
 
@@ -995,7 +984,7 @@ const syntheticAdmission = {
     type: "synthetic",
     data: { text: "Completed" },
     delivery: "queue",
-    timeCreated: 1_717_171_717_000,
+    time: { created: 1_717_171_717_000 },
   },
 }
 
@@ -1004,7 +993,7 @@ const compactionAdmission = {
     type: "compaction",
     id: "msg_compaction",
     sessionID: "ses_test",
-    timeCreated: 1_717_171_717_000,
+    time: { created: 1_717_171_717_000 },
   },
 }
 

@@ -112,7 +112,7 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
       if (request.method === "DELETE") return new Response(null, { status: 204 })
       return json({ location, data: { status: "pending" } })
     }
-    if (url.pathname === "/api/mcp/linear/connect" && request.method === "POST") {
+    if (url.pathname === "/api/experimental/mcp/linear/connect" && request.method === "POST") {
       connect++
       return new Response(null, { status: 204 })
     }

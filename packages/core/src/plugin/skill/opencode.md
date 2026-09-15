@@ -190,7 +190,7 @@ HTTP method and path or an OpenAPI operation ID.
 Call an endpoint with an HTTP method and path:
 
 ```sh
-opencode api get /api/health
+opencode api get /api/status
 ```
 
 Pass a request body with `--data` or `-d`, and additional headers with
@@ -241,7 +241,7 @@ OpenCode runs a client and a background server. Start by determining whether a
 problem belongs to the client, the shared server, or one project.
 
 - Check the service with `opencode service status` and verify the API with
-  `opencode api get /api/health`.
+  `opencode api get /api/status`.
 - Compare with `opencode --standalone`, which runs the TUI with a private
   server, to isolate shared-service issues.
 - Inspect `~/.local/share/opencode/log/opencode.log`. Filter `role=cli` for

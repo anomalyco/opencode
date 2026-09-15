@@ -343,7 +343,7 @@ async function openDraft(page: Page, worktree = "main", options: { git?: boolean
       (route) => route.fulfill({ json: { location: { directory }, data: { branch: {} } } }),
     )
   }
-  await page.route("**/api/mcp**", async (route) => {
+  await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, async (route) => {
     if (route.request().method() === "OPTIONS") return route.fallback()
     const url = new URL(route.request().url())
     const target = url.searchParams.get("location[directory]") ?? directory
@@ -404,7 +404,7 @@ async function openDraft(page: Page, worktree = "main", options: { git?: boolean
             {
               id: "summary-skill",
               name: "summary-skill",
-              location: "/skills/summary/SKILL.md",
+              path: "/skills/summary/SKILL.md",
               content: "Summary skill",
             },
           ],

@@ -1,6 +1,13 @@
 import type { BlockStatement, Expression, Pattern } from "acorn"
 import type { Effect, Fiber } from "effect"
-import { type AstNode, AsyncIteratorSymbol, type Binding, type GeneratorRequestKind, IteratorSymbol } from "./model.js"
+import { checkArrayLength } from "./limits.js"
+import {
+  AsyncIteratorSymbol,
+  type Binding,
+  type GeneratorRequestKind,
+  IteratorSymbol,
+  type PendingThrow,
+} from "./model.js"
 
 /** Property attributes, as in a JS property descriptor. */
 export type Attributes = {
@@ -42,7 +49,10 @@ export class ProgramArray extends ProgramObject {
 }
 
 /** An object with the [[ErrorData]] slot: what `Error.prototype.toString` and the host boundary recognize as an error. */
-export class ProgramError extends ProgramObject {}
+export class ProgramError extends ProgramObject {
+  /** The interpreter failure this error materialized from, so rethrowing it keeps the diagnostic kind and location. */
+  host?: PendingThrow
+}
 
 export abstract class Callable extends ProgramObject {
   constructor(proto: ProgramObject, name: string, length: number) {
@@ -67,16 +77,8 @@ export class ProgramFunction extends Callable {
   }
 }
 
-export type NativeCall<R> = (
-  thisValue: unknown,
-  args: Array<unknown>,
-  node: AstNode,
-) => Effect.Effect<unknown, unknown, R>
-export type NativeConstruct<R> = (
-  args: Array<unknown>,
-  newTarget: Callable,
-  node: AstNode,
-) => Effect.Effect<unknown, unknown, R>
+export type NativeCall<R> = (thisValue: unknown, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
+export type NativeConstruct<R> = (args: Array<unknown>, newTarget: Callable) => Effect.Effect<unknown, unknown, R>
 
 export type NativeOptions<R> = {
   readonly name: string
@@ -114,11 +116,7 @@ export class ProgramGenerator extends ProgramObject {
   constructor(
     proto: ProgramObject,
     readonly asynchronous: boolean,
-    readonly request: (
-      kind: GeneratorRequestKind,
-      value: unknown,
-      node: AstNode,
-    ) => Effect.Effect<unknown, unknown, unknown>,
+    readonly request: (kind: GeneratorRequestKind, value: unknown) => Effect.Effect<unknown, unknown, unknown>,
   ) {
     super(proto)
   }
@@ -171,6 +169,16 @@ export class ProgramURL extends ProgramObject {
   }
 }
 
+/** An instance of an extension class: the host object lives in a field no property path reaches. */
+export class ProgramHandle extends ProgramObject {
+  constructor(
+    proto: ProgramObject,
+    readonly instance: object,
+  ) {
+    super(proto)
+  }
+}
+
 /** Built-in objects that wrap a host value; data-like, but never plain data. */
 export const isWrapper = (
   value: unknown,
@@ -182,13 +190,13 @@ export const isWrapper = (
   value instanceof ProgramURL ||
   value instanceof ProgramURLSearchParams
 
-const MAX_ARRAY_LENGTH = 4_294_967_295
+const MAX_ARRAY_INDEX = 4_294_967_295
 
 export const parseArrayIndex = (key: string | number): number | undefined => {
   const property = String(key)
   if (!/^(0|[1-9]\d*)$/.test(property)) return undefined
   const index = Number(property)
-  return index < MAX_ARRAY_LENGTH ? index : undefined
+  return index < MAX_ARRAY_INDEX ? index : undefined
 }
 
 const canonical = (key: PropertyKey): string | symbol => (typeof key === "symbol" ? key : String(key))
@@ -250,7 +258,8 @@ const writeArray = (target: ProgramArray, name: string | symbol, value: unknown)
   }
   if (name !== "length") return undefined
   const length = typeof value === "number" ? value : Number(value)
-  if (!Number.isInteger(length) || length < 0 || length > MAX_ARRAY_LENGTH) return false
+  if (!Number.isInteger(length) || length < 0) return false
+  checkArrayLength(length)
   target.items.length = length
   return true
 }
@@ -290,7 +299,12 @@ export const define = (target: ProgramObject, key: PropertyKey, value: unknown, 
   target.props.set(name, { value, ...attrs })
 }
 
-export const defineAccessor = (target: ProgramObject, key: PropertyKey, get: Getter, set?: Setter): void => {
+export const defineAccessor = (
+  target: ProgramObject,
+  key: PropertyKey,
+  get: Getter | undefined,
+  set?: Setter,
+): void => {
   target.props.set(canonical(key), { get, set, enumerable: false, configurable: true })
 }
 

@@ -15,7 +15,7 @@ export const ProviderGroup = HttpApiGroup.make("server.provider")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.provider.list",
+          identifier: "provider.list",
           summary: "List providers",
           description: "Retrieve active AI providers so clients can show provider availability and configuration.",
         }),
@@ -31,7 +31,7 @@ export const ProviderGroup = HttpApiGroup.make("server.provider")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.provider.get",
+          identifier: "provider.get",
           summary: "Get provider",
           description: "Retrieve a single AI provider so clients can inspect its availability and endpoint settings.",
         }),

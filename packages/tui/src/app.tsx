@@ -506,7 +506,7 @@ function App(props: { pair?: DialogPairCredentials }) {
     const session = data.session.get(route.data.sessionID)
     if (!session) return
     if (data.session.creating(session.id)) return
-    if (session.location.workspaceID !== undefined || terminalEnvironment.variables === undefined) return
+    if (terminalEnvironment.variables === undefined) return
     void client.api.session
       .environment({ sessionID: session.id, variables: terminalEnvironment.variables })
       .catch(toast.error)
@@ -671,7 +671,6 @@ function App(props: { pair?: DialogPairCredentials }) {
         order: "desc",
         parentID: null,
         directory: location.directory,
-        workspace: location.workspaceID,
       })
       .then((response) => {
         const match = response.data[0]?.id
@@ -681,7 +680,7 @@ function App(props: { pair?: DialogPairCredentials }) {
           return
         }
         void client.api.session
-          .fork({ sessionID: match, boundary: { type: "through" } })
+          .fork({ sessionID: match })
           .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
           .catch(toast.error)
       })
@@ -694,7 +693,7 @@ function App(props: { pair?: DialogPairCredentials }) {
     if (forked || !args.sessionID || !args.fork) return
     forked = true
     void client.api.session
-      .fork({ sessionID: args.sessionID, boundary: { type: "through" } })
+      .fork({ sessionID: args.sessionID })
       .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
       .catch(toast.error)
   })
@@ -909,7 +908,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "Switch model variant",
         category: "Agent",
         palette: local.model.variant.list().length === 0 ? undefined : (true as const),
-        slash: { name: "variants", aliases: ["thinking"] },
+        slash: { name: "variants", aliases: ["thinking", "effort"] },
         run: () => {
           if (local.model.variant.list().length === 0) {
             return toast.show({
@@ -1222,13 +1221,13 @@ function App(props: { pair?: DialogPairCredentials }) {
     bindings: ["app.exit"],
   }))
 
-  event.on("tui.command.execute", (evt, { workspace }) => {
-    if (workspace !== (location.current?.workspaceID ?? data.location.default().workspaceID)) return
+  event.on("tui.command.execute", (evt, { directory }) => {
+    if (directory !== (location.current?.directory ?? data.location.default().directory)) return
     keymap.dispatch(evt.data.command)
   })
 
-  event.on("tui.toast.show", (evt, { workspace }) => {
-    if (workspace !== (location.current?.workspaceID ?? data.location.default().workspaceID)) return
+  event.on("tui.toast.show", (evt, { directory }) => {
+    if (directory !== (location.current?.directory ?? data.location.default().directory)) return
     toast.show({
       title: evt.data.title,
       message: evt.data.message,
@@ -1237,8 +1236,8 @@ function App(props: { pair?: DialogPairCredentials }) {
     })
   })
 
-  event.on("tui.session.select", (evt, { workspace }) => {
-    if (workspace !== (location.current?.workspaceID ?? data.location.default().workspaceID)) return
+  event.on("tui.session.select", (evt, { directory }) => {
+    if (directory !== (location.current?.directory ?? data.location.default().directory)) return
     route.navigate({
       type: "session",
       sessionID: evt.data.sessionID,

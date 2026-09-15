@@ -94,7 +94,7 @@ type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: Sess
 
 type ForkInput = {
   sessionID: SessionSchema.ID
-  boundary: SessionSchema.ForkRequestBoundary
+  before?: SessionMessage.ID
 }
 
 export {
@@ -205,7 +205,7 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
-  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly continue?: boolean }) => Effect.Effect<boolean>
+  readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly resume?: boolean }) => Effect.Effect<boolean>
   readonly synthetic: (
     input: Parameters<Session.Handle["synthetic"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["synthetic"]>
@@ -308,17 +308,17 @@ const layer = Layer.effect(
           .where(
             and(
               eq(SessionMessageTable.session_id, input.sessionID),
-              input.boundary.type === "before" ? eq(SessionMessageTable.id, input.boundary.messageID) : undefined,
+              input.before ? eq(SessionMessageTable.id, input.before) : undefined,
             ),
           )
           .orderBy(desc(SessionMessageTable.seq))
           .limit(1)
           .get()
           .pipe(Effect.orDie)
-        if (!boundary && input.boundary.type === "before")
+        if (!boundary && input.before)
           return yield* new MessageNotFoundError({
             sessionID: input.sessionID,
-            messageID: input.boundary.messageID,
+            messageID: input.before,
           })
         if (!boundary) return yield* new ForkEmptyError({ sessionID: input.sessionID })
         const sessionID = SessionSchema.ID.create()
@@ -336,7 +336,7 @@ const layer = Layer.effect(
         yield* bus.publish(SessionEvent.Forked, {
           sessionID,
           parentID: parent.id,
-          boundary: { ...input.boundary, messageID: boundary.id },
+          boundary: { type: input.before ? "before" : "through", messageID: boundary.id },
           ...inherited,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)

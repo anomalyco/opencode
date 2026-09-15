@@ -148,7 +148,6 @@ export function PluginsDialog(props: {
         location,
         targets: [entry.plugin.source.target],
       })
-      .then(() => props.context.client.plugin.awaitActivation({ location }))
       .then(() => refetch())
       .catch((cause) => {
         props.context.ui.toast.show({

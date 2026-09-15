@@ -170,9 +170,10 @@ const table = sqliteTable("session", {
 - Test actual implementation, do not duplicate logic into tests
 - Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package directories such as `packages/core`.
 
-## Type Checking
+## Checks
 
-- Always run `bun typecheck` from package directories (for example, `packages/core`), never `tsc` directly.
+- Run `bun run check` from the repository root as the canonical full lint and type-check verification.
+- During focused iteration, run `bun typecheck` from the affected package directory (for example, `packages/core`). Never run `tsc` directly.
 
 ## V2 Session Core
 

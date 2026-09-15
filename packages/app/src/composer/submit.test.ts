@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { Skill } from "@opencode/schema/skill"
-import { AbsolutePath } from "@opencode/schema/schema"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
 import { createMemoryComposerState } from "./state"
 import { createComposerSubmit } from "./submit"
@@ -32,16 +31,6 @@ const selection = {
   },
 } satisfies ModelSelection
 
-const slashSkill = Skill.Info.make({
-  id: Skill.ID.make("show-me"),
-  name: Skill.Name.make("Show Me"),
-  description: "Explain visually",
-  slash: true,
-  autoinvoke: false,
-  location: AbsolutePath.make("/skills/show-me/SKILL.md"),
-  content: "Explain visually",
-})
-
 function controls(): ComposerControls {
   return {
     agents: {
@@ -64,13 +53,11 @@ function submitInput(
   notify = { missingSelection() {}, failed(_kind: "shell" | "command" | "prompt", _error: unknown) {} },
   mode: "normal" | "shell" = "normal",
   commands: () => readonly { name: string }[] | undefined = () => [],
-  skills: () => readonly Skill.Info[] | undefined = () => [],
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
     commands,
-    skills,
     editor: () => undefined,
     queueScroll() {},
     addToHistory() {},
@@ -153,7 +140,7 @@ describe("Composer submission", () => {
         await committed.promise
       },
       command: async (request) => {
-        expect(request).toMatchObject({ command: "review", text: "changes", delivery: "steer" })
+        expect(request).toMatchObject({ name: "review", text: "changes", delivery: "steer" })
         expect(request).not.toHaveProperty("model")
         expect(request).not.toHaveProperty("agent")
         calls.push("command")
@@ -266,107 +253,6 @@ describe("Composer submission", () => {
     expect(await failed.promise).toBe(error)
     expect(calls).toEqual(["track", "switch-agent", "cancel"])
     expect(state.current()[0]).toMatchObject({ content: "/review changes" })
-  })
-
-  test("submits a slash skill with its trailing text and attachments", async () => {
-    const state = createMemoryComposerState({ prompt: "/show-me explain " }).capture()
-    state.set([
-      { type: "text", content: "/show-me explain ", start: 0, end: 17 },
-      { type: "file", path: "src/cache.ts", content: "@src/cache.ts", start: 17, end: 30 },
-    ])
-    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
-    const target = session({ calls: [], prompt: async (value) => admitted.resolve(value) })
-    const adapter: ActiveComposerAdapter = {
-      kind: "active-session",
-      state,
-      ready: () => true,
-      controls,
-      working: () => false,
-      session: () => target,
-      interrupt: async () => undefined,
-      submitted() {},
-      setEditor() {},
-    }
-
-    await submitInput(
-      adapter,
-      undefined,
-      "normal",
-      () => [],
-      () => [slashSkill],
-    ).submit(new Event("submit"))
-    const request = await admitted.promise
-    expect(request.text).toBe("/show-me explain @src/cache.ts")
-    expect(request.skills).toEqual([
-      expect.objectContaining({ id: "show-me", mention: { start: 0, end: 8, text: "/show-me" } }),
-    ])
-    expect(request.files).toEqual([
-      { uri: "file:///C:/repo/src/cache.ts", name: "cache.ts", mention: { start: 17, end: 30, text: "@src/cache.ts" } },
-    ])
-  })
-
-  test.each([
-    { text: "/show-me", slash: true, expected: ["show-me"] },
-    { text: "/show-me\nexplain caching", slash: true, expected: ["show-me"] },
-    { text: "/show-me\texplain caching", slash: true, expected: ["show-me"] },
-    { text: "/show-me", slash: false, expected: [] },
-    { text: "/show-me", slash: undefined, expected: [] },
-    { text: "/show-me-extra", slash: true, expected: [] },
-    { text: "Explain /show-me", slash: true, expected: [] },
-  ])("resolves raw slash skill input $text with slash=$slash", async ({ text, slash, expected }) => {
-    const state = createMemoryComposerState({ prompt: text }).capture()
-    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
-    const target = session({ calls: [], prompt: async (value) => admitted.resolve(value) })
-    const adapter: ActiveComposerAdapter = {
-      kind: "active-session",
-      state,
-      ready: () => true,
-      controls,
-      working: () => false,
-      session: () => target,
-      interrupt: async () => undefined,
-      submitted() {},
-      setEditor() {},
-    }
-    await submitInput(
-      adapter,
-      undefined,
-      "normal",
-      () => [],
-      () => [{ ...slashSkill, slash }],
-    ).submit(new Event("submit"))
-    const request = await admitted.promise
-    expect(request.text).toBe(text)
-    expect(request.skills?.map((skill) => skill.id)).toEqual([...expected])
-  })
-
-  test("captures slash skills before creating a session in a new worktree", async () => {
-    const state = createMemoryComposerState({ prompt: "/show-me" }).capture()
-    let skills: readonly Skill.Info[] | undefined = [slashSkill]
-    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
-    const target = session({ calls: [], prompt: async (value) => admitted.resolve(value) })
-    const adapter: NewSessionComposerAdapter = {
-      kind: "new-session",
-      state,
-      ready: () => true,
-      controls,
-      working: () => false,
-      submitted() {},
-      async start() {
-        skills = undefined
-        return { session: target, cleanupReady: Promise.resolve() }
-      },
-    }
-    await submitInput(
-      adapter,
-      undefined,
-      "normal",
-      () => [],
-      () => skills,
-    ).submit(new Event("submit"))
-    expect((await admitted.promise).skills).toEqual([
-      expect.objectContaining({ id: "show-me", mention: { start: 0, end: 8, text: "/show-me" } }),
-    ])
   })
 
   test("sends one captured value with explicit delivery after selection switches", async () => {
@@ -652,7 +538,6 @@ describe("Composer submission", () => {
       notify,
       "normal",
       () => [],
-      () => [slashSkill],
     )
 
     await submission.submit(new Event("submit"))
@@ -744,14 +629,13 @@ describe("Composer submission", () => {
       undefined,
       "normal",
       () => catalog,
-      () => [{ ...slashSkill, id: Skill.ID.make("review") }],
     ).submit(new Event("submit"))
 
     expect(await sent.promise).toBe("command")
     expect(requests).toEqual([
       {
         sessionID: target.id,
-        command: "review",
+        name: "review",
         text: "https://github.com/example/repo/pull/1",
         files: [],
         agents: [],

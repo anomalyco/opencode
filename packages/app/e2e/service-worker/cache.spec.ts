@@ -75,13 +75,16 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
     const blocked: ServerResponse[] = []
     const release = () => blocked.splice(0).forEach((response) => response.end(builds.new["/large.bin"]))
     const server = createServer((request, response) => {
-      const path = new URL(request.url ?? "/", "http://localhost").pathname
+      const url = new URL(request.url ?? "/", "http://localhost")
+      const path = url.pathname
       requests.push(path)
       response.setHeader("cache-control", "no-store")
       if (path === "/observer.html")
         return void response.writeHead(200, { "content-type": "text/html" }).end("<title>Worker observer</title>")
-      if (path === "/api/health")
-        return void response.writeHead(200, { "content-type": "application/json" }).end('{"healthy":true}')
+      if (path === "/api/status")
+        return void response
+          .writeHead(200, { "content-type": "application/json" })
+          .end(`{"version":"test","pid":1,"urls":["${url.origin}"]}`)
       if (path === "/sw.js" && state.legacy && state.version === "old") {
         // Model the shipped worker's shared precache name and cache-first navigation behavior.
         const urls = Object.keys(builds.old).filter(
@@ -331,8 +334,8 @@ fixture("upgrades the legacy shared precache only after old tabs close", async (
 
 fixture("does not substitute cached HTML for API or missing asset navigations", async ({ page, site }) => {
   await install(page, site.url)
-  const api = await page.goto(`${site.url}/api/health`)
-  expect(await api?.json()).toEqual({ healthy: true })
+  const api = await page.goto(`${site.url}/api/status`)
+  expect(await api?.json()).toEqual({ version: "test", pid: 1, urls: ["http://localhost"] })
   expect(api?.fromServiceWorker()).toBe(false)
   const asset = await page.goto(`${site.url}/_assets/missing.js`)
   expect(asset?.status()).toBe(404)

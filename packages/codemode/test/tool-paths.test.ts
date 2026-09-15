@@ -198,7 +198,9 @@ describe("blocked member names on tool paths", () => {
     const poisoned = await failure(runtime, `const o = {}; o.__proto__.constructor("return 1")`)
     expect(poisoned.message).toContain("Cannot read properties of undefined")
     // Prototype mutation is confined to one run: the next program starts from fresh intrinsics.
-    expect(await value(runtime, `Object.prototype.polluted = 1; Array.prototype.push = 2; return ({}).polluted`)).toBe(1)
+    expect(await value(runtime, `Object.prototype.polluted = 1; Array.prototype.push = 2; return ({}).polluted`)).toBe(
+      1,
+    )
     expect(await value(runtime, `return [({}).polluted, typeof [].push]`)).toEqual([null, "function"])
     expect(Object.keys(Object.prototype)).toEqual([])
     expect(Object.keys(Array.prototype)).toEqual([])
@@ -277,5 +279,61 @@ describe("canonical path collisions", () => {
     expect(await value(runtime, `return await tools.issues.list({})`)).toBe("second")
     expect(await value(runtime, `return await tools.issues.get({})`)).toBe("got")
     expect(await value(runtime, `return await tools.issues.close({})`)).toBe("closed")
+  })
+})
+
+describe("tool argument prototype safety", () => {
+  test("a __proto__ key never reaches tool code", async () => {
+    let seen: unknown
+    const runtime = CodeMode.make({
+      tools: {
+        inspect: Tool.make({
+          description: "Inspect",
+          input: Schema.Struct({ v: Schema.Unknown }),
+          output: Schema.Unknown,
+          execute: (input) =>
+            Effect.sync(() => {
+              seen = (input as { v: unknown }).v
+              return null
+            }),
+        }),
+      },
+    })
+    await value(runtime, `return await tools.inspect({ v: { __proto__: { polluted: true }, a: 1 } })`)
+    expect(seen).toEqual({ a: 1 })
+    const merged = Object.assign({}, seen as Record<string, unknown>)
+    expect(merged.polluted).toBeUndefined()
+    expect(Object.getPrototypeOf(merged)).toBe(Object.prototype)
+  })
+
+  test("program results drop __proto__ keys", async () => {
+    const runtime = CodeMode.make({ tools: {} })
+    expect(await value(runtime, `return { __proto__: { polluted: true }, a: 2 }`)).toEqual({ a: 2 })
+    expect(await value(runtime, `return [{ __proto__: 1 }]`)).toEqual([{}])
+  })
+})
+
+describe("tool arguments cross in a useful form where JSON.stringify would give {}", () => {
+  test("Set, RegExp, and URLSearchParams; Map stays {} like JSON", async () => {
+    let seen: unknown
+    const runtime = CodeMode.make({
+      tools: {
+        inspect: Tool.make({
+          description: "Inspect",
+          input: Schema.Struct({ v: Schema.Unknown }),
+          output: Schema.Unknown,
+          execute: (input) =>
+            Effect.sync(() => {
+              seen = input.v
+              return null
+            }),
+        }),
+      },
+    })
+    await value(
+      runtime,
+      `return await tools.inspect({ v: { s: new Set([1, 2]), r: /x/g, p: new URLSearchParams("a=1&b=2"), m: new Map([["k", 1]]) } })`,
+    )
+    expect(seen).toEqual({ s: [1, 2], r: "/x/g", p: "a=1&b=2", m: {} })
   })
 })

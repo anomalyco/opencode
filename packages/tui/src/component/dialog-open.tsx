@@ -1,4 +1,4 @@
-import { batch, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
+import { batch, createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
 import path from "path"
 import { useTerminalDimensions } from "@opentui/solid"
@@ -29,9 +29,9 @@ export const DialogOpenKey = Symbol("DialogOpen")
 
 type OpenTarget =
   | { type: "session"; sessionID: string }
-  | { type: "project"; directory: string; workspaceID?: string; projectID?: string }
+  | { type: "project"; directory: string; projectID?: string }
 
-type OpenView = { type: "projects" } | { type: "worktrees"; projectID: string; workspaceID?: string }
+type OpenView = { type: "projects" } | { type: "worktrees"; projectID: string }
 
 type OpenSelection = { view: OpenView; filter: string; selected?: OpenTarget }
 
@@ -120,24 +120,24 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
     pending = creation()
     setCreation(undefined)
   }
-  const workspaceID = () => {
-    const current = view()
-    return current.type === "worktrees" ? current.workspaceID : undefined
-  }
-  const [worktrees] = createResource(
-    () => (view().type === "worktrees" ? view() : undefined),
-    () =>
-      client.api.worktree
-        .list({
-          location: {
-            directory: data.project.get(projectID()!)!.canonical,
-            workspace: workspaceID(),
-          },
-        })
-        .catch((error: unknown) => {
-          toast.show({ title: "Loading worktrees failed", message: errorMessage(error), variant: "error" })
-          return []
-        }),
+  const [worktrees, worktreeActions] = createResource(projectID, (projectID) =>
+    client.api.worktree.list({ projectID }).catch((error: unknown) => {
+      toast.show({ title: "Loading worktrees failed", message: errorMessage(error), variant: "error" })
+      return []
+    }),
+  )
+
+  const refreshed = new Set<string>()
+  createEffect(() => {
+    const id = projectID()
+    if (!id || worktrees.latest === undefined || refreshed.has(id)) return
+    refreshed.add(id)
+    void client.api.worktree.refresh({ projectID: id }).catch(() => undefined)
+  })
+  onCleanup(
+    client.event.on("worktree.updated", (event) => {
+      if (event.data.projectID === projectID()) void worktreeActions.refetch()
+    }),
   )
 
   const [matched] = createResource(
@@ -212,13 +212,11 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
       ...data.project.list().flatMap((project) =>
         [project.canonical, ...project.sandboxes].map((directory) => ({
           directory,
-          workspaceID: current.workspaceID,
           project,
         })),
       ),
       ...sessions().map((session) => ({
         directory: session.location.directory,
-        workspaceID: session.location.workspaceID,
         project: data.project.get(session.projectID),
       })),
     ]
@@ -246,14 +244,12 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           value: {
             type: "project",
             directory: item.directory,
-            ...(item.workspaceID ? { workspaceID: item.workspaceID } : {}),
             ...(git ? { projectID: item.project!.id } : {}),
           } as OpenTarget,
           category: "Projects",
           gutter:
-            item.workspaceID === current.workspaceID &&
-            (item.directory === current.directory ||
-              (item.directory === location.current?.project.canonical && !seen.has(locationKey(current))))
+            item.directory === current.directory ||
+            (item.directory === location.current?.project.canonical && !seen.has(locationKey(current)))
               ? () => <text fg={theme.text.formfield.selected}>●</text>
               : undefined,
         }
@@ -303,11 +299,9 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         return {
           title,
           footer: footer + " ".repeat(Math.max(0, width - stringWidth(footer))),
-          value: { type: "project", directory, ...(workspaceID() ? { workspaceID: workspaceID() } : {}) } as OpenTarget,
+          value: { type: "project", directory } as OpenTarget,
           gutter:
-            directory === current.directory && workspaceID() === current.workspaceID
-              ? () => <text fg={theme.text.formfield.selected}>●</text>
-              : undefined,
+            directory === current.directory ? () => <text fg={theme.text.formfield.selected}>●</text> : undefined,
         }
       })
   })
@@ -384,12 +378,11 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
                         if (target?.type !== "project" || !target.projectID) return
                         projectsSelection = snapshot()
                         restore({
-                          view: { type: "worktrees", projectID: target.projectID, workspaceID: target.workspaceID },
+                          view: { type: "worktrees", projectID: target.projectID },
                           filter: "",
                           selected: {
                             type: "project",
                             directory: target.directory,
-                            ...(target.workspaceID ? { workspaceID: target.workspaceID } : {}),
                           },
                         })
                       },
@@ -432,7 +425,6 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
               }
               const target = {
                 directory: option.value.directory,
-                ...(option.value.workspaceID ? { workspaceID: option.value.workspaceID } : {}),
               }
               route.navigate({ type: "home", location: target })
               location.set(target)
@@ -454,17 +446,13 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             setCreating(true)
             void client.api.worktree
               .create({
-                location: {
-                  directory: data.project.get(id)!.canonical,
-                  workspace: workspaceID(),
-                },
+                projectID: id,
                 ...(value.trim() ? { name: value.trim() } : {}),
               })
               .then((created) => {
                 if (closed || creation() !== previous) return
                 const target = {
                   directory: created.directory,
-                  ...(workspaceID() ? { workspaceID: workspaceID() } : {}),
                 }
                 dialog.clear()
                 route.navigate({ type: "home", location: target })

@@ -272,15 +272,15 @@ function authServer(fetch: (request: Request, url: URL) => Response | Promise<Re
     fetch(request) {
       const url = new URL(request.url)
       requests?.push(url.pathname)
-      if (url.pathname === "/api/health") return health()
+      if (url.pathname === "/api/status") return status()
       if (url.pathname === "/api/model/default") return Response.json(located(null))
       return fetch(request, url)
     },
   })
 }
 
-function health() {
-  return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
+function status() {
+  return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
 }
 
 function located<T>(data: T) {

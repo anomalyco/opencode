@@ -6,7 +6,7 @@ import { parseSlashHead } from "./parse"
 
 export async function directoryAutocomplete(
   file: Pick<OpenCodeClient["file"], "list">,
-  location: { directory: string; workspace?: string },
+  location: { directory: string },
   query: string,
   home: string,
 ) {

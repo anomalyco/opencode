@@ -1491,6 +1491,7 @@ describe("HttpApiCodegen.generate", () => {
     const link = JsonNumber.ast.encoding?.[0]
     if (link === undefined) throw new Error("Expected JSON number encoding")
     // This helper is present at runtime but omitted from the public declaration surface.
+    // oxlint-disable-next-line no-restricted-globals -- The test verifies an Effect runtime helper without a public type.
     const replaceEncoding: unknown = Reflect.get(SchemaAST, "replaceEncoding")
     if (typeof replaceEncoding !== "function") throw new Error("Expected SchemaAST.replaceEncoding")
     const ast: unknown = replaceEncoding(JsonNumber.ast, [

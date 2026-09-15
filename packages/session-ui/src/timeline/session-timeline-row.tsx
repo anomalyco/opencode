@@ -64,19 +64,24 @@ export function createSessionTimelineRowRenderer(input: {
 }) {
   const i18n = useI18n()
   const data = useData()
-  // Cached timelines retain subgroup identities alongside their disclosure choices.
+  // Cached timelines retain file-change subgroup identities alongside their disclosure choices.
   const patchGroupKeys = input.disclosure.patchGroupKeys ?? new Map<string, string>()
   const patchPartKeys = new WeakMap<SessionMessageAssistant["content"][number], string>()
   const patchOwners = createMemo(() => {
     const owners = new Map<string, string>()
     const rows = input.projection.rows()
-    // Track status changes before a group is first opened: a failed patch can
+    // Track status changes before a group is first opened: a failed file change can
     // split an existing group without changing the projection's row identities.
     rows.forEach((row) => {
       if (row._tag !== "AssistantPart" || row.group.type !== "context") return
       row.group.refs.forEach((ref) => {
         const content = Timeline.resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
-        if (content?.type !== "tool" || content.name !== "patch" || content.state.status === "error") return
+        if (
+          content?.type !== "tool" ||
+          !["edit", "write", "patch"].includes(content.name) ||
+          content.state.status === "error"
+        )
+          return
         const part = `${ref.messageID}:${ref.partID}`
         const key = patchGroupKeys.get(part)
         if (key && !owners.has(key)) owners.set(key, part)

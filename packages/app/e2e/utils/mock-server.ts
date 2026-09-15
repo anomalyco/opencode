@@ -10,8 +10,8 @@ export interface MockServerConfig {
   provider: unknown | (() => unknown)
   integrationMethods?: Record<string, unknown[]>
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
-  preferences?: Record<string, unknown>
   shells?: unknown[]
+  configEntries?: unknown[]
   websearchProviders?: unknown[]
   directory: string
   project: unknown
@@ -198,7 +198,7 @@ const corsHeaders = {
 function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, string>; nextCursor: number }) {
   const noContent = Effect.succeed(HttpApiSchema.NoContent.make())
   const delay = config.messageDelay === undefined ? Effect.void : Effect.sleep(Duration.millis(config.messageDelay))
-  const preferences = { current: config.preferences ?? {} }
+  const configEntries = config.configEntries ?? []
   return HttpApiBuilder.group(MockApi, "mock", (handlers) =>
     handlers
       .handleRaw("event", () => {
@@ -219,8 +219,8 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         }),
       )
       .handleAll({
-        health: () => Effect.succeed({ healthy: true, version: "2.0.0", pid: 1 }),
-        config: () => Effect.succeed([]),
+        status: () => Effect.succeed({ version: "2.0.0", pid: 1, urls: config.server ? [config.server] : [] }),
+        config: () => Effect.succeed(configEntries),
         reference: () =>
           Effect.succeed({
             location: {
@@ -285,19 +285,8 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             canonical: project.canonical ?? config.directory,
           })
         },
-        projectCurrent: () =>
-          Effect.succeed({
-            id: (config.project as { id?: string }).id,
-            directory: config.directory,
-            canonical: config.directory,
-          }),
-        configPreferences: () => Effect.succeed(preferences.current),
-        configUpdatePreferences: (ctx) =>
-          Effect.sync(() => {
-            preferences.current = { ...preferences.current, ...ctx.payload }
-            return preferences.current
-          }),
         configShells: () => Effect.succeed(config.shells ?? []),
+        configUpdate: () => noContent,
         websearchProviders: () => Effect.succeed({ location: location(config), data: config.websearchProviders ?? [] }),
         worktreeList: () =>
           Effect.succeed([
@@ -308,7 +297,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             })),
           ]),
         worktreeCreate: (ctx) => {
-          const input = record(ctx.payload) ? ctx.payload : {}
+          const input = ctx.payload
           return Effect.succeed({
             directory: `${typeof input.directory === "string" ? input.directory : config.directory}/${
               typeof input.name === "string" ? input.name : "copy"
@@ -448,7 +437,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
               data: {
                 id: typeof body.id === "string" ? body.id : `inb_mock_${Date.now()}`,
                 sessionID: ctx.params.sessionID,
-                timeCreated: Date.now(),
+                time: { created: Date.now() },
                 type: "user",
                 payload: {
                   text: typeof body.text === "string" ? body.text : "",
@@ -658,11 +647,6 @@ export function currentSession(session: { id: string } & Record<string, unknown>
           : typeof session.directory === "string"
             ? session.directory
             : fallbackDirectory,
-      ...(typeof session.workspaceID === "string"
-        ? { workspaceID: session.workspaceID }
-        : "workspaceID" in location && typeof location.workspaceID === "string"
-          ? { workspaceID: location.workspaceID }
-          : {}),
     },
     subpath: session.subpath ?? session.path,
     revert: session.revert,

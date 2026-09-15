@@ -1,5 +1,4 @@
 import { createMemo, createResource, onMount, type Accessor } from "solid-js"
-import type { ConfigPreferences, ConfigUpdatePreferencesInput } from "@opencode/client/promise"
 import type { ColorScheme } from "@opencode/ui/theme/context"
 import { useTheme } from "@opencode/ui/theme/context"
 import {
@@ -24,91 +23,47 @@ import { showToast } from "@/shell/notifications/toast"
 export { createShellOptions, createSoundPreviewController } from "./behavior"
 export type { ShellOption, ShellSelectOption } from "./behavior"
 
-export function createServerPreferencesController(server: Accessor<ServerConnection.Any>) {
+export function createServerShellController(server: Accessor<ServerConnection.Any>) {
   const language = useLanguage()
   const serverCtx = useServerCtx(server)
   const source = () => ServerConnection.key(server())
-  const [preferences, preferencesActions] = createResource<ConfigPreferences, ServerConnection.Key>(
+  const [state, actions] = createResource(
     source,
-    () =>
-      serverCtx()
-        .sdk.api.config.preferences()
-        .catch(() => ({})),
-    { initialValue: {} },
+    async () => {
+      const context = serverCtx()
+      const [entries, shells] = await Promise.all([
+        context.sdk.api.config.get().catch(() => []),
+        context.sdk.api.config.shells().catch(() => []),
+      ])
+      const boundary = entries.findIndex((entry) => entry.type === "directory")
+      const global = boundary === -1 ? entries : entries.slice(0, boundary)
+      return {
+        shells,
+        shell: global
+          .flatMap((entry) => (entry.type === "document" && entry.info.shell !== undefined ? [entry.info.shell] : []))
+          .at(-1),
+      }
+    },
+    { initialValue: { shells: [], shell: undefined } },
   )
-  const [shells] = createResource(
-    source,
-    () =>
-      serverCtx()
-        .sdk.api.config.shells()
-        .catch(() => []),
-    { initialValue: [] },
-  )
-  const [providers] = createResource(
-    source,
-    () =>
-      serverCtx()
-        .sdk.api.websearch.providers()
-        .then((result) => result.data)
-        .catch(() => []),
-    { initialValue: [] },
-  )
-
-  const update = async (patch: ConfigUpdatePreferencesInput) => {
-    const context = serverCtx()
-    const previous = preferences.latest
-    preferencesActions.mutate({
-      ...previous,
-      ...(patch.shell === undefined ? {} : { shell: patch.shell ?? undefined }),
-      ...(patch.websearch === undefined ? {} : { websearch: patch.websearch ?? undefined }),
-    })
-    await context.sdk.api.config
-      .updatePreferences(patch)
-      .then(preferencesActions.mutate)
-      .catch((error: unknown) => {
-        preferencesActions.mutate(previous)
-        showToast({
-          variant: "error",
-          title: language.t("common.requestFailed"),
-          description: error instanceof Error ? error.message : language.t("common.requestFailed"),
-        })
-      })
-  }
-
-  const websearchOptions = createMemo(() => {
-    const options = providers.latest.map((provider) => ({ value: provider.id, label: provider.name }))
-    const selected = preferences.latest.websearch
-    const configured = selected && selected.provider !== "random" ? selected.provider : undefined
-    return [
-      { value: "random" as const, label: language.t("session.websearch.any") },
-      ...options,
-      ...(configured && !options.some((option) => option.value === configured)
-        ? [{ value: configured, label: configured }]
-        : []),
-      { value: false as const, label: language.t("session.websearch.disable") },
-    ]
-  })
-  const websearchCurrent = createMemo(() => {
-    const selection = preferences.latest.websearch
-    const value = selection === false ? false : (selection?.provider ?? "random")
-    return websearchOptions().find((option) => option.value === value) ?? websearchOptions()[0]
-  })
 
   return {
-    shell: {
-      shells: () => shells.latest,
-      current: () => preferences.latest.shell ?? "",
-      select: (value: string) => {
-        if (value === (preferences.latest.shell ?? "")) return
-        void update({ shell: value || null })
-      },
-    },
-    websearch: {
-      options: websearchOptions,
-      current: websearchCurrent,
-      select: (value: string | false) => {
-        void update({ websearch: value === false ? false : { provider: value } })
-      },
+    shells: () => state.latest.shells,
+    current: () => state.latest.shell ?? "",
+    select: (value: string) => {
+      if (value === (state.latest.shell ?? "")) return
+      const previous = state.latest
+      actions.mutate({ ...previous, shell: value || undefined })
+      void serverCtx()
+        .sdk.api.config.update({ shell: value || null })
+        .catch((error: unknown) => {
+          actions.mutate(previous)
+          showToast({
+            variant: "error",
+            title: language.t("common.requestFailed"),
+            description: error instanceof Error ? error.message : language.t("common.requestFailed"),
+          })
+        })
     },
   }
 }
@@ -208,6 +163,7 @@ export function createSoundSettingsController() {
   }
 }
 
-export type ShellSettingsController = ReturnType<typeof createServerPreferencesController>["shell"]
+export type ShellSettingsController = ReturnType<typeof createServerShellController>
+
 export type AppearanceSettingsController = ReturnType<typeof createAppearanceSettingsController>
 export type SoundSettingsController = ReturnType<typeof createSoundSettingsController>

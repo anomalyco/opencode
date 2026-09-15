@@ -394,8 +394,8 @@ describe("RegExp", () => {
     })
   })
 
-  test("regexes serialize to {} at the boundary, like JSON", async () => {
-    expect(await value(`return /a/`)).toEqual({})
+  test("regexes cross the boundary as their literal form; JSON.stringify keeps {} like JS", async () => {
+    expect(await value(`return [/a/, { r: /b/gi }]`)).toEqual(["/a/", { r: "/b/gi" }])
     expect(await value(`return JSON.stringify({ r: /a/g })`)).toBe('{"r":{}}')
   })
 
@@ -521,7 +521,7 @@ describe("URL and URI helpers", () => {
       cannotParse: false,
       parsed: "https://example.test/users",
       invalidIsTypeError: true,
-      boundary: ["https://example.test/a", {}],
+      boundary: ["https://example.test/a", "q=one"],
       json: '{"url":"https://example.test/a","params":{}}',
     })
   })
@@ -715,8 +715,9 @@ describe("Set", () => {
     ).toBe(6)
   })
 
-  test("sets serialize to {} at the boundary, like JSON", async () => {
-    expect(await value(`return { s: new Set([1]) }`)).toEqual({ s: {} })
+  test("sets cross the boundary as arrays; JSON.stringify keeps {} like JS", async () => {
+    expect(await value(`return { s: new Set([1, "a", { n: 1 }, undefined]) }`)).toEqual({ s: [1, "a", { n: 1 }, null] })
+    expect(await value(`return JSON.stringify(new Set([1]))`)).toBe("{}")
   })
 })
 
@@ -737,9 +738,9 @@ describe("stdlib integration", () => {
     expect(await value(`const make = (C) => new C([["a", 1]]); return make(Map).get("a")`)).toBe(1)
     expect(await value(`const t = { M: Map }; return new t.M() instanceof Map`)).toBe(true)
     const shadowed = await error(`const Date = 5; return new Date()`)
-    expect(shadowed.message).toStartWith("Date is not a constructor.")
+    expect(shadowed.message).toStartWith("TypeError: Date is not a constructor.")
     const fn = await error(`const f = () => 1; return new f()`)
-    expect(fn.message).toStartWith("f cannot be constructed")
+    expect(fn.message).toStartWith("TypeError: f cannot be constructed")
   })
 
   test("Object.is uses SameValue semantics", async () => {

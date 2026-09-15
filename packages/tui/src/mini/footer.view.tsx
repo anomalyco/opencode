@@ -21,7 +21,6 @@ import {
   RunModelSelectBody,
   RunQueuedPromptSelectBody,
   RunSettingsBody,
-  RunSkillSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
 } from "./footer.command"
@@ -149,13 +148,11 @@ export function RunFooterView(props: RunFooterViewProps) {
   const [subagentMenuRows, setSubagentMenuRows] = createSignal(RUN_SUBAGENT_PANEL_ROWS)
   const queuedPrompts = createMemo(() => props.queuedPrompts?.() ?? [])
   const queue = createMemo(() => queuedPrompts().filter((item) => item.delivery === "queue"))
-  const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const prompt = createMemo(() => active().type === "prompt" && route().type === "composer")
   const selectingSubagent = createMemo(() => active().type === "prompt" && route().type === "subagent-menu")
   const selectingQueued = createMemo(() => active().type === "prompt" && route().type === "queued-menu")
   const inspecting = createMemo(() => active().type === "prompt" && route().type === "subagent")
   const commanding = createMemo(() => active().type === "prompt" && route().type === "command")
-  const skilling = createMemo(() => active().type === "prompt" && route().type === "skill")
   const agenting = createMemo(() => active().type === "prompt" && route().type === "agent")
   const modeling = createMemo(() => active().type === "prompt" && route().type === "model")
   const varianting = createMemo(() => active().type === "prompt" && route().type === "variant")
@@ -167,7 +164,6 @@ export function RunFooterView(props: RunFooterViewProps) {
       selectingQueued() ||
       selectingSubagent() ||
       commanding() ||
-      skilling() ||
       agenting() ||
       modeling() ||
       varianting() ||
@@ -298,14 +294,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     openRoute({ type: "agent" })
   }
 
-  const openSkillMenu = () => {
-    if (props.commands() && skills().length === 0) {
-      return
-    }
-
-    openRoute({ type: "skill" })
-  }
-
   const openVariant = () => {
     openRoute({ type: "variant" })
   }
@@ -398,7 +386,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     onInputClear: props.onInputClear,
     onExitRequest: props.onExitRequest,
     onExit: props.onExit,
-    onSkillMenu: openSkillMenu,
     onSettings: openSettings,
     onRows: setPromptRows,
     onStatus: props.onStatus,
@@ -683,7 +670,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     const current = route()
     if (
       current.type !== "command" &&
-      current.type !== "skill" &&
       current.type !== "agent" &&
       current.type !== "model" &&
       current.type !== "variant" &&
@@ -830,7 +816,6 @@ export function RunFooterView(props: RunFooterViewProps) {
                               closePanel()
                               void composer.openEditor()
                             }}
-                            onSkill={openSkillMenu}
                             onSubagent={openSubagentMenu}
                             onQueued={openQueuedMenu}
                             onVariant={openVariant}
@@ -857,26 +842,6 @@ export function RunFooterView(props: RunFooterViewProps) {
                             }}
                             onExit={props.onExit}
                             clearShortcut={shortcut("app.clear")}
-                            mono={props.mono}
-                          />
-                        </Match>
-                        <Match when={skilling()}>
-                          <RunSkillSelectBody
-                            theme={theme}
-                            commands={props.commands}
-                            onClose={closePanel}
-                            onSelect={(name) => {
-                              composer.replacePrompt({
-                                text: `/${name} `,
-                                parts: [],
-                                command: {
-                                  name,
-                                  arguments: "",
-                                  source: "skill",
-                                },
-                              })
-                              closePanel()
-                            }}
                             mono={props.mono}
                           />
                         </Match>

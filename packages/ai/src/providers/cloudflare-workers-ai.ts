@@ -7,7 +7,7 @@ import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("cloudflare-workers-ai")
-export const authEnvVars = ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN"] as const
+export const authEnvVars = ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"] as const
 
 type WorkersAIURL = AtLeastOne<{
   readonly accountId: string

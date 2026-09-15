@@ -1,5 +1,6 @@
 import { Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
+import { Worktree } from "@opencode/schema/worktree"
 
 const Json = Schema.Json.pipe(
   Schema.decodeTo(Schema.Unknown, {
@@ -32,7 +33,7 @@ export class MockBadRequest extends Schema.TaggedError<MockBadRequest>()("MockBa
 }) {}
 
 const Group = HttpApiGroup.make("mock")
-  .add(HttpApiEndpoint.get("health", "/api/health", { success: Json }))
+  .add(HttpApiEndpoint.get("status", "/api/status", { success: Json }))
   .add(
     HttpApiEndpoint.get("event", "/api/event", {
       success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/event-stream" })),
@@ -77,34 +78,35 @@ const Group = HttpApiGroup.make("mock")
       success: Json,
     }),
   )
-  .add(HttpApiEndpoint.get("projectCurrent", "/api/project/current", { success: Json }))
-  .add(HttpApiEndpoint.get("configPreferences", "/api/config/preferences", { success: Json }))
+  .add(HttpApiEndpoint.get("configShells", "/api/config/shell", { success: Json }))
   .add(
-    HttpApiEndpoint.patch("configUpdatePreferences", "/api/config/preferences", {
-      payload: JsonPayload,
-      success: Json,
+    HttpApiEndpoint.patch("configUpdate", "/api/experimental/config", {
+      payload: Schema.Struct({ shell: Schema.NullOr(Schema.String) }),
+      success: HttpApiSchema.NoContent,
     }),
   )
-  .add(HttpApiEndpoint.get("configShells", "/api/config/shell", { success: Json }))
   .add(HttpApiEndpoint.get("websearchProviders", "/api/websearch/provider", { success: Json }))
   .add(
     HttpApiEndpoint.get("worktreeList", "/api/worktree", {
+      query: Schema.Struct({ projectID: Schema.String }),
       success: Json,
     }),
   )
   .add(
     HttpApiEndpoint.post("worktreeCreate", "/api/worktree", {
-      payload: JsonPayload,
+      payload: Worktree.CreateInput,
       success: Json,
     }),
   )
   .add(
     HttpApiEndpoint.delete("worktreeRemove", "/api/worktree", {
+      payload: Worktree.RemoveInput,
       success: NoContent,
     }),
   )
   .add(
     HttpApiEndpoint.post("worktreeRefresh", "/api/worktree/refresh", {
+      payload: Schema.Struct({ projectID: Schema.String }),
       success: NoContent,
     }),
   )
@@ -235,7 +237,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
-    HttpApiEndpoint.post("sessionRename", "/api/session/:sessionID/rename", {
+    HttpApiEndpoint.patch("sessionRename", "/api/session/:sessionID", {
       params: SessionParams,
       payload: JsonPayload,
       success: NoContent,
@@ -256,7 +258,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
-    HttpApiEndpoint.post("sessionRevertClear", "/api/session/:sessionID/revert/clear", {
+    HttpApiEndpoint.delete("sessionRevertClear", "/api/session/:sessionID/revert", {
       params: SessionParams,
       success: NoContent,
     }),

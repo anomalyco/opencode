@@ -1,7 +1,8 @@
 import { Effect, Layer } from "effect"
 import { Agent } from "./agent.js"
 import { AISDK } from "./aisdk.js"
-import { Catalog } from "./catalog.js"
+import { Model } from "./model.js"
+import { Provider } from "./provider.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -25,8 +26,7 @@ import { Plugin } from "./plugin.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { InstancePlugins } from "./plugin/instance.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
-import { WorktreeRefresh } from "./worktree/refresh.js"
-import { Worktree } from "./worktree.js"
+import { WorktreeStrategies } from "./worktree/strategies.js"
 import { Pty } from "./pty.js"
 import { Shell } from "./shell.js"
 import { ShellSelect } from "./shell/select.js"
@@ -65,15 +65,15 @@ const nodes = [
   Rpc.node,
   WebSearch.node,
   Integration.node,
-  Catalog.node,
+  Provider.node,
+  Model.node,
   ModelResolver.node,
   AISDK.node,
   Plugin.node,
   PluginHooks.node,
   InstancePlugins.node,
   PluginSupervisor.node,
-  WorktreeRefresh.node,
-  Worktree.node,
+  WorktreeStrategies.node,
   FileSystemSearch.node,
   FileSystem.node,
   ShellSelect.node,

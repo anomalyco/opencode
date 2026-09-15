@@ -186,7 +186,7 @@ describe("Session.diff", () => {
           expect(yield* diff({ from: steer }).pipe(Effect.flip)).toMatchObject({
             _tag: "Session.MessageNotFoundError",
           })
-          const forked = yield* sessions.fork({ sessionID: created.id, boundary: { type: "through" } })
+          const forked = yield* sessions.fork({ sessionID: created.id })
           expect((yield* sessions.diff({ sessionID: forked.id, context: 0 })).map(summarize)).toEqual([
             ["third.txt", "added", 1, 0],
           ])

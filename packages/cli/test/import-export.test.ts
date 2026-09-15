@@ -42,7 +42,7 @@ const sanitizedTransfer = {
   ],
 }
 
-const health = () => Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
+const status = () => Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
 
 function run(args: string[], stdin?: string) {
   const child = Bun.spawn([process.execPath, "run", "src/index.ts", ...args], {
@@ -60,9 +60,9 @@ test("export is raw by default and supports explicit sanitization", async () => 
     port: 0,
     fetch(request) {
       const url = new URL(request.url)
-      if (url.pathname === "/api/health") return health()
+      if (url.pathname === "/api/status") return status()
       if (url.pathname === `/api/session/${info.id}`) return Response.json({ data: info })
-      if (url.pathname === `/api/session/${info.id}/export`) {
+      if (url.pathname === `/api/experimental/session/${info.id}/export`) {
         sanitization.push(url.searchParams.get("sanitize") ?? "")
         return Response.json({ data: url.searchParams.get("sanitize") === "true" ? sanitizedTransfer : transfer })
       }
@@ -98,7 +98,7 @@ test("export requires a session outside an interactive terminal", async () => {
     port: 0,
     fetch(request) {
       const url = new URL(request.url)
-      if (url.pathname === "/api/health") return health()
+      if (url.pathname === "/api/status") return status()
       if (url.pathname === "/api/location") {
         return Response.json({
           directory: "/project",
@@ -127,8 +127,8 @@ test("export reports a missing session without a stack trace", async () => {
     port: 0,
     fetch(request) {
       const url = new URL(request.url)
-      if (url.pathname === "/api/health") return health()
-      if (url.pathname === `/api/session/${sessionID}/export`) {
+      if (url.pathname === "/api/status") return status()
+      if (url.pathname === `/api/experimental/session/${sessionID}/export`) {
         return Response.json(
           { _tag: "SessionNotFoundError", sessionID, message: `Session not found: ${sessionID}` },
           { status: 404 },
@@ -158,14 +158,14 @@ test("import validates a file and sends it to the resolved location", async () =
     port: 0,
     async fetch(request) {
       const url = new URL(request.url)
-      if (url.pathname === "/api/health") return health()
+      if (url.pathname === "/api/status") return status()
       if (url.pathname === "/api/location") {
         return Response.json({
           directory: root,
           project: { id: "global", directory: root, canonical: root },
         })
       }
-      if (url.pathname === "/api/session/import") {
+      if (url.pathname === "/api/experimental/session/import") {
         imported = await request.json()
         return Response.json({ data: { ...info, location: { directory: root } } })
       }
@@ -201,14 +201,14 @@ test("import reports an existing session without a stack trace", async () => {
     port: 0,
     fetch(request) {
       const url = new URL(request.url)
-      if (url.pathname === "/api/health") return health()
+      if (url.pathname === "/api/status") return status()
       if (url.pathname === "/api/location") {
         return Response.json({
           directory: root,
           project: { id: "global", directory: root, canonical: root },
         })
       }
-      if (url.pathname === "/api/session/import") return new Response("Conflict", { status: 409 })
+      if (url.pathname === "/api/experimental/session/import") return new Response("Conflict", { status: 409 })
       return new Response("Not found", { status: 404 })
     },
   })

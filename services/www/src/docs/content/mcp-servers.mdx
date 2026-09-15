@@ -112,6 +112,7 @@ Use configuration for process options such as a working directory or environment
 | `disabled` | No | Prevents connection when `true`. Defaults to `false`. |
 | `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
 | `timeout` | No | Per-server timeout overrides. |
+| `protocol` | No | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version). |
 
 Use `{env:NAME}` for environment substitution. Shell expressions such as `$NAME` are not expanded in JSON strings:
 
@@ -160,6 +161,7 @@ Use configuration when the server needs headers or other options. Store secrets 
 | `disabled` | No | Prevents connection when `true`. Defaults to `false`. |
 | `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
 | `timeout` | No | Per-server timeout overrides. |
+| `protocol` | No | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version). |
 
 Use `oauth: false` only when the server exclusively uses an API key or another header credential:
 
@@ -266,6 +268,33 @@ Timeouts are positive integer milliseconds. Set defaults under `mcp.timeout`; a 
 | `startup` | 30 seconds | Transport connection and server initialization. |
 | `catalog` | 30 seconds | Listing tools, prompts, resources, and resource templates. |
 | `execution` | 12 hours | Tool calls, prompt retrieval, and resource reads. |
+
+## Protocol version
+
+OpenCode opens every server with the classic MCP `initialize` handshake by default. Set a server's `protocol` to talk to one built on the 2026-07-28 revision:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "modern": {
+        "type": "remote",
+        "url": "https://mcp.example.com/mcp",
+        "protocol": "auto",
+      },
+    },
+  },
+}
+```
+
+| Value | Behavior |
+| --- | --- |
+| `legacy` | Default. Sends `initialize` and speaks protocol revisions up to 2025-11-25. |
+| `auto` | Probes with `server/discover` for the 2026-07-28 revision and falls back to `legacy` when the server does not support it. |
+| `2026-07-28` | Requires the 2026-07-28 revision. The connection fails against older servers. |
+
+Probing a local `legacy` server adds a short-lived extra process and can wait up to the startup timeout when the server ignores unknown requests, so keep `auto` scoped to servers that need it.
 
 ## Names
 

@@ -2,7 +2,6 @@ export * as EventManifest from "./event-manifest.js"
 
 import { Schema } from "effect"
 import { Agent } from "./agent.js"
-import { Catalog } from "./catalog.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
 import { Credential } from "./credential.js"
@@ -16,11 +15,13 @@ import { Integration } from "./integration.js"
 import { LegacyEventV1 } from "./legacy-event.js"
 import { LspEvent } from "./lsp-event.js"
 import { McpEvent } from "./mcp-event.js"
+import { Model } from "./model.js"
 import { ModelsDev } from "./models-dev.js"
 import { Permission } from "./permission.js"
 import { PersistentPty } from "./persistent-pty.js"
 import { Plugin } from "./plugin.js"
 import { Project } from "./project.js"
+import { Provider } from "./provider.js"
 import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
 import { Reference } from "./reference.js"
@@ -42,7 +43,8 @@ const foundationDefinitions = Event.inventory(
   ...ModelsDev.Event.Definitions,
   ...Credential.Event.Definitions,
   ...Integration.Event.Definitions,
-  ...Catalog.Event.Definitions,
+  ...Provider.Event.Definitions,
+  ...Model.Event.Definitions,
   ...Agent.Event.Definitions,
   ...coreDefinitions,
 )

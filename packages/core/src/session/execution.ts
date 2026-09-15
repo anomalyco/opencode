@@ -34,7 +34,7 @@ export interface Interface {
   readonly interrupt: (
     sessionID: SessionSchema.ID,
     options?: {
-      readonly continue?: boolean
+      readonly resume?: boolean
       readonly reason?: "user" | "inactivity"
       readonly awaitSettlement?: boolean
     },
@@ -155,7 +155,7 @@ export const layer = Layer.effect(
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
           const interrupted = yield* coordinator.interrupt(sessionID, options?.reason ?? "user", options)
-          if (!options?.continue) return interrupted
+          if (!options?.resume) return interrupted
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
           // promotes them, and a control item behind a queued prompt waits its turn.

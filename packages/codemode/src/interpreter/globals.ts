@@ -16,7 +16,7 @@ import { ToolReference } from "../tool-runtime.js"
 import { errorGlobal } from "./errors.js"
 import { errorTypes } from "./intrinsics.js"
 import { constants, constructor, native } from "./native.js"
-import { type AstNode, AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "./model.js"
+import { AsyncIteratorSymbol, IteratorSymbol, typeError } from "./model.js"
 import { generatorGlobals } from "./generators.js"
 import { promiseGlobal, type PromiseRuntime } from "./promises.js"
 import type { Runner } from "./runner.js"
@@ -32,27 +32,24 @@ export type Host<R> = {
 
 // Function.prototype.constructor exists so `fn.constructor === Function` holds; dynamic code is unsupported.
 const functionGlobal = <R>(runner: Runner<R>) => {
-  const reject = (_: unknown, __: Array<unknown>, node: AstNode) =>
+  const reject = () =>
     Effect.sync(() => {
-      throw new InterpreterRuntimeError("The Function constructor is not supported; write the function inline.", node)
+      throw typeError("The Function constructor is not supported; write the function inline.")
     })
   return constructor<R>(runner.prototypes, runner.prototypes.Function, {
     name: "Function",
     length: 1,
     call: reject,
-    construct: (args, _, node) => reject(undefined, args, node),
+    construct: reject,
   })
 }
 
 const symbolGlobal = <R>(runner: Runner<R>) => {
   const symbol = native<R>(runner.prototypes, {
     name: "Symbol",
-    call: (_, __, node) =>
+    call: () =>
       Effect.sync(() => {
-        throw new InterpreterRuntimeError(
-          "Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available.",
-          node,
-        )
+        throw typeError("Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available.")
       }),
     callback: false,
   })
@@ -60,44 +57,52 @@ const symbolGlobal = <R>(runner: Runner<R>) => {
   return symbol
 }
 
+type Factory = <R>(host: Host<R>) => unknown
+
+// A table rather than a list so the names are known before any runtime exists.
+const table: Record<string, Factory> = {
+  tools: () => new ToolReference([]),
+  search: (host) =>
+    native(host.runner.prototypes, { name: "search", call: (_, args) => host.search(args), callback: false }),
+  undefined: () => undefined,
+  NaN: () => NaN,
+  Infinity: () => Infinity,
+  Object: (host) => objectGlobal(host.runner, host.toolKeys),
+  Function: (host) => functionGlobal(host.runner),
+  Array: (host) => arrayGlobal(host.runner),
+  Math: (host) => mathGlobal(host.runner),
+  JSON: (host) => jsonGlobal(host.runner),
+  console: (host) => consoleGlobal(host.runner, host.logs),
+  Promise: (host) => promiseGlobal(host.runner, host.promises),
+  Symbol: (host) => symbolGlobal(host.runner),
+  Number: (host) => numberGlobal(host.runner),
+  String: (host) => stringGlobal(host.runner),
+  Boolean: (host) => booleanGlobal(host.runner),
+  parseInt: (host) => coercion(host.runner, "parseInt", 2),
+  parseFloat: (host) => coercion(host.runner, "parseFloat"),
+  isFinite: (host) => coercion(host.runner, "isFinite"),
+  isNaN: (host) => coercion(host.runner, "isNaN"),
+  Date: (host) => dateGlobal(host.runner),
+  RegExp: (host) => regexpGlobal(host.runner),
+  Map: (host) => mapGlobal(host.runner),
+  Set: (host) => setGlobal(host.runner),
+  URL: (host) => urlGlobal(host.runner),
+  URLSearchParams: (host) => urlSearchParamsGlobal(host.runner),
+  encodeURI: (host) => uriGlobal(host.runner, "encodeURI"),
+  encodeURIComponent: (host) => uriGlobal(host.runner, "encodeURIComponent"),
+  decodeURI: (host) => uriGlobal(host.runner, "decodeURI"),
+  decodeURIComponent: (host) => uriGlobal(host.runner, "decodeURIComponent"),
+  atob: (host) => base64Global(host.runner, "atob"),
+  btoa: (host) => base64Global(host.runner, "btoa"),
+  crypto: (host) => cryptoGlobal(host.runner),
+  ...Object.fromEntries(errorTypes.map((type) => [type, <R>(host: Host<R>) => errorGlobal(type, host.runner)])),
+}
+
+/** Names bound in every program before extensions apply. */
+export const globalNames: ReadonlySet<string> = new Set(Object.keys(table))
+
 /** The immutable global bindings of every program, in declaration order. */
 export const globals = <R>(host: Host<R>): ReadonlyArray<readonly [string, unknown]> => {
-  const runner = host.runner
-  generatorGlobals(runner, host.promises)
-  return [
-    ["tools", new ToolReference([])],
-    ["search", native<R>(runner.prototypes, { name: "search", call: (_, args) => host.search(args), callback: false })],
-    ["undefined", undefined],
-    ["NaN", NaN],
-    ["Infinity", Infinity],
-    ["Object", objectGlobal(runner, host.toolKeys)],
-    ["Function", functionGlobal(runner)],
-    ["Array", arrayGlobal(runner)],
-    ["Math", mathGlobal(runner)],
-    ["JSON", jsonGlobal(runner)],
-    ["console", consoleGlobal(runner, host.logs)],
-    ["Promise", promiseGlobal(runner, host.promises)],
-    ["Symbol", symbolGlobal(runner)],
-    ["Number", numberGlobal(runner)],
-    ["String", stringGlobal(runner)],
-    ["Boolean", booleanGlobal(runner)],
-    ["parseInt", coercion(runner, "parseInt", 2)],
-    ["parseFloat", coercion(runner, "parseFloat")],
-    ["isFinite", coercion(runner, "isFinite")],
-    ["isNaN", coercion(runner, "isNaN")],
-    ["Date", dateGlobal(runner)],
-    ["RegExp", regexpGlobal(runner)],
-    ["Map", mapGlobal(runner)],
-    ["Set", setGlobal(runner)],
-    ["URL", urlGlobal(runner)],
-    ["URLSearchParams", urlSearchParamsGlobal(runner)],
-    ["encodeURI", uriGlobal(runner, "encodeURI")],
-    ["encodeURIComponent", uriGlobal(runner, "encodeURIComponent")],
-    ["decodeURI", uriGlobal(runner, "decodeURI")],
-    ["decodeURIComponent", uriGlobal(runner, "decodeURIComponent")],
-    ["atob", base64Global(runner, "atob")],
-    ["btoa", base64Global(runner, "btoa")],
-    ["crypto", cryptoGlobal(runner)],
-    ...errorTypes.map((type) => [type, errorGlobal(type, runner)] as const),
-  ]
+  generatorGlobals(host.runner, host.promises)
+  return Object.entries(table).map(([name, factory]) => [name, factory(host)] as const)
 }

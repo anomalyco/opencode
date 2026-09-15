@@ -1,5 +1,5 @@
 import { ToolReference } from "../tool-runtime.js"
-import { type AstNode, InterpreterRuntimeError } from "./model.js"
+import { invalidData } from "./model.js"
 import {
   Callable,
   getOwn,
@@ -8,6 +8,7 @@ import {
   ProgramArray,
   ProgramDate,
   ProgramGenerator,
+  ProgramHandle,
   ProgramMap,
   ProgramObject,
   ProgramPromise,
@@ -21,6 +22,7 @@ import {
 export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof Callable ||
   value instanceof ProgramGenerator ||
+  value instanceof ProgramHandle ||
   value instanceof ToolReference ||
   value instanceof ProgramPromise ||
   isWrapper(value)
@@ -66,11 +68,10 @@ export const rejectCircularInsertion = (
   container: object,
   value: unknown,
   label: string,
-  node: AstNode,
   seen = new Set<object>(),
 ): void => {
   if (find(value, (current) => current === container, isRuntimeReference, seen)) {
-    throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
+    throw invalidData(`${label} contains a circular value.`)
   }
 }
 
@@ -86,6 +87,7 @@ export const describeValue = (value: unknown): string => {
   if (value instanceof ProgramURL) return "a URL"
   if (value instanceof ProgramURLSearchParams) return "a URLSearchParams"
   if (value instanceof ProgramGenerator) return "a generator"
+  if (value instanceof ProgramHandle) return `a ${value.instance.constructor.name}`
   if (isRuntimeReference(value)) return "a function"
   if (typeof value === "object") return "a data object"
   return `a ${typeof value}`

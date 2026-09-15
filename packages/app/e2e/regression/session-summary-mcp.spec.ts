@@ -6,7 +6,7 @@ test("every MCP row hit area toggles exactly once and keeps the submenu open", a
   await mockStressTimeline(page)
   const state = { enabled: true }
   const writes: string[] = []
-  await page.route("**/api/mcp**", (route) => {
+  await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, (route) => {
     if (route.request().method() === "OPTIONS") return route.fallback()
     const url = new URL(route.request().url())
     const directory = url.searchParams.get("location[directory]")
@@ -62,7 +62,7 @@ test("every MCP row hit area toggles exactly once and keeps the submenu open", a
     await expect(submenu).toBeVisible()
     if (target === "keyboard") await expect(toggle).toBeFocused()
     expect(writes).toHaveLength(index + 1)
-    expect(writes[index]).toBe(`/api/mcp/figma/${enabled ? "connect" : "disconnect"}`)
+    expect(writes[index]).toBe(`/api/experimental/mcp/figma/${enabled ? "connect" : "disconnect"}`)
   }
 })
 
@@ -72,7 +72,7 @@ test("MCP authentication starts before a slow resource catalog finishes", async 
   const attempts: string[] = []
   const resources = Promise.withResolvers<void>()
   await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
-  await page.route("**/api/mcp**", async (route) => {
+  await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, async (route) => {
     if (route.request().method() === "OPTIONS") return route.fallback()
     const url = new URL(route.request().url())
     if (url.pathname.endsWith("/connect")) {
@@ -137,7 +137,9 @@ test("MCP authentication starts before a slow resource catalog finishes", async 
 
 test("multiple desktop connections show the session's server name", async ({ page }) => {
   await mockStressTimeline(page)
-  await page.route("http://secondary.test/**", (route) => route.fulfill({ json: { healthy: true, version: "2.0.0" } }))
+  await page.route("http://secondary.test/**", (route) =>
+    route.fulfill({ json: { version: "2.0.0", pid: 1, urls: ["http://secondary.test"] } }),
+  )
   await page.addInitScript(
     ({ directory, server }) => {
       const current = { type: "http", http: { url: server }, displayName: "Design server" }

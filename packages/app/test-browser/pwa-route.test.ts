@@ -27,7 +27,7 @@ test("detects iOS home-screen apps when the standalone media query does not matc
     expect(isStandalone()).toBe(true)
   } finally {
     if (descriptor) Object.defineProperty(navigator, "standalone", descriptor)
-    if (!descriptor) Reflect.deleteProperty(navigator, "standalone")
+    if (!descriptor) delete (navigator as Navigator & { standalone?: boolean }).standalone
   }
 })
 

@@ -166,6 +166,10 @@ Native chronological system messages are route/model-specific. Open Responses lo
 
 The wrapped-user fallback preserves ordering while visibly lowering authority. Never silently pass a raw chronological `role: "system"` through a route that might reject it. Do not insert raw retrieved documents, tool output, or web content into privileged chronological system updates; keep untrusted content in ordinary user/tool channels.
 
+### Effort Updates
+
+`Message.effort({ effort, previous })` is a chronological "reasoning effort changed here" marker (`undefined` means the model default). Changing a top-level effort invalidates the whole provider prompt cache, so protocols with a native per-message update (`Protocol.supportsEffortUpdates`) keep the top-level effort at the first marker's `previous` and lower each marker in place: Anthropic Messages emits an empty `role: "system"` message with `output_config.effort` plus the `mid-conversation-output-config-2026-07-01` beta, and OpenAI Responses emits `configuration_update` items. `applyEffortUpdates` runs in `prepareRequest` and strips the markers for every other route, so a protocol without support keeps today's plain top-level behaviour. When the last marker disagrees with the effort the request asks for (reverted or forked history), `resolveEffortUpdates` strips the markers and falls back to a plain top-level change.
+
 ### Tools
 
 Tool loops are represented in common messages and events:

@@ -11,16 +11,16 @@ export const Plugin = define({
   id: "opencode.config.policy",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.catalog.reload())
-    yield* ctx.catalog.transform((catalog) => {
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.provider.reload())
+    yield* ctx.provider.transform((providers) => {
       // User-global policy takes priority over policy authored by a repository.
       const policies = loaded.entries
         .filter((entry): entry is Document => entry.type === "document")
         .toReversed()
         .flatMap((entry) => entry.info.experimental?.policies ?? [])
-      for (const record of catalog.provider.list()) {
+      for (const record of providers.list()) {
         const policy = policies.findLast((policy) => Wildcard.match(record.provider.id, policy.resource))
-        if (policy?.effect === "deny") catalog.provider.remove(record.provider.id)
+        if (policy?.effect === "deny") providers.remove(record.provider.id)
       }
     })
   }),

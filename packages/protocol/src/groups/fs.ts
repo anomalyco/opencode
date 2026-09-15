@@ -30,7 +30,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.fs.read",
+          identifier: "fs.read",
           summary: "Read file",
           description: "Serve one file relative to the requested location.",
         }),
@@ -44,7 +44,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.fs.list",
+          identifier: "fs.list",
           summary: "List directory",
           description:
             "List direct children using an absolute path or a path relative to the requested location, including parents and siblings outside its directory. Entry paths remain relative to the requested location; listing does not switch locations.",
@@ -59,7 +59,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.fs.find",
+          identifier: "fs.find",
           summary: "Find files",
           description: "Find recursively ranked filesystem entries relative to the requested location.",
         }),

@@ -77,7 +77,7 @@ import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
-import { collapseToolOutput } from "../../util/collapse-tool-output"
+import { collapseShellOutput, collapseToolOutput } from "../../util/collapse-tool-output"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
@@ -86,6 +86,7 @@ import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
   createSessionRows,
+  legacyTurns,
   messageBoundaryIDs,
   resolvePart,
   sessionRowID,
@@ -153,6 +154,7 @@ export function Session(props: {
   const session = createMemo(() => data.session.get(route.sessionID))
   const messages = () => data.session.message.list(route.sessionID)
   const messageIndexes = createMemo(() => new Map(messages().map((message, index) => [message.id, index])))
+  const legacy = createMemo(() => legacyTurns(messages()))
   const messagesBeforeRevert = () => {
     const messageID = session()?.revert?.messageID
     if (!messageID) return messages()
@@ -1256,6 +1258,7 @@ export function Session(props: {
         diffWrapMode,
         models,
         messageIndex: (messageID) => messageIndexes().get(messageID),
+        legacyTurns: legacy,
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
@@ -1382,8 +1385,7 @@ export function Session(props: {
                 <Match
                   when={
                     session() &&
-                    currentLocation.error?.location.directory === session()!.location.directory &&
-                    currentLocation.error?.location.workspaceID === session()!.location.workspaceID
+                    currentLocation.error?.location.directory === session()!.location.directory
                   }
                 >
                   <SessionLocationMissing
@@ -1938,9 +1940,11 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
         ?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
   )
   const messages = createMemo(() => data.session.message.list(ctx.sessionID))
-  const duration = createMemo(() => turnDuration(props.message, messages(), ctx.messageIndex(props.message.id)))
+  const duration = createMemo(() =>
+    turnDuration(props.message, messages(), ctx.messageIndex(props.message.id), ctx.legacyTurns()),
+  )
   const tokensPerSecond = createMemo(() =>
-    turnTokensPerSecond(props.message, messages(), ctx.messageIndex(props.message.id)),
+    turnTokensPerSecond(props.message, messages(), ctx.messageIndex(props.message.id), ctx.legacyTurns()),
   )
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
   return (
@@ -2911,7 +2915,7 @@ function ShellDisplay(props: {
           id,
           cursor,
           limit: SHELL_DISPLAY_LIMIT,
-          location: location ? { directory: location.directory, workspace: location.workspaceID } : undefined,
+          location: location ? { directory: location.directory } : undefined,
         })
         .catch(() => undefined)
       if (!response) break
@@ -2964,14 +2968,9 @@ function ShellDisplay(props: {
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
   const prefix = createMemo(() => (workdir() && workdir() !== "." ? `cd ${workdir()} && ` : ""))
   const input = createMemo(() => (props.command ? `${isRunning() ? "" : "$ "}${prefix()}${props.command}` : ""))
-  const content = createMemo(() => [input(), output()].filter(Boolean).join("\n\n"))
-  const collapsed = createMemo(() => collapseToolOutput(content(), maxLines, maxChars()))
-  const limited = createMemo(() => {
-    if (expanded() || !collapsed().overflow) return content()
-    return collapsed().output
-  })
-  const limitedInput = createMemo(() => limited().slice(0, input().length))
-  const limitedOutput = createMemo(() => limited().slice(Math.min(limited().length, input().length + 2)))
+  const collapsed = createMemo(() => collapseShellOutput(input(), output(), maxLines, maxChars()))
+  const limitedInput = createMemo(() => (expanded() ? input() : collapsed().input))
+  const limitedOutput = createMemo(() => (expanded() ? output() : collapsed().output))
   const expandable = createMemo(() => Boolean(props.shellID) || collapsed().overflow)
   const toggle = () => {
     const next = !expanded()

@@ -20,7 +20,6 @@ test("session settings use the remote server context", async ({ page }) => {
   // one toggle sweeps every connected server, not just the focused one.
   await mockServers(page, permissionRequests, permissionResponses, {
     pending: { [serverA]: [pendingPermission("permission-pending-a", sessionA.id)] },
-    preferencesUnavailable: true,
   })
   await configureServers(page)
 
@@ -326,7 +325,6 @@ type MockServerOptions = {
   listFailures?: Record<string, number>
   // Records /api/session/:id GETs so tests can assert session resyncs.
   sessionGets?: string[]
-  preferencesUnavailable?: boolean
 }
 
 async function mockServers(
@@ -398,8 +396,6 @@ async function mockServers(
         },
       ])
     }
-    if (url.pathname === "/api/project/current")
-      return json(route, { id: remote ? sessionB.projectID : "project-server-a", directory, canonical: directory })
     if (url.pathname === "/api/session")
       return json(route, { data: sessions.map((session) => currentSession(session)), cursor: {} })
     if (url.pathname === "/api/session/active")
@@ -418,11 +414,8 @@ async function mockServers(
         directory,
         project: { id: remote ? sessionB.projectID : "project-server-a", directory, canonical: directory },
       })
-    if (url.pathname === "/api/config/preferences") return json(route, {}, options.preferencesUnavailable ? 404 : 200)
-    if (url.pathname === "/api/config/shell")
-      return json(route, options.preferencesUnavailable ? {} : [], options.preferencesUnavailable ? 404 : 200)
-    if (url.pathname === "/api/websearch/provider")
-      return json(route, { location: { directory }, data: [] }, options.preferencesUnavailable ? 404 : 200)
+    if (url.pathname === "/api/config/shell") return json(route, [])
+    if (url.pathname === "/api/websearch/provider") return json(route, { location: { directory }, data: [] })
     if (url.pathname === "/api/worktree") return json(route, [{ directory }])
     if (url.pathname === "/api/vcs")
       return json(route, { location: { directory }, data: { branch: "main", defaultBranch: "main" } })

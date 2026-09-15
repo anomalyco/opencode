@@ -52,15 +52,6 @@ export const settings: Setting[] = [
     keywords: ["side panel"],
   },
   {
-    title: "Terminal",
-    category: "Session",
-    path: ["session", "terminal"],
-    default: process.platform !== "win32",
-    values: [false, true],
-    labels: ["off", "on"],
-    keywords: ["pty", "shell", "terminal pane"],
-  },
-  {
     title: "Scrollbar",
     category: "Session",
     path: ["session", "scrollbar"],

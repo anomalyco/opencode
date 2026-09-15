@@ -77,7 +77,7 @@ const fromRow = (row: typeof SessionInboxTable.$inferSelect): Info => {
   const base = {
     id: SessionMessage.ID.make(row.id),
     sessionID: SessionSchema.ID.make(row.session_id),
-    timeCreated: DateTime.makeUnsafe(row.time_created),
+    time: { created: DateTime.makeUnsafe(row.time_created) },
   }
   if (row.type === "compaction")
     return Compaction.make({
@@ -126,7 +126,7 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
   if (row.session_id !== sessionID || (row.type !== "user" && row.type !== "synthetic"))
     return yield* new LifecycleConflict({ id })
   const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
-  const base = { id, sessionID, timeCreated: message.time.created, delivery }
+  const base = { id, sessionID, time: { created: message.time.created }, delivery }
   if (message.type === "user")
     return User.make({
       ...base,
@@ -184,7 +184,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
           Info.make({
             id: request.id,
             sessionID: request.sessionID,
-            timeCreated: DateTime.makeUnsafe(event.created),
+            time: { created: DateTime.makeUnsafe(event.created) },
             ...request.item,
           }),
         ),

@@ -104,15 +104,10 @@ type Auto = RunFooterMenuItem & {
 type SlashOption = RunFooterMenuItem & {
   kind: "slash"
   name: string
-  action?: "skill-menu" | "editor" | "settings"
+  action?: "editor" | "settings"
 }
 
-type SkillOption = RunFooterMenuItem & {
-  kind: "skill"
-  id: string
-}
-
-type PromptOption = Auto | SlashOption | SkillOption
+type PromptOption = Auto | SlashOption
 
 type MenuMode = false | "mention" | "slash"
 
@@ -141,7 +136,6 @@ type PromptInput = {
   onInputClear: () => void
   onExitRequest?: () => boolean
   onExit: () => void
-  onSkillMenu: () => void
   onSettings: () => void
   onRows: (rows: number) => void
   onStatus: (text: string) => void
@@ -514,19 +508,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }),
   )
   const mentionOptions = createMemo(() => [...agents(), ...files(), ...references()])
-  const skillCommands = createMemo(() => (input.commands() ?? []).filter((item) => item.source === "skill"))
-  const skillOptions = createMemo<SkillOption[]>(() =>
-    skillCommands().map((item) => ({
-      kind: "skill",
-      id: item.name,
-      display: `/${item.name}`,
-      description: item.description,
-    })),
-  )
-  const hasSkillsCommand = createMemo(() =>
-    (input.commands() ?? []).some((item) => item.source !== "skill" && item.name === "skills"),
-  )
-  const slashOptions = createMemo<Array<SlashOption | SkillOption>>(() => {
+  const slashOptions = createMemo<SlashOption[]>(() => {
     const builtins = [
       {
         kind: "slash",
@@ -552,26 +534,9 @@ export function createPromptState(input: PromptInput): PromptState {
       { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
     ]
     const hidden = new Set(builtins.map((item) => item.name))
-    const showSkillMenu = !shell() && skillCommands().length > 0 && !hasSkillsCommand()
-    if (showSkillMenu) {
-      hidden.add("skills")
-    }
-
     return [
-      ...skillOptions(),
-      ...(showSkillMenu
-        ? [
-            {
-              kind: "slash",
-              action: "skill-menu" as const,
-              name: "skills",
-              display: "/skills",
-              description: "browse available skills",
-            } satisfies SlashOption,
-          ]
-        : []),
       ...(input.commands() ?? [])
-        .filter((item) => item.source !== "skill" && !hidden.has(item.name))
+        .filter((item) => !hidden.has(item.name))
         .map(
           (item) =>
             ({
@@ -585,7 +550,7 @@ export function createPromptState(input: PromptInput): PromptState {
     ].sort((a, b) => a.display.localeCompare(b.display))
   })
   const options = createMemo<PromptOption[]>(() => {
-    const mixed: PromptOption[] = mode() === "slash" ? (at() === 0 ? slashOptions() : skillOptions()) : mentionOptions()
+    const mixed: PromptOption[] = mode() === "slash" ? slashOptions() : mentionOptions()
     if (!query()) {
       return mixed
     }
@@ -602,7 +567,7 @@ export function createPromptState(input: PromptInput): PromptState {
     return fuzzysort
       .go(next, mixed, {
         keys: [
-          (item) => (item.kind === "mention" ? item.value : item.kind === "skill" ? item.id : item.name).trimEnd(),
+          (item) => (item.kind === "mention" ? item.value : item.name).trimEnd(),
           "display",
           "description",
         ],
@@ -1073,50 +1038,11 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    if (next.kind === "skill") {
-      if (parts.some((part) => part.type === "skill" && part.id === next.id)) {
-        cancelAutocomplete()
-        return
-      }
-      const cursor = area.cursorOffset
-      const tail = displayCharAt(area.plainText, cursor)
-      const append = `/${next.id}${tail === " " ? "" : " "}`
-      area.cursorOffset = at()
-      const start = area.logicalCursor
-      area.cursorOffset = cursor
-      const end = area.logicalCursor
-      area.deleteRange(start.row, start.col, end.row, end.col)
-      area.insertText(append)
-
-      const text = `/${next.id}`
-      const startOffset = at()
-      const endOffset = startOffset + stringWidth(text)
-      const part: Extract<RunPromptPart, { type: "skill" }> = {
-        type: "skill",
-        id: next.id,
-        source: { start: startOffset, end: endOffset, value: text },
-      }
-      const id = area.extmarks.create({ start: startOffset, end: endOffset, virtual: true, typeId: type })
-      marks.set(id, parts.length)
-      parts.push(part)
-      hide()
-      syncDraft()
-      scheduleRows()
-      area.focus()
-      return
-    }
-
     if (next.kind === "slash") {
       if (next.action === "editor") {
         void openEditor({
           value: resolveEditorSlashValue(area.plainText),
         })
-        return
-      }
-
-      if (next.action === "skill-menu") {
-        cancelAutocomplete()
-        input.onSkillMenu()
         return
       }
 
@@ -1463,7 +1389,6 @@ export function createPromptState(input: PromptInput): PromptState {
     if (
       delivery === "queue" &&
       (next.mode === "shell" ||
-        command?.source === "skill" ||
         isNewCommand(next.text) ||
         isCompactCommand(next.text) ||
         isExitCommand(next.text) ||

@@ -168,7 +168,7 @@ describe("acp service lifecycle", () => {
       method: "POST",
       path: "/api/session/ses_loaded/fork",
       query: {},
-      body: { boundary: { type: "through" } },
+      body: {},
     })
   })
 

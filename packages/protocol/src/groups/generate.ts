@@ -16,7 +16,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
       error: [InvalidRequestError, ServiceUnavailableError],
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "v2.generate.text",
+        identifier: "generate.text",
         summary: "Generate text",
         description:
           "Run one stateless model generation using the server's base configuration and return the assistant text. Uses the base configuration's default model when none is specified.",

@@ -1,4 +1,5 @@
 export * as CodeMode from "./codemode.js"
+export * as Extension from "./extension.js"
 export * as Namespace from "./namespace.js"
 export * as Tool from "./tool.js"
 export * as OpenAPI from "./openapi/index.js"

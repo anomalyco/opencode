@@ -251,27 +251,28 @@ export const OpenAIPlugin = define({
       editor.method.update(headless(ctx.app))
     })
     yield* load()
-    yield* ctx.catalog.transform((evt) => {
-      const item = evt.provider.get(Provider.ID.openai)
+    yield* ctx.provider.transform((providers) => {
+      const item = providers.get(Provider.ID.openai)
       if (!item) return
-      for (const model of item.models.values()) {
-        evt.model.update(item.provider.id, model.id, (draft) => {
-          draft.capabilities.responsesWebsockets = true
-          draft.websocket = true
-        })
-      }
       if (!chatgpt) return
-      item.provider.settings = Provider.mergeOverlay(item.provider.settings, { baseURL: codexBaseURL })
       const account = chatgpt.metadata?.accountID
-      item.provider.headers = Provider.mergeHeaders(item.provider.headers, {
-        originator: "opencode",
-        "x-codex-beta-features": "remote_compaction_v2",
-        ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
+      providers.update(item.provider.id, (provider) => {
+        provider.settings = Provider.mergeOverlay(provider.settings, { baseURL: codexBaseURL })
+        provider.headers = Provider.mergeHeaders(provider.headers, {
+          originator: "opencode",
+          "x-codex-beta-features": "remote_compaction_v2",
+          ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
+        })
       })
-      for (const model of item.models.values()) {
+    })
+    yield* ctx.model.transform((models) => {
+      for (const model of models.list(Provider.ID.openai)) {
         // ChatGPT-plan tokens only authorize codex-eligible models, and the
         // subscription covers usage, so hide the rest and zero the cost.
-        evt.model.update(item.provider.id, model.id, (draft) => {
+        models.update(model.providerID, model.id, (draft) => {
+          draft.capabilities.responsesWebsockets = true
+          draft.websocket = true
+          if (!chatgpt) return
           if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {
             draft.enabled = false
             return
@@ -305,7 +306,7 @@ export const OpenAIPlugin = define({
         }),
       { providerID: Provider.ID.openai },
     )
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
+    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
       Stream.runForEach(refresh),

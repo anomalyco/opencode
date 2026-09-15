@@ -204,8 +204,8 @@ test("hides account rename and delete actions while the add account row is selec
   }
 })
 
-test("uses the active location for integration data and credential requests", async () => {
-  const location = { directory: "/remote/project", workspaceID: "workspace_test" }
+test("uses the active location for integration data without scoping credential requests", async () => {
+  const location = { directory: "/remote/project" }
   const fixture = await renderIntegration(location)
 
   try {
@@ -216,6 +216,7 @@ test("uses the active location for integration data and credential requests", as
     await fixture.app.waitFor(() => fixture.requests.length === 1)
     expect(fixture.locations).toContainEqual(location)
     expect(fixture.locations.at(-1)).toEqual(location)
+    expect(fixture.credentialQueries).toEqual([""])
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -225,6 +226,7 @@ async function renderIntegration(activeLocation?: LocationRef) {
   const events = createEventStream()
   const requests: Array<{ method: string; path: string; body?: { label: string } }> = []
   const locations: LocationRef[] = []
+  const credentialQueries: string[] = []
   const reads = { integration: 0, model: 0, provider: 0 }
   let accounts = [
     { type: "credential" as const, id: "cred_personal", label: "Personal" },
@@ -235,9 +237,7 @@ async function renderIntegration(activeLocation?: LocationRef) {
     const directory =
       url.searchParams.get("location[directory]") ??
       decodeURIComponent(request.headers.get("x-opencode-directory") ?? process.cwd())
-    const workspaceID =
-      url.searchParams.get("location[workspace]") ?? request.headers.get("x-opencode-workspace") ?? undefined
-    const requestedLocation = { directory, ...(workspaceID ? { workspaceID } : {}) }
+    const requestedLocation = { directory }
     const location = {
       ...requestedLocation,
       project: { id: "proj_test", directory, canonical: directory },
@@ -270,7 +270,7 @@ async function renderIntegration(activeLocation?: LocationRef) {
     }
 
     if (request.method === "POST" && /^\/api\/credential\/[^/]+\/activate$/.test(url.pathname)) {
-      locations.push(requestedLocation)
+      credentialQueries.push(url.search)
       const id = url.pathname.split("/")[3]
       const active = accounts.find((account) => account.id === id)
       if (!active) throw new Error(`unknown credential: ${id}`)
@@ -362,6 +362,7 @@ async function renderIntegration(activeLocation?: LocationRef) {
     reads,
     requests,
     locations,
+    credentialQueries,
     get accounts() {
       return accounts
     },
