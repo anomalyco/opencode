@@ -15552,6 +15552,9 @@
           },
           "requireAssistantAfterTool": {
             "type": "boolean"
+          },
+          "supportsPromptCacheKey": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
