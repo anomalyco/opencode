@@ -171,7 +171,7 @@ const AnthropicMessagesBody = Schema.Struct(AnthropicBodyFields)
 export type AnthropicMessagesBody = Schema.Schema.Type<typeof AnthropicMessagesBody>
 
 const AnthropicUsage = Schema.Struct({
-  input_tokens: Schema.optional(Schema.Number),
+  input_tokens: optionalNull(Schema.Number),
   output_tokens: Schema.optional(Schema.Number),
   cache_creation_input_tokens: optionalNull(Schema.Number),
   cache_read_input_tokens: optionalNull(Schema.Number),
@@ -572,7 +572,7 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // `outputTokens` carries the combined total.
 const mapUsage = (usage: AnthropicUsage | undefined): Usage | undefined => {
   if (!usage) return undefined
-  const nonCached = usage.input_tokens
+  const nonCached = usage.input_tokens ?? undefined
   const cacheRead = usage.cache_read_input_tokens ?? undefined
   const cacheWrite = usage.cache_creation_input_tokens ?? undefined
   const inputTokens = ProviderShared.sumTokens(nonCached, cacheRead, cacheWrite)
