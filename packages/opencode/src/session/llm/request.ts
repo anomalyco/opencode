@@ -156,12 +156,10 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   ) {
     for (const key of Object.keys(tools)) tools[key] = { ...tools[key], strict: false }
   }
-  if (
-    input.model.providerID.includes("github-copilot") &&
-    Object.keys(tools).length === 0 &&
-    hasToolCalls(input.messages)
-  ) {
-    // Copilot needs a tools field when replaying prior tool calls, even if no tools are currently enabled.
+  if (Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+    // Some providers (Bedrock, Copilot, proxies) reject requests containing
+    // tool_use/tool_result content blocks without a tools definition. Inject a
+    // stub tool to satisfy validation during compaction or tool-less replays.
     tools["_noop"] = aiTool({
       description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
       inputSchema: jsonSchema({
