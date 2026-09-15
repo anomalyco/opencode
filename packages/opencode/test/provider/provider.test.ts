@@ -121,6 +121,14 @@ it.instance("provider loaded from env variable", () =>
   }),
 )
 
+it.instance("GITHUB_TOKEN does not activate github-copilot", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("GITHUB_TOKEN", "test-github-token")
+    const providers = yield* list
+    expect(providers[ProviderV2.ID.githubCopilot]).toBeUndefined()
+  }),
+)
+
 it.instance(
   "provider loaded from config with apiKey option",
   Effect.gen(function* () {
