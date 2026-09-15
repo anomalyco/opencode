@@ -2,67 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Extension, Tool } from "../src/index.js"
 
-class Bag {
-  static made = 0
-  static of(...items: Array<string>) {
-    return new this(items)
-  }
-  constructor(readonly items: Array<string> = []) {
-    Bag.made++
-  }
-  get size() {
-    return this.items.length
-  }
-  set size(length: number) {
-    this.items.length = length
-  }
-  add(item: string) {
-    this.items.push(item)
-    return this
-  }
-  toArray() {
-    return [...this.items]
-  }
-  pair() {
-    return { self: this, list: [this, new Bag()] }
-  }
-  async later<T>(value: T) {
-    return value
-  }
-  async reject(reason: unknown) {
-    throw reason
-  }
-  fail() {
-    throw new RangeError("boom")
-  }
-  get lazy() {
-    return Promise.resolve(1)
-  }
-  detached() {
-    return new Other()
-  }
-}
-class Other {}
-class Big extends Bag {
-  double() {
-    return this.items.length * 2
-  }
-}
-class Vault {
-  secrets = new Map<string, string>()
-  set(key: string, value: string) {
-    this.secrets.set(key, value)
-  }
-}
-
 const held: Array<unknown> = []
 const config = { retries: 3, nested: { deep: true } }
+const requests: Array<unknown> = []
 const extension = Extension.make({
-  name: "bag",
+  name: "web",
   globals: {
-    Bag,
-    Big,
-    Vault,
     keep: (value: unknown) => {
       held.push(value)
       return value
@@ -70,6 +15,19 @@ const extension = Extension.make({
     settings: () => config,
     later: async (value: number) => value + 1,
     first: (map: Map<unknown, unknown>) => map.get("k"),
+    fetch: async (url: string, init?: { method?: string }) => {
+      requests.push([url, init])
+      const bytes = new TextEncoder().encode(`{"url":"${url}"}`)
+      return {
+        status: 200,
+        ok: true,
+        headers: { get: (name: string) => (name === "content-type" ? "application/json" : null) },
+        text: () => new TextDecoder().decode(bytes),
+        json: () => JSON.parse(new TextDecoder().decode(bytes)),
+        bytes: () => bytes,
+        handlers: [(step: number) => step + 1],
+      }
+    },
   },
 })
 
@@ -87,66 +45,61 @@ const failure = async (code: string, target = runtime) => {
   return result.error
 }
 
-describe("extension classes behave like JS", () => {
-  test("construct, call methods, read and write accessors", async () => {
-    expect(await value(`const b = new Bag(["a"]); b.add("b"); return [b.size, b.toArray()]`)).toEqual([2, ["a", "b"]])
-    expect(await value(`const b = new Bag(["a", "b"]); b.size = 1; return b.toArray()`)).toEqual(["a"])
-  })
-
-  test("instanceof, constructor, typeof, and prototype identity", async () => {
-    expect(
-      await value(
-        `const b = new Bag(); return [b instanceof Bag, b.constructor === Bag, typeof Bag, Bag.prototype.constructor === Bag]`,
-      ),
-    ).toEqual([true, true, "function", true])
-  })
-
-  test("statics, including `new this()` through an exposed subclass", async () => {
-    expect(await value(`return [Bag.of("x", "y").toArray(), Big.of("q") instanceof Big, Big.of === Bag.of]`)).toEqual([
-      ["x", "y"],
-      true,
-      true,
-    ])
-  })
-
-  test("data properties are invisible, so a program write never reaches the host class", async () => {
-    Bag.made = 0
-    expect(await value(`Bag.made = 999; return Bag.made`)).toBe(999)
-    expect(Bag.made).toBe(0)
-    expect(await value(`return [Bag.made, new Bag(["a"]).items]`)).toEqual([null, null])
-  })
-
-  test("inheritance chains to the exposed ancestor", async () => {
-    expect(
-      await value(`const b = new Big(["a"]); return [b.double(), b.add("b").size, b instanceof Bag, b instanceof Big]`),
-    ).toEqual([2, 2, true, true])
-  })
-
-  test("calling a class without new throws the host TypeError", async () => {
-    const error = await failure(`Bag()`)
-    expect(error.message).toStartWith("TypeError: ")
-    expect(error.message).toContain("new")
-  })
-
-  test("a function global is callable, awaitable, and not constructible", async () => {
+describe("extension functions", () => {
+  test("a global is callable, awaitable, and not constructible", async () => {
     expect(await value(`return await later(1)`)).toBe(2)
+    expect(await value(`return [typeof later, later.name, later.length]`)).toEqual(["function", "later", 1])
     expect((await failure(`new later()`)).message).toContain("new later(...) is not supported")
   })
 
-  test("a program can patch a prototype for its own run only", async () => {
-    expect(await value(`Bag.prototype.add = () => "patched"; return new Bag().add("x")`)).toBe("patched")
-    expect(await value(`return new Bag().add("x").toArray()`)).toEqual(["x"])
+  test("a function inside a result is callable and crosses the same way", async () => {
+    requests.length = 0
+    expect(
+      await value(
+        `const res = await fetch("https://a.test/", { method: "GET" }); return [res.status, res.ok, res.headers.get("content-type"), res.text(), res.json(), [...res.bytes()].length, typeof res.json, res.json.name, res.handlers[0](1)]`,
+      ),
+    ).toEqual([
+      200,
+      true,
+      "application/json",
+      '{"url":"https://a.test/"}',
+      { url: "https://a.test/" },
+      25,
+      "function",
+      "json",
+      2,
+    ])
+    expect(requests).toEqual([["https://a.test/", { method: "GET" }]])
+  })
+
+  test("a function inside a result is named by its path in diagnostics", async () => {
+    expect((await failure(`const res = await fetch("https://a.test/"); res.handlers[0](() => 1)`)).message).toContain(
+      "Argument 1 to fetch.handlers[0] contains a function",
+    )
+    const target = CodeMode.make({
+      extensions: [Extension.make({ name: "odd", globals: { make: () => ({ sym: () => Symbol("s") }) } })],
+    })
+    expect((await failure(`make().sym()`, target)).message).toContain("make.sym produced a symbol")
+  })
+
+  test("a function is invisible to the data boundary like any program function", async () => {
+    expect(await value(`return await fetch("https://a.test/")`)).toEqual({
+      status: 200,
+      ok: true,
+      headers: {},
+      handlers: [null],
+    })
+    expect(await value(`return JSON.stringify((await fetch("https://a.test/")).headers)`)).toBe("{}")
+  })
+
+  test("a class global is only a function; calling it throws the host TypeError", async () => {
+    const target = CodeMode.make({ extensions: [Extension.make({ name: "cls", globals: { Bag: class Bag {} } })] })
+    expect((await failure(`Bag()`, target)).message).toContain("without")
+    expect((await failure(`new Bag()`, target)).message).toContain("new Bag(...) is not supported")
   })
 })
 
 describe("values are converted at the boundary, never shared", () => {
-  test("the same host instance is the same handle", async () => {
-    expect(
-      await value(`const b = new Bag(); const p = b.pair(); return [p.self === b, p.list[0] === b, keep(b) === b]`),
-    ).toEqual([true, true, true])
-    expect(await value(`const p = new Bag().pair(); return p.list[1] instanceof Bag`)).toBe(true)
-  })
-
   test("plain data passed in is a copy the program cannot change afterwards", async () => {
     held.length = 0
     await value(
@@ -163,8 +116,12 @@ describe("values are converted at the boundary, never shared", () => {
     expect(config).toEqual({ retries: 3, nested: { deep: true } })
   })
 
-  test("Map and Set contents are converted element-wise, so handles unwrap inside them", async () => {
-    expect(await value(`const b = new Bag(); return first(new Map([["k", b]])) === b`)).toBe(true)
+  test("the same host value returned twice is two program values", async () => {
+    expect(await value(`return settings() === settings()`)).toBe(false)
+    expect(await value(`return keep(settings()) === settings()`)).toBe(false)
+  })
+
+  test("Map and Set contents are converted element-wise", async () => {
     expect(await value(`return first(new Map([["k", { z: 1 }]]))`)).toEqual({ z: 1 })
     held.length = 0
     await value(`const inner = { z: 1 }; keep(new Set([inner])); inner.z = 2`)
@@ -214,6 +171,13 @@ describe("values are converted at the boundary, never shared", () => {
     expect(Object.keys(held[0] as object)).toEqual([])
   })
 
+  test("an Error with an unknown name crosses as a plain Error", async () => {
+    held.length = 0
+    await value(`const e = new Error("x"); e.name = "constructor"; keep(e); e.name = "__proto__"; keep(e)`)
+    expect(held[0]).toBeInstanceOf(Error)
+    expect(held[1]).toBeInstanceOf(Error)
+  })
+
   test("functions, promises, and symbols cannot be passed in", async () => {
     expect((await failure(`keep(() => 1)`)).message).toContain("Argument 1 to keep contains a function")
     expect((await failure(`keep(later(1))`)).message).toContain("un-awaited Promise")
@@ -228,82 +192,45 @@ describe("values are converted at the boundary, never shared", () => {
     expect((await failure(`big()`, target)).message).toContain("big produced a bigint")
   })
 
-  test("an instance of an unexposed class cannot come out", async () => {
-    expect((await failure(`new Bag().detached()`)).message).toContain("produced a Other, which the program cannot hold")
-  })
-
-  test("a getter must be synchronous", async () => {
-    expect((await failure(`new Bag().lazy`)).message).toContain("Bag.prototype.lazy returned a Promise")
-  })
-})
-
-describe("the host object behind a handle is unreachable", () => {
-  test("enumeration, spread, and JSON see no own properties", async () => {
-    expect(
-      await value(`const b = new Bag(["a"]); return [Object.keys(b), Object.entries({ ...b }), String(b)]`),
-    ).toEqual([[], [], "[object Object]"])
-  })
-
-  test("a handle serializes as {} when returned, stringified, or handed to a tool", async () => {
-    expect(await value(`return new Bag()`)).toEqual({})
-    expect(await value(`return JSON.stringify(new Bag())`)).toBe("{}")
-    const tools = CodeMode.make({
-      extensions: [extension],
-      tools: {
-        echo: Tool.make({
-          description: "Echo",
-          input: Schema.Struct({ v: Schema.Unknown }),
-          output: Schema.Unknown,
-          execute: (input) => Effect.succeed(input.v),
-        }),
-      },
-    })
-    expect(await value(`return await tools.echo({ v: new Bag() })`, tools)).toEqual({})
-  })
-
-  test("a method only runs on a handle of its own class", async () => {
-    expect((await failure(`const add = new Bag().add; add("x")`)).message).toContain(
-      "Illegal invocation: Bag.prototype.add called on undefined",
-    )
-    expect((await failure(`const o = { add: Bag.prototype.add }; o.add("x")`)).message).toContain(
-      "called on a data object",
-    )
-    const vault = new Vault()
+  test("a class instance cannot come out", async () => {
+    class Other {}
     const target = CodeMode.make({
-      extensions: [Extension.make({ name: "vault", globals: { Bag, Vault, vault: () => vault } })],
+      extensions: [Extension.make({ name: "odd", globals: { detached: () => new Other() } })],
     })
-    expect((await failure(`const v = vault(); v.add = Bag.prototype.add; v.add("x")`, target)).message).toContain(
-      "Illegal invocation: Bag.prototype.add called on a Vault",
-    )
-    expect(vault.secrets.size).toBe(0)
-  })
-
-  test("reading an accessor off the prototype itself is an illegal invocation", async () => {
-    expect((await failure(`Bag.prototype.size`)).message).toContain("Illegal invocation")
+    expect((await failure(`detached()`, target)).message).toContain("produced a Other, which the program cannot hold")
   })
 })
 
 describe("host errors", () => {
   test("a synchronous throw becomes the matching program error", async () => {
-    expect(await value(`try { new Bag().fail() } catch (e) { return [e instanceof RangeError, e.message] }`)).toEqual([
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "odd",
+          globals: {
+            fail: () => {
+              throw new RangeError("boom")
+            },
+          },
+        }),
+      ],
+    })
+    expect(await value(`try { fail() } catch (e) { return [e instanceof RangeError, e.message] }`, target)).toEqual([
       true,
       "boom",
     ])
   })
 
   test("a thrown or rejected value crosses like a return, so the program catches what was thrown", async () => {
-    expect(
-      await value(
-        `try { await new Bag().reject(new TypeError("bad")) } catch (e) { return [e instanceof TypeError, e.message] }`,
-      ),
-    ).toEqual([true, "bad"])
-    expect(await value(`try { await new Bag().reject("plain") } catch (e) { return e }`)).toBe("plain")
     const reason = { status: 404, nested: { a: 1 } }
     const target = CodeMode.make({
       extensions: [
         Extension.make({
           name: "api",
           globals: {
+            reject: async (reason: unknown) => {
+              throw reason
+            },
             get: async () => Promise.reject(reason),
             boom: () => {
               throw reason
@@ -312,6 +239,13 @@ describe("host errors", () => {
         }),
       ],
     })
+    expect(
+      await value(
+        `try { await reject(new TypeError("bad")) } catch (e) { return [e instanceof TypeError, e.message] }`,
+        target,
+      ),
+    ).toEqual([true, "bad"])
+    expect(await value(`try { await reject("plain") } catch (e) { return e }`, target)).toBe("plain")
     expect(await value(`try { await get() } catch (e) { e.status = 0; return e }`, target)).toEqual({
       status: 0,
       nested: { a: 1 },
@@ -325,23 +259,45 @@ describe("host errors", () => {
 describe("configuration", () => {
   test("extension calls are not tool calls", async () => {
     const limited = CodeMode.make({ extensions: [extension], limits: { maxToolCalls: 0 } })
-    const result = await Effect.runPromise(limited.execute(`new Bag().add("x"); return await later(1)`))
+    const result = await Effect.runPromise(
+      limited.execute(`(await fetch("https://a.test/")).json(); return await later(1)`),
+    )
     expect(result.ok).toBe(true)
     expect(result.toolCalls).toEqual([])
   })
 
-  test("a global must be a class or a function", () => {
+  test("a result handed to a tool is plain data", async () => {
+    const tools = CodeMode.make({
+      extensions: [extension],
+      tools: {
+        echo: Tool.make({
+          description: "Echo",
+          input: Schema.Struct({ v: Schema.Unknown }),
+          output: Schema.Unknown,
+          execute: (input) => Effect.succeed(input.v),
+        }),
+      },
+    })
+    expect(await value(`return await tools.echo({ v: await fetch("https://a.test/") })`, tools)).toEqual({
+      status: 200,
+      ok: true,
+      headers: {},
+      handlers: [null],
+    })
+  })
+
+  test("a global must be a function", () => {
     expect(() => Extension.make({ name: "bad", globals: { n: 1 as never } })).toThrow(
-      'Extension "bad" global "n" must be a class or a function.',
+      'Extension "bad" global "n" must be a function.',
     )
   })
 
   test("a global may not shadow a built-in or another extension", () => {
-    expect(() => CodeMode.make({ extensions: [Extension.make({ name: "web", globals: { URL: class {} } })] })).toThrow(
+    expect(() => CodeMode.make({ extensions: [Extension.make({ name: "web", globals: { URL: () => 1 } })] })).toThrow(
       'Extension "web" global "URL" is already defined.',
     )
     expect(() =>
-      CodeMode.make({ extensions: [extension, Extension.make({ name: "again", globals: { Bag: class {} } })] }),
-    ).toThrow('Extension "again" global "Bag" is already defined.')
+      CodeMode.make({ extensions: [extension, Extension.make({ name: "again", globals: { fetch: () => 1 } })] }),
+    ).toThrow('Extension "again" global "fetch" is already defined.')
   })
 })

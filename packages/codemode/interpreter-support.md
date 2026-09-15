@@ -22,7 +22,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] The host boundary is `JSON.stringify` plus a short table. The program result and tool arguments cross as
       what `JSON.stringify` would serialize: `toJSON` is honored, functions and `undefined` properties vanish,
       `undefined` array elements and non-finite numbers become `null`, a cyclic value throws the same `TypeError`,
-      and Map, RegExp, generators, and extension handles serialize as `{}`. A bare `undefined` result is `null`.
+      and Map, RegExp, and generators serialize as `{}`. A bare `undefined` result is `null`.
       Tool results come back the way `JSON.parse(JSON.stringify(result))` would. The table, where a value cannot
       be JSON but what the program meant is clear: a promise is awaited (a rejection fails the program), a Set
       crosses as an array, a URLSearchParams as its query string, an Error as `{ name, message, ...own }`, a
@@ -452,29 +452,25 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 
 ## Extensions
 
-Host classes and functions a host opts in through `Extension.make({ name, globals })` and `CodeMode.make({ extensions })`.
+Host functions a host opts in through `Extension.make({ name, globals })` and `CodeMode.make({ extensions })`.
 Nothing is exposed unless a host provides it; extension calls are not tool calls.
 
-- [x] Each global is a class or a function, exposed as-is: constructors with `new`, prototype methods, accessors,
-      and statics (including through an exposed subclass, so `new this()` works), plus inheritance
-      up to the nearest exposed ancestor. A global that shadows a built-in or another extension throws at `make`.
-- [x] Instances of exposed classes stay on the host; the program holds a handle whose only members are the class's.
-      The same host instance is always the same handle within a run, so identity and `instanceof` hold. A handle
-      serializes as `{}` like any object without enumerable properties, so the host object never crosses.
+- [x] Each global is a function, callable but not constructible, run with `this` undefined. A global that shadows
+      a built-in or another extension throws at `make`.
 - [x] Every value crossing in either direction is converted, never shared: plain objects and arrays are copied,
       `Date`, `RegExp`, `URL`, `URLSearchParams`, `Map`, `Set`, and `Uint8Array` become fresh copies with their
       contents converted (a host `ArrayBuffer` comes in as a `Uint8Array`; other typed arrays cannot come out),
       errors cross as errors with their name and message, and a `__proto__` key is dropped. Functions, generators,
-      un-awaited promises, and symbols cannot be passed in; an instance of an unexposed class, a symbol, or a BigInt
-      cannot come out.
+      un-awaited promises, and symbols cannot be passed in; a class instance, a symbol, or a BigInt cannot come out.
+- [x] A host function inside a result becomes a program function whose calls cross the same way, so a result can
+      carry methods (`res.json()`) whose host closures keep the host state. Diagnostics name it by its path
+      (`fetch.json`). Like any program function it vanishes at the data boundary.
 - [x] A host `Promise` becomes a program promise. Whatever host code returns, resolves, throws, or rejects with
       crosses the same way, so `catch (e)` receives a copy of the thrown value (an `Error` of the matching type, or
-      plain data). A getter must be synchronous.
-- [x] A prototype member runs only with a handle of its own class as `this`; a detached call, a plain object, or a
-      handle of another class throws `TypeError: Illegal invocation`. Program edits to an exposed prototype affect
-      that run only. Data properties on a class or prototype are not exposed, since a program write would change the
-      host class itself; expose one through an accessor.
+      plain data).
 - [ ] Program functions as arguments to extension code (callbacks such as `forEach`).
+- [ ] Host classes. Stateful host objects are expressed as closures; a declared method table would be the next
+      step if `new X()` in a program is ever needed.
 
 ## Errors and diagnostics
 

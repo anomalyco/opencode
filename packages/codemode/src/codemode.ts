@@ -37,7 +37,7 @@ export type ResolvedExecutionLimits = {
 export type Options<Provided extends Record<string, unknown> = {}> = ToolRuntime.ToolCallHooks<Services<Provided>> & {
   /** Explicit tools exposed to the program as `tools`. */
   tools?: Provided & Tools<Services<Provided>>
-  /** Host classes and functions exposed as globals; see `Extension.make`. */
+  /** Host functions exposed as globals; see `Extension.make`. */
   extensions?: ReadonlyArray<Extension>
   /** Resource limits enforced on each execution. */
   limits?: ExecutionLimits
