@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define, hidden, NativeFunction, ProgramArray, ProgramError, ProgramObject } from "./objects.js"
+import { define, hidden, Native, Arr, ErrorObj, Obj } from "./objects.js"
 
 export const errorTypes = [
   "Error",
@@ -43,24 +43,24 @@ const builtins = [
  * The built-in prototype objects of one runtime, allocated empty in dependency order. The globals populate them
  * and attach their constructors when the runtime is built.
  */
-export type Prototypes = Readonly<Record<(typeof builtins)[number] | ErrorType, ProgramObject>>
+export type Builtins = Readonly<Record<(typeof builtins)[number] | ErrorType, Obj>>
 
-export const createErrorValue = (prototype: ProgramObject, message: string | undefined): ProgramError => {
-  const value = new ProgramError(prototype)
+export const createErrorValue = (prototype: Obj, message: string | undefined): ErrorObj => {
+  const value = new ErrorObj(prototype)
   if (message !== undefined) define(value, "message", message, hidden)
   return value
 }
 
-export const createPrototypes = (): Prototypes => {
-  const object = new ProgramObject(null)
+export const createBuiltins = (): Builtins => {
+  const object = new Obj(null)
   // Function.prototype is itself callable and returns undefined.
-  const fn = new NativeFunction(object, { name: "", call: () => Effect.undefined })
-  const plain = () => new ProgramObject(object)
+  const fn = new Native(object, { name: "", call: () => Effect.undefined })
+  const plain = () => new Obj(object)
   const error = plain()
   define(error, "name", "Error", hidden)
   define(error, "message", "", hidden)
   const derived = (type: ErrorType) => {
-    const proto = new ProgramObject(error)
+    const proto = new Obj(error)
     define(proto, "name", type, hidden)
     define(proto, "message", "", hidden)
     return proto
@@ -70,7 +70,7 @@ export const createPrototypes = (): Prototypes => {
   return {
     Object: object,
     Function: fn,
-    Array: new ProgramArray(object),
+    Array: new Arr(object),
     String: plain(),
     Number: plain(),
     Boolean: plain(),
@@ -86,8 +86,8 @@ export const createPrototypes = (): Prototypes => {
     Promise: plain(),
     Iterator: iterator,
     AsyncIterator: asyncIterator,
-    Generator: new ProgramObject(iterator),
-    AsyncGenerator: new ProgramObject(asyncIterator),
+    Generator: new Obj(iterator),
+    AsyncGenerator: new Obj(asyncIterator),
     Error: error,
     TypeError: derived("TypeError"),
     RangeError: derived("RangeError"),

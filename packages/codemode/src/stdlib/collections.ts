@@ -8,11 +8,11 @@ import {
   getOwn,
   hidden,
   isWrapper,
-  ProgramArray,
-  ProgramMap,
-  ProgramObject,
-  ProgramPromise,
-  ProgramSet,
+  Arr,
+  MapObj,
+  Obj,
+  PromiseObj,
+  SetObj,
 } from "../interpreter/objects.js"
 import { describeValue, isRuntimeReference } from "../interpreter/references.js"
 import {
@@ -25,7 +25,7 @@ import {
 } from "../interpreter/runner.js"
 
 const coerceGroupByPropertyKey = <R>(runner: Runner<R>, value: unknown): Effect.Effect<string, unknown, R> => {
-  if (value instanceof ProgramPromise) return Effect.succeed("[object Promise]")
+  if (value instanceof PromiseObj) return Effect.succeed("[object Promise]")
   if (!isWrapper(value) && isRuntimeReference(value)) {
     throw invalidData(`Object.groupBy callback must return a data value, received ${describeValue(value)}.`)
   }
@@ -34,20 +34,20 @@ const coerceGroupByPropertyKey = <R>(runner: Runner<R>, value: unknown): Effect.
 
 /** `Map.groupBy` and `Object.groupBy`: the same iteration, keyed into a Map or a data object. */
 export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
-  fn<R>(runner.prototypes, "groupBy", 2, (_, args) => {
-    const protos = runner.prototypes
+  fn<R>(runner.builtins, "groupBy", 2, (_, args) => {
+    const builtins = runner.builtins
     const source = args[0]
     if (source === null || source === undefined) {
       throw typeError(`${namespace}.groupBy expects an iterable collection.`)
     }
     const apply = applyCollectionCallback(runner, args[1], `${namespace}.groupBy`)
     return Effect.gen(function* () {
-      const cursor = yield* runner.syncIterator(source)
+      const cursor = yield* runner.iterate(source)
       if (cursor === undefined) {
         throw typeError(`${namespace}.groupBy expects an iterable collection.`)
       }
       if (namespace === "Map") {
-        const result = new ProgramMap(protos.Map)
+        const result = new MapObj(builtins.Map)
         let index = 0
         while (true) {
           const step = yield* cursor.next
@@ -55,14 +55,14 @@ export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
           const item = step.value
           const key = yield* preserveConsumerError(cursor, apply([item, index]))
           const group = result.map.get(key)
-          if (group === undefined) result.map.set(key, new ProgramArray(protos.Array, [item]))
-          else (group as ProgramArray).items.push(item)
+          if (group === undefined) result.map.set(key, new Arr(builtins.Array, [item]))
+          else (group as Arr).items.push(item)
           index += 1
         }
       }
 
       // Object.groupBy returns a null-prototype object, so group names never collide with inherited methods.
-      const result = new ProgramObject(null)
+      const result = new Obj(null)
       let index = 0
       while (true) {
         const step = yield* cursor.next
@@ -73,18 +73,18 @@ export const groupBy = <R>(runner: Runner<R>, namespace: "Map" | "Object") =>
           Effect.flatMap(apply([item, index]), (value) => coerceGroupByPropertyKey(runner, value)),
         )
         const group = getOwn(result, key)
-        if (group === undefined) define(result, key, new ProgramArray(protos.Array, [item]))
-        else (group as ProgramArray).items.push(item)
+        if (group === undefined) define(result, key, new Arr(builtins.Array, [item]))
+        else (group as Arr).items.push(item)
         index += 1
       }
     })
   })
 
-const constructMap = <R>(runner: Runner<R>, init: unknown, proto: ProgramObject) => {
-  const target = new ProgramMap(proto)
+const constructMap = <R>(runner: Runner<R>, init: unknown, proto: Obj) => {
+  const target = new MapObj(proto)
   if (init === undefined || init === null) return Effect.succeed(target)
   return Effect.gen(function* () {
-    const cursor = yield* runner.syncIterator(init)
+    const cursor = yield* runner.iterate(init)
     if (cursor === undefined) {
       throw typeError("new Map(...) expects an iterable of [key, value] pairs or no argument.")
     }
@@ -94,7 +94,7 @@ const constructMap = <R>(runner: Runner<R>, init: unknown, proto: ProgramObject)
       yield* preserveConsumerError(
         cursor,
         Effect.sync(() => {
-          if (!(step.value instanceof ProgramObject)) {
+          if (!(step.value instanceof Obj)) {
             throw typeError("new Map(...) expects [key, value] pairs as entry objects.")
           }
           target.map.set(getOwn(step.value, 0), getOwn(step.value, 1))
@@ -104,11 +104,11 @@ const constructMap = <R>(runner: Runner<R>, init: unknown, proto: ProgramObject)
   })
 }
 
-const constructSet = <R>(runner: Runner<R>, init: unknown, proto: ProgramObject) => {
-  const target = new ProgramSet(proto)
+const constructSet = <R>(runner: Runner<R>, init: unknown, proto: Obj) => {
+  const target = new SetObj(proto)
   if (init === undefined || init === null) return Effect.succeed(target)
   return Effect.gen(function* () {
-    const cursor = yield* runner.syncIterator(init)
+    const cursor = yield* runner.iterate(init)
     if (cursor === undefined) {
       throw typeError("new Set(...) expects a synchronous iterable or no argument.")
     }
@@ -121,18 +121,18 @@ const constructSet = <R>(runner: Runner<R>, init: unknown, proto: ProgramObject)
 }
 
 export const mapGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const proto = protos.Map
-  const map = constructor<R>(protos, proto, {
+  const builtins = runner.builtins
+  const proto = builtins.Map
+  const map = constructor<R>(builtins, proto, {
     name: "Map",
     call: requiresNew("Map"),
     construct: (args, newTarget) => constructMap(runner, args[0], prototypeFrom(newTarget, proto)),
   })
   define(map, "groupBy", groupBy(runner, "Map"), hidden)
-  const self = (thisValue: unknown, name: string) => receiver(ProgramMap, thisValue, `Map.prototype.${name}`)
-  const wrap = (items: Array<unknown>) => new ProgramArray(protos.Array, items)
-  defineAccessor(proto, "size", (thisValue) => receiver(ProgramMap, thisValue, "Map.prototype.size").map.size)
-  methods(protos, proto, [
+  const self = (thisValue: unknown, name: string) => receiver(MapObj, thisValue, `Map.prototype.${name}`)
+  const wrap = (items: Array<unknown>) => new Arr(builtins.Array, items)
+  defineAccessor(proto, "size", (thisValue) => receiver(MapObj, thisValue, "Map.prototype.size").map.size)
+  methods(builtins, proto, [
     ["get", 1, (thisValue, args) => self(thisValue, "get").map.get(args[0])],
     ["has", 1, (thisValue, args) => self(thisValue, "has").map.has(args[0])],
     [
@@ -187,21 +187,21 @@ const loadSetRecord = <R>(
   source: unknown,
   name: string,
 ): Effect.Effect<SetRecord<R>, unknown, R> => {
-  if (source instanceof ProgramSet) {
+  if (source instanceof SetObj) {
     return Effect.succeed({
       size: source.set.size,
       has: (item: unknown) => Effect.succeed(source.set.has(item)),
       keys: () => Effect.succeed(source.set.values()),
     })
   }
-  if (source instanceof ProgramMap) {
+  if (source instanceof MapObj) {
     return Effect.succeed({
       size: source.map.size,
       has: (item: unknown) => Effect.succeed(source.map.has(item)),
       keys: () => Effect.succeed(source.map.keys()),
     })
   }
-  if (!(source instanceof ProgramObject)) {
+  if (!(source instanceof Obj)) {
     throw typeError(`Set.${name} expects a Set-like object.`)
   }
   return Effect.gen(function* () {
@@ -216,10 +216,10 @@ const loadSetRecord = <R>(
     }
     return {
       size: Math.max(Math.trunc(size), 0),
-      has: (item: unknown) => Effect.map(runner.invokeCallable(has, source, [item]), Boolean),
+      has: (item: unknown) => Effect.map(runner.call(has, source, [item]), Boolean),
       keys: () =>
-        Effect.flatMap(runner.invokeCallable(keys, source, []), (result) => {
-          if (result instanceof ProgramArray) return Effect.succeed(result.items)
+        Effect.flatMap(runner.call(keys, source, []), (result) => {
+          if (result instanceof Arr) return Effect.succeed(result.items)
           throw typeError(`Set.${name} expected 'keys' to return an iterator.`)
         }),
     }
@@ -228,14 +228,14 @@ const loadSetRecord = <R>(
 
 const setOperation = <R>(
   runner: Runner<R>,
-  target: ProgramSet,
+  target: SetObj,
   name: string,
   source: unknown,
 ): Effect.Effect<unknown, unknown, R> =>
   Effect.gen(function* () {
     const other = yield* loadSetRecord(runner, source, name)
     const copy = () => {
-      const result = new ProgramSet(runner.prototypes.Set)
+      const result = new SetObj(runner.builtins.Set)
       for (const item of target.set.values()) result.set.add(item)
       return result
     }
@@ -245,7 +245,7 @@ const setOperation = <R>(
       return result
     }
     if (name === "intersection") {
-      const result = new ProgramSet(runner.prototypes.Set)
+      const result = new SetObj(runner.builtins.Set)
       if (target.set.size <= other.size) {
         for (const item of target.set.values()) {
           if (yield* other.has(item)) result.set.add(item)
@@ -303,22 +303,22 @@ const setOperation = <R>(
   })
 
 export const setGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const proto = protos.Set
-  const set = constructor<R>(protos, proto, {
+  const builtins = runner.builtins
+  const proto = builtins.Set
+  const set = constructor<R>(builtins, proto, {
     name: "Set",
     call: requiresNew("Set"),
     construct: (args, newTarget) => constructSet(runner, args[0], prototypeFrom(newTarget, proto)),
   })
-  const self = (thisValue: unknown, name: string) => receiver(ProgramSet, thisValue, `Set.prototype.${name}`)
-  const wrap = (items: Array<unknown>) => new ProgramArray(protos.Array, items)
+  const self = (thisValue: unknown, name: string) => receiver(SetObj, thisValue, `Set.prototype.${name}`)
+  const wrap = (items: Array<unknown>) => new Arr(builtins.Array, items)
   const operation = (name: string): Method => [
     name,
     1,
     (thisValue, args) => setOperation(runner, self(thisValue, name), name, args[0]),
   ]
-  defineAccessor(proto, "size", (thisValue) => receiver(ProgramSet, thisValue, "Set.prototype.size").set.size)
-  methods(protos, proto, [
+  defineAccessor(proto, "size", (thisValue) => receiver(SetObj, thisValue, "Set.prototype.size").set.size)
+  methods(builtins, proto, [
     ["has", 1, (thisValue, args) => self(thisValue, "has").set.has(args[0])],
     [
       "add",

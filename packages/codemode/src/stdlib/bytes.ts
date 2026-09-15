@@ -2,16 +2,16 @@ import { Effect } from "effect"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { constructor, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
 import { rangeError, syntaxError, typeError } from "../interpreter/model.js"
-import { defineAccessor, get, ProgramArray, ProgramBytes, ProgramObject } from "../interpreter/objects.js"
+import { defineAccessor, get, Arr, Bytes, Obj } from "../interpreter/objects.js"
 import { describeValue } from "../interpreter/references.js"
 import type { Runner } from "../interpreter/runner.js"
 import { coerceToNumber, coerceToString } from "./value.js"
 
 /** The bytes a Uint8Array, array, or other iterable of numbers describes; the host array clamps each value. */
 const collectBytes = <R>(runner: Runner<R>, source: unknown, name: string): Effect.Effect<Uint8Array, unknown, R> => {
-  if (source instanceof ProgramBytes) return Effect.succeed(new Uint8Array(source.bytes))
+  if (source instanceof Bytes) return Effect.succeed(new Uint8Array(source.bytes))
   return Effect.gen(function* () {
-    const cursor = yield* runner.syncIterator(source)
+    const cursor = yield* runner.iterate(source)
     if (cursor === undefined) {
       throw typeError(
         `${name} expects a Uint8Array, an array, or an iterable of numbers, received ${describeValue(source)}.`,
@@ -27,22 +27,22 @@ const collectBytes = <R>(runner: Runner<R>, source: unknown, name: string): Effe
   })
 }
 
-const constructBytes = <R>(runner: Runner<R>, args: Array<unknown>, proto: ProgramObject) => {
+const constructBytes = <R>(runner: Runner<R>, args: Array<unknown>, proto: Obj) => {
   const source = args[0]
   if (source !== null && typeof source === "object") {
-    return Effect.map(collectBytes(runner, source, "new Uint8Array(...)"), (bytes) => new ProgramBytes(proto, bytes))
+    return Effect.map(collectBytes(runner, source, "new Uint8Array(...)"), (bytes) => new Bytes(proto, bytes))
   }
   const length = source === undefined ? 0 : coerceToNumber(source)
   if (!Number.isInteger(length) || length < 0) throw rangeError(`Invalid typed array length: ${coerceToString(source)}`)
   checkArrayLength(length)
-  return Effect.succeed(new ProgramBytes(proto, new Uint8Array(length)))
+  return Effect.succeed(new Bytes(proto, new Uint8Array(length)))
 }
 
 export const uint8ArrayGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const proto = protos.Uint8Array
-  const wrap = (bytes: Uint8Array) => new ProgramBytes(proto, bytes)
-  const uint8Array = constructor<R>(protos, proto, {
+  const builtins = runner.builtins
+  const proto = builtins.Uint8Array
+  const wrap = (bytes: Uint8Array) => new Bytes(proto, bytes)
+  const uint8Array = constructor<R>(builtins, proto, {
     name: "Uint8Array",
     length: 3,
     call: requiresNew("Uint8Array"),
@@ -56,22 +56,22 @@ export const uint8ArrayGlobal = <R>(runner: Runner<R>) => {
       throw syntaxError(`Uint8Array.${name}: the string is not valid ${name === "fromHex" ? "hex" : "base64"}.`)
     }
   }
-  methods(protos, uint8Array, [
+  methods(builtins, uint8Array, [
     ["from", 1, (_, args) => Effect.map(collectBytes(runner, args[0], "Uint8Array.from"), wrap)],
     ["of", 0, (_, args) => wrap(Uint8Array.from(args, coerceToNumber))],
     ["fromBase64", 1, (_, args) => decode("fromBase64", args, (text) => Uint8Array.fromBase64(text))],
     ["fromHex", 1, (_, args) => decode("fromHex", args, (text) => Uint8Array.fromHex(text))],
   ])
 
-  const self = (thisValue: unknown, name: string) => receiver(ProgramBytes, thisValue, `Uint8Array.prototype.${name}`)
+  const self = (thisValue: unknown, name: string) => receiver(Bytes, thisValue, `Uint8Array.prototype.${name}`)
   const optNumber = (name: string, value: unknown, label: string): number | undefined => {
     if (value === undefined) return undefined
     if (typeof value !== "number") throw typeError(`Uint8Array.${name} expects ${label} to be a number.`)
     return value
   }
-  const wrapAll = (items: Array<unknown>) => new ProgramArray(protos.Array, items)
+  const wrapAll = (items: Array<unknown>) => new Arr(builtins.Array, items)
   defineAccessor(proto, "length", (thisValue) => self(thisValue, "length").bytes.length)
-  methods(protos, proto, [
+  methods(builtins, proto, [
     ["at", 1, (thisValue, args) => self(thisValue, "at").bytes.at(optNumber("at", args[0], "index") ?? 0)],
     [
       "slice",
@@ -186,24 +186,24 @@ export const uint8ArrayGlobal = <R>(runner: Runner<R>) => {
 }
 
 export const textEncoderGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const proto = protos.TextEncoder
+  const builtins = runner.builtins
+  const proto = builtins.TextEncoder
   const encoder = new TextEncoder()
   defineAccessor(proto, "encoding", () => "utf-8")
-  methods(protos, proto, [
-    ["encode", 0, (_, args) => new ProgramBytes(protos.Uint8Array, encoder.encode(coerceToString(args[0] ?? "")))],
+  methods(builtins, proto, [
+    ["encode", 0, (_, args) => new Bytes(builtins.Uint8Array, encoder.encode(coerceToString(args[0] ?? "")))],
   ])
-  return constructor<R>(protos, proto, {
+  return constructor<R>(builtins, proto, {
     name: "TextEncoder",
     call: requiresNew("TextEncoder"),
-    construct: (_, newTarget) => Effect.succeed(new ProgramObject(prototypeFrom(newTarget, proto))),
+    construct: (_, newTarget) => Effect.succeed(new Obj(prototypeFrom(newTarget, proto))),
   })
 }
 
 /** A `TextDecoder` holding the host decoder its label and options configured. */
-export class ProgramTextDecoder extends ProgramObject {
+export class TextDecoderObj extends Obj {
   constructor(
-    proto: ProgramObject,
+    proto: Obj,
     readonly decoder: TextDecoder,
   ) {
     super(proto)
@@ -214,21 +214,21 @@ export class ProgramTextDecoder extends ProgramObject {
 const utf8Labels = new Set(["unicode-1-1-utf-8", "unicode11utf8", "unicode20utf8", "utf-8", "utf8", "x-unicode20utf8"])
 
 export const textDecoderGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const proto = protos.TextDecoder
+  const builtins = runner.builtins
+  const proto = builtins.TextDecoder
   const self = (thisValue: unknown, name: string) =>
-    receiver(ProgramTextDecoder, thisValue, `TextDecoder.prototype.${name}`)
+    receiver(TextDecoderObj, thisValue, `TextDecoder.prototype.${name}`)
   defineAccessor(proto, "encoding", (thisValue) => self(thisValue, "encoding").decoder.encoding)
   defineAccessor(proto, "fatal", (thisValue) => self(thisValue, "fatal").decoder.fatal)
   defineAccessor(proto, "ignoreBOM", (thisValue) => self(thisValue, "ignoreBOM").decoder.ignoreBOM)
-  methods(protos, proto, [
+  methods(builtins, proto, [
     [
       "decode",
       0,
       (thisValue, args) => {
         const decoder = self(thisValue, "decode").decoder
         if (args[0] === undefined) return ""
-        if (!(args[0] instanceof ProgramBytes)) {
+        if (!(args[0] instanceof Bytes)) {
           throw typeError(`TextDecoder.decode expects a Uint8Array, received ${describeValue(args[0])}.`)
         }
         try {
@@ -239,16 +239,16 @@ export const textDecoderGlobal = <R>(runner: Runner<R>) => {
       },
     ],
   ])
-  return constructor<R>(protos, proto, {
+  return constructor<R>(builtins, proto, {
     name: "TextDecoder",
     call: requiresNew("TextDecoder"),
     construct: (args, newTarget) =>
       Effect.sync(() => {
         const label = args[0] === undefined ? "utf-8" : coerceToString(args[0]).trim().toLowerCase()
         if (!utf8Labels.has(label)) throw rangeError(`The "${label}" encoding is not supported; only UTF-8 is.`)
-        const options = args[1] instanceof ProgramObject ? args[1] : undefined
+        const options = args[1] instanceof Obj ? args[1] : undefined
         const flag = (name: string) => options !== undefined && Boolean(get(options, name))
-        return new ProgramTextDecoder(
+        return new TextDecoderObj(
           prototypeFrom(newTarget, proto),
           new TextDecoder("utf-8", { fatal: flag("fatal"), ignoreBOM: flag("ignoreBOM") }),
         )

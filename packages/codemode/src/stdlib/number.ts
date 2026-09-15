@@ -4,8 +4,8 @@ import type { Runner } from "../interpreter/runner.js"
 import { coercion, coerceToString } from "./value.js"
 
 export const numberGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const number = constructor<R>(protos, protos.Number, {
+  const builtins = runner.builtins
+  const number = constructor<R>(builtins, builtins.Number, {
     name: "Number",
     length: 1,
     call: coercion(runner, "Number").call,
@@ -20,7 +20,7 @@ export const numberGlobal = <R>(runner: Runner<R>) => {
     POSITIVE_INFINITY: Number.POSITIVE_INFINITY,
     NEGATIVE_INFINITY: Number.NEGATIVE_INFINITY,
   })
-  methods(protos, number, [
+  methods(builtins, number, [
     ["isInteger", 1, (_, args) => Number.isInteger(args[0])],
     ["isFinite", 1, (_, args) => Number.isFinite(args[0])],
     ["isNaN", 1, (_, args) => Number.isNaN(args[0])],
@@ -48,7 +48,7 @@ export const numberGlobal = <R>(runner: Runner<R>) => {
     if (typeof arg !== "number") throw typeError(`Number.${name} expects a number argument.`)
     return arg
   }
-  methods(protos, protos.Number, [
+  methods(builtins, builtins.Number, [
     ["toFixed", 1, (thisValue, args) => self(thisValue, "toFixed").toFixed(optNum("toFixed", args[0]))],
     [
       "toExponential",
@@ -82,8 +82,8 @@ export const numberGlobal = <R>(runner: Runner<R>) => {
 }
 
 export const booleanGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const boolean = constructor<R>(protos, protos.Boolean, {
+  const builtins = runner.builtins
+  const boolean = constructor<R>(builtins, builtins.Boolean, {
     name: "Boolean",
     length: 1,
     call: coercion(runner, "Boolean").call,
@@ -92,7 +92,7 @@ export const booleanGlobal = <R>(runner: Runner<R>) => {
     if (typeof thisValue === "boolean") return thisValue
     throw typeError(`Boolean.prototype.${name} requires that 'this' be a Boolean.`)
   }
-  methods(protos, protos.Boolean, [
+  methods(builtins, builtins.Boolean, [
     ["toString", 0, (thisValue) => String(self(thisValue, "toString"))],
     ["valueOf", 0, (thisValue) => self(thisValue, "valueOf")],
   ])

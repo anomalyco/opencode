@@ -5,11 +5,11 @@ import { checkStringLength } from "../interpreter/limits.js"
 import { syntaxError, typeError } from "../interpreter/model.js"
 import { typeofValue } from "../interpreter/references.js"
 import { fromData, toData, toProgram } from "../data.js"
-import { Callable, get, keys, ProgramArray, ProgramObject, record, remove, set } from "../interpreter/objects.js"
+import { Callable, get, keys, Arr, Obj, record, remove, set } from "../interpreter/objects.js"
 
 export const jsonGlobal = <R>(runner: Runner<R>) => {
-  const json = new ProgramObject(runner.prototypes.Object)
-  methods(runner.prototypes, json, [
+  const json = new Obj(runner.builtins.Object)
+  methods(runner.builtins, json, [
     ["parse", 2, (_, args) => parse(runner, args)],
     ["stringify", 3, (_, args) => stringify(runner, args)],
   ])
@@ -22,7 +22,7 @@ const parse = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<unknow
 
   const parsed = (() => {
     try {
-      return fromData(runner.prototypes, JSON.parse(text), "JSON.parse result")
+      return fromData(runner.builtins, JSON.parse(text), "JSON.parse result")
     } catch (error) {
       throw syntaxError(`JSON.parse received invalid JSON: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -30,10 +30,10 @@ const parse = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<unknow
   if (typeofValue(args[1]) !== "function") return Effect.succeed(parsed)
 
   const apply = applyCollectionCallback(runner, args[1], "JSON.parse")
-  const visit = (holder: ProgramObject, key: string): Effect.Effect<unknown, unknown, R> =>
+  const visit = (holder: Obj, key: string): Effect.Effect<unknown, unknown, R> =>
     Effect.gen(function* () {
       const value = get(holder, key)
-      if (value instanceof ProgramObject) {
+      if (value instanceof Obj) {
         for (const name of keys(value)) {
           const revived = yield* visit(value, name)
           if (revived === undefined) remove(value, name)
@@ -42,7 +42,7 @@ const parse = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<unknow
       }
       return yield* apply([key, value])
     })
-  return visit(record(runner.prototypes.Object, { "": parsed }), "")
+  return visit(record(runner.builtins.Object, { "": parsed }), "")
 }
 
 const stringify = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<unknown, unknown, R> => {
@@ -52,7 +52,7 @@ const stringify = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<un
 
   if (typeofValue(replacer) !== "function") {
     const properties =
-      replacer instanceof ProgramArray
+      replacer instanceof Arr
         ? replacer.items
             .filter((item): item is string | number => typeof item === "string" || typeof item === "number")
             .map(String)
@@ -64,20 +64,20 @@ const stringify = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<un
   }
 
   // Validate up front; the replacer walk below reads the original value.
-  toProgram(runner.prototypes, args[0], "JSON.stringify value")
+  toProgram(runner.builtins, args[0], "JSON.stringify value")
   const apply = applyCollectionCallback(runner, replacer, "JSON.stringify")
   const stack = new Set<object>()
-  const visit = (holder: ProgramObject, key: string): Effect.Effect<unknown, unknown, R> =>
+  const visit = (holder: Obj, key: string): Effect.Effect<unknown, unknown, R> =>
     Effect.gen(function* () {
       const value = yield* apply([key, yield* toJSONValue(runner, get(holder, key), key)])
       if (value === undefined || typeofValue(value) === "function") return undefined
-      toProgram(runner.prototypes, value, "JSON.stringify replacer result")
+      toProgram(runner.builtins, value, "JSON.stringify replacer result")
       if (typeof value === "number") return Number.isFinite(value) ? value : null
       if (value === null || typeof value === "string" || typeof value === "boolean") return value
-      if (!(value instanceof ProgramObject)) return {}
+      if (!(value instanceof Obj)) return {}
       if (stack.has(value)) throw typeError("Converting circular structure to JSON.")
       stack.add(value)
-      if (value instanceof ProgramArray) {
+      if (value instanceof Arr) {
         const result: Array<unknown> = []
         for (let index = 0; index < value.items.length; index += 1) {
           result.push((yield* visit(value, String(index))) ?? null)
@@ -94,14 +94,14 @@ const stringify = <R>(runner: Runner<R>, args: Array<unknown>): Effect.Effect<un
       return result
     })
 
-  return Effect.map(visit(record(runner.prototypes.Object, { "": args[0] }), ""), (value) =>
+  return Effect.map(visit(record(runner.builtins.Object, { "": args[0] }), ""), (value) =>
     JSON.stringify(value, null, indent),
   )
 }
 
 // SerializeJSONProperty step 2: a callable `toJSON` decides the value, as Date and URL define.
 const toJSONValue = <R>(runner: Runner<R>, value: unknown, key: string) => {
-  if (!(value instanceof ProgramObject)) return Effect.succeed(value)
+  if (!(value instanceof Obj)) return Effect.succeed(value)
   const toJSON = get(value, "toJSON")
-  return toJSON instanceof Callable ? runner.invokeCallable(toJSON, value, [key]) : Effect.succeed(value)
+  return toJSON instanceof Callable ? runner.call(toJSON, value, [key]) : Effect.succeed(value)
 }

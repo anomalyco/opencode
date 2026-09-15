@@ -2,7 +2,7 @@ import type { Node } from "acorn"
 import { Context } from "effect"
 import type { ErrorType } from "./intrinsics.js"
 import type { DiagnosticKind } from "../codemode.js"
-import type { ProgramError } from "./objects.js"
+import type { ErrorObj } from "./objects.js"
 
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
 export type AstNode = Node
@@ -30,7 +30,7 @@ export const AsyncIteratorSymbol: unique symbol = Symbol("codemode.async-iterato
 export const IteratorSymbol: unique symbol = Symbol("codemode.iterator")
 export const IteratorSymbols = [AsyncIteratorSymbol, IteratorSymbol] as const
 
-export class ProgramThrow {
+export class Throw {
   constructor(readonly value: unknown) {}
 }
 
@@ -46,7 +46,7 @@ export const OptionalShortCircuit: unique symbol = Symbol("codemode.optional-sho
  */
 export class PendingThrow {
   node?: AstNode
-  value?: ProgramError
+  value?: ErrorObj
 
   constructor(
     /** The JS error class a program sees when it catches this failure. */

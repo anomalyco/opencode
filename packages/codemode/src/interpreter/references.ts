@@ -5,31 +5,31 @@ import {
   getOwn,
   isWrapper,
   ownKeys,
-  ProgramArray,
-  ProgramBytes,
-  ProgramDate,
-  ProgramGenerator,
-  ProgramHandle,
-  ProgramMap,
-  ProgramObject,
-  ProgramPromise,
-  ProgramRegExp,
-  ProgramSet,
-  ProgramURL,
-  ProgramURLSearchParams,
+  Arr,
+  Bytes,
+  DateObj,
+  GeneratorObj,
+  Handle,
+  MapObj,
+  Obj,
+  PromiseObj,
+  RegExpObj,
+  SetObj,
+  URLObj,
+  URLSearchParamsObj,
 } from "./objects.js"
 
 /** Values that cannot cross the data boundary. */
 export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof Callable ||
-  value instanceof ProgramGenerator ||
-  value instanceof ProgramHandle ||
+  value instanceof GeneratorObj ||
+  value instanceof Handle ||
   value instanceof ToolReference ||
-  value instanceof ProgramPromise ||
+  value instanceof PromiseObj ||
   isWrapper(value)
 
 function* childValues(value: object): Generator {
-  if (!(value instanceof ProgramObject)) return
+  if (!(value instanceof Obj)) return
   for (const key of ownKeys(value)) yield getOwn(value, key)
 }
 
@@ -78,18 +78,18 @@ export const rejectCircularInsertion = (
 
 export const describeValue = (value: unknown): string => {
   if (value === null || value === undefined) return String(value)
-  if (value instanceof ProgramArray) return "an array"
-  if (value instanceof ProgramPromise) return "an un-awaited Promise"
+  if (value instanceof Arr) return "an array"
+  if (value instanceof PromiseObj) return "an un-awaited Promise"
   if (value instanceof ToolReference) return "a tool reference"
-  if (value instanceof ProgramDate) return "a Date"
-  if (value instanceof ProgramRegExp) return "a RegExp"
-  if (value instanceof ProgramMap) return "a Map"
-  if (value instanceof ProgramSet) return "a Set"
-  if (value instanceof ProgramURL) return "a URL"
-  if (value instanceof ProgramURLSearchParams) return "a URLSearchParams"
-  if (value instanceof ProgramBytes) return "a Uint8Array"
-  if (value instanceof ProgramGenerator) return "a generator"
-  if (value instanceof ProgramHandle) return `a ${value.instance.constructor.name}`
+  if (value instanceof DateObj) return "a Date"
+  if (value instanceof RegExpObj) return "a RegExp"
+  if (value instanceof MapObj) return "a Map"
+  if (value instanceof SetObj) return "a Set"
+  if (value instanceof URLObj) return "a URL"
+  if (value instanceof URLSearchParamsObj) return "a URLSearchParams"
+  if (value instanceof Bytes) return "a Uint8Array"
+  if (value instanceof GeneratorObj) return "a generator"
+  if (value instanceof Handle) return `a ${value.instance.constructor.name}`
   if (isRuntimeReference(value)) return "a function"
   if (typeof value === "object") return "a data object"
   return `a ${typeof value}`
