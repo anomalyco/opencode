@@ -159,6 +159,9 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
           error: item.status === "failed" ? item.error : undefined,
         }))
     },
+    skills() {
+      return sync.data.skills
+    },
   }
 }
 

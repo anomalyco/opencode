@@ -1267,6 +1267,28 @@ const layer = Layer.effect(
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
             ]
+            const loadedSkills = [
+              ...new Set(
+                msgs
+                  .flatMap((m) => m.parts)
+                  .filter(
+                    (p): p is SessionV1.ToolPart =>
+                      p.type === "tool" && p.tool === "skill" && p.state.status === "completed",
+                  )
+                  .map((p) => p.state.input.name)
+                  .filter((name): name is string => typeof name === "string"),
+              ),
+            ]
+            if (loadedSkills.length > 0) {
+              system.push(
+                [
+                  "<loaded_skills>",
+                  "These skills have already been loaded into the conversation via the skill tool. Their content is in the message history. Do NOT load them again — reference the existing content directly.",
+                  ...loadedSkills.map((name) => `  <skill>${name}</skill>`),
+                  "</loaded_skills>",
+                ].join("\n"),
+              )
+            }
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
