@@ -310,7 +310,7 @@ Media does not fit the LLM four-axis route (SSE frames → event state machine) 
 ### LLM integration
 
 - `MediaPart` becomes `{ type: "media"; media: Media.Asset; … }` so protocols branch on `kind` and can pass `url`/`ref` sources through natively (OpenAI `image_url`, Gemini `fileData`).
-- New `LLMEvent`s: `media { media: Media.Asset }` so Gemini inline image output and Responses `image_generation_call` are first-class instead of dropped or tunneled through tool results.
+- New `LLMEvent`s: `media { media: Media.Asset }` so Gemini inline image output is first-class instead of dropped. OpenAI Responses `image_generation_call` keeps its single carrier — the provider-executed `tool-result` with `file` content — because Core consumes hosted tool-result content today and has no `media` event handling yet; it switches to the `media` carrier when Core adopts the event, so the image is never emitted twice.
 - `Message.assistant([...])` accepts media parts; Gemini multi-turn image editing replays them.
 - `Tool.FileContent` aligns with `Media.Source`.
 

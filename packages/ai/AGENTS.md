@@ -10,7 +10,15 @@
 
 ## Conventions
 
-Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `LanguageModel.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, and `LLM.generateObject`. Use `LLMRequest.update(...)` when deriving canonical request data; do not add a duplicate `LLM.updateRequest(...)` path. Two ways to construct the same thing is one too many.
+Per-type constructors live on the type, not as top-level re-exports. Use `Message.system(...)`, `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `Message.media(...)`, `LanguageModel.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, and `LLM.generateObject`. Use `LLMRequest.update(...)` when deriving canonical request data; do not add a duplicate `LLM.updateRequest(...)` path. Two ways to construct the same thing is one too many.
+
+Modality namespaces mirror `LLM` exactly: `Image.request`, `Image.generate`, `Image.stream` (later `Video`, `Speech`, `Transcription`). Common request fields (`images`, `mask`, `n`, `size`, `aspectRatio`, `seed`, `format`) lower natively or fail with a typed `AIError`; provider-native controls always live under `providerOptions`, never under a modality-specific `options` key.
+
+Media payloads are always `Media.Asset` (`src/media.ts`). Construct them with `Media.bytes`, `Media.base64`, `Media.url`, `Media.ref`, `Media.fromDataUrl`, or `Media.file`; never introduce a parallel `data: string | Uint8Array` shape. `MediaPart.media`, `ImageRequest.images`/`mask`, `ImageResponse.images`, and the `media` `LLMEvent` all share it. Protocols branch on `asset.source.type` and `asset.kind` and use `ProviderShared.inlineMedia` / `requireInlineMedia` / `mediaUrl` / `MediaInput.refID` rather than re-deriving base64 or URL handling.
+
+`schema/messages.ts → media.ts → route/executor-service.ts` is an accepted runtime dependency from the schema layer on the executor service tag: `Media.Asset.bytes()` must be able to download `url` sources, and the tag lives in that leaf module precisely so the schema barrel never imports the executor implementation (which imports the schema barrel back). Do not move the tag into `route/executor.ts` or import `route/executor.ts` from `src/schema/*` or `src/media.ts`.
+
+Nothing in `src/*` except `src/promise.ts` may know about Promises. `@opencode/ai/promise` (`AI.make({ layer? })`, default `ai`) is the single Promise/`AsyncIterable` surface for LLM and media; it runs the Effect APIs in one `ManagedRuntime` and rethrows `AIError` unchanged.
 
 - Prefer forward compatibility for provider-defined options that OpenCode only passes through. For pass-through string enums, expose known values for autocomplete while accepting future values with `Known | (string & {})`, and accept any string at runtime. Closed literals are appropriate when OpenCode branches on a value, transforms its associated structure, or otherwise cannot correctly handle an unknown variant. New options whose shape or behavior requires implementation remain unsupported until they are handled; do not blindly forward unknown structures.
 - Order reasoning-effort values from lowest to highest: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Provider-specific subsets follow the same relative order in types, schemas, option lists, and tests.
@@ -86,6 +94,10 @@ The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Basete
 
 When a provider supports multiple physical transports, selection remains execution policy below its semantic route. `OpenResponsesChannel.transport(...)` owns the provider-neutral Responses WebSocket concept: it prepares one final request, executes HTTP by default, strips WebSocket-disallowed fields, and passes a generic channel exchange to a per-call `WebSocketChannelExecutor` when supplied. Provider-specific Responses routes opt in with handshake and connection-age policy. `Route.streamPrepared` owns decoding and acknowledges channel completion only after successful full consumption.
 
+### Media Routes
+
+Media does not fit the SSE-frames-to-event-state-machine LLM route. `MediaRoute.make(...)` (`src/route/media.ts`) composes a `MediaProtocol` kind with `Endpoint` and `Auth` and owns the transport plumbing: `http` option merging, URL/query rendering, auth headers, JSON vs multipart encoding, and handing the response back to the protocol. `MediaProtocol.inline` (`src/route/media-protocol.ts`) is `body.from(request)` plus `response.decode(response, context)`; use `MediaProtocol.decodeJson` / `text` / `bytes` so decode failures retain the raw body and HTTP context. `MediaProtocol.JobProtocol` is the queued shape and `Job` (`src/job.ts`) is the provider-neutral handle over a `JobRoute` (`status`, `result`, `cancel`, `pollHint`); the first video route implements it. Image protocol files follow the same section order as LLM protocols and declare unsupported common fields once through `MediaInput.rejectUnsupported`.
+
 ### URL Construction
 
 `Endpoint` owns `{ baseURL, path, query }`. Each protocol route includes a canonical endpoint when the provider has one (e.g. `https://api.openai.com/v1`); provider helpers override endpoint fields by configuring the route before selecting a model. Generic OpenAI-compatible routes have no canonical URL and require configuration before execution.
@@ -94,10 +106,11 @@ For providers where the URL is derived from typed inputs (Azure resource name, B
 
 ### Provider Facades
 
-Provider-facing APIs are configured facades over route values. Endpoint/auth/resource/API-version setup happens before model selection, and model selectors accept only a model or deployment id:
+Provider-facing APIs are configured facades over route values. Endpoint/auth/resource/API-version setup happens before model selection, and model selectors accept only a model or deployment id. Every facade is wrapped in `ModelRef.facade(...)`, which makes it callable: `openai("gpt-4o-mini")` returns a `ModelRef` with lazy per-modality routes derived from the facade's own selectors (`model` → `llm`, `image` → `image`). `LLM.request` and `Image.request` resolve their route from the ref at request time, so one value names a model for every modality while named selectors stay the single source of truth:
 
 ```ts
 const openai = OpenAI.configure({ apiKey, baseURL })
+const ref = openai("gpt-4o-mini") // ModelRef: LLM.request → .responses, Image.request → .image
 const model = openai.responses("gpt-4o-mini")
 
 const azure = Azure.configure({ resourceName, apiKey, apiVersion: "v1" })

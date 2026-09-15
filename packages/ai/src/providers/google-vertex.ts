@@ -8,6 +8,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { ProviderConfigurationError, ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
+import { ModelRef } from "../model-ref.js"
 
 export interface GeminiOptionsInput extends Gemini.OptionsInput {
   readonly labels?: Readonly<Record<string, string>>
@@ -106,12 +107,12 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
 }
 
 export const configure = (input: Config = {}) => {
-  return {
+  return ModelRef.facade({
     id,
     model: (modelID: string | ModelID) =>
       configuredRoute(input, modelID).model<GeminiProviderOptionsInput>({ id: modelID }),
     configure,
-  }
+  })
 }
 
 export const provider = {

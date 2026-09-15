@@ -9,6 +9,7 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
+import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("zai-coding-plan")
 
@@ -72,7 +73,7 @@ export const configure = (input: Config = {}) => {
       .model<MessagesOptionsInput>({ id: modelID, compatibility: { requireSignature: false } })
   const responses = (modelID: string | ModelID) =>
     responsesRoute.with(defaults).model<ResponsesOptionsInput>({ id: modelID })
-  return { id, model: chat, chat, messages, responses, configure }
+  return ModelRef.facade({ id, model: chat, chat, messages, responses, configure })
 }
 
 export const provider = configure()

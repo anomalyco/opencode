@@ -39,6 +39,11 @@ const mergeStringRecords = (
 export const ProviderOptions = Schema.Record(Schema.String, Schema.Unknown)
 export type ProviderOptions = Schema.Schema.Type<typeof ProviderOptions>
 
+export const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown)).annotate({
+  identifier: "LLM.ProviderMetadata",
+})
+export type ProviderMetadata = Schema.Schema.Type<typeof ProviderMetadata>
+
 export const mergeProviderOptions = (
   ...items: ReadonlyArray<ProviderOptions | undefined>
 ): ProviderOptions | undefined => mergeJsonRecords(...items)

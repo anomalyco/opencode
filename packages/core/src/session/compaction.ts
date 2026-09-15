@@ -217,7 +217,7 @@ const estimatePart = (part: ContentPart): number => {
   if (part.type === "compaction") return Token.estimate(part.text ?? "")
   if (part.type === "effort") return 0
   if (part.type === "text" || part.type === "reasoning") return Token.estimate(part.text)
-  if (part.type === "media") return estimateMedia(part.mediaType)
+  if (part.type === "media") return estimateMedia(part.media.mediaType)
   if (part.type === "tool-call") return Token.estimate(part.name + (JSON.stringify(part.input) ?? ""))
   if (part.result.type === "content")
     return part.result.value.reduce(

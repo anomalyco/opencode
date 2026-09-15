@@ -11,9 +11,30 @@ export type {
   Service as LLMClientService,
 } from "./route/client.js"
 export * from "./schema/index.js"
-export { GeneratedImage, ImageInput, ImageInputSchema, ImageModel, ImageRequest, ImageResponse } from "./image.js"
-export type { ImageModelOptions, ImageOptions, ImageRequestFor, ImageRequestInput, ImageRoute } from "./image.js"
+export {
+  ImageAspectRatio,
+  ImageEvent,
+  ImageModel,
+  ImageModelSchema,
+  ImageRequest,
+  ImageResponse,
+  ImageSize,
+} from "./image.js"
+export type {
+  ImageFormat,
+  ImageModelInput,
+  ImageModelOptions,
+  ImageOptions,
+  ImageRequestFor,
+  ImageRequestInput,
+  ImageRoute,
+} from "./image.js"
 export { Image } from "./image.js"
+export { Media } from "./media.js"
+export { ModelRef } from "./model-ref.js"
+export type { ResolveImageModel, ResolveLanguageModel } from "./model-ref.js"
+export { Job } from "./job.js"
+export type { Event as JobEvent, Poll, Route as JobRoute, Snapshot as JobSnapshot, Status as JobStatus } from "./job.js"
 export { Tool, ToolFailure, toDefinitions } from "./tool.js"
 export { ToolRuntime } from "./tool-runtime.js"
 export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime.js"

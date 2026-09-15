@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, ImageInput, LanguageModel, LLM, LLMClient, Provider } from "@opencode/ai"
+import { AIError, LanguageModel, LLM, LLMClient, Media, Provider } from "@opencode/ai"
 import { Route, Protocol, WebSocketTransport } from "@opencode/ai/route"
 import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {
@@ -34,7 +34,7 @@ describe("public exports", () => {
     expect(LLMClient.layer).toBeDefined()
     expect(AIError).toBeFunction()
     expect(LanguageModel.make).toBeFunction()
-    expect(ImageInput.bytes).toBeFunction()
+    expect(Media.bytes).toBeFunction()
     expect(Provider.make).toBeFunction()
     expect(ProviderSubpath.make).toBe(Provider.make)
     expect(TestLLM.layer).toBeFunction()

@@ -8,6 +8,7 @@ import type { ProviderPackage } from "../provider-package.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { newBreakpoints, ttlBucket } from "../protocols/utils/cache.js"
 import { isRecord } from "../protocols/shared.js"
+import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("openrouter")
 const baseURL = "https://openrouter.ai/api/v1"
@@ -181,12 +182,12 @@ const configuredRoute = (input: LanguageModelOptions) => {
 
 export const configure = (input: LanguageModelOptions = {}) => {
   const route = configuredRoute(input)
-  return {
+  return ModelRef.facade({
     id,
     model: (modelID: string | ModelID) =>
       route.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
     configure,
-  }
+  })
 }
 
 export const provider = configure()
