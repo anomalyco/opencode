@@ -118,4 +118,5 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".nix": "nix",
   ".typ": "typst",
   ".typc": "typst",
+  ".purs": "purescript",
 } as const
