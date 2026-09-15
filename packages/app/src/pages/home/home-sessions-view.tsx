@@ -1,11 +1,16 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
-import { type Accessor, createMemo, For, Show, Suspense } from "solid-js"
+import { type Accessor, createMemo, createSignal, For, Show, Suspense } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { SessionActionMenu } from "@/components/session-action-menu"
+import { SessionDeleteDialog } from "@/components/session-delete-dialog"
+import { SessionSharePopover } from "@/components/session-share-popover"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { SessionTabAvatarView } from "@/pages/layout/session-tab-avatar"
@@ -19,7 +24,6 @@ import {
   type OpenSessionOptions,
 } from "./home-sessions-controller"
 
-const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 const HOME_SESSION_SEARCH_RESULTS_ID = "home-session-search-results"
 
@@ -54,6 +58,12 @@ export type HomeSessionsViewProps = {
   onCreateSession: () => void
   onOpenSession: (session: Session, options?: OpenSessionOptions) => void
   onArchiveSession: (session: Session) => Promise<void>
+  onRenameSession: (session: Session, title: string) => Promise<void>
+  onShareSession: (session: Session) => Promise<string | undefined>
+  onUnshareSession: (session: Session) => Promise<boolean>
+  onExportSession: (session: Session) => Promise<void>
+  onDeleteSession: (session: Session) => Promise<boolean>
+  shareEnabled: Accessor<boolean>
   onSetHoverTarget: (element: HTMLElement) => void
   onSetThumbTrack: (element: HTMLDivElement) => void
   onSetContent: (element: HTMLDivElement) => void
@@ -417,65 +427,198 @@ function HomeSessionGroupHeader(props: {
 function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord }) {
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const showProjectName = () => props.showProjectName() && props.record.projectName
+  const shareUrl = createMemo(() => props.record.session.share?.url)
+  const [state, setState] = createStore({
+    menuOpen: false,
+    editing: false,
+    renaming: false,
+    pendingRename: false,
+    pendingShare: false,
+    draft: "",
+    shareOpen: false,
+    sharing: false,
+    unsharing: false,
+  })
+  const dialog = useDialog()
+  const language = useLanguage()
+  let menuTrigger: HTMLButtonElement | undefined
+  let titleInput: HTMLInputElement | undefined
+
+  function rename() {
+    setState("editing", true)
+    setState("draft", props.record.session.title ?? "")
+    requestAnimationFrame(() => {
+      titleInput?.focus()
+      titleInput?.select()
+    })
+  }
+
+  function saveRename() {
+    if (state.renaming || !state.editing) return
+    const next = state.draft.trim()
+    setState("editing", false)
+    if (!next || next === props.record.session.title) return
+    setState("renaming", true)
+    void props.onRenameSession(props.record.session, next).finally(() => setState("renaming", false))
+  }
 
   return (
     <div
       class="group/session relative flex h-10 min-w-0 items-center rounded-[6px]"
       classList={{ group: !!showProjectName() }}
     >
-      <button
-        type="button"
+      <div
         data-component="home-session-row"
         class={`
-          flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center gap-2 rounded-[6px] border-0
-          bg-transparent py-3 pl-3 pr-10 text-left text-v2-text-text-muted [font-weight:530]
+          flex h-10 min-w-0 w-full flex-1 shrink-0 items-center gap-2 rounded-[6px] py-3 pl-3 pr-10
+          text-left text-v2-text-text-muted [font-weight:530]
           transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
-          hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
         `}
-        onMouseDown={(event) => {
-          if (event.button === 1) event.preventDefault()
-        }}
-        onClick={(event) => props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })}
-        onAuxClick={(event) => {
-          if (!isBackgroundOpen(event)) return
-          event.preventDefault()
-          props.onOpenSession(props.record.session, { background: true })
-        }}
       >
-        <HomeSessionLeadingController
-          server={props.server}
-          isOpenTab={props.isOpenTab}
-          record={props.record}
-          revealProjectOnHover={!!showProjectName()}
-        />
-        <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
-        <Show when={showProjectName()}>
-          <HomeSessionProjectName name={props.record.projectName} />
-        </Show>
-      </button>
-      <Show when={SHOW_HOME_SESSION_ARCHIVE}>
-        <div
-          class={`
-            hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1
-            group-hover/session:opacity-100 focus-within:opacity-100
-          `}
+        <Show
+          when={state.editing}
+          fallback={
+            <button
+              type="button"
+              class="flex min-w-0 flex-1 items-center gap-2 rounded-[6px] text-left hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+              onMouseDown={(event) => {
+                if (event.button === 1) event.preventDefault()
+              }}
+              onClick={(event) => props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })}
+              onAuxClick={(event) => {
+                if (!isBackgroundOpen(event)) return
+                event.preventDefault()
+                props.onOpenSession(props.record.session, { background: true })
+              }}
+            >
+              <HomeSessionLeadingController
+                server={props.server}
+                isOpenTab={props.isOpenTab}
+                record={props.record}
+                revealProjectOnHover={!!showProjectName()}
+              />
+              <HomeSessionTitle title={title()} showProjectName={!!showProjectName()} />
+              <Show when={showProjectName()}>
+                <HomeSessionProjectName name={props.record.projectName} />
+              </Show>
+            </button>
+          }
         >
-          <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
-            <IconButtonV2
-              data-action="home-session-archive"
+          <input
+            ref={titleInput}
+            value={state.draft}
+            aria-label={language.t("common.rename")}
+            class="min-w-0 flex-1 bg-transparent text-[13px] leading-4 text-v2-text-text-base outline-none"
+            onInput={(event) => setState("draft", event.currentTarget.value)}
+            onKeyDown={(event) => {
+              event.stopPropagation()
+              if (event.key === "Enter") {
+                event.preventDefault()
+                saveRename()
+              }
+              if (event.key === "Escape") {
+                event.preventDefault()
+                setState("editing", false)
+              }
+            }}
+            onBlur={saveRename}
+          />
+        </Show>
+      </div>
+      <div
+        class={`
+          hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1
+          group-hover/session:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100
+        `}
+        data-menu={state.menuOpen || state.shareOpen}
+      >
+        <SessionActionMenu
+          trigger={
+            <MenuV2.Trigger
+              as={IconButtonV2}
+              data-action="home-session-menu"
               variant="ghost-muted"
               size="large"
-              icon={<IconV2 name="archive" />}
-              aria-label={props.language.t("common.archive")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void props.onArchiveSession(props.record.session)
+              icon={<IconV2 name="outline-dots" />}
+              aria-label={language.t("common.moreOptions")}
+              aria-expanded={state.menuOpen || state.shareOpen}
+              ref={(element: HTMLButtonElement) => {
+                menuTrigger = element
               }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
             />
-          </TooltipV2>
-        </div>
-      </Show>
+          }
+          open={state.menuOpen}
+          onOpenChange={(open) => setState("menuOpen", open)}
+          onCloseAutoFocus={() => {
+            if (state.pendingRename) {
+              setState("pendingRename", false)
+              rename()
+              return true
+            }
+            if (!state.pendingShare) return false
+            requestAnimationFrame(() => {
+              setState("shareOpen", true)
+              setState("pendingShare", false)
+            })
+            return true
+          }}
+          shareEnabled={props.shareEnabled()}
+          onRename={() => {
+            setState("pendingRename", true)
+            setState("menuOpen", false)
+          }}
+          onShare={() => {
+            setState("pendingShare", true)
+            setState("menuOpen", false)
+          }}
+          onExport={() => props.onExportSession(props.record.session)}
+          onArchive={() => props.onArchiveSession(props.record.session)}
+          onDelete={() =>
+            dialog.show(() => (
+              <SessionDeleteDialog
+                name={sessionTitle(props.record.session.title) ?? language.t("command.session.new")}
+                onDelete={() => props.onDeleteSession(props.record.session)}
+              />
+            ))
+          }
+        />
+        <SessionSharePopover
+          open={state.shareOpen}
+          anchor={() => menuTrigger}
+          url={shareUrl()}
+          publishing={state.sharing}
+          unpublishing={state.unsharing}
+          onOpenChange={(open) => setState("shareOpen", open)}
+          onPublish={() => {
+            setState("sharing", true)
+            void props
+              .onShareSession(props.record.session)
+              .catch(() => {})
+              .finally(() => {
+                setState("sharing", false)
+              })
+          }}
+          onUnpublish={() => {
+            setState("unsharing", true)
+            void props
+              .onUnshareSession(props.record.session)
+              .catch(() => {})
+              .finally(() => {
+                setState("unsharing", false)
+              })
+          }}
+          onCopy={() => {
+            const url = shareUrl()
+            if (url) void navigator.clipboard.writeText(url)
+          }}
+          onView={() => {
+            const url = shareUrl()
+            if (url) window.open(url, "_blank", "noopener,noreferrer")
+          }}
+        />
+      </div>
     </div>
   )
 }

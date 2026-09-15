@@ -180,6 +180,8 @@ describe("Home V2 session index", () => {
     cache.remove("a")
 
     expect(queryClient.getQueryData(cache.indexKey)).toBeUndefined()
-    expect(cache.sessions({ sessions, eventSequence: 0 }, undefined).map((item) => item.id)).toEqual(["b"])
+    expect(cache.sessions({ sessions, eventSequence: 0 }, queryClient.getQueryData(cache.eventsKey)).map((item) => item.id)).toEqual([
+      "b",
+    ])
   })
 })
