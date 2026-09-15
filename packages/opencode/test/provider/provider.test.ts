@@ -1200,6 +1200,29 @@ it.instance("ModelNotFoundError suggests catalog models for unloaded providers",
   }),
 )
 
+it.instance("ModelNotFoundError does not suggest the rejected catalog model", () =>
+  Effect.gen(function* () {
+    yield* remove("OPENCODE_API_KEY")
+    const error = yield* Provider.use
+      .getModel(ProviderV2.ID.opencode, ModelV2.ID.make("claude-haiku-4-5"))
+      .pipe(Effect.flip)
+    if (!Provider.ModelNotFoundError.isInstance(error)) throw error
+    expect(error.suggestions ?? []).not.toContain("claude-haiku-4-5")
+  }),
+)
+
+it.instance(
+  "ModelNotFoundError does not suggest the rejected model for a disabled provider",
+  Effect.gen(function* () {
+    const error = yield* Provider.use
+      .getModel(ProviderV2.ID.anthropic, ModelV2.ID.make("claude-sonnet-4-6"))
+      .pipe(Effect.flip)
+    if (!Provider.ModelNotFoundError.isInstance(error)) throw error
+    expect(error.suggestions ?? []).not.toContain("claude-sonnet-4-6")
+  }),
+  { config: { disabled_providers: ["anthropic"] } },
+)
+
 it.instance("getProvider returns undefined for nonexistent provider", () =>
   Effect.gen(function* () {
     const provider = yield* Provider.Service.use((svc) => svc.getProvider(ProviderV2.ID.make("nonexistent")))
