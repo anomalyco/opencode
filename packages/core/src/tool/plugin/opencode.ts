@@ -97,7 +97,7 @@ export const Plugin = {
         draft.add({
           name: "models",
           description:
-            'List the models available to you. Reference one as "provider/model", adding "#variant" from its variants when needed, for example "anthropic/claude-sonnet-4-5" or "openai/gpt-5#high". Pass the reference anywhere a model is accepted, such as the subagent tool.',
+            'List the models available to you. Reference one as "provider/model", or "provider/model#variant" using an entry from its variants. Pass the reference anywhere a model is accepted, such as the subagent tool.',
           input: ModelsInput,
           output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },
