@@ -228,7 +228,17 @@ const layer = Layer.effect(
         }),
       )
       return JSON.parse(text) as Record<string, Provider>
-    }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
+      // Bootstrap must not die when the catalog is unreachable (no cache yet and
+      // models.dev times out or is dropped — restricted networks, corporate VPNs):
+      // serve an empty catalog like OPENCODE_DISABLE_MODELS_FETCH and let the
+      // background refresh recover it. Dying here takes the whole server down.
+    }).pipe(
+      Effect.withSpan("ModelsDev.populate"),
+      Effect.tapCause((cause) =>
+        Effect.logError("Failed to fetch models.dev, continuing with an empty catalog", { cause }),
+      ),
+      Effect.catchCause(() => Effect.succeed({} as Record<string, Provider>)),
+    )
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
 
