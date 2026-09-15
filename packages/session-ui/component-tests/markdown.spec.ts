@@ -108,6 +108,38 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
   expect(result.afterInvalid).toBe(result.before)
 })
 
+story("recovers sequence message semicolons without changing valid Mermaid syntax", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { renderMermaidSvg } = await import(fixture)
+    const sources = [
+      "sequenceDiagram\nPlugin->>Plugin: Check permissions; create pending request",
+      "sequenceDiagram\nA->>+B: Check #quot;input#quot;; create request;\nB-->>-A: Return #59;; done",
+      "sequenceDiagram; A->>B: First; B-->>A: Second",
+      "sequenceDiagram\nA->>B: Already escaped #59; semicolon",
+      "sequenceDiagram\nA->>B: Check; create request\nnot valid syntax",
+      "flowchart LR; A[First] --> B[Second]",
+      "flowchart LR\nA[First; second",
+    ]
+    return Promise.all(
+      sources.map(async (source) => {
+        const svg = await renderMermaidSvg(source)
+        if (!svg) return
+        const document = new DOMParser().parseFromString(svg, "image/svg+xml")
+        return Array.from(document.querySelectorAll(".messageText, .nodeLabel")).map((node) => node.textContent)
+      }),
+    )
+  }, fixture)
+  expect(result).toEqual([
+    ["Check permissions; create pending request"],
+    ['Check "input"; create request', "Return ;; done"],
+    ["First", "Second"],
+    ["Already escaped ; semicolon"],
+    undefined,
+    ["First", "Second"],
+    undefined,
+  ])
+})
+
 story("mounts cached completed Markdown with sanitized HTML and decorations", async ({ page }) => {
   await page.evaluate(
     async ({ fixture, text }) => {
@@ -331,11 +363,18 @@ story("keeps a reopened cached answer recent under cache pressure", async ({ pag
 story("renders cached Mermaid blocks and falls back to code for invalid diagrams", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
-    await mountMarkdown({ text: "```mermaid\nflowchart LR\n A[Start] --> B[End]\n```", cached: true })
+    await mountMarkdown({
+      text: "```mermaid\nsequenceDiagram\nPlugin->>Plugin: Check permissions; create pending request\n```",
+      cached: true,
+    })
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
   const markdown = harness.locator('[data-component="markdown"]')
   await expect(markdown.locator('[data-component="markdown-mermaid"] > svg')).toBeVisible()
+  await expect(markdown.locator(".messageText")).toHaveText("Check permissions; create pending request")
+  await expect(markdown.locator("pre code")).toHaveText(
+    "sequenceDiagram\nPlugin->>Plugin: Check permissions; create pending request",
+  )
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown).toHaveCount(0)
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
