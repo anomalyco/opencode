@@ -97,6 +97,26 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+function isMistral(model: Provider.Model) {
+  const id = model.api.id.toLowerCase()
+  return (
+    model.providerID === "mistral" ||
+    ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => id.includes(family))
+  )
+}
+
+function mistralBridge(
+  model: Provider.Model,
+  previous: ModelMessage | undefined,
+  next: ModelMessage | undefined,
+): ModelMessage | undefined {
+  if (!isMistral(model) || previous?.role !== "tool" || next?.role !== "user") return
+  return {
+    role: "assistant",
+    content: [{ type: "text", text: "Done." }],
+  }
+}
+
 // TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
@@ -250,11 +270,7 @@ function normalizeMessages(
     })
   }
 
-  const modelID = model.api.id.toLowerCase()
-  if (
-    model.providerID === "mistral" ||
-    ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
-  ) {
+  if (isMistral(model)) {
     const scrub = (id: string) => {
       return id
         .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
@@ -285,17 +301,8 @@ function normalizeMessages(
       result.push(msg)
 
       // Fix message sequence: tool messages cannot be followed by user messages
-      if (msg.role === "tool" && nextMsg?.role === "user") {
-        result.push({
-          role: "assistant",
-          content: [
-            {
-              type: "text",
-              text: "Done.",
-            },
-          ],
-        })
-      }
+      const bridge = mistralBridge(model, msg, nextMsg)
+      if (bridge) result.push(bridge)
     }
     return result
   }
@@ -462,9 +469,18 @@ function mapProviderOptions(
   })
 }
 
-export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+export type MessageSuffix = readonly ModelMessage[]
+
+export function message(
+  msgs: ModelMessage[],
+  model: Provider.Model,
+  options: Record<string, unknown>,
+  suffix?: MessageSuffix,
+) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  const tail = suffix?.length ? normalizeMessages(unsupportedParts([...suffix], model), model, options) : []
+  const bridge = mistralBridge(model, msgs.at(-1), tail[0])
   const usesAnthropicAutomaticCaching =
     options.cacheControl !== undefined &&
     (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic")
@@ -482,6 +498,7 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   ) {
     msgs = applyCaching(msgs, model)
   }
+  if (bridge || tail.length) msgs = [...msgs, ...(bridge ? [bridge] : []), ...tail]
 
   // Remap providerOptions keys from stored providerID to expected SDK key
   const key = sdkKey(model.api.npm)

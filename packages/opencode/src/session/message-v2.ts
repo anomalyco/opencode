@@ -128,13 +128,40 @@ function providerMeta(metadata: Record<string, any> | undefined) {
   return Object.keys(rest).length > 0 ? rest : undefined
 }
 
-export const toModelMessagesEffect = Effect.fnUntraced(function* (
+export function appendedTailCount(before: readonly string[], after: readonly WithParts[]): number {
+  const anchor = before.at(-1)
+  if (!anchor) return 0
+  if (new Set(before).size !== before.length) return 0
+
+  const ids = after.map((message) => message.info.id)
+  if (new Set(ids).size !== ids.length) return 0
+  const anchorIndexes = ids.flatMap((id, index) => (id === anchor ? [index] : []))
+  if (anchorIndexes.length !== 1) return 0
+
+  const anchorIndex = anchorIndexes[0]!
+  const rank = new Map(before.map((id, index) => [id, index]))
+  const surviving = ids.slice(0, anchorIndex + 1).flatMap((id) => (rank.has(id) ? [rank.get(id)!] : []))
+  if (surviving.some((index, offset) => offset > 0 && index <= surviving[offset - 1]!)) return 0
+
+  const prior = new Set(before)
+  const suffix = ids.slice(anchorIndex + 1)
+  if (suffix.some((id) => prior.has(id))) return 0
+  return suffix.length
+}
+
+export const toModelMessagesSplitEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number; requestOnlyTailCount?: number },
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
+  const requestOnlyStart = input.length - Math.min(Math.max(options?.requestOnlyTailCount ?? 0, 0), input.length)
+  const requestOnly = new WeakSet<UIMessage>()
+  const emit = (message: UIMessage, sourceIndex: number) => {
+    result.push(message)
+    if (sourceIndex >= requestOnlyStart) requestOnly.add(message)
+  }
   // Track media from tool results that need to be injected as user messages
   // for providers that don't support that media type in tool results.
   //
@@ -192,7 +219,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     return { type: "json", value: output as never }
   }
 
-  for (const msg of input) {
+  for (const [sourceIndex, msg] of input.entries()) {
     if (msg.parts.length === 0) continue
 
     if (msg.info.role === "user") {
@@ -238,7 +265,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         }
       }
-      if (userMessage.parts.length > 0) result.push(userMessage)
+      if (userMessage.parts.length > 0) emit(userMessage, sourceIndex)
     }
 
     if (msg.info.role === "assistant") {
@@ -376,26 +403,29 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         }
       }
       if (assistantMessage.parts.length > 0) {
-        result.push(assistantMessage)
+        emit(assistantMessage, sourceIndex)
         // Inject pending media as a user message for providers that don't support
         // media (images, PDFs) in tool results
         if (media.length > 0) {
-          result.push({
-            id: MessageID.ascending(),
-            role: "user",
-            parts: [
-              {
-                type: "text" as const,
-                text: SYNTHETIC_ATTACHMENT_PROMPT,
-              },
-              ...media.map((attachment) => ({
-                type: "file" as const,
-                url: attachment.url,
-                mediaType: attachment.mime,
-                filename: attachment.filename,
-              })),
-            ],
-          })
+          emit(
+            {
+              id: MessageID.ascending(),
+              role: "user",
+              parts: [
+                {
+                  type: "text" as const,
+                  text: SYNTHETIC_ATTACHMENT_PROMPT,
+                },
+                ...media.map((attachment) => ({
+                  type: "file" as const,
+                  url: attachment.url,
+                  mediaType: attachment.mime,
+                  filename: attachment.filename,
+                })),
+              ],
+            },
+            sourceIndex,
+          )
         }
       }
     }
@@ -403,15 +433,46 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 
   const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
-  return yield* Effect.promise(() =>
-    convertToModelMessages(
-      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
-      {
+  const convert = (messages: UIMessage[]) =>
+    Effect.promise(() =>
+      convertToModelMessages(messages, {
         //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
         tools,
-      },
-    ),
-  )
+      }),
+    )
+
+  const filtered = result.filter((msg) => msg.parts.some((part) => part.type !== "step-start"))
+  const split = filtered.findIndex((message) => requestOnly.has(message))
+  if (split < 0 || !filtered.slice(split).every((message) => requestOnly.has(message))) {
+    return { messages: yield* convert(filtered), tail: [] }
+  }
+
+  // The AI SDK lowers ModelMessage into a provider prompt before middleware runs. The suffix joins
+  // inside that middleware, so only text (plus the step boundary that converts into text messages)
+  // is already in the same shape on both sides of that lowering. Keep richer plugin appends in the
+  // main array rather than risk changing files, tool results, or other structured content in flight.
+  const tail = filtered.slice(split)
+  if (
+    !tail.every((message) =>
+      message.parts.every((part) => part.type === "step-start" || (part.type === "text" && part.text !== "")),
+    )
+  ) {
+    return { messages: yield* convert(filtered), tail: [] }
+  }
+
+  return {
+    messages: yield* convert(filtered.slice(0, split)),
+    tail: yield* convert(tail),
+  }
+})
+
+export const toModelMessagesEffect = Effect.fnUntraced(function* (
+  input: WithParts[],
+  model: Provider.Model,
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+) {
+  const result = yield* toModelMessagesSplitEffect(input, model, options)
+  return result.messages
 })
 
 export function toModelMessages(
