@@ -94,6 +94,8 @@ const layer = Layer.effectDiscard(
               })
               const target = path.resolve(location.directory, input.path ?? ".")
               const info = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              if (!info)
+                return yield* new ToolFailure({ message: `Search path not found: ${input.path ?? "."}` })
               return yield* ripgrep
                 .grep({
                   cwd: info?.type === "Directory" ? target : path.dirname(target),
@@ -123,7 +125,11 @@ const layer = Layer.effectDiscard(
                     ),
                   ),
                 )
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to grep for ${input.pattern}` }))),
+            }).pipe(
+              Effect.mapError((error) =>
+                error instanceof ToolFailure ? error : new ToolFailure({ message: `Unable to grep for ${input.pattern}` }),
+              ),
+            ),
         }),
       })
       .pipe(Effect.orDie)
