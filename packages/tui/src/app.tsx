@@ -65,7 +65,6 @@ import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogPair } from "./component/dialog-pair"
 import { DialogThemeList } from "./component/dialog-theme-list"
-import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogOpen, DialogOpenKey, moveOpenSession } from "./component/dialog-open"
@@ -1080,17 +1079,19 @@ function App() {
         category: "System",
       },
       {
-        name: "help.show",
-        title: "Help",
-        slash: { name: "help" },
+        name: "docs.open",
+        title: "Open docs",
+        slash: { name: "docs", aliases: ["help"] },
         run: () => {
-          dialog.replace(() => <DialogHelp />)
+          open("https://opencode.ai/docs").catch(() => {})
+          dialog.clear()
         },
         category: "System",
       },
       {
-        name: "docs.open",
-        title: "Open docs",
+        name: "help.show",
+        title: "Help",
+        palette: undefined,
         run: () => {
           open("https://opencode.ai/docs").catch(() => {})
           dialog.clear()
