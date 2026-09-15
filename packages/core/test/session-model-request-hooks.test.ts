@@ -80,7 +80,7 @@ describe("SessionModelRequest HTTP hooks", () => {
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 
-  it.effect("offers the WebSocket executor alongside HTTP hooks and routes the handshake hook", () =>
+  it.effect("offers the WebSocket executor alongside HTTP hooks and routes the WebSocket hooks", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
       const seen: string[] = []
@@ -92,13 +92,31 @@ describe("SessionModelRequest HTTP hooks", () => {
           delete event.headers["api-key"]
         }),
       )
+      yield* hooks.register("session", "experimental.ws.send", (event) =>
+        Effect.sync(() => {
+          seen.push(`send:${event.kind}:${event.mode}:${event.frame}`)
+          event.frame = `${event.frame}+plugin`
+        }),
+      )
+      yield* hooks.register("session", "experimental.ws.receive", (event) =>
+        Effect.sync(() => {
+          seen.push(`receive:${event.kind}:${event.frame}`)
+          event.frame = event.frame.toUpperCase()
+        }),
+      )
       const bound: Array<{ url: string; headers: Record<string, string> }> = []
+      const frames: string[] = []
       const websocketTransport = SessionModelTransport.Service.of({
-        bind: (_sessionID, handshake) => ({
+        bind: (_sessionID, interceptor) => ({
           execute: () =>
             Effect.gen(function* () {
-              if (!handshake) throw new Error("Expected a handshake interceptor")
-              bound.push(yield* handshake({ url: "wss://example.test/v1/responses", headers: { "api-key": "k" } }))
+              if (!interceptor?.handshake || !interceptor.send || !interceptor.receive)
+                throw new Error("Expected a full WebSocket interceptor")
+              bound.push(
+                yield* interceptor.handshake({ url: "wss://example.test/v1/responses", headers: { "api-key": "k" } }),
+              )
+              frames.push(yield* interceptor.send("create", "incremental"))
+              frames.push(yield* interceptor.receive("created"))
               return { frames: Stream.empty, complete: Effect.void }
             }),
         }),
@@ -127,7 +145,12 @@ describe("SessionModelRequest HTTP hooks", () => {
       expect(prepared.options.webSocket).toBeDefined()
       yield* prepared.options.webSocket!.execute({} as never)
       expect(bound).toEqual([{ url: "wss://example.test/v1/responses", headers: { authorization: "Bearer minted" } }])
-      expect(seen).toEqual(["handshake:primary:wss://example.test/v1/responses"])
+      expect(frames).toEqual(["create+plugin", "CREATED"])
+      expect(seen).toEqual([
+        "handshake:primary:wss://example.test/v1/responses",
+        "send:primary:incremental:create",
+        "receive:primary:created",
+      ])
     }),
   )
 })

@@ -1277,6 +1277,27 @@ effect: (ctx) =>
   }),
 ```
 
+`experimental.ws.send` and `experimental.ws.receive` expose the frames themselves: `send` runs after the provider
+driver builds an outbound frame (`mode` is `"full"` or `"incremental"`), `receive` runs on each inbound frame before
+the driver observes it. Whatever `frame` holds when the hook returns is what crosses the wire or reaches the driver;
+OpenCode does not validate it.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.send",
+      (event) =>
+        Effect.sync(() => {
+          const body = JSON.parse(event.frame)
+          if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+          event.frame = JSON.stringify(body)
+        }),
+      { providerID: "openai" },
+    )
+  }),
+```
+
 Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
 classifies the failure and proposes its policy, but before any retry is scheduled. It does not expose how OpenCode
 internally performs the next attempt.
@@ -1317,6 +1338,9 @@ interface SessionHooks {
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
 }
 

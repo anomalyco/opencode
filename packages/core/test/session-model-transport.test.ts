@@ -178,12 +178,13 @@ describe("SessionModelTransport", () => {
       fixture.connector,
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
-        const executor = transport.bind(session, (connect) =>
-          Effect.succeed({
-            url: connect.url,
-            headers: { ...connect.headers, authorization: `Bearer ${tokens.shift()}` },
-          }),
-        )
+        const executor = transport.bind(session, {
+          handshake: (connect) =>
+            Effect.succeed({
+              url: connect.url,
+              headers: { ...connect.headers, authorization: `Bearer ${tokens.shift()}` },
+            }),
+        })
         yield* collect(executor, exchange("first", { headers: { "api-key": "k" } }))
         yield* collect(executor, exchange("second", { headers: { "api-key": "k" } }))
         yield* collect(executor, exchange("third", { headers: { "api-key": "k" } }))
@@ -192,6 +193,36 @@ describe("SessionModelTransport", () => {
         expect(fixture.connections).toHaveLength(2)
         expect(fixture.connections.map((item) => item.headers.authorization)).toEqual(["Bearer one", "Bearer two"])
         expect(fixture.connections.map((item) => item.sent)).toEqual([["first", "second"], ["third"]])
+      }),
+    )
+  })
+
+  test("sends the frame the send tap returns and observes the frame the receive tap returns", async () => {
+    const fixture = automatic()
+    const seen: Array<{ tap: "send" | "receive"; frame: string; mode?: string }> = []
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session, {
+          send: (frame, mode) => {
+            seen.push({ tap: "send", frame, mode })
+            return Effect.succeed(`${frame}:rewritten`)
+          },
+          receive: (frame) => {
+            seen.push({ tap: "receive", frame })
+            return Effect.succeed(`${frame}:observed`)
+          },
+        })
+        const frames = yield* collect(executor, exchange("first"))
+
+        // The wire carries the rewritten outbound frame; the driver sees the rewritten inbound frame.
+        expect(fixture.connections.map((item) => item.sent)).toEqual([["first:rewritten"]])
+        expect(frames).toEqual(["completed:first:rewritten:observed"])
+        expect(seen).toEqual([
+          { tap: "send", frame: "first", mode: "full" },
+          { tap: "receive", frame: "completed:first:rewritten" },
+        ])
       }),
     )
   })
