@@ -324,6 +324,44 @@ describe("MCP OAuth", () => {
     expect(probes.some((probe) => probe.includes("codemode"))).toBe(false)
   })
 
+  test("keeps the configured URL as the resource when metadata echoes the dialed query", async () => {
+    const tokenRequests: URLSearchParams[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+          })
+        if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
+          return Response.json({ resource: `${url.origin}/mcp${url.search}`, authorization_servers: [url.origin] })
+        if (request.method === "POST" && url.pathname === "/token") {
+          tokenRequests.push(new URLSearchParams(await request.text()))
+          return Response.json({ access_token: "next", token_type: "Bearer" })
+        }
+        return new Response(null, { status: 404 })
+      },
+    })
+    const url = `${server.url.origin}/mcp`
+    const oauthProvider = await connectProvider(
+      remote(url),
+      memoryCredentials([credential({ access: "expired", refresh: "refresh", url })]),
+    )
+
+    // The transport dials with ?codemode=false and follows the 401 challenge to metadata that echoes it.
+    await auth(oauthProvider, {
+      serverUrl: `${url}?codemode=false`,
+      resourceMetadataUrl: new URL(`${server.url.origin}/.well-known/oauth-protected-resource/mcp?codemode=false`),
+    }).finally(() => server.stop(true))
+
+    expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
+    expect(tokenRequests[0]?.get("resource")).toBe(url)
+  })
+
   test("finds resource metadata through the 401 header when the well-known path is not served", async () => {
     const server = Bun.serve({
       port: 0,
