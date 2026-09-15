@@ -36,11 +36,15 @@ if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
   throw new Error(getRootNotFoundError())
 }
 
-const clearAuthToken = () => {
+const sanitizeLocation = () => {
   const params = new URLSearchParams(location.search)
-  if (!params.has("auth_token")) return
-  params.delete("auth_token")
-  history.replaceState(null, "", location.pathname + (params.size ? `?${params}` : "") + location.hash)
+  const hasToken = params.has("auth_token")
+  const hasCredentials = Boolean(location.username || location.password)
+  if (!hasToken && !hasCredentials) return
+  if (hasToken) params.delete("auth_token")
+  const query = params.size ? `?${params}` : ""
+  const cleanUrl = `${location.protocol}//${location.host}${location.pathname}${query}${location.hash}`
+  history.replaceState(null, "", cleanUrl)
 }
 
 const web = createWebPlatform(pkg.version)
@@ -72,8 +76,9 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
   // Lazy chunks can import the entry chunk back under a distinct URL, so claim the root before async startup.
   root.dataset.opencodeMounted = ""
   void loadInitialLocale().then((locale) => {
-    const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
-    clearAuthToken()
+    const token = new URLSearchParams(location.search).get("auth_token")
+    const auth = authFromToken(token) ?? (location.password ? { password: location.password } : undefined)
+    sanitizeLocation()
     const standalone = isStandalone()
     root.dataset.standalone = String(standalone)
     if (standalone) restorePwaRoute()
