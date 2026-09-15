@@ -47,6 +47,10 @@ export function tool<Args extends z.ZodRawShape>(input: {
   args: Args
   execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<ToolResult>
 }) {
+  const invalid = Object.entries(input.args).find(
+    (entry) => typeof entry[1] !== "object" || entry[1] === null || !("_zod" in entry[1]),
+  )
+  if (invalid) throw new TypeError(`Invalid tool argument "${invalid[0]}": args must contain Zod schemas`)
   return input
 }
 tool.schema = z
