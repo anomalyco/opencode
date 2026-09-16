@@ -7,6 +7,7 @@ import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions }
 import { scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { assertAttachmentBudget, createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
+import { checkDirectories } from "./check-directories"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
 
 export type Interface = ReturnType<typeof make>
@@ -92,6 +93,8 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
       shell.showItemInFolder(target)
       return true
     }),
+    checkDirectories: (targets: ReadonlyArray<string>) =>
+      checkDirectories(targets).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
     readClipboardImage() {
       const image = clipboard.readImage()
       if (image.isEmpty()) return null

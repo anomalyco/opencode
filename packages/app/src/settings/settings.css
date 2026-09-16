@@ -960,43 +960,6 @@
   font-variation-settings: "slnt" 0;
 }
 
-.settings-keybind-button {
-  box-sizing: border-box;
-  flex-shrink: 0;
-  padding: 6px 8px;
-  margin: -6px -8px;
-  border: 0;
-  border-radius: 2px;
-  background: transparent;
-  cursor: pointer;
-  font-style: normal;
-  font-weight: 530;
-  font-size: 11px;
-  line-height: 1;
-  letter-spacing: 0.05px;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings:
-    "tnum" on,
-    "lnum" on;
-  font-variation-settings: "slnt" 0;
-  color: var(--v2-text-text-faint);
-}
-
-.settings-keybind-button:hover {
-  background-color: var(--v2-background-bg-layer-02);
-}
-
-.settings-keybind-button:focus-visible {
-  outline: 2px solid var(--v2-border-border-focus);
-  outline-offset: 2px;
-}
-
-.settings-keybind-button--active {
-  color: var(--v2-text-text-faint);
-  border-radius: 2px;
-  background-color: var(--v2-background-bg-layer-02);
-}
-
 .settings-shortcuts-status {
   display: flex;
   flex-direction: column;

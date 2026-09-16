@@ -5,7 +5,7 @@ for (const colorScheme of ["light", "dark"] as const) {
   test.describe(colorScheme, () => {
     test.use({ colorScheme, contextOptions: { reducedMotion: "reduce" } })
 
-    test("project card edges stay inside the settings scrollport", async ({ page }, info) => {
+    test("project list actions and edges stay inside the settings scrollport", async ({ page }, info) => {
       const projects = ["rebase", "dinocms", "opencode", "Playground"].map((name, index) => ({
         id: `project-${index}`,
         name,
@@ -40,18 +40,45 @@ for (const colorScheme of ["light", "dark"] as const) {
       const panel = settings.getByRole("tabpanel")
       await expect(panel.getByText("rebase", { exact: true })).toBeVisible()
       await expect(panel.getByText("Playground", { exact: true })).toBeVisible()
+      await expect(panel.getByRole("button", { name: "Add project", exact: true })).toBeVisible()
+      const list = panel.locator('[data-component="settings-list"]')
+      await expect(list).toHaveAttribute("data-variant", "catalog")
+      await expect(list).toHaveCSS("padding-left", "16px")
+      await expect(list).toHaveCSS("padding-right", "16px")
+      const projectButton = panel.getByRole("button", { name: "rebase", exact: true })
+      const projectRow = projectButton.locator("..")
+      const projectName = projectButton.getByText("rebase", { exact: true })
+      await expect(projectName).toHaveCSS("font-weight", "530")
+      await expect(projectName).toHaveCSS("line-height", "20px")
+      await expect(projectRow).toHaveCSS("padding-top", "16px")
+      await expect(projectRow).toHaveCSS("padding-bottom", "16px")
+      expect(
+        Math.abs(
+          (await projectButton.evaluate((element) => element.getBoundingClientRect().height)) -
+            (await projectRow.evaluate((element) => element.getBoundingClientRect().height)),
+        ),
+      ).toBeLessThanOrEqual(1)
+      const chevron = projectButton.locator('svg:has(use[href="#opencode-v2-icon-chevron-right"])')
+      await expect(chevron).toHaveCSS("opacity", "0")
+      await projectRow.hover()
+      await expect(chevron).toHaveCSS("opacity", "1")
+      const more = projectRow.getByRole("button", { name: "More options", exact: true })
+      await more.click()
+      const menu = page.getByRole("menu")
+      await expect(menu.getByRole("menuitem")).toHaveText(["New session", "Clear notifications", "Close"])
+      await expect(menu.getByRole("separator")).toHaveCount(1)
+      await panel.getByRole("heading", { name: "Projects", exact: true }).click()
+      await expect(menu).toBeHidden()
       await page.evaluate(() => document.fonts.ready)
 
       for (const width of [1280, 1050, 960, 720, 600]) {
         await page.setViewportSize({ width, height: 720 })
         await page.mouse.move(0, 0)
         await page.screenshot({ path: info.outputPath(`projects-${width}.png`), animations: "disabled" })
-        // Raised cards paint a half-pixel border outside their box. The scrollport
-        // must leave room for that border and the soft shadow on both sides.
+        // The catalog card and its rows stay fully inside every horizontal clip ancestor.
         await expect
           .poll(() =>
-            panel.getByText("rebase", { exact: true }).evaluate((label) => {
-              const row = label.parentElement!.parentElement!
+            projectRow.evaluate((row) => {
               const bounds = row.getBoundingClientRect()
               const clips = []
               for (let parent = row.parentElement; parent; parent = parent.parentElement) {
@@ -72,6 +99,11 @@ for (const colorScheme of ["light", "dark"] as const) {
       await expect(settings.getByRole("textbox", { name: "Project name", exact: true })).toHaveValue("rebase")
       await settings.getByRole("button", { name: "Back to projects", exact: true }).click()
       await expect(panel.getByText("rebase", { exact: true })).toBeVisible()
+
+      const secondProject = panel.getByRole("button", { name: "dinocms", exact: true })
+      await secondProject.locator("..").getByRole("button", { name: "More options", exact: true }).click()
+      await page.getByRole("menuitem", { name: "Close", exact: true }).click()
+      await expect(secondProject).toHaveCount(0)
 
       await page.setViewportSize({ width: 1280, height: 260 })
       await panel.getByText("rebase", { exact: true }).hover()

@@ -25,6 +25,7 @@ function fileApi(events: string[]) {
     resolveAppPath: async () => null,
     openPath: async () => undefined,
     revealPath: async () => false,
+    checkDirectories: async (paths: string[]) => paths,
     readClipboardImage: async () => null,
     writeClipboardText: async (text: string) => {
       events.push(`clipboard:${text}`)

@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode/ui/context"
-import { Accessor, createEffect, createMemo, createResource, createRoot, getOwner } from "solid-js"
+import { Accessor, batch, createEffect, createMemo, createResource, createRoot, getOwner } from "solid-js"
 import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
 import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
@@ -14,6 +14,7 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
 import { ModelState } from "./persistence"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { showToast } from "@/shell/notifications/toast"
 import { formatServerError } from "./errors"
 import { useSettings } from "@/settings/model"
@@ -109,6 +110,7 @@ function createServerController(
 ) {
   const language = useLanguage()
   const settings = useSettings()
+  const platform = usePlatform()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
   const source = createData({
@@ -165,6 +167,27 @@ function createServerController(
 
   const isLocal =
     (conn?.type === "sidecar" && conn.variant === "base") || (conn?.type === "http" && isLocalHost(conn.http.url))
+
+  // Only the desktop can stat a local server's project directories without a server round-trip.
+  // Each directory is checked once per app run; the list is tracked so persisted projects are
+  // checked after the store hydrates.
+  const checked = new Set<string>()
+  createEffect(() => {
+    if (!isLocal || !platform.checkDirectories) return
+    const directories = projects
+      .list()
+      .map((project) => project.worktree)
+      .filter((directory) => !checked.has(pathKey(directory)))
+    if (directories.length === 0) return
+    directories.forEach((directory) => checked.add(pathKey(directory)))
+    void platform
+      .checkDirectories(directories)
+      .then((available) => {
+        const keep = new Set(available.map(pathKey))
+        batch(() => directories.filter((directory) => !keep.has(pathKey(directory))).forEach(projects.remove))
+      })
+      .catch(() => undefined)
+  })
 
   return {
     data,

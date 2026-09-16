@@ -1,14 +1,25 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Menu } from "@opencode/ui/menu"
 import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
-import { displayName } from "@/shell/layout/helpers"
+import { displayName, errorMessage, homeProjectDirectories } from "@/shell/layout/helpers"
 import { ProjectIcon } from "@/shell/layout/project-icon"
 import type { LocalProject } from "@/shell/state/layout"
+import { useTabs } from "@/shell/tabs/tabs"
+import { usePlatform } from "@/runtime/platform/platform"
+import { useDirectoryPicker } from "@/workspaces/selection/picker"
+import { fileManagerApp } from "@/home/projects/file-manager"
+import { addProjects } from "@/home/projects/add"
+import { revealProject } from "@/home/projects/reveal"
+import { showToast } from "@/shell/notifications/toast"
 import { settingsProjects } from "../servers/inventory"
+import { SettingsList } from "../list"
 import "@/settings/settings.css"
 
 export const SettingsProjects: Component<{
@@ -19,9 +30,13 @@ export const SettingsProjects: Component<{
 }> = (props) => {
   const language = useLanguage()
   const global = useGlobal()
-  const [store, setStore] = createStore({ filter: "" })
+  const platform = usePlatform()
+  const tabs = useTabs()
+  const pickDirectory = useDirectoryPicker()
+  const [store, setStore] = createStore({ filter: "", menu: undefined as string | undefined })
   let search: HTMLInputElement | undefined
-  const projects = createMemo(() => settingsProjects(global.ensureServerCtx(props.server)))
+  const context = createMemo(() => global.ensureServerCtx(props.server))
+  const projects = createMemo(() => settingsProjects(context()))
   const searchable = createMemo(() => projects().length > 7)
   const filtered = createMemo(() => {
     const query = searchable() ? store.filter.trim().toLowerCase() : ""
@@ -43,6 +58,54 @@ export const SettingsProjects: Component<{
   createEffect(() => {
     if (!searchable()) setStore("filter", "")
   })
+  const addProject = () =>
+    pickDirectory({
+      server: props.server,
+      title: language.t("command.project.open"),
+      multiple: true,
+      onSelect: (result) => addProjects(context(), homeProjectDirectories(result)),
+    })
+  const newSession = (project: LocalProject) => {
+    context().projects.open(project.worktree)
+    context().projects.touch(project.worktree)
+    void tabs.newDraft({ server: ServerConnection.key(props.server), directory: project.worktree })
+  }
+  const canReveal = () =>
+    platform.platform === "desktop" && !!platform.revealPath && ServerConnection.local(props.server)
+  const reveal = (project: LocalProject) => {
+    if (!platform.revealPath || !canReveal()) return
+    void revealProject({
+      directory: project.worktree,
+      reveal: platform.revealPath,
+      remove: context().projects.remove,
+    })
+      .then((revealed) => {
+        if (revealed) return
+        showToast({
+          variant: "error",
+          title: language.t("home.project.missing.title"),
+          description: language.t("home.project.missing.description", { name: displayName(project) }),
+        })
+      })
+      .catch((cause: unknown) =>
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(cause, language.t("common.requestFailed")),
+        }),
+      )
+  }
+  const unseen = (project: LocalProject) =>
+    [project.worktree, ...(project.sandboxes ?? [])].reduce(
+      (total, directory) => total + context().notification.project.unseenCount(directory),
+      0,
+    )
+  const clearNotifications = (project: LocalProject) => {
+    const notification = context().notification
+    const directories = [project.worktree, ...(project.sandboxes ?? [])]
+    directories
+      .filter((directory) => notification.project.unseenCount(directory) > 0)
+      .forEach((directory) => notification.project.markViewed(directory))
+  }
 
   return (
     <>
@@ -52,6 +115,9 @@ export const SettingsProjects: Component<{
             <h2 class="settings-tab-title">{language.t("settings.projects.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.projects.description")}</span>
           </div>
+          <Button variant="ghost-muted" icon="plus" onClick={addProject}>
+            {language.t("home.project.add")}
+          </Button>
         </div>
         <Show when={searchable()}>
           <div class="settings-tab-search">
@@ -86,28 +152,65 @@ export const SettingsProjects: Component<{
             </div>
           }
         >
-          <div class="flex w-full flex-col gap-2">
+          <SettingsList variant="catalog">
             <For each={filtered()}>
               {(project) => (
-                <button
-                  type="button"
-                  aria-label={displayName(project)}
-                  class="group mx-px flex items-center justify-between gap-5 px-4 py-2.5 rounded-lg bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] transition-[background-color] hover:bg-v2-background-bg-layer-01 text-start"
-                  onClick={() => props.onOpenProject(project)}
-                >
-                  <span class="flex items-center gap-2.5 min-w-0 flex-1">
+                <div data-component="settings-row" class="group/project relative !gap-2">
+                  <button
+                    type="button"
+                    aria-label={displayName(project)}
+                    class="group/target -my-4 flex min-h-[52px] min-w-0 flex-1 items-center gap-2 rounded-[4px] bg-transparent py-4 text-start focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--v2-border-border-focus)]"
+                    onClick={() => props.onOpenProject(project)}
+                  >
                     <ProjectIcon project={project} class="shrink-0" />
-                    <bdi class="text-13-medium text-v2-text-text-base truncate">{displayName(project)}</bdi>
-                  </span>
-                  <Icon
-                    name="chevron-right"
-                    size="small"
-                    class="shrink-0 text-v2-icon-icon-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                  />
-                </button>
+                    <span class="flex min-w-0 items-center gap-1">
+                      <bdi class="truncate text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base">
+                        {displayName(project)}
+                      </bdi>
+                      <Icon
+                        name="chevron-right"
+                        size="small"
+                        class="shrink-0 text-v2-icon-icon-muted opacity-0 transition-opacity group-hover/project:opacity-100 group-focus-visible/target:opacity-100 rtl:rotate-180"
+                      />
+                    </span>
+                  </button>
+                  <Menu
+                    gutter={4}
+                    modal={false}
+                    placement="bottom-end"
+                    open={store.menu === project.worktree}
+                    onOpenChange={(open) => setStore("menu", open ? project.worktree : undefined)}
+                  >
+                    <Menu.Trigger
+                      as={IconButton}
+                      variant="ghost-muted"
+                      size="small"
+                      class="-my-0.5"
+                      icon={<Icon name="outline-dots" />}
+                      aria-label={language.t("common.moreOptions")}
+                    />
+                    <Menu.Portal>
+                      <Menu.Content>
+                        <Menu.Item onSelect={() => newSession(project)}>{language.t("command.session.new")}</Menu.Item>
+                        <Show when={canReveal()}>
+                          <Menu.Item onSelect={() => reveal(project)}>
+                            {language.t(fileManagerApp(platform.os ?? "unknown").actionLabel)}
+                          </Menu.Item>
+                        </Show>
+                        <Menu.Item disabled={unseen(project) === 0} onSelect={() => clearNotifications(project)}>
+                          {language.t("sidebar.project.clearNotifications")}
+                        </Menu.Item>
+                        <Menu.Separator />
+                        <Menu.Item onSelect={() => context().projects.close(project.worktree)}>
+                          {language.t("common.close")}
+                        </Menu.Item>
+                      </Menu.Content>
+                    </Menu.Portal>
+                  </Menu>
+                </div>
               )}
             </For>
-          </div>
+          </SettingsList>
         </Show>
       </div>
     </>

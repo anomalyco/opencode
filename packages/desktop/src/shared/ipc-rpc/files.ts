@@ -53,6 +53,10 @@ export const FilesRevealPath = Rpc.make("FilesRevealPath", {
   payload: { path: Schema.String },
   success: Schema.Boolean,
 })
+export const FilesCheckDirectories = Rpc.make("FilesCheckDirectories", {
+  payload: { paths: Schema.Array(Schema.String) },
+  success: Schema.Array(Schema.String),
+})
 export const FilesReadClipboardImage = Rpc.make("FilesReadClipboardImage", {
   success: Schema.NullOr(ClipboardImage),
 })
@@ -70,6 +74,7 @@ export const FileRpcs = RpcGroup.make(
   FilesOpenLocalFile,
   FilesOpenPath,
   FilesRevealPath,
+  FilesCheckDirectories,
   FilesReadClipboardImage,
   FilesWriteClipboardText,
 )
