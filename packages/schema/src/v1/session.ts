@@ -600,10 +600,9 @@ const events = {
   MessageUpdated: define({
     type: "message.updated",
     ...options,
-    durable: {
-      ...options.durable,
-      compact: "$.info.id",
-    },
+    // Not compacted: retained part snapshots project with a foreign key to
+    // their message row, so the message creation snapshot must survive
+    // compaction for replay to reconstruct the aggregate.
     schema: {
       sessionID: SessionID,
       info: Info,
@@ -623,6 +622,14 @@ const events = {
     durable: {
       ...options.durable,
       compact: "$.part.id",
+      // Streaming tool progress re-emits an identical part with only timing
+      // advanced. state.time.compacted is deliberately not ignored: it marks
+      // the part's history as compacted rather than a per-tick value.
+      // step-finish parts are exempt from compaction and dedupe in the event
+      // store: they carry cumulative cost/token accounting that the projector
+      // applies as a delta against the stored part, so their previous snapshot
+      // must survive.
+      dedupe: ["$.time", "$.part.state.time.start", "$.part.state.time.end", "$.part.state.metadata.time"],
     },
     schema: {
       sessionID: SessionID,

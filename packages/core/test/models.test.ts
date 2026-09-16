@@ -252,8 +252,14 @@ describe("ModelsDev Service", () => {
           const svc = yield* ModelsDev.Service
           yield* svc.refresh(true)
           // Flip the client flag between fetches; a module-load-time constant would not see this.
-          process.env["OPENCODE_CLIENT"] = "desktop"
-          yield* svc.refresh(true)
+          const client = process.env["OPENCODE_CLIENT"]
+          try {
+            process.env["OPENCODE_CLIENT"] = "desktop"
+            yield* svc.refresh(true)
+          } finally {
+            if (client === undefined) delete process.env["OPENCODE_CLIENT"]
+            else process.env["OPENCODE_CLIENT"] = client
+          }
         }),
       )
       const final = yield* Ref.get(state)

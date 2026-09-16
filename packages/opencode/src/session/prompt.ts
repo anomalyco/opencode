@@ -37,12 +37,13 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "@/tool/shell/id"
+import { outputReporter, OUTPUT_REPORT_INTERVAL_MS } from "@/tool/shell"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
+import { Cause, Effect, Exit, Latch, Layer, Option, Schedule, Scope, Context, Schema, Types } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
@@ -524,6 +525,13 @@ const layer = Layer.effect(
           const args = Shell.args(sh, input.command, cwd)
           let output = ""
           let aborted = false
+          const reportOutput = outputReporter((value) =>
+            Effect.suspend(() => {
+              if (part.state.status !== "running") return Effect.void
+              part.state.metadata = { output: value }
+              return sessions.updatePart(part).pipe(Effect.asVoid)
+            }),
+          )
 
           const finish = Effect.uninterruptible(
             Effect.gen(function* () {
@@ -564,13 +572,14 @@ const layer = Layer.effect(
                 forceKillAfter: "3 seconds",
               })
               const handle = yield* spawner.spawn(cmd)
+              yield* Effect.forkScoped(
+                Effect.repeat(reportOutput.flush, Schedule.spaced(OUTPUT_REPORT_INTERVAL_MS)),
+              )
               yield* Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
                 Effect.gen(function* () {
                   output += chunk
-                  if (part.state.status === "running") {
-                    part.state.metadata = { output }
-                    yield* sessions.updatePart(part)
-                  }
+                  if (part.state.status !== "running") return
+                  yield* reportOutput.push(output)
                 }),
               )
               yield* handle.exitCode

@@ -3,7 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt, inArray, lt, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -23,16 +23,50 @@ export type Unsubscribe = Effect.Effect<void>
  * like `$.sessionID` or `$.info.id`. Returns undefined if the path cannot be
  * resolved (the event then simply won't be compacted).
  */
-function compactKey(encoded: Record<string, unknown>, path: string): string | undefined {
+function compactKeyValue(encoded: Record<string, unknown>, path: string): string | undefined {
   if (!path.startsWith("$.")) return undefined
   let current: unknown = encoded
   for (const segment of path.slice(2).split(".")) {
-    if (current === null || typeof current !== "object") return undefined
-    current = (current as Record<string, unknown>)[segment]
+    if (typeof current !== "object" || current === null) return undefined
+    current = Reflect.get(current, segment)
   }
   return typeof current === "string" ? current : undefined
 }
 
+/**
+ * step-finish parts carry cumulative cost/token accounting: the projector
+ * subtracts the stored part's usage before applying the replacement, so their
+ * previous snapshot must survive. Exempt them from dedupe and compaction.
+ */
+const accountingPart = (encoded: Record<string, unknown>): boolean => {
+  const part = encoded.part
+  return typeof part === "object" && part !== null && Reflect.get(part, "type") === "step-finish"
+}
+
+/**
+ * Deep equality that treats the listed `$`-prefixed dot paths as equal. Used to
+ * recognize a snapshot whose only changes are volatile fields (streaming
+ * timings) as a duplicate of the previous stored snapshot.
+ */
+function sameSnapshot(previous: unknown, next: unknown, ignore: ReadonlyArray<string>): boolean {
+  const ignored = new Set(ignore)
+  const walk = (left: unknown, right: unknown, path: string): boolean => {
+    if (ignored.has(path)) return true
+    if (left === right) return true
+    if (Array.isArray(left) || Array.isArray(right)) {
+      if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false
+      // Dedupe paths cannot address array elements, so elements share the parent path.
+      return left.every((value, index) => walk(value, right[index], path))
+    }
+    if (left === null || right === null || typeof left !== "object" || typeof right !== "object") return false
+    const leftRecord = Object.entries(left)
+    const rightEntries = Object.entries(right)
+    if (leftRecord.length !== rightEntries.length) return false
+    const rightRecord = new Map(rightEntries)
+    return leftRecord.every(([key, value]) => rightRecord.has(key) && walk(value, rightRecord.get(key), `${path}.${key}`))
+  }
+  return walk(previous, next, "$")
+}
 export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
   db: Database.Interface["db"],
   aggregateID: string,
@@ -225,6 +259,7 @@ export const layerWith = (options?: LayerOptions) =>
           readonly aggregateID: string
           readonly ownerID?: string
           readonly strictOwner?: boolean
+          readonly allowGap?: boolean
         },
         commit?: (seq: number) => Effect.Effect<void>,
       ) {
@@ -266,6 +301,47 @@ export const layerWith = (options?: LayerOptions) =>
                             string,
                             unknown
                           >
+                          // Skip a live snapshot that repeats the stored one apart
+                          // from volatile fields. Replay inputs and local commit
+                          // hooks must always write, so they bypass this.
+                          // When the comparison runs it also locates the previous
+                          // stored snapshot for the entity; compaction reuses its
+                          // sequence instead of rescanning every stored snapshot.
+                          let supersededSeq: number | undefined
+                          let compared = false
+                          const accounting = accountingPart(encoded)
+                          const compactKey = durable.compact && !accounting ? compactKeyValue(encoded, durable.compact) : undefined
+                          if (!input && !commit && durable.dedupe?.length) {
+                            // Without a compact path the aggregate is the entity;
+                            // otherwise the snapshot only duplicates the stored one
+                            // for the same entity, not merely the same aggregate.
+                            if (durable.compact === undefined || compactKey !== undefined) {
+                              const previous = yield* db
+                                .select({ seq: EventTable.seq, data: EventTable.data })
+                                .from(EventTable)
+                                .where(
+                                  and(
+                                    eq(EventTable.aggregate_id, aggregateID),
+                                    eq(EventTable.type, versionedType(definition.type, durable.version)),
+                                    ...(compactKey === undefined
+                                      ? []
+                                      : [eq(EventTable.compact_key, compactKey)]),
+                                  ),
+                                )
+                                .orderBy(desc(EventTable.seq))
+                                .limit(1)
+                                .get()
+                                .pipe(Effect.orDie)
+                              compared = true
+                              // Skipping is only safe when the stored snapshot is
+                              // also the aggregate's latest event: an intervening
+                              // event (a part or message removal) may have changed
+                              // the projected state, so the re-sent snapshot must
+                              // be written to restore it.
+                              if (previous && previous.seq === latest && sameSnapshot(previous.data, encoded, durable.dedupe)) return
+                              supersededSeq = previous?.seq
+                            }
+                          }
                           if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
                             yield* Effect.die(
                               new InvalidDurableEventError({
@@ -299,9 +375,8 @@ export const layerWith = (options?: LayerOptions) =>
                             if (!stored && durable.compact) {
                               // Tolerate a row only if a newer snapshot of the same compact entity
                               // superseded it; a bare gap could equally be a lost or fabricated row.
-                              const key = compactKey(encoded, durable.compact)
                               const superseded =
-                                key !== undefined &&
+                                compactKey !== undefined &&
                                 (yield* db
                                   .select({ id: EventTable.id })
                                   .from(EventTable)
@@ -310,7 +385,7 @@ export const layerWith = (options?: LayerOptions) =>
                                       eq(EventTable.aggregate_id, aggregateID),
                                       eq(EventTable.type, versionedType(definition.type, durable.version)),
                                       gt(EventTable.seq, input.seq),
-                                      sql`json_extract(${EventTable.data}, ${durable.compact}) = ${key}`,
+                                      eq(EventTable.compact_key, compactKey),
                                     ),
                                   )
                                   .get()
@@ -328,6 +403,20 @@ export const layerWith = (options?: LayerOptions) =>
                             return
                           }
                           const seq = input?.seq ?? latest + 1
+                          // The divergence check above only covers seq <= latest;
+                          // a forward jump silently advances the cursor past
+                          // never-written sequences. It is only tolerated inside
+                          // replayAll batches that verified ascending order across
+                          // the whole history (compaction gaps), never for a
+                          // single replayed event arriving over the wire.
+                          if (input && seq !== latest + 1 && !input.allowGap) {
+                            yield* Effect.die(
+                              new InvalidDurableEventError({
+                                type: event.type,
+                                message: `Sequence mismatch for aggregate ${aggregateID}: expected ${latest + 1}, got ${seq}`,
+                              }),
+                            )
+                          }
                           const stored = yield* db
                             .select({ aggregateID: EventTable.aggregate_id, seq: EventTable.seq })
                             .from(EventTable)
@@ -370,25 +459,65 @@ export const layerWith = (options?: LayerOptions) =>
                                 seq,
                                 type: versionedType(definition.type, durable.version),
                                 data: encoded,
+                                compact_key: compactKey,
                               },
                             ])
                             .run()
                             .pipe(Effect.orDie)
-                          if (durable.compact) {
-                            const key = compactKey(encoded, durable.compact)
-                            if (key !== undefined) {
-                              yield* db
-                                .delete(EventTable)
-                                .where(
-                                  and(
-                                    eq(EventTable.aggregate_id, aggregateID),
-                                    eq(EventTable.type, versionedType(definition.type, durable.version)),
-                                    lt(EventTable.seq, seq),
-                                    sql`json_extract(${EventTable.data}, ${durable.compact}) = ${key}`,
-                                  ),
-                                )
-                                .run()
-                                .pipe(Effect.orDie)
+                          if (durable.compact && !accounting) {
+                            if (compactKey !== undefined) {
+                              if (compared && supersededSeq !== undefined) {
+                                // The dedupe comparison already located the previous
+                                // snapshot for this entity; remove exactly that row
+                                // instead of rescanning every stored snapshot.
+                                // ponytail: single-row delete keeps live writes O(1);
+                                // pre-compaction backlogs drain via replay/warp paths
+                                // (full sweep below), not on every publish.
+                                yield* db
+                                  .delete(EventTable)
+                                  .where(
+                                    and(
+                                      eq(EventTable.aggregate_id, aggregateID),
+                                      eq(EventTable.seq, supersededSeq),
+                                    ),
+                                  )
+                                  .run()
+                                  .pipe(Effect.orDie)
+                              } else if (!compared) {
+                                // Locate the previous snapshots for this entity
+                                // via the materialized compact key: one indexed
+                                // lookup, one delete. All older snapshots go at
+                                // once, which also drains the backlog left by
+                                // databases upgraded from before compaction.
+                                const superseded = yield* db
+                                  .select({ seq: EventTable.seq })
+                                  .from(EventTable)
+                                  .where(
+                                    and(
+                                      eq(EventTable.aggregate_id, aggregateID),
+                                      eq(EventTable.type, versionedType(definition.type, durable.version)),
+                                      lt(EventTable.seq, seq),
+                                      eq(EventTable.compact_key, compactKey),
+                                    ),
+                                  )
+                                  .all()
+                                  .pipe(Effect.orDie)
+                                if (superseded.length > 0) {
+                                  yield* db
+                                    .delete(EventTable)
+                                    .where(
+                                      and(
+                                        eq(EventTable.aggregate_id, aggregateID),
+                                        inArray(
+                                          EventTable.seq,
+                                          superseded.map((row) => row.seq),
+                                        ),
+                                      ),
+                                    )
+                                    .run()
+                                    .pipe(Effect.orDie)
+                                }
+                              }
                             }
                           }
                           return { aggregateID, seq }
@@ -434,6 +563,10 @@ export const layerWith = (options?: LayerOptions) =>
               yield* notify(event as Payload, true)
               return event
             }
+            // Dedupe-skipped publish: nothing was written, but a dying
+            // listener must not fail the caller either.
+            yield* notify(event as Payload, true)
+            return event
           }
           yield* notify(event as Payload, false)
           return event
@@ -448,6 +581,10 @@ export const layerWith = (options?: LayerOptions) =>
           ),
         )
 
+      // isolateListeners: dying listeners are logged instead of failing the
+      // publish caller. Durable paths (committed or dedupe-skipped) isolate —
+      // the write is done, a listener crash must not fail the publisher.
+      // Live-only publishes stay fail-fast so broken listeners surface.
       function notify(event: Payload, isolateListeners: boolean) {
         return Effect.gen(function* () {
           yield* Effect.forEach(
@@ -485,7 +622,7 @@ export const layerWith = (options?: LayerOptions) =>
 
       function replay(
         event: SerializedEvent,
-        options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean },
+        options?: { readonly publish?: boolean; readonly ownerID?: string; readonly strictOwner?: boolean; readonly allowGap?: boolean },
       ) {
         return Effect.gen(function* () {
           const definition = Durable.get(event.type)
@@ -504,6 +641,7 @@ export const layerWith = (options?: LayerOptions) =>
               aggregateID: event.aggregateID,
               ownerID: options?.ownerID,
               strictOwner: options?.strictOwner,
+              allowGap: options?.allowGap,
             })
             if (committed && options?.publish) {
               yield* notify(
@@ -550,8 +688,10 @@ export const layerWith = (options?: LayerOptions) =>
             }
             previous = event.seq
           }
+          // The batch verified ascending order, so forward jumps inside it are
+          // compaction gaps, not a hostile cursor advance.
           for (const event of events) {
-            yield* replay(event, options)
+            yield* replay(event, { ...options, allowGap: true })
           }
           return source
         })

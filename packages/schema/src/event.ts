@@ -23,6 +23,13 @@ export type DurableMeta = {
    * non-string values are not supported and silently disable compaction.
    */
   readonly compact?: string
+  /**
+   * JSON paths into data that are ignored when comparing a snapshot against
+   * the latest stored snapshot of the same aggregate and event type. When the
+   * remaining fields match, the snapshot carries no new information and is not
+   * persisted. Supported subset mirrors `compact`.
+   */
+  readonly dedupe?: ReadonlyArray<string>
 }
 
 export type Definition<

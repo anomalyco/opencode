@@ -177,3 +177,15 @@ These are some other paths I explored:
   - Fatal flaw: we need type-checking done earlier. We can't do this at run-time. This worked for consumers of our SDK (because it gets generated TS types from the converted schema) but breaks for our internal usage of `Bus.subscribe` calls
 
 I explored many other permutations of the above solutions. What we have today I think is the best balance of backwards compatibility while opening a path forward for the new events.
+
+## Durable snapshots: compaction, dedupe, and replay gaps
+
+Durable events with a `compact` path (in `@opencode-ai/schema`'s `DurableMeta`) are snapshots of one entity. The store keeps only the latest stored snapshot per entity key: when a new snapshot for the same key is persisted, older rows for that key are deleted. This is storage compaction for high-frequency events like `message.part.updated`.
+
+Snapshots may also declare `dedupe` paths — volatile fields (streaming timings) that are ignored when comparing against the latest stored snapshot of the same aggregate and type. A snapshot identical to the stored one apart from those paths carries no new information and is not persisted at all; live listeners still receive it. Replay inputs and local commit-hook writes always bypass dedupe, because they must land atomically with their projection or owner state.
+
+Consequences for consumers of the sync log:
+
+- A compacted aggregate's stored sequence numbers are **not gap-free**. A client replaying the log must not treat a missing `seq` between two stored rows of the same type as an error; the gap is a compacted-away superseded snapshot. The store itself tolerates this on replay (a replayed row whose seq falls in a compacted gap is accepted when a newer snapshot of the same entity already exists).
+- Dedupe means a live-emitted event may never appear in the log at all. Clients reconstructing state from the log must tolerate that the final stored snapshot is the authoritative state, not the last received live event.
+- These semantics are part of the compaction design: old peers that replay logs expecting gap-free per-type sequences are incompatible with compacted aggregates by construction. There is no handshake; the sync log for a compacted event type is a snapshot log, not an append-only one.
