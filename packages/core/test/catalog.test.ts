@@ -171,6 +171,9 @@ describe("Provider and Model", () => {
         Effect.forkScoped({ startImmediately: true }),
       )
       yield* Effect.yieldNow
+      const updates = Ref.get(log).pipe(
+        Effect.map((types) => types.filter((type) => type === Model.Event.Updated.type).length),
+      )
 
       const first = yield* credentials.create({
         integrationID,
@@ -178,6 +181,8 @@ describe("Provider and Model", () => {
       })
       const materialized = yield* models.available()
       expect(materialized).toHaveLength(1)
+      // Credential events reach Model on other fibers; let the connect land before switching.
+      yield* settle(updates.pipe(Effect.map((count) => count >= 1)))
 
       const second = yield* credentials.create({
         integrationID,
@@ -201,7 +206,37 @@ describe("Provider and Model", () => {
           ),
         ),
       )
-      expect((yield* Ref.get(log)).filter((type) => type === Model.Event.Updated.type)).toHaveLength(2)
+      expect(yield* updates).toBe(2)
+    }),
+  )
+
+  it.effect("persists direct edits to models returned by list and get", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("direct")
+      const listed = Model.ID.make("listed")
+      const fetched = Model.ID.make("fetched")
+      const definitions = [Model.Info.default(providerID, listed), Model.Info.default(providerID, fetched)]
+      yield* providers.transform((editor) =>
+        editor.add({ info: { ...Provider.Info.empty(providerID), activation: "enabled" }, models: definitions }),
+      )
+      yield* models.transform((editor) => {
+        editor.list(providerID).forEach((model) => {
+          model.limit.context = 4096
+        })
+        required(editor.get(providerID, fetched)).capabilities.input.push("pdf")
+      })
+
+      expect(yield* models.get(providerID, listed)).toMatchObject({
+        limit: { context: 4096 },
+        capabilities: { input: ["text", "image"] },
+      })
+      expect(yield* models.get(providerID, fetched)).toMatchObject({
+        limit: { context: 4096 },
+        capabilities: { input: ["text", "image", "pdf"] },
+      })
+      expect(definitions.map((model) => model.limit.context)).toEqual([200_000, 200_000])
     }),
   )
 

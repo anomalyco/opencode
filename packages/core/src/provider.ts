@@ -231,7 +231,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pr
 const definitions = new WeakMap<readonly Model.Info[], Map<ID, ReadonlyMap<Model.ID, Model.Info>>>()
 function index(providerID: ID, models: readonly Model.Info[]) {
   const indexes = definitions.get(models) ?? new Map<ID, ReadonlyMap<Model.ID, Model.Info>>()
-  definitions.set(models, indexes)
   const cached = indexes.get(providerID)
   if (cached) return cached
   // Model shares these definitions without copying, so a foreign definition takes this provider's identity here.
@@ -240,6 +239,7 @@ function index(providerID: ID, models: readonly Model.Info[]) {
     true,
   )
   indexes.set(providerID, result)
+  definitions.set(models, indexes)
   return result
 }
 

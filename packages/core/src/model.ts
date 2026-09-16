@@ -99,8 +99,9 @@ const layer = Layer.effect(
         }
         const draft = (providerID: Provider.ID, modelID: ID) => {
           const models = writable(providerID)
-          const current = models?.get(modelID)
-          if (!models || !current) return undefined
+          if (!models) return undefined
+          const current = models.get(modelID)
+          if (!current) return undefined
           if (drafts.has(current)) return current as MutableInfo
           const copy = structuredClone(current) as MutableInfo
           drafts.add(copy)
@@ -108,10 +109,12 @@ const layer = Layer.effect(
           return copy
         }
         return {
-          list: (providerID) =>
-            (providerID === undefined ? Array.from(data.models.keys()) : [providerID]).flatMap((id) =>
+          list: (providerID) => {
+            const ids = providerID === undefined ? Array.from(data.models.keys()) : [providerID]
+            return ids.flatMap((id) =>
               Array.from(data.models.get(id)?.keys() ?? []).flatMap((modelID) => draft(id, modelID) ?? []),
-            ),
+            )
+          },
           get: draft,
           update: (providerID, modelID, update) => {
             // Model edits cannot create/enable a provider or bypass its availability decision.
