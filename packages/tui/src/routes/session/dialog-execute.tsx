@@ -1,14 +1,14 @@
-import { CliRenderEvents, TextAttributes, type CodeRenderable, type ScrollBoxRenderable } from "@opentui/core"
-import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { TextAttributes, type CodeRenderable, type ScrollBoxRenderable } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
-import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import stripAnsi from "strip-ansi"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
-import { useDialog } from "../../ui/dialog"
+import { dialogWidth, useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { Locale } from "../../util/locale"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -24,11 +24,9 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   const toast = useToast()
   const theme = useTheme("elevated")
   const { currentSyntax: syntax } = useThemes()
-  const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const config = useConfig().data
   const [copied, setCopied] = createSignal<"code" | "output">()
-  const [height, setHeight] = createSignal(1)
   const maxHeight = createMemo(() => Math.max(3, Math.floor(dimensions().height * 0.7) - 6))
   let scroll: ScrollBoxRenderable | undefined
   // Unwrapped <code> clips long lines and scrolls them itself. Each block clamps
@@ -41,21 +39,6 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     panX = Math.max(0, Math.min(max, panX + delta))
     blocks.forEach((block) => (block.scrollX = panX))
   }
-
-  // Fit the scroll area to its content up to the cap. Wrapped code settles a
-  // frame after mount and output streams in, so grow from the measured height
-  // on every frame instead of measuring once; a resize restarts the fit.
-  createEffect(() => {
-    dimensions()
-    setHeight(1)
-  })
-  const measure = () => {
-    if (!scroll) return
-    const next = Math.max(1, Math.min(maxHeight(), scroll.scrollHeight))
-    if (next > untrack(height)) setHeight(next)
-  }
-  renderer.on(CliRenderEvents.FRAME, measure)
-  onCleanup(() => renderer.off(CliRenderEvents.FRAME, measure))
 
   dialog.setSize("xlarge")
   dialog.setCentered(true)
@@ -88,6 +71,19 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     const parsed = decodeJson(json)
     if (Option.isNone(parsed)) return { json: "", rest: text }
     return { json, rest: text.slice(json.length).trim() }
+  })
+  // Code and JSON never wrap, so the content height is known up front. Sizing
+  // synchronously lets the dialog open complete instead of growing over frames.
+  const height = createMemo(() => {
+    const lines = (text: string) => (text ? text.split("\n").length : 1)
+    const width = Math.max(20, Math.min(dialogWidth(dialog.size), dimensions().width - 2) - 4)
+    const rest = sections().rest
+      ? sections()
+          .rest.split("\n")
+          .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / width)), 0)
+      : 0
+    const outputRows = output() ? (sections().json ? lines(sections().json) : 0) + rest : 1
+    return Math.min(maxHeight(), 1 + lines(code()) + 1 + 1 + outputRows)
   })
   const status = createMemo(() => {
     const state = props.part.state
