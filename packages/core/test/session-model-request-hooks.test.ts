@@ -94,7 +94,7 @@ describe("SessionModelRequest HTTP hooks", () => {
       )
       yield* hooks.register("session", "experimental.ws.send", (event) =>
         Effect.sync(() => {
-          seen.push(`send:${event.kind}:${event.mode}:${event.frame}`)
+          seen.push(`send:${event.kind}:${event.frame}`)
           event.frame = `${event.frame}+plugin`
         }),
       )
@@ -115,7 +115,7 @@ describe("SessionModelRequest HTTP hooks", () => {
               bound.push(
                 yield* interceptor.handshake({ url: "wss://example.test/v1/responses", headers: { "api-key": "k" } }),
               )
-              frames.push(yield* interceptor.send("create", "incremental"))
+              frames.push(yield* interceptor.send("create"))
               frames.push(yield* interceptor.receive("created"))
               return { frames: Stream.empty, complete: Effect.void }
             }),
@@ -148,7 +148,7 @@ describe("SessionModelRequest HTTP hooks", () => {
       expect(frames).toEqual(["create+plugin", "CREATED"])
       expect(seen).toEqual([
         "handshake:primary:wss://example.test/v1/responses",
-        "send:primary:incremental:create",
+        "send:primary:create",
         "receive:primary:created",
       ])
     }),

@@ -1413,8 +1413,7 @@ await ctx.session.hook(
 `experimental.ws.send` and `experimental.ws.receive` expose the frames themselves, the WebSocket counterpart of
 editing an HTTP request or response body. `send` runs after the provider driver builds an outbound frame and before it
 is written; `receive` runs on each inbound frame before the driver observes it. Both carry the frame as a string and
-send whatever `frame` holds when the hook returns. `send` also reports `mode`: `"full"` frames carry the whole request,
-`"incremental"` frames carry only what changed since the provider's last checkpoint.
+send whatever `frame` holds when the hook returns.
 
 OpenCode does not validate rewritten frames. The driver tracks state from the provider's replies, so a rewrite that
 changes protocol meaning is the plugin's responsibility, just as a rewritten HTTP body is.
@@ -1502,7 +1501,6 @@ interface SessionWebSocketSendHook {
   readonly agent: string
   readonly model: { providerID: string; id: string; variant?: string }
   readonly kind: "primary" | "compaction" | "title" | "generate"
-  readonly mode: "full" | "incremental"
   frame: string
 }
 

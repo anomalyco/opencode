@@ -2,7 +2,6 @@ export * as SessionModelTransport from "./model-transport.js"
 
 import {
   WebSocketTransport,
-  type ChannelCreate,
   type ChannelObservation,
   type ChannelCheckpoint,
   type WebSocketChannelExchange,
@@ -66,7 +65,7 @@ export interface Handshake {
  */
 export interface Interceptor {
   readonly handshake?: (connect: Handshake) => Effect.Effect<Handshake>
-  readonly send?: (frame: string, mode: ChannelCreate["mode"]) => Effect.Effect<string>
+  readonly send?: (frame: string) => Effect.Effect<string>
   readonly receive?: (frame: string) => Effect.Effect<string>
 }
 
@@ -363,9 +362,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
         )
         if (create.mode === "full") channel.checkpoint = undefined
         const message = interceptor?.send
-          ? yield* interceptor
-              .send(create.message, create.mode)
-              .pipe(Effect.onInterrupt(() => closeChannel(owner, channel)))
+          ? yield* interceptor.send(create.message).pipe(Effect.onInterrupt(() => closeChannel(owner, channel)))
           : create.message
         yield* Effect.logDebug("session websocket sending", {
           sessionTransport: "websocket",

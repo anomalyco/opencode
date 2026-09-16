@@ -329,9 +329,9 @@ export const layer = Layer.effect(
                     headers: connect.headers,
                   })
                   .pipe(Effect.map((event) => ({ url: event.url, headers: event.headers }))),
-              send: (frame, mode) =>
+              send: (frame) =>
                 hooks
-                  .trigger("session", "experimental.ws.send", { ...scope, mode, frame })
+                  .trigger("session", "experimental.ws.send", { ...scope, frame })
                   .pipe(Effect.map((event) => event.frame)),
               receive: (frame) =>
                 hooks

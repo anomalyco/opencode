@@ -1278,8 +1278,7 @@ effect: (ctx) =>
 ```
 
 `experimental.ws.send` and `experimental.ws.receive` expose the frames themselves: `send` runs after the provider
-driver builds an outbound frame (`mode` is `"full"` or `"incremental"`), `receive` runs on each inbound frame before
-the driver observes it. Whatever `frame` holds when the hook returns is what crosses the wire or reaches the driver;
+driver builds an outbound frame, `receive` runs on each inbound frame before the driver observes it. Whatever `frame` holds when the hook returns is what crosses the wire or reaches the driver;
 OpenCode does not validate it.
 
 ```ts

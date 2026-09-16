@@ -109,8 +109,6 @@ export interface SessionWebSocketSend {
   readonly agent: Agent.ID
   readonly model: Model.Ref
   readonly kind: SessionRequestKind
-  /** `"incremental"` frames carry only what changed since the provider's last checkpoint. */
-  readonly mode: "full" | "incremental"
   frame: string
 }
 

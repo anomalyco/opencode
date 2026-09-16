@@ -199,14 +199,14 @@ describe("SessionModelTransport", () => {
 
   test("sends the frame the send tap returns and observes the frame the receive tap returns", async () => {
     const fixture = automatic()
-    const seen: Array<{ tap: "send" | "receive"; frame: string; mode?: string }> = []
+    const seen: Array<{ tap: "send" | "receive"; frame: string }> = []
     await run(
       fixture.connector,
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
         const executor = transport.bind(session, {
-          send: (frame, mode) => {
-            seen.push({ tap: "send", frame, mode })
+          send: (frame) => {
+            seen.push({ tap: "send", frame })
             return Effect.succeed(`${frame}:rewritten`)
           },
           receive: (frame) => {
@@ -220,7 +220,7 @@ describe("SessionModelTransport", () => {
         expect(fixture.connections.map((item) => item.sent)).toEqual([["first:rewritten"]])
         expect(frames).toEqual(["completed:first:rewritten:observed"])
         expect(seen).toEqual([
-          { tap: "send", frame: "first", mode: "full" },
+          { tap: "send", frame: "first" },
           { tap: "receive", frame: "completed:first:rewritten" },
         ])
       }),
