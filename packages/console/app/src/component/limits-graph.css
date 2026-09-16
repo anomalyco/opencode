@@ -144,6 +144,11 @@
     }
   }
 
+  [data-slot="model-row"][data-unlimited] :is([data-slot="requests"], [data-slot="allowance"]) bdi {
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+
   [data-slot="currency"] {
     color: var(--color-text-weak);
   }
