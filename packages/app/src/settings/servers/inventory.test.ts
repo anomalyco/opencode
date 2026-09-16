@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { ServerConnection } from "@/runtime/server/registry"
+import { createStore, unwrap } from "solid-js/store"
+import { createServerProjects, ServerConnection } from "@/runtime/server/registry"
+import { ServerScope } from "@/runtime/server/scope"
 import type { SshItem } from "@/servers/ssh/types"
-import { settingsServers } from "./inventory"
+import { settingsProjects, settingsServers } from "./inventory"
 
 const ssh: SshItem = {
   config: { id: "build", target: "dev@example.com", name: "Build server" },
@@ -45,4 +47,46 @@ describe("settings server inventory", () => {
     expect(settingsServers([], [], [{ ...ssh, saved: false }])).toEqual([])
     expect(settingsServers([connection], [], [ssh])[0].connection).toBeUndefined()
   })
+})
+
+test("closed projects stay out of settings across persistence and reopen normally", () => {
+  const [store, setStore] = createStore<Parameters<typeof createServerProjects>[0]["store"]>({
+    list: [],
+    hidden: {},
+    projects: {},
+    lastProject: {},
+    recentlyClosed: {},
+  })
+  const scope = () => ServerScope.fromServerKey(ServerConnection.Key.make("http://localhost:4096"))
+  const projects = {
+    ...createServerProjects({ scope, store, setStore }),
+    resolve: (project: { worktree: string; expanded: boolean }) => project,
+  }
+  const sync = {
+    data: {
+      project: Array.from({ length: 20 }, (_, index) => ({
+        id: `project-${index}`,
+        worktree: `/projects/${index}`,
+        time: { created: 1, updated: 1 },
+        sandboxes: [],
+        worktrees: [],
+      })),
+    },
+  }
+  projects.open("/projects/0")
+  expect(settingsProjects({ projects, sync })).toHaveLength(20)
+  sync.data.project.forEach((project) => projects.close(project.worktree))
+  expect(settingsProjects({ projects, sync })).toEqual([])
+  expect(projects.list()).toEqual([])
+  expect(sync.data.project).toHaveLength(20)
+
+  const [restored, setRestored] = createStore(structuredClone(unwrap(store)))
+  const reopened = {
+    ...createServerProjects({ scope, store: restored, setStore: setRestored }),
+    resolve: projects.resolve,
+  }
+  expect(settingsProjects({ projects: reopened, sync })).toEqual([])
+  reopened.open("/projects/0")
+  expect(settingsProjects({ projects: reopened, sync }).map((project) => project.worktree)).toEqual(["/projects/0"])
+  expect(reopened.closed()).not.toContain("/projects/0")
 })

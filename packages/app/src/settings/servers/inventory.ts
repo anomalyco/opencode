@@ -7,14 +7,18 @@ import { sshName, type SshItem } from "@/servers/ssh/types"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { pathKey } from "@/workspaces/path-key"
 
-export function settingsProjects(context: ServerCtx) {
+export function settingsProjects(context: {
+  projects: Pick<ServerCtx["projects"], "list" | "closed" | "resolve">
+  sync: { data: Pick<ServerCtx["sync"]["data"], "project"> }
+}) {
   const tracked = context.projects.list()
   const paths = new Set(tracked.map((project) => pathKey(project.worktree)))
+  const closed = new Set(context.projects.closed().map(pathKey))
   return [
     ...tracked,
     ...context.sync.data.project
-      .filter((project) => !paths.has(pathKey(project.worktree)))
-      .map((project) => ({ ...project, expanded: false })),
+      .filter((project) => !paths.has(pathKey(project.worktree)) && !closed.has(pathKey(project.worktree)))
+      .map((project) => context.projects.resolve({ worktree: project.worktree, expanded: false })),
   ]
 }
 
