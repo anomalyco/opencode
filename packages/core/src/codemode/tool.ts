@@ -147,26 +147,30 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
       rows.set(call, items.length)
       return [...items, entry]
     })
-  const settle = (call: object, result: CodeMode.CallResult) =>
-    record((items) => {
-      const index = rows.get(call)
-      if (index === undefined) return items
+  const settle = (call: object, result: CodeMode.CallResult) => {
+    const index = rows.get(call)
+    if (index === undefined) return Effect.void
+    return record((items) => {
       const next = [...items]
       next[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
       return next
     })
+  }
   return {
     "tool.before": (call) => {
       const shown = displayInput(call.input)
       return start(call, { tool: call.name, status: "running", ...(shown ? { input: shown } : {}) })
     },
     "tool.after": settle,
-    "extension.before": (call) =>
-      start(call, {
-        tool: call.name,
-        status: "running",
-        ...(call.name === "fetch" ? { input: CodeModeWeb.display(call.args) } : {}),
-      }),
+    // Only listed extension functions get a row; anything else stays out of the TUI.
+    "extension.before": (call) => {
+      switch (call.name) {
+        case "fetch":
+          return start(call, { tool: call.name, status: "running", input: CodeModeWeb.display(call.args) })
+        default:
+          return Effect.void
+      }
+    },
     "extension.after": settle,
   } satisfies CodeMode.Hooks
 }
