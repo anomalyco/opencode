@@ -521,12 +521,12 @@ export function Prompt(props: PromptProps) {
           dialog.replace(() => (
             <DialogSkill
               onSelect={(skill) => {
-                input.setText(`/${skill} `)
-                setStore("prompt", {
-                  input: `/${skill} `,
-                  parts: [],
-                })
+                input.insertText(`/${skill} `)
                 input.gotoBufferEnd()
+                setStore("prompt", {
+                  input: input.plainText,
+                  parts: store.prompt.parts,
+                })
               }}
             />
           ))
@@ -1068,6 +1068,49 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (
+      // Multi-command prompts: every non-empty line is its own /command.
+      // Anything else (mixed text, paths like /Users/x) falls through below.
+      inputText.includes("\n") &&
+      inputText
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .every((line) => {
+          if (!line.startsWith("/")) return false
+          const space = line.indexOf(" ")
+          const name = space === -1 ? line.slice(1) : line.slice(1, space)
+          return sync.data.command.some((x) => x.name === name)
+        })
+    ) {
+      move.startSubmit()
+      const segments = inputText
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => {
+          const space = line.indexOf(" ")
+          return {
+            command: space === -1 ? line.slice(1) : line.slice(1, space),
+            arguments: space === -1 ? "" : line.slice(space + 1).trim(),
+          }
+        })
+      const fileParts = nonTextParts.filter((x) => x.type === "file")
+      void segments.reduce<Promise<unknown>>(
+        (pending, seg) =>
+          pending.then(() =>
+            sdk.client.session.command({
+              sessionID,
+              command: seg.command,
+              arguments: seg.arguments,
+              agent: agent.name,
+              model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+              variant,
+              parts: fileParts,
+            }),
+          ),
+        Promise.resolve(),
+      )
     } else if (
       inputText.startsWith("/") &&
       sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
