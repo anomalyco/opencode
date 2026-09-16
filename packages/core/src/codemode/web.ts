@@ -38,3 +38,9 @@ const fetch = async (input: string | URL, init: Init = {}) => {
 }
 
 export const extension = Extension.make({ name: "web", globals: { fetch } })
+
+/** What to show for a fetch call: its method and URL. */
+export const display = (args: ReadonlyArray<unknown>) => {
+  const [input, init] = args as [string | URL, Init | undefined]
+  return { method: init?.method?.toUpperCase() ?? "GET", url: String(input) }
+}

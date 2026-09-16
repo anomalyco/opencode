@@ -161,7 +161,12 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
       return start(call, { tool: call.name, status: "running", ...(shown ? { input: shown } : {}) })
     },
     "tool.after": settle,
-    "extension.before": (call) => start(call, { tool: call.name, status: "running" }),
+    "extension.before": (call) =>
+      start(call, {
+        tool: call.name,
+        status: "running",
+        ...(call.name === "fetch" ? { input: CodeModeWeb.display(call.args) } : {}),
+      }),
     "extension.after": settle,
   } satisfies CodeMode.Hooks
 }
