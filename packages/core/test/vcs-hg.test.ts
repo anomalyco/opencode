@@ -151,13 +151,13 @@ describeHg("Vcs mercurial", () => {
         })
         const vcs = yield* Vcs.Service
         const bus = yield* Bus.Service
-        expect(yield* vcs.info()).toEqual({ branch: { current: "default", default: "default" } })
+        expect(yield* vcs.info()).toEqual({ provider: "hg", branch: { current: "default", default: "default" } })
 
         const updated = yield* bus
           .subscribe(VcsEvent.BranchUpdated)
           .pipe(Stream.take(1), Stream.runHead, Effect.forkScoped({ startImmediately: true }))
         yield* Effect.promise(() => hg(directory, "branch", "-q", "feature"))
-        expect(yield* vcs.info()).toEqual({ branch: { current: "default", default: "default" } })
+        expect(yield* vcs.info()).toEqual({ provider: "hg", branch: { current: "default", default: "default" } })
 
         yield* bus.publish(FileSystem.Event.Changed, {
           file: path.join(directory, ".hg", "branch"),
@@ -167,7 +167,7 @@ describeHg("Vcs mercurial", () => {
           _tag: "Some",
           value: { location: { directory }, data: { branch: "feature" } },
         })
-        expect(yield* vcs.info()).toEqual({ branch: { current: "feature", default: "default" } })
+        expect(yield* vcs.info()).toEqual({ provider: "hg", branch: { current: "feature", default: "default" } })
       }),
     ),
   )
