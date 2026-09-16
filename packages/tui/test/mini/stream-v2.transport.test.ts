@@ -1887,13 +1887,6 @@ describe("V2 mini transport", () => {
         delta: " replacement",
       },
     })
-    let resized = false
-    const resize = transport.replayOnResize({
-      localRows: () => [],
-      reset: async () => {
-        resized = true
-      },
-    })
     releaseHydration()
     while (
       !ui.events.some(
@@ -1901,12 +1894,9 @@ describe("V2 mini transport", () => {
       )
     )
       await Bun.sleep(0)
-    while (refreshes < 2) await Bun.sleep(0)
-    await resize
-    expect(resized).toBe(false)
-    expect(prompt).not.toHaveBeenCalled()
-    releaseCatalog()
     await queued
+    while (refreshes < 2) await Bun.sleep(0)
+    releaseCatalog()
 
     expect(current).toEqual([second])
     expect(first.event.subscribe).toHaveBeenCalledTimes(1)
@@ -1959,6 +1949,41 @@ describe("V2 mini transport", () => {
     })
     expect(prompt).toHaveBeenCalled()
     expect(client.event.subscribe).toHaveBeenCalledTimes(2)
+    await transport.close()
+  })
+
+  test("reconnects even when catalog refresh hangs", async () => {
+    const first = feed()
+    const second = feed()
+    first.push(connected("evt_connected_1"))
+    second.push(connected("evt_connected_2"))
+    const client = sdk({ streams: [first, second] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      footer: ui.api,
+      onCatalogRefresh: (signal) =>
+        new Promise<void>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true })
+        }),
+    })
+    first.close()
+    while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.status === "reconnecting"))
+      await Bun.sleep(0)
+    const prompt = spyOn(client.session, "prompt").mockImplementation(
+      (request) => ok({ data: promptAdmission(request) }) as never,
+    )
+    await transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { messageID: "msg_after_hanging_catalog", text: "hello", parts: [] },
+      files: [],
+      includeFiles: true,
+    })
+    expect(prompt).toHaveBeenCalled()
     await transport.close()
   })
 

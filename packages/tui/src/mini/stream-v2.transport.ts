@@ -999,7 +999,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       phase: state.rootActive ? "running" : "idle",
       status: state.rootActive ? "assistant responding" : blockerStatus(state.view),
     })
-    if (!state.rootActive) await input.footer.idle()
+    if (!state.rootActive && !next.reconnect) await input.footer.idle()
     if (!current(attempt)) return
   }
 
@@ -1470,13 +1470,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     })
     return task
   }
-  const settleCatalog = async (attempt: Attempt) => {
-    while (current(attempt)) {
-      const refreshes = catalogRefreshes.get(attempt.generation)
-      if (!refreshes || refreshes.size === 0) return
-      await Promise.all(refreshes)
-    }
-  }
   const settleCatalogRefreshes = async () => {
     while (catalogRefreshes.size > 0)
       await Promise.all([...catalogRefreshes.values()].flatMap((refreshes) => [...refreshes]))
@@ -1514,18 +1507,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             ),
             consume,
           ])
-          await Promise.race([refreshCatalog(attempt), consume])
           if (!current(attempt)) throw new Error("Event stream disconnected")
           state.initial = false
-          do {
-            for (const event of buffered.splice(0)) apply(attempt, event)
-            await Promise.race([subagents.ready(), consume])
-            await Promise.race([settleCatalog(attempt), consume])
-          } while (buffered.length > 0)
+          for (const event of buffered.splice(0)) apply(attempt, event)
           if (!current(attempt)) throw new Error("Event stream disconnected")
           booting = false
           state.connected = true
           readyResolve()
+          void refreshCatalog(attempt)
           await consume
         } finally {
           connection.abort()
