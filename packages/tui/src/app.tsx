@@ -162,7 +162,6 @@ const appBindingCommands = [
   "theme.switch",
   "theme.switch_mode",
   "theme.mode.lock",
-  "help.show",
   "docs.open",
   "diff.open",
   "app.debug",
@@ -1081,17 +1080,6 @@ function App() {
       {
         name: "docs.open",
         title: "Open docs",
-        slash: { name: "docs", aliases: ["help"] },
-        run: () => {
-          open("https://opencode.ai/docs").catch(() => {})
-          dialog.clear()
-        },
-        category: "System",
-      },
-      {
-        name: "help.show",
-        title: "Help",
-        palette: undefined,
         run: () => {
           open("https://opencode.ai/docs").catch(() => {})
           dialog.clear()

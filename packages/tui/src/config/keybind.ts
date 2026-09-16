@@ -55,7 +55,6 @@ export const Definitions = {
   "app.toggle.diffwrap": keybind("none", "Toggle diff wrapping"),
   "app.toggle.paste_summary": keybind("none", "Toggle paste summary"),
   "command.palette.show": keybind("ctrl+p", "List available commands"),
-  "help.show": keybind("none", "Open documentation"),
   "docs.open": keybind("none", "Open documentation"),
   "opencode.settings": keybind("none", "Open settings"),
   "server.pair": keybind("none", "Pair device"),
