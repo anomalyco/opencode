@@ -52,7 +52,7 @@ export const goModels = [
   },
   {
     id: "union-alpha",
-    name: "Union Alpha",
+    name: "Union Alpha Free",
     requests: Infinity,
     allowance: Infinity,
     featured: true,

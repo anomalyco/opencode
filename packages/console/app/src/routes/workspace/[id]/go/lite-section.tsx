@@ -667,7 +667,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>MiMo-V2.5-Pro</li>
             <li>Hy4 preview</li>
             <li>Hy3</li>
-            <li>Union Alpha</li>
+            <li>Union Alpha Free</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("go.promo.unionAlpha")}</p>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
