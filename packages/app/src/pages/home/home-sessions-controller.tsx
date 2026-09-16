@@ -254,7 +254,9 @@ function buildHomeSessionRecords(input: {
   projectByID: () => Map<string, LocalProject>
 }) {
   const directories = new Set(input.projectDirectories().map(pathKey))
-  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
+  const sessions = input.sessions().filter(
+    (session) => session.workspaceID || directories.has(pathKey(session.directory)),
+  )
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort(compareSessionTime)
     .flatMap((session) => {
