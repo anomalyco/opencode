@@ -78,11 +78,14 @@ export function copyCommand(
   os: NodeJS.Platform,
   wayland: boolean,
   has: (name: string) => boolean,
+  primary?: boolean,
 ): string[] | undefined {
   if (os === "darwin" && has("osascript")) return ["osascript"]
-  if (os === "linux" && wayland && has("wl-copy")) return ["wl-copy"]
-  if (os === "linux" && has("xclip")) return ["xclip", "-selection", "clipboard"]
-  if (os === "linux" && has("xsel")) return ["xsel", "--clipboard", "--input"]
+  if (os === "linux" && wayland && has("wl-copy")) return primary ? ["wl-copy", "--primary"] : ["wl-copy"]
+  if (os === "linux" && has("xclip"))
+    return primary ? ["xclip", "-selection", "primary"] : ["xclip", "-selection", "clipboard"]
+  if (os === "linux" && has("xsel"))
+    return primary ? ["xsel", "--primary", "--input"] : ["xsel", "--clipboard", "--input"]
   if (os === "win32" && has("powershell.exe")) {
     return [
       "powershell.exe",
@@ -118,8 +121,18 @@ function getCopyMethod() {
   })())
 }
 
+async function writePrimary(text: string) {
+  const { which } = await import("@opencode-ai/core/util/which")
+  const native = copyCommand(platform(), Boolean(process.env.WAYLAND_DISPLAY), (name) => Boolean(which(name)), true)
+  if (!native) return
+  await command(native[0], native.slice(1), text).catch(() => undefined)
+}
+
 export async function write(text: string) {
   writeOsc52(text)
   const method = await getCopyMethod()
   await method(text)
+  if (process.env.OPENCODE_CLIPBOARD_PRIMARY_COPY === "true") {
+    await writePrimary(text)
+  }
 }
