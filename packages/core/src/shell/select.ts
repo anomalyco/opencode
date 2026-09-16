@@ -96,13 +96,31 @@ function executable(file: string, options?: Options, bin?: string) {
   // AppExecLink reparse point that stat and which cannot see even though CreateProcess
   // resolves it by name. where.exe does see it, so it separates "installed as an alias"
   // from "not installed" and keeps a configured shell like pwsh from silently falling back.
-  if (process.platform === "win32" && meta(shell) && aliased(shell)) return shell
+  // Restricted to the known shell families so an arbitrary configured name cannot resolve
+  // to some unrelated Store app that happens to share it.
+  if (process.platform === "win32" && meta(shell)) return aliased(shell)
   return undefined
 }
 
-function aliased(file: string) {
-  return spawnSync("where.exe", [file], { stdio: "ignore", windowsHide: true }).status === 0
+const aliases = new Map<string, string | undefined>()
+
+function line(out?: string) {
+  // trim() drops the trailing CR, so splitting on the LF alone is enough
+  return out?.split("\n")[0]?.trim() || undefined
 }
+
+// Spawning where.exe costs ~300ms, and resolve() skips its own cache whenever a shell is
+// configured, so memoize both hits and misses per name.
+export function aliased(file: string) {
+  if (aliases.has(file)) return aliases.get(file)
+  const result = spawnSync("where.exe", [file], { encoding: "utf8", windowsHide: true })
+  // spawnSync reports a failed launch on .error rather than throwing, so a missing or
+  // blocked where.exe lands here as a miss.
+  const path = result.status === 0 ? line(result.stdout) : undefined
+  aliases.set(file, path)
+  return path
+}
+aliased.reset = () => aliases.clear()
 
 function win(options?: Options, bin?: string) {
   return Array.from(
