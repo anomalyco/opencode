@@ -133,6 +133,23 @@ const call = (input: typeof BashTool.Input.Type, id = "call-bash") => ({
 const it = testEffect(Layer.empty)
 
 describe("BashTool", () => {
+  it.live("rejects missing and blank descriptions before requesting execution", () =>
+    withTool(process.cwd(), (registry) =>
+      Effect.gen(function* () {
+        reset()
+        for (const input of [{ command: "pwd" }, { command: "pwd", description: " \t\n" }]) {
+          const result = yield* executeTool(registry, {
+            sessionID,
+            ...toolIdentity,
+            call: { type: "tool-call", id: "invalid-bash", name: "bash", input },
+          })
+          expect(result).toMatchObject({ type: "error", value: expect.stringContaining("description") })
+        }
+        expect(assertions).toEqual([])
+        expect(runs).toEqual([])
+      }),
+    ),
+  )
   it.live("registers and returns structured successful output from the active Location", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -144,6 +161,7 @@ describe("BashTool", () => {
             expect(definitions.map((tool) => tool.name)).toEqual(["bash"])
             expect(definitions[0]?.inputSchema).not.toHaveProperty("properties.background")
             expect(definitions[0]?.inputSchema).toHaveProperty("properties.description")
+            expect(definitions[0]?.inputSchema).toHaveProperty("required", expect.arrayContaining(["description"]))
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.output")
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.command")
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.cwd")
@@ -198,13 +216,16 @@ describe("BashTool", () => {
         return Effect.promise(() => fs.mkdir(path.join(tmp.path, "src"))).pipe(
           Effect.andThen(
             withTool(tmp.path, (registry) =>
-              executeTool(registry, call({ command: "pwd", description: "   ", workdir: "src" })),
+              executeTool(
+                registry,
+                call({ command: "pwd", description: "Check the source working directory", workdir: "src" }),
+              ),
             ),
           ),
           Effect.andThen(
             Effect.sync(() => {
               expect(runs).toMatchObject([{ cwd: realpathSync(path.join(tmp.path, "src")) }])
-              expect(assertions[0]?.metadata).toBeUndefined()
+              expect(assertions[0]?.metadata).toEqual({ description: "Check the source working directory" })
             }),
           ),
         )
@@ -228,7 +249,12 @@ describe("BashTool", () => {
             : Effect.void
         return Effect.promise(() => fs.mkdir(workdir)).pipe(
           Effect.andThen(
-            withTool(tmp.path, (registry) => executeTool(registry, call({ command: "pwd", workdir: "src" }))),
+            withTool(tmp.path, (registry) =>
+              executeTool(
+                registry,
+                call({ description: "Verify shell execution for this test.", command: "pwd", workdir: "src" }),
+              ),
+            ),
           ),
           Effect.andThen(
             Effect.sync(() => {
@@ -250,7 +276,11 @@ describe("BashTool", () => {
           reset()
           return withTool(
             tmp.path,
-            (registry) => settleTool(registry, call({ command: "printf core-bash" })),
+            (registry) =>
+              settleTool(
+                registry,
+                call({ description: "Verify shell execution for this test.", command: "printf core-bash" }),
+              ),
             LayerNode.compile(AppProcess.node),
           ).pipe(
             Effect.andThen((settled) =>
@@ -314,14 +344,19 @@ describe("BashTool", () => {
           reset()
           denyAction = "external_directory"
           yield* withTool(active.path, (registry) =>
-            executeTool(registry, call({ command: "pwd", workdir: outside.path })),
+            executeTool(
+              registry,
+              call({ description: "Verify shell execution for this test.", command: "pwd", workdir: outside.path }),
+            ),
           )
           expect(assertions.map((item) => item.action)).toEqual(["external_directory"])
           expect(runs).toEqual([])
 
           reset()
           denyAction = "bash"
-          yield* withTool(active.path, (registry) => executeTool(registry, call({ command: "pwd" })))
+          yield* withTool(active.path, (registry) =>
+            executeTool(registry, call({ description: "Verify shell execution for this test.", command: "pwd" })),
+          )
           expect(assertions.map((item) => item.action)).toEqual(["bash"])
           expect(runs).toEqual([])
         }),
@@ -339,7 +374,12 @@ describe("BashTool", () => {
         reset()
         denyAction = "external_directory"
         const target = path.join(outside.path, "secret.txt")
-        return withTool(active.path, (registry) => settleTool(registry, call({ command: `cat ${target}` }))).pipe(
+        return withTool(active.path, (registry) =>
+          settleTool(
+            registry,
+            call({ description: "Verify shell execution for this test.", command: `cat ${target}` }),
+          ),
+        ).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
               expect(assertions.map((item) => item.action)).toEqual(["bash"])
@@ -369,7 +409,12 @@ describe("BashTool", () => {
       (tmp) => {
         reset()
         result = { ...result, exitCode: 7, output: Buffer.from("HEAD full output TAIL") }
-        return withTool(tmp.path, (registry) => settleTool(registry, call({ command: "false" }, "call-overflow"))).pipe(
+        return withTool(tmp.path, (registry) =>
+          settleTool(
+            registry,
+            call({ description: "Verify shell execution for this test.", command: "false" }, "call-overflow"),
+          ),
+        ).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
               expect(settled.output?.content[1]).toMatchObject({
@@ -395,7 +440,9 @@ describe("BashTool", () => {
       (tmp) => {
         reset()
         result = { ...result, outputTruncated: true }
-        return withTool(tmp.path, (registry) => settleTool(registry, call({ command: "verbose" }))).pipe(
+        return withTool(tmp.path, (registry) =>
+          settleTool(registry, call({ description: "Verify shell execution for this test.", command: "verbose" })),
+        ).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
               expect(settled.output?.structured).toMatchObject({ truncated: true })
@@ -418,7 +465,12 @@ describe("BashTool", () => {
       (tmp) => {
         reset()
         runFailure = new AppProcess.AppProcessError({ command: "sleep", cause: new Error("Timed out") })
-        return withTool(tmp.path, (registry) => settleTool(registry, call({ command: "sleep 60", timeout: 10 }))).pipe(
+        return withTool(tmp.path, (registry) =>
+          settleTool(
+            registry,
+            call({ description: "Verify shell execution for this test.", command: "sleep 60", timeout: 10 }),
+          ),
+        ).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
               expect(settled.output?.content[1]).toMatchObject({

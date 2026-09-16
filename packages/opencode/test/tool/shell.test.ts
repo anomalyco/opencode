@@ -182,10 +182,18 @@ const mustTruncate = (result: {
 }
 
 describe("tool.shell", () => {
-  it.instance("advertises the task description while keeping runtime callers compatible", () =>
+  it.instance("requires a task description in the model schema", () =>
     Effect.gen(function* () {
       const tool = yield* initShell()
       expect(ToolJsonSchema.fromTool({ ...tool, id: "bash" })).toHaveProperty("properties.description")
+      expect(ToolJsonSchema.fromTool({ ...tool, id: "bash" })).toHaveProperty(
+        "required",
+        expect.arrayContaining(["description"]),
+      )
+      // @ts-expect-error exercise an incomplete model call
+      const exit = yield* tool.execute({ command: "echo unused" }, ctx).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Tool.InvalidArgumentsError)
     }),
   )
 
@@ -193,9 +201,7 @@ describe("tool.shell", () => {
     runIn(
       projectRoot,
       Effect.gen(function* () {
-        const result = yield* run({
-          command: "echo test",
-        })
+        const result = yield* run({ description: "Verify shell execution for this test.", command: "echo test" })
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("test")
       }),
@@ -216,6 +222,7 @@ describe("tool.shell", () => {
           const result = yield* bash.execute(
             {
               command: "echo fallback",
+              description: "Verify the fallback shell works.",
             },
             ctx,
           )
@@ -259,9 +266,7 @@ describe("tool.shell permissions", () => {
         Effect.gen(function* () {
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           yield* run(
-            {
-              command: "echo foo && echo bar",
-            },
+            { description: "Verify shell execution for this test.", command: "echo foo && echo bar" },
             capture(requests),
           )
           expect(requests.length).toBe(1)
@@ -273,15 +278,16 @@ describe("tool.shell permissions", () => {
     }),
   )
 
-  each("omits blank descriptions from permission metadata", () =>
+  each("rejects blank descriptions before requesting permission", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* runIn(
         tmp,
         Effect.gen(function* () {
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-          yield* run({ command: "echo hello", description: "   " }, capture(requests))
-          expect(requests[0]?.metadata).toEqual({ command: "echo hello" })
+          const exit = yield* run({ command: "echo hello", description: "   " }, capture(requests)).pipe(Effect.exit)
+          expect(Exit.isFailure(exit)).toBe(true)
+          expect(requests).toEqual([])
         }),
       )
     }),
@@ -297,6 +303,7 @@ describe("tool.shell permissions", () => {
             const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
             yield* run(
               {
+                description: "Verify shell execution for this test.",
                 command: "Write-Host foo; if ($?) { Write-Host bar }",
               },
               capture(requests),
@@ -325,9 +332,7 @@ describe("tool.shell permissions", () => {
               const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               expect(
                 yield* fail(
-                  {
-                    command: "Remove-Item -Recurse tmp",
-                  },
+                  { description: "Verify shell execution for this test.", command: "Remove-Item -Recurse tmp" },
                   capture(requests, err),
                 ),
               ).toMatchObject({ message: err.message })
@@ -352,9 +357,7 @@ describe("tool.shell permissions", () => {
         const want = process.platform === "win32" ? glob(path.join(process.env.WINDIR!, "*")) : "/etc/*"
         expect(
           yield* fail(
-            {
-              command: `cat ${file}`,
-            },
+            { description: "Verify shell execution for this test.", command: `cat ${file}` },
             capture(requests, err),
           ),
         ).toMatchObject({ message: err.message })
@@ -379,9 +382,7 @@ describe("tool.shell permissions", () => {
                 const file = path.join(outerTmp, "outside.txt").replaceAll("\\", "/")
                 const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
                 yield* run(
-                  {
-                    command: `echo $(cat "${file}")`,
-                  },
+                  { description: "Verify shell execution for this test.", command: `echo $(cat "${file}")` },
                   capture(requests),
                 )
                 const extDirReq = requests.find((r) => r.permission === "external_directory")
@@ -409,6 +410,7 @@ describe("tool.shell permissions", () => {
               expect(
                 yield* fail(
                   {
+                    description: "Verify shell execution for this test.",
                     command: `Copy-Item -PassThru "${process.env.WINDIR!.replaceAll("\\", "/")}/win.ini" ./out`,
                   },
                   capture(requests, err),
@@ -434,6 +436,7 @@ describe("tool.shell permissions", () => {
               const file = `${process.env.WINDIR!.replaceAll("\\", "/")}/win.ini`
               yield* run(
                 {
+                  description: "Verify shell execution for this test.",
                   command: `Write-Output $(Get-Content ${file})`,
                 },
                 capture(requests),
@@ -463,9 +466,7 @@ describe("tool.shell permissions", () => {
                 const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
                 expect(
                   yield* fail(
-                    {
-                      command: 'Get-Content "C:../outside.txt"',
-                    },
+                    { description: "Verify shell execution for this test.", command: 'Get-Content "C:../outside.txt"' },
                     capture(requests, err),
                   ),
                 ).toMatchObject({ message: err.message })
@@ -490,9 +491,7 @@ describe("tool.shell permissions", () => {
               const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               expect(
                 yield* fail(
-                  {
-                    command: 'Get-Content "$HOME/.ssh/config"',
-                  },
+                  { description: "Verify shell execution for this test.", command: 'Get-Content "$HOME/.ssh/config"' },
                   capture(requests, err),
                 ),
               ).toMatchObject({ message: err.message })
@@ -519,6 +518,7 @@ describe("tool.shell permissions", () => {
                 expect(
                   yield* fail(
                     {
+                      description: "Verify shell execution for this test.",
                       command: 'Get-Content "$PWD/../outside.txt"',
                     },
                     capture(requests, err),
@@ -546,6 +546,7 @@ describe("tool.shell permissions", () => {
               expect(
                 yield* fail(
                   {
+                    description: "Verify shell execution for this test.",
                     command: 'Get-Content "$PSHOME/outside.txt"',
                   },
                   capture(requests, err),
@@ -581,6 +582,7 @@ describe("tool.shell permissions", () => {
                   expect(
                     yield* fail(
                       {
+                        description: "Verify shell execution for this test.",
                         command: `Get-Content -Path "${root}$env:${key}\\Windows\\win.ini"`,
                       },
                       capture(requests, err),
@@ -610,9 +612,7 @@ describe("tool.shell permissions", () => {
             Effect.gen(function* () {
               const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               yield* run(
-                {
-                  command: "Get-Content $env:WINDIR/win.ini",
-                },
+                { description: "Verify shell execution for this test.", command: "Get-Content $env:WINDIR/win.ini" },
                 capture(requests),
               )
               const extDirReq = requests.find((r) => r.permission === "external_directory")
@@ -638,6 +638,7 @@ describe("tool.shell permissions", () => {
               expect(
                 yield* fail(
                   {
+                    description: "Verify shell execution for this test.",
                     command: `Get-Content -Path FileSystem::${process.env.WINDIR!.replaceAll("\\", "/")}/win.ini`,
                   },
                   capture(requests, err),
@@ -666,6 +667,7 @@ describe("tool.shell permissions", () => {
               expect(
                 yield* fail(
                   {
+                    description: "Verify shell execution for this test.",
                     command: "Get-Content ${env:WINDIR}/win.ini",
                   },
                   capture(requests, err),
@@ -691,9 +693,7 @@ describe("tool.shell permissions", () => {
             Effect.gen(function* () {
               const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               yield* run(
-                {
-                  command: "Set-Location C:/Windows",
-                },
+                { description: "Verify shell execution for this test.", command: "Set-Location C:/Windows" },
                 capture(requests),
               )
               const extDirReq = requests.find((r) => r.permission === "external_directory")
@@ -718,9 +718,7 @@ describe("tool.shell permissions", () => {
             Effect.gen(function* () {
               const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               yield* run(
-                {
-                  command: "Write-Output ('a' * 3)",
-                },
+                { description: "Verify shell execution for this test.", command: "Write-Output ('a' * 3)" },
                 capture(requests),
               )
               const bashReq = requests.find((r) => r.permission === "bash")
@@ -744,6 +742,7 @@ describe("tool.shell permissions", () => {
             const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
             yield* run(
               {
+                description: "Verify shell execution for this test.",
                 command: `TYPE "${path.join(process.env.WINDIR!, "win.ini")}"`,
               },
               capture(requests),
@@ -767,9 +766,7 @@ describe("tool.shell permissions", () => {
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           expect(
             yield* fail(
-              {
-                command: "cd ../",
-              },
+              { description: "Verify shell execution for this test.", command: "cd ../" },
               capture(requests, err),
             ),
           ).toMatchObject({ message: err.message })
@@ -822,10 +819,7 @@ describe("tool.shell permissions", () => {
               const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
               expect(
                 yield* fail(
-                  {
-                    command: "echo ok",
-                    workdir: dir,
-                  },
+                  { description: "Verify shell execution for this test.", command: "echo ok", workdir: dir },
                   capture(requests, err),
                 ),
               ).toMatchObject({ message: err.message })
@@ -854,10 +848,7 @@ describe("tool.shell permissions", () => {
               const want = glob(path.join(os.tmpdir(), "*"))
               expect(
                 yield* fail(
-                  {
-                    command: "echo ok",
-                    workdir: "/tmp",
-                  },
+                  { description: "Verify shell execution for this test.", command: "echo ok", workdir: "/tmp" },
                   capture(requests, err),
                 ),
               ).toMatchObject({ message: err.message })
@@ -882,9 +873,7 @@ describe("tool.shell permissions", () => {
               const want = glob(path.join(os.tmpdir(), "*"))
               expect(
                 yield* fail(
-                  {
-                    command: "cat /tmp/opencode-does-not-exist",
-                  },
+                  { description: "Verify shell execution for this test.", command: "cat /tmp/opencode-does-not-exist" },
                   capture(requests, err),
                 ),
               ).toMatchObject({ message: err.message })
@@ -913,9 +902,7 @@ describe("tool.shell permissions", () => {
           const filepath = path.join(outerTmp, "outside.txt")
           expect(
             yield* fail(
-              {
-                command: `cat ${filepath}`,
-              },
+              { description: "Verify shell execution for this test.", command: `cat ${filepath}` },
               capture(requests, err),
             ),
           ).toMatchObject({ message: err.message })
@@ -943,9 +930,7 @@ describe("tool.shell permissions", () => {
         Effect.gen(function* () {
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           yield* run(
-            {
-              command: `rm -rf ${path.join(tmp, "nested")}`,
-            },
+            { description: "Verify shell execution for this test.", command: `rm -rf ${path.join(tmp, "nested")}` },
             capture(requests),
           )
           const extDirReq = requests.find((r) => r.permission === "external_directory")
@@ -963,9 +948,7 @@ describe("tool.shell permissions", () => {
         Effect.gen(function* () {
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
           yield* run(
-            {
-              command: "git log --oneline -5",
-            },
+            { description: "Verify shell execution for this test.", command: "git log --oneline -5" },
             capture(requests),
           )
           expect(requests.length).toBe(1)
@@ -983,12 +966,7 @@ describe("tool.shell permissions", () => {
         tmp,
         Effect.gen(function* () {
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-          yield* run(
-            {
-              command: "cd .",
-            },
-            capture(requests),
-          )
+          yield* run({ description: "Verify shell execution for this test.", command: "cd ." }, capture(requests))
           const bashReq = requests.find((r) => r.permission === "bash")
           expect(bashReq).toBeUndefined()
         }),
@@ -1004,7 +982,12 @@ describe("tool.shell permissions", () => {
         Effect.gen(function* () {
           const err = new Error("stop after permission")
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-          expect(yield* fail({ command: "echo test > output.txt" }, capture(requests, err))).toMatchObject({
+          expect(
+            yield* fail(
+              { description: "Verify shell execution for this test.", command: "echo test > output.txt" },
+              capture(requests, err),
+            ),
+          ).toMatchObject({
             message: err.message,
           })
           const bashReq = requests.find((r) => r.permission === "bash")
@@ -1022,7 +1005,7 @@ describe("tool.shell permissions", () => {
         tmp,
         Effect.gen(function* () {
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-          yield* run({ command: "ls -la" }, capture(requests))
+          yield* run({ description: "Verify shell execution for this test.", command: "ls -la" }, capture(requests))
           const bashReq = requests.find((r) => r.permission === "bash")
           expect(bashReq).toBeDefined()
           expect(bashReq!.always[0]).toBe("ls *")
@@ -1042,9 +1025,7 @@ describe("tool.shell abort", () => {
           const controller = new AbortController()
           const collected: string[] = []
           const res = yield* run(
-            {
-              command: `echo before && sleep 30`,
-            },
+            { description: "Verify shell execution for this test.", command: `echo before && sleep 30` },
             {
               ...ctx,
               abort: controller.signal,
@@ -1073,6 +1054,7 @@ describe("tool.shell abort", () => {
         projectRoot,
         Effect.gen(function* () {
           const result = yield* run({
+            description: "Verify shell execution for this test.",
             command: `sleep 60`,
             timeout: 500,
           })
@@ -1094,6 +1076,7 @@ describe("tool.shell abort", () => {
           const result = yield* tool.execute(
             {
               command: `sleep 60`,
+              description: "Verify the configured shell timeout.",
             },
             ctx,
           )
@@ -1109,6 +1092,7 @@ describe("tool.shell abort", () => {
         projectRoot,
         Effect.gen(function* () {
           const result = yield* run({
+            description: "Verify shell execution for this test.",
             command: `echo stdout_msg && echo stderr_msg >&2`,
           })
           expect(result.output).toContain("stdout_msg")
@@ -1123,9 +1107,7 @@ describe("tool.shell abort", () => {
     runIn(
       projectRoot,
       Effect.gen(function* () {
-        const result = yield* run({
-          command: `exit 42`,
-        })
+        const result = yield* run({ description: "Verify shell execution for this test.", command: `exit 42` })
         expect(result.metadata.exit).toBe(42)
       }),
     ),
@@ -1137,9 +1119,7 @@ describe("tool.shell abort", () => {
       Effect.gen(function* () {
         const updates: string[] = []
         const result = yield* run(
-          {
-            command: `echo first && sleep 0.1 && echo second`,
-          },
+          { description: "Verify shell execution for this test.", command: `echo first && sleep 0.1 && echo second` },
           {
             ...ctx,
             metadata: (input) =>
@@ -1164,6 +1144,7 @@ describe("tool.shell truncation", () => {
       Effect.gen(function* () {
         const lineCount = Truncate.MAX_LINES + 500
         const result = yield* run({
+          description: "Verify shell execution for this test.",
           command: fill("lines", lineCount),
         })
         mustTruncate(result)
@@ -1179,6 +1160,7 @@ describe("tool.shell truncation", () => {
       Effect.gen(function* () {
         const byteCount = Truncate.MAX_BYTES + 10000
         const result = yield* run({
+          description: "Verify shell execution for this test.",
           command: fill("bytes", byteCount),
         })
         mustTruncate(result)
@@ -1192,9 +1174,7 @@ describe("tool.shell truncation", () => {
     runIn(
       projectRoot,
       Effect.gen(function* () {
-        const result = yield* run({
-          command: fill("lines", 1),
-        })
+        const result = yield* run({ description: "Verify shell execution for this test.", command: fill("lines", 1) })
         expect((result.metadata as { truncated?: boolean }).truncated).toBe(false)
         expect(result.output).toContain("1")
       }),
@@ -1207,6 +1187,7 @@ describe("tool.shell truncation", () => {
       Effect.gen(function* () {
         const lineCount = Truncate.MAX_LINES + 100
         const result = yield* run({
+          description: "Verify shell execution for this test.",
           command: fill("lines", lineCount),
         })
         mustTruncate(result)

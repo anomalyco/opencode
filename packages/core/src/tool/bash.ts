@@ -22,7 +22,7 @@ export const MAX_CAPTURE_BYTES = 1024 * 1024
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
-  description: Schema.String.pipe(Schema.optional).annotate({
+  description: Schema.String.check(Schema.isPattern(/\S/)).annotate({
     description:
       "Provide a concise reason grounded in the user's request that explains the intended outcome. Do not merely repeat the command or invent a purpose.",
   }),

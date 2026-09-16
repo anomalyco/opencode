@@ -24,6 +24,11 @@ exports[`tool parameters JSON Schema (wire shape) bash 1`] = `
       "description": "The command to execute",
       "type": "string",
     },
+    "description": {
+      "description": "Provide a concise reason grounded in the user's request that explains the intended outcome. Do not merely repeat the command or invent a purpose.",
+      "pattern": "\\S",
+      "type": "string",
+    },
     "timeout": {
       "description": "Optional timeout in milliseconds",
       "exclusiveMinimum": 0,
@@ -38,6 +43,7 @@ exports[`tool parameters JSON Schema (wire shape) bash 1`] = `
   },
   "required": [
     "command",
+    "description",
   ],
   "type": "object",
 }
@@ -257,6 +263,11 @@ exports[`tool parameters JSON Schema (wire shape) read 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "description": {
+      "description": "Provide a concise reason grounded in the user's request that explains the intended outcome or information needed. Do not merely repeat the path or invent a purpose.",
+      "pattern": "\\S",
+      "type": "string",
+    },
     "filePath": {
       "description": "The absolute path to the file or directory to read",
       "type": "string",
@@ -276,6 +287,7 @@ exports[`tool parameters JSON Schema (wire shape) read 1`] = `
   },
   "required": [
     "filePath",
+    "description",
   ],
   "type": "object",
 }

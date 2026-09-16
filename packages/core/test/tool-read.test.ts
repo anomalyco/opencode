@@ -146,6 +146,21 @@ const itWithoutResizer = testEffect(readLayer(unavailableImage))
 const sessionID = SessionV2.ID.make("ses_read_tool_test")
 
 describe("ReadTool", () => {
+  it.effect("rejects missing and blank descriptions before requesting access", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      for (const input of [{ path: "README.md" }, { path: "README.md", description: " \t\n" }]) {
+        const result = yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "invalid-read", name: "read", input },
+        })
+        expect(result).toMatchObject({ type: "error", value: expect.stringContaining("description") })
+      }
+      expect(assertions).toEqual([])
+      expect(readCalls).toEqual([])
+    }),
+  )
   beforeEach(() => {
     assertions.length = 0
     readCalls.length = 0
@@ -170,12 +185,21 @@ describe("ReadTool", () => {
 
       expect(yield* toolDefinitions(registry)).toMatchObject([{ name: "read" }])
       expect((yield* toolDefinitions(registry))[0]?.inputSchema).toHaveProperty("properties.description")
+      expect((yield* toolDefinitions(registry))[0]?.inputSchema).toHaveProperty(
+        "required",
+        expect.arrayContaining(["description"]),
+      )
       expect(yield* toolDefinitions(registry, [{ action: "read", resource: "*", effect: "deny" }])).toEqual([])
       expect(
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
+          call: {
+            type: "tool-call",
+            id: "call-read",
+            name: "read",
+            input: { description: "Inspect the fixture to verify read behavior.", path: "README.md" },
+          },
         }),
       ).toEqual({
         type: "json",
@@ -188,7 +212,7 @@ describe("ReadTool", () => {
         },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
-      expect(assertions[0]?.metadata).toBeUndefined()
+      expect(assertions[0]?.metadata).toEqual({ description: "Inspect the fixture to verify read behavior." })
       expect(readCalls).toEqual([
         {
           input: AbsolutePath.make(path.join(process.cwd(), "README.md")),
@@ -250,7 +274,12 @@ describe("ReadTool", () => {
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-image", name: "read", input: { path: "pixel.png" } },
+          call: {
+            type: "tool-call",
+            id: "call-image",
+            name: "read",
+            input: { description: "Inspect the fixture to verify read behavior.", path: "pixel.png" },
+          },
         }),
       ).toEqual({
         type: "content",
@@ -269,7 +298,12 @@ describe("ReadTool", () => {
       const settled = yield* settleTool(registry, {
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: "call-image-settle", name: "read", input: { path: "pixel.png" } },
+        call: {
+          type: "tool-call",
+          id: "call-image-settle",
+          name: "read",
+          input: { description: "Inspect the fixture to verify read behavior.", path: "pixel.png" },
+        },
       })
       expect(settled.output?.structured).toMatchObject({
         uri: "file:///pixel.png",
@@ -304,7 +338,12 @@ describe("ReadTool", () => {
       const settled = yield* settleTool(registry, {
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: "call-large-image", name: "read", input: { path: "large.png" } },
+        call: {
+          type: "tool-call",
+          id: "call-large-image",
+          name: "read",
+          input: { description: "Inspect the fixture to verify read behavior.", path: "large.png" },
+        },
       })
 
       expect(settled.outputPaths).toBeUndefined()
@@ -340,7 +379,12 @@ describe("ReadTool", () => {
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-image-fallback", name: "read", input: { path: "pixel.png" } },
+          call: {
+            type: "tool-call",
+            id: "call-image-fallback",
+            name: "read",
+            input: { description: "Inspect the fixture to verify read behavior.", path: "pixel.png" },
+          },
         }),
       ).toMatchObject({
         type: "content",
@@ -364,7 +408,12 @@ describe("ReadTool", () => {
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-truncated-image", name: "read", input: { path: "truncated.png" } },
+          call: {
+            type: "tool-call",
+            id: "call-truncated-image",
+            name: "read",
+            input: { description: "Inspect the fixture to verify read behavior.", path: "truncated.png" },
+          },
         }),
       ).toEqual({ type: "error", value: "Image could not be decoded: truncated.png" })
     }),
@@ -397,7 +446,12 @@ describe("ReadTool", () => {
       const result = yield* executeTool(registry, {
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: "call-wide-image", name: "read", input: { path: "wide.png" } },
+        call: {
+          type: "tool-call",
+          id: "call-wide-image",
+          name: "read",
+          input: { description: "Inspect the fixture to verify read behavior.", path: "wide.png" },
+        },
       })
 
       expect(result.type).toBe("error")
@@ -430,7 +484,12 @@ describe("ReadTool", () => {
       const result = yield* executeTool(registry, {
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: "call-resize-image", name: "read", input: { path: "wide.png" } },
+        call: {
+          type: "tool-call",
+          id: "call-resize-image",
+          name: "read",
+          input: { description: "Inspect the fixture to verify read behavior.", path: "wide.png" },
+        },
       })
 
       expect(result.type).toBe("content")
@@ -469,7 +528,12 @@ describe("ReadTool", () => {
       const result = yield* executeTool(registry, {
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: "call-max-bytes", name: "read", input: { path: "pixel.png" } },
+        call: {
+          type: "tool-call",
+          id: "call-max-bytes",
+          name: "read",
+          input: { description: "Inspect the fixture to verify read behavior.", path: "pixel.png" },
+        },
       })
 
       expect(result.type).toBe("error")
@@ -493,7 +557,12 @@ describe("ReadTool", () => {
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-disguised-image", name: "read", input: { path: "pixel.bin" } },
+          call: {
+            type: "tool-call",
+            id: "call-disguised-image",
+            name: "read",
+            input: { description: "Inspect the fixture to verify read behavior.", path: "pixel.bin" },
+          },
         }),
       ).toMatchObject({
         type: "content",
@@ -515,7 +584,12 @@ describe("ReadTool", () => {
             type: "tool-call",
             id: "call-binary",
             name: "read",
-            input: { path: "archive.dat", offset: 2, limit: 1 },
+            input: {
+              description: "Inspect the fixture to verify read behavior.",
+              path: "archive.dat",
+              offset: 2,
+              limit: 1,
+            },
           },
         }),
       ).toEqual({ type: "error", value: "Cannot read binary file: archive.dat" })
@@ -535,7 +609,12 @@ describe("ReadTool", () => {
           yield* executeTool(registry, {
             sessionID,
             ...toolIdentity,
-            call: { type: "tool-call", id: "call-defect", name: "read", input: { path: "README.md" } },
+            call: {
+              type: "tool-call",
+              id: "call-defect",
+              name: "read",
+              input: { description: "Inspect the fixture to verify read behavior.", path: "README.md" },
+            },
           }).pipe(Effect.exit),
         ),
       ).toBe(true)
@@ -551,7 +630,12 @@ describe("ReadTool", () => {
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
+          call: {
+            type: "tool-call",
+            id: "call-read",
+            name: "read",
+            input: { description: "Inspect the fixture to verify read behavior.", path: "README.md" },
+          },
         }),
       ).toEqual({ type: "error", value: "Unable to read README.md" })
       expect(readCalls).toEqual([])
@@ -566,7 +650,12 @@ describe("ReadTool", () => {
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-missing-path", name: "read", input: { path: missingPath } },
+          call: {
+            type: "tool-call",
+            id: "call-missing-path",
+            name: "read",
+            input: { description: "Inspect the fixture to verify read behavior.", path: missingPath },
+          },
         }),
       ).toEqual({ type: "error", value: `Unable to read ${missingPath}` })
       expect(assertions).toEqual([])
@@ -587,7 +676,7 @@ describe("ReadTool", () => {
             type: "tool-call",
             id: "call-read-directory",
             name: "read",
-            input: { path: "src", offset: 2, limit: 10 },
+            input: { description: "Inspect the fixture to verify read behavior.", path: "src", offset: 2, limit: 10 },
           },
         }),
       ).toEqual({ type: "json", value: { entries: [], truncated: false } })
@@ -606,7 +695,12 @@ describe("ReadTool", () => {
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-read-directory-denied", name: "read", input: { path: "src" } },
+          call: {
+            type: "tool-call",
+            id: "call-read-directory-denied",
+            name: "read",
+            input: { description: "Inspect the fixture to verify read behavior.", path: "src" },
+          },
         }),
       ).toEqual({ type: "error", value: "Unable to read src" })
       expect(listCalls).toEqual([])
@@ -623,7 +717,12 @@ describe("ReadTool", () => {
           yield* executeTool(registry, {
             sessionID,
             ...toolIdentity,
-            call: { type: "tool-call", id: "call-missing", name: "read", input: { path: "missing.txt" } },
+            call: {
+              type: "tool-call",
+              id: "call-missing",
+              name: "read",
+              input: { description: "Inspect the fixture to verify read behavior.", path: "missing.txt" },
+            },
           }).pipe(Effect.exit),
         ),
       ).toBe(true)
@@ -652,7 +751,12 @@ describe("ReadTool", () => {
             type: "tool-call",
             id: "call-large",
             name: "read",
-            input: { path: "large.txt", offset: 2, limit: 1 },
+            input: {
+              description: "Inspect the fixture to verify read behavior.",
+              path: "large.txt",
+              offset: 2,
+              limit: 1,
+            },
           },
         }),
       ).toEqual({
@@ -680,7 +784,12 @@ describe("ReadTool", () => {
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-direct-binary", name: "read", input: { path: "late-binary" } },
+          call: {
+            type: "tool-call",
+            id: "call-direct-binary",
+            name: "read",
+            input: { description: "Inspect the fixture to verify read behavior.", path: "late-binary" },
+          },
         }),
       ).toEqual({ type: "error", value: "Cannot read binary file: late-binary" })
     }),

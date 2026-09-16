@@ -150,10 +150,19 @@ const asks = () => {
 }
 
 describe("tool.read external_directory permission", () => {
-  it.effect("advertises the task description while keeping runtime callers compatible", () =>
+  it.effect("requires a task description in the model schema", () =>
     Effect.gen(function* () {
       const tool = yield* init()
       expect(ToolJsonSchema.fromTool({ ...tool, id: "read" })).toHaveProperty("properties.description")
+      expect(ToolJsonSchema.fromTool({ ...tool, id: "read" })).toHaveProperty(
+        "required",
+        expect.arrayContaining(["description"]),
+      )
+      // Exercise the runtime boundary with an intentionally incomplete model call.
+      // @ts-expect-error description is required
+      const exit = yield* tool.execute({ filePath: "unused" }, ctx).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Tool.InvalidArgumentsError)
     }),
   )
 
@@ -162,7 +171,10 @@ describe("tool.read external_directory permission", () => {
       const dir = yield* tmpdirScoped()
       yield* put(path.join(dir, "test.txt"), "hello world")
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "test.txt") })
+      const result = yield* exec(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "test.txt"),
+      })
       expect(result.output).toContain("hello world")
     }),
   )
@@ -172,7 +184,10 @@ describe("tool.read external_directory permission", () => {
       const dir = yield* tmpdirScoped()
       yield* put(path.join(dir, "subdir", "test.txt"), "nested content")
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "subdir", "test.txt") })
+      const result = yield* exec(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "subdir", "test.txt"),
+      })
       expect(result.output).toContain("nested content")
     }),
   )
@@ -199,13 +214,14 @@ describe("tool.read external_directory permission", () => {
     }),
   )
 
-  it.live("omits blank descriptions from permission metadata", () =>
+  it.live("rejects blank descriptions before requesting permission", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       yield* put(path.join(dir, "test.txt"), "hello")
       const { items, next } = asks()
-      yield* exec(dir, { filePath: path.join(dir, "test.txt"), description: "   " }, next)
-      expect(items.find((item) => item.permission === "read")?.metadata).toEqual({})
+      const error = yield* fail(dir, { filePath: path.join(dir, "test.txt"), description: "   " }, next)
+      expect(error).toBeInstanceOf(Tool.InvalidArgumentsError)
+      expect(items).toEqual([])
     }),
   )
 
@@ -222,7 +238,7 @@ describe("tool.read external_directory permission", () => {
           .replaceAll("\\", "/")
           .toLowerCase()
 
-        yield* exec(dir, { filePath: alt }, next)
+        yield* exec(dir, { description: "Inspect the fixture to verify read behavior.", filePath: alt }, next)
         const read = items.find((item) => item.permission === "read")
         expect(read).toBeDefined()
         expect(read!.patterns).toEqual([path.relative(dir, full(target))])
@@ -236,7 +252,11 @@ describe("tool.read external_directory permission", () => {
       yield* put(path.join(dir, "src", "secret.ts"), "shh")
 
       const { items, next } = asks()
-      yield* exec(dir, { filePath: path.join(dir, "src", "secret.ts") }, next)
+      yield* exec(
+        dir,
+        { description: "Inspect the fixture to verify read behavior.", filePath: path.join(dir, "src", "secret.ts") },
+        next,
+      )
       const read = items.find((item) => item.permission === "read")
       expect(read).toBeDefined()
       expect(read!.patterns).toEqual([path.join("src", "secret.ts")])
@@ -251,7 +271,11 @@ describe("tool.read external_directory permission", () => {
 
       const { items, next } = asks()
 
-      yield* exec(dir, { filePath: path.join(outer, "external") }, next)
+      yield* exec(
+        dir,
+        { description: "Inspect the fixture to verify read behavior.", filePath: path.join(outer, "external") },
+        next,
+      )
       const ext = items.find((item) => item.permission === "external_directory")
       expect(ext).toBeDefined()
       expect(ext!.patterns).toContain(glob(path.join(outer, "external", "*")))
@@ -264,7 +288,11 @@ describe("tool.read external_directory permission", () => {
 
       const { items, next } = asks()
 
-      yield* fail(dir, { filePath: "../outside.txt" }, next)
+      yield* fail(
+        dir,
+        { description: "Inspect the fixture to verify read behavior.", filePath: "../outside.txt" },
+        next,
+      )
       const ext = items.find((item) => item.permission === "external_directory")
       expect(ext).toBeDefined()
     }),
@@ -277,7 +305,11 @@ describe("tool.read external_directory permission", () => {
 
       const { items, next } = asks()
 
-      yield* exec(dir, { filePath: path.join(dir, "internal.txt") }, next)
+      yield* exec(
+        dir,
+        { description: "Inspect the fixture to verify read behavior.", filePath: path.join(dir, "internal.txt") },
+        next,
+      )
       const ext = items.find((item) => item.permission === "external_directory")
       expect(ext).toBeUndefined()
     }),
@@ -324,7 +356,10 @@ describe("tool.read env file permissions", () => {
                     }),
                 }
 
-                yield* run({ filePath: path.join(dir, filename) }, next)
+                yield* run(
+                  { description: "Inspect the fixture to verify read behavior.", filePath: path.join(dir, filename) },
+                  next,
+                )
                 return asked
               }),
             )
@@ -346,7 +381,10 @@ describe("tool.read truncation", () => {
       const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
       yield* put(path.join(test.directory, "large.json"), content)
 
-      const result = yield* run({ filePath: path.join(test.directory, "large.json") })
+      const result = yield* run({
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(test.directory, "large.json"),
+      })
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Output capped at")
       expect(result.output).toContain("Use offset=")
@@ -362,7 +400,10 @@ describe("tool.read truncation", () => {
 
       const fs = yield* FSUtil.Service
       const counter = { bytes: 0 }
-      const result = yield* run({ filePath: filepath }).pipe(
+      const result = yield* run({
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: filepath,
+      }).pipe(
         Effect.provideService(
           FSUtil.Service,
           FSUtil.Service.of({
@@ -391,7 +432,11 @@ describe("tool.read truncation", () => {
       const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
       yield* put(path.join(test.directory, "many-lines.txt"), lines)
 
-      const result = yield* run({ filePath: path.join(test.directory, "many-lines.txt"), limit: 10 })
+      const result = yield* run({
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(test.directory, "many-lines.txt"),
+        limit: 10,
+      })
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Showing lines 1-10 of 100")
       expect(result.output).toContain("Use offset=11")
@@ -406,7 +451,10 @@ describe("tool.read truncation", () => {
       const test = yield* TestInstance
       yield* put(path.join(test.directory, "small.txt"), "hello world")
 
-      const result = yield* run({ filePath: path.join(test.directory, "small.txt") })
+      const result = yield* run({
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(test.directory, "small.txt"),
+      })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).toContain("End of file")
       expect(result.metadata.display).toMatchObject({
@@ -427,7 +475,12 @@ describe("tool.read truncation", () => {
       const lines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n")
       yield* put(path.join(dir, "offset.txt"), lines)
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "offset.txt"), offset: 10, limit: 5 })
+      const result = yield* exec(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "offset.txt"),
+        offset: 10,
+        limit: 5,
+      })
       expect(result.output).toContain("10: line10")
       expect(result.output).toContain("14: line14")
       expect(result.output).not.toContain("9: line10")
@@ -445,7 +498,12 @@ describe("tool.read truncation", () => {
       const lines = Array.from({ length: 3 }, (_, i) => `line${i + 1}`).join("\n")
       yield* put(path.join(dir, "short.txt"), lines)
 
-      const err = yield* fail(dir, { filePath: path.join(dir, "short.txt"), offset: 4, limit: 5 })
+      const err = yield* fail(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "short.txt"),
+        offset: 4,
+        limit: 5,
+      })
       expect(err.message).toContain("Offset 4 is out of range for this file (3 lines)")
     }),
   )
@@ -455,7 +513,10 @@ describe("tool.read truncation", () => {
       const dir = yield* tmpdirScoped()
       yield* put(path.join(dir, "empty.txt"), "")
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "empty.txt") })
+      const result = yield* exec(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "empty.txt"),
+      })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).toContain("End of file - total 0 lines")
     }),
@@ -466,7 +527,11 @@ describe("tool.read truncation", () => {
       const dir = yield* tmpdirScoped()
       yield* put(path.join(dir, "empty.txt"), "")
 
-      const err = yield* fail(dir, { filePath: path.join(dir, "empty.txt"), offset: 2 })
+      const err = yield* fail(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "empty.txt"),
+        offset: 2,
+      })
       expect(err.message).toContain("Offset 2 is out of range for this file (0 lines)")
     }),
   )
@@ -482,7 +547,12 @@ describe("tool.read truncation", () => {
         },
       )
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "dir"), offset: 6, limit: 5 })
+      const result = yield* exec(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "dir"),
+        offset: 6,
+        limit: 5,
+      })
       expect(result.metadata.truncated).toBe(false)
       expect(result.output).not.toContain("Showing 5 of 10 entries")
       expect(result.metadata.display).toMatchObject({
@@ -501,7 +571,10 @@ describe("tool.read truncation", () => {
       const dir = yield* tmpdirScoped()
       yield* put(path.join(dir, "long-line.txt"), "x".repeat(3000))
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "long-line.txt") })
+      const result = yield* exec(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "long-line.txt"),
+      })
       expect(result.output).toContain("(line truncated to 2000 chars)")
       expect(result.output.length).toBeLessThan(3000)
     }),
@@ -516,7 +589,10 @@ describe("tool.read truncation", () => {
       )
       yield* put(path.join(dir, "image.png"), png)
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "image.png") })
+      const result = yield* exec(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "image.png"),
+      })
       expect(result.metadata.truncated).toBe(false)
       expect(result.attachments).toBeDefined()
       expect(result.attachments?.length).toBe(1)
@@ -532,7 +608,10 @@ describe("tool.read truncation", () => {
       const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01])
       yield* put(path.join(dir, "image.bin"), jpeg)
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "image.bin") })
+      const result = yield* exec(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "image.bin"),
+      })
       expect(result.output).toBe("Image read successfully")
       expect(result.attachments?.[0].mime).toBe("image/jpeg")
       expect(result.attachments?.[0].url.startsWith("data:image/jpeg;base64,")).toBe(true)
@@ -541,7 +620,10 @@ describe("tool.read truncation", () => {
 
   it.live("large image files are properly attached without error", () =>
     Effect.gen(function* () {
-      const result = yield* exec(FIXTURES_DIR, { filePath: path.join(FIXTURES_DIR, "large-image.png") })
+      const result = yield* exec(FIXTURES_DIR, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(FIXTURES_DIR, "large-image.png"),
+      })
       expect(result.metadata.truncated).toBe(false)
       expect(result.attachments).toBeDefined()
       expect(result.attachments?.length).toBe(1)
@@ -566,7 +648,10 @@ table Monster {
 root_type Monster;`
       yield* put(path.join(dir, "schema.fbs"), fbs)
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "schema.fbs") })
+      const result = yield* exec(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "schema.fbs"),
+      })
       expect(result.attachments).toBeUndefined()
       expect(result.output).toContain("namespace MyGame")
       expect(result.output).toContain("table Monster")
@@ -584,7 +669,10 @@ root_type Monster;`
 
       for (const item of cases) {
         yield* put(path.join(dir, item[0]), item[1])
-        const result = yield* exec(dir, { filePath: path.join(dir, item[0]) })
+        const result = yield* exec(dir, {
+          description: "Inspect the fixture to verify read behavior.",
+          filePath: path.join(dir, item[0]),
+        })
         expect(result.attachments).toBeUndefined()
         expect(result.output).toContain(item[1])
       }
@@ -599,7 +687,10 @@ describe("tool.read loaded instructions", () => {
       yield* put(path.join(dir, "subdir", "AGENTS.md"), "# Test Instructions\nDo something special.")
       yield* put(path.join(dir, "subdir", "nested", "test.txt"), "test content")
 
-      const result = yield* exec(dir, { filePath: path.join(dir, "subdir", "nested", "test.txt") })
+      const result = yield* exec(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "subdir", "nested", "test.txt"),
+      })
       expect(result.output).toContain("test content")
       expect(result.output).toContain("system-reminder")
       expect(result.output).toContain("Test Instructions")
@@ -616,7 +707,10 @@ describe("tool.read binary detection", () => {
       const bytes = Buffer.from([0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x77, 0x6f, 0x72, 0x6c, 0x64])
       yield* put(path.join(dir, "null-byte.txt"), bytes)
 
-      const err = yield* fail(dir, { filePath: path.join(dir, "null-byte.txt") })
+      const err = yield* fail(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "null-byte.txt"),
+      })
       expect(err.message).toContain("Cannot read binary file")
     }),
   )
@@ -626,7 +720,10 @@ describe("tool.read binary detection", () => {
       const dir = yield* tmpdirScoped()
       yield* put(path.join(dir, "module.wasm"), "not really wasm")
 
-      const err = yield* fail(dir, { filePath: path.join(dir, "module.wasm") })
+      const err = yield* fail(dir, {
+        description: "Inspect the fixture to verify read behavior.",
+        filePath: path.join(dir, "module.wasm"),
+      })
       expect(err.message).toContain("Cannot read binary file")
     }),
   )

@@ -27,7 +27,7 @@ class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 // unchanged; purely CLI-facing uses must now send numbers rather than strings.
 export const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "The absolute path to the file or directory to read" }),
-  description: Schema.optional(Schema.String).annotate({
+  description: Schema.String.check(Schema.isPattern(/\S/)).annotate({
     description:
       "Provide a concise reason grounded in the user's request that explains the intended outcome or information needed. Do not merely repeat the path or invent a purpose.",
   }),

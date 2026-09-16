@@ -15,7 +15,7 @@ export type Limits = {
 export function parameterSchema() {
   return Schema.Struct({
     command: Schema.String.annotate({ description: "The command to execute" }),
-    description: Schema.optional(Schema.String).annotate({
+    description: Schema.String.check(Schema.isPattern(/\S/)).annotate({
       description:
         "Provide a concise reason grounded in the user's request that explains the intended outcome. Do not merely repeat the command or invent a purpose.",
     }),

@@ -17,7 +17,7 @@ export const name = "read"
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const LocationInput = Schema.Struct({
   path: Schema.String,
-  description: Schema.String.pipe(Schema.optional).annotate({
+  description: Schema.String.check(Schema.isPattern(/\S/)).annotate({
     description:
       "Provide a concise reason grounded in the user's request that explains the intended outcome or information needed. Do not merely repeat the path or invent a purpose.",
   }),

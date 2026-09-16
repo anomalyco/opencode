@@ -106,11 +106,19 @@ describe("tool parameters", () => {
   })
 
   describe("shell", () => {
-    test("accepts command", () => {
-      expect(parse(Shell, { command: "ls" })).toEqual({ command: "ls" })
+    test("accepts command and description", () => {
+      expect(parse(Shell, { command: "ls", description: "Inspect the project files" })).toEqual({
+        command: "ls",
+        description: "Inspect the project files",
+      })
     })
     test("accepts optional timeout + workdir", () => {
-      const parsed = parse(Shell, { command: "ls", timeout: 5000, workdir: "/tmp" })
+      const parsed = parse(Shell, {
+        command: "ls",
+        description: "Inspect temporary files",
+        timeout: 5000,
+        workdir: "/tmp",
+      })
       expect(parsed.timeout).toBe(5000)
       expect(parsed.workdir).toBe("/tmp")
     })
@@ -215,11 +223,16 @@ describe("tool parameters", () => {
   })
 
   describe("read", () => {
-    test("accepts filePath-only", () => {
-      expect(parse(Read, { filePath: "/a" }).filePath).toBe("/a")
+    test("accepts filePath and description", () => {
+      expect(parse(Read, { filePath: "/a", description: "Inspect the requested file" }).filePath).toBe("/a")
     })
     test("accepts optional offset + limit", () => {
-      const parsed = parse(Read, { filePath: "/a", offset: 10, limit: 100 })
+      const parsed = parse(Read, {
+        filePath: "/a",
+        description: "Inspect the requested excerpt",
+        offset: 10,
+        limit: 100,
+      })
       expect(parsed.offset).toBe(10)
       expect(parsed.limit).toBe(100)
     })
