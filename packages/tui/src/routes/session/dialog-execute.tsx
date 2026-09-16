@@ -1,7 +1,7 @@
 import { CliRenderEvents, TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js"
 import stripAnsi from "strip-ansi"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
@@ -28,7 +28,21 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   const [height, setHeight] = createSignal(1)
   const maxHeight = createMemo(() => Math.max(3, Math.floor(dimensions().height * 0.7) - 6))
   let scroll: ScrollBoxRenderable | undefined
-  let measure: (() => void) | undefined
+
+  // Fit the scroll area to its content up to the cap. Wrapped code settles a
+  // frame after mount and output streams in, so grow from the measured height
+  // on every frame instead of measuring once; a resize restarts the fit.
+  createEffect(() => {
+    dimensions()
+    setHeight(1)
+  })
+  const measure = () => {
+    if (!scroll) return
+    const next = Math.max(1, Math.min(maxHeight(), scroll.scrollHeight))
+    if (next > untrack(height)) setHeight(next)
+  }
+  renderer.on(CliRenderEvents.FRAME, measure)
+  onCleanup(() => renderer.off(CliRenderEvents.FRAME, measure))
 
   dialog.setSize("xlarge")
   dialog.setCentered(true)
@@ -62,27 +76,6 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     return `Completed${duration}`
   })
 
-  // Size the scroll area to its content up to the cap so short calls do not
-  // leave a mostly empty dialog; remeasure as the part streams in.
-  createEffect(() => {
-    dimensions()
-    code()
-    calls()
-    output()
-    if (measure) renderer.off(CliRenderEvents.FRAME, measure)
-    measure = () => {
-      measure = undefined
-      if (!scroll) return
-      setHeight(Math.max(1, Math.min(maxHeight(), scroll.scrollHeight)))
-    }
-    renderer.once(CliRenderEvents.FRAME, measure)
-    renderer.requestRender()
-  })
-
-  onCleanup(() => {
-    if (measure) renderer.off(CliRenderEvents.FRAME, measure)
-  })
-
   const copy = (kind: "code" | "output") => {
     const text = kind === "code" ? code() : output()
     if (!text) return
@@ -97,8 +90,8 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     commands: [
       { bind: "up", title: "Scroll up", group: "Execute", run: () => scroll?.scrollBy(-1) },
       { bind: "down", title: "Scroll down", group: "Execute", run: () => scroll?.scrollBy(1) },
-      { bind: "pageup", title: "Previous page", group: "Execute", run: () => scroll?.scrollBy(-height()) },
-      { bind: "pagedown", title: "Next page", group: "Execute", run: () => scroll?.scrollBy(height()) },
+      { bind: "pageup", title: "Previous page", group: "Execute", run: () => scroll?.scrollBy(-maxHeight()) },
+      { bind: "pagedown", title: "Next page", group: "Execute", run: () => scroll?.scrollBy(maxHeight()) },
       { bind: "home", title: "Scroll to code", group: "Execute", run: () => scroll?.scrollTo(0) },
       { bind: "end", title: "Scroll to output", group: "Execute", run: () => scroll?.scrollTo(Infinity) },
       { bind: "c", title: "Copy code", group: "Execute", run: () => copy("code") },
