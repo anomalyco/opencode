@@ -110,6 +110,36 @@ describe("pty", () => {
     }),
   )
 
+  ptyTest("does not pass AppImage ARGV0 to the terminal", () =>
+    Effect.gen(function* () {
+      const previous = process.env.ARGV0
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          if (previous === undefined) {
+            delete process.env.ARGV0
+            return
+          }
+          process.env.ARGV0 = previous
+        }),
+      )
+      process.env.ARGV0 = "/tmp/opencode.AppImage"
+
+      const pty = yield* Pty.Service
+      const info = yield* createPty("/usr/bin/env", [
+        "sh",
+        "-c",
+        'read -r line; printf "ARGV0=%s;TERM=%s;OPENCODE_TERMINAL=%s\\n" "${ARGV0-unset}" "$TERM" "$OPENCODE_TERMINAL"',
+      ])
+      const attached = yield* attachCollecting(info.id)
+      yield* pty.write(info.id, "\n")
+
+      expect(yield* waitForOutput(attached.output, "OPENCODE_TERMINAL=1")).toContain(
+        "ARGV0=unset;TERM=xterm-256color;OPENCODE_TERMINAL=1",
+      )
+      expect(process.env.ARGV0).toBe("/tmp/opencode.AppImage")
+    }),
+  )
+
   ptyTest("retains exited sessions until removed", () =>
     Effect.gen(function* () {
       const pty = yield* Pty.Service

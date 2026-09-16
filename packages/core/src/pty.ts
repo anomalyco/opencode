@@ -173,6 +173,8 @@ const layer = Layer.effect(
         TERM: "xterm-256color",
         OPENCODE_TERMINAL: "1",
       } as Record<string, string>
+      // AppImage's ARGV0 overrides child command names in zsh.
+      delete env.ARGV0
       if (process.platform === "win32") {
         env.LC_ALL = "C.UTF-8"
         env.LC_CTYPE = "C.UTF-8"
