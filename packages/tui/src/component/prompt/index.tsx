@@ -1111,45 +1111,8 @@ export function Prompt(props: PromptProps) {
     if (move.creating()) return false
     if (auto()?.visible) return false
     const trimmed = store.prompt.text.trim()
-    if (!trimmed) {
-      if (delivery !== "steer") return false
-      const sessionID = props.sessionID
-      const session = sessionID ? data.session.get(sessionID) : undefined
-      const agent = local.agent.current()
-      const selection = local.model.selection()
-      if (
-        store.mode !== "shell" &&
-        sessionID &&
-        session &&
-        agent &&
-        selection &&
-        (session.agent !== agent.id ||
-          session.model?.providerID !== selection.providerID ||
-          session.model?.id !== selection.modelID ||
-          session.model?.variant !== selection.variant)
-      ) {
-        if (!local.model.available(selection)) {
-          toast.show({
-            title: "Model unavailable",
-            message: `${selection.providerID}/${selection.modelID} is not available in this session's location`,
-            variant: "warning",
-          })
-          return false
-        }
-        const model = { providerID: selection.providerID, id: selection.modelID, variant: selection.variant }
-        const cancelCommit = local.model.trackSessionCommit(sessionID, model, agent.id)
-        try {
-          if (session.agent !== agent.id) await client.api.session.switchAgent({ sessionID, agent: agent.id })
-          await client.api.session.switchModel({ sessionID, model })
-          return true
-        } catch (error) {
-          cancelCommit()
-          toast.show({ title: "Failed to switch model", message: errorMessage(error), variant: "error" })
-          return false
-        }
-      }
-      return (await props.onEmptySubmit?.()) === true
-    }
+    if (!trimmed && (!props.sessionID || store.mode === "shell" || delivery === "queue"))
+      return delivery === "steer" ? (await props.onEmptySubmit?.()) === true : false
     if (
       delivery === "queue" &&
       (store.mode === "shell" || trimmed === "exit" || trimmed === "quit" || trimmed === ":q")
@@ -1216,8 +1179,10 @@ export function Prompt(props: PromptProps) {
     // snapshot unless the user has started typing something new.
     const currentMode = store.mode
     const entry = { ...store.prompt, mode: currentMode }
-    resetComposer()
-    props.onSubmit?.()
+    if (trimmed) {
+      resetComposer()
+      props.onSubmit?.()
+    }
     const restoreEntry = () => {
       if (disposed || input.isDestroyed || input.plainText !== "") return
       input.setText(entry.text)
@@ -1307,7 +1272,7 @@ export function Prompt(props: PromptProps) {
         throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
       })
     }
-    history.append(entry)
+    if (trimmed) history.append(entry)
     const dispatch = (send: () => Promise<unknown>) => {
       const setup = newSession
       if (setup) void setup.gate.then(send).catch(setup.recover)
@@ -1343,6 +1308,11 @@ export function Prompt(props: PromptProps) {
       move.startSubmit()
       try {
         await prepareAgent()
+        if (!trimmed) {
+          await commitModel()
+          await props.onEmptySubmit?.()
+          return true
+        }
       } catch (error) {
         toast.show({ title: "Failed to prepare session", message: errorMessage(error), variant: "error" })
         restoreEntry()
