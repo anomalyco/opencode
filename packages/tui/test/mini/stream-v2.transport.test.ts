@@ -1902,7 +1902,7 @@ describe("V2 mini transport", () => {
     expect(first.event.subscribe).toHaveBeenCalledTimes(1)
     expect(second.event.subscribe).toHaveBeenCalledTimes(1)
     expect(second.session.list).toHaveBeenCalled()
-    expect(second.form.list).toHaveBeenCalledWith({ sessionID: "ses_child" }, { signal: expect.any(AbortSignal) })
+    expect(second.session.form.list).toHaveBeenCalledWith({ sessionID: "ses_child" }, { signal: expect.any(AbortSignal) })
     expect(ui.commits.filter((commit) => commit.messageID === "msg_assistant").map((commit) => commit.text)).toEqual([
       "partial",
       " replacement",
