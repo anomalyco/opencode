@@ -67,23 +67,22 @@ export function isNushell(shell: string) {
   return name === "nu" || name === "nu.exe" || raw.endsWith("\\nu.exe")
 }
 
-export function loadShellEnv(shell: string, logger: ShellEnvLogger) {
+export function loadShellEnv(shell: string, logger: ShellEnvLogger, probeShell = probe) {
   if (isNushell(shell)) {
     logger.log(`[server] Skipping shell env probe for nushell: ${shell}`)
     return null
   }
 
-  const interactive = probe(shell, "-il")
+  const interactive = probeShell(shell, "-il")
   if (interactive.type === "Loaded") {
     logger.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
     return interactive.value
   }
   if (interactive.type === "Timeout") {
-    logger.log(`[server] Interactive shell env probe timed out: ${shell}`)
-    return null
+    logger.log(`[server] Interactive shell env probe timed out, retrying with -l: ${shell}`)
   }
 
-  const login = probe(shell, "-l")
+  const login = probeShell(shell, "-l")
   if (login.type === "Loaded") {
     logger.log(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
     return login.value
