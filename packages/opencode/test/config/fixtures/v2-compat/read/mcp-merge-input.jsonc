@@ -1,0 +1,11 @@
+{
+  // Flat V1 entries win when an enveloped V2 server has the same name.
+  "mcp": {
+    "legacy": { "type": "local", "command": ["legacy-mcp"], "enabled": false },
+    "shared": { "type": "remote", "url": "https://legacy.example.com/mcp" },
+    "servers": {
+      "shared": { "type": "remote", "url": "https://native.example.com/mcp", "disabled": false },
+      "native": { "type": "local", "command": ["native-mcp"], "disabled": true },
+    },
+  },
+}
