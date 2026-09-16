@@ -1,8 +1,9 @@
 import { expect } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { LLM, LLMClient } from "../../src/index.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
-import { Meta } from "../../src/providers/index.js"
+import { Azure, Meta, OpenAI, XAI } from "../../src/providers/index.js"
+import { WebSocketTransport } from "../../src/route.js"
 import { configure } from "../../src/providers/openai-compatible-responses.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
@@ -44,10 +45,58 @@ it.effect("normalizes flat errors in shared SSE and WebSocket decoding", () =>
 
 it.effect("continues to normalize untyped xAI WebSocket errors", () =>
   Effect.gen(function* () {
-    const frame = { error: { type: "api_error", message: "gRPC error: Response with id=resp_missing not found" } }
-    expect(yield* OpenResponses.decodeChannelEvent(JSON.stringify(frame))).toEqual({ ...frame, type: "error" })
+    const message = "gRPC error: Response with id=resp_missing not found"
+    for (const error of [{ type: "api_error", message }, message]) {
+      expect(yield* OpenResponses.decodeChannelEvent(JSON.stringify({ error }))).toEqual({
+        type: "error",
+        error: typeof error === "string" ? { message } : error,
+      })
+    }
   }),
 )
+
+it.effect("normalizes string errors in shared SSE and WebSocket decoding", () =>
+  Effect.gen(function* () {
+    for (const decode of [decodeEvent, OpenResponses.decodeChannelEvent]) {
+      expect(yield* decode(JSON.stringify({ type: "error", error: "Gateway failed" }))).toEqual({
+        type: "error",
+        error: { message: "Gateway failed" },
+      })
+      expect(
+        yield* decode(
+          JSON.stringify({ type: "response.failed", response: { id: "resp_failed", error: "Gateway failed" } }),
+        ),
+      ).toEqual({
+        type: "response.failed",
+        response: { id: "resp_failed", error: { message: "Gateway failed" } },
+      })
+    }
+  }),
+)
+
+for (const model of [
+  OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.6-sol"),
+  XAI.configure({ apiKey: "fixture" }).responses("grok-4.6"),
+  Azure.configure({ apiKey: "fixture", resourceName: "fixture" }).responses("deployment"),
+]) {
+  it.effect(`preserves string error messages and raw bodies through ${model.provider} Responses`, () =>
+    Effect.gen(function* () {
+      const raw = '{ "type": "error", "error": "Gateway rejected the request", "trace": "original" }'
+      const webSocket = WebSocketTransport.makeDirect({
+        open: () => Effect.succeed({ sendText: () => Effect.void, messages: Stream.make(raw), close: Effect.void }),
+      })
+      for (const options of [{ webSocket }, {}]) {
+        const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Hello" }), options).pipe(
+          Effect.provide(fixedResponse(sseEvents(raw))),
+          Effect.flip,
+        )
+        expect(error.reason._tag).toBe("UnknownProvider")
+        expect(error.message).toBe("Gateway rejected the request")
+        expect(error.reason.body).toBe(raw)
+      }
+    }),
+  )
+}
 
 it.effect("retains classification and original error bodies through Meta and generic Responses routes", () =>
   Effect.gen(function* () {

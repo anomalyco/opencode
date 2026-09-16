@@ -33,6 +33,15 @@ export default function Layout(props: ParentProps) {
     },
     install: installUpdate,
   }
+  // A plain object avoids the compiler's conditional-prop memo, which leaks when read from event handlers.
+  const debugTools = import.meta.env.DEV
+    ? {
+        get visible() {
+          return state.debugTools
+        },
+        toggle: () => setState("debugTools", (value) => !value),
+      }
+    : undefined
 
   return (
     <TitlebarRightProvider>
@@ -53,11 +62,7 @@ export default function Layout(props: ParentProps) {
         <Titlebar
           update={update}
           verticalTabs={verticalTabs() ? { mount: state.tabsMount } : undefined}
-          debugTools={
-            import.meta.env.DEV
-              ? { visible: state.debugTools, toggle: () => setState("debugTools", (value) => !value) }
-              : undefined
-          }
+          debugTools={debugTools}
         />
         <div class="flex flex-1 min-h-0 min-w-0 flex-row">
           <Show when={verticalTabs()}>

@@ -95,7 +95,6 @@ export const Info = Schema.Struct({
   ).annotate({ description: "Scrolling behavior" }),
   attention: Schema.optional(
     Schema.Struct({
-      enabled: Schema.optional(Schema.Boolean).annotate({ description: "Enable attention alerts" }),
       notifications: Schema.optional(Schema.Boolean).annotate({ description: "Show system notifications" }),
       sound: Schema.optional(Schema.Boolean).annotate({ description: "Play attention sounds" }),
       volume: Schema.optional(
@@ -242,7 +241,6 @@ export type Info = Schema.Schema.Type<typeof Info>
 
 export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader" | "mouse" | "session" | "tabs"> & {
   attention: {
-    enabled: boolean
     notifications: boolean
     sound: boolean
     volume: number
@@ -285,9 +283,8 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
   return {
     ...input,
     attention: {
-      enabled: input.attention?.enabled ?? false,
-      notifications: input.attention?.notifications ?? true,
-      sound: input.attention?.sound ?? true,
+      notifications: input.attention?.notifications ?? false,
+      sound: input.attention?.sound ?? false,
       volume: input.attention?.volume ?? 0.4,
       sound_pack: input.attention?.sound_pack ?? "opencode.default",
       sounds: input.attention?.sounds ?? {},

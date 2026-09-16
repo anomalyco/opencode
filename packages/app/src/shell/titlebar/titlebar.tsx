@@ -792,7 +792,7 @@ function ChannelIndicator(props: {
   if (!channel || channel === "prod") return null
 
   const label = () => language.t(`titlebar.channel.${channel}`)
-  const debug = () => (channel === "dev" ? props.debugTools : undefined)
+  const debug = () => (channel === "dev" || channel === "local" ? props.debugTools : undefined)
   return (
     <Tooltip
       placement={props.sidebar ? "right" : "bottom"}

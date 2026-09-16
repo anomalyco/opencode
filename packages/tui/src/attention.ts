@@ -128,7 +128,7 @@ export function createTuiAttention(input: {
   return {
     async notify(request) {
       try {
-        if (!input.config.attention.enabled) return skipped("attention_disabled")
+        if (!input.config.attention.notifications && !input.config.attention.sound) return skipped("attention_disabled")
         if (disposed || input.renderer.isDestroyed) return skipped("renderer_destroyed")
 
         const message = normalizeText(request.message, "", MESSAGE_LIMIT)

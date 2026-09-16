@@ -63,12 +63,7 @@ import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
 import type { Info as ToolInfo } from "@opencode/schema/tool"
-import {
-  InstructionStateTable,
-  SessionInboxTable,
-  SessionMessageTable,
-  SessionTable,
-} from "@opencode/core/session/sql"
+import { InstructionStateTable, SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionStore } from "@opencode/core/session/store"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -121,7 +116,7 @@ const testModel = (id: string, limit: ModelLimit = defaultModelLimit) => {
 const model = testModel("fake-model")
 const defaultSystem = SessionSystemPrompt.make([])
 const identity = (providerID: string, id: string) =>
-  ["# Your Model", `- Provider: ${providerID}`, `- Name: ${id}`, `- ID: ${providerID}/${id}`].join("\n")
+  ["# Your Model", `- Name: ${id}`, `- Provider ID: ${providerID}`, `- Model ID: ${id}`].join("\n")
 const fakeIdentity = identity("fake", "fake-model")
 const replacementIdentity = identity("fake", "replacement")
 const gptIdentity = identity("openai", "gpt-5")
@@ -624,6 +619,18 @@ const continuationRejected = (recovery: "retry-full" | "rotate-and-retry-full") 
       phase: "receive",
       delivery: "rejected",
       recovery,
+    }),
+  })
+
+const websocketDisconnected = () =>
+  new AIError({
+    reason: new TransportError({
+      message: "WebSocket closed with code 1006",
+      transport: "websocket",
+      operation: "read",
+      phase: "close",
+      code: "1006",
+      delivery: "accepted",
     }),
   })
 
@@ -1740,7 +1747,11 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Done", "text-build"))
     yield* s.resume
 
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(["Build agent instructions", fakeIdentity, "Initial context"])
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
+      "Build agent instructions",
+      fakeIdentity,
+      "Initial context",
+    ])
   })
 
   scenario("uses the configured default agent system for omitted-agent sessions", function* (s) {
@@ -1761,7 +1772,11 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Done", "text-reviewer"))
     yield* s.resume
 
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", fakeIdentity, "Initial context"])
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
+      "Reviewer instructions",
+      fakeIdentity,
+      "Initial context",
+    ])
     expect((yield* s.messages)[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
   })
 
@@ -1784,7 +1799,11 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Done", "text-selected"))
     yield* s.resume
 
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", fakeIdentity, "Initial context"])
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
+      "Reviewer instructions",
+      fakeIdentity,
+      "Initial context",
+    ])
     expect((yield* s.messages)[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
   })
 
@@ -3026,7 +3045,11 @@ describe("SessionRunnerLLM", () => {
     expect(resolutions).toBe(2)
     expect(s.requests).toHaveLength(3)
     expect(s.requests[2]?.model).toBe(replacementModel)
-    expect(s.requests[2]?.system.map((part) => part.text)).toEqual([defaultSystem, replacementIdentity, "Initial context"])
+    expect(s.requests[2]?.system.map((part) => part.text)).toEqual([
+      defaultSystem,
+      replacementIdentity,
+      "Initial context",
+    ])
     expect(systemTexts(s.requests[2])).toContain("Changed during compaction")
     expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Overflow summary\n</summary>")
     expect(userTexts(s.requests[2]).join("\n")).not.toContain("Queued during compaction")
@@ -5000,30 +5023,33 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("bounds jittered exponential backoff for eligible pre-output failures", function* (s) {
-    yield* s.admit("Retry transport")
-    yield* s.llm.push(Stream.fail(providerUnavailable()))
-    yield* s.llm.push(TestLLM.text("Recovered", "retry-success"))
+  for (const failure of [providerUnavailable, websocketDisconnected]) {
+    scenario(`bounds jittered exponential backoff before output for ${failure.name}`, function* (s) {
+      yield* s.admit("Retry transport")
+      yield* s.llm.push(TestLLM.failAfter(failure(), LLMEvent.stepStart({ index: 0 })))
+      yield* s.llm.push(TestLLM.text("Recovered", "retry-success"))
 
-    const scheduled = yield* subscribeRetries(s)
-    const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* Queue.take(scheduled)
-    yield* TestClock.adjust("1599 millis")
-    expect(s.requests).toHaveLength(1)
-    yield* TestClock.adjust("801 millis")
-    yield* Fiber.join(run)
+      const scheduled = yield* subscribeRetries(s)
+      const run = yield* s.resume.pipe(Effect.forkChild)
+      yield* Queue.take(scheduled)
+      yield* TestClock.adjust("1599 millis")
+      expect(s.requests).toHaveLength(1)
+      yield* TestClock.adjust("801 millis")
+      yield* Fiber.join(run)
 
-    expect(s.requests).toHaveLength(2)
-    const eventTypes = yield* recordedEventTypes(sessionID)
-    expect(eventTypes).toContain("session.retry.scheduled.1")
-    expect(eventTypes.filter((type) => type === "session.step.started.1")).toHaveLength(2)
-    expect(yield* s.context).toMatchObject([
-      { type: "user" },
-      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
-    ])
-    yield* replaySessionProjection(sessionID)
-    expect((yield* s.context).filter((message) => message.type === "assistant")).toHaveLength(1)
-  })
+      expect(s.requests).toHaveLength(2)
+      expect(s.requests[1]?.messages).toEqual(s.requests[0]?.messages)
+      const eventTypes = yield* recordedEventTypes(sessionID)
+      expect(eventTypes).toContain("session.retry.scheduled.1")
+      expect(eventTypes.filter((type) => type === "session.step.started.1")).toHaveLength(2)
+      expect(yield* s.context).toMatchObject([
+        { type: "user" },
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+      ])
+      yield* replaySessionProjection(sessionID)
+      expect((yield* s.context).filter((message) => message.type === "assistant")).toHaveLength(1)
+    })
+  }
 
   scenario("does not start another physical attempt after interruption during retry backoff", function* (s) {
     yield* s.admit("Interrupt retry backoff")
@@ -5327,47 +5353,49 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("continues after a transport read failure with durable reasoning state", function* (s) {
-    yield* s.admit("Recover disconnected reasoning")
-    yield* s.llm.push(
-      TestLLM.failAfter(
-        streamDisconnected(),
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.reasoningStart({
-          id: "disconnected-reasoning",
-          providerMetadata: {
-            openai: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
+  for (const failure of [streamDisconnected, websocketDisconnected]) {
+    scenario(`continues after ${failure.name} with durable reasoning state`, function* (s) {
+      yield* s.admit("Recover disconnected reasoning")
+      yield* s.llm.push(
+        TestLLM.failAfter(
+          failure(),
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.reasoningStart({
+            id: "disconnected-reasoning",
+            providerMetadata: {
+              openai: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
+            },
+          }),
+        ),
+      )
+      yield* s.llm.push(TestLLM.text("Recovered", "reasoning-transport-recovery"))
+
+      const scheduled = yield* subscribeRetries(s)
+      const run = yield* s.resume.pipe(Effect.forkChild)
+      yield* Queue.take(scheduled)
+      yield* TestClock.adjust("2400 millis")
+      yield* Fiber.join(run)
+
+      expect(s.requests).toHaveLength(2)
+      expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
+      expect(s.requests[1]?.messages.slice(-2)).toMatchObject([
+        { role: "user", content: [{ type: "text", text: "Recover disconnected reasoning" }] },
+        { role: "user", content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }] },
+      ])
+      expect(yield* s.context).toMatchObject([
+        { type: "user" },
+        Expected.assistant({ finish: "error" }, [
+          {
+            type: "reasoning",
+            text: "",
+            state: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
           },
-        }),
-      ),
-    )
-    yield* s.llm.push(TestLLM.text("Recovered", "reasoning-transport-recovery"))
-
-    const scheduled = yield* subscribeRetries(s)
-    const run = yield* s.resume.pipe(Effect.forkChild)
-    yield* Queue.take(scheduled)
-    yield* TestClock.adjust("2400 millis")
-    yield* Fiber.join(run)
-
-    expect(s.requests).toHaveLength(2)
-    expect(yield* recordedEventTypes(sessionID)).toContain("session.retry.scheduled.1")
-    expect(s.requests[1]?.messages.slice(-2)).toMatchObject([
-      { role: "user", content: [{ type: "text", text: "Recover disconnected reasoning" }] },
-      { role: "user", content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }] },
-    ])
-    expect(yield* s.context).toMatchObject([
-      { type: "user" },
-      Expected.assistant({ finish: "error" }, [
-        {
-          type: "reasoning",
-          text: "",
-          state: { itemId: "rs_disconnected", reasoningEncryptedContent: "encrypted-state" },
-        },
-      ]),
-      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
-      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
-    ])
-  })
+        ]),
+        { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+        Expected.assistant({ finish: "stop" }, [Expected.text("Recovered")]),
+      ])
+    })
+  }
 
   scenario("continues an incomplete stream after settling a local tool", function* (s) {
     yield* s.admit("Continue after tool")

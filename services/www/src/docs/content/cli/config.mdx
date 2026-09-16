@@ -108,12 +108,11 @@ Set scroll speed and acceleration:
 
 ## Attention
 
-Configure notifications and sounds:
+Configure notifications and sounds. Both are off by default and can be enabled independently:
 
 ```json title="cli.json"
 {
   "attention": {
-    "enabled": true,
     "notifications": true,
     "sound": true,
     "volume": 0.4,
@@ -127,8 +126,7 @@ Configure notifications and sounds:
 
 | Field           | Values                 | Description                                                                                          |
 | --------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `enabled`       | boolean                | Enables attention alerts.                                                                            |
-| `notifications` | boolean                | Shows system notifications.                                                                          |
+| `notifications` | boolean                | Shows system notifications when the terminal is not focused.                                         |
 | `sound`         | boolean                | Plays attention sounds.                                                                              |
 | `volume`        | number from `0` to `1` | Sets sound volume.                                                                                   |
 | `sound_pack`    | string                 | Selects the active sound pack.                                                                       |

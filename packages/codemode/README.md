@@ -88,8 +88,11 @@ runtime.catalog() // structured tool descriptions
 runtime.execute(source) // Effect<CodeMode.Result, never, ToolServices>
 ```
 
-The Effect environment is inferred from the supplied tools. `onToolCallStart` observes admitted calls with decoded
-input; `onToolCallEnd` observes settled outcomes and duration. Both hooks return Effects and must not fail.
+The Effect environment is inferred from the supplied tools. `hooks` surround every call the program makes into the
+host: `tool.before`/`tool.after` receive `{ name, input }` with decoded input, `extension.before`/`extension.after`
+receive `{ extension, name, args }`. An `after` hook also receives how the call ended (`success` with its value,
+`failure` with its error, or `interrupted`). A failing `before` hook denies the call, and the program catches the
+failure as a thrown error.
 
 ### `Values`
 

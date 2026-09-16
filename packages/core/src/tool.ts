@@ -154,6 +154,7 @@ const layer = Layer.effect(
       }
     })
 
+    let catalog: { data: Data; names: string; value: CodeModeCatalog.Inventory } | undefined
     const state = State.create<Data, Editor>({
       name: "tool",
       initial: () => ({
@@ -201,8 +202,9 @@ const layer = Layer.effect(
           editor.tools.delete(id)
         },
       }),
-      notify: (value) =>
-        Effect.forEach(
+      notify: (value) => {
+        catalog = undefined
+        return Effect.forEach(
           value.errors,
           ({ kind, name, namespace, error }) =>
             Effect.logError(`Skipping invalid ${kind} registration`, {
@@ -211,7 +213,8 @@ const layer = Layer.effect(
               error: error.message,
             }),
           { discard: true },
-        ),
+        )
+      },
     })
 
     return Service.of({
@@ -219,15 +222,16 @@ const layer = Layer.effect(
       reload: state.reload,
       snapshot: Effect.fn("Tool.snapshot")((permissions) =>
         Effect.sync(() => {
+          const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
-          for (const [name, tool] of state.get().tools) {
+          for (const [name, tool] of data.tools) {
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
           const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
           const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
-          const namespaces = state.get().namespaces
+          const namespaces = data.namespaces
           const codeModeInventory = { tools: codeModeTools, namespaces }
           const codeModeEnabled = !whollyDisabled("execute", rules)
           const codeModeTool = codeModeEnabled
@@ -237,7 +241,15 @@ const layer = Layer.effect(
                 ),
               )
             : undefined
-          const codeModeCatalog = codeModeEnabled ? CodeModeTool.catalog(codeModeInventory) : undefined
+          const names = Array.from(codeModeTools.keys()).join("\0")
+          // Discovery is immutable for a registry revision and visible tool set. Keep request
+          // definitions/executors fresh, but share the much larger rendered catalog across steps.
+          const codeModeCatalog = !codeModeEnabled
+            ? undefined
+            : catalog?.data === data && catalog.names === names
+              ? catalog.value
+              : CodeModeTool.catalog(codeModeInventory)
+          if (codeModeCatalog) catalog = { data, names, value: codeModeCatalog }
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [

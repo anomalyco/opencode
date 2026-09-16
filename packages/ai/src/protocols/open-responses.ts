@@ -336,12 +336,18 @@ export type OutputItem = StreamItem & { readonly id: string }
 // Responses-compatible providers put streaming error details at the top level or
 // under `error`, and response failures under `response.error`. Accept all three shapes.
 // https://www.openresponses.org/specification
-const OpenResponsesErrorPayload = Schema.Struct({
+const OpenResponsesErrorObject = Schema.Struct({
   type: optionalNull(Schema.String),
   code: optionalNull(Schema.String),
   message: optionalNull(Schema.String),
   param: optionalNull(Schema.String),
 })
+const OpenResponsesErrorPayload = Schema.Union([Schema.String, OpenResponsesErrorObject]).pipe(
+  Schema.decodeTo(OpenResponsesErrorObject, {
+    decode: SchemaGetter.transform((error) => (typeof error === "string" ? { message: error } : error)),
+    encode: SchemaGetter.passthrough(),
+  }),
+)
 type OpenResponsesErrorPayload = Schema.Schema.Type<typeof OpenResponsesErrorPayload>
 
 const WebSocketErrorHeader = Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
@@ -434,7 +440,9 @@ export const decodeChannelEvent = (frame: string) =>
   decodeFrame(frame).pipe(
     Effect.flatMap((value) =>
       decodeEventValue(
-        ProviderShared.isRecord(value) && value.type === undefined && ProviderShared.isRecord(value.error)
+        ProviderShared.isRecord(value) &&
+          value.type === undefined &&
+          (typeof value.error === "string" || ProviderShared.isRecord(value.error))
           ? { ...value, type: "error" }
           : value,
       ),
