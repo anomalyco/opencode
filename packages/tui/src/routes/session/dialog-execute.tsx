@@ -122,7 +122,8 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   }))
 
   // The gutter is digits + 2 wide and its minWidth is fixed at construction, so
-  // pad the block with fewer digits to keep code and output on one column.
+  // pad the block with fewer digits to keep code and output on one column. Each
+  // title then sits over the first digit of its own block's widest line number.
   const digits = (text: string) => String(text ? text.split("\n").length : 0).length
   const pad = (own: string, other: string) => Math.max(0, digits(other) - digits(own))
 
@@ -146,7 +147,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
       >
         <box gap={1}>
           <box>
-            <box paddingLeft={1}>
+            <box paddingLeft={1 + pad(code(), sections().json)}>
               <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
                 Code
               </text>
@@ -168,7 +169,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
             </Show>
           </box>
           <box>
-            <box paddingLeft={1}>
+            <box paddingLeft={1 + pad(sections().json, code())}>
               <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
                 Output
               </text>
