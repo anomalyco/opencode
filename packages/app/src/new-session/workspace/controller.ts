@@ -188,12 +188,18 @@ export function createNewSessionWorkspaceController(input: {
     settings.workspaces.setLastUsed(serverSDK.scope, project.id, local ? "local" : "workspace")
   }
   const select = (worktree: string) => {
-    const project = currentProject()
-    if (project && worktree !== "main" && worktree !== "create")
-      setState("existing", { projectID: project.id, directory: worktree })
     input.setSelectedBranch(undefined)
     input.setSelectedWorktree(worktree)
     remember(worktree)
+  }
+  // The remembered worktree may have been removed since it was selected. Cycling to a directory the
+  // inventory no longer contains would resolve back to the fallback and leave the cycle stuck.
+  const existing = () => {
+    const project = currentProject()
+    const previous = state.existing
+    if (!project || previous?.projectID !== project.id) return
+    if (!worktreeDirectories().some((item) => sameDirectory(item, previous.directory))) return
+    return previous.directory
   }
 
   return {
@@ -213,12 +219,7 @@ export function createNewSessionWorkspaceController(input: {
       },
       remember,
       set: select,
-      cycle: () => {
-        const project = currentProject()
-        const previous = state.existing
-        const existing = project && previous?.projectID === project.id ? previous.directory : undefined
-        select(cycleNewSessionWorktree({ current: value(), existing }))
-      },
+      cycle: () => select(cycleNewSessionWorktree({ current: value(), existing: existing() })),
       create: (branch: string) => {
         input.setSelectedBranch(branch)
         input.setSelectedWorktree("create")
