@@ -74,7 +74,7 @@ const appAssetsPlugin: BunPlugin = {
     }))
     build.onLoad({ filter: /^opencode-app-assets$/, namespace: "opencode" }, () => ({
       loader: "js",
-      contents: `export default ${JSON.stringify(appArchive)}`,
+      contents: `export default ${appArchive}`,
     }))
   },
 }
