@@ -11,7 +11,7 @@ import { AppProcess } from "@opencode-ai/core/process"
 import path from "path"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
-import { InstallationChannel, InstallationVersion, installationUserAgent } from "@opencode-ai/core/installation/version"
+import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
 import { InstallationEvent } from "@opencode-ai/schema/installation-event"
 
@@ -37,12 +37,6 @@ export const Info = Schema.Struct({
   latest: Schema.String,
 }).annotate({ identifier: "InstallationInfo" })
 export type Info = Schema.Schema.Type<typeof Info>
-
-export function userAgent(client = "cli") {
-  return installationUserAgent(client)
-}
-
-export const USER_AGENT = userAgent()
 
 export function isPreview() {
   return InstallationChannel !== "latest"
