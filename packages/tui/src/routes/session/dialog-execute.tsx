@@ -118,6 +118,11 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     ],
   }))
 
+  // The gutter is digits + 2 wide and its minWidth is fixed at construction, so
+  // pad the block with fewer digits to keep code and output on one column.
+  const digits = (text: string) => String(text ? text.split("\n").length : 0).length
+  const pad = (own: string, other: string) => Math.max(0, digits(other) - digits(own))
+
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
       <box flexDirection="row" gap={2}>
@@ -142,17 +147,19 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
               Code
             </text>
             <Show when={code()} fallback={<text fg={theme.text.subdued}>Waiting for code…</text>}>
-              <line_number fg={theme.text.subdued} minWidth={3} paddingRight={1}>
-                <code
-                  ref={(block: CodeRenderable) => blocks.add(block)}
-                  conceal={false}
-                  wrapMode="none"
-                  fg={theme.text.default}
-                  filetype="typescript"
-                  syntaxStyle={syntax()}
-                  content={code()}
-                />
-              </line_number>
+              <box paddingLeft={pad(code(), sections().json)}>
+                <line_number fg={theme.text.subdued} minWidth={3} paddingRight={1}>
+                  <code
+                    ref={(block: CodeRenderable) => blocks.add(block)}
+                    conceal={false}
+                    wrapMode="none"
+                    fg={theme.text.default}
+                    filetype="typescript"
+                    syntaxStyle={syntax()}
+                    content={code()}
+                  />
+                </line_number>
+              </box>
             </Show>
           </box>
           <box>
@@ -168,15 +175,19 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
               }
             >
               <Show when={sections().json}>
-                <code
-                  ref={(block: CodeRenderable) => blocks.add(block)}
-                  conceal={false}
-                  wrapMode="none"
-                  fg={theme.text.default}
-                  filetype="json"
-                  syntaxStyle={syntax()}
-                  content={sections().json}
-                />
+                <box paddingLeft={pad(sections().json, code())}>
+                  <line_number fg={theme.text.subdued} minWidth={3} paddingRight={1}>
+                    <code
+                      ref={(block: CodeRenderable) => blocks.add(block)}
+                      conceal={false}
+                      wrapMode="none"
+                      fg={theme.text.default}
+                      filetype="json"
+                      syntaxStyle={syntax()}
+                      content={sections().json}
+                    />
+                  </line_number>
+                </box>
               </Show>
               <Show when={sections().rest}>
                 <text fg={failed() ? theme.text.feedback.error.default : theme.text.default} wrapMode="word">
