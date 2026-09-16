@@ -31,9 +31,16 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   const [height, setHeight] = createSignal(1)
   const maxHeight = createMemo(() => Math.max(3, Math.floor(dimensions().height * 0.7) - 6))
   let scroll: ScrollBoxRenderable | undefined
-  // Unwrapped <code> clips long lines and scrolls them itself, so pan both blocks together.
+  // Unwrapped <code> clips long lines and scrolls them itself. Each block clamps
+  // to its own width, so drive both from one shared offset or the narrower block
+  // stops early and the two drift apart on the way back.
   const blocks = new Set<CodeRenderable>()
-  const pan = (delta: number) => blocks.forEach((block) => (block.scrollX += delta))
+  let panX = 0
+  const pan = (delta: number) => {
+    const max = Math.max(0, ...[...blocks].map((block) => block.scrollWidth - block.width))
+    panX = Math.max(0, Math.min(max, panX + delta))
+    blocks.forEach((block) => (block.scrollX = panX))
+  }
 
   // Fit the scroll area to its content up to the cap. Wrapped code settles a
   // frame after mount and output streams in, so grow from the measured height
