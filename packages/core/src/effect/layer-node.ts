@@ -262,7 +262,7 @@ export function compile<A, E, const Items extends Replacements = readonly []>(
         const implementation = node.implementation! as RuntimeLayer
         return dependencies.length === 0
           ? implementation
-          : implementation.pipe(Layer.provide(dependencies as [RuntimeLayer, ...RuntimeLayer[]]))
+          : implementation.pipe(Layer.provide(Layer.mergeAll(...(dependencies as [RuntimeLayer, ...RuntimeLayer[]]))))
       },
       { cache, resolve: (node) => replacementMap.get(node.name) ?? node },
     )
