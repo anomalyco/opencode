@@ -1,17 +1,20 @@
 import { CliRenderEvents, TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
-import { createEffect, createMemo, createResource, createSignal, onCleanup, Show, untrack } from "solid-js"
+import { Option, Schema } from "effect"
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import stripAnsi from "strip-ansi"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
-import { dialogWidth, useDialog } from "../../ui/dialog"
+import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { Locale } from "../../util/locale"
 import { getScrollAcceleration } from "../../util/scroll"
 import { toolDisplayContent, toolDisplayMetadata } from "../../util/tool-display"
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 // The part is passed as a live accessor prop so the dialog follows the tool
 // while child calls stream and the output arrives.
@@ -52,17 +55,6 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     if (typeof input === "string") return ""
     return typeof input.code === "string" ? input.code : ""
   })
-  // Models often emit the program on one line. Reformat it for reading and fall
-  // back to the raw source while formatting runs or when it does not parse yet.
-  const printWidth = createMemo(() => Math.min(dialogWidth(dialog.size), dimensions().width - 2) - 8)
-  const [formatted] = createResource(
-    () => [code(), printWidth()] as const,
-    async ([source, width]) => ({ source, text: await prettify(source, width) }),
-  )
-  const display = createMemo(() => {
-    const result = formatted.latest
-    return result?.source === code() ? result.text : code()
-  })
   const failed = createMemo(
     () => toolDisplayMetadata(props.part.state).error === true || props.part.state.status === "error",
   )
@@ -76,6 +68,17 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
         .trim(),
     )
   })
+  // The tool prints a JSON result, optionally followed by "\n\nWarnings:" and
+  // "\n\nLogs:" sections. Highlight the JSON and keep any trailing text plain.
+  const sections = createMemo(() => {
+    const text = output()
+    if (!text.startsWith("{") && !text.startsWith("[")) return { json: "", rest: text }
+    const end = text.search(/\n\n(Warnings|Logs):\n/)
+    const json = end === -1 ? text : text.slice(0, end)
+    const parsed = decodeJson(json)
+    if (Option.isNone(parsed)) return { json: "", rest: text }
+    return { json, rest: text.slice(json.length).trim() }
+  })
   const status = createMemo(() => {
     const state = props.part.state
     if (state.status === "streaming") return "Receiving code…"
@@ -88,7 +91,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   })
 
   const copy = (kind: "code" | "output") => {
-    const text = kind === "code" ? display() : output()
+    const text = kind === "code" ? code() : output()
     if (!text) return
     void clipboard
       .write(text)
@@ -140,7 +143,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
                   fg={theme.text.default}
                   filetype="typescript"
                   syntaxStyle={syntax()}
-                  content={display()}
+                  content={code()}
                 />
               </line_number>
             </Show>
@@ -157,9 +160,20 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
                 </text>
               }
             >
-              <text fg={failed() ? theme.text.feedback.error.default : theme.text.default} wrapMode="word">
-                {output()}
-              </text>
+              <Show when={sections().json}>
+                <code
+                  conceal={false}
+                  fg={theme.text.default}
+                  filetype="json"
+                  syntaxStyle={syntax()}
+                  content={sections().json}
+                />
+              </Show>
+              <Show when={sections().rest}>
+                <text fg={failed() ? theme.text.feedback.error.default : theme.text.default} wrapMode="word">
+                  {sections().rest}
+                </text>
+              </Show>
             </Show>
           </box>
         </box>
@@ -182,19 +196,4 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
       </box>
     </box>
   )
-}
-
-async function prettify(source: string, printWidth: number) {
-  if (!source) return source
-  const { format } = await import("prettier/standalone")
-  const { default: babel } = await import("prettier/plugins/babel")
-  const { default: estree } = await import("prettier/plugins/estree")
-  return format(source, {
-    parser: "babel",
-    plugins: [babel, estree],
-    printWidth: Math.max(40, printWidth),
-    semi: false,
-  })
-    .then((text) => text.trimEnd())
-    .catch(() => source)
 }
