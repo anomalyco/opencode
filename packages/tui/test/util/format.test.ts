@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatDuration } from "../../src/util/format"
+import { formatAnswer, formatDuration } from "../../src/util/format"
 
 describe("util.format", () => {
   describe("formatDuration", () => {
@@ -54,6 +54,30 @@ describe("util.format", () => {
       expect(formatDuration(86400)).toBe("~1 day")
       expect(formatDuration(604799)).toBe("~6 days")
       expect(formatDuration(604800)).toBe("~1 week")
+    })
+  })
+
+  describe("formatAnswer", () => {
+    test("keeps prose text unchanged", () => {
+      expect(formatAnswer("hello world")).toBe("hello world")
+      expect(formatAnswer("")).toBe("")
+    })
+
+    test("trims trailing whitespace outside code blocks", () => {
+      expect(formatAnswer("hello   \nworld\t ")).toBe("hello\nworld")
+    })
+
+    test("collapses repeated blank lines and trims ends", () => {
+      expect(formatAnswer("\n\na\n\n\n\nb\n\n")).toBe("a\n\nb")
+    })
+
+    test("preserves fenced code blocks byte-for-byte", () => {
+      const code = "```js\nline one   \n\n\nline two\t\n```"
+      expect(formatAnswer(`before   \n\n${code}\n\nafter   `)).toBe(`before\n\n${code}\n\nafter`)
+    })
+
+    test("treats unclosed fences as code to the end", () => {
+      expect(formatAnswer("text   \n```\nkeep   \n\n\nkeep")).toBe("text\n```\nkeep   \n\n\nkeep")
     })
   })
 })

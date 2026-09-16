@@ -55,6 +55,7 @@ import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
+import { formatAnswer } from "../../util/format"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
 import { Toast, useToast } from "../../ui/toast"
@@ -909,6 +910,57 @@ export function Session() {
         clipboard
           .write?.(text)
           .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
+          .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+        dialog.clear()
+      },
+    },
+    {
+      title: "Copy last assistant message formatted",
+      value: "messages.copy.formatted",
+      category: "Session",
+      run: () => {
+        const lastAssistantMessage = messagesBeforeRevert().findLast((message) => message.role === "assistant")
+        if (!lastAssistantMessage) {
+          toast.show({ message: "No assistant messages found", variant: "error" })
+          dialog.clear()
+          return
+        }
+        if (
+          lastAssistantMessage.error ||
+          !lastAssistantMessage.finish ||
+          ["tool-calls", "unknown"].includes(lastAssistantMessage.finish)
+        ) {
+          toast.show({ message: "Last assistant message is not complete", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        const parts = sync.data.part[lastAssistantMessage.id] ?? []
+        const textParts = parts.filter((part) => part.type === "text")
+        if (textParts.length === 0) {
+          toast.show({ message: "No text parts found in last assistant message", variant: "error" })
+          dialog.clear()
+          return
+        }
+
+        const text = formatAnswer(
+          textParts
+            .map((part) => part.text)
+            .join("\n")
+            .trim(),
+        )
+        if (!text) {
+          toast.show({
+            message: "No text content found in last assistant message",
+            variant: "error",
+          })
+          dialog.clear()
+          return
+        }
+
+        clipboard
+          .write?.(text)
+          .then(() => toast.show({ message: "Formatted message copied to clipboard!", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
         dialog.clear()
       },
