@@ -57,6 +57,20 @@ describe("inference stat normalization", () => {
     expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
   })
 
+  test("maps oversized model ids to unknown before aggregation", () => {
+    expect(statModel("x".repeat(256), "")).toBe("x".repeat(256))
+    expect(statModel("x".repeat(257), "")).toBe("unknown")
+    expect(statModel("big-pickle", `provider/${"x".repeat(257)}`)).toBe("unknown")
+
+    const [query] = buildStatsQueries(new Date("2026-09-16T00:00:00.000Z"), new Date("2026-09-16T04:00:00.000Z"), {
+      namespace: "inference",
+      table: "generation",
+      dataset: "zen",
+    })
+    expect(query).toContain("WHEN length(")
+    expect(query).toContain(") > 256 THEN 'unknown'")
+  })
+
   test("keeps stealth model usage without exposing the route provider", () => {
     expect(statProvider("omen-alpha", "gpt-test-model", "test-provider")).toBe("unknown")
     expect(statProvider("OMEN-ALPHA-free:global", "gpt-test-model", "test-provider")).toBe("unknown")
