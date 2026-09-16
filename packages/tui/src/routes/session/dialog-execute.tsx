@@ -125,6 +125,8 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   // pad the block with fewer digits to keep code and output on one column.
   const digits = (text: string) => String(text ? text.split("\n").length : 0).length
   const pad = (own: string, other: string) => Math.max(0, digits(other) - digits(own))
+  // Section titles sit over the first content character, past the shared gutter.
+  const indent = createMemo(() => Math.max(3, Math.max(digits(code()), digits(sections().json)) + 2))
 
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
@@ -146,9 +148,11 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
       >
         <box gap={1}>
           <box>
-            <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
-              Code
-            </text>
+            <box paddingLeft={indent()}>
+              <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
+                Code
+              </text>
+            </box>
             <Show when={code()} fallback={<text fg={theme.text.subdued}>Waiting for code…</text>}>
               <box paddingLeft={pad(code(), sections().json)}>
                 <line_number fg={theme.text.subdued} minWidth={3} paddingRight={1}>
@@ -166,9 +170,11 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
             </Show>
           </box>
           <box>
-            <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
-              Output
-            </text>
+            <box paddingLeft={indent()}>
+              <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
+                Output
+              </text>
+            </box>
             <Show
               when={output()}
               fallback={
