@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm"
 import { Effect } from "effect"
 import { Durable } from "@opencode-ai/schema/durable-event-manifest"
 import type { DatabaseMigration } from "../migration"
@@ -8,35 +9,43 @@ function compactKeyValue(data: unknown, path: string): string | undefined {
   if (!path.startsWith("$.")) return undefined
   let current: unknown = data
   for (const segment of path.slice(2).split(".")) {
-    if (current === null || typeof current !== "object") return undefined
-    current = (current as Record<string, unknown>)[segment]
+    if (typeof current !== "object" || current === null) return undefined
+    current = Reflect.get(current, segment)
   }
   return typeof current === "string" ? current : undefined
+}
+
+// Mirror of event.ts accountingPart: step-finish rows must keep a NULL key, or
+// a later live snapshot of the same part would sweep-delete the accounting
+// rows during compaction.
+function accountingPart(data: unknown): boolean {
+  if (typeof data !== "object" || data === null) return false
+  const part = Reflect.get(data, "part")
+  return typeof part === "object" && part !== null && Reflect.get(part, "type") === "step-finish"
 }
 
 export default {
   id: "20260916181847_event_compact_key",
   up(tx) {
     return Effect.gen(function* () {
-      yield* tx.run(`ALTER TABLE \`event\` ADD \`compact_key\` text;`)
+      yield* tx.run(sql`ALTER TABLE ${sql.identifier("event")} ADD ${sql.identifier("compact_key")} text;`)
       // Backfill existing rows so compaction and dedupe apply to pre-upgrade
       // data; a NULL key never matches the indexed lookup.
       for (const [type, definition] of Durable) {
         const path = definition.durable?.compact
         if (!path) continue
         const rows = yield* tx.all<{ id: string; data: unknown }>(
-          `SELECT id, data FROM \`event\` WHERE type = ${JSON.stringify(type)} AND compact_key IS NULL`,
+          sql`SELECT id, data FROM ${sql.identifier("event")} WHERE type = ${type} AND compact_key IS NULL`,
         )
         for (const row of rows) {
+          if (accountingPart(row.data)) continue
           const key = compactKeyValue(row.data, path)
           if (key === undefined) continue
-          yield* tx.run(
-            `UPDATE \`event\` SET compact_key = ${JSON.stringify(key)} WHERE id = ${JSON.stringify(row.id)}`,
-          )
+          yield* tx.run(sql`UPDATE ${sql.identifier("event")} SET compact_key = ${key} WHERE id = ${row.id}`)
         }
       }
       yield* tx.run(
-        `CREATE INDEX \`event_aggregate_type_compact_key_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`compact_key\`);`,
+        sql`CREATE INDEX ${sql.identifier("event_aggregate_type_compact_key_idx")} ON ${sql.identifier("event")} (${sql.identifier("aggregate_id")},${sql.identifier("type")},${sql.identifier("compact_key")});`,
       )
     })
   },
