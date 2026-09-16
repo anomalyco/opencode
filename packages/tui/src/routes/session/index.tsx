@@ -110,7 +110,16 @@ import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
-import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, reasoningContent, TextPart } from "./message-parts"
+import {
+  INLINE_TOOL_ICON_WIDTH,
+  InlineToolRow,
+  ReasoningPart,
+  patchTarget,
+  pendingPatch,
+  reasoningContent,
+  reasoningPending,
+  TextPart,
+} from "./message-parts"
 import { groupRefs } from "./grouping/session"
 export { InlineToolRow } from "./message-parts"
 
@@ -1726,12 +1735,20 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
             />
           </Match>
           <Match when={item().type === "tool"}>
-            <ToolPart part={item() as SessionMessageAssistantTool} />
+            <Show when={!mergedIntoThinking(item() as SessionMessageAssistantTool, message())}>
+              <ToolPart part={item() as SessionMessageAssistantTool} />
+            </Show>
           </Match>
         </Switch>
       )}
     </Show>
   )
+}
+
+/** The running patch row is hidden while a thinking spinner shows the merged progress line. */
+function mergedIntoThinking(part: SessionMessageAssistantTool, message: SessionMessageInfo | undefined) {
+  if (message?.type !== "assistant" || !reasoningPending(message)) return false
+  return pendingPatch(message)?.id === part.id
 }
 
 function SessionReasoningGroupView(props: {
@@ -1770,6 +1787,16 @@ function SessionReasoningGroupView(props: {
       return total + (start === undefined || end === undefined ? 0 : Math.max(0, end - start))
     }, 0),
   )
+  const mergedPatch = createMemo(() => {
+    if (props.completed) return ""
+    const last = props.refs.at(-1)
+    const message = last ? props.message(last.messageID) : undefined
+    if (message?.type !== "assistant") return ""
+    const part = pendingPatch(message)
+    if (!part) return ""
+    const target = patchTarget(part)
+    return target ? ` · Patch ${target}` : " · Patch"
+  })
 
   return (
     <Show when={parts().length > 0}>
@@ -1793,7 +1820,7 @@ function SessionReasoningGroupView(props: {
                     )
             }
             complete={props.completed}
-            pending={latest() ? `Thinking: ${latest()}` : "Thinking"}
+            pending={(latest() ? `Thinking: ${latest()}` : "Thinking") + mergedPatch()}
             spinner={!props.completed}
             onMouseOver={() => setHover(true)}
             onMouseOut={() => setHover(false)}
@@ -1802,7 +1829,7 @@ function SessionReasoningGroupView(props: {
               setExpanded((value) => !value)
             }}
           >
-            {props.completed ? "Thought" : latest() ? `Thinking: ${latest()}` : "Thinking"}
+            {(props.completed ? "Thought" : latest() ? `Thinking: ${latest()}` : "Thinking") + mergedPatch()}
             <Show when={props.completed && !expanded() && latest()}>: {latest()}</Show>
             <Show when={props.completed && parts().length > 1}> · {parts().length} steps</Show>
             <Show when={props.completed && duration()}> · {Locale.duration(duration())}</Show>
