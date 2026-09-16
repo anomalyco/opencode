@@ -1138,8 +1138,6 @@ export const dict: Record<string, string> = {
   "settings.general.row.terminalPlacement.description": "ལཱ་ཡུན་ཚུ་ནང་ ཊར་མི་ནཱལ་ག་ཏེ་ཁ་ཕྱེ་ནི་ཨིན་ན་གདམ་ཁ་རྐྱབས།",
   "settings.general.row.terminalPlacement.side": "ཟུར་ཁ།",
   "settings.general.row.terminalPlacement.bottom": "མཇུག་ལུ།",
-  "settings.general.row.showProjectIcon.title": "ལས་གཞིའི་ངོས་དཔར།",
-  "settings.general.row.showProjectIcon.description": "ལཱ་ཡུན་གྱི་མགོ་ཡིག་ནང་ ལས་གཞིའི་ངོས་དཔར་སྟོན།",
   "command.session.background": "རྒྱབ་ཁར་སྤོ།",
   "session.timeline.notice.finished": "{{actor}} མཇུག་བསྡུ་ཡོདཔ།",
   "session.timeline.notice.failed": "{{actor}} འཐུས་ཤོར་བྱུང་ཡོདཔ།",
@@ -1313,9 +1311,6 @@ export const dict: Record<string, string> = {
   "settings.about.typeset": "ཨིན་ཊར་དང་ཨའི་བི་ཨེམ་པེལེགསི་མོ་ནོ་ནང་ཡིག་དཔར་གཞི་སྒྲིག།",
   "settings.about.tagline": "ཁྱོད་མེད་པར་ AI གིས་མཉེན་ཆས་ལེགས་ཤོམ་བཟོ་མི་ཐུབ།",
   "settings.about.copyright": "© Anomaly གསར་གཏོད།",
-  "settings.appearance.row.projectName.title": "ལས་འགུལ་གྱི་མིང་ཚུ་སྟོན།",
-  "settings.appearance.row.projectName.description":
-    "ཀེར་ཕྲང་མཆོང་ལྡེ་དང་ མོ་བཱ་ཡེལ་མཆོང་ལྡེ་ཤུད་སྒམ་ནང་ལས་འགུལ་གྱི་མིང་ཚུ་སྟོན།",
   "project.settings.title": "ཞུན་དག་ལས་གཞི།",
   "settings.timeline.title": "དུས་ཚོད།",
   "settings.timeline.detail": "དུས་ཚོད་ཐིག་རྒྱས་པ།",
@@ -1490,9 +1485,6 @@ export const dict: Record<string, string> = {
   "settings.timeline.visibility.label": "{{activity}} མཐོང་ཚུལ།",
   "settings.timeline.grouped.label": "{{activity}} སྡེ་ཚན་བཟོ་ཡོདཔ།",
   "settings.timeline.collapsed.label": "{{activity}} རྡིབ་སོང་",
-  "settings.general.row.browserPane.title": "བརའུ་ཟར་",
-  "settings.general.row.browserPane.description":
-    "ལས་ཚབ་ཚུ་ལུ་ གློག་རིམ་ནང་གོང་འཕེལ་བརྡ་འཚོལ་ཅིག་ ཁ་ཕྱེ་ནི་དང་ཚད་འཛིན་འབད་བཅུག།",
   "session.new.workspace.search.empty": "མཐུན་སྒྲིག་ལཱ་ཤིང་མེད།",
   "settings.workspaces.description": "ལཱ་གི་ཤིང་ཚུ་བསྐྱར་ཞིབ་འབད་དེ་ ཌིཀསི་ལག་ལེན་འཛིན་སྐྱོང་འཐབ།",
   "settings.workspaces.empty.description": "OpenCode ནང་གསར་བསྐྲུན་འབད་ཡོད་པའི་ལཱ་ཤིང་ཚུ་ ནཱ་ལུ་འབྱུངམ་ཨིན།",

@@ -15,7 +15,7 @@ import { DialogServer } from "@/servers/connect/dialog"
 import { LocationProvider } from "@/workspaces/location"
 import { SettingsGeneral } from "./general/general"
 import { SettingsAppearance } from "./appearance/appearance"
-import { SettingsExperimental } from "./experimental/experimental"
+import { experimentalSettingsAvailable, SettingsExperimental } from "./experimental/experimental"
 import { SettingsKeybinds } from "./keybinds/keybinds"
 import { SettingsNotifications } from "./notifications/notifications"
 import { SettingsPairing } from "./pairing/pairing"
@@ -55,10 +55,10 @@ const serverTabs = [
   { value: "extensions", icon: pageIcons.extensions, label: "settings.tab.extensions" },
 ] as const
 
-const trailingTabs = [
-  [{ value: "experimental", icon: pageIcons.experimental, label: "settings.tab.experimental" }],
-  [{ value: "about", icon: pageIcons.about, label: "settings.tab.about" }],
+const experimentalTab = [
+  { value: "experimental", icon: pageIcons.experimental, label: "settings.tab.experimental" },
 ] as const
+const aboutTab = [{ value: "about", icon: pageIcons.about, label: "settings.tab.about" }] as const
 
 const nestedServerTabs = [
   { value: "general", icon: pageIcons.servers, label: "settings.general.section.general" },
@@ -220,6 +220,11 @@ function RootSettings() {
     return connectionFor(list(), layout.home.selection().server)
   })
   const sourceDirectory = useSettingsDirectory(sourceServer)
+  createEffect(() => {
+    const view = surface.view()
+    if (experimentalSettingsAvailable || view.type !== "root" || view.tab !== "experimental") return
+    surface.open("general")
+  })
   const addServer = () =>
     void dialog.push(() => (
       <DialogServer mode="add" onSave={(server) => surface.openServer(ServerConnection.key(server))} />
@@ -255,7 +260,10 @@ function RootSettings() {
             ],
           },
         ]),
-    ...trailingTabs.map((items) => ({ items: items.map((item) => ({ ...item, label: language.t(item.label) })) })),
+    ...(experimentalSettingsAvailable
+      ? [{ items: experimentalTab.map((item) => ({ ...item, label: language.t(item.label) })) }]
+      : []),
+    { items: aboutTab.map((item) => ({ ...item, label: language.t(item.label) })) },
   ])
 
   createEffect(() => {

@@ -1197,8 +1197,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Sessiýalarda terminalyň nirede açyljakdygyny saýlaň",
   "settings.general.row.terminalPlacement.side": "Gapdalda",
   "settings.general.row.terminalPlacement.bottom": "Aşakda",
-  "settings.general.row.showProjectIcon.title": "Taslama nyşany",
-  "settings.general.row.showProjectIcon.description": "Taslama nyşanyny sessiýanyň sözbaşysynda görkeziň",
   "session.location.unavailable": "Sessiýanyň ýerleşýän ýeri elýeterli däl",
   "session.location.description": "Bu sessiýany dowam etdirmek üçin başga katalog saýlaň.",
   "session.location.choose": "Katalog saýlaň",
@@ -1292,9 +1290,6 @@ export const dict = {
   "settings.about.typeset": "Inter we IBM Plex Mono bilen düzüldi",
   "settings.about.tagline": "AI sizsiz ajaýyp programma üpjünçiligini döredip bilmez",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Taslama atlaryny görkez",
-  "settings.appearance.row.projectName.description":
-    "Taslama atlaryny dik sahypalarda we mobil sahypa çekmesinde görkez",
   "project.settings.title": "Taslamany redaktirle",
   "settings.timeline.title": "Wagt çyzgysy",
   "settings.timeline.detail": "Wagt çyzgysynyň jikme-jigi",
@@ -1474,9 +1469,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} görünmek",
   "settings.timeline.grouped.label": "{{activity}} toparlanandyr",
   "settings.timeline.collapsed.label": "{{activity}} ýykyldy",
-  "settings.general.row.browserPane.title": "Brauzer",
-  "settings.general.row.browserPane.description":
-    "Agentlere programma içindäki brauzeri açmaga we dolandyrmaga rugsat beriň.",
   "session.new.workspace.search.empty": "Gabat gelýän iş agaçlary ýok",
   "settings.workspaces.description": "Iş agaçlaryny gözden geçiriň we disk ulanylyşyny dolandyryň",
   "settings.workspaces.empty.description": "OpenCode-da döredilen iş agaçlary şu ýerde peýda bolar",

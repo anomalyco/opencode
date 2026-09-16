@@ -1220,8 +1220,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "اختر مكان فتح المحطة الطرفية في الجلسات",
   "settings.general.row.terminalPlacement.side": "الجانب",
   "settings.general.row.terminalPlacement.bottom": "الأسفل",
-  "settings.general.row.showProjectIcon.title": "أيقونة المشروع",
-  "settings.general.row.showProjectIcon.description": "إظهار أيقونة المشروع في رأس الجلسة",
   "desktop.menu.installCli": "تثبيت CLI...",
   "desktop.cli.installed.title": "تم تثبيت CLI",
   "desktop.cli.installed.message":
@@ -1349,9 +1347,6 @@ export const dict = {
   "settings.about.typeset": "منضّد بخطي \u2068Inter\u2069 و\u2068IBM Plex Mono\u2069",
   "settings.about.tagline": "لا يستطيع الذكاء الاصطناعي بناء برمجيات رائعة من دونك",
   "settings.about.copyright": "© \u2068Anomaly Innovations, Inc.\u2069",
-  "settings.appearance.row.projectName.title": "إظهار أسماء المشاريع",
-  "settings.appearance.row.projectName.description":
-    "إظهار أسماء المشاريع في علامات التبويب العمودية ودرج علامات التبويب على الهاتف",
   "project.settings.title": "تحرير المشروع",
   "settings.timeline.title": "المخطط الزمني",
   "settings.timeline.detail": "تفاصيل المخطط الزمني",
@@ -1514,8 +1509,6 @@ export const dict = {
   "settings.timeline.visibility.label": "رؤية \u2068{{activity}}\u2069",
   "settings.timeline.grouped.label": "\u2068{{activity}}\u2069 مجمّع",
   "settings.timeline.collapsed.label": "\u2068{{activity}}\u2069 مطوي",
-  "settings.general.row.browserPane.title": "المتصفح",
-  "settings.general.row.browserPane.description": "السماح للوكلاء بفتح متصفح تطوير داخل التطبيق والتحكم فيه.",
   "session.new.workspace.search.empty": "لا توجد أشجار عمل مطابقة",
   "settings.workspaces.description": "مراجعة أشجار العمل وإدارة استخدام القرص",
   "settings.workspaces.empty.description": "ستظهر هنا أشجار العمل المنشأة في OpenCode",

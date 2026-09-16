@@ -1204,8 +1204,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Ընտրեք, թե նիստերում որտեղ բացվի տերմինալը",
   "settings.general.row.terminalPlacement.side": "Կողքից",
   "settings.general.row.terminalPlacement.bottom": "Ներքևում",
-  "settings.general.row.showProjectIcon.title": "Նախագծի պատկերակ",
-  "settings.general.row.showProjectIcon.description": "Ցույց տալ նախագծի պատկերակը նիստի վերնագրում",
   "session.location.unavailable": "Նիստի տեղադրությունն անհասանելի է",
   "session.location.description": "Այս նիստը շարունակելու համար ընտրեք այլ գրացուցակ։",
   "session.location.choose": "Ընտրել գրացուցակ",
@@ -1298,9 +1296,6 @@ export const dict = {
   "settings.about.typeset": "Շարված է Inter և IBM Plex Mono տառատեսակներով",
   "settings.about.tagline": "AI-ը չի կարող հիանալի ծրագրակազմ ստեղծել առանց ձեզ",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Ցուցադրել նախագծերի անունները",
-  "settings.appearance.row.projectName.description":
-    "Ցուցադրել նախագծերի անունները ուղղահայաց ներդիրներում և բջջային ներդիրների դարակում",
   "project.settings.title": "Խմբագրել նախագիծը",
   "settings.timeline.title": "Ժամանակագիծ",
   "settings.timeline.detail": "Ժամանակագծի մանրամասներ",
@@ -1484,9 +1479,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} տեսանելիություն",
   "settings.timeline.grouped.label": "{{activity}} խմբավորված",
   "settings.timeline.collapsed.label": "{{activity}} ծալված է",
-  "settings.general.row.browserPane.title": "Բրաուզեր",
-  "settings.general.row.browserPane.description":
-    "Թույլատրել գործակալներին բացել և կառավարել հավելվածում կառուցված բրաուզերը:",
   "session.new.workspace.search.empty": "Համապատասխան աշխատանքային ծառեր չկան",
   "settings.workspaces.description": "Դիտարկել աշխատանքային ծառերը և կառավարել սկավառակի օգտագործումը",
   "settings.workspaces.empty.description": "OpenCode-ում ստեղծված աշխատանքային ծառերը կհայտնվեն այստեղ",

@@ -1197,8 +1197,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "აირჩიეთ, სად გაიხსნას ტერმინალი სესიებში",
   "settings.general.row.terminalPlacement.side": "გვერდით",
   "settings.general.row.terminalPlacement.bottom": "ქვემოთ",
-  "settings.general.row.showProjectIcon.title": "პროექტის ხატულა",
-  "settings.general.row.showProjectIcon.description": "პროექტის ხატულის ჩვენება სესიის სათაურში",
   "session.location.unavailable": "სესიის მდებარეობა მიუწვდომელია",
   "session.location.description": "ამ სესიის გასაგრძელებლად აირჩიეთ სხვა დირექტორია.",
   "session.location.choose": "დირექტორიის არჩევა",
@@ -1291,9 +1289,6 @@ export const dict = {
   "settings.about.typeset": "აწყობილია Inter და IBM Plex Mono შრიფტებით",
   "settings.about.tagline": "AI ვერ შექმნის შესანიშნავ პროგრამულ უზრუნველყოფას თქვენ გარეშე",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "პროექტების სახელების ჩვენება",
-  "settings.appearance.row.projectName.description":
-    "პროექტების სახელების ჩვენება ვერტიკალურ ჩანართებსა და მობილური ჩანართების უჯრაში",
   "project.settings.title": "პროექტის რედაქტირება",
   "settings.timeline.title": "დროის ხაზი",
   "settings.timeline.detail": "დროის ხაზის დეტალები",
@@ -1479,9 +1474,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} ხილვადობა",
   "settings.timeline.grouped.label": "{{activity}} ჯგუფური",
   "settings.timeline.collapsed.label": "{{activity}} ჩაკეცილია",
-  "settings.general.row.browserPane.title": "ბრაუზერი",
-  "settings.general.row.browserPane.description":
-    "აგენტებს შეუძლიათ გახსნან და მართონ აპლიკაციაში ინტეგრირებული ბრაუზერი.",
   "session.new.workspace.search.empty": "შესაბამისი სამუშაო ხეები არ არის",
   "settings.workspaces.description": "მიმოიხილეთ სამუშაო ხეები და მართეთ დისკის გამოყენება",
   "settings.workspaces.empty.description": "OpenCode-ში შექმნილი სამუშაო ხეები გამოჩნდება აქ",

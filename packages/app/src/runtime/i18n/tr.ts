@@ -1225,8 +1225,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Oturumlarda terminalin nerede açılacağını seçin",
   "settings.general.row.terminalPlacement.side": "Yan",
   "settings.general.row.terminalPlacement.bottom": "Alt",
-  "settings.general.row.showProjectIcon.title": "Proje simgesi",
-  "settings.general.row.showProjectIcon.description": "Oturum başlığında proje simgesini göster",
 
   "command.session.background": "Arka plana taşı",
 
@@ -1401,9 +1399,6 @@ export const dict = {
   "settings.about.typeset": "Inter ve IBM Plex Mono'da dizgi",
   "settings.about.tagline": "Yapay zeka siz olmadan mükemmel yazılım geliştiremez",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Proje adlarını göster",
-  "settings.appearance.row.projectName.description":
-    "Proje adlarını dikey sekmelerde ve mobil sekme çekmecesinde gösterin",
   "project.settings.title": "Projeyi düzenle",
   "settings.timeline.title": "Zaman çizelgesi",
   "settings.timeline.detail": "Zaman çizelgesi ayrıntısı",
@@ -1571,9 +1566,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} görünürlük",
   "settings.timeline.grouped.label": "{{activity}} gruplandırılmış",
   "settings.timeline.collapsed.label": "{{activity}} çöktü",
-  "settings.general.row.browserPane.title": "Tarayıcı",
-  "settings.general.row.browserPane.description":
-    "Temsilcilerin uygulama içi geliştirme tarayıcısını açmasına ve kontrol etmesine izin verin.",
   "session.new.workspace.search.empty": "Eşleşen çalışma ağacı yok",
   "settings.workspaces.description": "Çalışma ağaçlarını inceleyin ve disk kullanımını yönetin",
   "settings.workspaces.empty.description": "OpenCode'de oluşturulan çalışma ağaçları burada görünecek",

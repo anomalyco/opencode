@@ -144,9 +144,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} näkyvyys",
   "settings.timeline.grouped.label": "{{activity}} ryhmitelty",
   "settings.timeline.collapsed.label": "{{activity}} romahti",
-  "settings.general.row.browserPane.title": "Selain",
-  "settings.general.row.browserPane.description":
-    "Salli agenttien avata ja hallita sovelluksen sisäistä kehitysselainta.",
   "session.new.workspace.search.empty": "Ei vastaavia työpuita",
   "settings.workspaces.description": "Tarkastele työpuita ja hallitse levyn käyttöä",
   "settings.workspaces.empty.description": "OpenCode:llä luodut työtilat näkyvät täällä",
@@ -258,9 +255,6 @@ export const dict = {
   "settings.about.typeset": "Kirjasinlajit Inter ja IBM Plex Mono",
   "settings.about.tagline": "Tekoäly ei voi rakentaa erinomaista ohjelmistoa ilman sinua",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Näytä projektien nimet",
-  "settings.appearance.row.projectName.description":
-    "Näytä projektien nimet pystysuuntaisissa välilehdissä ja mobiililaitteen välilehtipaneelissa",
   "project.settings.title": "Muokkaa projektia",
   "settings.timeline.title": "Aikajana",
   "settings.timeline.detail": "Aikajanan tarkkuus",
@@ -1535,8 +1529,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Valitse, mihin terminaali avautuu istunnoissa",
   "settings.general.row.terminalPlacement.side": "Sivulla",
   "settings.general.row.terminalPlacement.bottom": "Alhaalla",
-  "settings.general.row.showProjectIcon.title": "Projektikuvake",
-  "settings.general.row.showProjectIcon.description": "Näytä projektikuvake istunnon otsikossa",
   "command.debugBar.toggle": "Näytä tai piilota virheenkorjauspalkki",
   "command.session.location.cycle": "Vaihda istunnon sijaintia",
   "dialog.provider.anthropic.note": "Suora pääsy Claude-malleihin API-avaimella",

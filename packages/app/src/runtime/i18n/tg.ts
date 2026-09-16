@@ -1205,8 +1205,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Интихоб кунед, ки терминал дар сессияҳо дар куҷо кушода шавад",
   "settings.general.row.terminalPlacement.side": "Канор",
   "settings.general.row.terminalPlacement.bottom": "Поён",
-  "settings.general.row.showProjectIcon.title": "Нишонаи лоиҳа",
-  "settings.general.row.showProjectIcon.description": "Нишонаи лоиҳаро дар сарлавҳаи сессия нишон диҳед",
   "session.location.unavailable": "Ҷойгиршавии сессия дастнорас аст",
   "session.location.description": "Барои идомаи ин сессия директорияи дигарро интихоб кунед.",
   "session.location.choose": "Интихоби директория",
@@ -1301,9 +1299,6 @@ export const dict = {
   "settings.about.typeset": "Бо Inter ва IBM Plex Mono ҳуруфчинӣ шудааст",
   "settings.about.tagline": "AI бе шумо нармафзори олӣ сохта наметавонад",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Номҳои лоиҳаҳоро нишон диҳед",
-  "settings.appearance.row.projectName.description":
-    "Номҳои лоиҳаҳоро дар ҷадвалбандҳои амудӣ ва кашовари ҷадвалбандҳои мобилӣ нишон диҳед",
   "project.settings.title": "Таҳрири лоиҳа",
   "settings.timeline.title": "Ҷадвали вақт",
   "settings.timeline.detail": "Тафсилоти ҷадвали вақт",
@@ -1494,9 +1489,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} намоён",
   "settings.timeline.grouped.label": "{{activity}} гурӯҳбандӣ шудааст",
   "settings.timeline.collapsed.label": "{{activity}} фурӯ рехт",
-  "settings.general.row.browserPane.title": "Браузер",
-  "settings.general.row.browserPane.description":
-    "Ба агентҳо иҷозат диҳед, ки браузери таҳияи дохили барномаро кушоянд ва назорат кунанд.",
   "session.new.workspace.search.empty": "Дарахти мувофиқ нест",
   "settings.workspaces.description": "Дарахтони корро аз назар гузаронед ва истифодаи дискро идора кунед",
   "settings.workspaces.empty.description": "Дарахтҳои кории дар OpenCode сохташуда дар ин ҷо пайдо мешаванд",

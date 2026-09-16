@@ -1201,8 +1201,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Zgjidhni ku hapet terminali në sesione",
   "settings.general.row.terminalPlacement.side": "Anash",
   "settings.general.row.terminalPlacement.bottom": "Poshtë",
-  "settings.general.row.showProjectIcon.title": "Ikona e projektit",
-  "settings.general.row.showProjectIcon.description": "Shfaq ikonën e projektit në kokën e sesionit",
   "session.location.unavailable": "Vendndodhja e sesionit nuk është e disponueshme",
   "session.location.description": "Zgjidhni një drejtori tjetër për të vazhduar këtë sesion.",
   "session.location.choose": "Zgjidhni drejtorinë",
@@ -1295,9 +1293,6 @@ export const dict = {
   "settings.about.typeset": "Llojet në Inter dhe IBM Plex Mono",
   "settings.about.tagline": "AI nuk mund të ndërtojë softuer të shkëlqyeshëm, pa ju",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Trego emrat e projekteve",
-  "settings.appearance.row.projectName.description":
-    "Shfaq emrat e projekteve në skedat vertikale dhe sirtarin e skedave celulare",
   "project.settings.title": "Redakto projektin",
   "settings.timeline.title": "Afati kohor",
   "settings.timeline.detail": "Detajet e afatit kohor",
@@ -1468,9 +1463,6 @@ export const dict = {
   "settings.timeline.visibility.label": "dukshmëria {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} grupuar",
   "settings.timeline.collapsed.label": "{{activity}} u rrëzua",
-  "settings.general.row.browserPane.title": "Shfletuesi",
-  "settings.general.row.browserPane.description":
-    "Lejo agjentët të hapin dhe kontrollojnë një shfletues të zhvillimit brenda aplikacionit.",
   "session.new.workspace.search.empty": "Nuk ka pemë pune që përputhen",
   "settings.workspaces.description": "Rishikoni pemët e punës dhe menaxhoni përdorimin e diskut",
   "settings.workspaces.empty.description": "Pemët e punës të krijuara në OpenCode do të shfaqen këtu",

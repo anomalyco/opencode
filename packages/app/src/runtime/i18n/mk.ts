@@ -1206,8 +1206,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Изберете каде да се отвора терминалот во сесиите",
   "settings.general.row.terminalPlacement.side": "Отстрана",
   "settings.general.row.terminalPlacement.bottom": "Долу",
-  "settings.general.row.showProjectIcon.title": "Икона на проектот",
-  "settings.general.row.showProjectIcon.description": "Прикажи ја иконата на проектот во заглавието на сесијата",
   "session.location.unavailable": "Локацијата на сесијата не е достапна",
   "session.location.description": "Изберете друг директориум за да ја продолжите оваа сесија.",
   "session.location.choose": "Избери директориум",
@@ -1302,9 +1300,6 @@ export const dict = {
   "settings.about.typeset": "Типови во Inter и IBM Plex Mono",
   "settings.about.tagline": "AI не може да изгради одличен софтвер, без вас",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Прикажи ги имињата на проектите",
-  "settings.appearance.row.projectName.description":
-    "Прикажи ги имињата на проектите во вертикалните јазичиња и фиоката за мобилни јазичиња",
   "project.settings.title": "Уреди проект",
   "settings.timeline.title": "Времеплов",
   "settings.timeline.detail": "Детали за временската линија",
@@ -1491,9 +1486,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Видливост на {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} групирано",
   "settings.timeline.collapsed.label": "{{activity}} склопено",
-  "settings.general.row.browserPane.title": "Прелистувач",
-  "settings.general.row.browserPane.description":
-    "Дозволи на агентите да отворат и контролираат прелистувач за развој во апликацијата.",
   "session.new.workspace.search.empty": "Нема соодветни worktrees",
   "settings.workspaces.description": "Прегледај worktrees и управувај со употребата на дискот",
   "settings.workspaces.empty.description": "Worktrees креирани во OpenCode ќе се прикажат тука",

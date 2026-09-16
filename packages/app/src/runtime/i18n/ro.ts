@@ -1205,8 +1205,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Alegeți unde se deschide terminalul în sesiuni",
   "settings.general.row.terminalPlacement.side": "Lateral",
   "settings.general.row.terminalPlacement.bottom": "Jos",
-  "settings.general.row.showProjectIcon.title": "Pictograma proiectului",
-  "settings.general.row.showProjectIcon.description": "Afișează pictograma proiectului în antetul sesiunii",
   "session.location.unavailable": "Locația sesiunii nu este disponibilă",
   "session.location.description": "Alegeți alt director pentru a continua această sesiune.",
   "session.location.choose": "Alege directorul",
@@ -1301,9 +1299,6 @@ export const dict = {
   "settings.about.typeset": "Compoziție în Inter și IBM Plex Mono",
   "settings.about.tagline": "AI nu poate construi un software grozav fără tine",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Afișați numele proiectelor",
-  "settings.appearance.row.projectName.description":
-    "Afișați numele proiectelor în file verticale și în sertarul de file mobil",
   "project.settings.title": "Editați proiectul",
   "settings.timeline.title": "Cronologie",
   "settings.timeline.detail": "Detalii cronologie",
@@ -1479,9 +1474,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} vizibilitate",
   "settings.timeline.grouped.label": "{{activity}} grupat",
   "settings.timeline.collapsed.label": "{{activity}} s-a prăbușit",
-  "settings.general.row.browserPane.title": "Browser",
-  "settings.general.row.browserPane.description":
-    "Permiteți agenților să deschidă și să controleze un browser de dezvoltare în aplicație.",
   "session.new.workspace.search.empty": "Nu se potrivesc arbori de lucru",
   "settings.workspaces.description": "Examinați arborele de lucru și gestionați utilizarea discului",
   "settings.workspaces.empty.description": "Arborele de lucru creat în OpenCode vor apărea aici",

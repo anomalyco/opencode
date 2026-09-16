@@ -34,9 +34,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "display sleep awake local",
     available: "desktop",
   },
-  { tab: "experimental", label: "settings.tab.experimental" },
   { tab: "about", label: "settings.tab.about", keywords: "version license credits" },
   { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
+  {
+    tab: "general",
+    label: "settings.appearance.row.tabs.title",
+    target: "settings-tab-layout",
+    keywords: "vertical horizontal tabs",
+  },
   {
     tab: "general",
     label: "settings.workspaces.default.title",
@@ -179,25 +184,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.sounds",
     description: "settings.general.sounds.errors.description",
     keywords: "sound audio errors",
-  },
-  {
-    tab: "experimental",
-    label: "settings.general.row.browserPane.title",
-    target: "settings-experimental-browser",
-    available: "browser",
-  },
-  {
-    tab: "experimental",
-    label: "settings.appearance.row.tabs.title",
-    target: "settings-tab-layout",
-    keywords: "vertical horizontal tabs",
-  },
-  { tab: "experimental", label: "settings.appearance.row.projectName.title", target: "settings-show-project-name" },
-  {
-    tab: "experimental",
-    label: "settings.general.row.showProjectIcon.title",
-    target: "settings-show-project-icon",
-    available: "dev",
   },
 ]
 

@@ -1227,8 +1227,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "ސެޝަންތަކުގައި ޓާމިނަލް ހުޅުވާނެ ތަން ހޮވާށެވެ",
   "settings.general.row.terminalPlacement.side": "އަރިމަތީގައި",
   "settings.general.row.terminalPlacement.bottom": "ތިރީގައި",
-  "settings.general.row.showProjectIcon.title": "ޕްރޮޖެކްޓް އައިކޮން",
-  "settings.general.row.showProjectIcon.description": "ސެޝަން ހެޑަރގައި ޕްރޮޖެކްޓް އައިކޮން ދައްކާށެވެ",
   "session.location.unavailable": "ސެޝަންގެ ތަން ނުލިބެއެވެ",
   "session.location.description": "މި ސެޝަން ކުރިއަށް ގެންދިއުމަށް އެހެން ޑިރެކްޓަރީއެއް ހޮވާށެވެ.",
   "session.location.choose": "ޑިރެކްޓަރީ ހޮވާށެވެ",
@@ -1322,9 +1320,6 @@ export const dict = {
   "settings.about.typeset": "Inter އަދި IBM Plex Mono އިން ޓައިޕްސެޓްކޮށްފައި",
   "settings.about.tagline": "ތިބާ ނެތި AI އަށް ރަނގަޅު ސޮފްޓްވެއަރ ނުހެދޭނެ",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "ޕްރޮޖެކްޓްގެ ނަންތައް ދައްކަވާ",
-  "settings.appearance.row.projectName.description":
-    "ވަރޓިކަލް ޓެބްތަކާއި މޯބައިލް ޓެބް ޑްރޯއަރގައި ޕްރޮޖެކްޓްގެ ނަންތައް ދައްކަވާ",
   "project.settings.title": "ޕްރޮޖެކްޓް އެޑިޓްކުރައްވާ",
   "settings.timeline.title": "ޓައިމްލައިން",
   "settings.timeline.detail": "ޓައިމްލައިންގެ ތަފްޞީލް",
@@ -1519,9 +1514,6 @@ export const dict = {
   "settings.timeline.visibility.label": "\u2068{{activity}}\u2069 ފެންނަން ހުރުމެވެ",
   "settings.timeline.grouped.label": "\u2068{{activity}}\u2069 ގްރޫޕްކޮށްފައި ހުރެއެވެ",
   "settings.timeline.collapsed.label": "\u2068{{activity}}\u2069 ވެއްޓިއްޖެއެވެ",
-  "settings.general.row.browserPane.title": "ބްރައުޒާ އެވެ",
-  "settings.general.row.browserPane.description":
-    "އޭޖެންޓުންނަށް އިން-އެޕް ޑިވެލޮޕްމަންޓް ބްރައުޒާއެއް ހުޅުވައި ކޮންޓްރޯލް ކުރުމުގެ ހުއްދަ ދިނުން.",
   "session.new.workspace.search.empty": "އެއްގޮތް ވޯކްޓްރީއެއް ނެތެވެ",
   "settings.workspaces.description": "ވޯކްޓްރީތައް ރިވިއުކޮށް ޑިސްކް ބޭނުންކުރުން މެނޭޖްކުރުން",
   "settings.workspaces.empty.description": "OpenCode ގައި އުފެއްދި ވޯކްޓްރީތައް މިތަނުން ފެންނާނެއެވެ",

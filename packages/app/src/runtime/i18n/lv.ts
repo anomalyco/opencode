@@ -1205,8 +1205,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Izvēlieties, kur sesijās tiek atvērts terminālis",
   "settings.general.row.terminalPlacement.side": "Sānos",
   "settings.general.row.terminalPlacement.bottom": "Apakšā",
-  "settings.general.row.showProjectIcon.title": "Projekta ikona",
-  "settings.general.row.showProjectIcon.description": "Rādīt projekta ikonu sesijas galvenē",
   "session.location.unavailable": "Sesijas atrašanās vieta nav pieejama",
   "session.location.description": "Izvēlieties citu direktoriju, lai turpinātu šo sesiju.",
   "session.location.choose": "Izvēlēties direktoriju",
@@ -1301,9 +1299,6 @@ export const dict = {
   "settings.about.typeset": "Salikums Inter un IBM Plex Mono",
   "settings.about.tagline": "AI nevar izveidot lielisku programmatūru bez jums",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Parādiet projektu nosaukumus",
-  "settings.appearance.row.projectName.description":
-    "Rādīt projektu nosaukumus vertikālajās cilnēs un mobilo ierīču ciļņu atvilktnē",
   "project.settings.title": "Rediģēt projektu",
   "settings.timeline.title": "Laika skala",
   "settings.timeline.detail": "Laika skalas informācija",
@@ -1479,9 +1474,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} redzamība",
   "settings.timeline.grouped.label": "{{activity}} grupēti",
   "settings.timeline.collapsed.label": "{{activity}} sabruka",
-  "settings.general.row.browserPane.title": "Pārlūkprogramma",
-  "settings.general.row.browserPane.description":
-    "Ļaujiet aģentiem atvērt un kontrolēt lietotnes izstrādes pārlūkprogrammu.",
   "session.new.workspace.search.empty": "Nav atbilstošu darba koku",
   "settings.workspaces.description": "Pārskatiet darba kokus un pārvaldiet diska lietojumu",
   "settings.workspaces.empty.description": "Šeit tiks parādīti OpenCode izveidotie darba koki",

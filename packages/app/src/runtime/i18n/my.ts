@@ -1234,8 +1234,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "ဆက်ရှင်များတွင် Terminal ဖွင့်မည့်နေရာကို ရွေးချယ်ပါ",
   "settings.general.row.terminalPlacement.side": "ဘေးဘက်",
   "settings.general.row.terminalPlacement.bottom": "အောက်ဘက်",
-  "settings.general.row.showProjectIcon.title": "ပရောဂျက် အိုင်ကွန်",
-  "settings.general.row.showProjectIcon.description": "ဆက်ရှင် ခေါင်းစီးတွင် ပရောဂျက် အိုင်ကွန်ကို ပြပါ",
   "session.location.unavailable": "ဆက်ရှင်တည်နေရာကို မရရှိနိုင်ပါ",
   "session.location.description": "ဤဆက်ရှင်ကို ဆက်လုပ်ရန် အခြား directory တစ်ခုကို ရွေးပါ။",
   "session.location.choose": "Directory ရွေးပါ",
@@ -1328,9 +1326,6 @@ export const dict = {
   "settings.about.typeset": "Inter နှင့် IBM Plex Mono တွင် အမျိုးအစားအစုံ",
   "settings.about.tagline": "AI သည် သင်မပါဘဲ ကောင်းမွန်သော ဆော့ဖ်ဝဲလ်ကို မတည်ဆောက်နိုင်ပါ။",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "ပရောဂျက်အမည်များကို ပြပါ။",
-  "settings.appearance.row.projectName.description":
-    "ဒေါင်လိုက်တက်ဘ်များနှင့် မိုဘိုင်းတက်ဘ်အံဆွဲများတွင် ပရောဂျက်အမည်များကို ပြပါ။",
   "project.settings.title": "ပရောဂျက်ကို တည်းဖြတ်ပါ။",
   "settings.timeline.title": "အချိန်ဇယား",
   "settings.timeline.detail": "အချိန်ဇယားအသေးစိတ်",
@@ -1523,9 +1518,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} မြင်သာမှု",
   "settings.timeline.grouped.label": "{{activity}} အုပ်စုဖွဲ့ပြီး",
   "settings.timeline.collapsed.label": "{{activity}} ပိတ်ထား",
-  "settings.general.row.browserPane.title": "ဘရောက်ဇာ",
-  "settings.general.row.browserPane.description":
-    "အက်ပလီကေးရှင်းတွင်း ဖွင့်၍ ထိန်းချုပ်နိုင်သော ဖွံ့ဖြိုးရေးဘရောက်ဇာအား အေးဂျင့်များကိုခွင့်ပြုပါ။",
   "session.new.workspace.search.empty": "ကိုက်ညီသော worktrees မရှိပါ",
   "settings.workspaces.description": "worktrees ကို ပြန်လည်သုံးသပ်ပြီး ဒစ်စ်ကိုသုံးစွဲမှုကို စီမံပါ",
   "settings.workspaces.empty.description": "OpenCode တွင်ဖန်တီးထားသော worktrees များကို ဒီမှာတွေ့နိုင်ပါမည်",

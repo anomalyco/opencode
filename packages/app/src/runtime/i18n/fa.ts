@@ -1198,8 +1198,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "محل باز شدن ترمینال در جلسه‌ها را انتخاب کنید",
   "settings.general.row.terminalPlacement.side": "کنار",
   "settings.general.row.terminalPlacement.bottom": "پایین",
-  "settings.general.row.showProjectIcon.title": "نماد پروژه",
-  "settings.general.row.showProjectIcon.description": "نمایش نماد پروژه در سربرگ جلسه",
   "desktop.menu.installCli": "نصب CLI...",
   "desktop.cli.installed.title": "CLI نصب شد",
   "desktop.cli.installed.message":
@@ -1303,9 +1301,6 @@ export const dict = {
   "settings.about.typeset": "حروف‌چینی با \u2068Inter\u2069 و \u2068IBM Plex Mono\u2069",
   "settings.about.tagline": "هوش مصنوعی بدون شما نمی‌تواند نرم‌افزار عالی بسازد",
   "settings.about.copyright": "© \u2068Anomaly Innovations, Inc.\u2069",
-  "settings.appearance.row.projectName.title": "نمایش نام پروژه‌ها",
-  "settings.appearance.row.projectName.description":
-    "نمایش نام پروژه‌ها در برگه‌های عمودی و کشوی برگه‌ها در تلفن همراه",
   "project.settings.title": "ویرایش پروژه",
   "settings.timeline.title": "خط زمانی",
   "settings.timeline.detail": "جزئیات خط زمانی",
@@ -1471,9 +1466,6 @@ export const dict = {
   "settings.timeline.visibility.label": "نمایان بودن \u2068{{activity}}\u2069",
   "settings.timeline.grouped.label": "\u2068{{activity}}\u2069 گروه‌بندی‌شده",
   "settings.timeline.collapsed.label": "\u2068{{activity}}\u2069 جمع‌شده",
-  "settings.general.row.browserPane.title": "مرورگر",
-  "settings.general.row.browserPane.description":
-    "به عامل‌ها اجازه دهید یک مرورگر توسعهٔ درون‌برنامه‌ای را باز و کنترل کنند.",
   "session.new.workspace.search.empty": "هیچ درخت‌کار مطابقی نیست",
   "settings.workspaces.description": "بازبینی درخت‌های کار و مدیریت مصرف دیسک",
   "settings.workspaces.empty.description": "درخت‌های کار ایجادشده در OpenCode اینجا ظاهر می‌شوند",
