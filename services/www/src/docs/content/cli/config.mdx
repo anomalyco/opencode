@@ -28,6 +28,17 @@ Add the published JSON Schema for editor validation and autocomplete:
 
 OpenCode includes this automatically when it creates or migrates your CLI config.
 
+## Inline config
+
+Set `OPENCODE_CLI_CONFIG_CONTENT` to apply CLI settings from inline JSON:
+
+```sh
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"enabled":false}}' opencode
+```
+
+OpenCode merges the inline settings over the global `cli.json`. Nested objects are merged, while arrays and scalar
+values from the environment replace global values. Inline settings remain authoritative while the variable is set.
+
 ## Theme
 
 Set the theme and color mode:

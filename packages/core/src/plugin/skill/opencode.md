@@ -42,8 +42,9 @@ that section.
 CLI and TUI preferences are separate from OpenCode's server and project
 configuration. They live in the global `~/.config/opencode/cli.json`, or
 `$XDG_CONFIG_HOME/opencode/cli.json` when `XDG_CONFIG_HOME` is set. There is no
-project-local CLI configuration. Most preferences can also be changed from the
-TUI by pressing `Ctrl+P` and selecting **Open settings**.
+project-local CLI configuration. Set `OPENCODE_CLI_CONFIG_CONTENT` to merge
+inline JSON over the global settings. Most preferences can also be changed from
+the TUI by pressing `Ctrl+P` and selecting **Open settings**.
 
 Fetch the full [CLI configuration guide](https://opencode.ai/v2/docs/cli/config)
 before editing `cli.json`. It covers terminal-only settings such as themes,
