@@ -1,4 +1,10 @@
-import { TextAttributes, type CodeRenderable, type ScrollBoxRenderable } from "@opentui/core"
+import {
+  TextAttributes,
+  type CodeRenderable,
+  type RGBA,
+  type ScrollBoxRenderable,
+  type SyntaxStyle,
+} from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
@@ -121,11 +127,20 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     ],
   }))
 
-  // The gutter is digits + 2 wide and its minWidth is fixed at construction, so
-  // pad the block with fewer digits to keep code and output on one column. Each
-  // title then sits over the first digit of its own block's widest line number.
-  const digits = (text: string) => String(text ? text.split("\n").length : 0).length
-  const pad = (own: string, other: string) => Math.max(0, digits(other) - digits(own))
+  // Both blocks share one gutter width so their content starts on the same
+  // column. The width only reserves digits; it does not shift the left edge.
+  const digits = createMemo(() => String(Math.max(lineCount(code()), lineCount(sections().json), 1)).length)
+  const source = (content: string, filetype: string) => (
+    <NumberedSource
+      content={content}
+      filetype={filetype}
+      digits={digits()}
+      fg={theme.text.default}
+      muted={theme.text.subdued}
+      syntax={syntax()}
+      register={(block) => blocks.add(block)}
+    />
+  )
 
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
@@ -147,60 +162,41 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
       >
         <box gap={1}>
           <box>
-            <box paddingLeft={1 + pad(code(), sections().json)}>
-              <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
-                Code
-              </text>
-            </box>
+            <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
+              Code
+            </text>
             <Show when={code()} fallback={<text fg={theme.text.subdued}>Waiting for code…</text>}>
-              <box paddingLeft={pad(code(), sections().json)}>
-                <line_number fg={theme.text.subdued} minWidth={3} paddingRight={1}>
-                  <code
-                    ref={(block: CodeRenderable) => blocks.add(block)}
-                    conceal={false}
-                    wrapMode="none"
-                    fg={theme.text.default}
-                    filetype="typescript"
-                    syntaxStyle={syntax()}
-                    content={code()}
-                  />
-                </line_number>
-              </box>
+              {source(code(), "typescript")}
             </Show>
           </box>
           <box>
-            <box paddingLeft={1 + pad(sections().json, code())}>
-              <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
-                Output
-              </text>
-            </box>
+            <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
+              Output
+            </text>
             <Show
-              when={output()}
+              when={sections().json}
               fallback={
-                <text fg={theme.text.subdued}>
-                  {props.part.state.status === "completed" ? "No output" : "Waiting for output…"}
+                <text
+                  fg={
+                    output() ? (failed() ? theme.text.feedback.error.default : theme.text.default) : theme.text.subdued
+                  }
+                  wrapMode="word"
+                >
+                  {output()
+                    ? sections().rest
+                    : props.part.state.status === "completed"
+                      ? "No output"
+                      : "Waiting for output…"}
                 </text>
               }
             >
-              <Show when={sections().json}>
-                <box paddingLeft={pad(sections().json, code())}>
-                  <line_number fg={theme.text.subdued} minWidth={3} paddingRight={1}>
-                    <code
-                      ref={(block: CodeRenderable) => blocks.add(block)}
-                      conceal={false}
-                      wrapMode="none"
-                      fg={theme.text.default}
-                      filetype="json"
-                      syntaxStyle={syntax()}
-                      content={sections().json}
-                    />
-                  </line_number>
-                </box>
-              </Show>
+              {source(sections().json, "json")}
               <Show when={sections().rest}>
-                <text fg={failed() ? theme.text.feedback.error.default : theme.text.default} wrapMode="word">
-                  {sections().rest}
-                </text>
+                <box paddingLeft={digits() + 1}>
+                  <text fg={failed() ? theme.text.feedback.error.default : theme.text.default} wrapMode="word">
+                    {sections().rest}
+                  </text>
+                </box>
               </Show>
             </Show>
           </box>
@@ -221,6 +217,52 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
           <span style={{ fg: theme.text.subdued }}>{copied() === "output" ? "" : " copy output"}</span>
         </text>
         <text fg={theme.text.subdued}>esc back</text>
+      </box>
+    </box>
+  )
+}
+
+function lineCount(text: string) {
+  return text ? text.split("\n").length : 0
+}
+
+// `<line_number>` right-aligns digits in a gutter sized to that block alone, so
+// the column "1" starts on depends on how many lines the block has. Padding a
+// title to chase that column slides it between calls and never sits on the
+// numbers actually on screen. A shared left-aligned gutter keeps the title and
+// every line number on one column, in every call.
+function NumberedSource(props: {
+  content: string
+  filetype: string
+  digits: number
+  fg: RGBA
+  muted: RGBA
+  syntax: SyntaxStyle
+  register: (block: CodeRenderable) => void
+}) {
+  const gutter = createMemo(() =>
+    props.content
+      .split("\n")
+      .map((_, index) => String(index + 1).padEnd(props.digits))
+      .join("\n"),
+  )
+
+  return (
+    <box flexDirection="row" gap={1} width="100%">
+      <text fg={props.muted} flexShrink={0} width={props.digits}>
+        {gutter()}
+      </text>
+      <box flexGrow={1} flexShrink={1} minWidth={0}>
+        <code
+          ref={props.register}
+          width="100%"
+          conceal={false}
+          wrapMode="none"
+          fg={props.fg}
+          filetype={props.filetype}
+          syntaxStyle={props.syntax}
+          content={props.content}
+        />
       </box>
     </box>
   )
