@@ -1,4 +1,4 @@
-https:vrcsbplus_\mar.gmail.rq
+https:vrcsb+plus_mar.gmail.rq
 code incoth vrcsb guia tv
 
 https://is_canner.com/sharing/c0e08bc6
