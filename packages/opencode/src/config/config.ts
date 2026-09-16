@@ -12,6 +12,7 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { existsSync } from "fs"
 import { Account } from "@/account/account"
 import { isRecord } from "@/util/record"
@@ -450,8 +451,25 @@ const layer = Layer.effect(
           if (!Flag.OPENCODE_DISABLE_PLUGIN_DEPS) {
             yield* ensureGitignore(dir).pipe(Effect.orDie)
 
+            // Relocate the dependency tree into the XDG data dir so config
+            // dirs only get a node_modules symlink: bare imports from local
+            // plugins still resolve through parent-directory traversal while
+            // node_modules and manifests live outside ~/.config and project
+            // trees. Falls back to the config dir when symlinks are
+            // unavailable (e.g. unprivileged Windows) or when a real
+            // node_modules directory already exists there.
+            const store = path.join(Global.Path.data, "deps", Hash.fast(dir))
+            const link = path.join(dir, "node_modules")
+            const linked = yield* Effect.tryPromise(async () => {
+              const existing = await fsNode.lstat(link).catch(() => undefined)
+              if (existing?.isSymbolicLink()) return
+              if (existing) throw new Error("unmanaged node_modules in config dir")
+              await fsNode.mkdir(store, { recursive: true })
+              await fsNode.symlink(path.join(store, "node_modules"), link)
+            }).pipe(Effect.option)
+
             const dep = yield* npmSvc
-              .install(dir, {
+              .install(linked._tag === "Some" ? store : dir, {
                 add: [
                   {
                     name: "@opencode-ai/plugin",
