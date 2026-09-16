@@ -128,7 +128,7 @@ export function createSseFixture(options: FixtureOptions = {}) {
 
       const permission = /^\/api\/session\/([^/]+)\/permission\/([^/]+)\/reply$/.exec(url.pathname)
       if (permission?.[1] && permission[2]) {
-        const reply = stringField(body, "reply")
+        const reply = stringField(body, "decision")
         if (!reply) return new Response(null, { status: 400 })
         await options.onPermissionReply?.({
           sessionID: decodeURIComponent(permission[1]),
@@ -140,7 +140,7 @@ export function createSseFixture(options: FixtureOptions = {}) {
         return new Response(null, { status: 204 })
       }
 
-      const form = /^\/api\/session\/([^/]+)\/form\/([^/]+)\/cancel$/.exec(url.pathname)
+      const form = request.method === "DELETE" ? /^\/api\/session\/([^/]+)\/form\/([^/]+)$/.exec(url.pathname) : null
       if (form?.[1] && form[2]) {
         await options.onFormCancel?.({
           sessionID: decodeURIComponent(form[1]),
