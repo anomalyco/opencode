@@ -267,7 +267,9 @@ function buildHomeSessionRecords(input: {
           .find(
             (item) =>
               pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-          ) ?? projectForSession(session, input.projects(), input.projectByID())
+          ) ??
+        projectForSession(session, input.projects(), input.projectByID()) ??
+        (session.workspaceID ? { worktree: session.directory, expanded: true } : undefined)
       if (!project) return []
       return { session, project, projectName: displayName(project) }
     })
