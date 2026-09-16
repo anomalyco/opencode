@@ -5,13 +5,16 @@ import { type ExtensionInvocation, hooked } from "../tool-runtime.js"
 import type { Interpreter } from "./interpreter.js"
 import { createErrorValue, isErrorType } from "./intrinsics.js"
 import { MAX_VALUE_DEPTH } from "./limits.js"
-import { Throw, typeError } from "./model.js"
+import { PendingThrow, Throw, typeError } from "./model.js"
 import { fn } from "./native.js"
 import {
   Callable,
   define,
   entries,
   get,
+  has,
+  hidden,
+  keys,
   Arr,
   Bytes,
   DateObj,
@@ -60,14 +63,28 @@ export const extensionGlobals = <R>(
     ) {
       throw typeError(`${label} contains ${describeValue(value)}, which cannot be passed to an extension.`)
     }
+    if (seen.has(value)) throw typeError(`${label} contains a circular value.`)
+    seen.add(value)
     if (value instanceof ErrorObj) {
       const name = coerceToString(get(value, "name"))
       const message = get(value, "message")
       const text = message === undefined ? "" : coerceToString(message)
-      return name === "AggregateError" ? new AggregateError([], text) : new (hostErrors.get(name) ?? Error)(text)
+      const copied =
+        name === "AggregateError" ? new AggregateError([], text) : new (hostErrors.get(name) ?? Error)(text)
+      for (const key of new Set(["cause", ...keys(value)])) {
+        if (uncrossed.has(key) || !has(value, key)) continue
+        const item = crossing(() => next(get(value, key)))
+        if (item === left) continue
+        Object.defineProperty(copied, key, {
+          value: item,
+          writable: true,
+          configurable: true,
+          enumerable: key !== "cause",
+        })
+      }
+      seen.delete(value)
+      return copied
     }
-    if (seen.has(value)) throw typeError(`${label} contains a circular value.`)
-    seen.add(value)
     const copied =
       value instanceof Arr
         ? value.items.map(next)
@@ -85,18 +102,29 @@ export const extensionGlobals = <R>(
     if (isPrimitive(value)) return value
     if (typeof value === "function") return wrap(value, label)
     if (value !== null && typeof value === "object") {
+      const next = (item: unknown, path: string) => fromHost(item, path, depth + 1, seen)
       if (value instanceof Date) return new DateObj(builtins.Date, value.getTime())
       if (value instanceof RegExp) return new RegExpObj(builtins.RegExp, value.source, value.flags)
       if (value instanceof Uint8Array) return new Bytes(builtins.Uint8Array, new Uint8Array(value))
       if (value instanceof ArrayBuffer) return new Bytes(builtins.Uint8Array, new Uint8Array(value.slice(0)))
       if (value instanceof Error) {
-        return createErrorValue(builtins[isErrorType(value.name) ? value.name : "Error"], value.message)
+        if (seen.has(value)) throw typeError(`${label} produced a circular value.`)
+        seen.add(value)
+        const copied = createErrorValue(builtins[isErrorType(value.name) ? value.name : "Error"], value.message)
+        const fields = value as unknown as Record<string, unknown>
+        for (const key of new Set(["cause", ...Object.keys(value)])) {
+          if (uncrossed.has(key) || !(key in value) || typeof fields[key] === "function") continue
+          const item = crossing(() => next(fields[key], `${label}.${key}`))
+          if (item === left) continue
+          define(copied, key, item, key === "cause" ? hidden : undefined)
+        }
+        seen.delete(value)
+        return copied
       }
       if (value instanceof URL) return new URLObj(builtins.URL, builtins.URLSearchParams, new URL(value.href))
       if (value instanceof URLSearchParams) {
         return new URLSearchParamsObj(builtins.URLSearchParams, new URLSearchParams(value))
       }
-      const next = (item: unknown, path: string) => fromHost(item, path, depth + 1, seen)
       if (value instanceof Map) {
         const wrapped = new MapObj(builtins.Map)
         for (const [key, item] of value) wrapped.map.set(next(key, label), next(item, label))
@@ -158,6 +186,22 @@ export const extensionGlobals = <R>(
       ([name, value]) => [name, wrap(value, name, (args) => ({ extension: extension.name, name, args }))] as const,
     ),
   )
+}
+
+/**
+ * An error crosses as its name, message, `cause`, and own enumerable fields, such as Node's `code`, `errno`,
+ * `syscall`, and `path`. `stack` stays on its own side, and no field may shadow an Error method. A field that cannot
+ * cross (a socket, a handle, a function) is left behind so the error itself always arrives.
+ */
+const uncrossed = new Set(["stack", "constructor", "toString", "__proto__"])
+const left = Symbol("left behind")
+const crossing = (convert: () => unknown): unknown => {
+  try {
+    return convert()
+  } catch (reason) {
+    if (reason instanceof PendingThrow) return left
+    throw reason
+  }
 }
 
 const hostErrors = new Map<string, ErrorConstructor>([

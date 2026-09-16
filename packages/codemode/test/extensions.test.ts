@@ -163,12 +163,26 @@ describe("values are converted at the boundary, never shared", () => {
     expect(held[0]).toEqual({ a: 1 })
   })
 
-  test("a program Error crosses as a host Error with its name and message", async () => {
+  test("a program Error crosses as a host Error with its name, message, cause, and own data", async () => {
     held.length = 0
     await value(`keep(new TypeError("bad"))`)
     expect(held[0]).toBeInstanceOf(TypeError)
     expect((held[0] as Error).message).toBe("bad")
     expect(Object.keys(held[0] as object)).toEqual([])
+    held.length = 0
+    await value(`
+      const e = new Error("m", { cause: new RangeError("root") })
+      e.code = "ENOENT"; e.detail = { path: "x" }
+      e.stack = "chosen"; e.toString = 1; e.constructor = 2; e.fn = () => 1
+      keep(e)`)
+    const crossed = held[0] as Error & Record<string, unknown>
+    expect(crossed.cause).toBeInstanceOf(RangeError)
+    expect((crossed.cause as Error).message).toBe("root")
+    expect(Object.keys(crossed)).toEqual(["code", "detail"])
+    expect(crossed.detail).toEqual({ path: "x" })
+    expect(crossed.stack).not.toBe("chosen")
+    expect(String(crossed)).toBe("Error: m")
+    expect(crossed.constructor).toBe(Error)
   })
 
   test("an Error with an unknown name crosses as a plain Error", async () => {
@@ -228,6 +242,49 @@ describe("host errors", () => {
     expect(await value(`try { fail() } catch (e) { return [e instanceof RangeError, e.message] }`, target)).toEqual([
       true,
       "boom",
+    ])
+  })
+
+  test("a host Error arrives with its cause and own data; what cannot cross is left behind", async () => {
+    class Handle {}
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "fs",
+          globals: {
+            open: () => {
+              const error = Object.assign(new Error("ENOENT: no such file or directory, open 'x'"), {
+                code: "ENOENT",
+                errno: -2,
+                path: "x",
+                detail: { retried: true },
+                handle: new Handle(),
+                retry: () => 1,
+              })
+              throw new Error("open failed", { cause: error })
+            },
+          },
+        }),
+      ],
+    })
+    expect(
+      await value(
+        `try { open() } catch (e) {
+          const c = e.cause
+          return [e.message, Object.keys(e), c instanceof Error, c.code, c.errno, c.path, c.detail, Object.keys(c), "stack" in c]
+        }`,
+        target,
+      ),
+    ).toEqual([
+      "open failed",
+      [],
+      true,
+      "ENOENT",
+      -2,
+      "x",
+      { retried: true },
+      ["code", "errno", "path", "detail"],
+      false,
     ])
   })
 
