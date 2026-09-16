@@ -1,4 +1,4 @@
-import retriever, { LocalRetriever } from './retriever';
+import { defaultRetriever, LocalRetriever } from './retriever';
 import type { RetrievalResult } from './types';
 
 export interface EnrichmentMessage {
@@ -18,7 +18,7 @@ export class KnowledgeEnrichmentMiddleware {
   private retriever: LocalRetriever;
 
   constructor(customRetriever?: LocalRetriever) {
-    this.retriever = customRetriever || retriever;
+    this.retriever = customRetriever ?? defaultRetriever();
   }
 
   /**
@@ -123,5 +123,3 @@ ${bestSolution.content}
     };
   }
 }
-
-export default new KnowledgeEnrichmentMiddleware();

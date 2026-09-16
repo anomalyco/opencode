@@ -25,13 +25,3 @@ export { LocalRetriever, LocalRetriever as RetrievalEngine } from './retriever';
 export { applyAbstentionGate, hasLexicalSupport, substantiveTokens } from './abstention';
 export { AgentKnowledgeIntegration } from './agent-integration';
 export { KnowledgeEngineManager } from './manager';
-
-import manager from './manager';
-import retriever from './retriever';
-import integration from './agent-integration';
-
-export default {
-  manager,
-  retriever,
-  integration,
-};

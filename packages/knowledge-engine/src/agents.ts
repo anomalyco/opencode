@@ -1,5 +1,5 @@
-import retriever, { LocalRetriever } from './retriever';
-import middleware, { KnowledgeEnrichmentMiddleware } from './middleware';
+import { defaultRetriever, LocalRetriever } from './retriever';
+import { KnowledgeEnrichmentMiddleware } from './middleware';
 import type { RetrievalResult } from './types';
 
 export interface PlanOutput {
@@ -14,7 +14,7 @@ export class BuildAgentKnowledge {
   private retriever: LocalRetriever;
 
   constructor(customRetriever?: LocalRetriever) {
-    this.retriever = customRetriever || retriever;
+    this.retriever = customRetriever ?? defaultRetriever();
     this.middleware = new KnowledgeEnrichmentMiddleware(this.retriever);
   }
 
@@ -61,7 +61,7 @@ export class PlanAgentKnowledge {
   private retriever: LocalRetriever;
 
   constructor(customRetriever?: LocalRetriever) {
-    this.retriever = customRetriever || retriever;
+    this.retriever = customRetriever ?? defaultRetriever();
   }
 
   /**

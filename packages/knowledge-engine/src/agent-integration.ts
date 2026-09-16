@@ -1,4 +1,4 @@
-import defaultRetriever, { LocalRetriever } from './retriever';
+import { defaultRetriever, LocalRetriever } from './retriever';
 import type { RetrievalResult } from './types';
 
 export class AgentKnowledgeIntegration {
@@ -10,7 +10,7 @@ export class AgentKnowledgeIntegration {
     currentContext: string = '',
     customRetriever?: LocalRetriever
   ): Promise<string> {
-    const activeRetriever = customRetriever || defaultRetriever;
+    const activeRetriever = customRetriever ?? defaultRetriever();
     const relevantKnowledge = await activeRetriever.advancedSearch(task, {
       agentType: 'build',
       topK: 4,
@@ -45,7 +45,7 @@ ${knowledgeText}
     currentContext: string = '',
     customRetriever?: LocalRetriever
   ): Promise<string> {
-    const activeRetriever = customRetriever || defaultRetriever;
+    const activeRetriever = customRetriever ?? defaultRetriever();
     const [strategyResults, bestPractices] = await Promise.all([
       activeRetriever.advancedSearch(task, { agentType: 'plan', topK: 3 }),
       activeRetriever.getBestPractice(task),
@@ -84,7 +84,7 @@ ${practicesText || 'Standard practices apply.'}
     errorMessage: string,
     customRetriever?: LocalRetriever
   ): Promise<string> {
-    const activeRetriever = customRetriever || defaultRetriever;
+    const activeRetriever = customRetriever ?? defaultRetriever();
     const solutions = await activeRetriever.findTroubleshootingSolution(errorMessage);
 
     if (solutions.length === 0) {
@@ -111,7 +111,7 @@ ${guidance}
     topic: string,
     customRetriever?: LocalRetriever
   ): Promise<string> {
-    const activeRetriever = customRetriever || defaultRetriever;
+    const activeRetriever = customRetriever ?? defaultRetriever();
     const detailed = await activeRetriever.getDetailedContent(topic);
 
     const overview = detailed.overview.map(o => `### ${o.section}\n${o.content}`).join('\n\n');

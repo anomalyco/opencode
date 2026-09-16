@@ -108,4 +108,13 @@ export class LocalRetriever {
   }
 }
 
-export default new LocalRetriever();
+let sharedInstance: LocalRetriever | undefined;
+
+/**
+ * Process-shared retriever, created on first use — never at import time.
+ * Importing this module must not open any database.
+ */
+export function defaultRetriever(): LocalRetriever {
+  if (!sharedInstance) sharedInstance = new LocalRetriever();
+  return sharedInstance;
+}

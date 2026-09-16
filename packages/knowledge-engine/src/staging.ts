@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { join, dirname } from 'path';
+import { ensureParentDir, isPackagedRuntime, packagedDbPath } from './paths';
 import {
   approveCandidate,
   createCandidate,
@@ -26,13 +27,15 @@ export const CANDIDATES_DB_FILENAME = 'knowledge-candidates.db';
 
 /**
  * Single explicit DB location: explicit arg wins, then
- * $OPENCODE_KNOWLEDGE_CANDIDATES_DB, otherwise <package-root>/knowledge-candidates.db.
+ * $OPENCODE_KNOWLEDGE_CANDIDATES_DB, then a packaged user-data default
+ * (writable, outside $bunfs), otherwise <package-root>/knowledge-candidates.db.
  * Deliberately separate from knowledge.db — staging and production never share a file.
  */
 export function resolveCandidatesDbPath(requested?: string): string {
   if (requested) return requested;
   const fromEnv = process.env.OPENCODE_KNOWLEDGE_CANDIDATES_DB;
   if (fromEnv) return fromEnv;
+  if (isPackagedRuntime()) return packagedDbPath(CANDIDATES_DB_FILENAME);
   return join(dirname(import.meta.dir), CANDIDATES_DB_FILENAME);
 }
 
@@ -118,6 +121,7 @@ export class CandidateStore {
 
   constructor(dbPath?: string) {
     this.dbPath = resolveCandidatesDbPath(dbPath);
+    ensureParentDir(this.dbPath);
     this.db = new Database(this.dbPath);
     this.init();
   }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-import manager from './manager';
-import retriever from './retriever';
+import { KnowledgeEngineManager } from './manager';
+import { LocalRetriever } from './retriever';
 
 const args = process.argv.slice(2);
 const command = args[0] || 'help';
@@ -8,6 +8,7 @@ const command = args[0] || 'help';
 async function main() {
   switch (command) {
     case 'index': {
+      const manager = new KnowledgeEngineManager();
       const targetPath = args[1];
       const res = manager.buildIndex(targetPath);
       console.log('\n📊 إحصائيات الفهرس الحالية:');
@@ -22,6 +23,7 @@ async function main() {
         process.exit(1);
       }
       console.log(`\n🔍 البحث عن: "${query}"...\n`);
+      const retriever = new LocalRetriever();
       const results = await retriever.retrieveRelevant(query, 5);
       if (results.length === 0) {
         console.log('لم يتم العثور على نتائج.');
@@ -39,12 +41,12 @@ async function main() {
     }
 
     case 'test': {
-      await manager.testRetrieval();
+      await new KnowledgeEngineManager().testRetrieval();
       break;
     }
 
     case 'stats': {
-      const stats = manager.getFullStats();
+      const stats = new KnowledgeEngineManager().getFullStats();
       console.log('\n📊 إحصائيات محرك المعرفة المحلي:');
       console.log(JSON.stringify(stats, null, 2));
       break;

@@ -4,18 +4,22 @@ import { join, dirname } from 'path';
 import type { KnowledgeChunk, RetrievalResult, SearchOptions, IndexStats } from './types';
 import { LocalEmbedder } from './embedder';
 import { applyAbstentionGate } from './abstention';
+import { ensureParentDir, isPackagedRuntime, packagedDbPath } from './paths';
 
 export const KNOWLEDGE_DB_FILENAME = 'knowledge.db';
 
 /**
- * Single explicit DB location: $OPENCODE_KNOWLEDGE_DB wins when set,
- * otherwise <package-root>/knowledge.db next to this package.
+ * Single explicit DB location: explicit arg wins, then $OPENCODE_KNOWLEDGE_DB,
+ * then a packaged user-data default (writable, outside $bunfs), otherwise
+ * <package-root>/knowledge.db next to this package (source runs).
  * No silent candidate chain — a wrong path must fail loudly, never attach elsewhere.
+ * Nothing is migrated automatically: point the env var at an existing file to reuse it.
  */
 export function resolveKnowledgeDbPath(requested?: string): string {
   if (requested) return requested;
   const fromEnv = process.env.OPENCODE_KNOWLEDGE_DB;
   if (fromEnv) return fromEnv;
+  if (isPackagedRuntime()) return packagedDbPath(KNOWLEDGE_DB_FILENAME);
   return join(dirname(import.meta.dir), KNOWLEDGE_DB_FILENAME);
 }
 
@@ -25,6 +29,7 @@ export class LocalVectorDB {
 
   constructor(dbPath?: string) {
     this.dbPath = resolveKnowledgeDbPath(dbPath);
+    ensureParentDir(this.dbPath);
     this.db = new Database(this.dbPath);
     this.init();
   }
@@ -383,5 +388,3 @@ export class LocalVectorDB {
     this.db.close();
   }
 }
-
-export default new LocalVectorDB();

@@ -81,5 +81,3 @@ export class KnowledgeEngineManager {
     return this.db.getStats();
   }
 }
-
-export default new KnowledgeEngineManager();
