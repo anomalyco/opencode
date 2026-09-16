@@ -9,8 +9,8 @@ import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
-test("validates the three explicit diff source defaults", () => {
-  for (const source of ["branch", "committed", "working"] as const) {
+test("validates the four explicit diff source defaults", () => {
+  for (const source of ["branch", "committed", "working", "turn"] as const) {
     expect(decodeInfo({ diffs: { source } })).toEqual({ diffs: { source } })
   }
   expect(decodeInfo({ diffs: {} })).toEqual({ diffs: {} })

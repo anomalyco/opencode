@@ -21,7 +21,7 @@ import { EmptyBorder } from "../../ui/border"
 import { FilePath } from "../../ui/file-path"
 import { getScrollAcceleration } from "../../util/scroll"
 import { createDebouncedSignal } from "../../util/signal"
-import { useConfig } from "../../config"
+import { type DiffSource, useConfig } from "../../config"
 import { locationKey } from "../../context/data"
 import { useThemes } from "../../context/theme"
 import { PatchDiff, type PatchDiffRef } from "../../component/patch-diff"
@@ -44,7 +44,7 @@ const FILE_TREE_MIN_WIDTH = 30
 const FILE_TREE_MAX_WIDTH = 40
 const FILE_HEADER_HEIGHT = 2
 const VCS_DIFF_CONTEXT_LINES = 12
-type DiffMode = Vcs.Mode
+type DiffMode = DiffSource
 type DiffView = "split" | "unified"
 type SelectedHunk = { readonly fileIndex: number; readonly hunkIndex: number; readonly scrollTop: number }
 type FileMenuState = { readonly fileIndex: number; readonly x: number; readonly y: number }
@@ -73,8 +73,12 @@ function storedView(value: unknown): DiffView | undefined {
 function diffSourceLabel(mode: DiffMode) {
   if (mode === "branch") return "All"
   if (mode === "committed") return "Committed"
+  if (mode === "turn") return "Last turn"
   return "Uncommitted"
 }
+
+/** Branch comparisons resolve a review base; the working copy and the session turn do not. */
+const needsBase = (mode: DiffMode) => mode === "branch" || mode === "committed"
 
 function DiffViewer(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
@@ -93,12 +97,15 @@ function DiffViewer(props: { context: Plugin.Context }) {
         }
       | undefined
   }
-  const [mode, setMode] = createSignal(params()?.mode ?? memory.source ?? config.data.diffs?.source ?? "branch")
+  const sessionID = () => params()?.sessionID
+  const initialMode = params()?.mode ?? memory.source ?? config.data.diffs?.source ?? "branch"
+  // The session turn only exists inside a session; a remembered or configured turn source falls back elsewhere.
+  const [mode, setMode] = createSignal<DiffMode>(initialMode === "turn" && !sessionID() ? "branch" : initialMode)
   const location = createMemo(
     () => {
-      const sessionID = params()?.sessionID
-      return sessionID
-        ? (props.context.data.session.get(sessionID)?.location ?? props.context.data.location.default())
+      const id = sessionID()
+      return id
+        ? (props.context.data.session.get(id)?.location ?? props.context.data.location.default())
         : props.context.data.location.default()
     },
     undefined,
@@ -121,19 +128,30 @@ function DiffViewer(props: { context: Plugin.Context }) {
     bases.set(key, pending)
     return pending
   }
-  const diffInput = createMemo(() => ({
-    mode: mode(),
-    location: location(),
-    key: baseKey(),
-    selected: mode() === "working" ? undefined : selectedBase(),
-  }))
+  const diffInput = createMemo(() => {
+    const current = mode()
+    if (current === "turn") return { sessionID: sessionID() }
+    return {
+      mode: current,
+      location: location(),
+      key: baseKey(),
+      selected: needsBase(current) ? selectedBase() : undefined,
+    }
+  })
   const [diff] = createResource(diffInput, async (input) => {
-    const base =
-      input.mode === "working"
-        ? undefined
-        : input.selected
-          ? { name: input.selected, ref: input.selected }
-          : (await loadBase(input.location, input.key)).data
+    if ("sessionID" in input) {
+      if (!input.sessionID) return { base: null, files: [] }
+      const files = await props.context.client.session.diff({
+        sessionID: input.sessionID,
+        context: VCS_DIFF_CONTEXT_LINES,
+      })
+      return { base: null, files: normalizeDiffs(files) }
+    }
+    const base = !needsBase(input.mode)
+      ? undefined
+      : input.selected
+        ? { name: input.selected, ref: input.selected }
+        : (await loadBase(input.location, input.key)).data
     if (input !== diffInput() || (input.mode === "committed" && !base)) {
       return { base: null, files: [] }
     }
@@ -151,6 +169,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
   }
   const result = () => (diff.error || diff.loading ? undefined : diff())
   const sourceDetail = () => {
+    if (mode() === "turn") return diff.error ? "Diff unavailable" : "since your last prompt"
     if (mode() === "working") return "vs HEAD"
     if (diff.error) return "Base or diff unavailable"
     if (!result()) return "Resolving diff…"
@@ -167,6 +186,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
         loading={diff.loading}
         error={diff.error}
         mode={mode()}
+        turnSource={!!sessionID()}
         sourceDetail={sourceDetail()}
         sourceBase={sourceBase()}
         unavailable={mode() === "committed" && !!result() && !result()?.base}
@@ -261,6 +281,8 @@ export function DiffViewerContent(props: {
   loading?: boolean
   error?: unknown
   mode: DiffMode
+  /** Offer the session turn source; only meaningful when the viewer opened from a session. */
+  turnSource?: boolean
   sourceDetail?: string
   sourceBase?: Pick<Vcs.Base, "name" | "ref"> | null
   unavailable?: boolean
@@ -715,6 +737,14 @@ export function DiffViewerContent(props: {
         value: "working" as const,
         description: "Local changes only",
       },
+      ...(props.turnSource
+        ? [
+            {
+              value: "turn" as const,
+              description: "Since your last prompt",
+            },
+          ]
+        : []),
     ]
     dialog.show(() => (
       <DialogSelect<DiffMode | "base">
@@ -834,7 +864,7 @@ export function DiffViewerContent(props: {
           <Match when={!props.loading && props.error}>
             <box flexGrow={1} padding={2}>
               <text fg={theme.text.feedback.error.default}>
-                {!props.sourceBase && mode() !== "working"
+                {!props.sourceBase && needsBase(mode())
                   ? "Could not load diff. Choose a base branch from Diff source, or select Uncommitted."
                   : "Could not load diff. Reopen the diff viewer to try again."}
               </text>
