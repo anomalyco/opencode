@@ -545,9 +545,9 @@ for (const streaming of [false, true]) {
         { fixture, streaming },
       )
       const harness = page.getByTestId("markdown-fixture")
-      const image = harness.getByRole("img", { name: "Chart", exact: true })
+      const image = harness.getByRole("button", { name: "Chart", exact: true })
       await expect.poll(() => image.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(1)
-      await expect(harness.getByRole("img", { name: "Again", exact: true })).toHaveAttribute("src", /^blob:/)
+      await expect(harness.getByRole("button", { name: "Again", exact: true })).toHaveAttribute("src", /^blob:/)
       expect(requests).toHaveLength(1)
       expect(new URL(requests[0]).searchParams.get("location[directory]")).toBe("C:/tmp/")
       const url = await image.getAttribute("src")
@@ -557,7 +557,9 @@ for (const streaming of [false, true]) {
       await harness.getByLabel("Markdown text").fill("![Replacement](./images/next.png)")
       await expect
         .poll(() =>
-          harness.getByRole("img", { name: "Replacement" }).evaluate((image: HTMLImageElement) => image.naturalWidth),
+          harness
+            .getByRole("button", { name: "Replacement" })
+            .evaluate((image: HTMLImageElement) => image.naturalWidth),
         )
         .toBe(1)
       expect(requests).toHaveLength(2)
@@ -571,9 +573,9 @@ for (const streaming of [false, true]) {
           url,
         ),
       ).toBe(true)
-      const next = await harness.getByRole("img", { name: "Replacement" }).getAttribute("src")
+      const next = await harness.getByRole("button", { name: "Replacement" }).getAttribute("src")
       await harness.getByRole("button", { name: "Toggle Markdown" }).click()
-      await expect(harness.getByRole("img")).toHaveCount(0)
+      await expect(harness.locator("img")).toHaveCount(0)
       expect(
         await page.evaluate(
           (url) =>
@@ -602,9 +604,14 @@ story("keeps remote images browser-owned and rejects unsafe image sources", asyn
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
   await expect
-    .poll(() => harness.getByRole("img", { name: "Remote" }).evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .poll(() =>
+      harness.getByRole("button", { name: "Remote" }).evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
     .toBe(1)
-  await expect(harness.getByRole("img", { name: "Remote" })).toHaveAttribute("src", "https://images.example/chart.png")
+  await expect(harness.getByRole("button", { name: "Remote" })).toHaveAttribute(
+    "src",
+    "https://images.example/chart.png",
+  )
   await expect(harness.locator("[onerror], [src^='javascript:'], [data-local-image]")).toHaveCount(0)
 })
 
@@ -628,7 +635,7 @@ story("keeps scripts and external resources inactive inside local SVG images", a
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ images: true, text: "![SVG](Z:/charts/chart.svg)" })
   }, fixture)
-  const image = page.getByTestId("markdown-fixture").getByRole("img", { name: "SVG" })
+  const image = page.getByTestId("markdown-fixture").getByRole("button", { name: "SVG" })
   await expect.poll(() => image.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(32)
   await expect(image).toHaveAttribute("src", /^data:image\/svg\+xml;/)
   await expect(page).not.toHaveTitle("image-script-ran")
@@ -662,12 +669,12 @@ story("loads file URLs and leaves unreadable images as alt text", async ({ page 
   await expect
     .poll(() =>
       harness
-        .getByRole("img", { name: "Available", exact: true })
+        .getByRole("button", { name: "Available", exact: true })
         .evaluate((image: HTMLImageElement) => image.naturalWidth),
     )
     .toBe(1)
   await expect.poll(() => [...requested].sort()).toEqual(["/api/fs/read/chart%25.png", "/api/fs/read/missing.png"])
-  await expect(harness.getByRole("img", { name: "Unavailable" })).not.toHaveAttribute("src")
+  await expect(harness.getByRole("button", { name: "Unavailable" })).not.toHaveAttribute("src")
   await harness.getByLabel("Markdown text").fill("Still usable")
   await expect(harness.locator('[data-component="markdown"]')).toHaveText("Still usable")
 })

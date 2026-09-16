@@ -61,7 +61,7 @@ test("session settings use the remote server context", async ({ page }) => {
         directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-pending-a",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
     ])
 
@@ -153,7 +153,7 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
         directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-background-a",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
     ])
 
@@ -180,14 +180,14 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
         directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-background-a",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
       {
         origin: serverA,
         directory: undefined,
         sessionID: childSessionA.id,
         permissionID: "permission-background-a-child",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
     ])
 })
@@ -243,7 +243,7 @@ test("auto-accept sweeps again after a reconnect", async ({ page }) => {
         directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-offline-a",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
     ])
   // The reconnect sweep must resync active sessions instead of trusting
@@ -280,7 +280,7 @@ test("auto-accept approves a request discovered by opening a session", async ({ 
         directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-synced-a",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
     ])
 })

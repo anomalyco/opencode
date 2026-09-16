@@ -136,7 +136,6 @@ export class RegExpObj extends Obj {
   constructor(proto: Obj, pattern: string, flags: string) {
     super(proto)
     this.regex = new RegExp(pattern, flags)
-    define(this, "lastIndex", 0, { writable: true, enumerable: false, configurable: false })
   }
 }
 
@@ -174,16 +173,6 @@ export class Bytes extends Obj {
   constructor(
     proto: Obj,
     readonly bytes: Uint8Array,
-  ) {
-    super(proto)
-  }
-}
-
-/** An instance of an extension class: the host object lives in a field no property path reaches. */
-export class Handle extends Obj {
-  constructor(
-    proto: Obj,
-    readonly instance: object,
   ) {
     super(proto)
   }

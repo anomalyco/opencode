@@ -23,8 +23,8 @@ import type { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
 import type { Shell } from "@opencode/schema/shell"
 import type { Provider } from "@opencode/schema/provider"
-import type { Integration } from "@opencode/schema/integration"
 import type { Form } from "@opencode/schema/form"
+import type { Integration } from "@opencode/schema/integration"
 import type { Mcp } from "@opencode/schema/mcp"
 import type { Credential } from "@opencode/schema/credential"
 import type { PermissionSaved } from "@opencode/schema/permission-saved"
@@ -233,9 +233,13 @@ export type SessionSwitchModelOperation<E = never> = (
   input: SessionSwitchModelInput,
 ) => Effect.Effect<SessionSwitchModelOutput, E>
 
-export type SessionRenameInput = { readonly sessionID: Session.ID; readonly title: string }
-export type SessionRenameOutput = void
-export type SessionRenameOperation<E = never> = (input: SessionRenameInput) => Effect.Effect<SessionRenameOutput, E>
+export type SessionUpdateInput = {
+  readonly sessionID: Session.ID
+  readonly title?: string | undefined
+  readonly permissions?: Permission.Ruleset | undefined
+}
+export type SessionUpdateOutput = void
+export type SessionUpdateOperation<E = never> = (input: SessionUpdateInput) => Effect.Effect<SessionUpdateOutput, E>
 
 export type SessionMoveInput = {
   readonly sessionID: Session.ID
@@ -360,17 +364,15 @@ export type SessionInboxCancelOperation<E = never> = (
   input: SessionInboxCancelInput,
 ) => Effect.Effect<SessionInboxCancelOutput, E>
 
-export type SessionInboxSteerInput = { readonly sessionID: Session.ID; readonly inboxID: SessionMessage.ID }
-export type SessionInboxSteerOutput = void
-export type SessionInboxSteerOperation<E = never> = (
-  input: SessionInboxSteerInput,
-) => Effect.Effect<SessionInboxSteerOutput, E>
-
-export type SessionInboxQueueInput = { readonly sessionID: Session.ID; readonly inboxID: SessionMessage.ID }
-export type SessionInboxQueueOutput = void
-export type SessionInboxQueueOperation<E = never> = (
-  input: SessionInboxQueueInput,
-) => Effect.Effect<SessionInboxQueueOutput, E>
+export type SessionInboxUpdateInput = {
+  readonly sessionID: Session.ID
+  readonly inboxID: SessionMessage.ID
+  readonly delivery: SessionInbox.Delivery
+}
+export type SessionInboxUpdateOutput = void
+export type SessionInboxUpdateOperation<E = never> = (
+  input: SessionInboxUpdateInput,
+) => Effect.Effect<SessionInboxUpdateOutput, E>
 
 export type SessionInstructionsEntryListInput = { readonly sessionID: Session.ID }
 export type SessionInstructionsEntryListOutput = ReadonlyArray<InstructionEntry.Info>
@@ -513,7 +515,7 @@ export type SessionLogOutput =
           readonly id: Event.ID
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
-          readonly type: "session.permissions.updated"
+          readonly type: "session.permissions"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?:
             | {
@@ -1325,6 +1327,44 @@ export type SessionMessageGetOperation<E = never> = (
   input: SessionMessageGetInput,
 ) => Effect.Effect<SessionMessageGetOutput, E>
 
+export type SessionFormListInput = { readonly sessionID: string }
+export type SessionFormListOutput = ReadonlyArray<Form.Info>
+export type SessionFormListOperation<E = never> = (
+  input: SessionFormListInput,
+) => Effect.Effect<SessionFormListOutput, E>
+
+export type SessionFormCreateInput = {
+  readonly sessionID: string
+  readonly id?: Form.ID | undefined
+  readonly title: string
+  readonly metadata?: Form.Metadata | undefined
+  readonly fields: Form.Fields
+}
+export type SessionFormCreateOutput = Form.Info
+export type SessionFormCreateOperation<E = never> = (
+  input: SessionFormCreateInput,
+) => Effect.Effect<SessionFormCreateOutput, E>
+
+export type SessionFormGetInput = { readonly sessionID: string; readonly formID: Form.ID }
+export type SessionFormGetOutput = Form.Detail
+export type SessionFormGetOperation<E = never> = (input: SessionFormGetInput) => Effect.Effect<SessionFormGetOutput, E>
+
+export type SessionFormReplyInput = {
+  readonly sessionID: string
+  readonly formID: Form.ID
+  readonly answer: Form.Answer
+}
+export type SessionFormReplyOutput = void
+export type SessionFormReplyOperation<E = never> = (
+  input: SessionFormReplyInput,
+) => Effect.Effect<SessionFormReplyOutput, E>
+
+export type SessionFormCancelInput = { readonly sessionID: string; readonly formID: Form.ID }
+export type SessionFormCancelOutput = void
+export type SessionFormCancelOperation<E = never> = (
+  input: SessionFormCancelInput,
+) => Effect.Effect<SessionFormCancelOutput, E>
+
 export type SessionEnvironmentInput = {
   readonly sessionID: Session.ID
   readonly variables: { readonly [x: string]: string }
@@ -1350,7 +1390,7 @@ export interface SessionApi<E = never> {
   readonly fork: SessionForkOperation<E>
   readonly switchAgent: SessionSwitchAgentOperation<E>
   readonly switchModel: SessionSwitchModelOperation<E>
-  readonly rename: SessionRenameOperation<E>
+  readonly update: SessionUpdateOperation<E>
   readonly move: SessionMoveOperation<E>
   readonly prompt: SessionPromptOperation<E>
   readonly command: SessionCommandOperation<E>
@@ -1369,8 +1409,7 @@ export interface SessionApi<E = never> {
   readonly inbox: {
     readonly list: SessionInboxListOperation<E>
     readonly cancel: SessionInboxCancelOperation<E>
-    readonly steer: SessionInboxSteerOperation<E>
-    readonly queue: SessionInboxQueueOperation<E>
+    readonly update: SessionInboxUpdateOperation<E>
   }
   readonly instructions: {
     readonly entry: {
@@ -1384,6 +1423,13 @@ export interface SessionApi<E = never> {
   readonly interrupt: SessionInterruptOperation<E>
   readonly background: SessionBackgroundOperation<E>
   readonly message: { readonly get: SessionMessageGetOperation<E> }
+  readonly form: {
+    readonly list: SessionFormListOperation<E>
+    readonly create: SessionFormCreateOperation<E>
+    readonly get: SessionFormGetOperation<E>
+    readonly reply: SessionFormReplyOperation<E>
+    readonly cancel: SessionFormCancelOperation<E>
+  }
   readonly environment: SessionEnvironmentOperation<E>
   readonly view: SessionViewOperation<E>
 }
@@ -1684,50 +1730,12 @@ export interface ProjectApi<E = never> {
   readonly update: ProjectUpdateOperation<E>
 }
 
-export type FormRequestListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
-export type FormRequestListOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<Form.Info> }
-export type FormRequestListOperation<E = never> = (
-  input?: FormRequestListInput,
-) => Effect.Effect<FormRequestListOutput, E>
-
-export type FormListInput = { readonly sessionID: string }
-export type FormListOutput = ReadonlyArray<Form.Info>
-export type FormListOperation<E = never> = (input: FormListInput) => Effect.Effect<FormListOutput, E>
-
-export type FormCreateInput = {
-  readonly sessionID: string
-  readonly id?: Form.ID | undefined
-  readonly title: string
-  readonly metadata?: Form.Metadata | undefined
-  readonly fields: Form.Fields
-}
-export type FormCreateOutput = Form.Info
-export type FormCreateOperation<E = never> = (input: FormCreateInput) => Effect.Effect<FormCreateOutput, E>
-
-export type FormGetInput = { readonly sessionID: string; readonly formID: Form.ID }
-export type FormGetOutput = Form.Info
-export type FormGetOperation<E = never> = (input: FormGetInput) => Effect.Effect<FormGetOutput, E>
-
-export type FormStateInput = { readonly sessionID: string; readonly formID: Form.ID }
-export type FormStateOutput = Form.State
-export type FormStateOperation<E = never> = (input: FormStateInput) => Effect.Effect<FormStateOutput, E>
-
-export type FormReplyInput = { readonly sessionID: string; readonly formID: Form.ID; readonly answer: Form.Answer }
-export type FormReplyOutput = void
-export type FormReplyOperation<E = never> = (input: FormReplyInput) => Effect.Effect<FormReplyOutput, E>
-
-export type FormCancelInput = { readonly sessionID: string; readonly formID: Form.ID }
-export type FormCancelOutput = void
-export type FormCancelOperation<E = never> = (input: FormCancelInput) => Effect.Effect<FormCancelOutput, E>
+export type FormListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type FormListOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<Form.Info> }
+export type FormListOperation<E = never> = (input?: FormListInput) => Effect.Effect<FormListOutput, E>
 
 export interface FormApi<E = never> {
-  readonly request: { readonly list: FormRequestListOperation<E> }
   readonly list: FormListOperation<E>
-  readonly create: FormCreateOperation<E>
-  readonly get: FormGetOperation<E>
-  readonly state: FormStateOperation<E>
-  readonly reply: FormReplyOperation<E>
-  readonly cancel: FormCancelOperation<E>
 }
 
 export type PermissionRequestListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
@@ -1777,19 +1785,13 @@ export type PermissionGetOperation<E = never> = (input: PermissionGetInput) => E
 export type PermissionReplyInput = {
   readonly sessionID: Session.ID
   readonly requestID: Permission.ID
-  readonly reply: Permission.Reply
+  readonly decision: Permission.Reply
   readonly message?: string | undefined
 }
 export type PermissionReplyOutput = void
 export type PermissionReplyOperation<E = never> = (
   input: PermissionReplyInput,
 ) => Effect.Effect<PermissionReplyOutput, E>
-
-export type PermissionRulesInput = { readonly sessionID: Session.ID; readonly permissions: Permission.Ruleset }
-export type PermissionRulesOutput = void
-export type PermissionRulesOperation<E = never> = (
-  input: PermissionRulesInput,
-) => Effect.Effect<PermissionRulesOutput, E>
 
 export interface PermissionApi<E = never> {
   readonly request: { readonly list: PermissionRequestListOperation<E> }
@@ -1798,7 +1800,6 @@ export interface PermissionApi<E = never> {
   readonly list: PermissionListOperation<E>
   readonly get: PermissionGetOperation<E>
   readonly reply: PermissionReplyOperation<E>
-  readonly rules: PermissionRulesOperation<E>
 }
 
 export type FileListInput = {
@@ -2101,7 +2102,7 @@ export type ShellCreateInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly command: string
   readonly cwd?: string | undefined
-  readonly timeout: number
+  readonly timeout?: number | undefined
   readonly metadata?: { readonly [x: string]: unknown } | undefined
 }
 export type ShellCreateOutput = { readonly location: Location.PublicRef; readonly data: Shell.Info }
@@ -2113,14 +2114,6 @@ export type ShellGetInput = {
 }
 export type ShellGetOutput = { readonly location: Location.PublicRef; readonly data: Shell.Info }
 export type ShellGetOperation<E = never> = (input: ShellGetInput) => Effect.Effect<ShellGetOutput, E>
-
-export type ShellTimeoutInput = {
-  readonly id: Shell.ID
-  readonly location?: { readonly directory?: string | undefined } | undefined
-  readonly timeout: number
-}
-export type ShellTimeoutOutput = { readonly location: Location.PublicRef; readonly data: Shell.Info }
-export type ShellTimeoutOperation<E = never> = (input: ShellTimeoutInput) => Effect.Effect<ShellTimeoutOutput, E>
 
 export type ShellOutputInput = {
   readonly id: Shell.ID
@@ -2150,7 +2143,6 @@ export interface ShellApi<E = never> {
   readonly list: ShellListOperation<E>
   readonly create: ShellCreateOperation<E>
   readonly get: ShellGetOperation<E>
-  readonly timeout: ShellTimeoutOperation<E>
   readonly output: ShellOutputOperation<E>
   readonly remove: ShellRemoveOperation<E>
 }
@@ -2213,13 +2205,13 @@ export type VcsStatusInput = { readonly location?: { readonly directory?: string
 export type VcsStatusOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<Vcs.FileStatus> }
 export type VcsStatusOperation<E = never> = (input?: VcsStatusInput) => Effect.Effect<VcsStatusOutput, E>
 
-export type VcsBranchesInput = {
+export type VcsBranchListInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly search?: string | undefined
   readonly limit?: number | undefined
 }
-export type VcsBranchesOutput = { readonly location: Location.PublicRef; readonly data: Vcs.BranchList }
-export type VcsBranchesOperation<E = never> = (input?: VcsBranchesInput) => Effect.Effect<VcsBranchesOutput, E>
+export type VcsBranchListOutput = { readonly location: Location.PublicRef; readonly data: Vcs.BranchList }
+export type VcsBranchListOperation<E = never> = (input?: VcsBranchListInput) => Effect.Effect<VcsBranchListOutput, E>
 
 export type VcsDiffInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
@@ -2234,7 +2226,7 @@ export interface VcsApi<E = never> {
   readonly get: VcsGetOperation<E>
   readonly base: VcsBaseOperation<E>
   readonly status: VcsStatusOperation<E>
-  readonly branches: VcsBranchesOperation<E>
+  readonly branch: { readonly list: VcsBranchListOperation<E> }
   readonly diff: VcsDiffOperation<E>
 }
 

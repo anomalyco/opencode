@@ -99,15 +99,11 @@ export function DialogIntegration(
   })
 
   const options = createMemo(() => {
-    const providers = data.location.websearch.list(location) ?? []
-    const providersByID = new Map(providers.map((provider) => [provider.id, provider]))
     return integrations().map((integration) => {
       const methods = connectMethods(integration)
-      const provider = providersByID.get(integration.id)
       const credentials = credentialConnections(integration)
       let category = "Services"
       if (integration.id in INTEGRATION_PRIORITY) category = "Popular"
-      if (provider) category = "Web search"
       if (integration.metadata?.source === "mcp") category = "MCP"
       return {
         title: integration.name,

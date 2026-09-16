@@ -33,8 +33,8 @@ import type {
   SessionSwitchAgentOutput,
   SessionSwitchModelInput,
   SessionSwitchModelOutput,
-  SessionRenameInput,
-  SessionRenameOutput,
+  SessionUpdateInput,
+  SessionUpdateOutput,
   SessionMoveInput,
   SessionMoveOutput,
   SessionPromptInput,
@@ -65,10 +65,8 @@ import type {
   SessionInboxListOutput,
   SessionInboxCancelInput,
   SessionInboxCancelOutput,
-  SessionInboxSteerInput,
-  SessionInboxSteerOutput,
-  SessionInboxQueueInput,
-  SessionInboxQueueOutput,
+  SessionInboxUpdateInput,
+  SessionInboxUpdateOutput,
   SessionInstructionsEntryListInput,
   SessionInstructionsEntryListOutput,
   SessionInstructionsEntryPutInput,
@@ -85,6 +83,16 @@ import type {
   SessionBackgroundOutput,
   SessionMessageGetInput,
   SessionMessageGetOutput,
+  SessionFormListInput,
+  SessionFormListOutput,
+  SessionFormCreateInput,
+  SessionFormCreateOutput,
+  SessionFormGetInput,
+  SessionFormGetOutput,
+  SessionFormReplyInput,
+  SessionFormReplyOutput,
+  SessionFormCancelInput,
+  SessionFormCancelOutput,
   SessionEnvironmentInput,
   SessionEnvironmentOutput,
   SessionViewInput,
@@ -144,20 +152,8 @@ import type {
   ProjectListOutput,
   ProjectUpdateInput,
   ProjectUpdateOutput,
-  FormRequestListInput,
-  FormRequestListOutput,
   FormListInput,
   FormListOutput,
-  FormCreateInput,
-  FormCreateOutput,
-  FormGetInput,
-  FormGetOutput,
-  FormStateInput,
-  FormStateOutput,
-  FormReplyInput,
-  FormReplyOutput,
-  FormCancelInput,
-  FormCancelOutput,
   PermissionRequestListInput,
   PermissionRequestListOutput,
   PermissionSavedListInput,
@@ -172,8 +168,6 @@ import type {
   PermissionGetOutput,
   PermissionReplyInput,
   PermissionReplyOutput,
-  PermissionRulesInput,
-  PermissionRulesOutput,
   FileReadInput,
   FileReadOutput,
   FileListInput,
@@ -223,8 +217,6 @@ import type {
   ShellCreateOutput,
   ShellGetInput,
   ShellGetOutput,
-  ShellTimeoutInput,
-  ShellTimeoutOutput,
   ShellOutputInput,
   ShellOutputOutput,
   ShellRemoveInput,
@@ -245,8 +237,8 @@ import type {
   VcsBaseOutput,
   VcsStatusInput,
   VcsStatusOutput,
-  VcsBranchesInput,
-  VcsBranchesOutput,
+  VcsBranchListInput,
+  VcsBranchListOutput,
   VcsDiffInput,
   VcsDiffOutput,
   DebugLocationListOutput,
@@ -644,12 +636,12 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      rename: (input: SessionRenameInput, requestOptions?: RequestOptions) =>
-        request<SessionRenameOutput>(
+      update: (input: SessionUpdateInput, requestOptions?: RequestOptions) =>
+        request<SessionUpdateOutput>(
           {
             method: "PATCH",
             path: `/api/session/${encodeURIComponent(input.sessionID)}`,
-            body: { title: input["title"] },
+            body: { title: input["title"], permissions: input["permissions"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,
@@ -851,27 +843,17 @@ export function make(options: ClientOptions) {
               method: "DELETE",
               path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}`,
               successStatus: 204,
-              declaredStatuses: [400, 401, 404, 409],
+              declaredStatuses: [400, 401, 404],
               empty: true,
             },
             requestOptions,
           ),
-        steer: (input: SessionInboxSteerInput, requestOptions?: RequestOptions) =>
-          request<SessionInboxSteerOutput>(
+        update: (input: SessionInboxUpdateInput, requestOptions?: RequestOptions) =>
+          request<SessionInboxUpdateOutput>(
             {
-              method: "POST",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}/steer`,
-              successStatus: 204,
-              declaredStatuses: [400, 401, 404, 409],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        queue: (input: SessionInboxQueueInput, requestOptions?: RequestOptions) =>
-          request<SessionInboxQueueOutput>(
-            {
-              method: "POST",
-              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}/queue`,
+              method: "PATCH",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}`,
+              body: { delivery: input["delivery"] },
               successStatus: 204,
               declaredStatuses: [400, 401, 404, 409],
               empty: true,
@@ -977,11 +959,70 @@ export function make(options: ClientOptions) {
             requestOptions,
           ).then((value) => value.data),
       },
+      form: {
+        list: (input: SessionFormListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionFormListOutput }>(
+            {
+              method: "GET",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        create: (input: SessionFormCreateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionFormCreateOutput }>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
+              body: { id: input["id"], title: input["title"], metadata: input["metadata"], fields: input["fields"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        get: (input: SessionFormGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionFormGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        reply: (input: SessionFormReplyInput, requestOptions?: RequestOptions) =>
+          request<SessionFormReplyOutput>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/reply`,
+              body: { answer: input["answer"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        cancel: (input: SessionFormCancelInput, requestOptions?: RequestOptions) =>
+          request<SessionFormCancelOutput>(
+            {
+              method: "DELETE",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 409],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
       environment: (input: SessionEnvironmentInput, requestOptions?: RequestOptions) =>
         request<SessionEnvironmentOutput>(
           {
             method: "PUT",
-            path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/environment`,
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/environment`,
             body: { variables: input["variables"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
@@ -1047,7 +1088,7 @@ export function make(options: ClientOptions) {
         request<{ readonly data: GenerateTextOutput }>(
           {
             method: "POST",
-            path: `/api/generate`,
+            path: `/api/experimental/generate`,
             body: { prompt: input["prompt"], model: input["model"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 503],
@@ -1367,85 +1408,15 @@ export function make(options: ClientOptions) {
         ),
     },
     form: {
-      request: {
-        list: (input?: FormRequestListInput, requestOptions?: RequestOptions) =>
-          request<FormRequestListOutput>(
-            {
-              method: "GET",
-              path: `/api/form/request`,
-              query: { location: input?.["location"] },
-              successStatus: 200,
-              declaredStatuses: [400, 401],
-              empty: false,
-            },
-            requestOptions,
-          ),
-      },
-      list: (input: FormListInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: FormListOutput }>(
+      list: (input?: FormListInput, requestOptions?: RequestOptions) =>
+        request<FormListOutput>(
           {
             method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
+            path: `/api/form`,
+            query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401],
             empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      create: (input: FormCreateInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: FormCreateOutput }>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form`,
-            body: { id: input["id"], title: input["title"], metadata: input["metadata"], fields: input["fields"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      get: (input: FormGetInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: FormGetOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      state: (input: FormStateInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: FormStateOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/state`,
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      reply: (input: FormReplyInput, requestOptions?: RequestOptions) =>
-        request<FormReplyOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/reply`,
-            body: { answer: input["answer"] },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404, 409],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      cancel: (input: FormCancelInput, requestOptions?: RequestOptions) =>
-        request<FormCancelOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}/cancel`,
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404, 409],
-            empty: true,
           },
           requestOptions,
         ),
@@ -1537,19 +1508,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}/reply`,
-            body: { reply: input["reply"], message: input["message"] },
-            successStatus: 204,
-            declaredStatuses: [400, 401, 404],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      rules: (input: PermissionRulesInput, requestOptions?: RequestOptions) =>
-        request<PermissionRulesOutput>(
-          {
-            method: "PUT",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/rules`,
-            body: { permissions: input["permissions"] },
+            body: { decision: input["decision"], message: input["message"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,
@@ -1899,19 +1858,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      timeout: (input: ShellTimeoutInput, requestOptions?: RequestOptions) =>
-        request<ShellTimeoutOutput>(
-          {
-            method: "PATCH",
-            path: `/api/shell/${encodeURIComponent(input.id)}/timeout`,
-            query: { location: input["location"] },
-            body: { timeout: input["timeout"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404],
-            empty: false,
-          },
-          requestOptions,
-        ),
       output: (input: ShellOutputInput, requestOptions?: RequestOptions) =>
         request<ShellOutputOutput>(
           {
@@ -1931,7 +1877,7 @@ export function make(options: ClientOptions) {
             path: `/api/shell/${encodeURIComponent(input.id)}`,
             query: { location: input["location"] },
             successStatus: 204,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401],
             empty: true,
           },
           requestOptions,
@@ -2044,18 +1990,20 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      branches: (input?: VcsBranchesInput, requestOptions?: RequestOptions) =>
-        request<VcsBranchesOutput>(
-          {
-            method: "GET",
-            path: `/api/vcs/branches`,
-            query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
+      branch: {
+        list: (input?: VcsBranchListInput, requestOptions?: RequestOptions) =>
+          request<VcsBranchListOutput>(
+            {
+              method: "GET",
+              path: `/api/vcs/branch`,
+              query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
       diff: (input: VcsDiffInput, requestOptions?: RequestOptions) =>
         request<VcsDiffOutput>(
           {

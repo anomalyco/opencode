@@ -352,6 +352,38 @@ describe("MCP OAuth", () => {
     expect(url.pathname).toBe("/as/authorize")
   })
 
+  test("uses configured authorization server metadata when the resource publishes none", async () => {
+    const { server: issuer } = authorizationServer({})
+    const resource = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
+    const url = `${resource.url.origin}/mcp`
+    const oauth = {
+      client_id: "client",
+      auth_server_metadata_url: `${issuer.url.origin}/.well-known/oauth-authorization-server`,
+    }
+
+    const { url: authorization } = await Effect.runPromise(Effect.scoped(start(url, oauth)))
+    expect(authorization.origin).toBe(issuer.url.origin)
+    expect(authorization.pathname).toBe("/authorize")
+    expect(authorization.searchParams.get("resource")).toBe(url)
+
+    const { server, tokenRequests } = authorizationServer({})
+    const store = memoryCredentials([credential({ access: "expired", refresh: "refresh", url })])
+    const oauthProvider = await connectProvider(
+      new ConfigMCP.Remote({
+        type: "remote",
+        url,
+        oauth: { ...oauth, auth_server_metadata_url: `${server.url.origin}/.well-known/oauth-authorization-server` },
+      }),
+      store,
+    )
+    await auth(oauthProvider, { serverUrl: url }).finally(() => {
+      resource.stop(true)
+      issuer.stop(true)
+      server.stop(true)
+    })
+    expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
+  })
+
   test("forwards iss from the redirect so issuer-advertising servers can complete", async () => {
     const { server } = authorizationServer({ authorization_response_iss_parameter_supported: true })
     const result = await Effect.runPromise(

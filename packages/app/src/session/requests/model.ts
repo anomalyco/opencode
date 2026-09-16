@@ -112,7 +112,7 @@ export function createSessionRequestModel() {
 
     setStore("responding", perm.id)
     serverSDK.api.permission
-      .reply({ sessionID: perm.sessionID, requestID: perm.id, reply: response })
+      .reply({ sessionID: perm.sessionID, requestID: perm.id, decision: response })
       .catch((err: unknown) => {
         const description = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description })

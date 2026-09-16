@@ -51,7 +51,7 @@ export const Plugin = {
             const sessionID = input.sessionID ?? context.sessionID
             const title = input.title.trim()
             if (!title) return Effect.fail(new ToolFailure({ message: "Session title must not be empty" }))
-            return ctx.session.rename({ sessionID, title }).pipe(
+            return ctx.session.update({ sessionID, title }).pipe(
               Effect.as({
                 output: { sessionID, title },
                 content: `Renamed session ${sessionID} to ${title}.`,

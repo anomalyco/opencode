@@ -243,7 +243,7 @@ test("permission layers leave the focused peer's Enter and navigation alone unti
     panes.setActive(true)
     panes.app.mockInput.pressEnter()
     await panes.app.waitFor(() => panes.replies.length === 1)
-    expect(panes.replies).toEqual([{ reply: "once" }])
+    expect(panes.replies).toEqual([{ decision: "once" }])
     expect(panes.submissions).toHaveLength(1)
   } finally {
     panes.app.renderer.destroy()
@@ -272,7 +272,7 @@ test("permission rejection text keeps its draft and regains focus when its scope
     expect(panes.app.renderer.currentFocusedEditor?.id).toBe(input?.id)
     panes.app.mockInput.pressEnter()
     await panes.app.waitFor(() => panes.replies.length === 1)
-    expect(panes.replies).toEqual([{ reply: "reject", message: "choose another command" }])
+    expect(panes.replies).toEqual([{ decision: "reject", message: "choose another command" }])
   } finally {
     panes.app.renderer.destroy()
   }

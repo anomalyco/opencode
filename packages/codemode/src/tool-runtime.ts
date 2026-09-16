@@ -409,7 +409,13 @@ export const make = <R>(
     keys: (path) => namespaceKeys(root, path),
     search: (args) => Effect.suspend(() => executeTool("search", searchTool, args)),
     execute: (path, args) =>
-      Effect.suspend(() => executeTool(canonicalSegments(path).join("."), resolve(root, path), args)),
+      Effect.suspend(() => {
+        const segments = canonicalSegments(path)
+        // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
+        if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
+          return executeTool("search", searchTool, args)
+        return executeTool(segments.join("."), resolve(root, path), args)
+      }),
   }
 }
 

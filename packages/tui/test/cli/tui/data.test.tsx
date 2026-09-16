@@ -2347,7 +2347,7 @@ test("dismisses a permission that expired before its reply", async () => {
     await data.session.permission.reply({
       sessionID: request.sessionID,
       requestID: request.id,
-      reply: "once",
+      decision: "once",
     })
 
     expect(replies).toBe(1)
@@ -2501,7 +2501,7 @@ test("syncs global forms once for each requested location", async () => {
   const requests: URL[] = []
   const other = { directory: "/tmp/opencode-other" }
   const calls = createFetch((url) => {
-    if (url.pathname !== "/api/form/request") return
+    if (url.pathname !== "/api/form") return
     requests.push(url)
     const requestedDirectory = url.searchParams.get("location[directory]") ?? directory
     return json({
@@ -2579,7 +2579,7 @@ test("resyncs global forms only for the active location after reconnect", async 
         ],
         cursor: {},
       })
-    if (url.pathname !== "/api/form/request") return
+    if (url.pathname !== "/api/form") return
     requests.push(url)
     const requestedDirectory = url.searchParams.get("location[directory]") ?? home.directory
     const count = (counts.get(requestedDirectory) ?? 0) + 1

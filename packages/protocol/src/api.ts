@@ -54,16 +54,20 @@ type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof VcsGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ConfigGroup, LocationId>
 
-type SessionGroups<SessionLocationId extends HttpApiMiddleware.AnyId, SessionLocationService> =
-  | ReturnType<typeof makeSessionGroup<SessionLocationId, SessionLocationService>>
-  | typeof MessageGroup
-
-type FormGroups<
-  LocationId extends HttpApiMiddleware.AnyId,
-  LocationService,
+type SessionGroups<
+  SessionLocationId extends HttpApiMiddleware.AnyId,
+  SessionLocationService,
   FormLocationId extends HttpApiMiddleware.AnyId,
   FormLocationService,
-> = ReturnType<typeof makeFormGroup<LocationId, LocationService, FormLocationId, FormLocationService>>
+> =
+  | ReturnType<
+      typeof makeSessionGroup<SessionLocationId, SessionLocationService, FormLocationId, FormLocationService>
+    >
+  | typeof MessageGroup
+
+type FormGroups<LocationId extends HttpApiMiddleware.AnyId, LocationService> = ReturnType<
+  typeof makeFormGroup<LocationId, LocationService>
+>
 
 type MixedMiddlewareGroups<
   LocationId extends HttpApiMiddleware.AnyId,
@@ -89,8 +93,8 @@ type ApiGroups<
   | typeof PersistentPtyGroup
   | typeof CredentialGroup
   | LocationGroups<LocationId>
-  | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
-  | SessionGroups<SessionLocationId, SessionLocationService>
+  | FormGroups<LocationId, LocationService>
+  | SessionGroups<SessionLocationId, SessionLocationService, FormLocationId, FormLocationService>
   | MixedMiddlewareGroups<LocationId, LocationService, SessionLocationId, SessionLocationService>
   | Event
 
@@ -151,7 +155,7 @@ const makeApiFromGroup = <
     .add(LocationGroup.middleware(locationMiddleware))
     .add(AgentGroup.middleware(locationMiddleware))
     .add(PluginGroup.middleware(locationMiddleware))
-    .add(makeSessionGroup(sessionLocationMiddleware))
+    .add(makeSessionGroup(sessionLocationMiddleware, formLocationMiddleware))
     .add(MessageGroup)
     .add(ModelGroup.middleware(locationMiddleware))
     .add(GenerateGroup)
@@ -160,7 +164,7 @@ const makeApiFromGroup = <
     .add(McpGroup.middleware(locationMiddleware))
     .add(CredentialGroup)
     .add(ProjectGroup.middleware(locationMiddleware))
-    .add(makeFormGroup(locationMiddleware, formLocationMiddleware))
+    .add(makeFormGroup(locationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(FileSystemGroup.middleware(locationMiddleware))
     .add(CommandGroup.middleware(locationMiddleware))

@@ -948,9 +948,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       projectedMessages(client, attempt.signal),
       client.session.inbox.list({ sessionID: input.sessionID }, options),
       client.permission.list({ sessionID: input.sessionID }, options),
-      client.form.list({ sessionID: input.sessionID }, options),
+      client.session.form.list({ sessionID: input.sessionID }, options),
       input.location
-        ? client.form.request.list(
+        ? client.form.list(
             {
               location: { directory: input.location.directory },
             },

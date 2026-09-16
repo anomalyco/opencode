@@ -111,15 +111,15 @@ export const Renamed = Event.durable({
 })
 export type Renamed = typeof Renamed.Type
 
-export const PermissionsUpdated = Event.durable({
-  type: "session.permissions.updated",
+export const Permissions = Event.durable({
+  type: "session.permissions",
   ...options,
   schema: {
     ...Base,
     permissions: Permission.Ruleset,
   },
 })
-export type PermissionsUpdated = typeof PermissionsUpdated.Type
+export type Permissions = typeof Permissions.Type
 
 export const Viewed = Event.durable({
   type: "session.viewed",
@@ -646,7 +646,7 @@ export const Definitions = Event.inventory(
   ModelSelected,
   Moved,
   Renamed,
-  PermissionsUpdated,
+  Permissions,
   Viewed,
   UsageUpdated,
   Deleted,

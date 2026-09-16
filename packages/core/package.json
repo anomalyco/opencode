@@ -111,6 +111,7 @@
     "@ff-labs/fff-node": "0.10.5",
     "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/core": "2.0.0",
     "@opencode-ai/pty": "0.1.13",
     "@opencode/ai": "workspace:*",
     "@opencode/codemode": "workspace:*",

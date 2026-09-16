@@ -1,14 +1,9 @@
 import { Shell } from "@opencode/schema/shell"
 import { Location } from "@opencode/schema/location"
-import { NonNegativeInt } from "@opencode/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { ShellNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
-
-const TimeoutInput = Schema.Struct({
-  timeout: NonNegativeInt,
-})
 
 export const ShellGroup = HttpApiGroup.make("server.shell")
   .add(
@@ -58,23 +53,6 @@ export const ShellGroup = HttpApiGroup.make("server.shell")
       ),
   )
   .add(
-    HttpApiEndpoint.patch("shell.timeout", "/api/shell/:id/timeout", {
-      params: { id: Shell.ID },
-      query: LocationQuery,
-      payload: TimeoutInput,
-      success: Location.response(Shell.Info),
-      error: ShellNotFoundError,
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "shell.timeout",
-          summary: "Update shell timeout",
-          description: "Replace a running shell command's timeout from now, or clear it with zero.",
-        }),
-      ),
-  )
-  .add(
     HttpApiEndpoint.get("shell.output", "/api/shell/:id/output", {
       params: { id: Shell.ID },
       query: Schema.Struct({ ...LocationQuery.fields, ...Shell.OutputInput.fields }),
@@ -95,7 +73,6 @@ export const ShellGroup = HttpApiGroup.make("server.shell")
       params: { id: Shell.ID },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
-      error: ShellNotFoundError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -107,5 +84,5 @@ export const ShellGroup = HttpApiGroup.make("server.shell")
       ),
   )
   .annotateMerge(
-    OpenApi.annotations({ title: "shell", description: "Experimental location-scoped shell command routes." }),
+    OpenApi.annotations({ title: "shell", description: "Location-scoped shell command routes." }),
   )

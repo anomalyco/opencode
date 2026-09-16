@@ -173,7 +173,7 @@ describe("run interactive runtime", () => {
     let lifecycle!: LifecycleInput
     const settled: Array<{ sessionID: string; formID: string }> = []
     stubCatalogLists(sdk)
-    const reply = spyOn(sdk.form, "reply").mockImplementation(() => ok(undefined))
+    const reply = spyOn(sdk.session.form, "reply").mockImplementation(() => ok(undefined))
 
     const task = runInteractiveDeferredMode(
       {

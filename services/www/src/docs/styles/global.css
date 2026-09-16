@@ -1,39 +1,23 @@
 @font-face {
-  font-family: "OpenTUI Mono";
-  src: url("../assets/fonts/OpenTUIMono-Regular.woff2") format("woff2");
-  font-weight: 400;
+  font-family: "IBM Plex Mono";
+  src: url("../assets/fonts/IBMPlexMonoVariable-Roman.woff2") format("woff2");
+  font-weight: 100 700;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "OpenTUI Mono";
-  src: url("../assets/fonts/OpenTUIMono-Bold.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "OpenTUI Mono";
-  src: url("../assets/fonts/OpenTUIMono-Italic.woff2") format("woff2");
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "OpenTUI Mono";
-  src: url("../assets/fonts/OpenTUIMono-BoldItalic.woff2") format("woff2");
-  font-weight: 700;
+  font-family: "IBM Plex Mono";
+  src: url("../assets/fonts/IBMPlexMonoVariable-Italic.woff2") format("woff2");
+  font-weight: 100 700;
   font-style: italic;
   font-display: swap;
 }
 
 :root {
   color-scheme: dark;
-  --background: #000;
-  --foreground: #ededed;
+  --background: #000000;
+  --foreground: #efefef;
   --muted: #929292;
   --border: #303030;
   --surface: #101010;
@@ -76,9 +60,11 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: "OpenTUI Mono", monospace;
+  font-family: "IBM Plex Mono", monospace;
   font-size: 0.875rem;
-  line-height: 1.5;
+  font-weight: 400;
+  line-height: 1.8em;
+  letter-spacing: 0.02em;
 }
 
 button,
@@ -796,12 +782,14 @@ main {
   gap: 1rem;
   font-size: 1.875rem;
   line-height: 1.2;
+  letter-spacing: .04em;
 }
 
 .prose h2 {
   margin: 3rem 0 0.75rem;
   font-size: 1.25rem;
   line-height: 1.5;
+  letter-spacing: .03em;
 }
 
 .prose h3 {

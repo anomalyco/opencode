@@ -142,7 +142,7 @@ export function createNewSessionWorkspaceController(input: {
     () => (visible() ? { directory: projectRoot(), search: state.search } : undefined),
     ({ directory, search }) =>
       serverSDK.api.vcs
-        .branches({ location: { directory }, search, limit: 50 })
+        .branch.list({ location: { directory }, search, limit: 50 })
         .then((response) => ({ directory, search, data: response.data }))
         .catch(() => ({ directory, search, data: [] })),
   )

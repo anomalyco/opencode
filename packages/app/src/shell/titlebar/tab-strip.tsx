@@ -116,7 +116,7 @@ function SessionTabEntry(props: {
 
     ctx.data.session.remember({ ...value, title })
     try {
-      await ctx.sdk.api.session.rename({ sessionID: value.id, title })
+      await ctx.sdk.api.session.update({ sessionID: value.id, title })
     } catch (err) {
       const current = session()
       const currentCtx = props.serverCtx

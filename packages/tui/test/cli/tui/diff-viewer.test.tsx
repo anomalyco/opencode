@@ -1847,7 +1847,7 @@ async function renderDiffViewer(
         ? options.baseResponse()
         : json({ location: session.location, data: options.base === undefined ? baseFixture : options.base })
     }
-    if (url.pathname === "/api/vcs/branches") {
+    if (url.pathname === "/api/vcs/branch") {
       branchesRequests.push(url)
       return options.branchesResponse
         ? options.branchesResponse(url)

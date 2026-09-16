@@ -111,7 +111,13 @@ export class CodeRequiredError extends Schema.TaggedError<CodeRequiredError>()("
 
 export class AuthorizationError extends Schema.TaggedError<AuthorizationError>()("Integration.Authorization", {
   cause: Schema.Defect(),
-}) {}
+}) {
+  override get message() {
+    const cause = this.cause
+    if (cause instanceof Error && cause.message) return cause.message
+    return "Authorization failed"
+  }
+}
 
 export class AttemptNotFoundError extends Schema.TaggedError<AttemptNotFoundError>()("Integration.AttemptNotFound", {
   integrationID: ID,

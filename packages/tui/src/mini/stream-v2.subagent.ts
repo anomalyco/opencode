@@ -541,7 +541,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         replayBlockerEvents(child, "permission")
         input.emit()
       }),
-      sdk.form.list({ sessionID: child.sessionID }, { signal }).then((forms) => {
+      sdk.session.form.list({ sessionID: child.sessionID }, { signal }).then((forms) => {
         if (!blockerCurrent(child, epoch, signal)) return
         child.forms = forms
         replayBlockerEvents(child, "form")

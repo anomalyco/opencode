@@ -2,8 +2,9 @@ import { describe, expect } from "bun:test"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Integration } from "@opencode/core/integration"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { Deferred, Effect, Exit, Fiber, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { testEffect } from "./lib/effect"
 
@@ -60,6 +61,30 @@ describe("Job", () => {
             info: { status: "completed", output: `done-${index}` },
           })
         })
+      })
+    }),
+  )
+
+  it.live("preserves authorization and complete failure details without stacks", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const job = yield* jobs.start({
+        type: "test",
+        run: Effect.failCause(
+          Cause.combine(
+            Cause.fail(
+              new Integration.AuthorizationError({
+                cause: new Error("authorization failed", { cause: new Error("token expired") }),
+              }),
+            ),
+            Cause.die({ code: "cleanup_failed" }),
+          ),
+        ),
+      })
+
+      expect((yield* jobs.wait({ id: job.id })).info).toMatchObject({
+        status: "error",
+        error: 'authorization failed\nCaused by: token expired\n{"code":"cleanup_failed"}',
       })
     }),
   )

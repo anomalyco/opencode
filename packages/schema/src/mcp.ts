@@ -44,6 +44,10 @@ export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
   scope: Schema.String.pipe(optional),
   callback_port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).pipe(optional),
   redirect_uri: Schema.String.pipe(optional),
+  auth_server_metadata_url: Schema.String.pipe(optional).annotate({
+    description:
+      "URL of the OAuth or OpenID Connect authorization server metadata document. Set when the MCP server does not publish protected resource metadata that names its authorization server.",
+  }),
 }) {}
 
 export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")({

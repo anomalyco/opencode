@@ -98,7 +98,7 @@ describe("createRequestQueue", () => {
 
   test("classifies git and worktree endpoints as slow", () => {
     expect(isSlowRequest("/api/vcs")).toBe(true)
-    expect(isSlowRequest("/api/vcs/branches")).toBe(true)
+    expect(isSlowRequest("/api/vcs/branch")).toBe(true)
     expect(isSlowRequest("/api/worktree")).toBe(true)
     expect(isSlowRequest("/api/vcsx")).toBe(false)
     expect(isSlowRequest("/api/session")).toBe(false)

@@ -74,7 +74,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
         item: { type: "user", payload: row.payload, delivery: row.delivery },
       })
     },
-    onInboxChange: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" }) => {
+    onInboxChange: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => {
       changes.push({ inboxID: input.inboxID, action: input.action })
       log.push(`${input.action}:${input.inboxID}`)
       const index = rows.findIndex((row) => row.id === input.inboxID)
@@ -85,11 +85,11 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
         emit("session.inbox.cancelled", { sessionID: input.sessionID, inboxID: input.inboxID })
         return
       }
-      row.delivery = "steer"
+      row.delivery = input.action
       emit("session.inbox.delivery.changed", {
         sessionID: input.sessionID,
         inboxID: input.inboxID,
-        delivery: "steer",
+        delivery: input.action,
       })
     },
   }

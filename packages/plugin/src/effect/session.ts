@@ -134,7 +134,7 @@ export type SessionDomain = Pick<
   | "command"
   | "synthetic"
   | "interrupt"
-  | "rename"
+  | "update"
   | "move"
   | "wait"
   | "context"

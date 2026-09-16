@@ -9,7 +9,6 @@ import {
   Bytes,
   DateObj,
   GeneratorObj,
-  Handle,
   MapObj,
   Obj,
   PromiseObj,
@@ -23,7 +22,6 @@ import {
 export const isRuntimeReference = (value: unknown): boolean =>
   value instanceof Callable ||
   value instanceof GeneratorObj ||
-  value instanceof Handle ||
   value instanceof ToolReference ||
   value instanceof PromiseObj ||
   isWrapper(value)
@@ -89,7 +87,6 @@ export const describeValue = (value: unknown): string => {
   if (value instanceof URLSearchParamsObj) return "a URLSearchParams"
   if (value instanceof Bytes) return "a Uint8Array"
   if (value instanceof GeneratorObj) return "a generator"
-  if (value instanceof Handle) return `a ${value.instance.constructor.name}`
   if (isRuntimeReference(value)) return "a function"
   if (typeof value === "object") return "a data object"
   return `a ${typeof value}`

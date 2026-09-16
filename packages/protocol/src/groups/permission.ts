@@ -117,7 +117,7 @@ export const makePermissionGroup = <
       HttpApiEndpoint.post("session.permission.reply", "/api/session/:sessionID/permission/:requestID/reply", {
         params: { sessionID: Session.ID, requestID: Permission.ID },
         payload: Schema.Struct({
-          reply: Permission.Reply,
+          decision: Permission.Reply,
           message: Schema.String.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
@@ -129,23 +129,6 @@ export const makePermissionGroup = <
             identifier: "session.permission.reply",
             summary: "Reply to pending permission request",
             description: "Respond to a pending permission request owned by a session.",
-          }),
-        ),
-    )
-    .add(
-      HttpApiEndpoint.put("session.permission.rules", "/api/session/:sessionID/permission/rules", {
-        params: { sessionID: Session.ID },
-        payload: Schema.Struct({ permissions: Permission.Ruleset }),
-        success: HttpApiSchema.NoContent,
-        error: SessionNotFoundError,
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "session.permission.rules",
-            summary: "Replace session permission rules",
-            description:
-              "Replace the session-scoped permission rules. Rules are evaluated after the agent's rules, and the last matching rule wins.",
           }),
         ),
     )

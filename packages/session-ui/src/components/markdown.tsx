@@ -39,6 +39,7 @@ import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
 import { useMarkdown, type ReadMarkdownImage } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
+import { createImagePreview } from "./image-preview"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -394,6 +395,7 @@ export function Markdown(
   const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "deferUntilReady", "class", "classList"])
   const i18n = useI18n()
   const markdown = useMarkdown()
+  const previewImages = createImagePreview()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
   const lifetime = new AbortController()
@@ -557,6 +559,7 @@ export function Markdown(
       child.remove()
     }
     images?.update(container)
+    previewImages(container)
     container
       .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
       .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))

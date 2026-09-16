@@ -230,6 +230,7 @@ When a provider gives you client credentials, use V2's snake_case OAuth fields:
 | `scope` | Space-delimited scopes to request. |
 | `callback_port` | Local callback port from `1` through `65535`. An available ephemeral port is the default. |
 | `redirect_uri` | Pre-registered loopback URI whose path and port reach the local callback listener. |
+| `auth_server_metadata_url` | URL of the authorization server's OAuth or OpenID Connect metadata document. Set it when the MCP server does not publish protected resource metadata that names its authorization server. |
 
 Remove stored OAuth credentials when you need to sign in again or switch accounts:
 

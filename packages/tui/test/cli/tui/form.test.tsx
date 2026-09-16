@@ -67,7 +67,7 @@ async function mountForm(
         replies.push(answer)
         return response?.reply ? failure(response.reply) : new Response(null, { status: 204 })
       })
-    if (url.pathname === "/api/session/ses_test/form/frm_test/cancel") {
+    if (url.pathname === "/api/session/ses_test/form/frm_test" && request.method === "DELETE") {
       cancellations.push(true)
       return response?.cancel ? failure(response.cancel) : new Response(null, { status: 204 })
     }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { FormAnswer, FormCreated, FormReplyInput, OpenCodeEvent } from "@opencode/client/promise"
+import type { FormAnswer, FormCreated, SessionFormReplyInput, OpenCodeEvent } from "@opencode/client/promise"
 import { replyWebSearch } from "./websearch"
 
 const consent: FormCreated["data"]["form"] = {
@@ -28,7 +28,7 @@ const provider: FormCreated["data"]["form"] = {
 
 function fixture() {
   const listeners = new Set<(event: OpenCodeEvent) => void>()
-  const replies: FormReplyInput[] = []
+  const replies: SessionFormReplyInput[] = []
   const abort = new AbortController()
   const emit = (event: OpenCodeEvent) => listeners.forEach((listener) => listener(event))
   return {
@@ -45,7 +45,7 @@ function fixture() {
         }
       },
     },
-    reply: async (input: FormReplyInput) => {
+    reply: async (input: SessionFormReplyInput) => {
       replies.push(input)
     },
     create: (form = provider) => emit({ id: "evt_create", created: 0, type: "form.created", data: { form } }),

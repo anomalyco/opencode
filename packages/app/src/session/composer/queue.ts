@@ -130,7 +130,9 @@ export function createSessionQueue(input: {
   }
   const steer = (id: string) => {
     if (state.editing?.id === id) cancelEdit()
-    return server.api.session.inbox.steer({ sessionID: input.sessionID, inboxID: id }).catch(() => notify())
+    return server.api.session.inbox
+      .update({ sessionID: input.sessionID, inboxID: id, delivery: "steer" })
+      .catch(() => notify())
   }
   const remove = (id: string) => {
     if (state.editing?.id === id) cancelEdit()

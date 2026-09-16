@@ -748,7 +748,9 @@ describe("acp event behavior", () => {
 
       expect(response.stopReason).toBe("end_turn")
       expect(
-        fixture.requests.some((request) => request.path === "/api/session/ses_form/form/frm_question/cancel"),
+        fixture.requests.some(
+          (request) => request.method === "DELETE" && request.path === "/api/session/ses_form/form/frm_question",
+        ),
       ).toBe(true)
     } finally {
       await fixture.stop()

@@ -55,7 +55,7 @@ export async function replyPermission(input: {
   await input.client.permission.reply({
     sessionID: input.sessionID,
     requestID: input.event.data.id,
-    reply,
+    decision: reply,
   })
 }
 

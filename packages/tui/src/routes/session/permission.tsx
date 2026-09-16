@@ -135,7 +135,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
   function reply(value: PermissionReply, message?: string) {
     void data.session.permission
-      .reply({ sessionID: props.request.sessionID, requestID: props.request.id, reply: value, message })
+      .reply({ sessionID: props.request.sessionID, requestID: props.request.id, decision: value, message })
       .catch((error: unknown) => toast.error(error))
   }
 

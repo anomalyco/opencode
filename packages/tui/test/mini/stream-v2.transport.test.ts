@@ -174,8 +174,8 @@ function sdk(input: {
     }),
   )
   spyOn(client.permission, "list").mockImplementation((request) => ok(input.permissions?.[request.sessionID] ?? []))
-  spyOn(client.form, "list").mockImplementation((request) => ok(input.forms?.[request.sessionID] ?? []))
-  spyOn(client.form.request, "list").mockImplementation(() =>
+  spyOn(client.session.form, "list").mockImplementation((request) => ok(input.forms?.[request.sessionID] ?? []))
+  spyOn(client.form, "list").mockImplementation(() =>
     ok({
       location: {
         directory: input.globalLocation?.directory ?? "/tmp",
@@ -1902,7 +1902,10 @@ describe("V2 mini transport", () => {
     expect(first.event.subscribe).toHaveBeenCalledTimes(1)
     expect(second.event.subscribe).toHaveBeenCalledTimes(1)
     expect(second.session.list).toHaveBeenCalled()
-    expect(second.form.list).toHaveBeenCalledWith({ sessionID: "ses_child" }, { signal: expect.any(AbortSignal) })
+    expect(second.session.form.list).toHaveBeenCalledWith(
+      { sessionID: "ses_child" },
+      { signal: expect.any(AbortSignal) },
+    )
     expect(ui.commits.filter((commit) => commit.messageID === "msg_assistant").map((commit) => commit.text)).toEqual([
       "partial",
       " replacement",

@@ -244,7 +244,7 @@ export function Session(props: {
       void data.session.permission
         .reply({
           sessionID: request.sessionID,
-          reply: "once",
+          decision: "once",
           requestID: request.id,
         })
         .catch((error) => {
@@ -545,9 +545,9 @@ export function Session(props: {
     const result = await runPendingAction(inboxID, async () => {
       const request =
         action === "steer"
-          ? client.api.session.inbox.steer({ sessionID: route.sessionID, inboxID })
+          ? client.api.session.inbox.update({ sessionID: route.sessionID, inboxID, delivery: "steer" })
           : action === "queue"
-            ? client.api.session.inbox.queue({ sessionID: route.sessionID, inboxID })
+            ? client.api.session.inbox.update({ sessionID: route.sessionID, inboxID, delivery: "queue" })
             : client.api.session.inbox.cancel({ sessionID: route.sessionID, inboxID })
       const error = await request.then(
         () => undefined,
@@ -821,7 +821,7 @@ export function Session(props: {
         const title = input.trim()
         void (
           title
-            ? client.api.session.rename({ sessionID: route.sessionID, title })
+            ? client.api.session.update({ sessionID: route.sessionID, title })
             : data.session.title.generate(route.sessionID)
         ).catch((error) => toast.error(error))
       },
