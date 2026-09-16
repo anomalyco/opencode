@@ -1,10 +1,4 @@
-import {
-  TextAttributes,
-  type CodeRenderable,
-  type RGBA,
-  type ScrollBoxRenderable,
-  type SyntaxStyle,
-} from "@opentui/core"
+import { TextAttributes, type CodeRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
@@ -18,7 +12,6 @@ import { dialogWidth, useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { Locale } from "../../util/locale"
 import { getScrollAcceleration } from "../../util/scroll"
-import { toolDisplayContent, toolDisplayMetadata } from "../../util/tool-display"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
@@ -29,7 +22,6 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   const clipboard = useClipboard()
   const toast = useToast()
   const theme = useTheme("elevated")
-  const { currentSyntax: syntax } = useThemes()
   const dimensions = useTerminalDimensions()
   const config = useConfig().data
   const [copied, setCopied] = createSignal<"code" | "output">()
@@ -49,47 +41,27 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   dialog.setSize("xlarge")
   dialog.setCentered(true)
 
-  const code = createMemo(() => {
-    const input = props.part.state.input
-    if (typeof input === "string") return ""
-    return typeof input.code === "string" ? input.code : ""
+  const code = createMemo(() => executeCode(props.part.state.input))
+  const text = createMemo(() => outputText(props.part.state))
+  const highlighted = createMemo(() => {
+    const value = text()
+    return value ? highlightedOutput(value) : undefined
   })
-  const failed = createMemo(
-    () => toolDisplayMetadata(props.part.state).error === true || props.part.state.status === "error",
-  )
-  const output = createMemo(() => {
+  const failed = createMemo(() => {
     const state = props.part.state
-    if (state.status === "error") return state.error.message
-    return stripAnsi(
-      toolDisplayContent(state)
-        .flatMap((item) => (item.type === "text" ? [item.text] : []))
-        .join("\n")
-        .trim(),
-    )
+    if (state.status === "error") return true
+    if (state.status === "streaming") return false
+    return state.metadata?.error === true
   })
-  // The tool prints a JSON result, optionally followed by "\n\nWarnings:" and
-  // "\n\nLogs:" sections. Highlight the JSON and keep any trailing text plain.
-  const sections = createMemo(() => {
-    const text = output()
-    if (!text.startsWith("{") && !text.startsWith("[")) return { json: "", rest: text }
-    const end = text.search(/\n\n(Warnings|Logs):\n/)
-    const json = end === -1 ? text : text.slice(0, end)
-    const parsed = decodeJson(json)
-    if (Option.isNone(parsed)) return { json: "", rest: text }
-    return { json, rest: text.slice(json.length).trim() }
-  })
+  // Both blocks share one gutter width so their content starts on the same column.
+  const digits = createMemo(() => String(Math.max(lineCount(code()), lineCount(highlighted()?.json), 1)).length)
   // Code and JSON never wrap, so the content height is known up front. Sizing
   // synchronously lets the dialog open complete instead of growing over frames.
   const height = createMemo(() => {
-    const lines = (text: string) => (text ? text.split("\n").length : 1)
     const width = Math.max(20, Math.min(dialogWidth(dialog.size), dimensions().width - 2) - 4)
-    const rest = sections().rest
-      ? sections()
-          .rest.split("\n")
-          .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / width)), 0)
-      : 0
-    const outputRows = output() ? (sections().json ? lines(sections().json) : 0) + rest : 1
-    return Math.min(maxHeight(), 1 + lines(code()) + 1 + 1 + outputRows)
+    const body = highlighted()
+    const outputRows = body ? lineCount(body.json) + wrappedRows(body.rest, width) : wrappedRows(text(), width) || 1
+    return Math.min(maxHeight(), (lineCount(code()) || 1) + outputRows + 3)
   })
   const status = createMemo(() => {
     const state = props.part.state
@@ -103,10 +75,10 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   })
 
   const copy = (kind: "code" | "output") => {
-    const text = kind === "code" ? code() : output()
-    if (!text) return
+    const value = kind === "code" ? code() : text()
+    if (!value) return
     void clipboard
-      .write(text)
+      .write(value)
       .then(() => setCopied(kind))
       .catch(toast.error)
   }
@@ -126,21 +98,6 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
       { bind: "o", title: "Copy output", group: "Execute", run: () => copy("output") },
     ],
   }))
-
-  // Both blocks share one gutter width so their content starts on the same
-  // column. The width only reserves digits; it does not shift the left edge.
-  const digits = createMemo(() => String(Math.max(lineCount(code()), lineCount(sections().json), 1)).length)
-  const source = (content: string, filetype: string) => (
-    <NumberedSource
-      content={content}
-      filetype={filetype}
-      digits={digits()}
-      fg={theme.text.default}
-      muted={theme.text.subdued}
-      syntax={syntax()}
-      register={(block) => blocks.add(block)}
-    />
-  )
 
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
@@ -166,7 +123,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
               Code
             </text>
             <Show when={code()} fallback={<text fg={theme.text.subdued}>Waiting for code…</text>}>
-              {source(code(), "typescript")}
+              {(value) => <GutteredCode content={value()} filetype="typescript" digits={digits()} blocks={blocks} />}
             </Show>
           </box>
           <box>
@@ -174,30 +131,30 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
               Output
             </text>
             <Show
-              when={sections().json}
+              when={highlighted()}
               fallback={
                 <text
-                  fg={
-                    output() ? (failed() ? theme.text.feedback.error.default : theme.text.default) : theme.text.subdued
-                  }
+                  fg={text() ? (failed() ? theme.text.feedback.error.default : theme.text.default) : theme.text.subdued}
                   wrapMode="word"
                 >
-                  {output()
-                    ? sections().rest
-                    : props.part.state.status === "completed"
-                      ? "No output"
-                      : "Waiting for output…"}
+                  {text() ?? (props.part.state.status === "completed" ? "No output" : "Waiting for output…")}
                 </text>
               }
             >
-              {source(sections().json, "json")}
-              <Show when={sections().rest}>
-                <box paddingLeft={digits() + 1}>
-                  <text fg={failed() ? theme.text.feedback.error.default : theme.text.default} wrapMode="word">
-                    {sections().rest}
-                  </text>
-                </box>
-              </Show>
+              {(body) => (
+                <>
+                  <GutteredCode content={body().json} filetype="json" digits={digits()} blocks={blocks} />
+                  <Show when={body().rest}>
+                    {(rest) => (
+                      <box paddingLeft={digits() + 1}>
+                        <text fg={failed() ? theme.text.feedback.error.default : theme.text.default} wrapMode="word">
+                          {rest()}
+                        </text>
+                      </box>
+                    )}
+                  </Show>
+                </>
+              )}
             </Show>
           </box>
         </box>
@@ -222,24 +179,53 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   )
 }
 
-function lineCount(text: string) {
+function executeCode(input: SessionMessageAssistantTool["state"]["input"]) {
+  if (typeof input === "string") return
+  return typeof input.code === "string" && input.code ? input.code : undefined
+}
+
+function outputText(state: SessionMessageAssistantTool["state"]) {
+  if (state.status === "error") return state.error.message || undefined
+  if (state.status !== "completed") return
+  const text = stripAnsi(
+    state.content
+      .flatMap((item) => (item.type === "text" ? [item.text] : []))
+      .join("\n")
+      .trim(),
+  )
+  return text || undefined
+}
+
+// The tool prints a JSON result, optionally followed by "\n\nWarnings:" and "\n\nLogs:".
+function highlightedOutput(text: string) {
+  if (!text.startsWith("{") && !text.startsWith("[")) return
+  const end = text.search(/\n\n(Warnings|Logs):\n/)
+  const json = end === -1 ? text : text.slice(0, end)
+  if (Option.isNone(decodeJson(json))) return
+  return { json, rest: text.slice(json.length).trim() || undefined }
+}
+
+function lineCount(text: string | undefined) {
   return text ? text.split("\n").length : 0
 }
 
+function wrappedRows(text: string | undefined, width: number) {
+  if (!text) return 0
+  return text.split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / width)), 0)
+}
+
 // `<line_number>` right-aligns digits in a gutter sized to that block alone, so
-// the column "1" starts on depends on how many lines the block has. Padding a
-// title to chase that column slides it between calls and never sits on the
-// numbers actually on screen. A shared left-aligned gutter keeps the title and
-// every line number on one column, in every call.
-function NumberedSource(props: {
+// the column "1" starts on depends on the line count and differs between calls.
+// One shared left-aligned gutter keeps the title and every line number on the
+// same column, and keeps code and output on one content column.
+function GutteredCode(props: {
   content: string
-  filetype: string
+  filetype: "typescript" | "json"
   digits: number
-  fg: RGBA
-  muted: RGBA
-  syntax: SyntaxStyle
-  register: (block: CodeRenderable) => void
+  blocks: Set<CodeRenderable>
 }) {
+  const theme = useTheme("elevated")
+  const syntax = useThemes().currentSyntax
   const gutter = createMemo(() =>
     props.content
       .split("\n")
@@ -249,18 +235,18 @@ function NumberedSource(props: {
 
   return (
     <box flexDirection="row" gap={1} width="100%">
-      <text fg={props.muted} flexShrink={0} width={props.digits}>
+      <text fg={theme.text.subdued} flexShrink={0} width={props.digits}>
         {gutter()}
       </text>
       <box flexGrow={1} flexShrink={1} minWidth={0}>
         <code
-          ref={props.register}
+          ref={(block: CodeRenderable) => props.blocks.add(block)}
           width="100%"
           conceal={false}
           wrapMode="none"
-          fg={props.fg}
+          fg={theme.text.default}
           filetype={props.filetype}
-          syntaxStyle={props.syntax}
+          syntaxStyle={syntax()}
           content={props.content}
         />
       </box>
