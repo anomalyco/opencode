@@ -156,7 +156,9 @@ export const make = <const Provided extends Record<string, unknown> = {}>(
     }
   }
   return {
-    catalog: prepared.catalog,
+    get catalog() {
+      return prepared.catalog
+    },
     execute: (code) =>
       executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => extensionGlobals(ctx, extensions)),
   }

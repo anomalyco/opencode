@@ -166,15 +166,24 @@ const flattenTools = <R>(
   ]
 }
 
-const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => ({
-  path: visible.path,
-  description: visible.tool.description,
-  signature: isEmptyInput(visible.tool)
-    ? `${toolExpression(visible.path)}(): Promise<${outputTypeScript(visible.tool, true)}>`
-    : `${toolExpression(visible.path)}(input: ${inputTypeScript(visible.tool, true)}): Promise<${outputTypeScript(visible.tool, true)}>`,
-})
+const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
+  let signature: string | undefined
+  return {
+    path: visible.path,
+    description: visible.tool.description,
+    get signature() {
+      // Search ranks paths and descriptions first; only returned matches need their schemas rendered.
+      // Joining the final fragments avoids retaining the rendering's intermediate string ropes in JSC.
+      return (signature ??= [
+        toolExpression(visible.path),
+        isEmptyInput(visible.tool) ? "()" : `(input: ${inputTypeScript(visible.tool, true)})`,
+        `: Promise<${outputTypeScript(visible.tool, true)}>`,
+      ].join(""))
+    },
+  }
+}
 
-/** Tools indexed once per runtime: the lookup trie plus the model-facing catalog and search index. */
+/** Tools indexed once per runtime, with discovery materialized on demand. */
 export type Prepared<R = never> = {
   readonly root: ToolNode<R>
   readonly catalog: ReadonlyArray<ToolDescription>
@@ -286,12 +295,20 @@ const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => ({
 
 export const prepare = <R>(tools: Tools<R>): Prepared<R> => {
   const root = toolTrie(tools)
-  // Discovery bytes are durable instructions, so order only after canonical-path collisions settle.
-  const visible = flattenTools(root).sort((left, right) => compareText(left.path, right.path))
+  let searchIndex: ReadonlyArray<SearchEntry> | undefined
+  let catalog: ReadonlyArray<ToolDescription> | undefined
   return {
     root,
-    catalog: visible.map(describeTool),
-    searchIndex: visible.map(toSearchEntry),
+    get catalog() {
+      return (catalog ??= this.searchIndex.map((entry) => entry.description))
+    },
+    get searchIndex() {
+      // Executing known tools only needs the trie. Render discovery when it is actually read,
+      // ordering after canonical-path collisions settle so instruction bytes stay deterministic.
+      return (searchIndex ??= flattenTools(root)
+        .sort((left, right) => compareText(left.path, right.path))
+        .map(toSearchEntry))
+    },
   }
 }
 
@@ -355,7 +372,6 @@ export const make = <R>(
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
   const root = prepared.root
-  const searchTool = makeSearchTool(prepared.searchIndex)
 
   const recordCall = (call: ToolCall): void => {
     if (maxToolCalls !== undefined && calls.length >= maxToolCalls) {
@@ -412,13 +428,13 @@ export const make = <R>(
     calls,
     hooks,
     keys: (path) => namespaceKeys(root, path),
-    search: (args) => Effect.suspend(() => executeTool("search", searchTool, args)),
+    search: (args) => Effect.suspend(() => executeTool("search", makeSearchTool(prepared.searchIndex), args)),
     execute: (path, args) =>
       Effect.suspend(() => {
         const segments = canonicalSegments(path)
         // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
         if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
-          return executeTool("search", searchTool, args)
+          return executeTool("search", makeSearchTool(prepared.searchIndex), args)
         return executeTool(segments.join("."), resolve(root, path), args)
       }),
   }
