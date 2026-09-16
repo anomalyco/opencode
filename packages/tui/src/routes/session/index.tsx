@@ -1799,6 +1799,11 @@ function GenericTool(props: ToolProps) {
   const { theme } = useTheme()
   const ctx = use()
   const output = createMemo(() => props.output?.trim() ?? "")
+  // Plugin tools report progress through ctx.metadata({ title }); show it while running, like Task does.
+  const liveTitle = createMemo(() => {
+    const state = props.part.state
+    return state.status === "running" && state.title ? state.title : undefined
+  })
   const [expanded, setExpanded] = createSignal(false)
   const maxLines = 3
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
@@ -1813,7 +1818,7 @@ function GenericTool(props: ToolProps) {
       when={props.output && ctx.showGenericToolOutput()}
       fallback={
         <InlineTool icon="⚙" pending="Writing command…" complete={true} part={props.part}>
-          {props.tool} {input(props.input)}
+          {props.tool} {liveTitle() ?? input(props.input)}
         </InlineTool>
       }
     >
