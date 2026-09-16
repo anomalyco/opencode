@@ -1549,6 +1549,39 @@ describe("ProviderTransform.schema - gemini type arrays", () => {
     expect(result.properties.maybe.nullable).toBe(true)
   })
 
+  test("moves type-specific keywords into the matching anyOf branch", () => {
+    // Shape emitted by the Kaggle MCP server for nullable arrays and objects.
+    const schema = {
+      type: "object",
+      properties: {
+        tagIds: { type: ["array", "null"], items: { type: "integer" }, description: "tags" },
+        readMask: {
+          type: ["object", "null"],
+          properties: { paths: { type: ["array", "null"], items: { type: "string" } } },
+          required: ["paths"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.tagIds).toEqual({
+      anyOf: [{ type: "array", items: { type: "integer" } }],
+      nullable: true,
+      description: "tags",
+    })
+    expect(result.properties.readMask).toEqual({
+      anyOf: [
+        {
+          type: "object",
+          properties: { paths: { anyOf: [{ type: "array", items: { type: "string" } }], nullable: true } },
+          required: ["paths"],
+        },
+      ],
+      nullable: true,
+    })
+  })
+
   test("collapses an all-null type array to type null", () => {
     const schema = {
       type: "object",
