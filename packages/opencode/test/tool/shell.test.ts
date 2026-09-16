@@ -1112,7 +1112,33 @@ describe("tool.shell abort", () => {
         const updates: string[] = []
         const result = yield* run(
           {
-            command: `echo first && sleep 0.1 && echo second`,
+            command: `echo first && sleep 0.5 && echo second`,
+          },
+          {
+            ...ctx,
+            metadata: (input) =>
+              Effect.sync(() => {
+                const meta: Record<string, unknown> = input.metadata ?? {}
+                const output = typeof meta.output === "string" ? meta.output : undefined
+                if (output) updates.push(output)
+              }),
+          },
+        )
+        expect(result.output).toContain("first")
+        expect(result.output).toContain("second")
+        expect(updates.length).toBeGreaterThan(1)
+      }),
+    ),
+  )
+
+  it.live("coalesces rapid output reports", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const updates: string[] = []
+        const result = yield* run(
+          {
+            command: `i=0; while [ $i -lt 200 ]; do echo line-$i; i=$((i+1)); done`,
           },
           {
             ...ctx,
@@ -1123,9 +1149,10 @@ describe("tool.shell abort", () => {
               }),
           },
         )
-        expect(result.output).toContain("first")
-        expect(result.output).toContain("second")
-        expect(updates.length).toBeGreaterThan(1)
+        expect(result.output).toContain("line-199")
+        // A burst of chunks must not produce a report per chunk.
+        expect(updates.length).toBeGreaterThan(0)
+        expect(updates.length).toBeLessThan(50)
       }),
     ),
   )

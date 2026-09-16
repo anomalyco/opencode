@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Schedule, Semaphore, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -25,6 +25,47 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+// Streamed shell output is coalesced so a chatty command does not write a full
+// part snapshot per chunk. The first report always lands and the completion
+// path writes the final output, so dropped reports lose no state.
+export const OUTPUT_REPORT_INTERVAL_MS = 250
+const OUTPUT_REPORT_BYTES = 16 * 1024
+
+/**
+ * Leading/trailing coalescer for high-frequency streamed output. The first
+ * report of a run always lands; after that a report is emitted once the
+ * interval or a size step has elapsed, and `flush` reports whatever arrived
+ * last so output that goes quiet is still observable.
+ */
+export function outputReporter(report: (value: string) => Effect.Effect<void>) {
+  let lastAt = 0
+  let lastSize = 0
+  let latest: string | undefined
+  // Reports serialize through one permit: a trailing flush must not overtake an
+  // in-flight push report and regress the visible output to a stale chunk.
+  const permits = Semaphore.makeUnsafe(1)
+  const emit = (value: string) => permits.withPermits(1)(report(value))
+  const push = (value: string) => {
+    latest = value
+    const size = Buffer.byteLength(value, "utf-8")
+    const now = Date.now()
+    if (lastAt !== 0 && now - lastAt < OUTPUT_REPORT_INTERVAL_MS && size - lastSize < OUTPUT_REPORT_BYTES)
+      return Effect.void
+    lastAt = now
+    lastSize = size
+    latest = undefined
+    return emit(value)
+  }
+  const flush = Effect.suspend(() => {
+    if (latest === undefined) return Effect.void
+    const value = latest
+    latest = undefined
+    lastAt = Date.now()
+    lastSize = Buffer.byteLength(value, "utf-8")
+    return emit(value)
+  })
+  return { push, flush }
+}
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -446,7 +487,7 @@ export const ShellTool = Tool.define(
       let cut = false
       let expired = false
       let aborted = false
-
+      const report = outputReporter((value) => ctx.metadata({ metadata: { output: value } }))
       const closeSink = Effect.fnUntraced(function* () {
         const stream = sink
         if (!stream) return
@@ -511,24 +552,16 @@ export const ShellTool = Tool.define(
                         full = ""
                       }),
                     ),
-                    Effect.andThen(
-                      ctx.metadata({
-                        metadata: {
-                          output: last,
-                        },
-                      }),
-                    ),
+                    Effect.andThen(Effect.suspend(() => report.push(last))),
                   )
                 }
               }
 
-              return ctx.metadata({
-                metadata: {
-                  output: last,
-                },
-              })
+              return report.push(last)
             }),
           )
+
+          yield* Effect.forkScoped(Effect.repeat(report.flush, Schedule.spaced(OUTPUT_REPORT_INTERVAL_MS)))
 
           const abort = Effect.callback<void>((resume) => {
             if (ctx.abort.aborted) return resume(Effect.void)
