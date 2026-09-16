@@ -13,12 +13,27 @@ import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
 
-it.effect("lists available models newest first with paging", () =>
+const alpha = { id: "test/alpha", name: "Alpha", released: 300, variants: ["fast"], cost: [], status: "beta" }
+const beta = { id: "other/beta", name: "Beta", released: 200, variants: [], cost: [], status: "active" }
+const gamma = { id: "other/gamma", name: "Gamma Flash", released: 100, variants: [], cost: [], status: "active" }
+const gammaOld = {
+  id: "other/gamma-old",
+  name: "Gamma Flash Old",
+  released: 50,
+  variants: [],
+  cost: [],
+  status: "active",
+}
+
+it.effect("groups available models by provider with paging", () =>
   Effect.gen(function* () {
     const catalog = yield* Provider.Service
     const plugins = yield* Plugin.Service
     const pluginHost = yield* PluginHost.make(plugins)
     yield* catalog.transform((editor) => {
+      editor.update(Provider.ID.make("other"), (provider) => {
+        provider.name = "Other Provider"
+      })
       editor.models.update(Provider.ID.make("test"), Model.ID.make("alpha"), (model) => {
         model.name = "Alpha"
         model.time.released = 300
@@ -30,8 +45,14 @@ it.effect("lists available models newest first with paging", () =>
         model.time.released = 200
       })
       editor.models.update(Provider.ID.make("other"), Model.ID.make("gamma"), (model) => {
-        model.name = "Gamma"
+        model.name = "Gamma Flash"
         model.time.released = 100
+        model.family = Model.Family.make("gamma")
+      })
+      editor.models.update(Provider.ID.make("other"), Model.ID.make("gamma-old"), (model) => {
+        model.name = "Gamma Flash Old"
+        model.time.released = 50
+        model.family = Model.Family.make("gamma")
       })
       editor.models.update(Provider.ID.make("other"), Model.ID.make("disabled"), (model) => {
         model.time.released = 400
@@ -52,47 +73,51 @@ it.effect("lists available models newest first with paging", () =>
         },
       }).pipe(Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")))
 
-    // Newest first, disabled models excluded, and the full agent-facing shape.
+    // Grouped by provider, newest first within each, disabled models excluded.
     expect(yield* run({})).toEqual({
-      models: [
-        {
-          id: "test/alpha",
-          name: "Alpha",
-          released: 300,
-          variants: ["fast"],
-          cost: [],
-          status: "beta",
-        },
-        {
-          id: "other/beta",
-          name: "Beta",
-          released: 200,
-          variants: [],
-          cost: [],
-          status: "active",
-        },
-        {
-          id: "other/gamma",
-          name: "Gamma",
-          released: 100,
-          variants: [],
-          cost: [],
-          status: "active",
-        },
+      providers: [
+        { id: "other", name: "Other Provider", models: [beta, gamma] },
+        { id: "test", name: "test", models: [alpha] },
       ],
       total: 3,
       next: null,
     })
 
-    const first = yield* run({ limit: 2 })
-    expect(first.models.map((model: { id: string }) => model.id)).toEqual(["test/alpha", "other/beta"])
-    expect(first).toMatchObject({ total: 3, next: 2 })
-    const second = yield* run({ limit: 2, offset: 2 })
-    expect(second.models.map((model: { id: string }) => model.id)).toEqual(["other/gamma"])
-    expect(second).toMatchObject({ total: 3, next: null })
+    // Paging slices the ordered list, so a page can end inside a provider group.
+    expect(yield* run({ limit: 2 })).toEqual({
+      providers: [{ id: "other", name: "Other Provider", models: [beta, gamma] }],
+      total: 3,
+      next: 2,
+    })
+    expect(yield* run({ limit: 2, offset: 2 })).toEqual({
+      providers: [{ id: "test", name: "test", models: [alpha] }],
+      total: 3,
+      next: null,
+    })
 
-    const filtered = yield* run({ provider: "other" })
-    expect(filtered.models.map((model: { id: string }) => model.id)).toEqual(["other/beta", "other/gamma"])
-    expect(filtered).toMatchObject({ total: 2, next: null })
+    expect(yield* run({ provider: "other provider" })).toMatchObject({ total: 2, providers: [{ id: "other" }] })
+    expect(yield* run({ provider: "test" })).toEqual({
+      providers: [{ id: "test", name: "test", models: [alpha] }],
+      total: 1,
+      next: null,
+    })
+
+    // Every word of the query must appear somewhere in the reference or display name, ignoring case.
+    expect(yield* run({ query: "GAMMA" })).toEqual({
+      providers: [{ id: "other", name: "Other Provider", models: [gamma] }],
+      total: 1,
+      next: null,
+    })
+    expect(yield* run({ query: "test/" })).toMatchObject({ total: 1, providers: [{ id: "test" }] })
+    expect(yield* run({ query: "other flash" })).toMatchObject({ total: 1, providers: [{ models: [gamma] }] })
+    expect(yield* run({ query: "gamma beta" })).toEqual({ providers: [], total: 0, next: null })
+
+    // Only the newest model of each family is listed unless `all` is set; the query is applied first.
+    expect(yield* run({ all: true })).toMatchObject({
+      total: 4,
+      providers: [{ id: "other", models: [beta, gamma, gammaOld] }, { id: "test" }],
+    })
+    expect(yield* run({ query: "old" })).toMatchObject({ total: 1, providers: [{ models: [gammaOld] }] })
+    expect(yield* run({ provider: "other", query: "alpha" })).toEqual({ providers: [], total: 0, next: null })
   }),
 )

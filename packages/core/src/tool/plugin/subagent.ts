@@ -27,12 +27,15 @@ const backgroundResult = (sessionID: SessionSchema.ID) => ({
 })
 
 export const Input = Schema.Struct({
-  agent: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
+  agent: Schema.String.annotate({
+    description:
+      "The type of specialized agent to use for this task. If the user asks for a subagent by a name that is not one of the available subagents, they most likely mean a model: pick a suitable agent and pass the name through the model parameter instead.",
+  }),
   description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
-      'Only use this parameter if the user explicitly asks you to run the subagent on a particular model or variant. The value is written as "provider/model", or "provider/model#variant" to include a variant. Use the models tool to list the available models and their variants. If several models match, choose one from your own provider when possible. Assume the user wants the latest version unless they say otherwise.',
+      'NEVER set this unless the user explicitly asks for a particular model or variant. The value is written as "providerID/modelID", or "providerID/modelID#variant" to include a variant. Do not guess the ID: look the model up with the models tool, filtering to your own provider first.',
   }),
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description:
@@ -73,7 +76,9 @@ export const Plugin = {
       const ref = yield* Effect.try({
         try: () => Model.Ref.parse(input),
         catch: () =>
-          new ToolFailure({ message: `Invalid model "${input}". Use "provider/model" or "provider/model#variant".` }),
+          new ToolFailure({
+            message: `Invalid model "${input}". Use "providerID/modelID" or "providerID/modelID#variant".`,
+          }),
       })
       const model = (yield* models.available()).find(
         (model) => model.providerID === ref.providerID && model.id === ref.id,

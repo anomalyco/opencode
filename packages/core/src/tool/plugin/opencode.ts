@@ -25,8 +25,14 @@ export const MoveInput = Schema.Struct({
 const MoveOutput = Schema.Struct({ sessionID: Session.ID, directory: AbsolutePath })
 
 export const ModelsInput = Schema.Struct({
+  query: Schema.optionalKey(Schema.String).annotate({
+    description: "Text to search for in model names and IDs.",
+  }),
   provider: Schema.optionalKey(Schema.String).annotate({
-    description: "Limit results to models from a particular provider.",
+    description: "Provider ID or name to filter by. Try your own provider first.",
+  }),
+  all: Schema.optionalKey(Schema.Boolean).annotate({
+    description: "Include older versions of each model family. By default only the newest version is listed.",
   }),
   limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))).annotate({
     description: "Maximum number of models to return. Defaults to 20.",
@@ -36,20 +42,26 @@ export const ModelsInput = Schema.Struct({
   }),
 })
 
+const ModelEntry = Schema.Struct({
+  id: Schema.String.annotate({ description: "providerID/modelID" }),
+  name: Schema.String,
+  released: Model.Info.fields.time.fields.released.annotate({
+    description: "Release date as a Unix timestamp in milliseconds, or 0 when unknown.",
+  }),
+  variants: Schema.Array(Model.VariantID),
+  cost: Model.Info.fields.cost.annotate({ description: "Pricing in USD per million tokens." }),
+  status: Model.Info.fields.status,
+})
+
 const ModelsOutput = Schema.Struct({
-  models: Schema.Array(
+  providers: Schema.Array(
     Schema.Struct({
-      id: Schema.String.annotate({ description: 'Model reference in "provider/model" form.' }),
+      id: Schema.String,
       name: Schema.String,
-      released: Model.Info.fields.time.fields.released.annotate({
-        description: "Release date as a Unix timestamp in milliseconds, or 0 when unknown.",
-      }),
-      variants: Schema.Array(Model.VariantID),
-      cost: Model.Info.fields.cost.annotate({ description: "Pricing in USD per million tokens." }),
-      status: Model.Info.fields.status,
+      models: Schema.Array(ModelEntry).annotate({ description: "Newest first." }),
     }),
-  ),
-  total: Schema.Int,
+  ).annotate({ description: "Matching models grouped by provider." }),
+  total: Schema.Int.annotate({ description: "Number of matching models across all pages." }),
   next: Schema.NullOr(Schema.Int).annotate({ description: "Offset of the next page, or null on the last page." }),
 })
 
@@ -117,36 +129,64 @@ export const Plugin = {
         })
         draft.add({
           name: "models",
-          description: "List the models available to use.",
+          description:
+            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference before running a subagent on it. Check your own provider first.",
           input: ModelsInput,
           output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },
           execute: (input) =>
-            ctx.model.list().pipe(
-              Effect.map((list) => {
-                const offset = input.offset ?? 0
-                const limit = input.limit ?? 20
-                const matching = list.data
-                  .filter((model) => input.provider === undefined || model.providerID === input.provider)
-                  .toSorted((left, right) => right.time.released - left.time.released)
-                const models = matching.slice(offset, offset + limit).map((model) => ({
-                  id: `${model.providerID}/${model.id}`,
-                  name: model.name,
-                  released: model.time.released,
-                  variants: model.variants.map((variant) => variant.id),
-                  cost: model.cost,
-                  status: model.status,
-                }))
-                return {
-                  output: {
-                    models,
-                    total: matching.length,
-                    next: offset + limit < matching.length ? offset + limit : null,
-                  },
-                }
-              }),
-              Effect.mapError((error) => new ToolFailure({ message: "Unable to list models", error })),
-            ),
+            Effect.gen(function* () {
+              const offset = input.offset ?? 0
+              const limit = input.limit ?? 20
+              const terms = input.query?.toLowerCase().split(/\s+/).filter(Boolean) ?? []
+              const names = new Map((yield* ctx.provider.list()).data.map((provider) => [provider.id, provider.name]))
+              const provider = input.provider?.toLowerCase()
+              const matching = (yield* ctx.model.list()).data
+                .filter(
+                  (model) =>
+                    provider === undefined ||
+                    model.providerID.toLowerCase() === provider ||
+                    names.get(model.providerID)?.toLowerCase() === provider,
+                )
+                .filter((model) => {
+                  const text = `${model.providerID}/${model.id} ${model.name}`.toLowerCase()
+                  return terms.every((term) => text.includes(term))
+                })
+                .toSorted(
+                  (left, right) =>
+                    left.providerID.localeCompare(right.providerID) || right.time.released - left.time.released,
+                )
+                .filter((model, index, sorted) => {
+                  if (input.all || model.family === undefined) return true
+                  return (
+                    sorted.findIndex(
+                      (other) => other.providerID === model.providerID && other.family === model.family,
+                    ) === index
+                  )
+                })
+              const page = matching.slice(offset, offset + limit)
+              const providers = Array.from(new Set(page.map((model) => model.providerID))).map((id) => ({
+                id,
+                name: names.get(id) ?? id,
+                models: page
+                  .filter((model) => model.providerID === id)
+                  .map((model) => ({
+                    id: `${model.providerID}/${model.id}`,
+                    name: model.name,
+                    released: model.time.released,
+                    variants: model.variants.map((variant) => variant.id),
+                    cost: model.cost,
+                    status: model.status,
+                  })),
+              }))
+              return {
+                output: {
+                  providers,
+                  total: matching.length,
+                  next: offset + limit < matching.length ? offset + limit : null,
+                },
+              }
+            }).pipe(Effect.mapError((error) => new ToolFailure({ message: "Unable to list models", error }))),
         })
       })
       .pipe(Effect.orDie)

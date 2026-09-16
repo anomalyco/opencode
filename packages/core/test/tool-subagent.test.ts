@@ -668,7 +668,7 @@ describe("SubagentTool", () => {
           })
 
           const failures = [
-            ["not-a-ref", 'Invalid model "not-a-ref". Use "provider/model" or "provider/model#variant".'],
+            ["not-a-ref", 'Invalid model "not-a-ref". Use "providerID/modelID" or "providerID/modelID#variant".'],
             ["test/missing", 'Model "test/missing" is not available. Use the models tool to see what is available.'],
             ["test/override#slow", 'Variant "slow" is not available for "test/override". Available: fast.'],
           ] as const
