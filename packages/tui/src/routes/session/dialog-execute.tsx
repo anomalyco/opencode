@@ -1,4 +1,4 @@
-import { CliRenderEvents, TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
+import { CliRenderEvents, TextAttributes, type CodeRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
@@ -31,6 +31,9 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   const [height, setHeight] = createSignal(1)
   const maxHeight = createMemo(() => Math.max(3, Math.floor(dimensions().height * 0.7) - 6))
   let scroll: ScrollBoxRenderable | undefined
+  // Unwrapped <code> clips long lines and scrolls them itself, so pan both blocks together.
+  const blocks = new Set<CodeRenderable>()
+  const pan = (delta: number) => blocks.forEach((block) => (block.scrollX += delta))
 
   // Fit the scroll area to its content up to the cap. Wrapped code settles a
   // frame after mount and output streams in, so grow from the measured height
@@ -106,6 +109,8 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
       { bind: "down", title: "Scroll down", group: "Execute", run: () => scroll?.scrollBy(1) },
       { bind: "pageup", title: "Previous page", group: "Execute", run: () => scroll?.scrollBy(-maxHeight()) },
       { bind: "pagedown", title: "Next page", group: "Execute", run: () => scroll?.scrollBy(maxHeight()) },
+      { bind: "left", title: "Scroll left", group: "Execute", run: () => pan(-8) },
+      { bind: "right", title: "Scroll right", group: "Execute", run: () => pan(8) },
       { bind: "home", title: "Scroll to code", group: "Execute", run: () => scroll?.scrollTo(0) },
       { bind: "end", title: "Scroll to output", group: "Execute", run: () => scroll?.scrollTo(Infinity) },
       { bind: "c", title: "Copy code", group: "Execute", run: () => copy("code") },
@@ -139,7 +144,9 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
             <Show when={code()} fallback={<text fg={theme.text.subdued}>Waiting for code…</text>}>
               <line_number fg={theme.text.subdued} minWidth={3} paddingRight={1}>
                 <code
+                  ref={(block: CodeRenderable) => blocks.add(block)}
                   conceal={false}
+                  wrapMode="none"
                   fg={theme.text.default}
                   filetype="typescript"
                   syntaxStyle={syntax()}
@@ -162,7 +169,9 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
             >
               <Show when={sections().json}>
                 <code
+                  ref={(block: CodeRenderable) => blocks.add(block)}
                   conceal={false}
+                  wrapMode="none"
                   fg={theme.text.default}
                   filetype="json"
                   syntaxStyle={syntax()}
@@ -179,7 +188,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
         </box>
       </scrollbox>
       <box flexDirection="row" gap={3} flexWrap="wrap">
-        <text fg={theme.text.subdued}>↑/↓ scroll</text>
+        <text fg={theme.text.subdued}>↑/↓ ←/→ scroll</text>
         <text onMouseUp={() => copy("code")}>
           <span style={{ fg: copied() === "code" ? theme.text.feedback.success.default : theme.text.default }}>
             <b>{copied() === "code" ? "✓ copied" : "c"}</b>
