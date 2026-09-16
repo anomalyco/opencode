@@ -1,17 +1,17 @@
 import { CliRenderEvents, TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, Show, untrack } from "solid-js"
 import stripAnsi from "strip-ansi"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
-import { useDialog } from "../../ui/dialog"
+import { dialogWidth, useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { Locale } from "../../util/locale"
 import { getScrollAcceleration } from "../../util/scroll"
-import { executeCalls, executeCallSummary, toolDisplayContent, toolDisplayMetadata } from "../../util/tool-display"
+import { toolDisplayContent, toolDisplayMetadata } from "../../util/tool-display"
 
 // The part is passed as a live accessor prop so the dialog follows the tool
 // while child calls stream and the output arrives.
@@ -52,9 +52,20 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
     if (typeof input === "string") return ""
     return typeof input.code === "string" ? input.code : ""
   })
-  const metadata = createMemo(() => toolDisplayMetadata(props.part.state))
-  const calls = createMemo(() => executeCalls(metadata().toolCalls))
-  const failed = createMemo(() => metadata().error === true || props.part.state.status === "error")
+  // Models often emit the program on one line. Reformat it for reading and fall
+  // back to the raw source while formatting runs or when it does not parse yet.
+  const printWidth = createMemo(() => Math.min(dialogWidth(dialog.size), dimensions().width - 2) - 8)
+  const [formatted] = createResource(
+    () => [code(), printWidth()] as const,
+    async ([source, width]) => ({ source, text: await prettify(source, width) }),
+  )
+  const display = createMemo(() => {
+    const result = formatted.latest
+    return result?.source === code() ? result.text : code()
+  })
+  const failed = createMemo(
+    () => toolDisplayMetadata(props.part.state).error === true || props.part.state.status === "error",
+  )
   const output = createMemo(() => {
     const state = props.part.state
     if (state.status === "error") return state.error.message
@@ -77,7 +88,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   })
 
   const copy = (kind: "code" | "output") => {
-    const text = kind === "code" ? code() : output()
+    const text = kind === "code" ? display() : output()
     if (!text) return
     void clipboard
       .write(text)
@@ -129,30 +140,11 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
                   fg={theme.text.default}
                   filetype="typescript"
                   syntaxStyle={syntax()}
-                  content={code()}
+                  content={display()}
                 />
               </line_number>
             </Show>
           </box>
-          <Show when={calls().length > 0}>
-            <box>
-              <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
-                Tool calls
-              </text>
-              <For each={calls()}>
-                {(call) => (
-                  <text
-                    wrapMode="none"
-                    truncate
-                    fg={call.status === "error" ? theme.text.feedback.error.default : theme.text.default}
-                  >
-                    {call.status === "error" ? "✗ " : call.status === "running" ? "│ " : "› "}
-                    {executeCallSummary(call)}
-                  </text>
-                )}
-              </For>
-            </box>
-          </Show>
           <box>
             <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
               Output
@@ -190,4 +182,19 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
       </box>
     </box>
   )
+}
+
+async function prettify(source: string, printWidth: number) {
+  if (!source) return source
+  const { format } = await import("prettier/standalone")
+  const { default: babel } = await import("prettier/plugins/babel")
+  const { default: estree } = await import("prettier/plugins/estree")
+  return format(source, {
+    parser: "babel",
+    plugins: [babel, estree],
+    printWidth: Math.max(40, printWidth),
+    semi: false,
+  })
+    .then((text) => text.trimEnd())
+    .catch(() => source)
 }
