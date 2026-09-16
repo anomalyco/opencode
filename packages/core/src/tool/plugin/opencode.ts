@@ -60,7 +60,7 @@ const ModelsOutput = Schema.Struct({
       name: Schema.String,
       models: Schema.Array(ModelEntry).annotate({ description: "Newest first." }),
     }),
-  ).annotate({ description: "Matching models grouped by provider." }),
+  ).annotate({ description: "Matching models grouped by provider. Your own provider comes first." }),
   total: Schema.Int.annotate({ description: "Number of matching models across all pages." }),
   next: Schema.NullOr(Schema.Int).annotate({ description: "Offset of the next page, or null on the last page." }),
 })
@@ -81,7 +81,11 @@ export const Plugin = {
     yield* ctx.session.hook("generate", hook)
     yield* ctx.tool
       .transform((draft) => {
-        draft.namespace({ name: "opencode", description: "OpenCode session and runtime tools." })
+        draft.namespace({
+          name: "opencode",
+          description:
+            "Tools for managing OpenCode itself, such as working with sessions and searching the available models.",
+        })
         draft.add({
           name: "session_rename",
           description:
@@ -134,10 +138,11 @@ export const Plugin = {
           input: ModelsInput,
           output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },
-          execute: (input) =>
+          execute: (input, context) =>
             Effect.gen(function* () {
               const offset = input.offset ?? 0
               const limit = input.limit ?? 20
+              const own = (yield* ctx.session.get({ sessionID: context.sessionID })).model?.providerID
               const terms = input.query?.toLowerCase().split(/\s+/).filter(Boolean) ?? []
               const names = new Map((yield* ctx.provider.list()).data.map((provider) => [provider.id, provider.name]))
               const provider = input.provider?.toLowerCase()
@@ -154,7 +159,9 @@ export const Plugin = {
                 })
                 .toSorted(
                   (left, right) =>
-                    left.providerID.localeCompare(right.providerID) || right.time.released - left.time.released,
+                    Number(right.providerID === own) - Number(left.providerID === own) ||
+                    left.providerID.localeCompare(right.providerID) ||
+                    right.time.released - left.time.released,
                 )
                 .filter((model, index, sorted) => {
                   if (input.all || model.family === undefined) return true

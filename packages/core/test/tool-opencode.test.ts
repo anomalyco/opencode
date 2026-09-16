@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Provider } from "@opencode/core/provider"
@@ -29,6 +30,8 @@ it.effect("groups available models by provider with paging", () =>
   Effect.gen(function* () {
     const catalog = yield* Provider.Service
     const plugins = yield* Plugin.Service
+    const sessions = yield* Session.Service
+    const location = yield* Location.Service
     const pluginHost = yield* PluginHost.make(plugins)
     yield* catalog.transform((editor) => {
       editor.update(Provider.ID.make("other"), (provider) => {
@@ -60,10 +63,15 @@ it.effect("groups available models by provider with paging", () =>
       })
     })
     yield* OpenCodeTools.Plugin.effect(pluginHost)
+    // The caller runs on `test`, which sorts first despite `other` coming earlier alphabetically.
+    const session = yield* sessions.create({
+      location: Location.Ref.make({ directory: location.directory }),
+      model: Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("alpha") }),
+    })
     const registry = yield* Tool.Service
     const run = (input: Record<string, unknown>) =>
       executeTool(registry, {
-        sessionID: Session.ID.make("ses_tool_opencode"),
+        sessionID: session.id,
         ...toolIdentity,
         call: {
           type: "tool-call",
@@ -76,8 +84,8 @@ it.effect("groups available models by provider with paging", () =>
     // Grouped by provider, newest first within each, disabled models excluded.
     expect(yield* run({})).toEqual({
       providers: [
-        { id: "other", name: "Other Provider", models: [beta, gamma] },
         { id: "test", name: "test", models: [alpha] },
+        { id: "other", name: "Other Provider", models: [beta, gamma] },
       ],
       total: 3,
       next: null,
@@ -85,12 +93,15 @@ it.effect("groups available models by provider with paging", () =>
 
     // Paging slices the ordered list, so a page can end inside a provider group.
     expect(yield* run({ limit: 2 })).toEqual({
-      providers: [{ id: "other", name: "Other Provider", models: [beta, gamma] }],
+      providers: [
+        { id: "test", name: "test", models: [alpha] },
+        { id: "other", name: "Other Provider", models: [beta] },
+      ],
       total: 3,
       next: 2,
     })
     expect(yield* run({ limit: 2, offset: 2 })).toEqual({
-      providers: [{ id: "test", name: "test", models: [alpha] }],
+      providers: [{ id: "other", name: "Other Provider", models: [gamma] }],
       total: 3,
       next: null,
     })
@@ -115,7 +126,7 @@ it.effect("groups available models by provider with paging", () =>
     // Only the newest model of each family is listed unless `all` is set; the query is applied first.
     expect(yield* run({ all: true })).toMatchObject({
       total: 4,
-      providers: [{ id: "other", models: [beta, gamma, gammaOld] }, { id: "test" }],
+      providers: [{ id: "test" }, { id: "other", models: [beta, gamma, gammaOld] }],
     })
     expect(yield* run({ query: "old" })).toMatchObject({ total: 1, providers: [{ models: [gammaOld] }] })
     expect(yield* run({ provider: "other", query: "alpha" })).toEqual({ providers: [], total: 0, next: null })
