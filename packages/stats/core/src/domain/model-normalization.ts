@@ -16,6 +16,7 @@ export const MODEL_AUTHOR_RULES = [
 export const EXCLUDED_MODELS = new Set(["alpha-gpt-next"])
 export const STEALTH_MODELS = new Set(["omen-alpha"])
 export const FREE_MODELS = new Set(["gpt-5-nano", "grok-code", "big-pickle"])
+export const MODEL_NAME_MAX_LENGTH = 256
 export const MODEL_NAME_ALIASES: Record<string, string> = {
   "deepseek-flash": "deepseek-v4.1-flash",
   "deepseek-v4-flash-0731": "deepseek-v4-flash",
@@ -41,7 +42,8 @@ export function modelAuthor(value: string | undefined) {
 export function statModel(model: string | undefined, providerModel: string | undefined) {
   const normalized = normalizeInferenceModel(model)
   const resolved = normalized === "big-pickle" ? normalizeInferenceModel(providerModel?.split("/").at(-1)) : normalized
-  return MODEL_NAME_ALIASES[resolved.toLowerCase()] ?? resolved
+  const value = MODEL_NAME_ALIASES[resolved.toLowerCase()] ?? resolved
+  return value.length > MODEL_NAME_MAX_LENGTH ? "unknown" : value
 }
 
 export function statProvider(
