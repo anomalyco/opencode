@@ -217,8 +217,6 @@ import type {
   ShellCreateOutput,
   ShellGetInput,
   ShellGetOutput,
-  ShellTimeoutInput,
-  ShellTimeoutOutput,
   ShellOutputInput,
   ShellOutputOutput,
   ShellRemoveInput,
@@ -239,8 +237,8 @@ import type {
   VcsBaseOutput,
   VcsStatusInput,
   VcsStatusOutput,
-  VcsBranchesInput,
-  VcsBranchesOutput,
+  VcsBranchListInput,
+  VcsBranchListOutput,
   VcsDiffInput,
   VcsDiffOutput,
   DebugLocationListOutput,
@@ -1090,7 +1088,7 @@ export function make(options: ClientOptions) {
         request<{ readonly data: GenerateTextOutput }>(
           {
             method: "POST",
-            path: `/api/generate`,
+            path: `/api/experimental/generate`,
             body: { prompt: input["prompt"], model: input["model"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 503],
@@ -1860,19 +1858,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      timeout: (input: ShellTimeoutInput, requestOptions?: RequestOptions) =>
-        request<ShellTimeoutOutput>(
-          {
-            method: "PATCH",
-            path: `/api/shell/${encodeURIComponent(input.id)}/timeout`,
-            query: { location: input["location"] },
-            body: { timeout: input["timeout"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404],
-            empty: false,
-          },
-          requestOptions,
-        ),
       output: (input: ShellOutputInput, requestOptions?: RequestOptions) =>
         request<ShellOutputOutput>(
           {
@@ -1892,7 +1877,7 @@ export function make(options: ClientOptions) {
             path: `/api/shell/${encodeURIComponent(input.id)}`,
             query: { location: input["location"] },
             successStatus: 204,
-            declaredStatuses: [400, 401, 404],
+            declaredStatuses: [400, 401],
             empty: true,
           },
           requestOptions,
@@ -2005,18 +1990,20 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      branches: (input?: VcsBranchesInput, requestOptions?: RequestOptions) =>
-        request<VcsBranchesOutput>(
-          {
-            method: "GET",
-            path: `/api/vcs/branches`,
-            query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
-            successStatus: 200,
-            declaredStatuses: [400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
+      branch: {
+        list: (input?: VcsBranchListInput, requestOptions?: RequestOptions) =>
+          request<VcsBranchListOutput>(
+            {
+              method: "GET",
+              path: `/api/vcs/branch`,
+              query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
       diff: (input: VcsDiffInput, requestOptions?: RequestOptions) =>
         request<VcsDiffOutput>(
           {

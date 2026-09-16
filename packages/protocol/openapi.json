@@ -5114,10 +5114,10 @@
         "summary": "Get default model"
       }
     },
-    "/api/generate": {
+    "/api/experimental/generate": {
       "post": {
         "tags": ["generate"],
-        "operationId": "generate.text",
+        "operationId": "experimental.generate.text",
         "parameters": [],
         "security": [],
         "responses": {
@@ -10613,7 +10613,7 @@
                     "type": "object"
                   }
                 },
-                "required": ["command", "timeout"],
+                "required": ["command"],
                 "additionalProperties": false
               }
             }
@@ -10791,140 +10791,10 @@
                 }
               }
             }
-          },
-          "404": {
-            "description": "ShellNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ShellNotFoundErrorEncoded"
-                }
-              }
-            }
           }
         },
         "description": "Terminate and remove one shell command and its retained output.",
         "summary": "Remove shell command"
-      }
-    },
-    "/api/shell/{id}/timeout": {
-      "patch": {
-        "tags": ["shell"],
-        "operationId": "shell.timeout",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^sh_"
-            },
-            "required": true
-          },
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "location": {
-                      "$ref": "#/components/schemas/Location.PublicRef"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/Shell.Info"
-                    }
-                  },
-                  "required": ["location", "data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ShellNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ShellNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Replace a running shell command's timeout from now, or clear it with zero.",
-        "summary": "Update shell timeout",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "timeout": {
-                    "type": "integer",
-                    "minimum": 0
-                  }
-                },
-                "required": ["timeout"],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": true
-        }
       }
     },
     "/api/shell/{id}/output": {
@@ -11677,10 +11547,10 @@
         "summary": "VCS status"
       }
     },
-    "/api/vcs/branches": {
+    "/api/vcs/branch": {
       "get": {
         "tags": ["vcs"],
-        "operationId": "vcs.branches",
+        "operationId": "vcs.branch.list",
         "parameters": [
           {
             "name": "location",
@@ -18498,7 +18368,8 @@
             "type": "object",
             "properties": {
               "started": {
-                "type": "number"
+                "type": "number",
+                "description": "Start time in milliseconds since the Unix epoch"
               },
               "completed": {
                 "type": "number"
@@ -18752,6 +18623,9 @@
       "Vcs.Info": {
         "type": "object",
         "properties": {
+          "provider": {
+            "type": "string"
+          },
           "branch": {
             "$ref": "#/components/schemas/Vcs.Branch"
           }
@@ -19006,7 +18880,7 @@
     },
     {
       "name": "shell",
-      "description": "Experimental location-scoped shell command routes."
+      "description": "Location-scoped shell command routes."
     },
     {
       "name": "reference",

@@ -501,7 +501,9 @@ export function fromPromise(plugin: Plugin) {
           vcs: {
             get: adaptApiMethod(VcsEndpoints["vcs.get"], host.vcs.get),
             base: adaptApiMethod(VcsEndpoints["vcs.base"], host.vcs.base),
-            branches: adaptApiMethod(VcsEndpoints["vcs.branches"], host.vcs.branches),
+            branch: {
+              list: adaptApiMethod(VcsEndpoints["vcs.branch.list"], host.vcs.branch.list),
+            },
             status: adaptApiMethod(VcsEndpoints["vcs.status"], host.vcs.status),
             diff: adaptApiMethod(VcsEndpoints["vcs.diff"], host.vcs.diff),
             reload: () => run(host.vcs.reload()),

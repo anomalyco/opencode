@@ -217,7 +217,7 @@ function DiffBaseDialog(props: {
   const theme = props.context.theme.contextual.elevated
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [branches] = createResource(search, (search) =>
-    props.context.client.vcs.branches({ location: props.location, search, limit: 100 }),
+    props.context.client.vcs.branch.list({ location: props.location, search, limit: 100 }),
   )
   const Empty = () => (
     <box paddingLeft={4} paddingRight={4}>

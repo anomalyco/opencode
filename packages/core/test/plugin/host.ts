@@ -138,7 +138,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     vcs: overrides.vcs ?? {
       base: () => Effect.die("unused vcs.base"),
       get: () => Effect.die("unused vcs.get"),
-      branches: () => Effect.die("unused vcs.branches"),
+      branch: {
+        list: () => Effect.die("unused vcs.branch.list"),
+      },
       status: () => Effect.die("unused vcs.status"),
       diff: () => Effect.die("unused vcs.diff"),
       transform: () => Effect.die("unused vcs.transform"),

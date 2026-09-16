@@ -157,7 +157,7 @@ test("generate.text uses the locationless public contract", async () => {
   })
 
   expect(await client.generate.text({ prompt: "ping" })).toEqual({ text: "pong" })
-  expect(request?.url).toBe("http://localhost:3000/api/generate")
+  expect(request?.url).toBe("http://localhost:3000/api/experimental/generate")
   expect(await request?.json()).toEqual({ prompt: "ping" })
 })
 

@@ -221,8 +221,6 @@ import type {
   ShellCreateOutput,
   ShellGetInput,
   ShellGetOutput,
-  ShellTimeoutInput,
-  ShellTimeoutOutput,
   ShellOutputInput,
   ShellOutputOutput,
   ShellRemoveInput,
@@ -243,8 +241,8 @@ import type {
   VcsBaseOutput,
   VcsStatusInput,
   VcsStatusOutput,
-  VcsBranchesInput,
-  VcsBranchesOutput,
+  VcsBranchListInput,
+  VcsBranchListOutput,
   VcsDiffInput,
   VcsDiffOutput,
   DebugLocationListOutput,
@@ -1363,15 +1361,6 @@ const EndpointShellGet = (raw: RawClient["server.shell"]) => (input: ShellGetInp
     ),
   )
 
-const EndpointShellTimeout = (raw: RawClient["server.shell"]) => (input: ShellTimeoutInput) =>
-  preserveEffect<ShellTimeoutOutput>()(
-    raw["shell.timeout"]({
-      params: { id: input["id"] },
-      query: { location: input["location"] },
-      payload: { timeout: input["timeout"] },
-    }).pipe(Effect.mapError(mapClientError)),
-  )
-
 const EndpointShellOutput = (raw: RawClient["server.shell"]) => (input: ShellOutputInput) =>
   preserveEffect<ShellOutputOutput>()(
     raw["shell.output"]({
@@ -1391,7 +1380,6 @@ const adaptGroupShell = (raw: RawClient["server.shell"]) => ({
   list: EndpointShellList(raw),
   create: EndpointShellCreate(raw),
   get: EndpointShellGet(raw),
-  timeout: EndpointShellTimeout(raw),
   output: EndpointShellOutput(raw),
   remove: EndpointShellRemove(raw),
 })
@@ -1455,9 +1443,9 @@ const EndpointVcsStatus = (raw: RawClient["server.vcs"]) => (input?: VcsStatusIn
     raw["vcs.status"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const EndpointVcsBranches = (raw: RawClient["server.vcs"]) => (input?: VcsBranchesInput) =>
-  preserveEffect<VcsBranchesOutput>()(
-    raw["vcs.branches"]({
+const EndpointVcsBranchList = (raw: RawClient["server.vcs"]) => (input?: VcsBranchListInput) =>
+  preserveEffect<VcsBranchListOutput>()(
+    raw["vcs.branch.list"]({
       query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
@@ -1473,7 +1461,7 @@ const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
   get: EndpointVcsGet(raw),
   base: EndpointVcsBase(raw),
   status: EndpointVcsStatus(raw),
-  branches: EndpointVcsBranches(raw),
+  branch: { list: EndpointVcsBranchList(raw) },
   diff: EndpointVcsDiff(raw),
 })
 

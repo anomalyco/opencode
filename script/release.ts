@@ -36,7 +36,13 @@ process.chdir(root)
 
 console.log("\n=== Generating changelog ===\n")
 await rm(review, { force: true })
-await generateReview()
+await $`git fetch origin "+refs/tags/v2.*:refs/tags/v2.*"`
+const base = (await $`git tag --list "v2.*" --sort=-version:refname`.text())
+  .split("\n")
+  .find((tag) => /^v2\.\d+\.\d+$/.test(tag))
+if (!base) throw new Error("No stable V2 release tag was found")
+console.log(`Comparing ${base}..HEAD`)
+await generateReview(base)
 
 if (!(await Bun.file(review).exists())) throw new Error("OpenCode did not create RELEASE_REVIEW.md")
 
@@ -66,7 +72,7 @@ if (answer?.trim().toLowerCase() !== "y" && answer?.trim().toLowerCase() !== "ye
 await $`gh workflow run publish.yml --ref v2 ${input}`
 console.log(`Triggered the ${version} release`)
 
-async function generateReview() {
+async function generateReview(base: string) {
   const endpoint = await Service.ensure()
   const client = OpenCode.make({
     baseUrl: endpoint.url,
@@ -106,7 +112,7 @@ async function generateReview() {
   })()
 
   try {
-    await client.session.prompt({ sessionID: session.id, text: reviewPrompt() })
+    await client.session.prompt({ sessionID: session.id, text: reviewPrompt(base) })
     await completed
     const messages = await client.message.list({ sessionID: session.id, limit: 100, order: "desc" })
     const response = messages.data.find((message) => message.type === "assistant")
@@ -119,13 +125,14 @@ async function generateReview() {
   }
 }
 
-function reviewPrompt() {
+function reviewPrompt(base: string) {
   return `Create a concise pre-release review for a maintainer.
 
-Determine the latest non-draft GitHub release and inspect every relevant commit and actual diff from that release through
-HEAD. Do not rely only on commit titles. Write a user-facing changelog with sections for Core, TUI, Desktop, SDK, and
-Extensions, omitting empty sections and changes that are entirely internal. Group bug fixes separately from improvements.
-Preserve community contributor attribution when it is available from merged pull requests.
+The previous stable V2 release is ${base}. Inspect every relevant commit and actual diff in the exact range ${base}..HEAD.
+Do not compare against dev, V1 release tags, or commits outside that range. Do not rely only on commit titles. Write a
+user-facing changelog with sections for Core, TUI, Desktop, SDK, and Extensions, omitting empty sections and changes that
+are entirely internal. Group bug fixes separately from improvements. Preserve community contributor attribution when it
+is available from merged pull requests.
 
 Put the complete editable changelog between these markers, which must each appear exactly once outside code fences:
 

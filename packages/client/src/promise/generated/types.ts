@@ -1632,7 +1632,7 @@ export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
 
 export type WorktreeList = Array<WorktreeDirectory>
 
-export type VcsInfo = { branch: VcsBranch }
+export type VcsInfo = { provider?: string; branch: VcsBranch }
 
 export type SessionInboxMove = {
   id: string
@@ -5998,25 +5998,25 @@ export type ShellCreateInput = {
   readonly command: {
     readonly command: string
     readonly cwd?: string
-    readonly timeout: number
+    readonly timeout?: number
     readonly metadata?: { readonly [x: string]: JsonValue }
   }["command"]
   readonly cwd?: {
     readonly command: string
     readonly cwd?: string
-    readonly timeout: number
+    readonly timeout?: number
     readonly metadata?: { readonly [x: string]: JsonValue }
   }["cwd"]
-  readonly timeout: {
+  readonly timeout?: {
     readonly command: string
     readonly cwd?: string
-    readonly timeout: number
+    readonly timeout?: number
     readonly metadata?: { readonly [x: string]: JsonValue }
   }["timeout"]
   readonly metadata?: {
     readonly command: string
     readonly cwd?: string
-    readonly timeout: number
+    readonly timeout?: number
     readonly metadata?: { readonly [x: string]: JsonValue }
   }["metadata"]
 }
@@ -6029,14 +6029,6 @@ export type ShellGetInput = {
 }
 
 export type ShellGetOutput = { location: LocationPublicRef; data: ShellInfo1 }
-
-export type ShellTimeoutInput = {
-  readonly id: { readonly id: string }["id"]
-  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
-  readonly timeout: { readonly timeout: number }["timeout"]
-}
-
-export type ShellTimeoutOutput = { location: LocationPublicRef; data: ShellInfo1 }
 
 export type ShellOutputInput = {
   readonly id: { readonly id: string }["id"]
@@ -6149,7 +6141,7 @@ export type VcsStatusInput = {
 
 export type VcsStatusOutput = { location: LocationPublicRef; data: Array<VcsFileStatus> }
 
-export type VcsBranchesInput = {
+export type VcsBranchListInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined } | undefined
     readonly search?: string | undefined
@@ -6167,7 +6159,7 @@ export type VcsBranchesInput = {
   }["limit"]
 }
 
-export type VcsBranchesOutput = { location: LocationPublicRef; data: VcsBranchList }
+export type VcsBranchListOutput = { location: LocationPublicRef; data: VcsBranchList }
 
 export type VcsDiffInput = {
   readonly location?: {
