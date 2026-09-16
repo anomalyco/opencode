@@ -285,7 +285,9 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       },
       "session.text.started": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
-          draft.content.push(castDraft(SessionMessage.AssistantText.make({ type: "text", text: "" })))
+          draft.content.push(
+            castDraft(SessionMessage.AssistantText.make({ type: "text", text: "", time: { created } })),
+          )
         })
       },
       "session.text.ended": (event) => {
@@ -294,6 +296,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           if (match) {
             match.text = event.data.text
             match.state = castDraft(event.data.state)
+            match.time = { created: match.time?.created ?? created, completed: created }
           }
         })
       },
