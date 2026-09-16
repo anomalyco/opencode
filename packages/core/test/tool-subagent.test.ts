@@ -165,6 +165,7 @@ const withSubagent = (location: Location.Ref) =>
         editor.models.update(overrideModel.providerID, overrideModel.id, (model) => {
           model.variants = [{ id: Model.VariantID.make("fast") }]
         })
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("plain"), () => {})
       }),
     ).pipe(Effect.provide(locations.get(location)))
     yield* Agent.Service.use((agents) =>
@@ -671,6 +672,7 @@ describe("SubagentTool", () => {
             ["not-a-ref", 'Invalid model "not-a-ref". Use "providerID/modelID" or "providerID/modelID#variant".'],
             ["test/missing", 'Model "test/missing" is not available. Use the models tool to see what is available.'],
             ["test/override#slow", 'Variant "slow" is not available for "test/override". Available: fast.'],
+            ["test/plain#high", 'Model "test/plain" has no variants. Omit the variant.'],
           ] as const
           for (const [model, message] of failures) {
             expect(yield* call(`call-${model}`, { model })).toEqual({

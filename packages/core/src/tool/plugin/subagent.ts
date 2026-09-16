@@ -89,7 +89,10 @@ export const Plugin = {
         })
       if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
         return yield* new ToolFailure({
-          message: `Variant "${ref.variant}" is not available for "${ref.providerID}/${ref.id}". Available: ${model.variants.map((variant) => variant.id).join(", ") || "none"}.`,
+          message:
+            model.variants.length === 0
+              ? `Model "${ref.providerID}/${ref.id}" has no variants. Omit the variant.`
+              : `Variant "${ref.variant}" is not available for "${ref.providerID}/${ref.id}". Available: ${model.variants.map((variant) => variant.id).join(", ")}.`,
         })
       return ref
     })
