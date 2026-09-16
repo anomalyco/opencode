@@ -2,7 +2,7 @@ import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import { Effect, Layer, Result, Schema } from "effect"
+import { Effect, Layer, Result, Schema, Cause, Exit } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
@@ -415,6 +415,57 @@ describe("tool.registry", () => {
         })
       }),
     20_000,
+  )
+
+  it.instance("parses plugin tool args with Zod: fills defaults and rejects violations (#49279)", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const customTools = path.join(test.directory, ".opencode", "tools")
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(customTools, "argprobe.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'Echoes back what the runtime passed to execute.',",
+            "  args: {",
+            "    required: tool.schema.string(),",
+            "    withdefault: tool.schema.number().default(42),",
+            "    ranged: tool.schema.number().min(10).default(99),",
+            "  },",
+            "  execute: async (args) => 'RECEIVED ' + JSON.stringify(args),",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "argprobe")
+      if (!loaded) throw new Error("argprobe tool was not loaded")
+      const agents = yield* Agent.Service
+      const ctx = {
+        sessionID: SessionID.make("ses_test"),
+        messageID: MessageID.make("msg_test"),
+        agent: (yield* agents.defaultInfo()).name,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      } satisfies Tool.Context
+
+      const result = yield* loaded.execute({ required: "a" }, ctx)
+      expect(result.output).toBe('RECEIVED {"required":"a","withdefault":42,"ranged":99}')
+
+      const exit = yield* loaded.execute({ required: "b", ranged: 1 }, ctx).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (!Exit.isFailure(exit)) return
+      const error = Cause.squash(exit.cause)
+      expect(error).toBeInstanceOf(Tool.InvalidArgumentsError)
+      expect((error as Tool.InvalidArgumentsError).message).toContain("argprobe tool was called with invalid arguments")
+    }),
   )
 
   it.instance("preserves attachments from structured custom tool results", () =>

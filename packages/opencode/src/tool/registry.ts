@@ -151,7 +151,14 @@ const layer = Layer.effect(
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
-                const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                // Zod-declared plugin tools must parse args like Tool.define()
+                // does: fill .default() and reject constraint violations with
+                // a model-facing error instead of passing raw args through.
+                // Legacy JSON-schema tools keep pass-through (no parser).
+                const input = args ?? {}
+                const parsed = zodParams ? zodParams.safeParse(input) : { success: true as const, data: input }
+                if (parsed.success === false) yield* new Tool.InvalidArgumentsError({ tool: id, detail: parsed.error.message })
+                const result = yield* Effect.promise(() => def.execute(parsed.data as any, pluginCtx))
                 const output = typeof result === "string" ? result : result.output
                 const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
                 const attachments = typeof result === "string" ? undefined : result.attachments
@@ -168,6 +175,7 @@ const layer = Layer.effect(
                   },
                 }
               }).pipe(
+                Effect.orDie,
                 Effect.withSpan("Tool.execute", {
                   attributes: {
                     "tool.name": id,
