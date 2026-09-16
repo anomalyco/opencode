@@ -9,6 +9,7 @@ import { Location } from "./location.js"
 import { Permission } from "./permission.js"
 import { Project } from "./project.js"
 import { AbsolutePath } from "./schema.js"
+import { Skill } from "./skill.js"
 import type { SessionErrors } from "./session/error.js"
 import type { Tool } from "./tool.js"
 
@@ -95,6 +96,7 @@ const layer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
+    const skills = yield* Skill.Service
 
     const resolve = Effect.fn("FileAccess.resolve")(function* (input: ResolveInput) {
       const absolute = AbsolutePath.make(resolvePath(location.directory, input.path))
@@ -156,7 +158,21 @@ const layer = Layer.effect(
       const sibling = options && path.dirname(target.absolute) === path.dirname(options.siblingOf.absolute)
 
       // Filename recovery shares the directory approval, but checks the recovered file's own read rules.
-      if (!sibling) yield* authorizeExternal([target], context)
+      if (target.externalDirectory && !sibling) {
+        // Registered directory skills expose supporting files for reads, not mutations.
+        const supporting = (yield* skills.list()).some(
+          (skill) =>
+            path.basename(skill.location) === "SKILL.md" &&
+            FSUtil.contains(path.dirname(skill.location), target.absolute),
+        )
+        yield* permission.assert(
+          {
+            ...externalDirectoryPermission(target.externalDirectory),
+            ...invocation(context),
+          },
+          supporting ? [target.externalDirectory.resource] : undefined,
+        )
+      }
       yield* permission.assert({
         action: "read",
         resources: [target.resource],
@@ -170,4 +186,8 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Location.node, Permission.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [FSUtil.node, Location.node, Permission.node, Skill.node],
+})
