@@ -45,6 +45,8 @@ import {
 import { createWslServersController } from "./wsl/servers"
 import { registerWslIpcHandlers } from "./wsl/ipc"
 import { spawnWslSidecar } from "./wsl/sidecar"
+import { createSshServersController } from "./ssh/servers"
+import { registerSshIpcHandlers } from "./ssh/ipc"
 import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
@@ -167,6 +169,7 @@ const main = Effect.gen(function* () {
   const stopSidecars = async () => {
     await killSidecar()
     wslServers.stopAll()
+    sshServers.stopAll()
   }
   const relaunch = () => {
     setAppQuitting()
@@ -312,6 +315,9 @@ const main = Effect.gen(function* () {
     },
   })
   registerWslIpcHandlers(wslServers)
+  const sshServers = createSshServersController()
+  registerSshIpcHandlers(sshServers)
+  void sshServers.initialize()
   void updater.start()
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
   updateTimer.unref()

@@ -57,6 +57,7 @@ import { SettingsProvider, useSettings } from "@/context/settings"
 import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { WslServersProvider } from "@/wsl/context"
+import { SshServersProvider } from "@/ssh/context"
 import DirectoryLayout, { DirectoryDataProvider } from "@/pages/directory-layout"
 import LegacyLayout from "@/pages/layout"
 import NewLayout from "@/pages/layout-new"
@@ -414,9 +415,11 @@ export function AppBaseProviders(
             >
               <QueryProvider>
                 <WslServersProvider>
-                  <DialogProvider>
-                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </DialogProvider>
+                  <SshServersProvider>
+                    <DialogProvider>
+                      <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                    </DialogProvider>
+                  </SshServersProvider>
                 </WslServersProvider>
               </QueryProvider>
             </ErrorBoundary>

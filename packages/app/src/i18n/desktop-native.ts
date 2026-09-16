@@ -317,6 +317,10 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.wsl.error.commandTimeout": "{{command}} {{args}} timed out after {{timeout}}ms",
   "desktop.wsl.error.failedPort": "Failed to get port",
 
+  "desktop.ssh.error.alreadyAdded": "{{name}} is already added",
+  "desktop.ssh.error.serverExited": "SSH server exited after startup (code={{code}} signal={{signal}})",
+  "desktop.ssh.error.healthTimeout": "SSH sidecar for {{host}} health check timed out after {{timeout}}ms",
+
   "desktop.picker.error.notSelected": "File was not selected by the picker",
   "desktop.picker.error.sizeLimit": "Selected attachments exceed the {{limit}} MB limit",
 } as const
