@@ -42,3 +42,18 @@ story("hides and restores the same registration for Review tabs and unmount", as
   await root.getByRole("button", { name: "Unmount pane", exact: true }).click()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
 })
+
+story("hides the native view immediately while the pane stays mounted", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const toggle = root.getByRole("button", { name: "Toggle Review tab", exact: true })
+  await expect(toggle).toBeEnabled()
+  // Read in the same task as the click so a deferred animation-frame hide cannot pass.
+  const visible = await toggle.evaluate((element) => {
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    return document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
+  })
+  expect(visible).toBe("false")
+  await expect(root.locator("#browser-panel")).toHaveCount(1)
+  await toggle.click()
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
