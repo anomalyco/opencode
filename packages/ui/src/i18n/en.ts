@@ -189,6 +189,7 @@ export const dict: Record<string, string> = {
   "ui.common.showMore": "Show more",
 
   "ui.permission.deny": "Deny",
+  "ui.permission.reason": "Reason",
   "ui.permission.allowAlways": "Allow always",
   "ui.permission.allowOnce": "Allow once",
 

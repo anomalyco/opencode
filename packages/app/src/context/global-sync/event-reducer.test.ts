@@ -494,8 +494,10 @@ describe("applyDirectoryEvent", () => {
       }),
     )
 
+    const live = permissionRequest("perm_2", sessionID)
+    live.metadata = { description: "Inspect project documentation" }
     applyDirectoryEvent({
-      event: { type: "permission.asked", properties: permissionRequest("perm_2", sessionID) },
+      event: { type: "permission.asked", properties: live },
       store,
       setStore,
       push() {},
@@ -503,6 +505,9 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
     expect(store.permission[sessionID]?.map((x) => x.id)).toEqual(["perm_1", "perm_2", "perm_3"])
+    expect(store.permission[sessionID]?.find((x) => x.id === "perm_2")?.metadata.description).toBe(
+      "Inspect project documentation",
+    )
 
     applyDirectoryEvent({
       event: { type: "permission.asked", properties: permissionRequest("perm_2", sessionID, "updated") },

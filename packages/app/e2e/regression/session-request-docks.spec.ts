@@ -73,15 +73,15 @@ test("shows a pending question dock", async ({ page }) => {
   expect((await reply).postDataJSON()).toEqual({ answers: [["Minimal"]] })
 })
 
-test("shows a pending permission dock", async ({ page }) => {
+test("shows a permission reason and preserves all decisions", async ({ page }) => {
   await mockServer(page, {
     permissions: [
       {
         id: "permission-request",
         sessionID,
-        permission: "bash",
-        patterns: ["git status", "git diff"],
-        metadata: {},
+        permission: "external_directory",
+        patterns: ["C:/OpenCode/External/*"],
+        metadata: { description: "  Inspect generated artifacts  " },
         always: [],
       },
     ],
@@ -92,17 +92,72 @@ test("shows a pending permission dock", async ({ page }) => {
 
   const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
   await expect(permission).toBeVisible()
-  await expect(permission.getByText("git status")).toBeVisible()
-  await expect(permission.getByText("git diff")).toBeVisible()
+  const reason = permission.locator('[data-slot="permission-reason"]')
+  const scope = permission.getByText("C:/OpenCode/External/*")
+  await expect(reason).toHaveText("Reason: Inspect generated artifacts")
+  await expect(reason.locator("em")).toHaveText("Inspect generated artifacts")
+  await expect(reason.locator("span em")).toHaveCount(0)
+  await expect(scope).toBeVisible()
+  expect(
+    await permission
+      .locator('[data-slot="permission-reason"], [data-slot="permission-patterns"]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-slot"))),
+  ).toEqual(["permission-reason", "permission-patterns"])
   await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveCount(3)
   await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
 
-  const reply = page.waitForRequest((request) => request.method() === "POST")
-  await permission.getByRole("button", { name: "Allow once" }).click()
-  const request = await reply
-  expect(new URL(request.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
-  expect(request.postDataJSON()).toEqual({ reply: "once" })
+  for (const decision of [
+    { name: "Allow once", reply: "once" },
+    { name: "Allow always", reply: "always" },
+    { name: "Deny", reply: "reject" },
+  ]) {
+    const reply = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === `/api/session/${sessionID}/permission/permission-request/reply`,
+    )
+    await permission.getByRole("button", { name: decision.name }).click()
+    expect((await reply).postDataJSON()).toEqual({ reply: decision.reply })
+    if (decision.reply === "reject") continue
+    await page.reload()
+    await expectSessionTitle(page, title)
+    await expect(permission).toBeVisible()
+  }
 })
+
+for (const input of [
+  { name: "missing", permission: "read", metadata: {} },
+  { name: "blank", permission: "external_directory", metadata: { description: " \n\t " } },
+  { name: "non-string", permission: "bash", metadata: { description: 42 } },
+  { name: "skill", permission: "skill", metadata: { description: "Generic skill hint" } },
+  { name: "background", permission: "background", metadata: { description: "Background process hint" } },
+  { name: "unrelated", permission: "edit", metadata: { description: "Generic edit hint" } },
+]) {
+  test(`hides ${input.name} permission reasons while preserving the scope and controls`, async ({ page }) => {
+    await mockServer(page, {
+      permissions: [
+        {
+          id: "permission-request",
+          sessionID,
+          permission: input.permission,
+          patterns: ["C:/OpenCode/External/*"],
+          metadata: input.metadata,
+          always: [],
+        },
+      ],
+    })
+
+    await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+    await expectSessionTitle(page, title)
+
+    const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+    await expect(permission.getByText("C:/OpenCode/External/*")).toBeVisible()
+    await expect(permission.locator('[data-slot="permission-reason"]')).toHaveCount(0)
+    await expect(permission.getByRole("button", { name: "Allow once" })).toBeEnabled()
+    await expect(permission.getByRole("button", { name: "Allow always" })).toBeEnabled()
+    await expect(permission.getByRole("button", { name: "Deny" })).toBeEnabled()
+  })
+}
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
   const transport = await installSseTransport(page, {

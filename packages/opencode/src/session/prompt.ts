@@ -851,7 +851,12 @@ const layer = Layer.effect(
                   offset = Math.max(start, 1)
                   if (end) limit = end - (offset - 1)
                 }
-                const args = { filePath: filepath, offset, limit }
+                const args = {
+                  filePath: filepath,
+                  offset,
+                  limit,
+                  description: "Access an attachment from the user message.",
+                }
                 const pieces: Draft<SessionV1.Part>[] = [
                   {
                     messageID: info.id,
@@ -907,7 +912,7 @@ const layer = Layer.effect(
               }
 
               if (mime === "application/x-directory") {
-                const args = { filePath: filepath }
+                const args = { filePath: filepath, description: "Access an attachment from the user message." }
                 const exit = yield* execRead(args).pipe(Effect.exit)
                 if (Exit.isFailure(exit)) {
                   const error = Cause.squash(exit.cause)

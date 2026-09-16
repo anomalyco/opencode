@@ -5,12 +5,22 @@ import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useLanguage } from "@/context/language"
 
+const REASON_PERMISSIONS = new Set(["read", "external_directory", "bash"])
+
+function permissionReason(request: PermissionRequest) {
+  if (!REASON_PERMISSIONS.has(request.permission)) return
+  const description = request.metadata?.description
+  if (typeof description !== "string") return
+  return description.trim() || undefined
+}
+
 export function SessionPermissionDock(props: {
   request: PermissionRequest
   responding: boolean
   onDecide: (response: "once" | "always" | "reject") => void
 }) {
   const language = useLanguage()
+  const reason = () => permissionReason(props.request)
 
   const toolDescription = () => {
     const key = `settings.permissions.tool.${props.request.permission}.description`
@@ -52,6 +62,18 @@ export function SessionPermissionDock(props: {
         </>
       }
     >
+      <Show when={reason()}>
+        {(value) => (
+          <div data-slot="permission-row">
+            <span data-slot="permission-spacer" aria-hidden="true" />
+            <div data-slot="permission-reason">
+              <span>{language.t("ui.permission.reason")}: </span>
+              <em>{value()}</em>
+            </div>
+          </div>
+        )}
+      </Show>
+
       <Show when={toolDescription()}>
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />

@@ -17,6 +17,7 @@ import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
+import { ToolJsonSchema } from "@/tool/json-schema"
 import { Filesystem } from "@/util/filesystem"
 import {
   disposeAllInstances,
@@ -149,6 +150,13 @@ const asks = () => {
 }
 
 describe("tool.read external_directory permission", () => {
+  it.effect("advertises the task description while keeping runtime callers compatible", () =>
+    Effect.gen(function* () {
+      const tool = yield* init()
+      expect(ToolJsonSchema.fromTool({ ...tool, id: "read" })).toHaveProperty("properties.description")
+    }),
+  )
+
   it.live("allows reading absolute path inside project directory", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
@@ -177,10 +185,27 @@ describe("tool.read external_directory permission", () => {
 
       const { items, next } = asks()
 
-      yield* exec(dir, { filePath: path.join(outer, "secret.txt") }, next)
+      yield* exec(
+        dir,
+        { filePath: path.join(outer, "secret.txt"), description: "  Inspect the requested secret data  " },
+        next,
+      )
       const ext = items.find((item) => item.permission === "external_directory")
+      const read = items.find((item) => item.permission === "read")
       expect(ext).toBeDefined()
       expect(ext!.patterns).toContain(glob(path.join(outer, "*")))
+      expect(ext!.metadata).toMatchObject({ description: "Inspect the requested secret data" })
+      expect(read!.metadata).toEqual({ description: "Inspect the requested secret data" })
+    }),
+  )
+
+  it.live("omits blank descriptions from permission metadata", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      yield* put(path.join(dir, "test.txt"), "hello")
+      const { items, next } = asks()
+      yield* exec(dir, { filePath: path.join(dir, "test.txt"), description: "   " }, next)
+      expect(items.find((item) => item.permission === "read")?.metadata).toEqual({})
     }),
   )
 

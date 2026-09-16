@@ -1,10 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { BoxRenderable, RGBA, type RootRenderable } from "@opentui/core"
+import { BoxRenderable, RGBA, TextAttributes, type RootRenderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
-import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { OpencodeKeymapProvider, registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
 import {
   RUN_COMMAND_PANEL_ROWS,
@@ -32,10 +32,20 @@ import type {
   StreamCommit,
 } from "@/cli/cmd/run/types"
 import { RunQuestionBody } from "@/cli/cmd/run/footer.question"
-import { RejectField } from "@/cli/cmd/run/footer.permission"
+import { RejectField, RunPermissionBody } from "@/cli/cmd/run/footer.permission"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const tuiConfig = createTuiResolvedConfig()
+
+const permissionRequest = (permission: string, description: unknown) =>
+  ({
+    id: "permission-test",
+    sessionID: "session-test",
+    permission,
+    patterns: ["scope/*"],
+    always: ["scope/*"],
+    metadata: { description, command: "bun test", filePath: "scope/file.txt" },
+  }) satisfies PermissionRequest
 
 function command(input: { name: string; description: string; source?: "command" | "mcp" | "skill" }) {
   return {
@@ -1319,6 +1329,130 @@ test("direct permission rejection submits through keymap return binding", async 
     app.mockInput.pressEnter()
     await app.renderOnce()
     expect(submits).toEqual(["retry"])
+  } finally {
+    app.renderer.currentFocusedRenderable?.blur()
+    app.renderer.currentFocusedEditor?.blur()
+    off?.()
+    app.renderer.destroy()
+  }
+})
+
+test.each([
+  { permission: "read", title: "Read scope/file.txt" },
+  { permission: "external_directory", title: "Access external directory scope" },
+  { permission: "bash", title: "Shell command" },
+])("direct permission renders its reason before scope %j", async ({ permission, title }) => {
+  const app = await testRender(
+    () => (
+      <RunPermissionBody
+        request={permissionRequest(permission, "  Verify the generated output  ")}
+        theme={RUN_THEME_FALLBACK.footer}
+        block={RUN_THEME_FALLBACK.block}
+        onReply={() => {}}
+      />
+    ),
+    { width: 100, height: 20 },
+  )
+
+  try {
+    await app.renderOnce()
+    const lines = app
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.trim())
+    const index = lines.indexOf("Reason: Verify the generated output")
+    expect(index).toBeGreaterThan(lines.findIndex((line) => line.includes("Permission required")))
+    expect(lines[index + 1]).toBe("")
+    expect(lines[index + 2]).toContain(title)
+    const spans = app.captureSpans().lines[index].spans
+    expect(
+      spans.find((span) => span.text.includes("Reason:"))!.attributes & (TextAttributes.BOLD | TextAttributes.ITALIC),
+    ).toBe(0)
+    expect(
+      spans.find((span) => span.text.includes("Verify the generated output"))!.attributes & TextAttributes.ITALIC,
+    ).toBe(TextAttributes.ITALIC)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test.each([
+  { permission: "bash", description: undefined },
+  { permission: "read", description: "   " },
+  { permission: "external_directory", description: false },
+  { permission: "skill", description: "Run a skill shell" },
+  { permission: "background", description: "Start a process" },
+  { permission: "task", description: "Delegate work" },
+])("direct permission hides invalid or unrelated reason %j", async ({ permission, description }) => {
+  const app = await testRender(
+    () => (
+      <RunPermissionBody
+        request={permissionRequest(permission, description)}
+        theme={RUN_THEME_FALLBACK.footer}
+        block={RUN_THEME_FALLBACK.block}
+        onReply={() => {}}
+      />
+    ),
+    { width: 100, height: 20 },
+  )
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Permission required")
+    expect(app.captureCharFrame()).not.toContain("Reason:")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test.each(["once", "always", "reject"] as const)("direct permission sends %s through its controls", async (reply) => {
+  const replies: unknown[] = []
+  let off: (() => void) | undefined
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    off = registerOpencodeKeymap(keymap, renderer, tuiConfig)
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <RunPermissionBody
+          request={permissionRequest("bash", "Run verification")}
+          theme={RUN_THEME_FALLBACK.footer}
+          block={RUN_THEME_FALLBACK.block}
+          onReply={(input) => {
+            replies.push(input)
+          }}
+        />
+      </OpencodeKeymapProvider>
+    )
+  }
+  const app = await testRender(() => <Harness />, { width: 100, height: 20, kittyKeyboard: true })
+  try {
+    await app.renderOnce()
+    if (reply !== "once") {
+      app.mockInput.pressArrow("right")
+      if (reply === "reject") app.mockInput.pressArrow("right")
+      app.mockInput.pressEnter()
+      await app.renderOnce()
+      expect(app.captureCharFrame()).not.toContain("Reason:")
+      expect(replies).toEqual([])
+      if (reply === "always") {
+        app.mockInput.pressEscape()
+        await app.renderOnce()
+        expect(app.captureCharFrame()).toContain("Reason: Run verification")
+        app.mockInput.pressEnter()
+        await app.renderOnce()
+      }
+      if (reply === "reject") {
+        app.mockInput.pressEscape()
+        await app.renderOnce()
+        expect(app.captureCharFrame()).toContain("Reason: Run verification")
+        expect(replies).toEqual([])
+        app.mockInput.pressEnter()
+        await app.renderOnce()
+      }
+    }
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+    expect(replies).toEqual([{ requestID: "permission-test", reply }])
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()

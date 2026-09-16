@@ -381,13 +381,25 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           }
 
           const current = info()
+          const description = props.request.metadata?.description
+          const reason =
+            ["read", "external_directory", "bash"].includes(props.request.permission) && typeof description === "string"
+              ? description.trim()
+              : undefined
 
           const header = () => (
-            <box flexDirection="column" gap={0}>
+            <box flexDirection="column" gap={reason ? 1 : 0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <text fg={theme.warning}>{"△"}</text>
                 <text fg={theme.text}>Permission required</text>
               </box>
+              <Show when={reason}>
+                <box paddingLeft={2}>
+                  <text fg={theme.text}>
+                    Reason: <i>{reason}</i>
+                  </text>
+                </box>
+              </Show>
               <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
                 <text fg={theme.textMuted} flexShrink={0}>
                   {current.icon}

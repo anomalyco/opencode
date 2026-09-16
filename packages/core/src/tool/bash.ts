@@ -22,6 +22,10 @@ export const MAX_CAPTURE_BYTES = 1024 * 1024
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
+  description: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "Provide a concise reason grounded in the user's request that explains the intended outcome. Do not merely repeat the command or invent a purpose.",
+  }),
   workdir: Schema.String.pipe(Schema.optional).annotate({
     description: "Working directory. Defaults to the active Location; relative paths resolve from that Location.",
   }),
@@ -126,6 +130,8 @@ const layer = Layer.effectDiscard(
                 messageID: context.assistantMessageID,
                 callID: context.toolCallID,
               }
+              const description = input.description?.trim()
+              const metadata = description ? { description } : undefined
               const target = yield* mutation.resolve({ path: input.workdir ?? ".", kind: "directory" })
               const external = target.externalDirectory
               if (external)
@@ -134,6 +140,7 @@ const layer = Layer.effectDiscard(
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source,
+                  ...(metadata ? { metadata } : {}),
                 })
               const warnings = (yield* externalCommandDirectories(fs, input.command, target.canonical)).map(
                 (directory) =>
@@ -146,6 +153,7 @@ const layer = Layer.effectDiscard(
                 sessionID: context.sessionID,
                 agent: context.agent,
                 source,
+                ...(metadata ? { metadata } : {}),
               })
 
               if ((yield* fs.stat(target.canonical)).type !== "Directory")

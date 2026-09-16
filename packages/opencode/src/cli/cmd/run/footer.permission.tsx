@@ -34,6 +34,15 @@ import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
 import type { PermissionReply, RunDiffStyle } from "./types"
 
+const REASON_PERMISSIONS = new Set(["read", "external_directory", "bash"])
+
+function permissionReason(request: PermissionRequest) {
+  if (!REASON_PERMISSIONS.has(request.permission)) return undefined
+  const description = request.metadata?.description
+  if (typeof description !== "string") return undefined
+  return description.trim() || undefined
+}
+
 function buttons(
   list: PermissionOption[],
   selected: PermissionOption,
@@ -271,6 +280,15 @@ export function RunPermissionBody(props: {
           <text fg={state().stage === "reject" ? props.theme.error : props.theme.warning}>△</text>
           <text fg={props.theme.text}>{title()}</text>
         </box>
+        <Show when={state().stage === "permission" && permissionReason(props.request)}>
+          {(reason) => (
+            <box paddingLeft={2}>
+              <text fg={props.theme.text}>
+                Reason: <i>{reason()}</i>
+              </text>
+            </box>
+          )}
+        </Show>
         <Switch>
           <Match when={state().stage === "permission"}>
             <box flexDirection="row" gap={1} paddingLeft={2}>

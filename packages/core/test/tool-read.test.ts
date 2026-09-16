@@ -169,6 +169,7 @@ describe("ReadTool", () => {
       const registry = yield* ToolRegistry.Service
 
       expect(yield* toolDefinitions(registry)).toMatchObject([{ name: "read" }])
+      expect((yield* toolDefinitions(registry))[0]?.inputSchema).toHaveProperty("properties.description")
       expect(yield* toolDefinitions(registry, [{ action: "read", resource: "*", effect: "deny" }])).toEqual([])
       expect(
         yield* executeTool(registry, {
@@ -187,6 +188,7 @@ describe("ReadTool", () => {
         },
       })
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
+      expect(assertions[0]?.metadata).toBeUndefined()
       expect(readCalls).toEqual([
         {
           input: AbsolutePath.make(path.join(process.cwd(), "README.md")),
@@ -205,7 +207,12 @@ describe("ReadTool", () => {
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-external-read", name: "read", input: { path: external } },
+          call: {
+            type: "tool-call",
+            id: "call-external-read",
+            name: "read",
+            input: { path: external, description: "  Inspect external notes  " },
+          },
         }),
       ).toMatchObject({ type: "json" })
       expect(assertions).toMatchObject([
@@ -213,8 +220,15 @@ describe("ReadTool", () => {
           sessionID,
           action: "external_directory",
           resources: [path.join(path.dirname(external), "*").replaceAll("\\", "/")],
+          metadata: { description: "Inspect external notes" },
         },
-        { sessionID, action: "read", resources: [external.replaceAll("\\", "/")], save: ["*"] },
+        {
+          sessionID,
+          action: "read",
+          resources: [external.replaceAll("\\", "/")],
+          save: ["*"],
+          metadata: { description: "Inspect external notes" },
+        },
       ])
       expect(readCalls).toEqual([{ input: AbsolutePath.make(external), page: { offset: undefined, limit: undefined } }])
     }),

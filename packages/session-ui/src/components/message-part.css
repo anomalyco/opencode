@@ -792,6 +792,15 @@
     padding: 0;
   }
 
+  [data-slot="permission-reason"] {
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    color: var(--v2-text-text-base);
+    margin-bottom: 12px;
+  }
+
   [data-slot="permission-patterns"] {
     display: flex;
     flex-direction: column;

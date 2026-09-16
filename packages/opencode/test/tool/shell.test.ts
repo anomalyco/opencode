@@ -19,6 +19,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
+import { ToolJsonSchema } from "@/tool/json-schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceStore } from "@/project/instance-store"
 
@@ -181,6 +182,13 @@ const mustTruncate = (result: {
 }
 
 describe("tool.shell", () => {
+  it.instance("advertises the task description while keeping runtime callers compatible", () =>
+    Effect.gen(function* () {
+      const tool = yield* initShell()
+      expect(ToolJsonSchema.fromTool({ ...tool, id: "bash" })).toHaveProperty("properties.description")
+    }),
+  )
+
   each("basic", () =>
     runIn(
       projectRoot,
@@ -230,12 +238,14 @@ describe("tool.shell permissions", () => {
           yield* run(
             {
               command: "echo hello",
+              description: "  Verify shell output  ",
             },
             capture(requests),
           )
           expect(requests.length).toBe(1)
           expect(requests[0].permission).toBe("bash")
           expect(requests[0].patterns).toContain("echo hello")
+          expect(requests[0].metadata).toEqual({ command: "echo hello", description: "Verify shell output" })
         }),
       )
     }),
@@ -258,6 +268,20 @@ describe("tool.shell permissions", () => {
           expect(requests[0].permission).toBe("bash")
           expect(requests[0].patterns).toContain("echo foo")
           expect(requests[0].patterns).toContain("echo bar")
+        }),
+      )
+    }),
+  )
+
+  each("omits blank descriptions from permission metadata", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          yield* run({ command: "echo hello", description: "   " }, capture(requests))
+          expect(requests[0]?.metadata).toEqual({ command: "echo hello" })
         }),
       )
     }),
@@ -762,20 +786,22 @@ describe("tool.shell permissions", () => {
       yield* runIn(
         tmp,
         Effect.gen(function* () {
-          const err = new Error("stop after permission")
           const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
-          expect(
-            yield* fail(
-              {
-                command: "echo ok",
-                workdir: os.tmpdir(),
-              },
-              capture(requests, err),
-            ),
-          ).toMatchObject({ message: err.message })
+          yield* run(
+            {
+              command: "echo ok",
+              description: "  Inspect the external working directory  ",
+              workdir: os.tmpdir(),
+            },
+            capture(requests),
+          )
           const extDirReq = requests.find((r) => r.permission === "external_directory")
+          const bashReq = requests.find((r) => r.permission === "bash")
           expect(extDirReq).toBeDefined()
+          expect(bashReq).toBeDefined()
           expect(extDirReq!.patterns).toContain(glob(path.join(os.tmpdir(), "*")))
+          expect(extDirReq!.metadata).toMatchObject({ description: "Inspect the external working directory" })
+          expect(bashReq!.metadata).toMatchObject({ description: "Inspect the external working directory" })
         }),
       )
     }),

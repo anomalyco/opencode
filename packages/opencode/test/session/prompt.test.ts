@@ -2044,14 +2044,16 @@ function hangUntilAborted(tool: { execute: (...args: any[]) => any }) {
     const ready = yield* Deferred.make<void>()
     const aborted = yield* Deferred.make<void>()
     const original = tool.execute
-    tool.execute = (_args: any, ctx: any) => {
+    let input: unknown
+    tool.execute = (args: unknown, ctx: any) => {
+      input = args
       ctx.abort.addEventListener("abort", () => succeedVoid(aborted), { once: true })
       if (ctx.abort.aborted) succeedVoid(aborted)
       succeedVoid(ready)
       return Effect.callback<never>(() => Effect.sync(() => succeedVoid(aborted)))
     }
     const restore = Effect.addFinalizer(() => Effect.sync(() => void (tool.execute = original)))
-    return { ready, aborted, restore }
+    return { ready, aborted, restore, input: () => input }
   })
 }
 
@@ -2062,7 +2064,7 @@ noLLMServer.instance(
       const { directory: dir } = yield* TestInstance
       const registry = yield* ToolRegistry.Service
       const { read } = yield* registry.named()
-      const { ready, restore } = yield* hangUntilAborted(read)
+      const { ready, restore, input } = yield* hangUntilAborted(read)
       yield* restore
 
       const prompt = yield* SessionPrompt.Service
@@ -2084,6 +2086,7 @@ noLLMServer.instance(
         .pipe(Effect.forkChild)
 
       yield* awaitWithTimeout(Deferred.await(ready), "timed out waiting for read tool to start", "10 seconds")
+      expect(input()).toMatchObject({ description: "Access an attachment from the user message." })
       yield* prompt.cancel(chat.id)
       yield* Fiber.interrupt(fiber)
       const exit = yield* Fiber.await(fiber)
@@ -2100,7 +2103,7 @@ noLLMServer.instance(
       const { directory: dir } = yield* TestInstance
       const registry = yield* ToolRegistry.Service
       const { read } = yield* registry.named()
-      const { ready, restore } = yield* hangUntilAborted(read)
+      const { ready, restore, input } = yield* hangUntilAborted(read)
       yield* restore
 
       const prompt = yield* SessionPrompt.Service
@@ -2119,6 +2122,7 @@ noLLMServer.instance(
         .pipe(Effect.forkChild)
 
       yield* awaitWithTimeout(Deferred.await(ready), "timed out waiting for read tool to start", "10 seconds")
+      expect(input()).toMatchObject({ description: "Access an attachment from the user message." })
       yield* prompt.cancel(chat.id)
       yield* Fiber.interrupt(fiber)
       const exit = yield* Fiber.await(fiber)
@@ -2200,6 +2204,7 @@ noLLMServer.instance(
       const text = stored.parts.filter((part) => part.type === "text").map((part) => part.text)
 
       expect(text[0]?.startsWith("Called the Read tool with the following input:")).toBe(true)
+      expect(text[0]).toContain('"description":"Access an attachment from the user message."')
       expect(text[1]?.includes("Read tool failed to read")).toBe(true)
       expect(text[2]).toBe("after-file")
 

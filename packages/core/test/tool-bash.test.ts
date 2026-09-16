@@ -143,12 +143,14 @@ describe("BashTool", () => {
             const definitions = yield* toolDefinitions(registry)
             expect(definitions.map((tool) => tool.name)).toEqual(["bash"])
             expect(definitions[0]?.inputSchema).not.toHaveProperty("properties.background")
-            expect(definitions[0]?.inputSchema).not.toHaveProperty("properties.description")
+            expect(definitions[0]?.inputSchema).toHaveProperty("properties.description")
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.output")
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.command")
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.cwd")
             expect(yield* toolDefinitions(registry, [{ action: "bash", resource: "*", effect: "deny" }])).toEqual([])
-            expect(yield* settleTool(registry, call({ command: "pwd" }))).toEqual({
+            expect(
+              yield* settleTool(registry, call({ command: "pwd", description: "  Confirm the working directory  " })),
+            ).toEqual({
               result: {
                 type: "content",
                 value: [
@@ -172,7 +174,15 @@ describe("BashTool", () => {
               combineOutput: true,
               maxOutputBytes: BashTool.MAX_CAPTURE_BYTES,
             })
-            expect(assertions).toMatchObject([{ sessionID, action: "bash", resources: ["pwd"], save: ["pwd"] }])
+            expect(assertions).toMatchObject([
+              {
+                sessionID,
+                action: "bash",
+                resources: ["pwd"],
+                save: ["pwd"],
+                metadata: { description: "Confirm the working directory" },
+              },
+            ])
           }),
         )
       },
@@ -187,10 +197,15 @@ describe("BashTool", () => {
         reset()
         return Effect.promise(() => fs.mkdir(path.join(tmp.path, "src"))).pipe(
           Effect.andThen(
-            withTool(tmp.path, (registry) => executeTool(registry, call({ command: "pwd", workdir: "src" }))),
+            withTool(tmp.path, (registry) =>
+              executeTool(registry, call({ command: "pwd", description: "   ", workdir: "src" })),
+            ),
           ),
           Effect.andThen(
-            Effect.sync(() => expect(runs).toMatchObject([{ cwd: realpathSync(path.join(tmp.path, "src")) }])),
+            Effect.sync(() => {
+              expect(runs).toMatchObject([{ cwd: realpathSync(path.join(tmp.path, "src")) }])
+              expect(assertions[0]?.metadata).toBeUndefined()
+            }),
           ),
         )
       },
@@ -266,14 +281,19 @@ describe("BashTool", () => {
       ([active, outside]) => {
         reset()
         return withTool(active.path, (registry) =>
-          executeTool(registry, call({ command: "pwd", workdir: outside.path })),
+          executeTool(
+            registry,
+            call({ command: "pwd", description: "  Inspect the external working directory  ", workdir: outside.path }),
+          ),
         ).pipe(
           Effect.andThen(
             Effect.sync(() => {
               expect(assertions.map((item) => item.action)).toEqual(["external_directory", "bash"])
               expect(assertions[0]).toMatchObject({
                 resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
+                metadata: { description: "Inspect the external working directory" },
               })
+              expect(assertions[1]?.metadata).toEqual({ description: "Inspect the external working directory" })
               expect(runs).toHaveLength(1)
             }),
           ),
