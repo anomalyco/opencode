@@ -63,6 +63,11 @@ export const Plugin = define({
           sessions.delete(event.sessionID)
           return
         }
+        const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
+        if (session.parentID) {
+          sessions.delete(event.sessionID)
+          return
+        }
 
         // Once generate exposes request metadata to context hooks, tag warm requests instead of matching the prompt.
         const message = event.messages.at(-1)
