@@ -516,13 +516,13 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
-  it.effect("converts HTML to requested markdown and text", () =>
+  it.effect("converts mixed-case HTML media types to requested markdown and text", () =>
     Effect.gen(function* () {
       reset()
       respond = () =>
         Effect.succeed(
           new Response("<h1>Hello</h1><p>world</p><script>bad()</script>", {
-            headers: { "content-type": "text/html; charset=utf-8" },
+            headers: { "content-type": "Text/HTML; Charset=UTF-8" },
           }),
         )
       const registry = yield* Tool.Service
