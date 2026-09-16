@@ -1847,16 +1847,35 @@ describe("V2 mini transport", () => {
 
     firstEvents.close()
     while (!replacementHydrating) await Bun.sleep(0)
-    await expect(
-      transport.runPromptTurn({
-        agent: undefined,
-        model: undefined,
-        variant: undefined,
-        prompt: { messageID: "msg_blocked", text: "blocked", parts: [] },
-        files: [],
-        includeFiles: true,
-      }),
-    ).rejects.toThrow("Event stream is reconnecting")
+    const prompt = spyOn(second.session, "prompt").mockImplementation((request) => {
+      queueMicrotask(() => {
+        secondEvents.push({
+          id: "evt_replacement_prompt",
+          created: 3,
+          type: "session.inbox.delivered",
+          durable: durable("ses_1", 1),
+          data: { sessionID: "ses_1", inboxID: "msg_replacement" },
+        })
+        secondEvents.push({
+          id: "evt_replacement_settled",
+          created: 4,
+          type: "session.execution.succeeded",
+          durable: durable("ses_1", 2),
+          data: { sessionID: "ses_1" },
+        })
+      })
+      return ok({ data: promptAdmission(request) }) as never
+    })
+    const queued = transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { messageID: "msg_replacement", text: "replacement prompt", parts: [] },
+      files: [],
+      includeFiles: true,
+    })
+    await Bun.sleep(0)
+    expect(prompt).not.toHaveBeenCalled()
     secondEvents.push({
       id: "evt_buffered_text",
       created: 2,
@@ -1885,18 +1904,9 @@ describe("V2 mini transport", () => {
     while (refreshes < 2) await Bun.sleep(0)
     await resize
     expect(resized).toBe(false)
-    await expect(
-      transport.runPromptTurn({
-        agent: undefined,
-        model: undefined,
-        variant: undefined,
-        prompt: { messageID: "msg_catalog_blocked", text: "blocked", parts: [] },
-        files: [],
-        includeFiles: true,
-      }),
-    ).rejects.toThrow("Event stream is reconnecting")
+    expect(prompt).not.toHaveBeenCalled()
     releaseCatalog()
-    await Bun.sleep(0)
+    await queued
 
     expect(current).toEqual([second])
     expect(first.event.subscribe).toHaveBeenCalledTimes(1)
@@ -1910,34 +1920,6 @@ describe("V2 mini transport", () => {
       "partial",
       " replacement",
     ])
-
-    const prompt = spyOn(second.session, "prompt").mockImplementation((request) => {
-      queueMicrotask(() => {
-        secondEvents.push({
-          id: "evt_replacement_prompt",
-          created: 3,
-          type: "session.inbox.delivered",
-          durable: durable("ses_1", 1),
-          data: { sessionID: "ses_1", inboxID: "msg_replacement" },
-        })
-        secondEvents.push({
-          id: "evt_replacement_settled",
-          created: 4,
-          type: "session.execution.succeeded",
-          durable: durable("ses_1", 2),
-          data: { sessionID: "ses_1" },
-        })
-      })
-      return ok({ data: promptAdmission(request) }) as never
-    })
-    await transport.runPromptTurn({
-      agent: undefined,
-      model: undefined,
-      variant: undefined,
-      prompt: { messageID: "msg_replacement", text: "replacement prompt", parts: [] },
-      files: [],
-      includeFiles: true,
-    })
     const interrupt = spyOn(second.session, "interrupt").mockImplementation(() => ok({ interrupted: true }))
     await transport.interruptActiveTurn()
 
@@ -1945,6 +1927,38 @@ describe("V2 mini transport", () => {
     expect(interrupt).toHaveBeenCalledWith({ sessionID: "ses_1", resume: true })
     expect(firstPrompt).not.toHaveBeenCalled()
     expect(firstInterrupt).not.toHaveBeenCalled()
+    await transport.close()
+  })
+
+  test("sends a prompt after the event stream reconnects", async () => {
+    const first = feed()
+    const second = feed()
+    first.push(connected("evt_connected_1"))
+    second.push(connected("evt_connected_2"))
+    const client = sdk({ streams: [first, second] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      footer: ui.api,
+    })
+    first.close()
+    while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.status === "reconnecting"))
+      await Bun.sleep(0)
+    const prompt = spyOn(client.session, "prompt").mockImplementation(
+      (request) => ok({ data: promptAdmission(request) }) as never,
+    )
+    await transport.runPromptTurn({
+      agent: undefined,
+      model: undefined,
+      variant: undefined,
+      prompt: { messageID: "msg_after_reconnect", text: "hello", parts: [] },
+      files: [],
+      includeFiles: true,
+    })
+    expect(prompt).toHaveBeenCalled()
+    expect(client.event.subscribe).toHaveBeenCalledTimes(2)
     await transport.close()
   })
 

@@ -520,6 +520,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   const abortReady = () => readyReject(new Error("Mini closed before the event stream connected"))
   controller.signal.addEventListener("abort", abortReady, { once: true })
   const offFooterClose = input.footer.onClose(() => controller.abort())
+  const waitUntilConnected = async (signal?: AbortSignal) => {
+    const abort = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+    while (!state.connected) {
+      if (state.closed || controller.signal.aborted || input.footer.isClosed || signal?.aborted)
+        throw new Error("Event stream aborted")
+      await wait(25, abort)
+    }
+  }
   const current = (attempt: Attempt) =>
     !state.closed &&
     !controller.signal.aborted &&
@@ -1563,7 +1571,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   const runShellTurn = async (next: SessionTurnInput) => {
     if (state.wait || state.shellWait) throw new Error("prompt already running")
-    if (!state.connected) throw new Error("Event stream is reconnecting")
+    await waitUntilConnected(next.signal)
     const client = sdk
     const abort = new AbortController()
     const onAbort = () => abort.abort()
@@ -1796,7 +1804,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   return {
     async admitPromptTurn(next, delivery) {
       if (next.prompt.mode === "shell") throw new Error("This prompt cannot be queued")
-      if (!state.connected) throw new Error("Event stream is reconnecting")
+      await waitUntilConnected(next.signal)
       const client = sdk
       if (!next.prompt.command && next.agent)
         await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
@@ -1821,7 +1829,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
       if (state.wait || state.shellWait) throw new Error("prompt already running")
-      if (!state.connected) throw new Error("Event stream is reconnecting")
+      await waitUntilConnected(next.signal)
       const client = sdk
       const messageID = next.prompt.messageID
       if (!messageID) throw new Error("Prompt message ID is required")
