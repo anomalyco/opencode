@@ -277,6 +277,7 @@ interface RequestDescriptor {
   readonly query?: Record<string, unknown>
   readonly headers?: Record<string, unknown>
   readonly body?: unknown
+  readonly sse?: true
   readonly successStatus: number
   readonly declaredStatuses: ReadonlyArray<number>
   readonly empty: boolean
@@ -296,6 +297,7 @@ export function make(options: ClientOptions) {
       if (value !== undefined && value !== null) headers.set(key, String(value))
     }
     for (const [key, value] of new Headers(requestOptions?.headers)) headers.set(key, value)
+    if (descriptor.sse && !headers.has("accept")) headers.set("accept", "text/event-stream")
     if (descriptor.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")
     return {
       url,
@@ -340,7 +342,7 @@ export function make(options: ClientOptions) {
 
   const sse = <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): AsyncIterable<A> => ({
     async *[Symbol.asyncIterator]() {
-      const response = await execute(descriptor, requestOptions)
+      const response = await execute({ ...descriptor, sse: true }, requestOptions)
       if (response.status !== descriptor.successStatus) await responseError(response, descriptor)
       if (!isContentType(response, "text/event-stream")) {
         try {
