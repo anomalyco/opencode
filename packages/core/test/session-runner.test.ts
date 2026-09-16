@@ -63,12 +63,7 @@ import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { Tool } from "@opencode/core/tool"
 import type { Info as ToolInfo } from "@opencode/schema/tool"
-import {
-  InstructionStateTable,
-  SessionInboxTable,
-  SessionMessageTable,
-  SessionTable,
-} from "@opencode/core/session/sql"
+import { InstructionStateTable, SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { SessionStore } from "@opencode/core/session/store"
 import { Instructions } from "@opencode/core/instructions/index"
@@ -121,7 +116,7 @@ const testModel = (id: string, limit: ModelLimit = defaultModelLimit) => {
 const model = testModel("fake-model")
 const defaultSystem = SessionSystemPrompt.make([])
 const identity = (providerID: string, id: string) =>
-  ["# Your Model", `- Provider: ${providerID}`, `- Name: ${id}`, `- ID: ${providerID}/${id}`].join("\n")
+  ["# Your Model", `- Name: ${id}`, `- Provider ID: ${providerID}`, `- Model ID: ${id}`].join("\n")
 const fakeIdentity = identity("fake", "fake-model")
 const replacementIdentity = identity("fake", "replacement")
 const gptIdentity = identity("openai", "gpt-5")
@@ -1740,7 +1735,11 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Done", "text-build"))
     yield* s.resume
 
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(["Build agent instructions", fakeIdentity, "Initial context"])
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
+      "Build agent instructions",
+      fakeIdentity,
+      "Initial context",
+    ])
   })
 
   scenario("uses the configured default agent system for omitted-agent sessions", function* (s) {
@@ -1761,7 +1760,11 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Done", "text-reviewer"))
     yield* s.resume
 
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", fakeIdentity, "Initial context"])
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
+      "Reviewer instructions",
+      fakeIdentity,
+      "Initial context",
+    ])
     expect((yield* s.messages)[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
   })
 
@@ -1784,7 +1787,11 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Done", "text-selected"))
     yield* s.resume
 
-    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(["Reviewer instructions", fakeIdentity, "Initial context"])
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual([
+      "Reviewer instructions",
+      fakeIdentity,
+      "Initial context",
+    ])
     expect((yield* s.messages)[0]).toMatchObject({ type: "assistant", agent: "reviewer" })
   })
 
@@ -3026,7 +3033,11 @@ describe("SessionRunnerLLM", () => {
     expect(resolutions).toBe(2)
     expect(s.requests).toHaveLength(3)
     expect(s.requests[2]?.model).toBe(replacementModel)
-    expect(s.requests[2]?.system.map((part) => part.text)).toEqual([defaultSystem, replacementIdentity, "Initial context"])
+    expect(s.requests[2]?.system.map((part) => part.text)).toEqual([
+      defaultSystem,
+      replacementIdentity,
+      "Initial context",
+    ])
     expect(systemTexts(s.requests[2])).toContain("Changed during compaction")
     expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Overflow summary\n</summary>")
     expect(userTexts(s.requests[2]).join("\n")).not.toContain("Queued during compaction")
