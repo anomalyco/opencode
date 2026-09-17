@@ -31,7 +31,24 @@ async function main() {
   app.setPath("userData", path.join(root, "electron-data"))
   app.on("window-all-closed", () => {})
   await app.whenReady()
+  let unavailable = true
+  const loading = Promise.withResolvers<() => void>()
   const web = createServer((request, response) => {
+    if (request.url === "/loading") {
+      response.writeHead(200, { "content-type": "text/html" })
+      response.write("<!doctype html><html><body>Loading")
+      loading.resolve(() => response.end("</body></html>"))
+      return
+    }
+    if (request.url === "/finish-loading") {
+      void loading.promise.then((finish) => finish())
+      response.end()
+      return
+    }
+    if (request.url === "/unreachable" && unavailable) {
+      request.socket.destroy()
+      return
+    }
     if (request.url === "/cors-allowed" || request.url === "/cors-denied") {
       if (request.url === "/cors-allowed") response.setHeader("access-control-allow-origin", "*")
       response.setHeader("content-type", "text/plain")
@@ -204,6 +221,19 @@ async function main() {
     assert.equal((await call("tabs.list", {})).tabs.length, 2)
     const tabID = first.id
     assert.equal(first.url, fixture + "/")
+    assert.equal((await call("navigate", { tabID, url: `${fixture}/unreachable` })).loadError, "502 Bad Gateway")
+    const failed = await until(async () => {
+      const tab = (await call("tabs.list", {})).tabs.find((tab) => tab.id === tabID)
+      return tab?.loadError && !tab.loading ? tab : undefined
+    })
+    assert.equal(failed.url, `${fixture}/unreachable`)
+    assert.equal(failed.loadError, "502 Bad Gateway")
+    await until(async () => inventories.get("suite")?.tabs.find((tab) => tab.id === tabID)?.loadError)
+    assert.equal((await call("tabs.list", {})).tabs.find((tab) => tab.id === second.id)?.loadError, undefined)
+    unavailable = false
+    assert.equal((await call("reload", { tabID })).loadError, undefined)
+    assert.equal((await call("navigate", { tabID, url: fixture })).loadError, undefined)
+    console.log("PASS browser navigation failure state and retry")
     const networkProof = await call("evaluate", {
       tabID,
       script: `(async () => ({

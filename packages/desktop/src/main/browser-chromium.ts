@@ -103,11 +103,14 @@ export function createBrowserPage(
     revision++
   })
   let closed = false
+  let blank = true
+  let failure: { url: string; message: string } | undefined
   const state = (): Browser.Tab => ({
     id: options.id,
-    url: contents.getURL().slice(0, 16_384),
+    url: (failure?.url ?? contents.getURL()).slice(0, 16_384),
     title: contents.getTitle().slice(0, 2_048),
     loading: contents.isLoading(),
+    ...(failure ? { loadError: failure.message } : {}),
     canGoBack: contents.navigationHistory.canGoBack(),
     canGoForward: contents.navigationHistory.canGoForward(),
     generation,
@@ -115,8 +118,11 @@ export function createBrowserPage(
   const publish = () => {
     if (!closed) options.publish()
   }
-  const reset = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
+  const reset = (event: Electron.Event<{ url: string; isMainFrame: boolean; isSameDocument: boolean }>) => {
     if (!event.isMainFrame || event.isSameDocument) return
+    blank = event.url === "about:blank"
+    failure = undefined
+    updateVisibility()
     generation++
     documents.clear()
     refs.clear()
@@ -124,7 +130,25 @@ export function createBrowserPage(
     publish()
   }
   contents.on("did-start-navigation", reset)
-  contents.on("did-stop-loading", publish)
+  contents.on("did-navigate", (_event, url, status, statusText) => {
+    // The server-network proxy reports connection failures as HTTP error pages.
+    if (status < 400) return
+    failure = { url, message: `${status} ${statusText}`.trim().slice(0, 2_048) }
+    updateVisibility()
+    publish()
+  })
+  contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
+    // Cancelled navigation and failed subframes do not replace the current page.
+    if (!isMainFrame || code === -3) return
+    failure = { url, message: description.slice(0, 2_048) }
+    updateVisibility()
+    publish()
+  })
+  contents.on("did-start-loading", () => updateVisibility())
+  contents.on("did-stop-loading", () => {
+    updateVisibility()
+    publish()
+  })
   contents.on("did-navigate-in-page", publish)
   contents.on("page-title-updated", publish)
   contents.on("render-process-gone", () => {
@@ -252,6 +276,14 @@ export function createBrowserPage(
     corner.setVisible(false)
     win.contentView.addChildView(corner)
   })
+  let visible = false
+  const updateVisibility = () => {
+    // Keep the themed DOM background exposed throughout loading, including
+    // stale renderer layout updates while clearing a failed URL.
+    const show = visible && !contents.isLoading() && !blank && !failure
+    view.setVisible(show)
+    corners.forEach((corner) => corner.setVisible(show && !!cornerKey))
+  }
   const ready = Promise.all([
     files.ready,
     ...(options.initialize === false
@@ -302,9 +334,9 @@ export function createBrowserPage(
         )
       })
     },
-    setVisible(visible: boolean) {
-      view.setVisible(visible)
-      corners.forEach((corner) => corner.setVisible(visible && !!cornerKey))
+    setVisible(value: boolean) {
+      visible = value
+      updateVisibility()
     },
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready

@@ -29,6 +29,46 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
   }
   try {
     await page.ready
+    const started = new Promise<void>((resolve) => page.contents.once("did-navigate", () => resolve()))
+    page.setVisible(true)
+    const navigation = execute({ type: "navigate", tabID, url: url + "/loading" })
+    await started
+    assert(page.state().loading)
+    assert(win.contentView.children.slice(children).every((view) => !view.getVisible()))
+    page.setVisible(true)
+    assert(win.contentView.children.slice(children).every((view) => !view.getVisible()))
+    const stopped = new Promise<void>((resolve) => page.contents.once("did-stop-loading", () => resolve()))
+    await fetch(url + "/finish-loading")
+    await navigation
+    await stopped
+    assert.equal(page.state().loading, false)
+    assert(page.view.getVisible(), "The requested visibility must return after loading finishes")
+    console.log("PASS native loading keeps the themed background visible until navigation completes")
+    await assert.rejects(execute({ type: "navigate", tabID, url: url + "/unreachable" }), /ERR_EMPTY_RESPONSE/)
+    assert.equal(page.state().loadError, "ERR_EMPTY_RESPONSE")
+    assert.equal(page.state().url, url + "/unreachable")
+    await execute({ type: "navigate", tabID, url: url + "/missing" })
+    assert.equal(page.state().loadError, "404 Not Found")
+    page.setVisible(true)
+    assert(win.contentView.children.slice(children).every((view) => !view.getVisible()))
+    const clearing = new Promise<void>((resolve) => {
+      page.contents.once("did-start-navigation", () => {
+        page.setVisible(true)
+        assert(win.contentView.children.slice(children).every((view) => !view.getVisible()))
+        resolve()
+      })
+    })
+    await execute({ type: "navigate", tabID, url: "about:blank" })
+    await clearing
+    assert.equal(page.state().loadError, undefined)
+    page.setVisible(true)
+    assert(win.contentView.children.slice(children).every((view) => !view.getVisible()))
+    const restored = new Promise<void>((resolve) => page.contents.once("did-stop-loading", () => resolve()))
+    await execute({ type: "navigate", tabID, url })
+    await restored
+    page.setVisible(true)
+    assert(page.view.getVisible())
+    console.log("PASS native blank navigation stays hidden through stale layout updates")
     for (const color of [
       [255, 255, 255, 255],
       [20, 24, 30, 255],
@@ -91,6 +131,7 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
 
     await execute({ type: "evaluate", tabID, script: "document.querySelector('a[href=\"/download\"]').click()" })
     const fileID = await waitForFile()
+    assert.equal(page.state().loadError, undefined, "A download must not mark the page as unreachable")
     const fileAction: Browser.Action = { type: "files.get", tabID, fileID }
     const original = await inspect(fileAction)
     assert(original.resources.includes(url + "/download"))

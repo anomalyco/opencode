@@ -19,7 +19,14 @@ export function mountBrowserPane() {
       session: "Alpha",
       mounted: true,
       visible: true,
+      url: undefined as string | undefined,
+      loading: false,
+      generation: 0,
+      delayNavigation: false,
+      pendingURL: undefined as string | undefined,
+      loadErrors: {} as Record<string, string | undefined>,
       layouts: {} as Record<string, BrowserPaneLayout | undefined>,
+      shows: {} as Record<string, number>,
     })
     const tabs = ["Alpha", "Beta"].map((name) => ({
       id: Browser.TabID.make(`tab_${name === "Alpha" ? "11111111" : "22222222"}-1111-1111-1111-111111111111`),
@@ -35,7 +42,10 @@ export function mountBrowserPane() {
       tabs.map((tab) => [
         tab.title,
         {
-          setLayout: (layout) => setStore("layouts", tab.title, layout),
+          setLayout: (layout) => {
+            setStore("layouts", tab.title, layout)
+            if (layout?.visible) setStore("shows", tab.title, (count = 0) => count + 1)
+          },
           command: async () => undefined,
           close: () => undefined,
         },
@@ -47,13 +57,32 @@ export function mountBrowserPane() {
       opened: () => !!registrations.get(store.session),
       state: () => ({ tabs: tabs.filter((tab) => tab.title === store.session), focusedTabID: null }),
       tabs: () => tabs.filter((tab) => tab.title === store.session),
-      active: () => tabs.find((tab) => tab.title === store.session) ?? tabs[0],
+      active: () => {
+        const tab = tabs.find((tab) => tab.title === store.session) ?? tabs[0]
+        return {
+          ...tab,
+          url: store.url ?? tab.url,
+          loading: store.loading,
+          generation: store.generation,
+          loadError: store.loadErrors[store.session],
+        }
+      },
       registration: () => registrations.get(store.session),
-      error: () => undefined,
+      error: () => (store.loadErrors[store.session] ? "Request failed" : undefined),
       suspended: () => false,
       close: () => undefined,
       open: () => undefined,
-      command: () => undefined,
+      command: (command) => {
+        if (command.type === "navigate" || command.type === "reload") setStore("loadErrors", store.session, undefined)
+        if (command.type === "navigate") {
+          if (store.delayNavigation) {
+            setStore("pendingURL", command.url)
+            return
+          }
+          setStore({ url: command.url, loading: false, generation: store.generation + 1 })
+        }
+        if (command.type === "stop") setStore("loading", false)
+      },
     }
     return (
       <>
@@ -64,6 +93,24 @@ export function mountBrowserPane() {
             {(name) => <button onClick={() => setStore({ session: name, mounted: name !== "Empty" })}>{name}</button>}
           </For>
           <button onClick={() => setStore("mounted", false)}>Unmount pane</button>
+          <button onClick={() => setStore({ url: "about:blank", loading: false })}>Blank page</button>
+          <button onClick={() => setStore({ url: "about:blank", loading: true })}>Loading page</button>
+          <button
+            onClick={() =>
+              setStore({ loading: true, generation: store.generation + 1, loadErrors: { [store.session]: undefined } })
+            }
+          >
+            Load current page
+          </button>
+          <button onClick={() => setStore("loadErrors", store.session, "ERR_CONNECTION_REFUSED")}>Failed page</button>
+          <button onClick={() => setStore("delayNavigation", true)}>Delay navigation</button>
+          <button
+            onClick={() =>
+              setStore({ url: store.pendingURL, pendingURL: undefined, loading: false, generation: store.generation + 1 })
+            }
+          >
+            Complete navigation
+          </button>
           <button onClick={() => setStore("visible", (visible) => !visible)}>Toggle Review tab</button>
         </nav>
         <div style={{ width: "640px", height: "360px", border: "1px solid #555" }}>
@@ -78,6 +125,7 @@ export function mountBrowserPane() {
             <div
               data-testid={`native-${tab.title}`}
               data-visible={!!store.layouts[tab.title]?.visible}
+              data-shows={store.shows[tab.title] ?? 0}
               style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
             >
               {tab.title}: {store.layouts[tab.title]?.visible ? "visible" : "hidden"}
