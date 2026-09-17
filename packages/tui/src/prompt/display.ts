@@ -36,6 +36,24 @@ export function displayCharAt(value: string, offset: number) {
 }
 
 export function mentionTriggerIndex(value: string, offset = promptOffsetWidth(value)) {
+  // This runs on every keystroke while typing. The display-aware scan below
+  // walks the entire buffer with Intl.Segmenter (O(n) per keystroke, up to
+  // tens of ms for large inputs), so two cheap raw searches gate it first.
+  //
+  // A trigger can only exist if the text contains an "@".
+  if (!value.includes("@")) return
+
+  // With the cursor at the end of an ASCII buffer, a valid trigger must live in
+  // the trailing whitespace-delimited word (possibly empty when the buffer ends
+  // in whitespace). Resolve it with a raw scan instead of the full-buffer
+  // segmenter walk. For non-ASCII text (where display offsets diverge from char
+  // offsets) fall through to the exact computation.
+  if (offset === value.length && /^[\x00-\x7F]*$/.test(value)) {
+    let i = value.length
+    while (i > 0 && !/\s/.test(value[i - 1])) i--
+    if (!value.slice(i).includes("@")) return
+  }
+
   const text = displaySlice(value, 0, offset)
   const index = text.lastIndexOf("@")
   if (index === -1) return
