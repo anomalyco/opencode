@@ -219,7 +219,13 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         }),
       )
       .handleAll({
-        status: () => Effect.succeed({ version: "2.0.0", pid: 1, urls: config.server ? [config.server] : [] }),
+        info: () =>
+          Effect.succeed({
+            version: "2.0.0",
+            pid: 1,
+            urls: config.server ? [config.server] : [],
+            paths: { tmp: "/tmp/opencode" },
+          }),
         config: () => Effect.succeed(configEntries),
         reference: () =>
           Effect.succeed({

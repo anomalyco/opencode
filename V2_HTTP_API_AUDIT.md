@@ -54,7 +54,7 @@ Review endpoints in document order. For each endpoint, select one disposition an
 ### [x] `GET /api/health` and `GET /api/server`
 
 - **Decision:** Merge and rename
-- **Replacement:** `GET /api/status` with operation ID `server.status`.
+- **Replacement:** `GET /api/info` with operation ID `server.info`.
 - **Notes:** Returns `version`, `pid`, and connection `urls`; readiness is conveyed by HTTP status.
 
 ### [x] `GET /api/project/current`
@@ -74,7 +74,7 @@ Review endpoints in document order. For each endpoint, select one disposition an
 
 | Done | Method | Path | Operation ID | Decision | Notes |
 |---|---|---|---|---|---|
-| [x] 001–002 | `GET` | `/api/status` | `server.status` | Keep | Replaces the former health and server endpoints. |
+| [x] 001–002 | `GET` | `/api/info` | `server.info` | Keep | Replaces the former health and server endpoints. |
 | [x] 003 | `GET` | `/api/location` | `location.get` | Keep | Workspace selectors and response fields removed until workspace support ships. |
 | [x] 004 | `GET` | `/api/project` | `project.list` | Keep | Removed unused `time.initialized`; the database column remains for migration data. |
 | [x] 005 | `PATCH` | `/api/project/{projectID}` | `project.update` | Keep | Request and response accepted as-is. |

@@ -74,7 +74,13 @@ const retryAfter = (input: Input) => {
   return undefined
 }
 
-const schedule = Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
+// Exponential from 2s capped at 10s per gap, for 10 retries: 2, 4, 8, then 10 × 7, about 84s of
+// waiting when every attempt fails (67–101s with jitter). `min` takes the faster schedule, so the
+// cap applies per gap; `max` with `recurs` bounds the count.
+const schedule = Schedule.max([
+  Schedule.min([Schedule.exponential("2 seconds"), Schedule.spaced("10 seconds")]),
+  Schedule.recurs(10),
+]).pipe(
   Schedule.jittered,
   Schedule.setInputType<Input>(),
   Schedule.modifyDelay(({ input, duration: delay }) => {

@@ -93,6 +93,8 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
 
   const focusedError = createMemo(() => {
     const server = focusedServer()
+    // Enter starts sign-in for auth-gated integrations instead of showing the auth reason
+    if (server?.status.status === "needs_auth" && server.integrationID) return undefined
     return server ? statusError(server.status) : undefined
   })
 

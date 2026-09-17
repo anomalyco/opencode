@@ -35,8 +35,13 @@ describe("web UI", () => {
               Effect.gen(function* () {
                 const request = yield* HttpServerRequest.HttpServerRequest
                 const pathname = new URL(request.url, "http://localhost").pathname
-                if (pathname === "/api/status")
-                  return HttpServerResponse.jsonUnsafe({ version: "test", pid: 1, urls: [origin] })
+                if (pathname === "/api/info")
+                  return HttpServerResponse.jsonUnsafe({
+                    version: "test",
+                    pid: 1,
+                    urls: [origin],
+                    paths: { tmp: "/tmp/opencode" },
+                  })
                 return yield* Effect.fail(
                   new HttpServerError.HttpServerError({
                     reason: new HttpServerError.RouteNotFound({ request }),
@@ -47,8 +52,13 @@ describe("web UI", () => {
           )
           const origin = HttpServer.formatAddress(http.address)
 
-          const status = yield* Effect.promise(() => fetch(`${origin}/api/status`))
-          expect(yield* Effect.promise(() => status.json())).toEqual({ version: "test", pid: 1, urls: [origin] })
+          const status = yield* Effect.promise(() => fetch(`${origin}/api/info`))
+          expect(yield* Effect.promise(() => status.json())).toEqual({
+            version: "test",
+            pid: 1,
+            urls: [origin],
+            paths: { tmp: "/tmp/opencode" },
+          })
 
           const missing = yield* Effect.promise(() => fetch(`${origin}/api/missing`))
           expect(missing.status).toBe(404)

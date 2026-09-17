@@ -54,10 +54,10 @@ export function DevToolsBar() {
   )
   const groups = createMemo(() => DevTools.data().filter((group) => group.id !== "theme-performance"))
   const [server] = createResource(connected, async () => {
-    const status = await client.api.server.status()
+    const info = await client.api.server.info()
     return {
-      health: status,
-      address: status.urls[0] ? new URL(status.urls[0]).host : "Unknown",
+      health: info,
+      address: info.urls[0] ? new URL(info.urls[0]).host : "Unknown",
     }
   })
   const close = () => {

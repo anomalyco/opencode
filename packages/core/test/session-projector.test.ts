@@ -485,6 +485,7 @@ describe("SessionProjector", () => {
           assistantMessageID: id,
           agent: build,
           model,
+          started: 0,
         })
         .pipe(Effect.exit)
 
@@ -501,7 +502,13 @@ describe("SessionProjector", () => {
       const bus = yield* Bus.Service
       const first = SessionMessage.ID.make("msg_retry_first")
       const second = SessionMessage.ID.make("msg_retry_second")
-      yield* bus.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID: first, agent: build, model })
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: first,
+        agent: build,
+        model,
+        started: 0,
+      })
       yield* bus.publish(SessionEvent.RetryScheduled, {
         sessionID,
         assistantMessageID: first,
@@ -523,7 +530,13 @@ describe("SessionProjector", () => {
         retry: { attempt: 2, at: DateTime.makeUnsafe(2_000), error: { type: "provider.transport" } },
       })
 
-      yield* bus.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID: second, agent: build, model })
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: second,
+        agent: build,
+        model,
+        started: 0,
+      })
       yield* bus.publish(SessionEvent.RetryScheduled, {
         sessionID,
         assistantMessageID: second,

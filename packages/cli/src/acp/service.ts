@@ -7,9 +7,9 @@ import {
   type SessionInfo,
   type SessionMessageInfo,
 } from "@opencode/client/promise"
+import { FSUtil } from "@opencode/util/fs-util"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import type {
-  AgentSideConnection,
   AuthenticateRequest,
   AuthenticateResponse,
   AuthMethod,
@@ -46,6 +46,7 @@ import {
   parseModelSelection,
   type ConfigOptionProvider,
 } from "./config-option"
+import type { ACPConnection } from "./connection"
 import { promptContentToParts } from "./content"
 import {
   ChildSessionUpdateMethod,
@@ -59,9 +60,6 @@ import {
 import { ACPError } from "./error"
 
 export const AuthMethodID = "opencode-login"
-
-type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
-  Partial<Pick<AgentSideConnection, "writeTextFile" | "extNotification" | "signal">>
 
 type Catalog = {
   readonly providers: ConfigOptionProvider[]
@@ -102,15 +100,18 @@ export interface Interface {
   forkSession(input: ForkSessionRequest): Promise<ForkSessionResponse>
   setSessionConfigOption(input: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse>
   setSessionMode(input: SetSessionModeRequest): Promise<SetSessionModeResponse>
-  prompt(input: PromptRequest): Promise<PromptResponse>
+  prompt(input: PromptRequest, signal?: AbortSignal): Promise<PromptResponse>
   cancel(input: CancelNotification): Promise<void>
 }
 
-export function make(input: { readonly client: OpenCodeClient; readonly connection: Connection }): Interface {
+export function make(input: {
+  readonly client: OpenCodeClient
+  readonly connection: ACPConnection.Connection
+}): Interface {
   const sessions = new Map<string, Attached>()
   const catalogs = new Map<string, Promise<Catalog>>()
   const registeredMcp = new Map<string, Set<string>>()
-  const active = new Map<string, TurnControl>()
+  const active = new Map<string, { readonly control: TurnControl; readonly turn: Promise<PromptResponse> }>()
   const capabilities = { writeTextFile: false, childSessionUpdates: false }
 
   const catalog = (cwd: string) => {
@@ -134,6 +135,15 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
     sessions.get(sessionID)?.abort.abort()
     sessions.delete(sessionID)
     registeredMcp.delete(sessionID)
+  }
+
+  const cancelTurn = (sessionID: string) => {
+    const turn = active.get(sessionID)
+    if (turn) {
+      turn.control.cancelled = true
+      turn.control.admission.abort()
+    }
+    return input.client.session.interrupt({ sessionID })
   }
 
   const attach = async (session: SessionInfo, cwd: string, mcpServers: readonly McpServer[]) => {
@@ -216,7 +226,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       return { sessionId: state.id, configOptions: configOptions(state) }
     },
     loadSession: async (params) => {
-      const session = await getSession(input.client, params.sessionId)
+      const session = await getSession(input.client, params.sessionId, params.cwd)
       const state = await attach(session, session.location.directory, params.mcpServers)
       await replay(state)
       return { configOptions: configOptions(state) }
@@ -246,18 +256,17 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       return {}
     },
     resumeSession: async (params) => {
-      const session = await getSession(input.client, params.sessionId)
+      const session = await getSession(input.client, params.sessionId, params.cwd)
       const state = await attach(session, session.location.directory, params.mcpServers ?? [])
       return { configOptions: configOptions(state) }
     },
     closeSession: async (params) => {
-      detach(params.sessionId)
       const turn = active.get(params.sessionId)
-      if (turn) {
-        turn.cancelled = true
-        turn.admission.abort()
-      }
-      await input.client.session.interrupt({ sessionID: params.sessionId }).catch(() => {})
+      await cancelTurn(params.sessionId).catch((error) => {
+        if (!isSessionNotFoundError(error)) throw error
+      })
+      await turn?.turn.catch(() => {})
+      detach(params.sessionId)
       return {}
     },
     forkSession: async (params) => {
@@ -303,7 +312,7 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
       await selectMode(input.client, await requireSession(params.sessionId), params.modeId)
       return {}
     },
-    prompt: async (params) => {
+    prompt: async (params, signal) => {
       const state = await requireSession(params.sessionId)
       if (active.has(state.id)) {
         throw new ACPError.ServiceFailureError({
@@ -319,8 +328,9 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         capabilities.childSessionUpdates && extNotification
           ? (update: ChildSessionUpdate) => extNotification(ChildSessionUpdateMethod, update).then(() => {})
           : undefined
-      active.set(state.id, control)
-      const response = await streamTurn({
+      // A `$/cancel_request` for this prompt behaves like `session/cancel` for its turn.
+      const cancel = () => void cancelTurn(state.id).catch(() => {})
+      const turn = streamTurn({
         client: input.client,
         connection: input.connection,
         sessionID: state.id,
@@ -333,19 +343,23 @@ export function make(input: { readonly client: OpenCodeClient; readonly connecti
         sessionSignal: state.abort.signal,
         submit: (signal) => submitPrompt(input.client, state, prepared, signal),
         ...(childSessionUpdate ? { childSessionUpdate } : {}),
-      }).finally(() => {
-        if (active.get(state.id) === control) active.delete(state.id)
       })
-      await sendUsageUpdate(input.client, input.connection, state, response.usage?.totalTokens).catch(() => {})
-      return response
+        .then(async (response) => {
+          await sendUsageUpdate(input.client, input.connection, state, response.usage?.totalTokens).catch(() => {})
+          return response
+        })
+        .finally(() => {
+          signal?.removeEventListener("abort", cancel)
+          if (active.get(state.id)?.control === control) active.delete(state.id)
+        })
+      active.set(state.id, { control, turn })
+      signal?.addEventListener("abort", cancel, { once: true })
+      // The cancel may already be buffered behind the awaits above.
+      if (signal?.aborted) cancel()
+      return turn
     },
     cancel: async (params) => {
-      const current = active.get(params.sessionId)
-      if (current) {
-        current.cancelled = true
-        current.admission.abort()
-      }
-      await input.client.session.interrupt({ sessionID: params.sessionId }).catch(() => {})
+      await cancelTurn(params.sessionId).catch(() => {})
     },
   }
 }
@@ -472,11 +486,15 @@ async function selectMode(client: OpenCodeClient, state: Attached, modeID: strin
   await client.session.switchAgent({ sessionID: state.id, agent: modeID })
 }
 
-async function getSession(client: OpenCodeClient, sessionID: string) {
-  return client.session.get({ sessionID }).catch((error) => {
+async function getSession(client: OpenCodeClient, sessionID: string, cwd: string) {
+  const session = await client.session.get({ sessionID }).catch((error) => {
     if (isSessionNotFoundError(error)) throw new ACPError.SessionNotFoundError({ sessionId: sessionID })
     throw error
   })
+  if (FSUtil.resolve(cwd) !== FSUtil.resolve(session.location.directory)) {
+    throw new ACPError.SessionDirectoryMismatchError({ sessionId: sessionID, cwd })
+  }
+  return session
 }
 
 async function messages(client: OpenCodeClient, sessionID: string) {
@@ -542,7 +560,12 @@ function stableStringify(value: unknown): string {
     .join(",")}}`
 }
 
-async function sendUsageUpdate(client: OpenCodeClient, connection: Connection, session: Attached, used?: number) {
+async function sendUsageUpdate(
+  client: OpenCodeClient,
+  connection: ACPConnection.Connection,
+  session: Attached,
+  used?: number,
+) {
   if (!used) return
   const model = session.catalog.models.find(
     (item) => item.providerID === session.model.providerID && item.id === session.model.id,

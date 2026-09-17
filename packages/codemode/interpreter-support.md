@@ -182,7 +182,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `new` for Array, Object, Error types, Date, RegExp, Map, Set, URL, URLSearchParams, and Promise. `new` on any
       other value throws a catchable `TypeError` naming the callee: other built-in functions such as `Number` say
       `new` is unsupported and point at the plain call, user-defined functions report the constructor gap below, and
-      non-callable values are not constructors.
+      non-callable values are not constructors. Error constructors take the ES2022 options object, so
+      `new Error(message, { cause })` installs a non-enumerable `cause` when the option is present.
 - [x] Arithmetic operators: `+`, `-`, `*`, `/`, `%`, and `**`.
 - [x] Equality and ordering: `==`, `!=`, `===`, `!==`, `<`, `<=`, `>`, and `>=`.
 - [x] Bitwise operators: `&`, `|`, `^`, `~`, `<<`, `>>`, and `>>>`.
@@ -472,6 +473,10 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
 - [x] A host `Promise` becomes a program promise. Whatever host code returns, resolves, throws, or rejects with
       crosses the same way, so `catch (e)` receives a copy of the thrown value (an `Error` of the matching type, or
       plain data).
+- [x] An Error crosses, in either direction, as its name, message, `cause`, and own enumerable data, so Node's
+      `code`, `errno`, `syscall`, and `path` reach the program and `err.code === "ENOENT"` works. `stack` stays on its
+      own side, no field may shadow an Error method, and a field that cannot cross (a class instance, a function) is
+      left behind rather than replacing the error.
 - [ ] Program functions as arguments to extension code (callbacks such as `forEach`).
 - [ ] Host classes. Stateful host objects are expressed as closures; a declared method table would be the next
       step if `new X()` in a program is ever needed.

@@ -8,7 +8,7 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import type { SessionUserActions, SessionUserComment } from "../actions"
+import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { useData } from "../context"
 import { TimelineSeparator } from "../components/timeline-separator"
 import {
@@ -41,6 +41,7 @@ type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, TimelineRow.TurnGap>
 export type SessionUserPresentation = {
   displayText?: string
   comments?: SessionUserComment[]
+  references?: SessionUserAttachmentReference[]
 }
 
 export function createSessionTimelineRowRenderer(input: {
@@ -596,6 +597,7 @@ export function createSessionTimelineRowRenderer(input: {
                       message={message()}
                       displayText={presentation()?.displayText}
                       comments={presentation()?.comments}
+                      references={presentation()?.references}
                       historicalAgent={context()?.agent ?? ""}
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
                       actions={input.actions}

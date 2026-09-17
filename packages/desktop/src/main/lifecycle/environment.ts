@@ -42,7 +42,10 @@ export const configureApplication = Effect.fn("Application.configure")(function*
 
   const testRoot = yield* createTestRoot()
   app.setPath("userData", testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), appID))
-  if (testRoot) app.setPath("sessionData", path.join(testRoot, "session"))
+  if (testRoot) {
+    app.setPath("sessionData", path.join(testRoot, "session"))
+    if (testOnboarding) app.setPath("documents", path.join(testRoot, "documents"))
+  }
 })
 
 export function acquireApplicationLock() {
@@ -99,7 +102,7 @@ const createTestRoot = Effect.fn("Application.createTestRoot")(function* () {
   if (!root) return undefined
   if (testOnboarding) yield* fs.remove(root, { recursive: true, force: true })
   yield* Effect.forEach(
-    ["data", "config", "cache", "state", "desktop", "session"],
+    ["data", "config", "cache", "state", "desktop", "session", "documents"],
     (dir) => fs.makeDirectory(path.join(root, dir), { recursive: true }),
     { discard: true },
   )

@@ -34,6 +34,7 @@ import type {
   SessionMessageAssistantTool,
   SessionMessageUser,
   SessionInfo,
+  ModelInfo,
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
@@ -3167,6 +3168,7 @@ function Subagent(props: ToolProps) {
   const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
   const description = createMemo(() => stringValue(props.input.description))
   const continuation = createMemo(() => Boolean(stringValue(props.input.sessionID)))
+  const model = createMemo(() => subagentModelLabel(stringValue(props.input.model), data.location.model.list()))
   const isRunning = createMemo(() => {
     const id = sessionID()
     return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
@@ -3190,11 +3192,22 @@ function Subagent(props: ToolProps) {
         ) : undefined
       }
     >
-      {continuation()
-        ? `Continue subagent — ${description() ?? "Subagent"}`
-        : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent — ${description() ?? "Subagent"}`}
+      {`${continuation() ? "Continue subagent" : `${Locale.titlecase(stringValue(props.input.agent) ?? stringValue(props.input.subagent_type) ?? "General")} Subagent`} — ${description() ?? "Subagent"}${model() ? ` · ${model()}` : ""}`}
     </InlineTool>
   )
+}
+
+export function subagentModelLabel(
+  value: string | undefined,
+  models: readonly Pick<ModelInfo, "providerID" | "id" | "name">[] | undefined,
+) {
+  if (!value) return
+  const [reference, variant] = value.split("#")
+  const separator = reference.indexOf("/")
+  const providerID = separator === -1 ? "" : reference.slice(0, separator)
+  const modelID = separator === -1 ? reference : reference.slice(separator + 1)
+  const name = models?.find((item) => item.providerID === providerID && item.id === modelID)?.name
+  return `${name ?? reference}${variant ? ` (${variant})` : ""}`
 }
 
 export function isBackgroundSubagent(

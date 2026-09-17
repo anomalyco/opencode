@@ -766,7 +766,7 @@ async function formAnswer(dialog: ReturnType<typeof useDialog>, title: string, f
   const answer: FormAnswer = {}
   for (const field of fields) {
     if (!active(field, answer)) continue
-    const value = await fieldAnswer(dialog, title, field)
+    const value = field.type !== "external" && field.hidden ? field.default : await fieldAnswer(dialog, title, field)
     if (value === CANCELLED) return null
     if (value !== undefined) answer[field.key] = value
   }

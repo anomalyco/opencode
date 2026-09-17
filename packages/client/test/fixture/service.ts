@@ -52,7 +52,7 @@ const server = Bun.serve({
       await writeFile(registration + ".prepared", JSON.stringify(handoff))
       return Response.json({ handoff })
     }
-    if (pathname !== "/api/status") return new Response(null, { status: 404 })
+    if (pathname !== "/api/info") return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".status-request", "")
     if (mode === "hanging") {
@@ -65,10 +65,21 @@ const server = Bun.serve({
       return new Response(null, { status: 503 })
     }
     if (mode === "starting" && !(await Bun.file(registration + ".release").exists()))
-      return Response.json({ version, pid: process.pid, urls: [server.url.toString()] }, { status: 503 })
+      return Response.json(
+        { version, pid: process.pid, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
+        { status: 503 },
+      )
     if (mode === "failed-owner")
-      return Response.json({ version, pid: process.pid, urls: [server.url.toString()] }, { status: 500 })
-    return Response.json({ version, pid: process.pid, urls: [server.url.toString()] })
+      return Response.json(
+        { version, pid: process.pid, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
+        { status: 500 },
+      )
+    return Response.json({
+      version,
+      pid: process.pid,
+      urls: [server.url.toString()],
+      paths: { tmp: "/tmp/opencode" },
+    })
   },
 })
 

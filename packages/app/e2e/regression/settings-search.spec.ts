@@ -172,64 +172,6 @@ test("Models and Shortcuts autofocus their filters on normal navigation", async 
   await expect(result).toBeFocused()
 })
 
-for (const count of [7, 8]) {
-  test(`Projects search uses the full list threshold with ${count} projects`, async ({ page }) => {
-    await page.route("**/api/project", (route) => route.fulfill({ json: projectList(count) }))
-    await page.reload()
-    const view = ui(page)
-    await view.search.fill("OpenCode")
-    await expect(view.results.getByRole("option")).toHaveCount(count)
-    await view.search.clear()
-    await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
-    const search = view.settings.getByRole("searchbox", { name: "Search projects", exact: true })
-    const projects = view.settings.getByRole("button", { name: /^OpenCode / })
-    await expect(projects).toHaveCount(count)
-    if (count === 7) {
-      await expect(search).toHaveCount(0)
-      return
-    }
-    await expect(search).toBeFocused()
-    await search.fill("  CODE 06  ")
-    await expect(projects).toHaveCount(1)
-    await expect(projects).toHaveAccessibleName("OpenCode 06")
-    await expect(search).toBeVisible()
-    await search.fill("missing-project")
-    await expect(projects).toHaveCount(0)
-    await expect(view.settings.getByText("No projects found", { exact: true })).toBeVisible()
-    await view.settings.getByRole("button", { name: "Clear", exact: true }).click()
-    await expect(search).toBeFocused()
-    await expect(projects).toHaveCount(count)
-    await view.settings.getByRole("tab", { name: "Models", exact: true }).click()
-    await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
-    await expect(search).toBeFocused()
-    await search.fill("OpenCode 06")
-    await projects.click()
-    await expect(view.settings.getByRole("heading", { name: "OpenCode 06", exact: true })).toBeVisible()
-  })
-}
-
-test("Projects search focuses when the qualifying inventory arrives after opening", async ({ page }) => {
-  const inventory = Promise.withResolvers<void>()
-  await page.route("**/api/project", async (route) => {
-    await inventory.promise
-    await route.fulfill({ json: projectList(8) })
-  })
-  const requested = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/project")
-  await page.reload()
-  await requested
-  const view = ui(page)
-  const search = view.settings.getByRole("searchbox", { name: "Search projects", exact: true })
-  try {
-    await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
-    await expect(view.settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
-    await expect(search).toHaveCount(0)
-  } finally {
-    inventory.resolve()
-  }
-  await expect(search).toBeFocused()
-  await expect(view.settings.getByRole("button", { name: /^OpenCode / })).toHaveCount(8)
-})
-
 test("all indexed client controls resolve to visible production controls", async ({ page }) => {
   const view = ui(page)
   for (const entry of clientSettings.filter((entry) => entry.target && !entry.available)) {

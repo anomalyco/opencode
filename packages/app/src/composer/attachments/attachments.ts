@@ -4,64 +4,6 @@ import { createBlobReference } from "@/runtime/persistence/drafts"
 import { uuid } from "@/runtime/persistence/uuid"
 import type { ComposerAttachment, ComposerPrompt } from "../types"
 
-const accepted = [
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-  "application/pdf",
-  "text/*",
-  "application/json",
-  "application/ld+json",
-  "application/toml",
-  "application/x-toml",
-  "application/x-yaml",
-  "application/xml",
-  "application/yaml",
-  ".c",
-  ".cc",
-  ".cjs",
-  ".conf",
-  ".cpp",
-  ".css",
-  ".csv",
-  ".cts",
-  ".env",
-  ".go",
-  ".gql",
-  ".graphql",
-  ".h",
-  ".hh",
-  ".hpp",
-  ".htm",
-  ".html",
-  ".ini",
-  ".java",
-  ".js",
-  ".json",
-  ".jsx",
-  ".log",
-  ".md",
-  ".mdx",
-  ".mjs",
-  ".mts",
-  ".py",
-  ".rb",
-  ".rs",
-  ".sass",
-  ".scss",
-  ".sh",
-  ".sql",
-  ".toml",
-  ".ts",
-  ".tsx",
-  ".txt",
-  ".xml",
-  ".yaml",
-  ".yml",
-  ".zsh",
-]
-
 type PromptTarget = {
   current: () => ComposerPrompt
   cursor: () => number | undefined
@@ -75,7 +17,6 @@ export type ComposerAttachmentConfig = {
   ) => Promise<void>
   directory: () => string
   isDialogActive: () => boolean
-  warn: () => void
   duplicate: () => void
   onError: (error: unknown) => void
   readClipboardImage?: () => Promise<File | null>
@@ -102,13 +43,9 @@ export function createComposerAttachments(
     if (!editor) return
     return { prompt, cursor: prompt.cursor() ?? cursorPosition(editor) }
   }
-  const add = async (file: File, toast = true, target = capture(), clipboard = false) => {
+  const add = async (file: File, target = capture(), clipboard = false) => {
     if (!target) return false
     const mime = await attachmentMime(file)
-    if (!mime) {
-      if (toast) input.warn()
-      return false
-    }
     const blob = input.store ? await input.store(file) : await createBlobReference(file)
     const sourcePath = input.getPathForFile?.(file) || undefined
     // Native clipboard images arrive with a fresh timestamped filename on every paste, so identical
@@ -138,13 +75,11 @@ export function createComposerAttachments(
     target.prompt.set([...target.prompt.current(), attachment], target.cursor)
     return true
   }
-  const addAttachments = async (files: File[], toast = true, target = capture()) => {
-    const found = await files.reduce(async (result, file) => {
+  const addAttachments = async (files: File[], target = capture()) => {
+    return files.reduce(async (result, file) => {
       const previous = await result
-      return (await add(file, false, target)) || previous
+      return (await add(file, target)) || previous
     }, Promise.resolve(false))
-    if (!found && files.length > 0 && toast) input.warn()
-    return found
   }
   const handlePaste = async (event: ClipboardEvent) => {
     const clipboardData = event.clipboardData
@@ -159,13 +94,13 @@ export function createComposerAttachments(
       return file ? [file] : []
     })
     if (files.length > 0) {
-      await addAttachments(files, true, target)
+      await addAttachments(files, target)
       return
     }
     const plainText = clipboardData.getData("text/plain") ?? ""
     if (input.readClipboardImage && !plainText) {
       const file = await input.readClipboardImage()
-      if (file && (await add(file, true, target, true))) return
+      if (file && (await add(file, target, true))) return
     }
     if (!plainText) return
     const text = plainText.includes("\r") ? plainText.replace(/\r\n?/g, "\n") : plainText
@@ -223,9 +158,7 @@ export function createComposerAttachments(
         fallback()
         return
       }
-      void input
-        .picker({ defaultPath: input.directory(), multiple: true, accept: accepted }, (file) => add(file))
-        .catch(input.onError)
+      void input.picker({ defaultPath: input.directory(), multiple: true }, (file) => add(file)).catch(input.onError)
     },
   }
 }
@@ -249,6 +182,8 @@ const textMimes = new Set([
   "application/yaml",
 ])
 
+// Text-like files normalize to text/plain so the server inlines their content; every other
+// file keeps a binary type and is delivered to the model by path or as native media.
 async function attachmentMime(file: File) {
   const type = file.type.split(";", 1)[0]?.trim().toLowerCase() ?? ""
   if (imageMimes.has(type) || type === "application/pdf") return type
@@ -259,10 +194,11 @@ async function attachmentMime(file: File) {
   if (type.startsWith("text/") || textMimes.has(type) || type.endsWith("+json") || type.endsWith("+xml")) {
     return "text/plain"
   }
+  const binary = type || "application/octet-stream"
   const bytes = new Uint8Array(await file.slice(0, 4096).arrayBuffer())
-  if (bytes.some((byte) => byte === 0)) return
+  if (bytes.some((byte) => byte === 0)) return binary
   const control = bytes.filter((byte) => byte < 9 || (byte > 13 && byte < 32)).length
-  if (bytes.length > 0 && control / bytes.length > 0.3) return
+  if (bytes.length > 0 && control / bytes.length > 0.3) return binary
   return "text/plain"
 }
 

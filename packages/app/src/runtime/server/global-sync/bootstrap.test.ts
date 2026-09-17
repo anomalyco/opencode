@@ -5,6 +5,7 @@ import { createStore } from "solid-js/store"
 import { bootstrapGlobal, loadPathQuery, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
 import type { ServerApi } from "@/runtime/server/api"
+import { createServerTransport } from "@/runtime/server/client"
 import type { ServerSync } from "@/runtime/server/sync"
 import { worktreeInventoryKey } from "@/workspaces/inventory"
 
@@ -61,6 +62,44 @@ test("bootstraps projects through the native store setter and preserves subseque
     ])
   } finally {
     queryClient.clear()
+  }
+})
+
+// Chromium aborts in-flight loopback requests with ERR_NETWORK_CHANGED when Windows reconfigures an
+// adapter; the client wraps that as ClientError("Transport"), which the bootstrap retry must see through.
+test("recovers project metadata after the connection to the server is dropped", async () => {
+  const body = JSON.stringify([{ id: "project", canonical: "/repo", time: { created: 1, updated: 1 }, sandboxes: [] }])
+  let dropped = 0
+  const requests: string[] = []
+  const server = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      open(socket) {
+        if (dropped >= 2) return
+        dropped += 1
+        socket.terminate()
+      },
+      data(socket, chunk) {
+        requests.push(String(chunk).split(" ")[0] ?? "")
+        socket.end(
+          `HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\naccess-control-allow-origin: *\r\nconnection: close\r\n\r\n${body}`,
+        )
+      },
+    },
+  })
+  const transport = createServerTransport({ http: { url: `http://127.0.0.1:${server.port}` } })
+
+  try {
+    const result = await new QueryClient({ defaultOptions: { queries: { retry: false } } }).fetchQuery(
+      loadProjectsQuery(ServerScope.local, transport.api.project),
+    )
+    expect(dropped).toBe(2)
+    // happy-dom's fetch adds a CORS preflight; only the GET is the retried API call.
+    expect(requests.filter((method) => method === "GET")).toHaveLength(1)
+    expect(result).toMatchObject([{ id: "project", worktree: "/repo" }])
+  } finally {
+    server.stop(true)
   }
 })
 

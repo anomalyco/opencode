@@ -15,6 +15,31 @@ test.each(["build", "serve"] as const)("configures minification for %s", async (
   expect(result?.config.renderer?.build?.sourcemap).toBe(true)
 })
 
+test("onboarding preview is enabled only by the development test flag", async () => {
+  const previous = process.env.OPENCODE_TEST_ONBOARDING
+  try {
+    process.env.OPENCODE_TEST_ONBOARDING = "1"
+    for (const command of ["build", "serve"] as const) {
+      const result = await loadConfigFromFile(
+        { command, mode: command === "build" ? "production" : "development" },
+        `${import.meta.dirname}/electron.vite.config.ts`,
+      )
+      expect(result?.config.renderer?.define?.["import.meta.env.OPENCODE_TEST_ONBOARDING"]).toBe(
+        JSON.stringify(command === "serve"),
+      )
+    }
+    delete process.env.OPENCODE_TEST_ONBOARDING
+    const result = await loadConfigFromFile(
+      { command: "serve", mode: "development" },
+      `${import.meta.dirname}/electron.vite.config.ts`,
+    )
+    expect(result?.config.renderer?.define?.["import.meta.env.OPENCODE_TEST_ONBOARDING"]).toBe("false")
+  } finally {
+    delete process.env.OPENCODE_TEST_ONBOARDING
+    if (previous !== undefined) process.env.OPENCODE_TEST_ONBOARDING = previous
+  }
+})
+
 test("does not package external copies of bundled dependencies", () => {
   for (const name of ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"]) {
     expect(Object.keys(pkg.dependencies)).not.toContain(name)

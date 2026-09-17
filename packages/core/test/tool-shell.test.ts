@@ -92,6 +92,7 @@ const executionNode = makeGlobalNode({
           assistantMessageID,
           agent: session.agent ?? Agent.ID.make("code"),
           model: sessionModel,
+          started: 0,
         })
         yield* bus.publish(SessionEvent.Text.Started, {
           sessionID: id,

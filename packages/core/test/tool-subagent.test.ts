@@ -76,6 +76,7 @@ const executionNode = makeGlobalNode({
           assistantMessageID,
           agent: Agent.ID.make("reviewer"),
           model: childModel,
+          started: 0,
         })
         yield* bus.publish(SessionEvent.Text.Started, {
           sessionID,

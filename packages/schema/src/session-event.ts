@@ -328,6 +328,8 @@ export namespace Step {
       agent: Agent.ID,
       model: Model.Ref,
       snapshot: Snapshot.ID.pipe(optional),
+      /** Request dispatch time, before waiting for provider output. */
+      started: NonNegativeInt,
     },
   })
   export type Started = typeof Started.Type

@@ -163,7 +163,7 @@ async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTime
         : { type: "basic" as const, username: "opencode", password: info.password },
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
-  const result = await fetch(new URL("/api/status", info.url), { headers: headers(endpoint), signal })
+  const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
     .then(async (response) => ({
       response,
       body: response.status === 404 ? undefined : ((await response.json()) as unknown),
@@ -174,7 +174,7 @@ async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTime
     )
   if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
   const response = result.value.response
-  // The previous V2 service exposes /api/health instead. Its authenticated 404 is enough
+  // The previous V2 service exposes /api/status instead. Its authenticated 404 is enough
   // to recognize the registered daemon as incompatible and route it through replacement.
   if (response.status === 404)
     return {
@@ -187,15 +187,16 @@ async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTime
       } satisfies LocalService,
       timedOut: false,
     }
-  const status = decodeStatus(result.value.body)
-  if (status !== undefined) {
-    if (status.pid !== info.pid) return { service: undefined, timedOut: false }
-    if (info.version !== undefined && status.version !== info.version) return { service: undefined, timedOut: false }
+  const serverInfo = decodeInfo(result.value.body)
+  if (serverInfo !== undefined) {
+    if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false }
+    if (info.version !== undefined && serverInfo.version !== info.version)
+      return { service: undefined, timedOut: false }
     return {
       service: {
         info,
         endpoint,
-        version: status.version,
+        version: serverInfo.version,
         state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
         compatible: true,
       } satisfies LocalService,
@@ -205,7 +206,7 @@ async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTime
   return { service: undefined, timedOut: false }
 }
 
-function decodeStatus(input: unknown) {
+function decodeInfo(input: unknown) {
   if (typeof input !== "object" || input === null) return
   if (!("version" in input) || typeof input.version !== "string") return
   if (!("pid" in input) || typeof input.pid !== "number" || !Number.isInteger(input.pid) || input.pid < 0) return

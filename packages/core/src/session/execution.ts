@@ -108,6 +108,7 @@ export const layer = Layer.effect(
       return yield* SessionRunner.DrainResult.$match(result, {
         Complete: () => Effect.void,
         Moved: (result) => drain(sessionID, false, result.continuation, promotable),
+        Reloaded: (result) => drain(sessionID, result.force, result.continuation, promotable),
       })
     })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({

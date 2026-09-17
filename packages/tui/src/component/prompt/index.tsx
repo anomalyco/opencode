@@ -1111,24 +1111,19 @@ export function Prompt(props: PromptProps) {
     if (move.creating()) return false
     if (auto()?.visible) return false
     const trimmed = store.prompt.text.trim()
-    if (!trimmed) return delivery === "steer" ? (await props.onEmptySubmit?.()) === true : false
-    if (
-      delivery === "queue" &&
-      (store.mode === "shell" || trimmed === "exit" || trimmed === "quit" || trimmed === ":q")
-    ) {
+    if (!trimmed && (!props.sessionID || store.mode === "shell" || delivery === "queue"))
+      return delivery === "steer" ? (await props.onEmptySubmit?.()) === true : false
+    const exitWord = trimmed === "exit" || trimmed === "quit" || trimmed === ":q"
+    const slash = argumentSlash(store.prompt.text, keymapCommands())
+    if (delivery === "queue" && (store.mode === "shell" || exitWord || slash)) {
       toast.show({ message: "This prompt cannot be queued", variant: "warning" })
       return false
     }
-    if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
+    if (exitWord) {
       void exit()
       return true
     }
-    const slash = argumentSlash(store.prompt.text, keymapCommands())
     if (slash) {
-      if (delivery === "queue") {
-        toast.show({ message: "This prompt cannot be queued", variant: "warning" })
-        return false
-      }
       clearPrompt()
       await slash.command.run(slash.input)
       return true
@@ -1178,8 +1173,10 @@ export function Prompt(props: PromptProps) {
     // snapshot unless the user has started typing something new.
     const currentMode = store.mode
     const entry = { ...store.prompt, mode: currentMode }
-    resetComposer()
-    props.onSubmit?.()
+    if (trimmed) {
+      resetComposer()
+      props.onSubmit?.()
+    }
     const restoreEntry = () => {
       if (disposed || input.isDestroyed || input.plainText !== "") return
       input.setText(entry.text)
@@ -1187,6 +1184,19 @@ export function Prompt(props: PromptProps) {
       setStore("mode", entry.mode ?? "normal")
       restoreExtmarksFromPrompt(entry)
       input.cursorOffset = entry.text.length
+    }
+    const fail = (title: string, error: unknown) => {
+      toast.show({ title, message: errorMessage(error), variant: "error" })
+      restoreEntry()
+    }
+    const attempt = async (title: string, run: () => Promise<unknown>) => {
+      return run().then(
+        () => true,
+        (error: unknown) => {
+          fail(title, error)
+          return false
+        },
+      )
     }
 
     const variant = selection.variant
@@ -1269,22 +1279,30 @@ export function Prompt(props: PromptProps) {
         throw new Error(`Failed to switch model: ${errorMessage(error)}`, { cause: error })
       })
     }
-    history.append(entry)
-    const dispatch = (send: () => Promise<unknown>) => {
-      const setup = newSession
-      if (setup) void setup.gate.then(send).catch(setup.recover)
-      else void send()
+    const commitSelection = async () => {
+      await prepareAgent()
+      await commitModel()
     }
+    if (!trimmed) {
+      // Blank Enter in an existing session commits the composer's agent and
+      // model selection, then hands off to the route (queued prompt promotion).
+      await attempt("Failed to prepare session", async () => {
+        await commitSelection()
+        await props.onEmptySubmit?.()
+      })
+      return true
+    }
+    history.append(entry)
     if (currentMode === "shell") {
       move.startSubmit()
-      dispatch(() => client.api.session.shell({ sessionID: target, command: inputText }))
+      const send = () => client.api.session.shell({ sessionID: target, command: inputText })
+      void (newSession ? newSession.gate.then(send).catch(newSession.recover) : send())
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
       const send = async () => {
-        await prepareAgent()
         // Commands inherit the composer selection; command-specific overrides
         // remain server-owned and run after this preparation.
-        await commitModel()
+        await commitSelection()
         return client.api.session.command({
           sessionID: target,
           name: slashHead.name,
@@ -1295,32 +1313,20 @@ export function Prompt(props: PromptProps) {
           delivery,
         })
       }
-      const setup = newSession
-      void (setup ? setup.gate.then(send) : send()).catch((error) => {
-        if (setup) return setup.recover(error)
-        toast.show({ title: "Failed to run command", message: errorMessage(error), variant: "error" })
-        restoreEntry()
-      })
+      void (newSession ? newSession.gate.then(send) : send()).catch((error) =>
+        newSession ? newSession.recover(error) : fail("Failed to run command", error),
+      )
     } else {
       move.startSubmit()
-      try {
-        await prepareAgent()
-      } catch (error) {
-        toast.show({ title: "Failed to prepare session", message: errorMessage(error), variant: "error" })
-        restoreEntry()
-        return true
-      }
-      if (session?.revert) {
-        const error = await client.api.session.revert.commit({ sessionID: target }).then(
-          () => undefined,
-          (error) => error,
-        )
-        if (error) {
-          toast.show({ title: "Failed to commit revert", message: errorMessage(error), variant: "error" })
-          restoreEntry()
-          return false
-        }
-      }
+      if (!(await attempt("Failed to prepare session", prepareAgent))) return true
+      // Revert must settle before optimistic admission: its committed echo
+      // splices every local row at or after the boundary, which would include
+      // a freshly admitted prompt.
+      if (
+        session?.revert &&
+        !(await attempt("Failed to commit revert", () => client.api.session.revert.commit({ sessionID: target })))
+      )
+        return false
       if (pendingEditorSelection) {
         // Keep editor context hidden while admitting it before the corresponding user prompt.
         const send = () =>
@@ -1329,21 +1335,10 @@ export function Prompt(props: PromptProps) {
             text: formatEditorContext(pendingEditorSelection),
             resume: false,
           })
-        if (newSession) {
-          // Fold into the setup gate so the context still admits before the
-          // user prompt once the session exists.
-          newSession.gate = newSession.gate.then(send)
-        } else {
-          const error = await send().then(
-            () => undefined,
-            (error) => error,
-          )
-          if (error) {
-            toast.show({ title: "Failed to send editor context", message: errorMessage(error), variant: "error" })
-            restoreEntry()
-            return false
-          }
-        }
+        // Fold into the setup gate so the context still admits before the
+        // user prompt once the session exists.
+        if (newSession) newSession.gate = newSession.gate.then(send)
+        else if (!(await attempt("Failed to send editor context", send))) return false
       }
       // The data layer admits optimistically: the prompt renders immediately
       // and rolls back if the server rejects it, so submission does not wait
@@ -1363,11 +1358,7 @@ export function Prompt(props: PromptProps) {
           // the server makes an unchanged selection a no-op.
           prepare: commitModel,
         })
-        .catch((error) => {
-          if (newSession) return newSession.recover(error)
-          toast.show({ title: "Failed to send prompt", message: errorMessage(error), variant: "error" })
-          restoreEntry()
-        })
+        .catch((error) => (newSession ? newSession.recover(error) : fail("Failed to send prompt", error)))
       if (pendingEditorSelection) editor.markSelectionSent()
     }
 

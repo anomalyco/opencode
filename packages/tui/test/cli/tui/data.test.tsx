@@ -510,6 +510,7 @@ test("truncates committed revert messages without changing lifetime usage", asyn
       type: "session.step.started",
       durable: durable(sessionID, 1),
       data: {
+        started: 1,
         sessionID,
         assistantMessageID: "msg_revert_boundary",
         agent: "build",
@@ -545,6 +546,7 @@ test("truncates committed revert messages without changing lifetime usage", asyn
       type: "session.step.started",
       durable: durable(sessionID, 3),
       data: {
+        started: 3,
         sessionID,
         assistantMessageID: "msg_revert_later",
         agent: "build",
@@ -882,6 +884,7 @@ test("completes exploration when a queued prompt is promoted", async () => {
       type: "session.step.started",
       durable: durable(sessionID),
       data: {
+        started: 1,
         sessionID,
         assistantMessageID: "message-assistant",
         agent: "build",
@@ -1275,6 +1278,7 @@ test("tracks session status from active sessions and execution events", async ()
       type: "session.step.started",
       durable: durable("session-live"),
       data: {
+        started: 0,
         sessionID: "session-live",
         assistantMessageID: "message-live",
         agent: "build",
@@ -1340,6 +1344,7 @@ test("tracks session status from active sessions and execution events", async ()
       type: "session.step.started",
       durable: durable("session-failed"),
       data: {
+        started: 0,
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
         agent: "build",
@@ -1411,6 +1416,7 @@ test("tracks session status from active sessions and execution events", async ()
       type: "session.step.started",
       durable: durable("session-retry", 1),
       data: {
+        started: 0,
         sessionID: "session-retry",
         assistantMessageID: "message-retry",
         agent: "build",
@@ -1441,6 +1447,7 @@ test("tracks session status from active sessions and execution events", async ()
       type: "session.step.started",
       durable: durable("session-retry", 1),
       data: {
+        started: 2_000,
         sessionID: "session-retry",
         assistantMessageID: "message-retry",
         agent: "build",
@@ -1729,6 +1736,7 @@ test("restores queued compaction from durable pending input", async () => {
       type: "session.step.started",
       durable: durable(sessionID, 3),
       data: {
+        started: 2,
         sessionID,
         assistantMessageID: "message-assistant",
         agent: "build",
@@ -2754,6 +2762,7 @@ test("settles pending tools when a live failure arrives", async () => {
       type: "session.step.started",
       durable: durable("session-1", 2),
       data: {
+        started: 0,
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
         agent: "build",

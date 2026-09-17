@@ -41,6 +41,9 @@ const FieldBase = {
   title: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),
   required: Schema.Boolean.pipe(optional),
+  hidden: Schema.Boolean.pipe(optional).annotate({
+    description: "Skip the interactive authentication prompt and use the default unless an answer is supplied",
+  }),
   when: Schema.Array(When).pipe(optional),
 }
 

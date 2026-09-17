@@ -63,6 +63,7 @@ function stepStarted(): V2Event {
     type: "session.step.started",
     durable: { aggregateID: "ses_1", seq: 1, version: 1 },
     data: {
+      started: 1,
       sessionID: "ses_1",
       assistantMessageID: "msg_assistant",
       agent: "build",

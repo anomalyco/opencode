@@ -381,6 +381,7 @@ export function turnTokensPerSecond(
   const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0), 0)
   const duration = durations.reduce((total, value) => total + value, 0)
   if (output <= 0 || duration <= 0) return
+  // Aggregate before dividing so each step is weighted by its provider-active duration.
   return output / (duration / 1_000)
 }
 

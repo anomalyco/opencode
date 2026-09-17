@@ -172,7 +172,7 @@ export const Info = Schema.Struct({
 })
 
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
-const decodeStatus = Schema.decodeUnknownOption(
+const decodeInfo = Schema.decodeUnknownOption(
   Schema.Struct({
     version: Schema.String,
     pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -213,7 +213,7 @@ const probeResult = Effect.fnUntraced(function* (
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
   const result = yield* Effect.promise(() =>
-    fetch(new URL("/api/status", info.url), { headers: headers(endpoint), signal })
+    fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
       .then(async (response) => ({
         response,
         body: response.status === 404 ? undefined : ((await response.json()) as unknown),
@@ -225,7 +225,7 @@ const probeResult = Effect.fnUntraced(function* (
   )
   if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
   const response = result.value.response
-  // The previous V2 service exposes /api/health instead. Its authenticated 404 is enough
+  // The previous V2 service exposes /api/status instead. Its authenticated 404 is enough
   // to recognize the registered daemon as incompatible and route it through replacement.
   if (response.status === 404)
     return {
@@ -239,16 +239,16 @@ const probeResult = Effect.fnUntraced(function* (
       timedOut: false,
     }
   const body = result.value.body
-  const status = decodeStatus(body)
-  if (Option.isSome(status)) {
-    if (status.value.pid !== info.pid) return { service: undefined, timedOut: false }
-    if (info.version !== undefined && status.value.version !== info.version)
+  const serverInfo = decodeInfo(body)
+  if (Option.isSome(serverInfo)) {
+    if (serverInfo.value.pid !== info.pid) return { service: undefined, timedOut: false }
+    if (info.version !== undefined && serverInfo.value.version !== info.version)
       return { service: undefined, timedOut: false }
     return {
       service: {
         info,
         endpoint,
-        version: status.value.version,
+        version: serverInfo.value.version,
         state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
         compatible: true,
       } satisfies LocalService,

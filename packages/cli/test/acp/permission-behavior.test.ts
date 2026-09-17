@@ -1,20 +1,25 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentSideConnection, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk"
+import type {
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  SessionNotification,
+  WriteTextFileRequest,
+} from "@agentclientprotocol/sdk"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import type { ACPConnection } from "../../src/acp/connection"
 import { streamTurn } from "../../src/acp/event"
 import { syncEditedFiles } from "../../src/acp/permission"
 import { createSseFixture, durableEvent, ephemeralEvent, withTimeout } from "./sse-fixture"
 
-type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
-type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
-  Partial<Pick<AgentSideConnection, "writeTextFile">>
+type SessionUpdateParams = SessionNotification
+type Connection = Pick<ACPConnection.Connection, "sessionUpdate" | "requestPermission" | "writeTextFile">
 type Fixture = ReturnType<typeof createSseFixture>
 
 describe("acp permission behavior", () => {
   test("does not sync edits when writeTextFile was not advertised", async () => {
-    const writes: Parameters<AgentSideConnection["writeTextFile"]>[0][] = []
+    const writes: WriteTextFileRequest[] = []
 
     await syncEditedFiles({
       connection: {
@@ -216,7 +221,7 @@ describe("acp permission behavior", () => {
     const file = path.join(cwd, "file.ts")
     await fs.writeFile(file, "before")
     const permissionRequests: RequestPermissionRequest[] = []
-    const writes: Parameters<AgentSideConnection["writeTextFile"]>[0][] = []
+    const writes: WriteTextFileRequest[] = []
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
         send(durableEvent("session.inbox.delivered", { sessionID: "ses_edit", inboxID: id }))
@@ -306,7 +311,7 @@ describe("acp permission behavior", () => {
       "*** End Patch",
     ].join("\n")
     const permissionRequests: RequestPermissionRequest[] = []
-    const writes: Parameters<AgentSideConnection["writeTextFile"]>[0][] = []
+    const writes: WriteTextFileRequest[] = []
     const fixture = createSseFixture({
       onPrompt({ id, send }) {
         send(durableEvent("session.inbox.delivered", { sessionID: "ses_patch", inboxID: id }))
@@ -533,6 +538,55 @@ describe("acp permission behavior", () => {
     } finally {
       releaseBlocked.resolve({ outcome: { outcome: "cancelled" } })
       await Promise.all([blocked.catch(() => undefined), free.catch(() => undefined)])
+      await fixture.stop()
+    }
+  })
+
+  test("cancelling the turn cancels its pending permission request and rejects the permission", async () => {
+    const requested = Promise.withResolvers<AbortSignal | undefined>()
+    const fixture = createSseFixture({
+      onPrompt({ id, send }) {
+        send(durableEvent("session.inbox.delivered", { sessionID: "ses_cancel", inboxID: id }))
+        send(permissionAsked("ses_cancel", "perm_cancel"))
+      },
+      onPermissionReply({ send }) {
+        send(durableEvent("session.execution.interrupted", { sessionID: "ses_cancel", reason: "user" }))
+      },
+    })
+    const connection = {
+      sessionUpdate: async () => {},
+      // Behaves like a client answering the agent's `$/cancel_request` with a cancelled outcome.
+      requestPermission: (_request, options) =>
+        new Promise<RequestPermissionResponse>((resolve) => {
+          options?.cancellationSignal?.addEventListener("abort", () => resolve({ outcome: { outcome: "cancelled" } }), {
+            once: true,
+          })
+          requested.resolve(options?.cancellationSignal)
+        }),
+    } satisfies Connection
+    const control = { cancelled: false, admission: new AbortController() }
+    const result = streamTurn({
+      client: fixture.client,
+      connection,
+      sessionID: "ses_cancel",
+      cwd: "/workspace",
+      start: { type: "input", id: "input_cancel" },
+      writeTextFile: false,
+      control,
+      submit: (signal) =>
+        fixture.client.session.prompt({ sessionID: "ses_cancel", id: "input_cancel", text: "hello" }, { signal }),
+    })
+
+    try {
+      const signal = await withTimeout(requested.promise, "permission was not requested")
+      expect(signal?.aborted).toBe(false)
+      control.cancelled = true
+      control.admission.abort()
+
+      expect(await withTimeout(result, "cancelled turn did not finish")).toMatchObject({ stopReason: "cancelled" })
+      expect(permissionReplies(fixture)).toEqual([["perm_cancel", "reject"]])
+    } finally {
+      await result.catch(() => undefined)
       await fixture.stop()
     }
   })

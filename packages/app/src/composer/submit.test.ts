@@ -3,6 +3,7 @@ import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { Skill } from "@opencode/schema/skill"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
+import type { AttachmentDestination } from "./attachments/deliver"
 import { createMemoryComposerState } from "./state"
 import { createComposerSubmit } from "./submit"
 
@@ -48,6 +49,14 @@ function controls(): ComposerControls {
   }
 }
 
+const destination: AttachmentDestination = {
+  input: { image: true, pdf: true },
+  local: false,
+  upload: async () => {
+    throw new Error("native attachments must not upload")
+  },
+}
+
 function submitInput(
   adapter: ActiveComposerAdapter | NewSessionComposerAdapter,
   notify = { missingSelection() {}, failed(_kind: "shell" | "command" | "prompt", _error: unknown) {} },
@@ -64,6 +73,7 @@ function submitInput(
     resetHistory() {},
     setMode() {},
     closePopover() {},
+    destination: () => destination,
     notify,
     comments: { capture: () => [], clear() {}, restore() {} },
   })

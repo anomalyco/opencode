@@ -5,6 +5,7 @@ import { and, desc, eq, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
+import { LocationLifecycle } from "../../location-lifecycle.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
@@ -37,6 +38,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const lifecycle = yield* LocationLifecycle.Service
     const store = yield* SessionStore.Service
     const context = yield* SessionContext.Service
     const modelTransport = yield* SessionModelTransport.Service
@@ -69,6 +71,10 @@ const layer = Layer.effect(
         Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             while (true) {
+              if (lifecycle.isClosed()) {
+                yield* restore(modelTransport.close(sessionID))
+                return DrainResult.Reloaded({ force, continuation: continuing ? { step } : undefined })
+              }
               // Location entry and idle boundaries allow queued controls, not necessarily queued prompts.
               const pending = yield* SessionInbox.serialized(
                 sessionID,
@@ -240,6 +246,7 @@ const layer = Layer.effect(
           webSocket: "session",
         })
         const outcome = yield* steps.attempt({
+          isLocationClosed: lifecycle.isClosed,
           sessionID,
           assistantMessageID,
           agent: loaded.agent.id,
@@ -356,6 +363,7 @@ export const node = makeLocationNode({
   layer,
   deps: [
     Bus.node,
+    LocationLifecycle.node,
     llmClient,
     SessionContext.node,
     SessionModelTransport.node,

@@ -235,7 +235,7 @@ describe("OpenAPI.fromSpec", () => {
       path: "/api/fs/read/*",
       reason: "binary responses are not supported",
     })
-    expect(toolAt(result.tools, "server.status")).not.toBeUndefined()
+    expect(toolAt(result.tools, "server.info")).not.toBeUndefined()
     expect(toolAt(result.tools, "session.get")).not.toBeUndefined()
     expect(toolAt(result.tools, "session.create")).not.toBeUndefined()
 
@@ -978,10 +978,10 @@ describe("OpenAPI.fromSpec", () => {
 
     expect(spec.security).toStrictEqual([])
     expect(isRecord(components.securitySchemes) ? Object.keys(components.securitySchemes) : []).toStrictEqual([])
-    const status = toolAt(result.tools, "server.status")
-    const statusInput = Tool.isTool(status) && isRecord(status.input) ? status.input : undefined
-    expect(statusInput).toMatchObject({ type: "object", properties: {} })
-    const input = isRecord(statusInput) ? statusInput : {}
+    const info = toolAt(result.tools, "server.info")
+    const infoInput = Tool.isTool(info) && isRecord(info.input) ? info.input : undefined
+    expect(infoInput).toMatchObject({ type: "object", properties: {} })
+    const input = isRecord(infoInput) ? infoInput : {}
     expect(Object.keys(isRecord(input.properties) ? input.properties : {})).toStrictEqual([])
   })
 
@@ -994,7 +994,7 @@ describe("OpenAPI.fromSpec", () => {
       runtime
         .execute(
           `
-        return search({ query: "server status", namespace: "opencode", limit: 1 })
+        return search({ query: "server info", namespace: "opencode", limit: 1 })
       `,
         )
         .pipe(Effect.provide(layer)),
@@ -1005,8 +1005,8 @@ describe("OpenAPI.fromSpec", () => {
     expect(result.value).toMatchObject({
       items: [
         {
-          path: "tools.opencode.server.status",
-          description: "Return the server identity, connection URLs, and readiness status.",
+          path: "tools.opencode.server.info",
+          description: "Return the server identity, connection URLs, paths, and readiness status.",
         },
       ],
     })

@@ -120,6 +120,10 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
       if (!contentReady || !appliedTheme || revealed || win.isDestroyed()) return
       revealed = true
       win.show()
+      if (!app.isPackaged && process.env.OPENCODE_TEST_ONBOARDING === "1") {
+        if (process.platform === "darwin") app.focus({ steal: true })
+        win.focus()
+      }
       runFork(Effect.logInfo("main window visible", { window: id }))
     }
     const ready = () => {

@@ -39,23 +39,28 @@ import type { Vcs } from "@opencode/schema/vcs"
 import type { WebSearch } from "@opencode/schema/websearch"
 import type { Config } from "@opencode/schema/config"
 
-export type ServerStatusOutput = {
+export type ServerInfoOutput = {
   readonly version: string
   readonly pid: number
   readonly urls: ReadonlyArray<string>
+  readonly paths: { readonly tmp: string }
 }
-export type ServerStatusOperation<E = never> = () => Effect.Effect<ServerStatusOutput, E>
+export type ServerInfoOperation<E = never> = () => Effect.Effect<ServerInfoOutput, E>
 
 export interface ServerApi<E = never> {
-  readonly status: ServerStatusOperation<E>
+  readonly info: ServerInfoOperation<E>
 }
 
 export type LocationGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type LocationGetOutput = Location.PublicInfo
 export type LocationGetOperation<E = never> = (input?: LocationGetInput) => Effect.Effect<LocationGetOutput, E>
 
+export type LocationReloadOutput = void
+export type LocationReloadOperation<E = never> = () => Effect.Effect<LocationReloadOutput, E>
+
 export interface LocationApi<E = never> {
   readonly get: LocationGetOperation<E>
+  readonly reload: LocationReloadOperation<E>
 }
 
 export type AgentListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
@@ -812,6 +817,7 @@ export type SessionLogOutput =
             readonly agent: Agent.ID
             readonly model: Model.Ref
             readonly snapshot?: (string & Brand.Brand<"Snapshot.ID">) | undefined
+            readonly started: number
           }
         }
       | {

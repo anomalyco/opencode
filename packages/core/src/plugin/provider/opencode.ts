@@ -45,6 +45,15 @@ function oauth(http: HttpClient.HttpClient) {
       id: methodID,
       type: "oauth",
       label: "OpenCode Console account",
+      form: [
+        {
+          key: "server",
+          type: "string",
+          format: "uri",
+          hidden: true,
+          default: defaultServer,
+        },
+      ],
     },
     authorize: (answer) =>
       Effect.gen(function* () {

@@ -61,12 +61,10 @@
     :hover,
     :has(> [data-slot="tab-link"]:focus-visible)
   ):not([data-state="pressed"]):not([data-dragging="true"]):not([data-editing="true"]) {
-  --tab-base: var(--v2-background-bg-layer-02);
   --tab-overlay: var(--v2-overlay-simple-overlay-hover);
 }
 
 [data-titlebar-tab]:is([data-state="pressed"], [data-dragging="true"], [data-editing="true"]) {
-  --tab-base: var(--v2-background-bg-layer-02);
   --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
 }
 
@@ -218,22 +216,30 @@
   }
 }
 
-@container (max-width: 64px) {
+@container (44px < width <= 64px) {
+  [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-editing="true"]):is(:hover, [data-active="true"])
+    [data-slot="tab-link"] {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-editing="true"]):is(:hover, [data-active="true"])
+    [data-titlebar-tab-title] {
+    visibility: hidden;
+  }
+}
+
+@container (max-width: 44px) {
   [data-titlebar-tab]:not([data-orientation="vertical"]) [data-titlebar-tab-link] {
     justify-content: center;
     gap: 0;
     padding-inline: 0;
   }
 
-  @media (hover: none) {
-    [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-editing="true"]) [data-slot="tab-link"],
-    [data-titlebar-tab][data-title-overflow="true"]:not([data-orientation="vertical"]):not([data-editing="true"]):dir(
-        rtl
-      )
-      [data-slot="tab-link"] {
-      -webkit-mask-image: none;
-      mask-image: none;
-    }
+  [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-editing="true"]) [data-slot="tab-link"],
+  [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-editing="true"]):dir(rtl) [data-slot="tab-link"] {
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 
   [data-titlebar-tab]:not([data-orientation="vertical"]) [data-titlebar-tab-title] {
@@ -242,6 +248,13 @@
 
   [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-active="true"]) [data-slot="tab-close"] {
     display: none;
+  }
+
+  @media (hover: hover) {
+    [data-titlebar-tab]:not([data-orientation="vertical"]):not(:hover):not(:has(:focus-visible))
+      [data-slot="tab-close"] {
+      display: none;
+    }
   }
 
   [data-titlebar-tab]:not([data-orientation="vertical"]) [data-slot="tab-close"] {
