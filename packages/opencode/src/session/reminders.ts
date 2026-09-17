@@ -84,7 +84,7 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
     text: PLAN_MODE.replace("${planInfo}", () =>
       exists
         ? `A plan file already exists at ${plan}. You can read it and make incremental edits using the edit tool.`
-        : `No plan file exists yet. You should create your plan at ${plan} using the write tool.`,
+        : `No plan file exists yet. You should create your plan at ${plan} using the write tool. The plan file must start with a first line "Project: <path>" listing the project root path(s) it belongs to, e.g. "Project: ${ctx.worktree}". List one Project line per root when the plan spans several projects.`,
     ),
     synthetic: true,
   })

@@ -1170,6 +1170,7 @@ it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
     const dataDir = yield* tmpdirScoped()
     const configDir = path.join(dir, "configdir")
     yield* FSUtil.use.ensureDir(configDir)
+    yield* FSUtil.use.writeWithDirs(path.join(configDir, "plugins", "hello.js"), "export default () => ({})")
 
     yield* withGlobalDataDir(
       dataDir,
@@ -1190,6 +1191,30 @@ it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
     expect(yield* Effect.promise(() => fs.readlink(link))).toBe(path.join(store, "node_modules"))
     expect(yield* FSUtil.use.isDir(store)).toBe(true)
     expect(yield* FSUtil.use.existsSafe(path.join(configDir, "package.json"))).toBe(false)
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+)
+
+it.effect("skips dependency install for config dirs without plugins", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const dataDir = yield* tmpdirScoped()
+    const configDir = path.join(dir, "configdir")
+    yield* FSUtil.use.ensureDir(configDir)
+
+    yield* withGlobalDataDir(
+      dataDir,
+      withProcessEnv(
+        "OPENCODE_CONFIG_DIR",
+        configDir,
+        Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
+          provideInstanceEffect(dir),
+        ),
+      ),
+    )
+
+    expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("node_modules")
+    expect(yield* FSUtil.use.existsSafe(path.join(configDir, "node_modules"))).toBe(false)
+    expect(yield* FSUtil.use.existsSafe(path.join(dataDir, "deps", Hash.fast(configDir)))).toBe(false)
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 

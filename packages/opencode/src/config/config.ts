@@ -450,7 +450,23 @@ const layer = Layer.effect(
 
           if (!Flag.OPENCODE_DISABLE_PLUGIN_DEPS) {
             yield* ensureGitignore(dir).pipe(Effect.orDie)
+          }
 
+          result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
+          result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
+          result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.loadMode(dir)))
+          // Auto-discovered plugins under `.opencode/plugin(s)` are already local files, so ConfigPlugin.load
+          // returns normalized Specs and we only need to attach origin metadata here.
+          const list = yield* Effect.promise(() => ConfigPlugin.load(dir))
+          yield* mergePluginOrigins(dir, list)
+
+          // Only config directories that actually have plugins (declared in
+          // their opencode.json or auto-discovered under plugin(s)/) need the
+          // plugin SDK; plugin-less dirs keep just the .gitignore above.
+          const hasPlugins = (result.plugin_origins ?? []).some(
+            (origin) => origin.source === dir || FSUtil.contains(dir, origin.source),
+          )
+          if (!Flag.OPENCODE_DISABLE_PLUGIN_DEPS && hasPlugins) {
             // Relocate the dependency tree into the XDG data dir so config
             // dirs only get a node_modules symlink: bare imports from local
             // plugins still resolve through parent-directory traversal while
@@ -489,14 +505,6 @@ const layer = Layer.effect(
               )
             deps.push(dep)
           }
-
-          result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
-          result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
-          result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.loadMode(dir)))
-          // Auto-discovered plugins under `.opencode/plugin(s)` are already local files, so ConfigPlugin.load
-          // returns normalized Specs and we only need to attach origin metadata here.
-          const list = yield* Effect.promise(() => ConfigPlugin.load(dir))
-          yield* mergePluginOrigins(dir, list)
         }
 
         if (process.env.OPENCODE_CONFIG_CONTENT) {
