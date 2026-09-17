@@ -37,6 +37,7 @@ export function adaptServerEvent(event: OpenCodeEvent): ServerEvent {
         patterns: event.data.resources,
         always: event.data.save ?? [],
         metadata: event.data.metadata ?? {},
+        reason: event.data.reason,
         tool:
           event.data.source?.type === "tool"
             ? { messageID: event.data.source.messageID, callID: event.data.source.callID }

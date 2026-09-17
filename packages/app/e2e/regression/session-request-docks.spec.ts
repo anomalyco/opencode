@@ -81,6 +81,7 @@ test("shows a pending permission dock", async ({ page }) => {
         sessionID,
         permission: "bash",
         patterns: ["git status", "git diff"],
+        reason: "Inspect the changes before committing.",
         metadata: {},
         always: [],
       },
@@ -94,6 +95,8 @@ test("shows a pending permission dock", async ({ page }) => {
   await expect(permission).toBeVisible()
   await expect(permission.getByText("git status")).toBeVisible()
   await expect(permission.getByText("git diff")).toBeVisible()
+  await expect(permission.getByText("Reason:")).toBeVisible()
+  await expect(permission.getByText("Inspect the changes before committing.")).toBeVisible()
   await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveCount(3)
   await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
 

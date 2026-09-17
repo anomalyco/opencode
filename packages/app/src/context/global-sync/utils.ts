@@ -45,6 +45,7 @@ export function normalizePermissionRequest(input: PermissionV2Request | Permissi
     patterns: input.resources,
     always: input.save ?? [],
     metadata: input.metadata ?? {},
+    reason: input.reason,
     tool:
       input.source?.type === "tool" ? { messageID: input.source.messageID, callID: input.source.callID } : undefined,
   }

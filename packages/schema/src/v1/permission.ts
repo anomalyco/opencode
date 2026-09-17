@@ -30,6 +30,7 @@ export const Request = Schema.Struct({
   permission: Schema.String,
   patterns: Schema.Array(Schema.String),
   metadata: Schema.Record(Schema.String, Schema.Unknown),
+  reason: Schema.optional(Schema.String),
   always: Schema.Array(Schema.String),
   tool: Schema.optional(Schema.Struct({ messageID: Schema.String, callID: Schema.String })),
 }).annotate({ identifier: "PermissionRequest" })
