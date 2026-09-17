@@ -85,13 +85,32 @@ export function make<
 >(
   input: MakeInput<Implementation, Items, T>,
 ): Node<Layer.Success<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, T> {
+  const name = input.service !== undefined ? input.service.key : input.name
+  assertDependencies(name, input.deps)
   return {
     kind: "layer",
-    name: input.service !== undefined ? input.service.key : input.name,
+    name,
     service: input.service,
     implementation: input.layer,
     dependencies: input.deps,
     tag: input.tag,
+  }
+}
+
+// Guards against a common failure mode: a `deps: [...]` array referencing another
+// module's top-level `node` export before that module has finished initializing
+// (an ESM circular-import ordering issue). Without this check, an undefined entry
+// silently rides along in `dependencies` until `walk()` calls `node.name` on it deep
+// inside `hoist`/`compile`, producing a cryptic "undefined is not an object" crash
+// far from the actual cause. Failing fast here, at the node that declared the bad
+// dependency, points directly at the module import order to fix.
+function assertDependencies(name: string, deps: readonly (AnyNode | undefined)[]): asserts deps is readonly AnyNode[] {
+  const index = deps.findIndex((dependency) => dependency === undefined)
+  if (index !== -1) {
+    throw new Error(
+      `LayerNode "${name}" has an undefined dependency at index ${index}. ` +
+        `This usually means a circular import caused the referenced node's module to not be initialized yet.`,
+    )
   }
 }
 
@@ -108,6 +127,7 @@ export function unbound<R, Shape, const T extends Tag>(service: Context.Key<R, S
 export function group<const Items extends readonly AnyNode[]>(
   dependencies: Items,
 ): Node<Output<Items[number]>, Error<Items[number]>, NodeTag<Items[number]>> {
+  assertDependencies("group", dependencies)
   return { kind: "group", name: "group", dependencies }
 }
 
@@ -182,6 +202,12 @@ function walk<Result>(
   const stack: AnyNode[] = []
 
   const recur = (node: AnyNode): Result => {
+    if (node === undefined) {
+      throw new Error(
+        "LayerNode.walk encountered an undefined node in a dependencies array — " +
+          "likely a circular import that left a referenced node's module uninitialized.",
+      )
+    }
     const target = options.resolve?.(node) ?? node
     const cached = cache.get(target)
     if (cached !== undefined || cache.has(target)) return cached!
