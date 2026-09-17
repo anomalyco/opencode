@@ -49,6 +49,8 @@ import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
+import { parseMucUrl } from "./muc/deep-link"
+import { registerMucIpcHandlers } from "./muc/ipc"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -68,6 +70,8 @@ let logger: ReturnType<typeof initLogging>
 let server: SidecarListener | null = null
 
 const pendingDeepLinks: string[] = []
+// MUC Harness: 最近一次 muc://connect?code= 的授权码（一次性消费）
+let pendingMucConnectCode: string | null = null
 
 function useEnvProxy() {
   try {
@@ -80,6 +84,14 @@ function useEnvProxy() {
 
 function emitDeepLinks(urls: string[]) {
   if (urls.length === 0) return
+  // MUC Harness: muc://connect?code=... → 捕获授权码（不写入日志）
+  for (const url of urls) {
+    const link = parseMucUrl(url)
+    if (link) {
+      pendingMucConnectCode = link.code
+      logger.log("muc connect deep link received")
+    }
+  }
   pendingDeepLinks.push(...urls)
   const win = getLastFocusedWindow()
   if (win) sendDeepLinks(win, urls)
@@ -203,9 +215,9 @@ const main = Effect.gen(function* () {
   const shellEnv = preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
-    const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
+    const urls = argv.filter((arg: string) => arg.startsWith("opencode://") || arg.startsWith("muc://"))
     if (urls.length) {
-      logger.log("deep link received via second-instance", { urls })
+      logger.log("deep link received via second-instance", { count: urls.length, kinds: urls.map((u) => u.split("?")[0]) })
       emitDeepLinks(urls)
     }
     const win = getLastFocusedWindow()
@@ -217,7 +229,7 @@ const main = Effect.gen(function* () {
 
   app.on("open-url", (event: Event, url: string) => {
     event.preventDefault()
-    logger.log("deep link received via open-url", { url })
+    logger.log("deep link received via open-url", { kind: url.split("?")[0] })
     emitDeepLinks([url])
   })
 
@@ -269,6 +281,8 @@ const main = Effect.gen(function* () {
     ),
   )
   app.setAsDefaultProtocolClient("opencode")
+  // MUC Harness: 注册 muc:// 协议（muc://connect?code=...）
+  app.setAsDefaultProtocolClient("muc")
   registerRendererProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)
@@ -309,6 +323,14 @@ const main = Effect.gen(function* () {
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
     setNativeTranslations: (bundle) => {
       if (setNativeTranslations(bundle)) createMenu(menuDeps)
+    },
+  })
+  // MUC Harness: muc:// 凭据与连接 IPC
+  registerMucIpcHandlers(app.getPath("userData"), {
+    getPendingConnectCode: () => {
+      const code = pendingMucConnectCode
+      pendingMucConnectCode = null
+      return code
     },
   })
   registerWslIpcHandlers(wslServers)

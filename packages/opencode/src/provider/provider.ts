@@ -31,7 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
-import { SUB2API, sub2apiDefaultProvider, fetchSub2APIModels } from "./muc"
+import { MUC, sub2apiDefaultProvider, mucApiKey, mucGatewayV1, fetchSub2APIModels } from "./muc"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -43,7 +43,7 @@ function mucDynamicModel(providerID: string, modelID: string, baseURL: string, n
     providerID: ProviderV2.ID.make(providerID),
     name: modelID,
     family: modelID.split("-")[0] ?? "",
-    api: { id: modelID, npm: npm ?? SUB2API.npm, url: baseURL },
+    api: { id: modelID, npm: npm ?? MUC.npm, url: baseURL },
     status: "active",
     headers: {},
     options: {},
@@ -1470,10 +1470,12 @@ const layer = Layer.effect(
         const plugins = yield* plugin.list()
 
         // now read config providers - includes any modifications from plugin config() hook
-        // MUC harness: 烧入默认 Sub2API provider（用户配置已有 sub2api 时让位）
-        const mucDefault = sub2apiDefaultProvider(cfg.provider)
+        // MUC Harness: 仅在存在 MUC 凭据（Desktop 经内存环境变量注入）时
+        // 注入默认 Sub2API provider；用户手动配置的 sub2api* provider 始终保留。
+        const mucCredential = mucApiKey()
+        const mucDefault = sub2apiDefaultProvider(cfg.provider, mucCredential)
         const configProviders = Object.entries({
-          ...(mucDefault ? { [SUB2API.id]: mucDefault } : {}),
+          ...(mucDefault ? { [MUC.id]: mucDefault as NonNullable<ConfigV1.Info["provider"]>[string] } : {}),
           ...(cfg.provider ?? {}),
         })
         const disabled = new Set(cfg.disabled_providers ?? [])
@@ -1531,7 +1533,7 @@ const layer = Layer.effect(
           const mucDynamic =
             mucOptions.dynamicModels === true ||
             providerID.startsWith("sub2api") ||
-            (mucBaseURL?.includes(SUB2API.host) ?? false)
+            (mucBaseURL?.includes(MUC.host) ?? false)
           if (mucDynamic && mucBaseURL) {
             const discovered = yield* Effect.promise(() =>
               fetchSub2APIModels(mucBaseURL, mucOptions.apiKey),
