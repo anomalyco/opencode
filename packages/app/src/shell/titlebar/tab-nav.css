@@ -61,12 +61,10 @@
     :hover,
     :has(> [data-slot="tab-link"]:focus-visible)
   ):not([data-state="pressed"]):not([data-dragging="true"]):not([data-editing="true"]) {
-  --tab-base: var(--v2-background-bg-layer-02);
   --tab-overlay: var(--v2-overlay-simple-overlay-hover);
 }
 
 [data-titlebar-tab]:is([data-state="pressed"], [data-dragging="true"], [data-editing="true"]) {
-  --tab-base: var(--v2-background-bg-layer-02);
   --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
 }
 
