@@ -77,8 +77,9 @@
     }
   }
 
-  /* Center the 880px start-screen content in the space left by the 320px summary region. */
-  @container new-session (min-width: 1200px) {
+  /* Shift only while centered content overlaps the 280px summary cards and their 16px edge inset:
+     880px + 2 * (280px + 16px) = 1472px. Center it in the remaining space, reserving 320px. */
+  @container new-session (min-width: 1200px) and (width < 1472px) {
     [data-component="new-session"][data-summary-open="true"] [data-slot="new-session-content"] {
       --session-summary-translate: -160px;
 
