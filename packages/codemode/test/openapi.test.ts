@@ -223,11 +223,16 @@ describe("OpenAPI.fromSpec", () => {
     const spec = await opencodeSpec()
     const result = OpenAPI.fromSpec({ spec, baseUrl })
 
-    expect(result.skipped).toHaveLength(5)
+    expect(result.skipped).toHaveLength(6)
     expect(result.skipped).toContainEqual({
       method: "GET",
       path: "/api/pty/{ptyID}/connect",
       reason: "WebSocket operations are not supported",
+    })
+    expect(result.skipped).toContainEqual({
+      method: "POST",
+      path: "/api/experimental/fs/write",
+      reason: "request body has no JSON content (declared: application/octet-stream)",
     })
     expect(result.skipped.filter((item) => item.reason === "SSE operations are not supported")).toHaveLength(2)
     expect(result.skipped).toContainEqual({

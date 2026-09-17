@@ -102,6 +102,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused mcp.transform"),
       reload: () => Effect.die("unused mcp.reload"),
     },
+    message: overrides.message ?? {
+      list: () => Effect.die("unused message.list"),
+    },
     permission: overrides.permission ?? {
       hook: () => Effect.die("unused permission.hook"),
       list: () => Effect.die("unused permission.list"),
@@ -175,6 +178,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
       wait: overrides.session?.wait ?? (() => Effect.die("unused session.wait")),
       context: overrides.session?.context ?? (() => Effect.die("unused session.context")),
+      message: overrides.session?.message ?? {
+        get: () => Effect.die("unused session.message.get"),
+      },
     },
   }
 }

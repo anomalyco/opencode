@@ -19,6 +19,7 @@ import { LocationServiceMap } from "../location-service-map.js"
 import { Model } from "../model.js"
 import { Mcp } from "../mcp/index.js"
 import { Session } from "../session.js"
+import { SessionMessage } from "../session/message.js"
 import { PersistentPty } from "../persistent-pty.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
@@ -392,6 +393,30 @@ export const make = Effect.fn("PluginHost.make")(function* (
           })
         }),
     },
+    message: {
+      list: Effect.fn("PluginHost.messages")(function* (input) {
+        if (input.cursor !== undefined && input.order !== undefined)
+          return yield* Effect.fail(new Error("Cursor cannot be combined with order"))
+        const decoded = input.cursor === undefined ? undefined : yield* decodeMessageCursor(input.cursor)
+        const order = decoded?.order ?? input.order ?? "desc"
+        const messages = yield* sessions.messages({
+          sessionID: input.sessionID,
+          limit: input.limit ?? DefaultMessagesLimit,
+          order,
+          type: input.type,
+          cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
+        })
+        const first = messages[0]
+        const last = messages.at(-1)
+        return {
+          data: messages,
+          cursor: {
+            previous: first ? encodeMessageCursor(first, order, "previous") : undefined,
+            next: last ? encodeMessageCursor(last, order, "next") : undefined,
+          },
+        }
+      }),
+    },
     permission: {
       hook: (name, callback) => hooks.register("permission", name, callback),
       list: (input) => permission.forSession(input.sessionID),
@@ -547,6 +572,14 @@ export const make = Effect.fn("PluginHost.make")(function* (
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
       context: (input) => sessions.context(input.sessionID),
+      message: {
+        get: Effect.fn(function* (input) {
+          yield* sessions.get(input.sessionID)
+          const message = yield* sessions.message(input)
+          if (!message) return yield* Effect.fail(new Error(`Message not found: ${input.messageID}`))
+          return message
+        }),
+      },
     },
   }
   return context
@@ -655,3 +688,29 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
 function credential(value: Credential.OAuth) {
   return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }
+
+const DefaultMessagesLimit = 50
+
+const MessageCursor = Schema.Struct({
+  id: SessionMessage.ID,
+  order: Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")]),
+  direction: Schema.Union([Schema.Literal("previous"), Schema.Literal("next")]),
+})
+
+function encodeMessageCursor(
+  message: SessionMessage.Info,
+  order: "asc" | "desc",
+  direction: "previous" | "next",
+) {
+  return Buffer.from(JSON.stringify({ id: message.id, order, direction })).toString("base64url")
+}
+
+const decodeMessageCursor = Effect.fn("PluginHost.decodeMessageCursor")(function* (cursor: string) {
+  const parsed = yield* Effect.try({
+    try: () => JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")),
+    catch: () => new Error("Invalid cursor"),
+  })
+  return yield* Schema.decodeUnknownEffect(MessageCursor)(parsed).pipe(
+    Effect.mapError(() => new Error("Invalid cursor")),
+  )
+})
