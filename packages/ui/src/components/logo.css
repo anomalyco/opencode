@@ -2,3 +2,28 @@
   width: 16px;
   aspect-ratio: 4/5;
 }
+
+.splash-loading [data-slot="logo-splash-core"] {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: splash-loading-core 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes splash-loading-core {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.86);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-loading [data-slot="logo-splash-core"] {
+    animation: none;
+  }
+}
