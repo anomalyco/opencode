@@ -351,9 +351,10 @@ export function Titlebar(props: {
               >
                 <button
                   type="button"
+                  data-titlebar-tab-action
                   data-action="vertical-tabs-home"
                   data-state={layout.route().type === "home" ? "pressed" : undefined}
-                  class="group mb-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base"
+                  class="group mb-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
                   onClick={toggleHome}
                   aria-label={language.t("home.title")}
                   aria-pressed={layout.route().type === "home"}
@@ -650,8 +651,9 @@ export function Titlebar(props: {
                             {homeButton(true)}
                             <button
                               type="button"
+                              data-titlebar-tab-action
                               data-action="vertical-tabs-new-session"
-                              class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
+                              class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
                               onClick={openNewTab}
                               aria-label={language.t("command.session.new")}
                             >
