@@ -1,12 +1,28 @@
 export * as SessionStore from "./store.js"
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  notInArray,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Project } from "@opencode/schema/project"
 import { Workspace } from "@opencode/schema/workspace"
 import { AbsolutePath, PositiveInt, RelativePath } from "@opencode/schema/schema"
 import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { SessionHistory } from "./history.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
@@ -90,6 +106,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
+    const fs = yield* FSUtil.Service
 
     return Service.of({
       get: Effect.fnUntraced(function* (sessionID) {
@@ -102,7 +119,6 @@ const layer = Layer.effect(
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
         const sortColumn = SessionTable.time_updated
         const conditions: SQL[] = []
-        if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
@@ -123,6 +139,45 @@ const layer = Layer.effect(
                   and(eq(sortColumn, input.anchor.time), lt(SessionTable.id, input.anchor.id)),
                 )!,
           )
+        }
+        if ("directory" in input) {
+          // Older sessions and native moves can retain a different spelling of
+          // the same directory. Case folding only finds candidates: filesystem
+          // resolution must prove identity, including case-sensitive volumes.
+          // normalizePath uses native realpath on Windows; Bun's callback-based
+          // realPath can otherwise preserve the caller's case spelling.
+          // Resolve before LIMIT so excluded directories cannot shorten a page.
+          const candidates = yield* db
+            .selectDistinct({ directory: SessionTable.directory })
+            .from(SessionTable)
+            .where(conditions.length > 0 ? and(...conditions) : undefined)
+            .all()
+            .pipe(Effect.orDie)
+          const aliases = candidates.filter(
+            (row) => row.directory !== input.directory && row.directory.toUpperCase() === input.directory.toUpperCase(),
+          )
+          const canonical =
+            aliases.length > 0
+              ? yield* fs.realPath(input.directory).pipe(
+                  Effect.map(FSUtil.normalizePath),
+                  Effect.orElseSucceed(() => undefined),
+                )
+              : undefined
+          const directories =
+            canonical === undefined
+              ? []
+              : yield* Effect.forEach(
+                  aliases,
+                  (row) =>
+                    fs.realPath(row.directory).pipe(
+                      Effect.map(FSUtil.normalizePath),
+                      Effect.map((resolved) => (resolved === canonical ? [row.directory] : [])),
+                      Effect.orElseSucceed(() => []),
+                    ),
+                  { concurrency: 8 },
+                )
+          // Exact spelling remains readable even for missing/offline histories.
+          conditions.push(inArray(SessionTable.directory, [input.directory, ...directories.flat()]))
         }
         const query = db
           .select()
@@ -253,4 +308,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, FSUtil.node] })
