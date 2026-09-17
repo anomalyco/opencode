@@ -1,13 +1,10 @@
-import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { Component, createMemo, Show } from "solid-js"
 import { useSync } from "@/context/sync"
-import { useSDK } from "@/context/sdk"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useLanguage } from "@/context/language"
-import { useQueryOptions } from "@/context/server-sync"
-import { pathKey } from "@/utils/path-key"
+import { useMcpToggle } from "@/context/mcp"
 
 const statusLabels = {
   connected: "mcp.status.connected",
@@ -19,32 +16,15 @@ const statusLabels = {
 
 export const DialogSelectMcp: Component = () => {
   const sync = useSync()
-  const sdk = useSDK()
   const language = useLanguage()
-  const queryClient = useQueryClient()
-  const queryOptions = useQueryOptions()
 
   const items = createMemo(() =>
-    Object.entries(sync.data.mcp ?? {})
+    Object.entries(sync().data.mcp ?? {})
       .map(([name, status]) => ({ name, status: status.status }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
-  const toggle = useMutation(() => ({
-    mutationFn: async (name: string) => {
-      const status = sync.data.mcp[name]
-      if (status?.status === "connected") {
-        await sdk.client.mcp.disconnect({ name })
-        return
-      }
-      if (status?.status === "needs_auth") {
-        await sdk.client.mcp.auth.authenticate({ name })
-        return
-      }
-      await sdk.client.mcp.connect({ name })
-    },
-    onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
-  }))
+  const toggle = useMcpToggle()
 
   const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
   const totalCount = createMemo(() => items().length)
@@ -63,12 +43,12 @@ export const DialogSelectMcp: Component = () => {
         filterKeys={["name", "status"]}
         sortBy={(a, b) => a.name.localeCompare(b.name)}
         onSelect={(x) => {
-          if (!x || toggle.isPending) return
+          if (!x || x.status === "pending" || toggle.isPending) return
           toggle.mutate(x.name)
         }}
       >
         {(i) => {
-          const mcpStatus = () => sync.data.mcp[i.name]
+          const mcpStatus = () => sync().data.mcp[i.name]
           const status = () => mcpStatus()?.status
           const statusLabel = () => {
             const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined
@@ -96,7 +76,7 @@ export const DialogSelectMcp: Component = () => {
               <div onClick={(e) => e.stopPropagation()}>
                 <Switch
                   checked={enabled()}
-                  disabled={toggle.isPending && toggle.variables === i.name}
+                  disabled={status() === "pending" || (toggle.isPending && toggle.variables === i.name)}
                   onChange={() => {
                     if (toggle.isPending) return
                     toggle.mutate(i.name)

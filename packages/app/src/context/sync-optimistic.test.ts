@@ -4,11 +4,11 @@ import { applyOptimisticAdd, applyOptimisticRemove, mergeOptimisticPage } from "
 
 type Text = Extract<Part, { type: "text" }>
 
-const userMessage = (id: string, sessionID: string): Message => ({
+const userMessage = (id: string, sessionID: string, created = 1): Message => ({
   id,
   sessionID,
   role: "user",
-  time: { created: 1 },
+  time: { created },
   agent: "assistant",
   model: { providerID: "openai", modelID: "gpt" },
 })
@@ -22,21 +22,21 @@ const textPart = (id: string, sessionID: string, messageID: string): Text => ({
 })
 
 describe("sync optimistic reducers", () => {
-  test("applyOptimisticAdd inserts message in sorted order and stores parts", () => {
+  test("applyOptimisticAdd inserts by creation time", () => {
     const sessionID = "ses_1"
     const draft = {
-      message: { [sessionID]: [userMessage("msg_2", sessionID)] },
+      message: { [sessionID]: [userMessage("msg_z", sessionID, 1)] },
       part: {} as Record<string, Part[] | undefined>,
     }
 
     applyOptimisticAdd(draft, {
       sessionID,
-      message: userMessage("msg_1", sessionID),
-      parts: [textPart("prt_2", sessionID, "msg_1"), textPart("prt_1", sessionID, "msg_1")],
+      message: userMessage("msg_a", sessionID, 2),
+      parts: [textPart("prt_2", sessionID, "msg_a"), textPart("prt_1", sessionID, "msg_a")],
     })
 
-    expect(draft.message[sessionID]?.map((x) => x.id)).toEqual(["msg_1", "msg_2"])
-    expect(draft.part.msg_1?.map((x) => x.id)).toEqual(["prt_1", "prt_2"])
+    expect(draft.message[sessionID]?.map((x) => x.id)).toEqual(["msg_z", "msg_a"])
+    expect(draft.part.msg_a?.map((x) => x.id)).toEqual(["prt_1", "prt_2"])
   })
 
   test("applyOptimisticRemove removes message and part entries", () => {
@@ -60,17 +60,31 @@ describe("sync optimistic reducers", () => {
     const sessionID = "ses_1"
     const page = mergeOptimisticPage(
       {
-        session: [userMessage("msg_1", sessionID)],
-        part: [{ id: "msg_1", part: [textPart("prt_1", sessionID, "msg_1")] }],
+        session: [userMessage("msg_z", sessionID, 1)],
+        part: [{ id: "msg_z", part: [textPart("prt_1", sessionID, "msg_z")] }],
         complete: true,
       },
-      [{ message: userMessage("msg_2", sessionID), parts: [textPart("prt_2", sessionID, "msg_2")] }],
+      [{ message: userMessage("msg_a", sessionID, 2), parts: [textPart("prt_2", sessionID, "msg_a")] }],
     )
 
-    expect(page.session.map((x) => x.id)).toEqual(["msg_1", "msg_2"])
-    expect(page.part.find((x) => x.id === "msg_2")?.part.map((x) => x.id)).toEqual(["prt_2"])
+    expect(page.session.map((x) => x.id)).toEqual(["msg_z", "msg_a"])
+    expect(page.part.find((x) => x.id === "msg_a")?.part.map((x) => x.id)).toEqual(["prt_2"])
     expect(page.confirmed).toEqual([])
     expect(page.complete).toBe(true)
+  })
+
+  test("mergeOptimisticPage uses IDs only to break equal-time ties", () => {
+    const sessionID = "ses_1"
+    const page = mergeOptimisticPage(
+      {
+        session: [userMessage("msg_z", sessionID, 1)],
+        part: [],
+        complete: true,
+      },
+      [{ message: userMessage("msg_a", sessionID, 1), parts: [] }],
+    )
+
+    expect(page.session.map((message) => message.id)).toEqual(["msg_a", "msg_z"])
   })
 
   test("mergeOptimisticPage keeps missing optimistic parts until the server has them", () => {

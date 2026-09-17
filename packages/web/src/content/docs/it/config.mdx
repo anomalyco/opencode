@@ -489,14 +489,14 @@ Puoi controllare il comportamento di compattazione del contesto tramite l'opzion
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true,
+    "prune": false,
     "reserved": 10000
   }
 }
 ```
 
 - `auto` - Compatta automaticamente la sessione quando il contesto e pieno (predefinito: `true`).
-- `prune` - Rimuove output vecchi degli strumenti per risparmiare token (predefinito: `true`).
+- `prune` - Rimuove output vecchi degli strumenti per risparmiare token (predefinito: `false`).
 - `reserved` - Token buffer per la compattazione. Lascia abbastanza margine per evitare overflow durante la compattazione
 
 ---

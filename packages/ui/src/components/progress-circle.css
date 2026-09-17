@@ -2,11 +2,15 @@
   transform: rotate(-90deg);
 
   [data-slot="progress-circle-background"] {
-    stroke: var(--border-weak-base);
+    stroke: var(--progress-circle-background, var(--border-weak-base));
+  }
+
+  [data-slot="progress-circle-background-overlay"] {
+    stroke: var(--progress-circle-background-overlay, transparent);
   }
 
   [data-slot="progress-circle-progress"] {
-    stroke: var(--border-active);
+    stroke: var(--progress-circle-progress, var(--border-active));
     transition: stroke-dashoffset 0.35s cubic-bezier(0.65, 0, 0.35, 1);
   }
 }

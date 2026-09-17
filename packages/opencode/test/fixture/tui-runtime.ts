@@ -1,39 +1,31 @@
 import { spyOn } from "bun:test"
 import path from "path"
-import { createBindingLookup } from "@opentui/keymap/extras"
-import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
-import { TuiKeybind } from "../../src/cli/cmd/tui/config/keybind"
+import { resolve, type Info, type Resolved } from "@opencode-ai/tui/config"
+import { TuiConfig } from "../../src/config/tui"
+import { TuiKeybind } from "@opencode-ai/tui/config/keybind"
 
 type PluginSpec = string | [string, Record<string, unknown>]
-type ResolvedInput = Omit<TuiConfig.Resolved, "attention" | "keybinds" | "leader_timeout"> & {
-  attention?: Partial<TuiConfig.Resolved["attention"]>
+type PluginOrigin = {
+  spec: PluginSpec
+  scope: "global" | "local"
+  source: string
+}
+type HostResolved = Resolved & { plugin_origins?: PluginOrigin[] }
+type ResolvedInput = Omit<Info, "attention" | "keybinds" | "leader_timeout"> & {
+  attention?: Partial<Resolved["attention"]>
   keybinds?: Partial<TuiKeybind.Keybinds>
   leader_timeout?: number
+  plugin_origins?: PluginOrigin[]
 }
 
-export function createTuiResolvedKeybinds(input: Partial<TuiKeybind.Keybinds> = {}): TuiConfig.Resolved["keybinds"] {
-  const keybinds = TuiKeybind.Keybinds.parse(input)
-  return createBindingLookup(TuiKeybind.toBindingConfig(keybinds), {
-    commandMap: TuiKeybind.CommandMap,
-    bindingDefaults: TuiKeybind.bindingDefaults(),
-  })
+export function createTuiResolvedKeybinds(input: Partial<TuiKeybind.Keybinds> = {}): Resolved["keybinds"] {
+  return resolve({ keybinds: input }, { terminalSuspend: process.platform !== "win32" }).keybinds
 }
 
-export function createTuiResolvedConfig(input: ResolvedInput = {}): TuiConfig.Resolved {
-  const keybinds = TuiKeybind.Keybinds.parse(input.keybinds ?? {})
+export function createTuiResolvedConfig(input: ResolvedInput = {}): HostResolved {
   return {
-    ...input,
-    attention: {
-      enabled: false,
-      notifications: true,
-      sound: true,
-      volume: 0.4,
-      sound_pack: "opencode.default",
-      sounds: {},
-      ...input.attention,
-    },
-    keybinds: createTuiResolvedKeybinds(keybinds),
-    leader_timeout: input.leader_timeout ?? 2000,
+    ...resolve(input, { terminalSuspend: process.platform !== "win32" }),
+    plugin_origins: input.plugin_origins,
   }
 }
 

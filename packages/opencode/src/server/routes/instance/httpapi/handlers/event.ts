@@ -2,15 +2,12 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { GlobalBus } from "@/bus/global"
 import { EventV2 } from "@opencode-ai/core/event"
-import * as Log from "@opencode-ai/core/util/log"
 import { Effect, Queue } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { EventApi } from "../groups/event"
-
-const log = Log.create({ service: "server" })
 
 function eventData(data: unknown): Sse.Event {
   return {
@@ -68,14 +65,14 @@ function eventResponse(events: EventV2.Interface) {
       Stream.map(() => ({ id: eventID(), type: "server.heartbeat", properties: {} })),
     )
 
-    log.info("event connected")
+    yield* Effect.logInfo("event connected")
     return HttpServerResponse.stream(
       Stream.make({ id: eventID(), type: "server.connected", properties: {} }).pipe(
         Stream.concat(output.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
         Stream.map(eventData),
         Stream.pipeThroughChannel(Sse.encode()),
         Stream.encodeText,
-        Stream.ensuring(Effect.sync(() => log.info("event disconnected"))),
+        Stream.ensuring(Effect.logInfo("event disconnected")),
       ),
       {
         contentType: "text/event-stream",

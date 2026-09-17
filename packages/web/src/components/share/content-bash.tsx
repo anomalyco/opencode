@@ -6,7 +6,6 @@ import { codeToHtml } from "shiki"
 interface Props {
   command: string
   output: string
-  description?: string
   expand?: boolean
 }
 
@@ -45,7 +44,7 @@ export function ContentBash(props: Props) {
     <div class={style.root} data-expanded={expanded() || props.expand === true ? true : undefined}>
       <div data-slot="body">
         <div data-slot="header">
-          <span>{props.description}</span>
+          <span>Shell</span>
         </div>
         <div data-slot="content">
           <div innerHTML={commandHtml()} />

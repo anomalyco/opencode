@@ -5,12 +5,14 @@ import { Deferred, Effect, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import { HttpServer } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import { validateSession } from "../../src/cli/cmd/tui/validate-session"
-import { InstanceBootstrap } from "../../src/project/bootstrap-service"
+import { validateSession } from "../../src/cli/tui/validate-session"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -22,22 +24,19 @@ import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
-import { awaitWithTimeout, testEffect } from "../lib/effect"
+import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { testProviderConfig } from "../lib/test-provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Database } from "@opencode-ai/core/database/database"
 import { httpApiLayer } from "./httpapi-layer"
 
-const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
-const it = testEffect(
-  Layer.mergeAll(
-    FSUtil.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
-    InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap)),
-    Database.defaultLayer,
-    httpApiLayer,
-  ),
+const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+const appLayer = AppNodeBuilder.build(
+  LayerNode.group([FSUtil.node, CrossSpawnSpawner.node, InstanceStore.node, Database.node, SessionNs.node]),
+  [[InstanceStore.bootstrapNode, noopBootstrapLayer]],
 )
+const it = testEffect(Layer.mergeAll(appLayer, httpApiLayer))
 
 const original = {
   OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
@@ -54,19 +53,27 @@ type TestServices =
   | FSUtil.Service
   | ChildProcessSpawner.ChildProcessSpawner
   | InstanceStore.Service
+  | SessionNs.Service
   | HttpServer.HttpServer
 type TestScope = Scope.Scope | TestServices
 
 function client(
   serverPath: ServerPath,
   directory?: string,
-  input?: { password?: string; username?: string; headers?: Record<string, string> },
+  input?: {
+    password?: string
+    username?: string
+    headers?: Record<string, string>
+    workspaceID?: string
+    onRequest?: (request: Request) => void
+  },
 ) {
   return serverFetch(serverPath, input).pipe(
     Effect.map((fetch) =>
       createOpencodeClient({
         baseUrl: "http://localhost",
         directory,
+        experimental_workspaceID: input?.workspaceID,
         headers: input?.headers,
         fetch,
       }),
@@ -74,7 +81,10 @@ function client(
   )
 }
 
-function serverFetch(serverPath: ServerPath, input?: { password?: string; username?: string }) {
+function serverFetch(
+  serverPath: ServerPath,
+  input?: { password?: string; username?: string; onRequest?: (request: Request) => void },
+) {
   return HttpServer.HttpServer.use((server) =>
     Effect.sync(() => {
       void serverPath
@@ -84,6 +94,7 @@ function serverFetch(serverPath: ServerPath, input?: { password?: string; userna
       return Object.assign(
         async (request: RequestInfo | URL, init?: RequestInit) => {
           const source = request instanceof Request ? request : new Request(request, init)
+          input?.onRequest?.(source)
           const url = new URL(source.url)
           return globalThis.fetch(new Request(new URL(`${url.pathname}${url.search}`, baseUrl), source))
         },
@@ -299,7 +310,7 @@ function seedMessage(directory: string, sessionID: string) {
             role: "user",
             time: { created: Date.now() },
             agent: "test",
-            model: { providerID: ProviderV2.ID.make("test"), modelID: ProviderV2.ModelID.make("test") },
+            model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
             tools: {},
           } satisfies SessionV1.User)
           const part = yield* svc.updatePart({
@@ -311,7 +322,7 @@ function seedMessage(directory: string, sessionID: string) {
           })
           return { message, part }
         }),
-      ).pipe(Effect.provide(SessionNs.defaultLayer)),
+      ),
     ),
   )
 }
@@ -365,6 +376,36 @@ describe("HttpApi SDK", () => {
           expectStatus(() => sdk.find.files({ query: "hello", limit: 10 }), 200),
         ])
       }),
+  )
+
+  httpapi(
+    "routes configured SDK directory and workspace for v2 location GETs",
+    withProject("raw", { setup: writeStandardFiles }, ({ directory }) =>
+      Effect.gen(function* () {
+        const workspaceID = "wrk_sdk"
+        let request: Request | undefined
+        const sdk = yield* client("raw", directory, {
+          workspaceID,
+          onRequest: (value) => (request = value),
+        })
+        const found = yield* pollWithTimeout(
+          call(() => sdk.v2.fs.find({ query: "hello", type: "file" })).pipe(
+            Effect.map((result) => (result.data?.data.length ? result : undefined)),
+          ),
+          "SDK file search index was not ready",
+        )
+        const url = new URL(request!.url)
+
+        expect(found.response.status).toBe(200)
+        expect(found.data).toMatchObject({ data: [{ path: "hello.txt", type: "file" }] })
+        expect(url.searchParams.get("directory")).toBe(directory)
+        expect(url.searchParams.get("workspace")).toBe(workspaceID)
+        expect(url.searchParams.get("location[directory]")).toBe(directory)
+        expect(url.searchParams.get("location[workspace]")).toBe(workspaceID)
+        expect(request!.headers.has("x-opencode-directory")).toBe(false)
+        expect(request!.headers.has("x-opencode-workspace")).toBe(false)
+      }),
+    ),
   )
 
   serverPathParity("matches generated SDK global and control behavior", (serverPath) =>

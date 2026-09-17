@@ -12,14 +12,16 @@ const make = (directory: string) => ({
 })
 
 const root = "/tmp/story"
+const sdk = {
+  directory: root,
+  scope: "story-server",
+  url: "http://localhost:4096",
+  client: make(root),
+  createClient(input: { directory: string }) {
+    return make(input.directory)
+  },
+}
 
 export function useSDK() {
-  return {
-    directory: root,
-    url: "http://localhost:4096",
-    client: make(root),
-    createClient(input: { directory: string }) {
-      return make(input.directory)
-    },
-  }
+  return () => sdk
 }

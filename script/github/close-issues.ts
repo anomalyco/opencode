@@ -11,10 +11,20 @@ if (!token) {
 }
 
 const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+const agentLogin = "opencode-agent[bot]"
+const teamMembers = new Set(
+  (await Bun.file(new URL("../../.github/TEAM_MEMBERS", import.meta.url)).text())
+    .split("\n")
+    .map((line) => line.trim().toLowerCase())
+    .filter(Boolean),
+)
+const teamAssociations = new Set(["OWNER", "MEMBER"])
 
 type Issue = {
   number: number
   updated_at: string
+  author_association: string
+  user: { login: string } | null
 }
 
 const headers = {
@@ -22,6 +32,11 @@ const headers = {
   "Content-Type": "application/json",
   Accept: "application/vnd.github+json",
   "X-GitHub-Api-Version": "2022-11-28",
+}
+
+function shouldSkip(i: Issue) {
+  const login = i.user?.login.toLowerCase()
+  return login === agentLogin || (login ? teamMembers.has(login) : false) || teamAssociations.has(i.author_association)
 }
 
 async function close(num: number) {
@@ -63,6 +78,10 @@ async function main() {
     for (const i of all) {
       const updated = new Date(i.updated_at)
       if (updated < cutoff) {
+        if (shouldSkip(i)) {
+          console.log(`Skipping stale issue #${i.number}; author ${i.user?.login ?? "unknown"} is exempt`)
+          continue
+        }
         stale.push(i.number)
       } else {
         console.log(`\nFound fresh issue #${i.number}, stopping`)

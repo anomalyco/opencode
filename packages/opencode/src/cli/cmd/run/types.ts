@@ -1,4 +1,4 @@
-// Shared type vocabulary for the direct interactive mode (`run --interactive`).
+// Shared type vocabulary for the direct interactive mode (`opencode --mini`).
 //
 // Direct mode uses a split-footer terminal layout: immutable scrollback for the
 // session transcript, and a mutable footer for prompt input, status, and
@@ -12,7 +12,7 @@
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
 import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
-import type { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import type { TuiConfig } from "@opencode-ai/tui/config"
 
 export type RunFilePart = {
   type: "file"
@@ -68,6 +68,7 @@ export type RunInput = {
   files: RunFilePart[]
   initialInput?: string
   thinking: boolean
+  backgroundSubagents: boolean
   demo?: boolean
 }
 
@@ -95,6 +96,12 @@ export type FooterState = {
 export type FooterPatch = Partial<FooterState>
 
 export type RunDiffStyle = "auto" | "stacked"
+
+export type TurnSummary = {
+  agent: string
+  model: string
+  duration: string
+}
 
 export type ScrollbackOptions = {
   diffStyle?: RunDiffStyle
@@ -174,6 +181,7 @@ export type FooterPromptRoute =
   | { type: "subagent-menu" }
   | { type: "subagent"; sessionID: string }
   | { type: "command" }
+  | { type: "skill" }
   | { type: "model" }
   | { type: "variant" }
 
@@ -183,7 +191,8 @@ export type FooterSubagentTab = {
   callID: string
   label: string
   description: string
-  status: "running" | "completed" | "error"
+  status: "running" | "completed" | "cancelled" | "error"
+  background?: boolean
   title?: string
   toolCalls?: number
   lastUpdatedAt: number
@@ -296,6 +305,7 @@ export type StreamCommit = {
   text: string
   phase: StreamPhase
   source: StreamSource
+  summary?: TurnSummary
   messageID?: string
   partID?: string
   tool?: string

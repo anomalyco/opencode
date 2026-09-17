@@ -2,11 +2,10 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
-import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
+import { getLogger } from "./logging"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
-
-export type WslConfig = { enabled: boolean }
+import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
 
 export type HealthCheck = { wait: Promise<void> }
 
@@ -42,24 +41,17 @@ export function setDefaultServerUrl(url: string | null) {
   getStore().delete(DEFAULT_SERVER_URL_KEY)
 }
 
-export function getWslConfig(): WslConfig {
-  const value = getStore().get(WSL_ENABLED_KEY)
-  return { enabled: typeof value === "boolean" ? value : false }
-}
-
-export function setWslConfig(config: WslConfig) {
-  getStore().set(WSL_ENABLED_KEY, config.enabled)
-}
-
 export function preferAppEnv(userDataPath: string) {
   const shell = process.platform === "win32" ? null : getUserShell()
+  const shellEnv = shell ? loadShellEnv(shell, getLogger()) : null
   Object.assign(process.env, {
-    ...(shell ? loadShellEnv(shell) : null),
+    ...shellEnv,
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
+  return shellEnv
 }
 
 export async function spawnLocalServer(
@@ -192,9 +184,9 @@ export async function spawnLocalServer(
 }
 
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
-  let healthUrl: URL
+  let healthUrls: URL[]
   try {
-    healthUrl = new URL("/global/health", url)
+    healthUrls = [new URL("/api/health", url), new URL("/global/health", url)]
   } catch {
     return false
   }
@@ -205,16 +197,17 @@ export async function checkHealth(url: string, password?: string | null): Promis
     headers.set("authorization", `Basic ${auth}`)
   }
 
-  try {
-    const res = await fetch(healthUrl, {
-      method: "GET",
-      headers,
-      signal: AbortSignal.timeout(3000),
-    })
-    return res.ok
-  } catch {
-    return false
+  for (const healthUrl of healthUrls) {
+    try {
+      const res = await fetch(healthUrl, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(3000),
+      })
+      if (res.ok) return true
+    } catch {}
   }
+  return false
 }
 
 function createSidecarEnv(): Record<string, string> {

@@ -2,7 +2,7 @@
 exact = true
 # Only install newly resolved package versions published at least 3 days ago.
 minimumReleaseAge = 259200
-minimumReleaseAgeExcludes = ["@opentui/core", "@opentui/core-darwin-arm64", "@opentui/core-darwin-x64", "@opentui/core-linux-arm64", "@opentui/core-linux-x64", "@opentui/core-win32-arm64", "@opentui/core-win32-x64", "@opentui/keymap", "@opentui/solid", "gitlab-ai-provider"]
+minimumReleaseAgeExcludes = ["@ai-sdk/amazon-bedrock", "@ai-sdk/anthropic", "@opentui/core", "@opentui/core-darwin-arm64", "@opentui/core-darwin-x64", "@opentui/core-linux-arm64", "@opentui/core-linux-arm64-musl", "@opentui/core-linux-x64", "@opentui/core-linux-x64-musl", "@opentui/core-win32-arm64", "@opentui/core-win32-x64", "@opentui/keymap", "@opentui/solid", "opentui-spinner", "gitlab-ai-provider", "opencode-gitlab-auth", "@ff-labs/fff-node", "@ff-labs/fff-bun", "@ff-labs/fff-bin-darwin-arm64", "@ff-labs/fff-bin-darwin-x64", "@ff-labs/fff-bin-linux-arm64-gnu", "@ff-labs/fff-bin-linux-arm64-musl", "@ff-labs/fff-bin-linux-x64-gnu", "@ff-labs/fff-bin-linux-x64-musl", "@ff-labs/fff-bin-win32-arm64", "@ff-labs/fff-bin-win32-x64", "@pierre/diffs", "@pierre/theming", "app-builder-lib", "dmg-builder", "electron-builder", "electron-publish"]
 
 [test]
 root = "./do-not-run-tests-from-root"

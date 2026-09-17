@@ -7,6 +7,20 @@
   overflow: clip;
 }
 
+[data-dock-border-underlay] {
+  /* Later shadows paint underneath, so this solid ring masks overlapping surfaces without changing border geometry. */
+  box-shadow:
+    var(--dock-shell-visual-shadow, var(--shadow-xs-border)),
+    0 0 0 var(--dock-shell-border-underlay-width, 1px)
+      var(--dock-shell-border-underlay-background, var(--surface-raised-stronger-non-alpha));
+}
+
+[data-dock-border-underlay="v2"] {
+  --dock-shell-visual-shadow: var(--v2-elevation-raised);
+  --dock-shell-border-underlay-width: 0.5px;
+  --dock-shell-border-underlay-background: var(--v2-background-bg-base);
+}
+
 [data-dock-surface="tray"] {
   background-color: var(--background-base);
   border: 1px solid var(--border-weak-base);

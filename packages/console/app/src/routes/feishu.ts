@@ -2,6 +2,6 @@ import { redirect } from "@solidjs/router"
 
 export async function GET() {
   return redirect(
-    "https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=738j8655-cd59-4633-a30a-1124e0096789&qr_code=true",
+    "https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=52ao9352-5623-4fa0-b7dd-3407c392c1af&qr_code=true",
   )
 }

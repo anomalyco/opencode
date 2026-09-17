@@ -1,18 +1,24 @@
 /** @jsxImportSource @opentui/solid */
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
-import "opentui-spinner/solid"
+import { registerOpencodeSpinner } from "@opencode-ai/tui/component/register-spinner"
 import { Show, createMemo, indexArray } from "solid-js"
-import { SPINNER_FRAMES } from "../tui/component/spinner"
+import { SPINNER_FRAMES } from "@opencode-ai/tui/component/spinner"
 import { RunEntryContent, separatorRows } from "./scrollback.writer"
 import type { FooterSubagentDetail, FooterSubagentTab, RunDiffStyle } from "./types"
 import type { RunFooterTheme, RunTheme } from "./theme"
+
+registerOpencodeSpinner()
 
 export const SUBAGENT_INSPECTOR_ROWS = 14
 
 function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"]) {
   if (status === "completed") {
     return theme.highlight
+  }
+
+  if (status === "cancelled") {
+    return theme.muted
   }
 
   if (status === "error") {
@@ -25,6 +31,10 @@ function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"])
 function statusIcon(status: FooterSubagentTab["status"]) {
   if (status === "completed") {
     return "●"
+  }
+
+  if (status === "cancelled") {
+    return "○"
   }
 
   if (status === "error") {
@@ -111,13 +121,7 @@ export function RunFooterSubagentBody(props: {
   })
 
   return (
-    <box
-      id="run-direct-footer-subagent"
-      width="100%"
-      height="100%"
-      flexDirection="column"
-      backgroundColor={footer().surface}
-    >
+    <box width="100%" height="100%" flexDirection="column" backgroundColor={footer().surface}>
       <box paddingTop={1} paddingLeft={1} paddingRight={3} paddingBottom={1} flexDirection="column" flexGrow={1}>
         <Show when={tab()}>
           {(current) => (

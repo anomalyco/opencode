@@ -1,19 +1,51 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect } from "effect"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { VenicePlugin } from "@opencode-ai/core/plugin/provider/venice"
-import { fakeSelectorSdk, it, model } from "./provider-helper"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "./fixture"
+
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* VenicePlugin.effect(host)
+})
+
+function fakeSelectorSdk(calls: string[]) {
+  const make = (method: string) => (id: string) => {
+    calls.push(`${method}:${id}`)
+    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
+  }
+  return {
+    responses: make("responses"),
+    messages: make("messages"),
+    chat: make("chat"),
+    languageModel: make("languageModel"),
+  }
+}
 
 describe("VenicePlugin", () => {
   it.effect("creates a Venice SDK for venice-ai-sdk-provider", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(VenicePlugin)
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        { model: model("venice", "model"), package: "venice-ai-sdk-provider", options: { name: "venice" } },
-        {},
-      )
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      const result = yield* aisdk.runSDK({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("venice"), ModelV2.ID.make("model")),
+          api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
+        }),
+        package: "venice-ai-sdk-provider",
+        options: { name: "venice" },
+      })
       expect(result.sdk).toBeDefined()
     }),
   )
@@ -21,49 +53,42 @@ describe("VenicePlugin", () => {
   it.effect("uses the model provider ID as the bundled Venice SDK name", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      const observed: string[] = []
-      yield* plugin.add(VenicePlugin)
-      yield* plugin.add({
-        id: PluginV2.ID.make("inspector"),
-        effect: Effect.succeed({
-          "aisdk.sdk": (evt) =>
-            Effect.sync(() => {
-              observed.push(evt.sdk.languageModel("model").provider)
-            }),
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      const result = yield* aisdk.runSDK({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("custom-venice"), ModelV2.ID.make("model")),
+          api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
         }),
+        package: "venice-ai-sdk-provider",
+        options: { name: "custom-venice", apiKey: "test" },
       })
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: model("custom-venice", "model"),
-          package: "venice-ai-sdk-provider",
-          options: { name: "custom-venice", apiKey: "test" },
-        },
-        {},
-      )
       expect(result.sdk).toBeDefined()
-      expect(observed).toEqual(["custom-venice.chat"])
+      expect(result.sdk.languageModel("model").provider).toBe("custom-venice.chat")
     }),
   )
 
   it.effect("only handles the bundled venice-ai-sdk-provider package", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(VenicePlugin)
-      const similar = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: model("venice", "model"),
-          package: "file:///tmp/venice-ai-sdk-provider.js",
-          options: { name: "venice" },
-        },
-        {},
-      )
-      const other = yield* plugin.trigger(
-        "aisdk.sdk",
-        { model: model("venice", "model"), package: "@ai-sdk/openai-compatible", options: { name: "venice" } },
-        {},
-      )
+      const aisdk = yield* AISDK.Service
+      yield* addPlugin()
+      const similar = yield* aisdk.runSDK({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("venice"), ModelV2.ID.make("model")),
+          api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
+        }),
+        package: "file:///tmp/venice-ai-sdk-provider.js",
+        options: { name: "venice" },
+      })
+      const other = yield* aisdk.runSDK({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("venice"), ModelV2.ID.make("model")),
+          api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
+        }),
+        package: "@ai-sdk/openai-compatible",
+        options: { name: "venice" },
+      })
       expect(similar.sdk).toBeUndefined()
       expect(other.sdk).toBeUndefined()
     }),
@@ -72,13 +97,17 @@ describe("VenicePlugin", () => {
   it.effect("leaves Venice language selection to the default languageModel fallback", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       const calls: string[] = []
-      yield* plugin.add(VenicePlugin)
-      const result = yield* plugin.trigger(
-        "aisdk.language",
-        { model: model("venice", "alias"), sdk: fakeSelectorSdk(calls), options: {} },
-        {},
-      )
+      yield* addPlugin()
+      const result = yield* aisdk.runLanguage({
+        model: ModelV2.Info.make({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("venice"), ModelV2.ID.make("alias")),
+          api: { id: ModelV2.ID.make("alias"), type: "aisdk", package: "test-provider" },
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
       expect(calls).toEqual([])
       expect(result.language).toBeUndefined()
     }),

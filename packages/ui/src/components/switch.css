@@ -103,6 +103,10 @@
     background-color: var(--icon-invert-base);
   }
 
+  &:dir(rtl)[data-checked] [data-slot="switch-thumb"] {
+    transform: translateX(-12px);
+  }
+
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
     border-color: var(--border-hover);
     background-color: var(--surface-hover);

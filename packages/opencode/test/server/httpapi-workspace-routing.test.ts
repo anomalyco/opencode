@@ -54,8 +54,6 @@ const it = testEffect(
     testStateLayer,
     NodeHttpServer.layerTest,
     NodeServices.layer,
-    Database.defaultLayer,
-    Project.defaultLayer,
     workspaceLayer,
     Socket.layerWebSocketConstructorGlobal,
   ),

@@ -1,6 +1,7 @@
-import { expect, test } from "@playwright/test"
+import { test } from "@playwright/test"
 import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { expectAppVisible } from "../utils/waits"
 
 test("shows loaded sessions before the directory path request resolves", async ({ page }) => {
   await mockOpenCodeServer(page, {
@@ -15,8 +16,8 @@ test("shows loaded sessions before the directory path request resolves", async (
   const pathBlocked = new Promise<void>((resolve) => {
     releasePath = resolve
   })
-  await page.route("**/path?*", async (route) => {
-    if (!new URL(route.request().url()).searchParams.has("directory")) return route.fallback()
+  await page.route("**/api/path?*", async (route) => {
+    if (!new URL(route.request().url()).searchParams.has("location[directory]")) return route.fallback()
     await pathBlocked
     return route.fallback()
   })
@@ -33,7 +34,7 @@ test("shows loaded sessions before the directory path request resolves", async (
 
   await page.goto("/")
   try {
-    await expect(page.getByText(fixture.expected.sourceTitle).first()).toBeVisible({ timeout: 5_000 })
+    await expectAppVisible(page.getByText(fixture.expected.sourceTitle).first())
   } finally {
     releasePath()
   }

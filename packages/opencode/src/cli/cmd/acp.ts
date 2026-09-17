@@ -1,4 +1,3 @@
-import * as Log from "@opencode-ai/core/util/log"
 import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
@@ -6,8 +5,6 @@ import { ServerAuth } from "@/server/auth"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { ACPProfile } from "@/acp/profile"
-
-const log = Log.create({ service: "acp-command" })
 
 export const AcpCommand = effectCmd({
   command: "acp",
@@ -63,7 +60,7 @@ export const AcpCommand = effectCmd({
       return agent.create(conn)
     }, stream)
 
-    log.info("setup connection")
+    yield* Effect.logInfo("setup connection")
     process.stdin.resume()
     yield* Effect.promise(
       () =>

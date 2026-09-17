@@ -490,14 +490,14 @@ Você pode controlar o comportamento de compactação de contexto através da op
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true,
+    "prune": false,
     "reserved": 10000
   }
 }
 ```
 
 - `auto` - Compactar automaticamente a sessão quando o contexto estiver cheio (padrão: `true`).
-- `prune` - Remover saídas antigas de ferramentas para economizar tokens (padrão: `true`).
+- `prune` - Remover saídas antigas de ferramentas para economizar tokens (padrão: `false`).
 - `reserved` - Buffer de tokens para compactação. Deixa janela suficiente para evitar estouro durante a compactação
 
 ---

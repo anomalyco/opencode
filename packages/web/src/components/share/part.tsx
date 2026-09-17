@@ -616,7 +616,6 @@ export function BashTool(props: ToolProps) {
     <ContentBash
       command={props.state.input.command}
       output={props.state.metadata.output ?? props.state.metadata?.stdout}
-      description={props.state.metadata.description}
     />
   )
 }

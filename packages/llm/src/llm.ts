@@ -16,7 +16,7 @@ import {
   type ContentPart,
   ToolResultPart,
 } from "./schema"
-import { make as makeTool, type ToolSchema } from "./tool"
+import { make as makeTool, toDefinitions, type ToolSchema } from "./tool"
 
 export type ModelInput = SchemaModelInput
 
@@ -45,8 +45,6 @@ export type RequestInput = Omit<
 export const generate = LLMClient.generate
 
 export const stream = LLMClient.stream
-
-export const stepCountIs = LLMClient.stepCountIs
 
 export const requestInput = (input: LLMRequest): RequestInput => ({
   ...LLMRequest.input(input),
@@ -115,13 +113,10 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
 ) {
   const baseRequest = request(options)
   const generateRequest = LLMRequest.update(baseRequest, {
+    tools: toDefinitions({ [GENERATE_OBJECT_TOOL_NAME]: tool }),
     toolChoice: ToolChoice.named(GENERATE_OBJECT_TOOL_NAME),
   })
-  const response = yield* LLMClient.generate({
-    request: generateRequest,
-    tools: { [GENERATE_OBJECT_TOOL_NAME]: tool },
-    toolExecution: "none",
-  })
+  const response = yield* LLMClient.generate(generateRequest)
   const call = response.toolCalls.find(
     (event) => LLMEvent.is.toolCall(event) && event.name === GENERATE_OBJECT_TOOL_NAME,
   )

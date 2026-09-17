@@ -1,6 +1,6 @@
 export const dict = {
-  "desktop.menu.checkForUpdates": "Nach Updates suchen...",
-  "desktop.menu.installCli": "CLI installieren...",
+  "desktop.menu.checkForUpdates": "Nach Updates suchen…",
+  "desktop.menu.installCli": "CLI installieren…",
   "desktop.menu.reloadWebview": "Webview neu laden",
   "desktop.menu.restart": "Neustart",
 
@@ -25,4 +25,7 @@ export const dict = {
     "CLI wurde in {{path}} installiert\n\nStarten Sie Ihr Terminal neu, um den Befehl 'opencode' zu verwenden.",
   "desktop.cli.failed.title": "Installation fehlgeschlagen",
   "desktop.cli.failed.message": "CLI konnte nicht installiert werden: {{error}}",
+
+  "desktop.error.dev.rootNotFound":
+    "Wurzelelement nicht gefunden. Haben Sie vergessen, es in Ihre index.html aufzunehmen? Oder wurde das ID-Attribut falsch geschrieben?",
 }

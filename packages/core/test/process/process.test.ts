@@ -1,15 +1,30 @@
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
 import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { Effect, Exit, Stream } from "effect"
+import path from "node:path"
+import { Effect, Exit, Fiber, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppProcess } from "@opencode-ai/core/process"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(AppProcess.defaultLayer)
+const it = testEffect(LayerNode.compile(AppProcess.node))
 
 const NODE = process.execPath
 const cmd = (...args: string[]) => ChildProcess.make(NODE, args)
+
+const waitForFile = (file: string) =>
+  Effect.promise(async () => {
+    while (true) {
+      try {
+        return await fs.readFile(file, "utf8")
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+        await new Promise<void>((resolve) => setTimeout(resolve, 10))
+      }
+    }
+  })
 
 describe("AppProcess", () => {
   describe("run", () => {
@@ -22,6 +37,22 @@ describe("AppProcess", () => {
         expect(result.stdout.toString("utf8")).toBe("hi\n")
         expect(result.stdoutTruncated).toBe(false)
         expect(result.stderrTruncated).toBe(false)
+      }),
+    )
+
+    it.effect(
+      "captures stdout and stderr in emission order",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const script = [
+          'process.stdout.write("out 1\\n")',
+          'setTimeout(() => process.stderr.write("err 1\\n"), 10)',
+          'setTimeout(() => process.stdout.write("out 2\\n"), 20)',
+        ].join(";")
+        const result = yield* svc.run(cmd("-e", script), { combineOutput: true })
+        expect(result.output?.toString("utf8")).toBe("out 1\nerr 1\nout 2\n")
+        expect(result.stdout.toString("utf8")).toBe("")
+        expect(result.stderr.toString("utf8")).toBe("")
       }),
     )
 
@@ -47,6 +78,7 @@ describe("AppProcess", () => {
           if (reason && reason._tag === "Fail") {
             expect(reason.error).toBeInstanceOf(AppProcess.AppProcessError)
             expect((reason.error as AppProcess.AppProcessError).exitCode).toBe(1)
+            expect((reason.error as AppProcess.AppProcessError).message).toContain("Command failed (exit 1)")
           } else {
             throw new Error("expected fail reason")
           }
@@ -118,6 +150,50 @@ describe("AppProcess", () => {
         expect(result.command).toBe(`${NODE} -e process.stdout.write('hi')`)
       }),
     )
+
+    if (process.platform !== "win32") {
+      it.live(
+        "timeout cleans up the scoped child process",
+        Effect.acquireUseRelease(
+          Effect.promise(() => fs.mkdtemp(path.join(tmpdir(), "opencode-process-timeout-"))),
+          (directory) => {
+            const ready = path.join(directory, "ready")
+            const settled = path.join(directory, "settled")
+            const script = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(settled)},'settled');process.exit(0)});setInterval(()=>{},60000)`
+            return Effect.gen(function* () {
+              const svc = yield* AppProcess.Service
+              const exit = yield* Effect.exit(svc.run(cmd("-e", script), { timeout: "250 millis" }))
+              expect(Exit.isFailure(exit)).toBe(true)
+              expect(yield* waitForFile(ready)).toMatch(/^\d+$/)
+              expect(yield* waitForFile(settled)).toBe("settled")
+            })
+          },
+          (directory) => Effect.promise(() => fs.rm(directory, { recursive: true, force: true })),
+        ),
+        5_000,
+      )
+
+      it.live(
+        "fiber interruption cleans up the scoped child process after readiness",
+        Effect.acquireUseRelease(
+          Effect.promise(() => fs.mkdtemp(path.join(tmpdir(), "opencode-process-interrupt-"))),
+          (directory) => {
+            const ready = path.join(directory, "ready")
+            const settled = path.join(directory, "settled")
+            const script = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(settled)},'settled');process.exit(0)});setInterval(()=>{},60000)`
+            return Effect.gen(function* () {
+              const svc = yield* AppProcess.Service
+              const fiber = yield* svc.run(cmd("-e", script)).pipe(Effect.forkChild)
+              expect(yield* waitForFile(ready)).toMatch(/^\d+$/)
+              yield* Fiber.interrupt(fiber)
+              expect(yield* waitForFile(settled)).toBe("settled")
+            })
+          },
+          (directory) => Effect.promise(() => fs.rm(directory, { recursive: true, force: true })),
+        ),
+        5_000,
+      )
+    }
   })
 
   describe("inherited platform methods", () => {

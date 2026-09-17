@@ -490,13 +490,13 @@ Sie können das Verhalten der Kontextkomprimierung über die Option `compaction`
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": false
   }
 }
 ```
 
 - `auto` – Die Sitzung wird automatisch komprimieren, wenn der Kontext voll ist (Standard: `true`).
-- `prune` – Alte Tool-Ausgaben entfernen, um Token zu sparen (Standard: `true`).
+- `prune` – Alte Tool-Ausgaben entfernen, um Token zu sparen (Standard: `false`).
 
 ---
 

@@ -130,8 +130,8 @@
   }
 
   &[data-size="x-large"] [data-slot="dialog-container"] {
-    width: min(calc(100vw - 32px), 960px);
-    height: min(calc(100vh - 32px), 600px);
+    width: min(calc(100vw - 32px), 980px);
+    height: min(calc(100vh - 92px), 600px);
   }
 }
 

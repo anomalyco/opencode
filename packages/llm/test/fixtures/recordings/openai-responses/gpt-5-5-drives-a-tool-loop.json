@@ -22,7 +22,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool, then answer in one short sentence.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"What is the weather in Paris?\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_output_tokens\":80}"
+        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool, then answer in one short sentence.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"What is the weather in Paris?\"}]}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}],\"stream\":true,\"max_output_tokens\":80}"
       },
       "response": {
         "status": 200,
@@ -40,7 +40,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool, then answer in one short sentence.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"What is the weather in Paris?\"}]},{\"type\":\"function_call\",\"call_id\":\"call_JCuVTkQxVB3cCmFWx52adJKZ\",\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_JCuVTkQxVB3cCmFWx52adJKZ\",\"output\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_output_tokens\":80}"
+        "body": "{\"model\":\"gpt-5.5\",\"input\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool, then answer in one short sentence.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"What is the weather in Paris?\"}]},{\"type\":\"function_call\",\"call_id\":\"call_JCuVTkQxVB3cCmFWx52adJKZ\",\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_JCuVTkQxVB3cCmFWx52adJKZ\",\"output\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}],\"stream\":true,\"max_output_tokens\":80}"
       },
       "response": {
         "status": 200,

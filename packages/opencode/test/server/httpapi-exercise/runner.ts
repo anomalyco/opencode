@@ -7,11 +7,12 @@ import type { Config } from "../../../src/config/config"
 
 import type { MessageV2 } from "../../../src/session/message-v2"
 import { MessageID, PartID } from "../../../src/session/schema"
-import { call, callAuthProbe } from "./backend"
+import { call, callAuthProbe, disposeApps } from "./backend"
 import { original } from "./environment"
 import { runtime } from "./runtime"
 import type { ActiveScenario, Options, ProjectOptions, Result, Scenario, ScenarioContext, SeededContext } from "./types"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 export function runScenario(options: Options) {
   return (scenario: Scenario) => {
@@ -153,7 +154,7 @@ function withContext<A, E>(
                 agent: "build",
                 model: {
                   providerID: ProviderV2.ID.opencode,
-                  modelID: ProviderV2.ModelID.make("test"),
+                  modelID: ModelV2.ID.make("test"),
                 },
               }
               const part: SessionV1.TextPart = {
@@ -259,6 +260,7 @@ const resetState = Effect.promise(async () => {
   const modules = await runtime()
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
+  await disposeApps()
   await modules.disposeAllInstances()
   await modules.resetDatabase()
   await Bun.sleep(25)

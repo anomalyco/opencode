@@ -73,6 +73,46 @@ const expectLLMError = (error: unknown) => {
 const errorHttp = (error: LLMError) => ("http" in error.reason ? error.reason.http : undefined)
 
 describe("RequestExecutor", () => {
+  it.effect("classifies context overflow responses", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response('{"error":{"code":"context_length_exceeded","message":"prompt too long"}}', {
+            status: 400,
+          }),
+        ]),
+      ),
+    ),
+  )
+
+  it.effect("does not classify generic HTTP 413 payload errors as context overflow", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
+      expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
+    }).pipe(Effect.provide(responsesLayer([new Response("request too large", { status: 413 })]))),
+  )
+
+  it.effect("does not classify ordinary invalid requests as context overflow", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
+      expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
+    }).pipe(Effect.provide(responsesLayer([new Response("invalid parameter", { status: 400 })]))),
+  )
+
   it.effect("returns redacted diagnostics for retryable rate limits", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service

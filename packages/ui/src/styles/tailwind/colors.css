@@ -237,6 +237,7 @@
   --color-v2-background-bg-layer-01: var(--v2-background-bg-layer-01);
   --color-v2-background-bg-layer-02: var(--v2-background-bg-layer-02);
   --color-v2-background-bg-layer-03: var(--v2-background-bg-layer-03);
+  --color-v2-background-bg-layer-04: var(--v2-background-bg-layer-04);
   --color-v2-background-bg-inverse: var(--v2-background-bg-inverse);
   --color-v2-background-bg-contrast: var(--v2-background-bg-contrast);
   --color-v2-background-bg-button-neutral: var(--v2-background-bg-button-neutral);
@@ -248,6 +249,7 @@
   --color-v2-text-text-contrast: var(--v2-text-text-contrast);
   --color-v2-text-text-accent: var(--v2-text-text-accent);
   --color-v2-text-text-accent-hover: var(--v2-text-text-accent-hover);
+  --color-v2-text-text-code-accent: var(--v2-text-text-code-accent);
   --color-v2-icon-icon-base: var(--v2-icon-icon-base);
   --color-v2-icon-icon-muted: var(--v2-icon-icon-muted);
   --color-v2-icon-icon-inverse: var(--v2-icon-icon-inverse);

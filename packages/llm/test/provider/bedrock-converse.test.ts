@@ -5,6 +5,7 @@ import { Effect } from "effect"
 import { CacheHint, LLM, Message, ToolCallPart, ToolChoice } from "../../src"
 import { LLMClient } from "../../src/route"
 import { AmazonBedrock } from "../../src/providers"
+import * as BedrockConverse from "../../src/protocols/bedrock-converse"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
 import {
@@ -79,6 +80,43 @@ describe("Bedrock Converse route", () => {
         messages: [{ role: "user", content: [{ text: "Say hello." }] }],
         inferenceConfig: { maxTokens: 64, temperature: 0 },
       })
+    }),
+  )
+
+  it.effect("passes topK through additionalModelRequestFields as top_k", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.updateRequest(baseRequest, { generation: { maxTokens: 64, temperature: 0, topK: 40 } }),
+      )
+
+      // Converse's inferenceConfig has no topK; Anthropic/Nova read it from
+      // additionalModelRequestFields as top_k.
+      expect(prepared.body.inferenceConfig).toEqual({ maxTokens: 64, temperature: 0 })
+      expect(prepared.body.additionalModelRequestFields).toEqual({ top_k: 40 })
+    }),
+  )
+
+  it.effect("omits additionalModelRequestFields when topK is unset", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(baseRequest)
+      expect(prepared.body.additionalModelRequestFields).toBeUndefined()
+    }),
+  )
+
+  it.effect("lowers chronological system updates to wrapped user text in order", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.request({
+          model,
+          messages: [Message.user("Before."), Message.system("Update."), Message.assistant("After.")],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ text: "Before." }, { text: "<system-update>\nUpdate.\n</system-update>" }] },
+        { role: "assistant", content: [{ text: "After." }] },
+      ])
     }),
   )
 
@@ -171,7 +209,7 @@ describe("Bedrock Converse route", () => {
                 type: "content",
                 value: [
                   { type: "text", text: "Screenshot captured." },
-                  { type: "media", mediaType: "image/png", data: "AAAA" },
+                  { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" },
                 ],
               },
             }),
@@ -279,6 +317,44 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("preserves streamed reasoning signatures for continuation lowering", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["messageStart", { role: "assistant" }],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { text: "Let me think." } } }],
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { reasoningContent: { signature: "sig_1" } } }],
+        ["contentBlockStop", { contentBlockIndex: 0 }],
+        ["messageStop", { stopReason: "end_turn" }],
+      )
+      const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
+      const reasoning = response.events.find((event) => event.type === "reasoning-end")
+
+      expect(reasoning).toEqual({
+        type: "reasoning-end",
+        id: "reasoning-0",
+        providerMetadata: { bedrock: { signature: "sig_1" } },
+      })
+
+      const prepared = yield* LLMClient.prepare<BedrockConverse.BedrockConverseBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "Let me think.", providerMetadata: reasoning?.providerMetadata },
+            ]),
+          ],
+          cache: "none",
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [{ reasoningContent: { reasoningText: { text: "Let me think.", signature: "sig_1" } } }],
+        },
+      ])
+    }),
+  )
+
   it.effect("emits provider-error for throttlingException", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(
@@ -291,6 +367,23 @@ describe("Bedrock Converse route", () => {
         type: "provider-error",
         message: "Slow down",
         retryable: true,
+      })
+    }),
+  )
+
+  it.effect("classifies input-too-long validation exceptions", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(eventStreamBody(["validationException", { message: "Input is too long for requested model" }])),
+        ),
+      )
+
+      expect(response.events.find((event) => event.type === "provider-error")).toEqual({
+        type: "provider-error",
+        message: "Input is too long for requested model",
+        classification: "context-overflow",
+        retryable: false,
       })
     }),
   )
@@ -436,8 +529,8 @@ describe("Bedrock Converse route", () => {
           model,
           messages: [
             Message.user([
-              { type: "media", mediaType: "application/pdf", data: "PDFDATA", filename: "report.pdf" },
-              { type: "media", mediaType: "text/csv", data: "CSVDATA" },
+              { type: "media", mediaType: "application/pdf", data: "UERGREFUQQ==", filename: "report.pdf" },
+              { type: "media", mediaType: "text/csv", data: "Q1NWREFUQQ==" },
             ]),
           ],
         }),
@@ -449,9 +542,9 @@ describe("Bedrock Converse route", () => {
             role: "user",
             content: [
               // Filename round-trips when supplied.
-              { document: { format: "pdf", name: "report.pdf", source: { bytes: "PDFDATA" } } },
+              { document: { format: "pdf", name: "report.pdf", source: { bytes: "UERGREFUQQ==" } } },
               // Falls back to a stable placeholder when filename is missing.
-              { document: { format: "csv", name: "document.csv", source: { bytes: "CSVDATA" } } },
+              { document: { format: "csv", name: "document.csv", source: { bytes: "Q1NWREFUQQ==" } } },
             ],
           },
         ],

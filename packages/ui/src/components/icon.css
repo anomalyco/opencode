@@ -32,3 +32,8 @@
     height: auto;
   }
 }
+
+:dir(rtl) [data-component="icon"][data-directional] [data-slot="icon-svg"],
+:dir(rtl) [data-slot="menu-v2-item-chevron"] {
+  transform: scaleX(-1);
+}

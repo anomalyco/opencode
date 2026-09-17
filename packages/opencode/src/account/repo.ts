@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { eq } from "drizzle-orm"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Effect, Layer, Option, Schema, Context } from "effect"
@@ -38,7 +39,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ac
 
 export const use = serviceUse(Service)
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
@@ -165,6 +166,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [Database.node] })
 
 export * as AccountRepo from "./repo"

@@ -11,8 +11,7 @@ export function directoryAcceptKey(directory: string) {
 
 function accepted(autoAccept: Record<string, boolean>, sessionID: string, directory?: string) {
   const key = acceptKey(sessionID, directory)
-  const directoryKey = directory ? directoryAcceptKey(directory) : undefined
-  return autoAccept[key] ?? autoAccept[sessionID] ?? (directoryKey ? autoAccept[directoryKey] : undefined)
+  return autoAccept[key] ?? autoAccept[sessionID]
 }
 
 export function isDirectoryAutoAccepting(autoAccept: Record<string, boolean>, directory: string) {
@@ -44,8 +43,18 @@ export function autoRespondsPermission(
   permission: { sessionID: string },
   directory?: string,
 ) {
-  const value = sessionLineage(session, permission.sessionID)
+  const value = sessionAutoAccept(autoAccept, session, permission, directory)
+  if (value !== undefined) return value
+  return directory ? isDirectoryAutoAccepting(autoAccept, directory) : false
+}
+
+export function sessionAutoAccept(
+  autoAccept: Record<string, boolean>,
+  session: { id: string; parentID?: string }[],
+  permission: { sessionID: string },
+  directory?: string,
+) {
+  return sessionLineage(session, permission.sessionID)
     .map((id) => accepted(autoAccept, id, directory))
     .find((item): item is boolean => item !== undefined)
-  return value ?? false
 }

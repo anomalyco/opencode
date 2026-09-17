@@ -1,13 +1,7 @@
 import yargs from "yargs"
-import { TuiThreadCommand } from "./cli/cmd/tui/thread"
+import { TuiThreadCommand } from "./cli/cmd/tui"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { hideBin } from "yargs/helpers"
-import { Log } from "./node"
-
-Log.init({
-  print: false,
-})
-
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
@@ -28,6 +22,10 @@ const cli = yargs(hideBin(process.argv))
   .option("pure", {
     describe: "run without external plugins",
     type: "boolean",
+  })
+  .middleware((opts) => {
+    if (opts.printLogs) process.env.OPENCODE_PRINT_LOGS = "1"
+    if (opts.logLevel) process.env.OPENCODE_LOG_LEVEL = opts.logLevel
   })
   .command(TuiThreadCommand)
   .parse()

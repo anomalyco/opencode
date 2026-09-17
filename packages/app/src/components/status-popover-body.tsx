@@ -3,7 +3,6 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@/utils/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
@@ -11,16 +10,13 @@ import { createStore } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useSDK } from "@/context/sdk"
-import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
+import { ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { type ServerHealth } from "@/utils/server-health"
-import { useQueryOptions } from "@/context/server-sync"
-import { pathKey } from "@/utils/path-key"
 import { useGlobal } from "@/context/global"
 import { useSettings } from "@/context/settings"
-
-const pollMs = 10_000
+import { useMcpToggle } from "@/context/mcp"
+import { useServerProtocol } from "@/context/server-sdk"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -60,7 +56,7 @@ const useDefaultServerKey = (
   get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
 ) => {
   const [state, setState] = createStore({
-    url: undefined as string | undefined,
+    key: undefined as ServerConnection.Key | undefined,
     tick: 0,
   })
 
@@ -69,7 +65,7 @@ const useDefaultServerKey = (
     let dead = false
     const result = get?.()
     if (!result) {
-      setState("url", undefined)
+      setState("key", undefined)
       onCleanup(() => {
         dead = true
       })
@@ -79,7 +75,7 @@ const useDefaultServerKey = (
     if (result instanceof Promise) {
       void result.then((next) => {
         if (dead) return
-        setState("url", next ? normalizeServerUrl(next) : undefined)
+        setState("key", next ?? undefined)
       })
       onCleanup(() => {
         dead = true
@@ -87,7 +83,7 @@ const useDefaultServerKey = (
       return
     }
 
-    setState("url", normalizeServerUrl(result))
+    setState("key", ServerConnection.Key.make(result))
     onCleanup(() => {
       dead = true
     })
@@ -95,43 +91,10 @@ const useDefaultServerKey = (
 
   return {
     key: () => {
-      const u = state.url
-      if (!u) return
-      return ServerConnection.key({ type: "http", http: { url: u } })
+      return state.key
     },
     refresh: () => setState("tick", (value) => value + 1),
   }
-}
-
-const useMcpToggleMutation = () => {
-  const sync = useSync()
-  const sdk = useSDK()
-  const language = useLanguage()
-  const queryClient = useQueryClient()
-  const queryOptions = useQueryOptions()
-
-  return useMutation(() => ({
-    mutationFn: async (name: string) => {
-      const status = sync.data.mcp[name]
-      if (status?.status === "connected") {
-        await sdk.client.mcp.disconnect({ name })
-        return
-      }
-      if (status?.status === "needs_auth") {
-        await sdk.client.mcp.auth.authenticate({ name })
-        return
-      }
-      await sdk.client.mcp.connect({ name })
-    },
-    onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
-    onError: (err) => {
-      showToast({
-        variant: "error",
-        title: language.t("common.requestFailed"),
-        description: err instanceof Error ? err.message : String(err),
-      })
-    },
-  }))
 }
 
 type ServerStatusState = {
@@ -160,7 +123,6 @@ export function StatusPopoverServerBody() {
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
-
   let dialogRun = 0
   let dialogDead = false
   onCleanup(() => {
@@ -296,6 +258,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const language = useLanguage()
   const navigate = useNavigate()
   const settings = useSettings()
+  const protocol = useServerProtocol()
 
   const fail = (err: unknown) => {
     showToast({
@@ -315,16 +278,21 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     dialogDead = true
     dialogRun += 1
   })
-  const sortedServers = createMemo(() => listServersByHealth(global.servers.list(), server.key, global.servers.health))
-  const toggleMcp = useMcpToggleMutation()
+  const sortedServers = createMemo(() => {
+    const list = settings.general.newLayoutDesigns()
+      ? global.servers.list()
+      : global.servers.list().filter((x) => global.ensureServerCtx(x).sdk.protocolKind() !== "v2")
+    return listServersByHealth(list, server.key, global.servers.health)
+  })
+  const toggleMcp = useMcpToggle()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
-  const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
-  const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
+  const mcpNames = createMemo(() => Object.keys(sync().data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
+  const mcpStatus = (name: string) => sync().data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
-  const lspItems = createMemo(() => sync.data.lsp ?? [])
+  const lspItems = createMemo(() => sync().data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
   const plugins = createMemo(() =>
-    (sync.data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
+    (sync().data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
   )
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
@@ -342,7 +310,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
         <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
           {!settings.general.newLayoutDesigns() && (
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
-              {global.servers.list().length > 0 ? `${global.servers.list().length} ` : ""}
+              {sortedServers().length > 0 ? `${sortedServers().length} ` : ""}
               {language.t("status.popover.tab.servers")}
             </Tabs.Trigger>
           )}
@@ -354,10 +322,12 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
             {lspCount() > 0 ? `${lspCount()} ` : ""}
             {language.t("status.popover.tab.lsp")}
           </Tabs.Trigger>
-          <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
-            {pluginCount() > 0 ? `${pluginCount()} ` : ""}
-            {language.t("status.popover.tab.plugins")}
-          </Tabs.Trigger>
+          <Show when={protocol() === "v1"}>
+            <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
+              {pluginCount() > 0 ? `${pluginCount()} ` : ""}
+              {language.t("status.popover.tab.plugins")}
+            </Tabs.Trigger>
+          </Show>
         </Tabs.List>
 
         {!settings.general.newLayoutDesigns() && (
@@ -517,25 +487,27 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
           </div>
         </Tabs.Content>
 
-        <Tabs.Content value="plugins">
-          <div class="flex flex-col px-2 pb-2">
-            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
-              <Show
-                when={plugins().length > 0}
-                fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
-              >
-                <For each={plugins()}>
-                  {(plugin) => (
-                    <div class="flex items-center gap-2 w-full px-2 py-1">
-                      <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                      <span class="text-14-regular text-text-base truncate">{plugin}</span>
-                    </div>
-                  )}
-                </For>
-              </Show>
+        <Show when={protocol() === "v1"}>
+          <Tabs.Content value="plugins">
+            <div class="flex flex-col px-2 pb-2">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+                <Show
+                  when={plugins().length > 0}
+                  fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
+                >
+                  <For each={plugins()}>
+                    {(plugin) => (
+                      <div class="flex items-center gap-2 w-full px-2 py-1">
+                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                        <span class="text-14-regular text-text-base truncate">{plugin}</span>
+                      </div>
+                    )}
+                  </For>
+                </Show>
+              </div>
             </div>
-          </div>
-        </Tabs.Content>
+          </Tabs.Content>
+        </Show>
       </Tabs>
     </div>
   )

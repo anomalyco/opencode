@@ -1,10 +1,11 @@
 import { Effect, Layer } from "effect"
 import { Provider } from "@/provider/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 export namespace ProviderTest {
   export function model(override: Partial<Provider.Model> = {}): Provider.Model {
-    const id = override.id ?? ProviderV2.ModelID.make("gpt-5.2")
+    const id = override.id ?? ModelV2.ID.make("gpt-5.2")
     const providerID = override.providerID ?? ProviderV2.ID.make("openai")
     return {
       id,

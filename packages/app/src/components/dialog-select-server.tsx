@@ -16,8 +16,10 @@ import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
+import { detectServerProtocol } from "@/utils/server-protocol"
 import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
 import { useSettings } from "@/context/settings"
+import { useTabs } from "@/context/tabs"
 
 const DEFAULT_USERNAME = "opencode"
 
@@ -143,7 +145,7 @@ function ServerForm(props: ServerFormProps) {
           type="text"
           label={language.t("dialog.server.add.name")}
           placeholder={language.t("dialog.server.add.namePlaceholder")}
-          value={props.name}
+          defaultValue={props.name}
           disabled={props.busy}
           onChange={props.onNameChange}
           onKeyDown={keyDown}
@@ -153,7 +155,7 @@ function ServerForm(props: ServerFormProps) {
             type="text"
             label={language.t("dialog.server.add.username")}
             placeholder={language.t("dialog.server.add.usernamePlaceholder")}
-            value={props.username}
+            defaultValue={props.username}
             disabled={props.busy}
             onChange={props.onUsernameChange}
             onKeyDown={keyDown}
@@ -162,7 +164,7 @@ function ServerForm(props: ServerFormProps) {
             type="password"
             label={language.t("dialog.server.add.password")}
             placeholder={language.t("dialog.server.add.passwordPlaceholder")}
-            value={props.password}
+            defaultValue={props.password}
             disabled={props.busy}
             onChange={props.onPasswordChange}
             onKeyDown={keyDown}
@@ -188,9 +190,10 @@ export function DialogSelectServer() {
   )
 }
 
-export function useServerManagementController(options: { onSelect?: () => void } = {}) {
+export function useServerManagementController(options: { onSelect?: () => void; navigateOnAdd?: boolean } = {}) {
   const navigate = useNavigate()
   const server = useServer()
+  const tabs = useTabs()
   const global = useGlobal()
   const platform = usePlatform()
   const language = useLanguage()
@@ -261,8 +264,20 @@ export function useServerManagementController(options: { onSelect?: () => void }
         setStore("addServer", { error: language.t("dialog.server.add.error") })
         return
       }
+      if (
+        !settings.general.newLayoutDesigns() &&
+        (await detectServerProtocol(conn.http, platform.fetch ?? globalThis.fetch)) === "v2"
+      ) {
+        setStore("addServer", { error: language.t("dialog.server.add.error") })
+        return
+      }
 
       resetAdd()
+      if (options.navigateOnAdd === false) {
+        server.add(conn)
+        options.onSelect?.()
+        return
+      }
       await select(conn, true)
     },
   }))
@@ -300,6 +315,13 @@ export function useServerManagementController(options: { onSelect?: () => void }
         setStore("editServer", { error: language.t("dialog.server.add.error") })
         return
       }
+      if (
+        !settings.general.newLayoutDesigns() &&
+        (await detectServerProtocol(conn.http, platform.fetch ?? globalThis.fetch)) === "v2"
+      ) {
+        setStore("editServer", { error: language.t("dialog.server.add.error") })
+        return
+      }
       if (normalized === input.original.http.url) {
         server.add(conn)
       } else {
@@ -311,12 +333,14 @@ export function useServerManagementController(options: { onSelect?: () => void }
   }))
 
   const replaceServer = (original: ServerConnection.Http, next: ServerConnection.Http) => {
+    const originalKey = ServerConnection.key(original)
     const active = server.key
+    tabs.removeServer(originalKey)
     const newConn = server.add(next)
     if (!newConn) return
-    const nextActive = active === ServerConnection.key(original) ? ServerConnection.key(newConn) : active
+    const nextActive = active === originalKey ? ServerConnection.key(newConn) : active
     if (nextActive) server.setActive(nextActive)
-    server.remove(ServerConnection.key(original))
+    server.remove(originalKey)
   }
 
   const items = createMemo(() => {
@@ -335,7 +359,10 @@ export function useServerManagementController(options: { onSelect?: () => void }
   )
 
   const sortedItems = createMemo(() => {
-    const list = items()
+    const raw = items()
+    const list = settings.general.newLayoutDesigns()
+      ? raw
+      : raw.filter((x) => global.ensureServerCtx(x).sdk.protocolKind() !== "v2")
     if (!list.length) return list
     const active = current()
     const order = new Map(list.map((url, index) => [url, index] as const))
@@ -500,10 +527,16 @@ export function useServerManagementController(options: { onSelect?: () => void }
     resetEdit()
   })
 
-  async function handleRemove(url: ServerConnection.Key) {
-    server.remove(url)
-    if ((await platform.getDefaultServer?.()) === url) {
-      void platform.setDefaultServer?.(null)
+  async function handleRemove(key: ServerConnection.Key) {
+    try {
+      if (key.startsWith("wsl:")) await platform.wslServers?.removeServer(key)
+      tabs.removeServer(key)
+      server.remove(key)
+      if ((await platform.getDefaultServer?.()) === key) {
+        await setDefault(null)
+      }
+    } catch (err) {
+      showRequestError(language, err)
     }
   }
 

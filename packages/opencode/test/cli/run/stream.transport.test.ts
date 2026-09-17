@@ -1183,7 +1183,7 @@ describe("run stream transport", () => {
     }
   })
 
-  test("drops completed historical subagent tabs during bootstrap", async () => {
+  test("keeps completed historical subagent tabs during bootstrap", async () => {
     const src = eventFeed()
     const ui = footer()
     const transport = await createSessionTransport({
@@ -1231,7 +1231,7 @@ describe("run stream transport", () => {
         return item?.type === "stream.subagent" ? item.state : undefined
       })
 
-      expect(state.tabs).toEqual([])
+      expect(state.tabs).toEqual([expect.objectContaining({ sessionID: "child-1", status: "completed" })])
       expect(state.details).toEqual({})
     } finally {
       src.close()
