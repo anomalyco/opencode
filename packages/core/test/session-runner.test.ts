@@ -580,6 +580,12 @@ const scenario = (
     }),
   )
 
+// Nominal retry gaps: exponential from 2s capped at 10s, for 10 retries.
+const RETRY_GAPS = [2_000, 4_000, 8_000, ...Array<number>(7).fill(10_000)]
+// Longest possible gap per retry (+20% jitter); advancing the clock by these always fires the retry.
+const RETRY_GAPS_MAX = RETRY_GAPS.map((gap) => gap * 1.2)
+const RETRY_ATTEMPTS = RETRY_GAPS.map((_, index) => index + 2)
+
 // Subscribe before resuming; model requests can arrive before retry backoff is scheduled.
 const subscribeRetries = (s: Scenario) =>
   Effect.gen(function* () {
@@ -2676,8 +2682,8 @@ describe("SessionRunnerLLM", () => {
     const compaction = yield* s.session.compact({ sessionID })
     yield* s.resume
 
-    expect(attempts).toEqual([2, 3, 4, 5])
-    expect(s.requests).toHaveLength(6)
+    expect(attempts).toEqual(RETRY_ATTEMPTS)
+    expect(s.requests).toHaveLength(RETRY_ATTEMPTS.length + 2)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       status: "failed",
       error: { type: "provider.transport", message: "Provider unavailable" },
@@ -5476,28 +5482,34 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.textStart({ id: "mixed-partial" }),
         LLMEvent.textDelta({ id: "mixed-partial", text: "Partial" }),
       )
-      yield* s.llm.push(Stream.fail(failure), partial, Stream.fail(failure), partial, partial)
+      // Alternate transparent failures and partial continuations until the retry allowance is spent.
+      const outcomes = RETRY_GAPS.map((_, index) => (index % 2 === 0 ? Stream.fail(failure) : partial))
+      yield* s.llm.push(...outcomes, partial)
       const run = yield* s.resume.pipe(Effect.forkChild)
       const identities: SessionMessage.ID[] = []
-      for (const delay of [2_400, 4_800, 9_600, 19_200]) {
+      for (const delay of RETRY_GAPS_MAX) {
         identities.push(yield* Queue.take(scheduled))
         yield* TestClock.adjust(delay)
       }
       expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
-      expect(s.requests).toHaveLength(5)
-      expect(identities[0]).toBe(identities[1])
-      expect(identities[2]).toBe(identities[3])
-      expect(identities[0]).not.toBe(identities[2])
+      expect(s.requests).toHaveLength(RETRY_GAPS.length + 1)
+      // A transparent retry keeps the assistant identity; a partial continuation starts a new one.
+      for (const [index, identity] of identities.entries()) {
+        if (index === 0) continue
+        if (index % 2 === 1) expect(identity).toBe(identities[index - 1])
+        else expect(identity).not.toBe(identities[index - 1])
+      }
+      const partials = outcomes.filter((outcome) => outcome === partial).length
       const messages = yield* s.context
-      expect(messages.filter((message) => message.type === "assistant")).toHaveLength(3)
-      expect(messages.filter((message) => message.type === "synthetic")).toHaveLength(2)
+      expect(messages.filter((message) => message.type === "assistant")).toHaveLength(partials + 1)
+      expect(messages.filter((message) => message.type === "synthetic")).toHaveLength(partials)
       const events = yield* recordedEventTypes(sessionID)
-      expect(events.filter((type) => type === "session.retry.scheduled.1")).toHaveLength(4)
-      expect(events.filter((type) => type === "session.step.failed.1")).toHaveLength(3)
+      expect(events.filter((type) => type === "session.retry.scheduled.1")).toHaveLength(RETRY_GAPS.length)
+      expect(events.filter((type) => type === "session.step.failed.1")).toHaveLength(partials + 1)
     },
   )
 
-  scenario("stops incomplete stream continuations after five total attempts", function* (s) {
+  scenario("stops incomplete stream continuations once the retry allowance is spent", function* (s) {
     yield* s.admit("Exhaust partial continuations")
     const failure = incompleteStream()
     yield* s.llm.always(
@@ -5511,30 +5523,30 @@ describe("SessionRunnerLLM", () => {
 
     const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    for (const delay of [2_400, 4_800, 9_600, 19_200]) {
+    for (const delay of RETRY_GAPS_MAX) {
       yield* Queue.take(scheduled)
       yield* TestClock.adjust(delay)
     }
     expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
-    expect(s.requests).toHaveLength(5)
+    expect(s.requests).toHaveLength(RETRY_GAPS.length + 1)
     const context = yield* s.context
-    expect(context.filter((message) => message.type === "assistant")).toHaveLength(5)
-    expect(context.filter((message) => message.type === "synthetic")).toHaveLength(4)
+    expect(context.filter((message) => message.type === "assistant")).toHaveLength(RETRY_GAPS.length + 1)
+    expect(context.filter((message) => message.type === "synthetic")).toHaveLength(RETRY_GAPS.length)
   })
 
-  scenario("stops after five total retry attempts", function* (s) {
+  scenario("stops once the retry allowance is spent", function* (s) {
     yield* s.admit("Exhaust retries")
     const failure = providerUnavailable()
     yield* s.llm.always(Stream.fail(failure))
 
     const scheduled = yield* subscribeRetries(s)
     const run = yield* s.resume.pipe(Effect.forkChild)
-    for (const delay of [2_400, 4_800, 9_600, 19_200]) {
+    for (const delay of RETRY_GAPS_MAX) {
       yield* Queue.take(scheduled)
       yield* TestClock.adjust(delay)
     }
     expect(yield* Fiber.join(run).pipe(Effect.flip)).toBe(failure)
-    expect(s.requests).toHaveLength(5)
+    expect(s.requests).toHaveLength(RETRY_GAPS.length + 1)
 
     const retries = yield* s.db
       .select({ data: EventTable.data })
@@ -5543,22 +5555,20 @@ describe("SessionRunnerLLM", () => {
       .orderBy(asc(EventTable.seq))
       .all()
       .pipe(Effect.orDie)
-    for (const [index, range] of [
-      [1_600, 2_400],
-      [4_800, 7_200],
-      [11_200, 16_800],
-      [24_000, 36_000],
-    ].entries()) {
-      expect(retries[index]?.data.at).toBeGreaterThanOrEqual(range[0]!)
-      expect(retries[index]?.data.at).toBeLessThanOrEqual(range[1]!)
+    // Each scheduled time falls within the jittered cumulative window for that retry.
+    expect(retries).toHaveLength(RETRY_GAPS.length)
+    let elapsed = 0
+    for (const [index, gap] of RETRY_GAPS.entries()) {
+      elapsed += gap
+      expect(retries[index]?.data.at).toBeGreaterThanOrEqual(elapsed * 0.8)
+      expect(retries[index]?.data.at).toBeLessThanOrEqual(elapsed * 1.2)
     }
-    expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.step.started.1")).toHaveLength(5)
+    expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.step.started.1")).toHaveLength(
+      RETRY_GAPS.length + 1,
+    )
     const assistant = requireAssistant(yield* s.context)
     expect(yield* recordedStepSettlementEvents(sessionID, assistant.id)).toMatchObject([
-      { type: "session.step.started.1" },
-      { type: "session.step.started.1" },
-      { type: "session.step.started.1" },
-      { type: "session.step.started.1" },
+      ...RETRY_GAPS.map(() => ({ type: "session.step.started.1" })),
       { type: "session.step.started.1" },
       { type: "session.step.failed.1" },
     ])
