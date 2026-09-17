@@ -35,6 +35,22 @@ describe("Npm.sanitize", () => {
   })
 })
 
+describe("Npm.cacheKey", () => {
+  test("bare names share the @latest cache root", () => {
+    expect(Npm.cacheKey("prettier")).toBe("prettier@latest")
+    expect(Npm.cacheKey("prettier@latest")).toBe("prettier@latest")
+    expect(Npm.cacheKey("@scope/pkg")).toBe("@scope/pkg@latest")
+    expect(Npm.cacheKey("@scope/pkg@latest")).toBe("@scope/pkg@latest")
+  })
+
+  test("versioned and non-registry specs keep their own root", () => {
+    expect(Npm.cacheKey("prettier@1.2.3")).toBe("prettier@1.2.3")
+    expect(Npm.cacheKey("prettier@^2")).toBe("prettier@^2")
+    const spec = "acme@git+https://github.com/opencode/acme.git"
+    expect(Npm.cacheKey(spec)).toBe(spec)
+  })
+})
+
 describe("Npm.add", () => {
   test("reifies when package cache directory exists without the package installed", async () => {
     await using tmp = await tmpdir()
