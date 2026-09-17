@@ -168,8 +168,8 @@ export const DEFAULT_THEME = {
         $selected: "$background.formfield.default",
       },
       feedback: {
-        error: { default: "$background.default" },
-        warning: { default: "$background.default" },
+        error: { default: "$hue.red.100" },
+        warning: { default: "$hue.yellow.100" },
         success: { default: "$background.default" },
         info: { default: "$background.default" },
       },
@@ -389,8 +389,8 @@ export const DEFAULT_THEME = {
         $selected: "$background.formfield.default",
       },
       feedback: {
-        error: { default: "$background.default" },
-        warning: { default: "$background.default" },
+        error: { default: "$hue.red.900" },
+        warning: { default: "$hue.yellow.900" },
         success: { default: "$background.default" },
         info: { default: "$background.default" },
       },

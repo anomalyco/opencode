@@ -24,6 +24,12 @@ test("resolves one-mode documents with defaults for the available mode", () => {
 
   expect(resolvedLight.background.default.equals(resolveTheme(light).background.default)).toBeTrue()
   expect(resolvedDark.background.default.equals(resolveTheme(dark).background.default)).toBeTrue()
+  expect(
+    resolvedLight.background.feedback.warning.default.equals(resolveTheme(light).background.feedback.warning.default),
+  ).toBeTrue()
+  expect(
+    resolvedDark.background.feedback.warning.default.equals(resolveTheme(dark).background.feedback.warning.default),
+  ).toBeTrue()
   expect(resolvedLight.categorical.length).toBeGreaterThan(0)
   expect(resolvedDark.categorical.length).toBeGreaterThan(0)
 })
@@ -48,6 +54,8 @@ test("generates syntax with one categorical hue", () => {
   const syntax = generateSyntax(theme, "light")
 
   expect(syntax.getStyleId("extmark.skill")).not.toBeNull()
+  expect(syntax.getStyle("extmark.paste")?.fg).toBe(theme.text.feedback.warning.default)
+  expect(syntax.getStyle("extmark.paste")?.bg).toBe(theme.background.feedback.warning.default)
   syntax.destroy()
 })
 
@@ -79,6 +87,10 @@ test("resolves independent definitions and hue aliases", () => {
   expect(darkTheme.background.default).toBeInstanceOf(RGBA)
   expect(lightTheme.background.surface.offset).toBe(lightTheme.hue.neutral[300])
   expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[400])
+  expect(lightTheme.background.feedback.error.default).toBe(lightTheme.hue.red[100])
+  expect(lightTheme.background.feedback.warning.default).toBe(lightTheme.hue.yellow[100])
+  expect(darkTheme.background.feedback.error.default).toBe(darkTheme.hue.red[900])
+  expect(darkTheme.background.feedback.warning.default).toBe(darkTheme.hue.yellow[900])
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
   expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[200])
   expect(lightTheme.contextual.elevated.background.action.primary.default).toBe(lightTheme.hue.interactive[500])
