@@ -945,6 +945,90 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  // Anthropic's tool-search server tools (`tool_search_tool_bm25_20251119` /
+  // `tool_search_tool_regex_20251119`) let most tool schemas be sent with
+  // `defer_loading: true`. A search puts signed `thinking`, `server_tool_use`,
+  // `tool_search_tool_result` and `tool_use` blocks in ONE assistant turn.
+  // Anthropic rejects the next request if any sibling of a signed thinking
+  // block was dropped, so the search result has to survive the round trip.
+  it.effect("round-trips a tool_search_tool_result beside a signed thinking block", () =>
+    Effect.gen(function* () {
+      const result = [{ type: "tool_search_result", name: "read" }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "message_start", message: { usage: { input_tokens: 5 } } },
+              { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
+              {
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "thinking_delta", thinking: "Need the read tool." },
+              },
+              { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig_search" } },
+              { type: "content_block_stop", index: 0 },
+              {
+                type: "content_block_start",
+                index: 1,
+                content_block: {
+                  type: "server_tool_use",
+                  id: "srvtoolu_s1",
+                  name: "tool_search_tool_bm25",
+                  input: { query: "read file" },
+                },
+              },
+              { type: "content_block_stop", index: 1 },
+              {
+                type: "content_block_start",
+                index: 2,
+                content_block: { type: "tool_search_tool_result", tool_use_id: "srvtoolu_s1", content: result },
+              },
+              { type: "content_block_stop", index: 2 },
+              {
+                type: "content_block_start",
+                index: 3,
+                content_block: { type: "tool_use", id: "toolu_1", name: "read", input: { filePath: "/tmp/a" } },
+              },
+              { type: "content_block_stop", index: 3 },
+              { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 9 } },
+              { type: "message_stop" },
+            ),
+          ),
+        ),
+      )
+
+      // The result block carries only `tool_use_id`; the name comes from the
+      // originating `server_tool_use`, since both tool-search variants report
+      // through this one block type.
+      expect(response.events.find((event) => event.type === "tool-result")).toMatchObject({
+        type: "tool-result",
+        id: "srvtoolu_s1",
+        name: "tool_search_tool_bm25",
+        result: { type: "json", value: result },
+        providerExecuted: true,
+        providerMetadata: { anthropic: { blockType: "tool_search_tool_result", result } },
+      })
+
+      const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message], cache: "none" }))
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Need the read tool.", signature: "sig_search" },
+            {
+              type: "server_tool_use",
+              id: "srvtoolu_s1",
+              name: "tool_search_tool_bm25",
+              input: { query: "read file" },
+            },
+            { type: "tool_search_tool_result", tool_use_id: "srvtoolu_s1", content: result },
+            { type: "tool_use", id: "toolu_1", name: "read", input: { filePath: "/tmp/a" } },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("preserves a reasoning signature when message_stop closes the block", () =>
     Effect.gen(function* () {
       const compatible = Route.make({
