@@ -49,6 +49,11 @@ export type ElectronAPI = {
   wslServers: WslServersAPI
   updater: UpdaterAPI
   consumeInitialDeepLinks: () => Promise<string[]>
+  // MUC Harness
+  mucGetState: () => Promise<MucConnectionState>
+  mucConnect: (code: string) => Promise<MucConnectResult>
+  mucDisconnect: () => Promise<MucConnectionState>
+  mucPendingCode: () => Promise<string | null>
   getDefaultServerUrl: () => Promise<string | null>
   setDefaultServerUrl: (url: string | null) => Promise<void>
   isFirstLaunchOnboardingPending: () => Promise<boolean>
@@ -114,3 +119,19 @@ export type ElectronAPI = {
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
   setNativeTranslations: (bundle: DesktopNativeBundle) => Promise<void>
 }
+
+// MUC Harness
+export type MucConnectionState =
+  | { connected: false }
+  | {
+      connected: true
+      gateway: string
+      keyName: string
+      deviceId: string
+      user: string
+      connectedAt: string
+    }
+
+export type MucConnectResult =
+  | { ok: true; state: MucConnectionState; modelCount?: number }
+  | { ok: false; error: "invalid_code" | "invalid" | "expired" | "used" | "network" | "bad_response" | "unknown" }

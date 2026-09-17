@@ -24,6 +24,7 @@ import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { t } from "./i18n"
 import { initializationData } from "./initialization"
+import { createMucGate } from "./muc-gate"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import { windowFullscreen } from "./window-fullscreen"
@@ -443,10 +444,14 @@ render(() => {
     }
     return { id: await api.getWindowID?.() }
   })
+  // MUC Harness: 未连接账户时以品牌连接页拦截主界面
+  const { MucGate } = createMucGate()
 
   return (
-    <Show when={windowState.latest} fallback={<LoadingSplash />} keyed>
-      {(state) => <DesktopRoot windowState={state} />}
-    </Show>
+    <MucGate>
+      <Show when={windowState.latest} fallback={<LoadingSplash />} keyed>
+        {(state) => <DesktopRoot windowState={state} />}
+      </Show>
+    </MucGate>
   )
 }, root!)

@@ -57,3 +57,19 @@ export async function exchangeMucCode(gateway: string, code: string, deviceName:
     user: String(body.user ?? ""),
   }
 }
+
+// 连接成功后立即同步 /v1/models，向用户反馈可用模型数量（失败不阻塞连接）
+export async function countGatewayModels(gateway: string, apiKey: string): Promise<number | undefined> {
+  try {
+    const res = await fetch(gateway.replace(/\/+$/, "") + "/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(8_000),
+    })
+    if (!res.ok) return undefined
+    const data = (await res.json()) as any
+    const items = Array.isArray(data?.data) ? data.data : []
+    return items.length
+  } catch {
+    return undefined
+  }
+}

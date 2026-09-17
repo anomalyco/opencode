@@ -2,7 +2,7 @@
 // 并以内存环境变量 MUC_API_KEY 注入 opencode 核心（不落盘）。
 
 import { MucSecretStore, type MucConnectionState } from "./secret-store"
-import { exchangeMucCode, MucExchangeError } from "./connect"
+import { exchangeMucCode, countGatewayModels, MucExchangeError } from "./connect"
 import { mucGatewayBaseURL } from "./gateway"
 
 export class MucConnectController {
@@ -12,7 +12,7 @@ export class MucConnectController {
     return this.store.getState()
   }
 
-  async connect(code: string): Promise<MucConnectionState> {
+  async connect(code: string): Promise<{ state: MucConnectionState; modelCount?: number }> {
     const gateway = mucGatewayBaseURL()
     const deviceName = this.store.getDeviceId().slice(0, 8)
     const result = await exchangeMucCode(gateway, code, `MUC-${deviceName}`)
@@ -23,7 +23,9 @@ export class MucConnectController {
       user: result.user,
     })
     this.applyToProcessEnv(result.apiKey)
-    return state
+    // 立即用新凭据同步一次模型目录，向用户反馈可用模型数
+    const modelCount = await countGatewayModels(result.gateway, result.apiKey)
+    return { state, modelCount }
   }
 
   async disconnect(): Promise<MucConnectionState> {

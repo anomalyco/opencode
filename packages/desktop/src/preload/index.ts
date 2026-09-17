@@ -57,6 +57,11 @@ const api: ElectronAPI = {
     install: () => ipcRenderer.invoke("updater-install"),
   },
   consumeInitialDeepLinks: () => ipcRenderer.invoke("consume-initial-deep-links"),
+  // MUC Harness: 连接状态与凭据
+  mucGetState: () => ipcRenderer.invoke("muc:get-state"),
+  mucConnect: (code: string) => ipcRenderer.invoke("muc:connect", code),
+  mucDisconnect: () => ipcRenderer.invoke("muc:disconnect"),
+  mucPendingCode: () => ipcRenderer.invoke("muc:pending-code"),
   getDefaultServerUrl: () => ipcRenderer.invoke("get-default-server-url"),
   setDefaultServerUrl: (url) => ipcRenderer.invoke("set-default-server-url", url),
   isFirstLaunchOnboardingPending: () => ipcRenderer.invoke("is-first-launch-onboarding-pending"),

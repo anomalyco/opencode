@@ -326,7 +326,7 @@ const main = Effect.gen(function* () {
     },
   })
   // MUC Harness: muc:// 凭据与连接 IPC
-  registerMucIpcHandlers(app.getPath("userData"), {
+  const mucController = registerMucIpcHandlers(app.getPath("userData"), {
     getPendingConnectCode: () => {
       const code = pendingMucConnectCode
       pendingMucConnectCode = null
@@ -334,6 +334,8 @@ const main = Effect.gen(function* () {
     },
   })
   registerWslIpcHandlers(wslServers)
+  // MUC Harness: server spawn 前把已存凭据注入进程内存（MUC_API_KEY）
+  yield* Effect.promise(() => mucController.restoreToProcessEnv())
   void updater.start()
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
   updateTimer.unref()
