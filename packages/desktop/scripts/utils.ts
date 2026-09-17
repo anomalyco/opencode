@@ -9,7 +9,7 @@ export type Channel = "dev" | "beta" | "prod"
 
 export function resolveChannel(): Channel {
   const raw = Bun.env.OPENCODE_CHANNEL
-  if (raw === "dev" || raw === "beta" || raw === "prod") return raw
+  if (raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc") return raw
   return "dev"
 }
 

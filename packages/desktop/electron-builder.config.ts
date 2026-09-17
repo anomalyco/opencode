@@ -31,7 +31,7 @@ async function signWindows(configuration: { path: string }) {
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
-  if (raw === "dev" || raw === "beta" || raw === "prod") return raw
+  if (raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc") return raw
   return "dev"
 })()
 
@@ -39,10 +39,11 @@ const APP_IDS = {
   dev: "ai.opencode.desktop.dev",
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
+  muc: "cn.edu.muc.harness",
 } as const
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName: channel === "muc" ? "MUC-${os}-${arch}.${ext}" : "opencode-desktop-${os}-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -141,6 +142,17 @@ function getConfig() {
         publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
         deb: { fpm: [metainfoFpm(appId)] },
         rpm: { packageName: "opencode-beta", fpm: [metainfoFpm(appId)] },
+      }
+    }
+    case "muc": {
+      return {
+        ...base,
+        appId,
+        productName: "MUC",
+        icon: "resources/muc/icon.icns",
+        protocols: { name: "MUC Connect", schemes: ["muc", "opencode"] },
+        mac: { ...base.mac, icon: "resources/muc/icon.icns" },
+        dmg: { ...base.dmg, icon: "resources/muc/icon.icns" },
       }
     }
     case "prod": {
