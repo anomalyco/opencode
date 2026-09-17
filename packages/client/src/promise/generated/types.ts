@@ -319,6 +319,8 @@ export type PermissionSavedInfo = {
 
 export type FileSystemEntry = { path: string; type: "file" | "directory" }
 
+export type FileSystemWrite = { path: string }
+
 export type CommandInfo = { name: string; description?: string }
 
 export type SkillInfo = {
@@ -5792,6 +5794,20 @@ export type FileFindInput = {
 }
 
 export type FileFindOutput = { location: LocationPublicRef; data: Array<FileSystemEntry> }
+
+export type FileWriteInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly path: string
+  }["location"]
+  readonly path: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly path: string
+  }["path"]
+  readonly payload: globalThis.Uint8Array
+}
+
+export type FileWriteOutput = { location: LocationPublicRef; data: FileSystemWrite }
 
 export type CommandListInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]

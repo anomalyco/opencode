@@ -13,6 +13,13 @@ const ListQuery = Schema.Struct({
   }),
 })
 
+const WriteQuery = Schema.Struct({
+  ...LocationQuery.fields,
+  path: Schema.String.annotate({
+    description: "An absolute path or a path relative to the requested location. Missing parent directories are created.",
+  }),
+})
+
 const FindQuery = Schema.Struct({
   ...LocationQuery.fields,
   query: FileSystem.FindInput.fields.query,
@@ -62,6 +69,22 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
           identifier: "fs.find",
           summary: "Find files",
           description: "Find recursively ranked filesystem entries relative to the requested location.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("fs.write", "/api/experimental/fs/write", {
+      query: WriteQuery,
+      payload: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+      success: Location.response(FileSystem.Write),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.fs.write",
+          summary: "Write file",
+          description:
+            "Write the raw request body to an absolute path or a path relative to the requested location, creating parent directories, and return the resolved absolute path. Unlike read, the target is not confined to the location. Experimental: may change without compatibility guarantees.",
         }),
       ),
   )

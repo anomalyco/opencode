@@ -263,7 +263,8 @@ test("concurrent service processes elect one server", async () => {
       version: info.version,
       pid: info.pid,
       urls: [info.url],
-      paths: { tmp: path.join(os.tmpdir(), "opencode") },
+      // The server reports the canonical tmp directory; Windows os.tmpdir() can be an 8.3 short name.
+      paths: { tmp: await fs.realpath(path.join(os.tmpdir(), "opencode")) },
     })
     const contender = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
     try {
