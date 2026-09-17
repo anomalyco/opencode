@@ -6,7 +6,6 @@ import { useLanguage } from "@/runtime/i18n/language"
 import type { BrowserPaneCommand } from "@/runtime/platform/browser-pane"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { useServer } from "@/runtime/server/current"
-import { useSettings } from "@/settings/model"
 import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useCurrentRoute } from "@/shell/state/layout"
 import { createEventListener } from "@solid-primitives/event-listener"
@@ -32,7 +31,6 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
   gate: false,
   init: () => {
     const platform = usePlatform()
-    const settings = useSettings()
     const language = useLanguage()
     const shellTabs = useTabs()
     const route = useCurrentRoute()
@@ -43,9 +41,7 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
     const live = new Map<string, Live>()
     const focus = new Map<string, Set<(tabID: Browser.TabID) => void>>()
     const key = (server: Server, sessionID: string) => `${server.key}\n${sessionID}`
-    const enabled = createMemo(
-      () => !!platform.browserPane && settings.ready() && settings.general.experimentalBrowser(),
-    )
+    const enabled = createMemo(() => !!platform.browserPane)
     const close = (id: string) => {
       live.get(id)?.dispose()
       live.delete(id)

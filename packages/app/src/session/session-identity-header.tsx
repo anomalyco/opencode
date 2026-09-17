@@ -15,7 +15,6 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { displayName, errorMessage, getProjectAvatarSource, projectForSession } from "@/shell/layout/helpers"
 import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/shell/state/layout"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
-import { useSettings } from "@/settings/model"
 import { useSettingsSurface } from "@/settings/surface"
 import { pathKey } from "@/workspaces/path-key"
 import { isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
@@ -39,7 +38,6 @@ export function SessionProjectMenu(props: {
   project?: Omit<LocalProject, "expanded">
   directory?: string
   workspace: boolean
-  showProjectIcon: boolean
 }) {
   const server = useServer()
   const language = useLanguage()
@@ -90,20 +88,9 @@ export function SessionProjectMenu(props: {
           aria-label={projectName()}
           data-slot="session-project-trigger"
           icon={
-            <Show
-              when={props.showProjectIcon}
-              fallback={
-                <span class={props.workspace ? "text-v2-icon-icon-accent" : "text-v2-icon-icon-muted"}>
-                  <Icon name={props.workspace ? "outline-worktree" : "monitor"} />
-                </span>
-              }
-            >
-              <ProjectAvatar
-                fallback={projectName()}
-                src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
-                variant={getProjectAvatarVariant(props.project?.icon?.color)}
-              />
-            </Show>
+            <span class={props.workspace ? "text-v2-icon-icon-accent" : "text-v2-icon-icon-muted"}>
+              <Icon name={props.workspace ? "outline-worktree" : "monitor"} />
+            </span>
           }
         />
       </Tooltip>
@@ -209,7 +196,6 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
   const tabs = useTabs()
   const language = useLanguage()
   const pending = createMemo(() => tabs.pendingSession(server.key, props.sessionID))
-  const settings = useSettings()
   const navigate = useNavigate()
   const tab = createMemo(() =>
     tabs.store.find(
@@ -263,8 +249,6 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
       ) ?? server.ctx.sync.data.project.find((item) => isProjectDirectory(item, value))
     )
   })
-  const showProjectIcon = () =>
-    import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && settings.general.showProjectIcon() && !!directory()
   const workspaceSession = createMemo(() => !!pending() || isWorkspaceDirectory(project(), directory() ?? ""))
   const navigateParent = () => {
     const id = parentID()
@@ -275,7 +259,7 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
   }
 
   return (
-    <Show when={title() || parentTitle() || showProjectIcon()}>
+    <Show when={title() || parentTitle()}>
       <SessionTitleHeader>
         <div class="flex h-12 w-full items-center justify-between gap-2">
           <div class="flex min-w-0 flex-1 items-center gap-1">
@@ -284,7 +268,6 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
                 project={project()}
                 directory={directory()}
                 workspace={workspaceSession()}
-                showProjectIcon={showProjectIcon()}
               />
               <Show when={parentTitle()}>
                 {(value) => (

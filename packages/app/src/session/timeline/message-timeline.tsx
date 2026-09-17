@@ -20,7 +20,6 @@ import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import { SummaryPopover } from "../summary/popover"
 import { SessionContextUsage } from "@/session/timeline/session-context-usage"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -32,11 +31,9 @@ import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
 import { containsDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
-import { getProjectAvatarVariant } from "@/shell/state/layout"
-import { displayName, getProjectAvatarSource, projectForSession } from "@/shell/layout/helpers"
+import { projectForSession } from "@/shell/layout/helpers"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { useCommand } from "@/shell/commands/command"
-import { useSettings } from "@/settings/model"
 import { SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
 import type { BackgroundTask } from "../summary/background"
@@ -133,7 +130,6 @@ function MessageTimelineView(
   const language = useLanguage()
   const server = useServer()
   const data = server.ctx.data
-  const settings = useSettings()
   const sdk = useWorkspaceLocation()
   const sessionID = props.data.sessionID
   const sessionStatus = props.data.status
@@ -151,19 +147,11 @@ function MessageTimelineView(
       : projects.find((item) => containsDirectory(item.worktree, sessionDirectory()))
   })
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
-  const showProjectIcon = () => import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && settings.general.showProjectIcon()
   const avatarProject = createMemo(() => {
     const session = props.session.data.info()
     if (!session) return
     return projectForSession(session, server.ctx.projects.list()) ?? project()
   })
-  const projectAvatar = () => (
-    <ProjectAvatar
-      fallback={displayName(avatarProject() ?? { worktree: sessionDirectory() })}
-      src={getProjectAvatarSource(avatarProject()?.id, avatarProject()?.icon)}
-      variant={getProjectAvatarVariant(avatarProject()?.icon?.color)}
-    />
-  )
   createEffect(() => {
     const directory = project()?.worktree
     if (!directory) return
@@ -421,7 +409,6 @@ function MessageTimelineView(
                     project={avatarProject()}
                     directory={sessionDirectory()}
                     workspace={workspaceSession()}
-                    showProjectIcon={showProjectIcon()}
                   />
                   <Show when={parentID()}>
                     <button
@@ -551,7 +538,6 @@ function MessageTimelineView(
                             <SessionSummaryPanel
                               shown={summaryOpen()}
                               project={project()}
-                              avatar={showProjectIcon() ? projectAvatar() : undefined}
                               directory={sessionDirectory()}
                               local={!workspaceSession()}
                               branch={data.location.vcs.info({ directory: sdk().directory })?.branch.current}
