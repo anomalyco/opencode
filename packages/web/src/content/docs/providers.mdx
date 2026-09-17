@@ -1608,6 +1608,42 @@ To use Kimi K2 from Moonshot AI:
 
 ---
 
+### MTPLX
+
+You can configure opencode to use local models through [MTPLX](https://mtplx.com), a native inference engine and Mac app for Apple Silicon that runs Qwen models with their multi-token prediction heads. It serves an OpenAI-compatible API on `http://127.0.0.1:8000/v1`.
+
+The quickest path is `mtplx start opencode`, which loads a model, serves it, and launches OpenCode already configured. To configure it by hand:
+
+```json title="opencode.json" "mtplx" {5, 6, 8, 10-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "mtplx": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "MTPLX (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8000/v1"
+      },
+      "models": {
+        "mtplx-qwen38-27b-optimized-speed": {
+          "name": "Qwen 3.8 27B Optimized Speed (local)"
+        }
+      }
+    }
+  }
+}
+```
+
+In this example:
+
+- `mtplx` is the custom provider ID. This can be any string you want.
+- `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
+- `name` is the display name for the provider in the UI.
+- `options.baseURL` is the endpoint for the local server. MTPLX serves on port 8000 by default.
+- `models` is a map of model IDs to their configurations. MTPLX also serves `mtplx-qwen38-27b-optimized-quality`, `mtplx-flash-next-optimized-speed` and `mtplx-qwen35-9b-optimized-speed`; run `mtplx models` to see what is installed. See the [MTPLX OpenCode guide](https://mtplx.com/docs/opencode/) for details.
+
+---
+
 ### NVIDIA
 
 NVIDIA provides access to Nemotron models and many other open models through [build.nvidia.com](https://build.nvidia.com) for free.
