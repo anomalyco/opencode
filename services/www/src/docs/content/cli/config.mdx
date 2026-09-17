@@ -120,6 +120,7 @@ Configure how full-screen TUI sessions are presented and where new sessions star
     "sidebar": "auto",
     "scrollbar": false,
     "thinking": "hide",
+    "tool_details": "hide",
     "grouping": "auto",
     "image_preview": false,
     "tps": true,
@@ -137,6 +138,7 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 | `session.sidebar`       | `auto` or `hide`            | Shows the sidebar when space permits or always hides it.                     |
 | `session.scrollbar`     | boolean                     | Shows the transcript scrollbar.                                              |
 | `session.thinking`      | `show` or `hide`            | Shows or hides model reasoning by default.                                   |
+| `session.tool_details`  | `show` or `hide`            | Shows or hides completed tool calls by default.                              |
 | `session.grouping`      | `auto` or `none`            | Groups related transcript items or renders each item separately.             |
 | `session.image_preview` | boolean                     | Shows user attachment and tool-result images in the transcript.              |
 | `session.tps`           | boolean                     | Shows output tokens per second in assistant footers.                         |
@@ -145,6 +147,9 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 | `session.permissions`   | `prompt` or `autoaccept`    | Prompts for permission requests or accepts every request automatically.      |
 
 </div>
+
+When `session.tool_details` is `hide`, completed tool calls are omitted while running and failed calls remain visible. Use
+**Hide tool details** in the command palette or bind `session.toggle.tool_details` to change it while a session is open.
 
 ## Tabs
 

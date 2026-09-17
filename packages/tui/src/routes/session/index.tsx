@@ -224,6 +224,7 @@ export function Session(props: {
 
   const dimensions = useTerminalDimensions()
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
+  const showToolDetails = createMemo(() => config.session?.tool_details !== "hide")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
@@ -977,6 +978,20 @@ export function Session(props: {
       },
     },
     {
+      title: showToolDetails() ? "Hide tool details" : "Show tool details",
+      id: "session.toggle.tool_details",
+      group: "Session",
+      palette: undefined,
+      run: () => {
+        void configState
+          .update((draft) => {
+            draft.session = { ...draft.session, tool_details: showToolDetails() ? "hide" : "show" }
+          })
+          .catch(toast.error)
+        dialog.clear()
+      },
+    },
+    {
       title: groupExploration() ? "Show tool calls individually" : "Group related tool calls",
       id: "session.toggle.exploration_grouping",
       group: "Session",
@@ -1258,6 +1273,7 @@ export function Session(props: {
         },
         sessionID: route.sessionID,
         thinkingMode,
+        showToolDetails,
         markdownMode,
         groupExploration,
         diffWrapMode,
@@ -2445,7 +2461,9 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
 // Pending messages moved to individual tool pending functions
 
 function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }) {
+  const ctx = use()
   const display = createMemo(() => toolDisplay(props.part.name))
+  const hidden = createMemo(() => !ctx.showToolDetails() && props.part.state.status === "completed")
 
   const toolprops = {
     get metadata() {
@@ -2514,12 +2532,14 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
       </Match>
     </Switch>
   )
-  return [
-    content,
-    <Show when={props.images !== false}>
-      <ToolImages parts={[props.part]} />
-    </Show>,
-  ]
+  return (
+    <Show when={!hidden()}>
+      {content}
+      <Show when={props.images !== false}>
+        <ToolImages parts={[props.part]} />
+      </Show>
+    </Show>
+  )
 }
 
 function ToolImages(props: { parts: readonly SessionMessageAssistantTool[] }) {

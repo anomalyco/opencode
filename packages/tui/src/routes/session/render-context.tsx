@@ -17,6 +17,7 @@ export const context = createContext<{
   terminal: { width: number; height: number }
   sessionID: string
   thinkingMode: () => ThinkingMode
+  showToolDetails: () => boolean
   markdownMode: () => "source" | "rendered"
   groupExploration: () => boolean
   diffWrapMode: () => "word" | "none"

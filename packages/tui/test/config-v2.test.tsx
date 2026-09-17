@@ -41,6 +41,8 @@ test("validates the session tabs setting", () => {
   expect(() => decode({ tabs: { enabled: "on" } })).toThrow()
   expect(decode({ prompt: { image_preview: true } })).toEqual({ prompt: { image_preview: true } })
   expect(decode({ session: { image_preview: true } })).toEqual({ session: { image_preview: true } })
+  expect(decode({ session: { tool_details: "hide" } })).toEqual({ session: { tool_details: "hide" } })
+  expect(() => decode({ session: { tool_details: "compact" } })).toThrow()
   expect(decode({ session: { tps: false } })).toEqual({ session: { tps: false } })
   expect(decode({ session: { new_location: "inherit" } })).toEqual({ session: { new_location: "inherit" } })
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
@@ -158,6 +160,7 @@ test("accepts every v2-only named command ID", () => {
   const commands = [
     "server.pair",
     "session.toggle.exploration_grouping",
+    "session.toggle.tool_details",
     "composer.subagent.up",
     "composer.subagent.down",
     "composer.subagent.select",
