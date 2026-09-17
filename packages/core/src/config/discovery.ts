@@ -50,8 +50,14 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   )
 
   const globalEnabled = options?.global !== false
+  // Absence, malformed values, and provider failures all fall back to false so
+  // discovery stays infallible.
   const disableClaudeCode =
-    options?.disableClaudeCode ?? (yield* Config.boolean("OPENCODE_DISABLE_CLAUDE_CODE").pipe(Config.withDefault(false)))
+    options?.disableClaudeCode ??
+    (yield* Config.boolean("OPENCODE_DISABLE_CLAUDE_CODE").pipe(
+      Config.withDefault(false),
+      Effect.orElseSucceed(() => false),
+    ))
   const globalFiles = yield* Effect.forEach(names, (name) => fs.resolve(path.join(globalDirectory, name)))
   // Global sources must not re-enter through the project walk.
   const visible = discovered
