@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.unionAlpha": "يتوفر Union Alpha مجانًا لفترة محدودة",
+  "go.graph.bonus": "استخدام مضاعف {{count}} مرات",
   "nav.github": "GitHub",
   "nav.docs": "الوثائق",
   "nav.changelog": "سجل التغييرات",
@@ -256,7 +258,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "الاستثناءات التالية",
 
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
-  "go.banner.text": "يحصل GLM-5.3-Flash على حدود استخدام مضاعفة لفترة محدودة",
   "go.meta.description": "يبلغ سعر Go ‏$10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
   "go.hero.body":
@@ -271,8 +272,17 @@ export const dict = {
   "go.graph.freePill": "Big Pickle ونماذج مجانية",
   "go.graph.go": "Go",
   "go.graph.label": "الطلبات كل 5 ساعات",
+  "go.graph.period": "الاستخدام",
+  "go.graph.model": "النموذج",
+  "go.graph.requests": "الطلبات المقدّرة / ٥ ساعات",
+  "go.graph.allowance": "الاستخدام الشهري",
+  "go.graph.new": "جديد",
+  "go.graph.scale": "مقياس غير خطي لعدد الطلبات",
+  "go.graph.showAll": "عرض جميع النماذج ({{count}})",
+  "go.graph.showLess": "عرض نماذج أقل",
   "go.graph.limitedRegions": "مناطق محدودة",
   "go.graph.limitedTime": "لفترة محدودة",
+  "go.graph.unlimited": "غير محدود",
   "go.graph.usageLimits": "حدود الاستخدام",
   "go.graph.aria": "الطلبات كل 5 ساعات: {{free}} مقابل {{go}}",
 
