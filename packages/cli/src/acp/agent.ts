@@ -1,42 +1,28 @@
-import {
-  RequestError,
-  type Agent,
-  type AgentSideConnection,
-  type AuthenticateRequest,
-  type CancelNotification,
-  type CloseSessionRequest,
-  type DeleteSessionRequest,
-  type ForkSessionRequest,
-  type InitializeRequest,
-  type ListSessionsRequest,
-  type LoadSessionRequest,
-  type NewSessionRequest,
-  type PromptRequest,
-  type ResumeSessionRequest,
-  type SetSessionConfigOptionRequest,
-  type SetSessionModeRequest,
-} from "@agentclientprotocol/sdk"
+import { agent, RequestError, type Stream } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient } from "@opencode/client/promise"
+import { ACPConnection } from "./connection"
 import { ACPError } from "./error"
 import { ACPService } from "./service"
 
-export function create(client: OpenCodeClient, connection: AgentSideConnection) {
-  const service = ACPService.make({ client, connection })
-  return {
-    initialize: (params: InitializeRequest) => run(service.initialize(params)),
-    authenticate: (params: AuthenticateRequest) => run(service.authenticate(params)),
-    newSession: (params: NewSessionRequest) => run(service.newSession(params)),
-    loadSession: (params: LoadSessionRequest) => run(service.loadSession(params)),
-    listSessions: (params: ListSessionsRequest) => run(service.listSessions(params)),
-    deleteSession: (params: DeleteSessionRequest) => run(service.deleteSession(params)),
-    resumeSession: (params: ResumeSessionRequest) => run(service.resumeSession(params)),
-    closeSession: (params: CloseSessionRequest) => run(service.closeSession(params)),
-    unstable_forkSession: (params: ForkSessionRequest) => run(service.forkSession(params)),
-    setSessionConfigOption: (params: SetSessionConfigOptionRequest) => run(service.setSessionConfigOption(params)),
-    setSessionMode: (params: SetSessionModeRequest) => run(service.setSessionMode(params)),
-    prompt: (params: PromptRequest) => run(service.prompt(params)),
-    cancel: (params: CancelNotification) => run(service.cancel(params)),
-  } satisfies Agent
+export function connect(client: OpenCodeClient, stream: Stream) {
+  const connection = agent({ name: "opencode" })
+    .onRequest("initialize", (ctx) => run(service.initialize(ctx.params)))
+    .onRequest("authenticate", (ctx) => run(service.authenticate(ctx.params)))
+    .onRequest("session/new", (ctx) => run(service.newSession(ctx.params)))
+    .onRequest("session/load", (ctx) => run(service.loadSession(ctx.params)))
+    .onRequest("session/list", (ctx) => run(service.listSessions(ctx.params)))
+    .onRequest("session/delete", (ctx) => run(service.deleteSession(ctx.params)))
+    .onRequest("session/resume", (ctx) => run(service.resumeSession(ctx.params)))
+    .onRequest("session/close", (ctx) => run(service.closeSession(ctx.params)))
+    .onRequest("session/fork", (ctx) => run(service.forkSession(ctx.params)))
+    .onRequest("session/set_config_option", (ctx) => run(service.setSessionConfigOption(ctx.params)))
+    .onRequest("session/set_mode", (ctx) => run(service.setSessionMode(ctx.params)))
+    .onRequest("session/prompt", (ctx) => run(service.prompt(ctx.params, ctx.signal)))
+    .onNotification("session/cancel", (ctx) => run(service.cancel(ctx.params)))
+    .connect(stream)
+  // Inbound dispatch starts after the stream's async read loop yields, so handlers never observe this before assignment.
+  const service = ACPService.make({ client, connection: ACPConnection.make(connection) })
+  return connection
 }
 
 async function run<A>(promise: Promise<A>) {
@@ -52,6 +38,7 @@ async function run<A>(promise: Promise<A>) {
 function isACPError(error: unknown): error is ACPError.Error {
   return (
     error instanceof ACPError.SessionNotFoundError ||
+    error instanceof ACPError.SessionDirectoryMismatchError ||
     error instanceof ACPError.InvalidConfigOptionError ||
     error instanceof ACPError.InvalidModelError ||
     error instanceof ACPError.InvalidEffortError ||
