@@ -21,7 +21,7 @@ export type UpdateSource = {
   readonly check: (
     signal: AbortSignal,
   ) => Promise<ClientNotice | { readonly type: "unavailable"; readonly message: string } | undefined>
-  readonly apply: (version: string) => Promise<void>
+  readonly apply: () => Promise<string>
 }
 
 export const { use: useUpdateNotification, provider: UpdateNotificationProvider } = createSimpleContext({
@@ -65,8 +65,8 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       const current = state()
       if (!updater || !current || current.type !== "available") return
       setState({ type: "installing", version: current.version })
-      await updater.apply(current.version).then(
-        () => setState({ type: "installed", version: current.version }),
+      await updater.apply().then(
+        (version) => setState({ type: "installed", version }),
         (error) => setState({ type: "failed", message: errorMessage(error) }),
       )
     }

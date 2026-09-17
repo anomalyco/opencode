@@ -200,6 +200,16 @@ it.live("install failures expose stderr and process errors do not report success
     expect(missing.commands).toHaveLength(1)
   }),
 )
+
+it.live("manual apply refreshes the latest version before installing", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture((command) => ({
+      stdout: Buffer.from(command.command === "npm" ? "@opencode/cli@2.3.3" : ""),
+    }))
+    expect(yield* test.updater.apply()).toBe("2.3.4")
+    expect(test.commands.at(-1)).toEqual(["npm", "install", "--global", "--force", "@opencode/cli@2.3.4"])
+  }),
+)
 ;(["npm", "pnpm", "bun", "yarn", undefined] as const).forEach((method) => {
   it.live(`method detection identifies ${method ?? "an unknown installation"} using the V2 package`, () =>
     Effect.gen(function* () {

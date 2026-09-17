@@ -15,7 +15,7 @@ export type CheckResult = RunResult | { readonly type: "unavailable"; readonly m
 export interface Interface {
   readonly run: () => Effect.Effect<RunResult | undefined>
   readonly check: () => Effect.Effect<CheckResult | undefined, Error>
-  readonly apply: (version: string) => Effect.Effect<void, Error>
+  readonly apply: () => Effect.Effect<string, Error>
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
@@ -252,8 +252,10 @@ const make = Effect.gen(function* () {
     return true
   })
 
-  const apply = Effect.fn("cli.updater.apply")(function* (version: string) {
+  const apply = Effect.fn("cli.updater.apply")(function* () {
+    const version = yield* latest()
     if (!(yield* install(version))) return yield* Effect.fail(new Error("Installation method not found"))
+    return version
   })
 
   const check = Effect.fn("cli.updater.check")(function* () {

@@ -93,7 +93,7 @@ export default Runtime.handler(Commands, (input) =>
             { signal },
           ),
         check: (signal) => runPromise(Fiber.join(update).pipe(Effect.flatMap(() => updater.check())), { signal }),
-        apply: (version) => runPromise(updater.apply(version)),
+        apply: () => runPromise(updater.apply()),
       },
       packages: {
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
