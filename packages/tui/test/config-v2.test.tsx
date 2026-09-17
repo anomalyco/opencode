@@ -135,6 +135,8 @@ test("preserves current navigation defaults", () => {
   expect(config.keybinds.get("session.message.user.previous")).toEqual([])
   expect(config.keybinds.get("input.buffer.home")).toEqual([])
   expect(config.keybinds.get("input.buffer.end")).toEqual([])
+  expect(config.keybinds.get("session.background")).toEqual([])
+  expect(config.keybinds.get("input.move.left")).toMatchObject([{ key: "left,ctrl+b" }])
   expect(config.keybinds.get("prompt.images.view")).toMatchObject([{ key: "<leader>i" }])
 })
 
@@ -145,6 +147,7 @@ test("preserves migrated v1 keybind defaults", () => {
     ["prompt.queue", "prompt_queue"],
     ["session.delete", "session_delete"],
     ["session.list", "session_list"],
+    ["session.background", "session_background"],
     ["agent.list", "agent_list"],
   ] as const
 

@@ -123,7 +123,7 @@ export const Definitions = {
   "session.share": keybind("none", "Share current session"),
   "session.unshare": keybind("none", "Unshare current session"),
   "session.interrupt": keybind("escape", "Interrupt current session"),
-  "session.background": keybind("ctrl+b", "Background blocking session tools"),
+  "session.background": keybind("none", "Background blocking session tools"),
   "session.compact": keybind("<leader>c", "Compact the session"),
   "session.cd": keybind("none", "Change working directory"),
   "session.queued_prompts": keybind("<leader>q", "Manage queued prompts"),
