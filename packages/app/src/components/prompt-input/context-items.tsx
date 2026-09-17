@@ -51,7 +51,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
               >
                 <div
                   classList={{
-                    "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 cursor-default transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
+                    "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 cursor-default transition-[box-shadow,background-color] shadow-xs-border hover:shadow-xs-border-hover": true,
                     "hover:bg-surface-interactive-weak": !!item.commentID && !selected,
                     "bg-surface-interactive-hover hover:bg-surface-interactive-hover shadow-xs-border-hover": selected,
                     "bg-background-stronger": !selected,
@@ -76,7 +76,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
                       type="button"
                       icon="close-small"
                       variant="ghost"
-                      class="ml-auto size-3.5 text-text-weak hover:text-text-strong transition-all"
+                      class="ml-auto size-3.5 text-text-weak hover:text-text-strong transition-colors"
                       onClick={(e) => {
                         e.stopPropagation()
                         props.remove(item)
