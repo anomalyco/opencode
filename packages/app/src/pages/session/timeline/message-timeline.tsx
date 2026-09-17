@@ -69,6 +69,7 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useSDK } from "@/context/sdk"
+import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
 import { sessionTitle } from "@/utils/session-title"
@@ -262,6 +263,7 @@ export function MessageTimeline(props: {
   const serverSDK = useServerSDK()
   const sdk = useSDK()
   const sync = useSync()
+  const serverSync = useServerSync()
   const settings = useSettings()
   const dialog = useDialog()
   const sessionArchive = useSessionArchive()
@@ -873,6 +875,7 @@ export function MessageTimeline(props: {
 
     for (const id of removed) {
       sync().session.evict(id)
+      serverSync().homeSessions.remove(id)
     }
     notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [...removed] })
     return true
