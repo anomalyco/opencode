@@ -13,6 +13,7 @@ import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { ServiceRegistration } from "./services/service-registration"
+import { ShellEnvironment } from "./shell-environment"
 import { Updater } from "./services/updater"
 import { WebUi } from "./services/web-ui"
 import { databasePath } from "./database-path"
@@ -28,6 +29,9 @@ export type Options = {
 
 // The process effect lives until server shutdown; tracing it would parent every request to one process-lifetime trace.
 export const run = Effect.fnUntraced(function* (options: Options) {
+  // A managed service may have been started by a GUI client with launchd's environment. Adopt the
+  // login shell's before anything reads process.env, including the OPENCODE_* settings below.
+  if (options.mode === "service") yield* ShellEnvironment.adopt()
   return yield* processEffect(options).pipe(
     Effect.provide(
       LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), {
@@ -38,9 +42,8 @@ export const run = Effect.fnUntraced(function* (options: Options) {
         ],
       }),
     ),
-    Effect.provide(NodeServices.layer),
   )
-})
+}, Effect.provide(NodeServices.layer))
 
 const processEffect = Effect.fnUntraced(function* (options: Options) {
   const inherited = process.env.OPENCODE_PTY_HANDOFF
