@@ -110,6 +110,32 @@ describe("ToolRegistry", () => {
     }),
   )
 
+  it.effect("rejects invalid opaque tools before mutating registrations", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      yield* service.register({ healthy: make() })
+
+      const error = yield* service
+        .register({
+          ok: make(),
+          broken: structuredClone(make()) as Tool.AnyTool,
+        })
+        .pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Tool.RegistrationError)
+      expect(error.name).toBe("broken")
+      expect(error.message).toBe("Invalid Tool value")
+
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["healthy"])
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-healthy", name: "healthy", input: { text: "ok" } },
+        }),
+      ).toEqual({ type: "text", value: "ok" })
+    }),
+  )
+
   it.effect("reuses model definitions across provider turns", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service

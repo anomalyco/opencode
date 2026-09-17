@@ -83,6 +83,28 @@ describe("ApplicationTools", () => {
     }),
   )
 
+  it.effect("rejects invalid opaque tools before mutating application registrations", () =>
+    Effect.gen(function* () {
+      const applications = yield* ApplicationTools.Service
+      const registry = yield* ToolRegistry.Service
+      const healthy = contextual([])
+      yield* applications.register({ healthy })
+
+      const error = yield* applications
+        .register({
+          ok: contextual([]),
+          broken: structuredClone(healthy) as Tool.AnyTool,
+        })
+        .pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Tool.RegistrationError)
+      expect(error.name).toBe("broken")
+      expect(error.message).toBe("Invalid Tool value")
+
+      expect([...applications.entries().keys()]).toEqual(["healthy"])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["healthy"])
+    }),
+  )
+
   it.effect("filters an application tool by its name without adding execution authorization", () =>
     Effect.gen(function* () {
       const applications = yield* ApplicationTools.Service
