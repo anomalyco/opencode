@@ -181,8 +181,12 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       // getAdapter throws on unknown types; check registration instead so a
       // missing plugin (fresh boot, wrong type name) degrades to a trunk session
       if (!registeredAdapters(instance.project.id).some(([t]) => t === type)) return payload
+      // Record where the session was started: the UI lists workspace-bound
+      // sessions under this origin (the workspace directory is plumbing the
+      // user never chose and should not surface as a project).
+      const origin = yield* InstanceState.directory
       const info = yield* workspaceSvc
-        .create({ type, branch: null, projectID: instance.project.id })
+        .create({ type, branch: null, projectID: instance.project.id, extra: { origin } })
         .pipe(Effect.orDie)
       const target = yield* WorkspaceAdapterRuntime.target(info).pipe(Effect.orDie)
       if (target.type !== "local") return payload
