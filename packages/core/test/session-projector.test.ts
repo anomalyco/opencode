@@ -130,6 +130,48 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("commits a revert whose boundary is an admitted but unpromoted input", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+      const admitted = SessionMessage.ID.make("msg_admitted")
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.PromptAdmitted, {
+        sessionID,
+        messageID: admitted,
+        timestamp: DateTime.makeUnsafe(1),
+        prompt: Prompt.make({ text: "steer after interrupt" }),
+        delivery: "steer",
+      })
+      yield* events.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(2),
+        revert: { messageID: admitted, files: [] },
+      })
+      yield* events.publish(SessionEvent.RevertEvent.Committed, {
+        sessionID,
+        messageID: admitted,
+        timestamp: DateTime.makeUnsafe(3),
+      })
+      expect(yield* db.select({ id: SessionInputTable.id }).from(SessionInputTable).all()).toEqual([])
+      expect((yield* db.select({ revert: SessionTable.revert }).from(SessionTable).get())?.revert).toBeNull()
+    }),
+  )
+
   it.effect("orders projected messages and context by durable aggregate sequence", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service

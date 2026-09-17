@@ -9,7 +9,7 @@ import { Snapshot } from "../snapshot"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
-import { SessionMessageTable } from "./sql"
+import { SessionInputTable, SessionMessageTable } from "./sql"
 
 export class MessageNotFoundError extends Schema.TaggedErrorClass<MessageNotFoundError>()(
   "Session.MessageNotFoundError",
@@ -26,12 +26,20 @@ interface BoundaryInput {
 
 const plan = Effect.fn("SessionRevert.plan")(function* (input: BoundaryInput) {
   const db = (yield* Database.Service).db
-  const boundary = yield* db
+  const message = yield* db
     .select({ seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.messageID)))
     .get()
     .pipe(Effect.orDie)
+  const boundary =
+    message ??
+    (yield* db
+      .select({ seq: SessionInputTable.admitted_seq })
+      .from(SessionInputTable)
+      .where(and(eq(SessionInputTable.session_id, input.sessionID), eq(SessionInputTable.id, input.messageID)))
+      .get()
+      .pipe(Effect.orDie))
   if (!boundary) return yield* new MessageNotFoundError(input)
   const rows = yield* db
     .select()
