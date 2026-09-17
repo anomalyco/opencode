@@ -113,6 +113,9 @@ describe("OpencodePlugin", () => {
           id: Integration.MethodID.make("device"),
           type: "oauth",
           label: "OpenCode Console account",
+          form: [
+            { key: "server", type: "string", format: "uri", hidden: true, default: "https://opencode.ai/console" },
+          ],
         },
         { type: "key", label: "API key (service account)" },
       ])
@@ -350,7 +353,7 @@ describe("OpencodePlugin", () => {
         })
         .pipe(Effect.flip)
       expect(error).toBeInstanceOf(Integration.AuthorizationError)
-      expect(String(error.cause)).toContain("Invalid OpenCode server URL: expected string")
+      expect(String(error.cause)).toContain("Expected string for form field: server")
     }),
   )
 
