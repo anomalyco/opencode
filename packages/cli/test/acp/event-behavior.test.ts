@@ -656,6 +656,7 @@ describe("acp event behavior", () => {
           { signal },
         )
         submitted.resolve()
+        return "prompt"
       },
     })
 
@@ -694,10 +695,9 @@ describe("acp event behavior", () => {
       writeTextFile: false,
       control,
       submit: (signal) =>
-        fixture.client.session.prompt(
-          { sessionID: "ses_cancel_admission", id: "input_cancel_admission", text: "cancel me" },
-          { signal },
-        ),
+        fixture.client.session
+          .prompt({ sessionID: "ses_cancel_admission", id: "input_cancel_admission", text: "cancel me" }, { signal })
+          .then(() => "prompt" as const),
     })
 
     try {
@@ -784,7 +784,9 @@ function turn(input: {
     control: { cancelled: false, admission: new AbortController() },
     childSessionUpdate: input.childSessionUpdate,
     submit: (signal) =>
-      input.fixture.client.session.prompt({ sessionID: input.sessionID, id: input.inboxID, text: "hello" }, { signal }),
+      input.fixture.client.session
+        .prompt({ sessionID: input.sessionID, id: input.inboxID, text: "hello" }, { signal })
+        .then(() => "prompt" as const),
   })
 }
 

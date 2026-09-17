@@ -11,6 +11,7 @@ import { PluginModule } from "@opencode/core/plugin/module"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { fromPromise } from "@opencode/plugin/promise/adapter"
 import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -497,7 +498,12 @@ it.effect("reloading a plugin replaces its command implementation", () =>
       ])
     const request = {
       name: "greet",
-      invocation: { sessionID: Session.ID.make("ses_plugin"), prompt: { text: "" }, delivery: "steer" as const },
+      invocation: {
+        sessionID: Session.ID.make("ses_plugin"),
+        messageID: SessionMessage.ID.make("msg_greet"),
+        prompt: { text: "" },
+        delivery: "steer" as const,
+      },
     }
 
     yield* load("1", "before")

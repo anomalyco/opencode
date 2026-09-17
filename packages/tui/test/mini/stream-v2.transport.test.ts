@@ -712,9 +712,9 @@ describe("V2 mini transport", () => {
     })
 
     while (!ui.commits.some((commit) => commit.text === "Done.")) await Bun.sleep(0)
-    expect(ui.commits.filter((commit) => commit.kind === "assistant" || commit.kind === "tool").map((commit) => commit.text)).toEqual([
-      "Done.",
-    ])
+    expect(
+      ui.commits.filter((commit) => commit.kind === "assistant" || commit.kind === "tool").map((commit) => commit.text),
+    ).toEqual(["Done."])
     await transport.close()
   })
 
@@ -742,7 +742,11 @@ describe("V2 mini transport", () => {
               model: { providerID: "test", id: "model" },
               content: [
                 { type: "text", text: "I'll check." },
-                canonicalToolPart("read", { status: "completed", input: {}, content: [{ type: "text", text: "file" }] }),
+                canonicalToolPart("read", {
+                  status: "completed",
+                  input: {},
+                  content: [{ type: "text", text: "file" }],
+                }),
               ],
               time: { created: 2, completed: 3 },
             },
@@ -759,7 +763,9 @@ describe("V2 mini transport", () => {
 
     while (!ui.commits.some((commit) => commit.text === "Done.")) await Bun.sleep(0)
     expect(
-      ui.commits.filter((commit) => commit.kind === "user" || commit.kind === "assistant" || commit.kind === "tool").map((commit) => commit.text),
+      ui.commits
+        .filter((commit) => commit.kind === "user" || commit.kind === "assistant" || commit.kind === "tool")
+        .map((commit) => commit.text),
     ).toEqual(["what happened", "Done."])
     await transport.close()
   })
@@ -2929,10 +2935,7 @@ describe("V2 mini transport", () => {
       { sessionID: "ses_1", model: { providerID: "openai", id: "gpt-5", variant: "high" } },
       { signal: undefined },
     )
-    expect(defaultModel).toHaveBeenCalledWith(
-      { location: { directory: "/project" } },
-      { signal: undefined },
-    )
+    expect(defaultModel).toHaveBeenCalledWith({ location: { directory: "/project" } }, { signal: undefined })
     await transport.close()
   })
 
@@ -3406,7 +3409,7 @@ describe("V2 mini transport", () => {
           data: { sessionID: "ses_1" },
         })
       })
-      return ok(undefined)
+      return ok({ type: "prompt" as const, inboxID: "msg_cmd" })
     })
 
     await transport.runPromptTurn({

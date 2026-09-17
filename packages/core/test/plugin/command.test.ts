@@ -37,6 +37,7 @@ describe("CommandPlugin.Plugin", () => {
     Effect.gen(function* () {
       const command = yield* Command.Service
       const prompts: {
+        id?: string
         text: string
         files?: readonly { readonly uri: string }[]
         delivery?: "steer" | "queue"
@@ -51,9 +52,9 @@ describe("CommandPlugin.Plugin", () => {
           session: {
             prompt: (input) =>
               Effect.sync(() => {
-                prompts.push({ text: input.text, files: input.files, delivery: input.delivery })
+                prompts.push({ id: input.id, text: input.text, files: input.files, delivery: input.delivery })
                 return SessionInbox.User.make({
-                  id: SessionMessage.ID.make("msg_test"),
+                  id: input.id ?? SessionMessage.ID.make("msg_test"),
                   sessionID: input.sessionID,
                   time: { created: DateTime.makeUnsafe(0) },
                   type: "user",
@@ -78,10 +79,11 @@ describe("CommandPlugin.Plugin", () => {
         name: "review",
         description: "review changes [commit|branch|pr], defaults to uncommitted",
       })
-      yield* command.execute({
+      const outcome = yield* command.execute({
         name: "init",
         invocation: {
           sessionID: Session.ID.make("ses_test"),
+          messageID: SessionMessage.ID.make("msg_init"),
           prompt: { text: "extra context", files: [{ uri: "file:///tmp/context.md" }] },
           delivery: "queue",
         },
@@ -90,6 +92,7 @@ describe("CommandPlugin.Plugin", () => {
         name: "review",
         invocation: {
           sessionID: Session.ID.make("ses_test"),
+          messageID: SessionMessage.ID.make("msg_review"),
           prompt: { text: "  branch $& $$ $` $'  " },
           delivery: "steer",
         },
@@ -98,6 +101,7 @@ describe("CommandPlugin.Plugin", () => {
         name: "init",
         invocation: {
           sessionID: Session.ID.make("ses_test"),
+          messageID: SessionMessage.ID.make("msg_init_empty"),
           prompt: { text: "" },
           delivery: "steer",
         },
@@ -106,27 +110,33 @@ describe("CommandPlugin.Plugin", () => {
         name: "review",
         invocation: {
           sessionID: Session.ID.make("ses_test"),
+          messageID: SessionMessage.ID.make("msg_review_empty"),
           prompt: { text: "   " },
           delivery: "steer",
         },
       })
+      expect(outcome).toEqual({ type: "prompt", inboxID: SessionMessage.ID.make("msg_init") })
       expect(prompts).toEqual([
         {
+          id: "msg_init",
           text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", "extra context"),
           files: [{ uri: "file:///tmp/context.md" }],
           delivery: "queue",
         },
         {
+          id: "msg_review",
           text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", () => "branch $& $$ $` $'"),
           files: undefined,
           delivery: "steer",
         },
         {
+          id: "msg_init_empty",
           text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
           files: undefined,
           delivery: "steer",
         },
         {
+          id: "msg_review_empty",
           text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
           files: undefined,
           delivery: "steer",

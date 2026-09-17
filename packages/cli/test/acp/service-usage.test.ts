@@ -12,7 +12,7 @@ describe("acp service prompt routing and usage", () => {
           return Response.json({ data: makeSession("ses_routes") })
         }
         if (request.method === "POST" && request.path === "/api/session/ses_routes/command") {
-          return new Response(null, { status: 204 })
+          return Response.json({ data: { type: "immediate" } })
         }
         if (request.method === "POST" && request.path === "/api/session/ses_routes/compact") {
           const id = requestID(request)
@@ -42,6 +42,7 @@ describe("acp service prompt routing and usage", () => {
     const compact = fixture.requests.find((request) => request.path === "/api/session/ses_routes/compact")
     expect(command?.body).toMatchObject({
       name: "review",
+      id: expect.stringMatching(/^msg_/),
       text: "now",
       files: [],
       delivery: "steer",

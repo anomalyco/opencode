@@ -471,7 +471,7 @@ effect: (ctx) =>
   }),
 ```
 
-The current command transform is add-only. An executor receives the session, prompt attachments, and delivery mode.
+The current command transform is add-only. An executor receives the session, a message ID for admitted input, prompt attachments, and delivery mode. Return a `prompt` outcome when the command admits session input so clients follow that work; succeed with `void` for immediate actions.
 
 ```ts
 effect: (ctx) =>
@@ -483,12 +483,15 @@ effect: (ctx) =>
         name: "security-review",
         description: "Review changes for security issues",
         execute: (input) =>
-          session.prompt({
-            ...input.prompt,
-            sessionID: input.sessionID,
-            text: `Review these changes for security issues.\n\n${input.prompt.text}`,
-            delivery: input.delivery,
-          }).pipe(Effect.asVoid),
+          session
+            .prompt({
+              ...input.prompt,
+              sessionID: input.sessionID,
+              id: input.messageID,
+              text: `Review these changes for security issues.\n\n${input.prompt.text}`,
+              delivery: input.delivery,
+            })
+            .pipe(Effect.map((admitted) => ({ type: "prompt" as const, inboxID: admitted.id }))),
       })
     })
     yield* command.reload()

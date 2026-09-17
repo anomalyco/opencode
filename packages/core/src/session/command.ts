@@ -3,6 +3,7 @@ export * as SessionCommand from "./command.js"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { Effect } from "effect"
 import { Command } from "../command.js"
 import { Instance } from "../instance/service.js"
@@ -11,6 +12,7 @@ import { Plugin } from "../plugin/service.js"
 export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
   session: Session.Info
   command: string
+  id?: SessionMessage.ID
   text: string
   files?: PromptInput.Prompt["files"]
   agents?: PromptInput.Prompt["agents"]
@@ -19,10 +21,11 @@ export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
 }) {
   const instances = yield* Instance.Service
   const commands = yield* Plugin.awaitActivation.pipe(Effect.andThen(Command.Service), instances.provide(input.session))
-  yield* commands.execute({
+  return yield* commands.execute({
     name: input.command,
     invocation: {
       sessionID: input.session.id,
+      messageID: input.id ?? SessionMessage.ID.create(),
       prompt: {
         text: input.text,
         files: input.files,
