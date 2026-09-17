@@ -228,4 +228,29 @@ describe("lsp.spawn", () => {
       ),
     { config: { lsp: true } },
   )
+
+  for (const file of ["vehicle.sysml", "library.kerml"]) {
+    it.instance(
+      `spawns sysml-lsp for ${file}`,
+      () =>
+        LSP.Service.use((lsp) =>
+          Effect.gen(function* () {
+            const dir = (yield* TestInstance).directory
+            const spy = spyOn(LSPServer.Sysml, "spawn").mockResolvedValue(undefined)
+
+            try {
+              yield* lsp.hover({
+                file: path.join(dir, "model", file),
+                line: 0,
+                character: 0,
+              })
+              expect(spy).toHaveBeenCalledTimes(1)
+            } finally {
+              spy.mockRestore()
+            }
+          }),
+        ),
+      { config: { lsp: true } },
+    )
+  }
 })

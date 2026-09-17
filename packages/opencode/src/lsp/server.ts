@@ -1981,3 +1981,33 @@ export const JuliaLS: Info = {
     }
   },
 }
+
+export const Sysml: Info = {
+  id: "sysml",
+  extensions: [".sysml", ".kerml"],
+  root: async (_file, ctx) => ctx.directory,
+  async spawn(root, _ctx, flags) {
+    let bin = which("sysml-lsp")
+    if (!bin) {
+      if (!which("go")) return
+      if (flags.disableLspDownload) return
+
+      const proc = Process.spawn(["go", "install", "github.com/Open-MBEE/OpenSysML/cmd/sysml-lsp@latest"], {
+        env: { ...process.env, GOBIN: Global.Path.bin },
+        stdout: "pipe",
+        stderr: "pipe",
+        stdin: "pipe",
+      })
+      const exit = await proc.exited
+      if (exit !== 0) {
+        return
+      }
+      bin = path.join(Global.Path.bin, "sysml-lsp" + (process.platform === "win32" ? ".exe" : ""))
+    }
+    return {
+      process: spawn(bin, ["--stdio"], {
+        cwd: root,
+      }),
+    }
+  },
+}
