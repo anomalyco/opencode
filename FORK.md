@@ -6,7 +6,7 @@ Everything not listed here is stock mainline. In particular, the **experimental 
 
 ## Release lineage
 
-Releases are tagged `v<upstream-version>-neumark.<N>` off `web-ui-title` and published manually with a single `opencode-linux-x64.tar.gz` asset (no CI: upstream `publish.yml` is gated on `github.repository == 'anomalyco/opencode'`). Consumers that need other architectures walk the release list per-arch (fc-opencode's `pick_release_tag` picks the newest release actually shipping `opencode-linux-<arch>.tar.gz`).
+Releases are tagged `v<upstream-version>-neumark.<N>` off `web-ui-title` and published manually (no CI: upstream `publish.yml` is gated on `github.repository == 'anomalyco/opencode'`). Through `v1.18.31-neumark.6` each release shipped a single `opencode-linux-x64.tar.gz` asset; from `v1.18.31-neumark.7` releases ship both `opencode-linux-x64.tar.gz` and `opencode-linux-arm64.tar.gz` (arm64 cross-compiled by bun). Consumers walk the release list per-arch (fc-opencode's `pick_release_tag` picks the newest release actually shipping `opencode-linux-<arch>.tar.gz`).
 
 | Tag | Contents |
 | --- | --- |
@@ -17,6 +17,9 @@ Releases are tagged `v<upstream-version>-neumark.<N>` off `web-ui-title` and pub
 | `v1.18.31-neumark.4` | Home page lists workspace-bound sessions (`2a40543`) |
 | `v1.18.31-neumark.5` | Home page fallback project for workspace-bound sessions (`27449d3`) |
 | `v1.18.31-neumark.6` | Workspace `extra.origin`: sessions belong to their origin directory (`2c0e29c`) |
+| `v1.18.31-neumark.7` | First release off the rebased (linear) history; first dual-arch release — adds `opencode-linux-arm64.tar.gz`; binary code identical to `.6` (delta is this doc + history shape) |
+
+Commit hashes above are the ones the tags pin (pre-rebase history); the equivalent post-rebase commits are `240eb50`, `a2a088a`, `97d3063`, `46a088c`, `d6c987c`, `5d3cb26`.
 
 ## Features
 
