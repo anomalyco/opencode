@@ -85,6 +85,20 @@ describe("inference stat normalization", () => {
     expect(toRetentionAggregate({ ...row, cohort_date: "2026-08-10", eligible_users: "12" })).toMatchObject([
       { model: "omen-alpha", provider: "unknown", eligibleUsers: 12 },
     ])
+    ;["opencode-go/union-alpha", "opencode/union-alpha"].forEach((model) => {
+      expect(statModel(model, "")).toBe("union-alpha")
+      expect(statProvider(model, "gpt-test-model", "test-provider")).toBe("unknown")
+
+      const row = { ...aggregate(model, "test-provider"), provider_model: "gpt-test-model" }
+      expect(toModelAggregate(row)).toMatchObject([{ model: "union-alpha", provider: "unknown", requests: 1 }])
+      expect(toProviderAggregate(row)).toMatchObject([{ provider: "unknown", requests: 1 }])
+      expect(toGeoAggregate({ ...row, country: "US" })).toMatchObject([
+        { model: "union-alpha", provider: "unknown", country: "US", requests: 1 },
+      ])
+      expect(toRetentionAggregate({ ...row, cohort_date: "2026-08-10", eligible_users: "12" })).toMatchObject([
+        { model: "union-alpha", provider: "unknown", eligibleUsers: 12 },
+      ])
+    })
   })
 
   test("merges renamed models under their current name", () => {
@@ -184,7 +198,9 @@ describe("inference stat normalization", () => {
     expect(queries).toHaveLength(8)
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
-      expect(query).toContain("CASE\n      WHEN lower(model) IN ('omen-alpha') THEN 'unknown'\n")
+      expect(query).toContain("CASE\n      WHEN lower(model) IN ('omen-alpha', 'union-alpha') THEN 'unknown'\n")
+      expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
+      expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'deepseek-flash' THEN 'deepseek-v4.1-flash'")
     })
     expect(queries[0]).toContain("'week' AS grain")
@@ -253,7 +269,11 @@ describe("inference stat normalization", () => {
     expect(queries.map((query) => query.cohortDates)).toEqual([["2026-08-10"], ["2026-08-17"]])
     expect(queries[0]?.query).toContain("AND product = 'go'")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
-    expect(queries[0]?.query).toContain("CASE\n      WHEN lower(model) IN ('omen-alpha') THEN 'unknown'\n")
+    expect(queries[0]?.query).toContain(
+      "CASE\n      WHEN lower(model) IN ('omen-alpha', 'union-alpha') THEN 'unknown'\n",
+    )
+    expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
+    expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("COUNT(*) AS model_requests")
     expect(queries[0]?.query).toContain("SUM(model_requests) AS total_requests")
     expect(queries[0]?.query).toContain("MAX(model_requests) AS max_model_requests")
