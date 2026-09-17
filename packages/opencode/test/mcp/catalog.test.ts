@@ -105,3 +105,38 @@ test("preserves output schema validation across paginated tool discovery", async
     await Promise.all([client.close(), server.close()])
   }
 })
+
+test("discovers boolean property schemas without losing output validation", async () => {
+  const server = new Server({ name: "boolean-schema", version: "1.0.0" }, { capabilities: { tools: {} } })
+  const inputSchema = {
+    type: "object" as const,
+    properties: { value: true, forbidden: false, nested: { type: "object", properties: { value: true } } },
+  }
+  const outputSchema = {
+    type: "object" as const,
+    properties: { value: true, forbidden: false },
+  }
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [{ name: "echo", inputSchema, outputSchema }],
+  }))
+  server.setRequestHandler(CallToolRequestSchema, async ({ params }) => ({
+    content: [],
+    structuredContent: params.arguments ?? {},
+  }))
+  const client = new Client({ name: "boolean-schema-test", version: "1.0.0" })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+
+  try {
+    const tools = await Effect.runPromise(McpCatalog.defs(client))
+    expect(tools).toMatchObject([{ name: "echo", inputSchema, outputSchema }])
+    expect(await client.callTool({ name: "echo", arguments: { value: 42 } })).toMatchObject({
+      structuredContent: { value: 42 },
+    })
+    await expect(client.callTool({ name: "echo", arguments: { forbidden: 42 } })).rejects.toThrow(
+      "Structured content does not match the tool's output schema",
+    )
+  } finally {
+    await Promise.all([client.close(), server.close()])
+  }
+})
