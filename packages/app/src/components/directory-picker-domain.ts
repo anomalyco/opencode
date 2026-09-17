@@ -345,7 +345,10 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const request = args.sdk.api.file
       .list({ location: { directory: key } })
       .then((result) => result.data)
-      .catch(() => [])
+      .catch(() => {
+        cache.delete(key)
+        return []
+      })
       .then((nodes) =>
         nodes
           .filter((node) => node.type === "directory")

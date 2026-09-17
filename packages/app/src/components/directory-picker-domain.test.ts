@@ -237,6 +237,47 @@ test("searches from an absolute root without a default base", async () => {
   expect(directories).toEqual(["/"])
 })
 
+test("retries a failed directory listing without reopening the picker", async () => {
+  let attempts = 0
+  const sdk = {
+    api: {
+      file: {
+        list: () => {
+          attempts++
+          if (attempts === 1) return Promise.reject(new Error("Permission denied"))
+          return Promise.resolve({ data: [{ path: "My project 日本語/", type: "directory" }] })
+        },
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
+
+  expect(await search("~/")).toEqual(["/home/luke"])
+  expect(await search("~/")).toEqual(["/home/luke", "/home/luke/My project 日本語"])
+  expect(await search("~/My")).toEqual(["/home/luke/My project 日本語"])
+  expect(attempts).toBe(2)
+})
+
+test("does not replace newer results when an earlier directory listing fails", async () => {
+  const pending = Promise.withResolvers<{ data: { path: string; type: string }[] }>()
+  const sdk = {
+    api: {
+      file: {
+        list: (input: { location?: { directory?: string } }) =>
+          input.location?.directory === "/home/luke"
+            ? pending.promise
+            : Promise.resolve({ data: [{ path: "project/", type: "directory" }] }),
+      },
+    },
+  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
+
+  const previous = search("~/")
+  expect(await search("/project")).toEqual(["/project", "/project/project"])
+  pending.reject(new Error("Disconnected"))
+  expect(await previous).toEqual([])
+})
+
 test("identifies the next directory level to preload", () => {
   expect(
     preloadTreeDirectories("src/", [
