@@ -9,7 +9,7 @@ function compactKeyValue(data: unknown, path: string): string | undefined {
   if (!path.startsWith("$.")) return undefined
   let current: unknown = data
   for (const segment of path.slice(2).split(".")) {
-    if (typeof current !== "object" || current === null) return undefined
+    if (typeof current !== "object" || current === null || !Object.hasOwn(current, segment)) return undefined
     current = Reflect.get(current, segment)
   }
   return typeof current === "string" ? current : undefined
@@ -22,6 +22,17 @@ function accountingPart(data: unknown): boolean {
   if (typeof data !== "object" || data === null) return false
   const part = Reflect.get(data, "part")
   return typeof part === "object" && part !== null && Reflect.get(part, "type") === "step-finish"
+}
+
+// Raw SQL bypasses drizzle's json-mode column mapping: `data` comes back as a
+// serialized string, so it must be parsed before the key helpers run.
+function parseData(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return undefined
+  }
 }
 
 export default {
@@ -38,8 +49,9 @@ export default {
           sql`SELECT id, data FROM ${sql.identifier("event")} WHERE type = ${type} AND compact_key IS NULL`,
         )
         for (const row of rows) {
-          if (accountingPart(row.data)) continue
-          const key = compactKeyValue(row.data, path)
+          const data = parseData(row.data)
+          if (data === undefined || accountingPart(data)) continue
+          const key = compactKeyValue(data, path)
           if (key === undefined) continue
           yield* tx.run(sql`UPDATE ${sql.identifier("event")} SET compact_key = ${key} WHERE id = ${row.id}`)
         }

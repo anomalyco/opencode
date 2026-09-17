@@ -345,29 +345,39 @@ const layer = Layer.effect(
 
       const history = (yield* response.json) as HistoryEvent[]
 
+      // Replay per-aggregate batches: the history endpoint returns compacted
+      // rows, so sequence gaps are normal. replayAll verifies ascending order
+      // within a batch and tolerates those gaps; single-event replay would
+      // die on every post-gap row and wedge the resync permanently.
+      const groups = new Map<string, HistoryEvent[]>()
+      for (const event of history) {
+        const group = groups.get(event.aggregate_id)
+        if (group) group.push(event)
+        else groups.set(event.aggregate_id, [event])
+      }
+
       yield* Effect.forEach(
-        history,
-        (event) =>
+        groups,
+        ([aggregateID, group]) =>
           events
-            .replay(
-              {
+            .replayAll(
+              group.map((event) => ({
                 id: EventV2.ID.make(event.id),
                 aggregateID: event.aggregate_id,
                 seq: event.seq,
                 type: event.type,
                 data: event.data,
-              },
+              })),
               { publish: true, ownerID: space.id },
             )
             .pipe(
               Effect.catchCause((error) =>
-                // One un-replayable event must not abort the whole history
-                // pass: it would wedge every future resync at the same event.
-                Effect.logWarning("failed to replay history event", {
+                // One un-replayable batch must not abort the whole history
+                // pass: it would wedge every future resync at the same events.
+                Effect.logWarning("failed to replay history batch", {
                   workspaceID: space.id,
-                  sessionID: event.aggregate_id,
-                  seq: event.seq,
-                  type: event.type,
+                  sessionID: aggregateID,
+                  seqs: group.map((event) => event.seq),
                   error: errorData(error),
                 }),
               ),
@@ -451,7 +461,8 @@ const layer = Layer.effect(
                   // requests will never resend it. Resync the whole session
                   // history instead of continuing with a hole. Replay
                   // failures are defects (Effect.die), so catch the cause,
-                  // not just typed errors.
+                  // not just typed errors. The latch resets when the resync
+                  // settles so a later, different poison event still resyncs.
                   yield* syncHistory(space, target.url, target.headers).pipe(
                     Effect.catchCause((error) =>
                       Effect.logWarning("history resync after failed replay failed", {
@@ -461,9 +472,17 @@ const layer = Layer.effect(
                       }),
                     ),
                   )
+                  resyncInFlight = false
                   return
                 }
                 if (failed) return
+              } else if (payload.type === "sync") {
+                // A sync payload that fails schema validation is invisible
+                // data loss if dropped silently — log it.
+                yield* Effect.logWarning("malformed sync event from global sync", {
+                  workspaceID: space.id,
+                  payload,
+                })
               }
 
               try {

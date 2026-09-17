@@ -27,7 +27,7 @@ function compactKeyValue(encoded: Record<string, unknown>, path: string): string
   if (!path.startsWith("$.")) return undefined
   let current: unknown = encoded
   for (const segment of path.slice(2).split(".")) {
-    if (typeof current !== "object" || current === null) return undefined
+    if (typeof current !== "object" || current === null || !Object.hasOwn(current, segment)) return undefined
     current = Reflect.get(current, segment)
   }
   return typeof current === "string" ? current : undefined
@@ -484,14 +484,14 @@ export const layerWith = (options?: LayerOptions) =>
                                   .run()
                                   .pipe(Effect.orDie)
                               } else if (!compared) {
-                                // Locate the previous snapshots for this entity
-                                // via the materialized compact key: one indexed
-                                // lookup, one delete. All older snapshots go at
-                                // once, which also drains the backlog left by
-                                // databases upgraded from before compaction.
-                                const superseded = yield* db
-                                  .select({ seq: EventTable.seq })
-                                  .from(EventTable)
+                                // One indexed DELETE removes every older
+                                // snapshot for this entity at once, which also
+                                // drains the backlog left by databases upgraded
+                                // from before compaction. Direct WHERE, no id
+                                // list: a huge backlog must not hit the
+                                // bind-variable ceiling.
+                                yield* db
+                                  .delete(EventTable)
                                   .where(
                                     and(
                                       eq(EventTable.aggregate_id, aggregateID),
@@ -500,23 +500,8 @@ export const layerWith = (options?: LayerOptions) =>
                                       eq(EventTable.compact_key, compactKey),
                                     ),
                                   )
-                                  .all()
+                                  .run()
                                   .pipe(Effect.orDie)
-                                if (superseded.length > 0) {
-                                  yield* db
-                                    .delete(EventTable)
-                                    .where(
-                                      and(
-                                        eq(EventTable.aggregate_id, aggregateID),
-                                        inArray(
-                                          EventTable.seq,
-                                          superseded.map((row) => row.seq),
-                                        ),
-                                      ),
-                                    )
-                                    .run()
-                                    .pipe(Effect.orDie)
-                                }
                               }
                             }
                           }
@@ -689,9 +674,14 @@ export const layerWith = (options?: LayerOptions) =>
             previous = event.seq
           }
           // The batch verified ascending order, so forward jumps inside it are
-          // compaction gaps, not a hostile cursor advance.
+          // compaction gaps, not a hostile cursor advance. Only compacted
+          // types can legally have gaps — uncompacted rows are never deleted.
           for (const event of events) {
-            yield* replay(event, { ...options, allowGap: true })
+            const definition = Durable.get(event.type)
+            yield* replay(event, {
+              ...options,
+              allowGap: definition?.durable?.compact !== undefined,
+            })
           }
           return source
         })
