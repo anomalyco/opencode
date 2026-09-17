@@ -27,6 +27,7 @@ import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
+import { safeExit } from "./util/exit"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 
@@ -137,6 +138,6 @@ try {
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
-  // Explicitly exit to avoid any hanging subprocesses.
-  process.exit()
+  // Explicitly exit (on non-Windows) to avoid any hanging subprocesses.
+  safeExit()
 }
