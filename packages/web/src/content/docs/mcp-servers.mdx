@@ -510,3 +510,33 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Baizhi Agent Toolkit
+
+Add [Baizhi Agent Toolkit](https://baizhi.cloud/landing/agent-toolkit) to search the web, scrape pages, and extract structured information.
+
+The hosted service requires a Baizhi Cloud account, an API key, and sufficient service credits. Create an API key in the [Baizhi console](https://agent-toolkit.app.baizhi.cloud/), then set the `BAIZHI_API_KEY` environment variable before starting OpenCode. Use the key alone, without the `Bearer` prefix, and keep the real key out of configuration files and version control.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "baizhi": {
+      "type": "remote",
+      "url": "https://agent-toolkit.app.baizhi.cloud/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:BAIZHI_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Use [tool controls](#manage) to enable only the tools you need. Add `use baizhi` to your prompts to use the server:
+
+```txt "use baizhi"
+Find the official documentation for Streamable HTTP MCP and summarize it with source links. use baizhi
+```
