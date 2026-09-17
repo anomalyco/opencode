@@ -32,6 +32,23 @@ for (const expanded of [false, true]) {
   })
 }
 
+test("shows and expands a running shell command without shimmering it", async ({ page }) => {
+  const id = "prt_shell_running_command"
+  const command = "sleep 10 && echo done"
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([shell(id, "running", "still running", command)], { completed: false })],
+    settings: { shellToolPartsExpanded: false },
+  })
+
+  const tool = page.locator(`[data-timeline-part-id="${id}"]`)
+  await expect(tool.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
+  await expect(tool.locator('[data-component="shell-submessage"]')).toHaveText(command)
+  await expect(tool.locator('[data-component="shell-submessage"] [data-component="text-shimmer"]')).toHaveCount(0)
+  await tool.locator('[data-slot="collapsible-trigger"]').click()
+  await expect(tool.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
+  await expect(tool.locator('[data-slot="bash-pre"]')).toContainText("still running")
+})
+
 test("transitions thinking and hidden reasoning through busy to idle", async ({ page }) => {
   const reasoningID = "prt_reasoning_hidden"
   const assistant = assistantMessage([reasoningPart(reasoningID, "## Inspecting stability")], { completed: false })

@@ -1,5 +1,6 @@
 import { type ComponentProps, type JSX, Show, splitProps } from "solid-js"
 import { Icon } from "./icon"
+import { useI18n } from "../../context/i18n"
 import "./text-input-v2.css"
 
 export interface TextInputV2Props extends Omit<ComponentProps<"input">, "type"> {
@@ -25,6 +26,7 @@ export interface TextInputV2Props extends Omit<ComponentProps<"input">, "type"> 
 }
 
 export function TextInputV2(props: TextInputV2Props) {
+  const i18n = useI18n()
   const [local, inputProps] = splitProps(props, [
     "class",
     "classList",
@@ -71,7 +73,11 @@ export function TextInputV2(props: TextInputV2Props) {
           type="button"
           data-slot="text-input-v2-icon-button"
           data-variant={local.showClearButton ? "clear" : "copy"}
-          aria-label={local.showClearButton ? (local.clearLabel ?? "Clear") : (local.copyLabel ?? "Copy")}
+          aria-label={
+            local.showClearButton
+              ? (local.clearLabel ?? i18n.t("ui.common.clear"))
+              : (local.copyLabel ?? i18n.t("ui.message.copy"))
+          }
           disabled={local.disabled}
           onMouseDown={(event) => {
             if (!local.showClearButton) return

@@ -4,7 +4,7 @@ const docs = `### Overview
 Button v2 with visual variants and three sizes.
 
 ### API
-- \`variant\`: "neutral" | "danger" | "contrast" | "ghost" | "ghost-muted" | "loading".
+- \`variant\`: "neutral" | "danger" | "warning" | "contrast" | "ghost" | "ghost-muted" | "loading".
 - \`size\`: "small" | "normal" | "large".
 - \`icon\`: Optional icon name.
 - Inherits Kobalte Button props and native button attributes.
@@ -39,7 +39,7 @@ export default {
     },
     variant: {
       control: "select",
-      options: ["neutral", "danger", "contrast", "ghost", "ghost-muted", "loading"],
+      options: ["neutral", "danger", "warning", "contrast", "ghost", "ghost-muted", "loading"],
     },
     size: {
       control: "select",
@@ -62,6 +62,7 @@ export const Variants = {
     >
       <ButtonV2 variant="neutral">Neutral</ButtonV2>
       <ButtonV2 variant="danger">Danger</ButtonV2>
+      <ButtonV2 variant="warning">Warning</ButtonV2>
       <ButtonV2 variant="contrast">Contrast</ButtonV2>
       <ButtonV2 variant="ghost">Ghost</ButtonV2>
       <ButtonV2 variant="ghost-muted" icon="edit">
@@ -117,7 +118,7 @@ export const Icon = {
 
 export const AllStates = {
   render: () => {
-    const variants = ["neutral", "danger", "contrast", "ghost", "ghost-muted", "loading"] as const
+    const variants = ["neutral", "danger", "warning", "contrast", "ghost", "ghost-muted", "loading"] as const
     const states = ["default", "hover", "pressed", "focus", "disabled"] as const
     const toTitleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
     return (

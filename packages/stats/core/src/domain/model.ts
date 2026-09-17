@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, or } from "drizzle-orm"
+import { and, asc, eq, inArray, max, or } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import * as Context from "effect/Context"
 import { DatabaseError, DrizzleClient } from "../database"
@@ -7,6 +7,7 @@ import { RETIRED_STAT_MODELS, RETIRED_STAT_PROVIDERS } from "./model-normalizati
 import {
   chunks,
   collapseRows,
+  DATA_SITE_TIERS,
   inserted,
   isMissingUniqueUsersColumn,
   omitUniqueUsers,
@@ -43,6 +44,7 @@ export type ModelStatMetric = {
 export declare namespace ModelStatRepo {
   export interface Service {
     readonly listDaily: () => Effect.Effect<ModelStatMetric[], DatabaseError>
+    readonly lastSyncedAt: () => Effect.Effect<Date | null, DatabaseError>
     readonly upsert: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
     readonly deleteRetiredDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
   }
@@ -109,6 +111,14 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
           },
           catch: (cause) => DatabaseError.make({ cause }),
         })
+      })
+
+      const lastSyncedAt = Effect.fn("ModelStatRepo.lastSyncedAt")(function* () {
+        const result = yield* Effect.tryPromise({
+          try: () => db.select({ value: max(modelStat.updated_at) }).from(modelStat),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+        return result[0]?.value ?? null
       })
 
       const upsert = Effect.fn("ModelStatRepo.upsert")(function* (rows: ModelStatRow[]) {
@@ -192,7 +202,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
         })
       })
 
-      return ModelStatRepo.of({ listDaily, upsert, deleteRetiredDimensions })
+      return ModelStatRepo.of({ listDaily, lastSyncedAt, upsert, deleteRetiredDimensions })
     }),
   )
 }
@@ -202,7 +212,7 @@ function modelDailyScope() {
     eq(modelStat.grain, "day"),
     eq(modelStat.client, "all"),
     eq(modelStat.source, "all"),
-    inArray(modelStat.tier, ["Go", "go"]),
+    inArray(modelStat.tier, DATA_SITE_TIERS),
   )
 }
 

@@ -9,7 +9,7 @@ import { Effect, Layer } from "effect"
 import * as Context from "effect/Context"
 import { Resource } from "sst/resource"
 
-const ATHENA_MAX_POLL_ATTEMPTS = 300
+const ATHENA_MAX_POLL_ATTEMPTS = 900
 const ATHENA_PAGE_SIZE = 1000
 
 export type AthenaData = Record<string, string>

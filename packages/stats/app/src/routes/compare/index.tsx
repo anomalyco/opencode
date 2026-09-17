@@ -1,4 +1,3 @@
-import "../index.css"
 import { Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { createAsync } from "@solidjs/router"
@@ -8,13 +7,20 @@ import { LocaleLinks } from "../../component/locale-links"
 import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
 import { localizedUrl } from "../../lib/language"
-import { comparisonHref, modelRefFromCatalog, type ComparisonModelRef } from "../compare-cards"
+import {
+  ComparisonCardsSection,
+  comparisonHref,
+  modelRefFromCatalog,
+  type ComparisonModelRef,
+  type ComparisonPair,
+} from "../compare-cards"
 import { formatCatalogLabName, getModelCatalog, type ModelCatalogEntry } from "../model-catalog"
 import { setStatsPageCacheHeaders } from "../stats-cache"
 import {
   applyThemePreference,
   Footer,
   getGitHubStars,
+  githubLink,
   Header,
   isThemePreference,
   themeStorageKey,
@@ -56,13 +62,6 @@ const categoryTemplates = [
   },
 ] as const
 
-type CompareCategory = {
-  title: string
-  description: string
-  first: ComparisonModelRef
-  second: ComparisonModelRef
-  avatars: ComparisonModelRef[]
-}
 type CompareSlot = "first" | "second"
 
 export default function ModelCompareIndex() {
@@ -75,7 +74,8 @@ export default function ModelCompareIndex() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const compareUrl = createMemo(() => localizedUrl(language.locale(), comparePath))
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
-  const featuredModels = createMemo(() => (catalog()?.models ?? []).slice(0, 120))
+  const models = createMemo(() => catalog()?.models ?? [])
+  const featuredModels = createMemo(() => models().slice(0, 120))
   const categories = createMemo(() => buildComparisonCategories(featuredModels()))
   const compareHeaderLinks = createMemo<readonly HeaderLink[]>(() => [
     { href: `${import.meta.env.BASE_URL}#top-models`, label: i18n.t("nav.topModels") },
@@ -126,7 +126,11 @@ export default function ModelCompareIndex() {
       <Meta name="twitter:description" content={compareDescription} />
       <Meta name="twitter:image" content={statsUnfurlUrl} />
       <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
-      <Header githubStars={githubStars() ?? "150K"} links={compareHeaderLinks()} brandHref={import.meta.env.BASE_URL} />
+      <Header
+        githubStars={githubStars() ?? githubLink.fallbackStars}
+        links={compareHeaderLinks()}
+        brandHref={import.meta.env.BASE_URL}
+      />
       <div data-component="container">
         <div data-component="content">
           <section id="compare-tool" data-section="compare-home-hero">
@@ -135,7 +139,7 @@ export default function ModelCompareIndex() {
                 Data
               </a>
               <span data-slot="compare-home-separator">/</span>
-              <span data-slot="compare-home-crumb" data-current="true">
+              <span data-slot="compare-home-crumb" data-current="true" aria-current="page">
                 Compare
               </span>
             </nav>
@@ -151,7 +155,7 @@ export default function ModelCompareIndex() {
           </section>
           <section data-section="compare-home-selector" aria-label="Choose models to compare">
             <Show
-              when={featuredModels().length > 1}
+              when={models().length > 1}
               fallback={
                 <div data-component="empty-state" data-compact="true">
                   <strong>No models found</strong>
@@ -159,19 +163,15 @@ export default function ModelCompareIndex() {
                 </div>
               }
             >
-              <CompareHomeSelector models={featuredModels()} />
+              <CompareHomeSelector models={models()} />
             </Show>
           </section>
-          <Show when={categories().length > 0}>
-            <section id="model-comparison" data-section="compare-home-related">
-              <p data-slot="section-title">
-                <strong>Related comparisons.</strong> <span>Other model pairs to check.</span>
-              </p>
-              <div data-component="compare-home-card-grid">
-                <For each={categories()}>{(category) => <CompareHomeCard category={category} />}</For>
-              </div>
-            </section>
-          </Show>
+          <ComparisonCardsSection
+            pairs={categories()}
+            title="Related comparisons"
+            description="Other model pairs to check."
+            variant="featured"
+          />
         </div>
         <Footer
           themePreference={themePreference()}
@@ -443,35 +443,6 @@ function HeroModelStack() {
   )
 }
 
-function CompareHomeCard(props: { category: CompareCategory }) {
-  return (
-    <a
-      data-component="compare-home-card"
-      href={comparisonHref(props.category.first, props.category.second)}
-      aria-label={`${props.category.title}: ${props.category.first.name} vs ${props.category.second.name}`}
-    >
-      <span data-slot="compare-home-card-head">
-        <span>
-          <strong>{props.category.title}</strong>
-          <em>{props.category.description}</em>
-        </span>
-        <b aria-hidden="true" />
-      </span>
-      <span data-slot="compare-home-card-divider" aria-hidden="true" />
-      <span data-slot="compare-home-card-models">
-        <span>{props.category.first.name}</span>
-        <i aria-hidden="true">·</i>
-        <span>{props.category.second.name}</span>
-      </span>
-      <span data-slot="compare-home-card-avatars" aria-hidden="true">
-        <For each={props.category.avatars}>
-          {(model) => <LabLogo lab={model.lab} label={model.name} size="small" />}
-        </For>
-      </span>
-    </a>
-  )
-}
-
 function ModelAvatar(props: { model: ModelCatalogEntry; size: "large" | "small" | "tiny" }) {
   return <LabLogo lab={props.model.lab} label={props.model.name} size={props.size} />
 }
@@ -486,8 +457,8 @@ function LabLogo(props: { lab: string; label: string; size: "large" | "small" | 
   )
 }
 
-function buildComparisonCategories(models: ModelCatalogEntry[]): CompareCategory[] {
-  return categoryTemplates.reduce<{ keys: Set<string>; categories: CompareCategory[] }>(
+function buildComparisonCategories(models: ModelCatalogEntry[]): ComparisonPair[] {
+  return categoryTemplates.reduce<{ keys: Set<string>; categories: ComparisonPair[] }>(
     (result, template, index) => {
       const candidates = categoryCandidates(template.kind, models)
       const pair = categoryPair(candidates, models, index, result.keys)
@@ -496,11 +467,10 @@ function buildComparisonCategories(models: ModelCatalogEntry[]): CompareCategory
       const first = modelRefFromCatalog(pair.first)
       const second = modelRefFromCatalog(pair.second)
       result.categories.push({
-        title: template.title,
+        detail: template.title,
         description: template.description,
         first,
         second,
-        avatars: [first, second],
       })
       return result
     },

@@ -736,5 +736,5 @@ async function switchTitlebarSession(page: Page, sessionID: string, title: strin
 }
 
 async function expectSessionReady(page: Page) {
-  await expectAppVisible(page.getByRole("textbox", { name: /Ask anything/i }))
+  await expectAppVisible(page.getByRole("textbox", { name: "Prompt" }))
 }

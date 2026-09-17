@@ -223,7 +223,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const replyMutation = useMutation(() => ({
-    mutationFn: (answers: QuestionAnswer[]) => sdk().client.question.reply({ requestID: props.request.id, answers }),
+    mutationFn: (answers: QuestionAnswer[]) =>
+      sdk().api.question.reply({ sessionID: props.request.sessionID, requestID: props.request.id, answers }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -235,7 +236,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk().client.question.reject({ requestID: props.request.id }),
+    mutationFn: () => sdk().api.question.reject({ sessionID: props.request.sessionID, requestID: props.request.id }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -471,7 +472,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                         data-answered={answered(i())}
                         disabled={sending()}
                         onClick={() => jump(i())}
-                        aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
+                        aria-label={language.t("ui.tool.questions.numbered", { number: i() + 1 })}
                       />
                     )}
                   </For>

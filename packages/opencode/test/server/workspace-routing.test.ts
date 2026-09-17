@@ -80,6 +80,13 @@ describe("workspaceProxyURL", () => {
     expect(result.searchParams.get("keep")).toBe("yes")
   })
 
+  test("strips the host directory param so the remote resolves its own root", () => {
+    const url = new URL("http://localhost/session/abc?directory=F%3A%5Cproj&keep=yes")
+    const result = workspaceProxyURL("http://remote:8080/base", url)
+    expect(result.searchParams.get("directory")).toBeNull()
+    expect(result.searchParams.get("keep")).toBe("yes")
+  })
+
   test("preserves hash from request", () => {
     const url = new URL("http://localhost/page#section")
     const result = workspaceProxyURL("http://remote:8080", url)

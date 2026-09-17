@@ -75,3 +75,33 @@ export function flattenFileTreeV2(model: FileTreeV2Model, expanded: (path: strin
 
   return rows
 }
+
+export function flattenLiveFileTreeV2(
+  children: (path: string) => readonly FileNode[],
+  expanded: (path: string) => boolean,
+) {
+  const rows: FileTreeV2Row[] = []
+  const stack = children("")
+    .toReversed()
+    .map((node) => ({ node: toLiveNode(node), level: 0 }))
+
+  while (stack.length > 0) {
+    const row = stack.pop()!
+    rows.push(row)
+    if (row.node.type !== "directory" || !expanded(row.node.path)) continue
+    const nested = children(row.node.originalPath)
+    for (let index = nested.length - 1; index >= 0; index--) {
+      stack.push({ node: toLiveNode(nested[index]!), level: row.level + 1 })
+    }
+  }
+
+  return rows
+}
+
+function toLiveNode(node: FileNode): FileTreeV2Node {
+  return {
+    ...node,
+    path: normalizeFileTreeV2Path(node.path),
+    originalPath: node.path,
+  }
+}

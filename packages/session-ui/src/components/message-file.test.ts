@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { FilePart } from "@opencode-ai/sdk/v2"
-import { attached, inline, kind } from "./message-file"
+import { attached, inline, kind, typeLabel } from "./message-file"
 
 function file(part: Partial<FilePart> = {}): FilePart {
   return {
@@ -21,7 +21,7 @@ describe("message-file", () => {
     expect(attached(file())).toBe(false)
   })
 
-  test("treats only non-attachment source ranges as inline references", () => {
+  test("keeps data-backed file mentions inline", () => {
     expect(
       inline(
         file({
@@ -34,22 +34,30 @@ describe("message-file", () => {
       ),
     ).toBe(true)
 
-    expect(
-      inline(
-        file({
-          url: "data:text/plain;base64,SGVsbG8=",
-          source: {
-            type: "file",
-            path: "/repo/README.txt",
-            text: { value: "@README.txt", start: 0, end: 11 },
-          },
-        }),
-      ),
-    ).toBe(false)
+    const mentioned = file({
+      url: "data:text/plain;base64,SGVsbG8=",
+      source: {
+        type: "file",
+        path: "/repo/README.txt",
+        text: { value: "@README.txt", start: 0, end: 11 },
+      },
+    })
+    expect(inline(mentioned)).toBe(true)
+    expect(attached(mentioned)).toBe(false)
   })
 
   test("separates image and file attachment kinds", () => {
     expect(kind(file({ mime: "image/png" }))).toBe("image")
     expect(kind(file({ mime: "application/pdf" }))).toBe("file")
+  })
+
+  test("labels attachment types from the basename extension", () => {
+    expect(typeLabel("list.md", "text/plain", "File")).toBe("Markdown")
+    expect(typeLabel("/repo/src/main.ts", "text/plain", "File")).toBe("TypeScript")
+    expect(typeLabel("/tmp/report.pdf", "application/pdf", "File")).toBe("PDF")
+    expect(typeLabel("notes.xyz", "text/plain", "File")).toBe("XYZ")
+    expect(typeLabel("/home/user/my.project/Makefile", "text/plain", "File")).toBe("File")
+    expect(typeLabel(".gitignore", "text/plain", "File")).toBe("File")
+    expect(typeLabel("/repo/.env", "text/plain", "File")).toBe("File")
   })
 })

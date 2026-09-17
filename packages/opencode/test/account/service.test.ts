@@ -10,6 +10,7 @@ import { Account } from "../../src/account/account"
 import {
   AccessToken,
   AccountID,
+  AccountServiceError,
   AccountTransportError,
   DeviceCode,
   Login,
@@ -71,18 +72,18 @@ const deviceTokenClient = (body: unknown, status = 400) =>
 const poll = (body: unknown, status = 400) =>
   Account.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(deviceTokenClient(body, status))))
 
-it.live("login normalizes trailing slashes in the provided server URL", () =>
+it.live("login resolves origin-rooted verification URLs from servers with base paths", () =>
   Effect.gen(function* () {
     const seen: Array<string> = []
     const client = HttpClient.make((req) =>
       Effect.gen(function* () {
         seen.push(`${req.method} ${req.url}`)
 
-        if (req.url === "https://one.example.com/auth/device/code") {
+        if (req.url === "https://one.example.com/console/auth/device/code") {
           return json(req, {
             device_code: "device-code",
             user_code: "user-code",
-            verification_uri_complete: "/device?user_code=user-code",
+            verification_uri_complete: "/console/device?user_code=user-code",
             expires_in: 600,
             interval: 5,
           })
@@ -92,11 +93,31 @@ it.live("login normalizes trailing slashes in the provided server URL", () =>
       }),
     )
 
-    const result = yield* Account.use.login("https://one.example.com/").pipe(Effect.provide(live(client)))
+    const result = yield* Account.use.login("https://one.example.com/console/").pipe(Effect.provide(live(client)))
 
-    expect(seen).toEqual(["POST https://one.example.com/auth/device/code"])
-    expect(result.server).toBe("https://one.example.com")
-    expect(result.url).toBe("https://one.example.com/device?user_code=user-code")
+    expect(seen).toEqual(["POST https://one.example.com/console/auth/device/code"])
+    expect(result.server).toBe("https://one.example.com/console")
+    expect(result.url).toBe("https://one.example.com/console/device?user_code=user-code")
+  }),
+)
+
+it.live("login rejects malformed device verification URLs", () =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((req) =>
+      Effect.succeed(
+        json(req, {
+          device_code: "device-code",
+          user_code: "user-code",
+          verification_uri_complete: "http://[::1",
+          expires_in: 600,
+          interval: 5,
+        }),
+      ),
+    )
+
+    const error = yield* Effect.flip(Account.use.login("https://one.example.com").pipe(Effect.provide(live(client))))
+    expect(error).toBeInstanceOf(AccountServiceError)
+    if (error instanceof AccountServiceError) expect(error.message).toBe("Invalid device verification URL")
   }),
 )
 
@@ -170,6 +191,53 @@ it.live("orgsByAccount groups orgs per account", () =>
       [AccountID.make("user-2"), [OrgID.make("org-2"), OrgID.make("org-3")]],
     ])
     expect(seen).toEqual(["GET https://one.example.com/api/orgs", "GET https://two.example.com/api/orgs"])
+  }),
+)
+
+it.live("remove switches to another org when the active account is removed", () =>
+  Effect.gen(function* () {
+    const first = AccountID.make("user-1")
+    const second = AccountID.make("user-2")
+
+    yield* AccountRepo.Service.use((r) =>
+      r.persistAccount({
+        id: first,
+        email: "one@example.com",
+        url: "https://one.example.com",
+        accessToken: AccessToken.make("at_1"),
+        refreshToken: RefreshToken.make("rt_1"),
+        expiry: Date.now() + outsideEagerRefreshWindow,
+        orgID: Option.some(OrgID.make("org-1")),
+      }),
+    )
+
+    yield* AccountRepo.Service.use((r) =>
+      r.persistAccount({
+        id: second,
+        email: "two@example.com",
+        url: "https://two.example.com",
+        accessToken: AccessToken.make("at_2"),
+        refreshToken: RefreshToken.make("rt_2"),
+        expiry: Date.now() + outsideEagerRefreshWindow,
+        orgID: Option.some(OrgID.make("org-2")),
+      }),
+    )
+
+    const client = HttpClient.make((req) =>
+      Effect.succeed(
+        req.url === "https://one.example.com/api/orgs" ? json(req, [org("org-1", "One")]) : json(req, [], 404),
+      ),
+    )
+
+    yield* Account.use.remove(second).pipe(Effect.provide(live(client)))
+
+    const active = yield* AccountRepo.use.active()
+    expect(Option.getOrThrow(active)).toEqual(
+      expect.objectContaining({
+        id: first,
+        active_org_id: OrgID.make("org-1"),
+      }),
+    )
   }),
 )
 

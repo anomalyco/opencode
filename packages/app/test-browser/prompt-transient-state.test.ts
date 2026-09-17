@@ -18,7 +18,6 @@ test("resets transient prompt input state when the prompt session changes", () =
       draggingType: "image",
       mode: "shell",
       applyingHistory: true,
-      variantOpen: true,
     })
 
     setIdentity("B")
@@ -33,7 +32,6 @@ test("resets transient prompt input state when the prompt session changes", () =
       draggingType: null,
       mode: "normal",
       applyingHistory: false,
-      variantOpen: false,
     })
     dispose()
   })

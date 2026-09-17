@@ -15,12 +15,12 @@ const rootSession = (input: { id: string; parentID?: string; archived?: number }
     },
   }) as Session
 
-const userMessage = (id: string, sessionID: string) =>
+const userMessage = (id: string, sessionID: string, created = 1) =>
   ({
     id,
     sessionID,
     role: "user",
-    time: { created: 1 },
+    time: { created },
     agent: "assistant",
     model: { providerID: "openai", modelID: "gpt" },
   }) as Message
@@ -80,6 +80,7 @@ const baseState = (input: Partial<State> = {}) =>
     vcs: undefined,
     limit: 10,
     message: {},
+    session_message: {},
     part: {},
     part_text_accum_delta: {},
     ...input,
@@ -243,10 +244,26 @@ describe("applyDirectoryEvent", () => {
     expect(store.session_status.ses_1).toBeUndefined()
   })
 
+  test("ignores an archived session absent from a passive directory store", () => {
+    const [store, setStore] = createStore(baseState({ session: [], sessionTotal: 0 }))
+
+    applyDirectoryEvent({
+      event: { type: "session.updated", properties: { info: rootSession({ id: "missing", archived: 10 }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session).toEqual([])
+    expect(store.sessionTotal).toBe(0)
+  })
+
   test("cleans session caches when deleted and decrements only root totals", () => {
     const cases = [
-      { info: rootSession({ id: "ses_1" }), expectedTotal: 1 },
-      { info: rootSession({ id: "ses_2", parentID: "ses_1" }), expectedTotal: 2 },
+      { info: rootSession({ id: "ses_1" }), expectedTotal: 1, current: false },
+      { info: rootSession({ id: "ses_2", parentID: "ses_1" }), expectedTotal: 2, current: true },
     ]
 
     for (const item of cases) {
@@ -270,7 +287,10 @@ describe("applyDirectoryEvent", () => {
       )
 
       applyDirectoryEvent({
-        event: { type: "session.deleted", properties: { info: item.info } },
+        event: {
+          type: "session.deleted",
+          properties: item.current ? { sessionID: item.info.id } : { info: item.info },
+        },
         store,
         setStore,
         push() {},
@@ -350,13 +370,13 @@ describe("applyDirectoryEvent", () => {
     const sessionID = "ses_1"
     const [store, setStore] = createStore(
       baseState({
-        message: { [sessionID]: [userMessage("msg_1", sessionID), userMessage("msg_3", sessionID)] },
-        part: { msg_2: [textPart("prt_1", sessionID, "msg_2")] },
+        message: { [sessionID]: [userMessage("msg_z", sessionID, 1), userMessage("msg_b", sessionID, 3)] },
+        part: { msg_a: [textPart("prt_1", sessionID, "msg_a")] },
       }),
     )
 
     applyDirectoryEvent({
-      event: { type: "message.updated", properties: { info: userMessage("msg_2", sessionID) } },
+      event: { type: "message.updated", properties: { info: userMessage("msg_a", sessionID, 2) } },
       store,
       setStore,
       push() {},
@@ -364,14 +384,14 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
 
-    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_1", "msg_2", "msg_3"])
+    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_z", "msg_a", "msg_b"])
 
     applyDirectoryEvent({
       event: {
         type: "message.updated",
         properties: {
           info: {
-            ...userMessage("msg_2", sessionID),
+            ...userMessage("msg_a", sessionID, 2),
             role: "assistant",
           } as Message,
         },
@@ -383,10 +403,10 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
 
-    expect(store.message[sessionID]?.find((x) => x.id === "msg_2")?.role).toBe("assistant")
+    expect(store.message[sessionID]?.find((x) => x.id === "msg_a")?.role).toBe("assistant")
 
     applyDirectoryEvent({
-      event: { type: "message.removed", properties: { sessionID, messageID: "msg_2" } },
+      event: { type: "message.removed", properties: { sessionID, messageID: "msg_a" } },
       store,
       setStore,
       push() {},
@@ -394,8 +414,8 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
 
-    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_1", "msg_3"])
-    expect(store.part.msg_2).toBeUndefined()
+    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_z", "msg_b"])
+    expect(store.part.msg_a).toBeUndefined()
   })
 
   test("upserts and prunes message parts", () => {

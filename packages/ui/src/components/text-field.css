@@ -45,7 +45,7 @@
       align-items: start;
       justify-content: space-between;
       width: 100%;
-      padding-right: 4px;
+      padding-inline-end: 4px;
 
       border-radius: var(--radius-md);
       border: 1px solid var(--border-weak-base);
@@ -68,7 +68,7 @@
       }
 
       &:not(:has([data-slot="input-copy-button"])) {
-        padding-right: 0;
+        padding-inline-end: 0;
       }
     }
 

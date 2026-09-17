@@ -65,9 +65,12 @@ export function SortableTerminalTabV2(props: {
 
   const focus = () => {
     if (store.editing) return
+    terminal.requestFocus(props.terminal.id)
     terminal.open(props.terminal.id)
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     focusTerminalById(props.terminal.id)
+    const input = document.getElementById(`terminal-wrapper-${props.terminal.id}`)?.querySelector("textarea")
+    if (input === document.activeElement) terminal.consumeFocus(props.terminal.id)
   }
 
   const edit = (e?: Event) => {

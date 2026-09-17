@@ -10,6 +10,7 @@ const response = (id: number, reset: boolean, stable: [string, string][], unstab
   type: "highlight" as const,
   id,
   key: "code",
+  language: "typescript",
   reset,
   stable,
   unstable,
@@ -20,6 +21,7 @@ test("accumulates stable worker tokens and replaces the unstable tail", () => {
     type: "highlight",
     id: 1,
     key: "code",
+    language: "typescript",
     reset: true,
     stable: [token("one\n")],
     unstable: [token("tw")],
@@ -28,6 +30,7 @@ test("accumulates stable worker tokens and replaces the unstable tail", () => {
     type: "highlight",
     id: 2,
     key: "code",
+    language: "typescript",
     reset: false,
     stable: [token("two\n")],
     unstable: [token("three")],
@@ -35,6 +38,7 @@ test("accumulates stable worker tokens and replaces the unstable tail", () => {
 
   expect(second.stable.map((item) => item[0])).toEqual(["one\n", "two\n"])
   expect(second.unstable.map((item) => item[0])).toEqual(["three"])
+  expect(second.language).toBe("typescript")
 })
 
 test("increments generation only when the worker resets token identity", () => {
@@ -45,12 +49,13 @@ test("increments generation only when the worker resets token identity", () => {
 })
 
 test("ignores stale worker responses and resets replacement streams", () => {
-  const current = { id: 2, generation: 1, stable: [token("current")], unstable: [] }
+  const current = { id: 2, generation: 1, language: "typescript", stable: [token("current")], unstable: [] }
   expect(
     applyMarkdownWorkerResponse(current, {
       type: "highlight",
       id: 1,
       key: "code",
+      language: "typescript",
       reset: false,
       stable: [token("stale")],
       unstable: [],
@@ -62,6 +67,7 @@ test("ignores stale worker responses and resets replacement streams", () => {
       type: "highlight",
       id: 3,
       key: "code",
+      language: "typescript",
       reset: true,
       stable: [token("replacement")],
       unstable: [],

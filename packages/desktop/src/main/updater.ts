@@ -5,6 +5,7 @@ import { createUpdaterController, type UpdaterReadyRecord } from "./updater-cont
 import { getLogger } from "./logging"
 import { getStore } from "./store"
 import { setAppQuitting } from "./windows"
+import { nativeT } from "./native-translations"
 
 const { autoUpdater } = pkg
 const key = "ready"
@@ -63,21 +64,29 @@ export async function showUpdaterDialog(controller: ReturnType<typeof setupAutoU
   const state = await controller.check()
   if (state.status === "error") {
     if (!alertOnFail) return
-    await dialog.showMessageBox({ type: "error", message: "Update check failed.", title: "Update Error" })
+    await dialog.showMessageBox({
+      type: "error",
+      message: nativeT("desktop.updater.dialog.checkFailed.message"),
+      title: nativeT("desktop.updater.dialog.checkFailed.title"),
+    })
     return
   }
   if (state.status === "up-to-date") {
     if (!alertOnFail) return
-    await dialog.showMessageBox({ type: "info", message: "You're up to date.", title: "No Updates" })
+    await dialog.showMessageBox({
+      type: "info",
+      message: nativeT("desktop.updater.dialog.upToDate.message"),
+      title: nativeT("desktop.updater.dialog.upToDate.title"),
+    })
     return
   }
   if (state.status !== "ready") return
 
   const response = await dialog.showMessageBox({
     type: "info",
-    message: `Update ${state.version} downloaded. Restart now?`,
-    title: "Update Ready",
-    buttons: ["Restart", "Later"],
+    message: nativeT("desktop.updater.dialog.ready.message", { version: state.version }),
+    title: nativeT("desktop.updater.dialog.ready.title"),
+    buttons: [nativeT("desktop.updater.dialog.restart"), nativeT("desktop.updater.dialog.later")],
     defaultId: 0,
     cancelId: 1,
   })
