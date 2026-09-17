@@ -232,4 +232,70 @@ describe("MoveSession", () => {
       expect(yield* Effect.promise(() => fs.readFile(path.join(source, "untracked.txt"), "utf8"))).toBe("unrelated\n")
     }),
   )
+
+  it.live("moves session across distinct project repositories without transferring git changes", () =>
+    Effect.gen(function* () {
+      const rootA = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const rootB = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(rootA.path))
+      yield* Effect.promise(async () => {
+        await $`git init`.cwd(rootB.path).quiet()
+        await $`git config core.autocrlf false`.cwd(rootB.path).quiet()
+        await $`git config core.fsmonitor false`.cwd(rootB.path).quiet()
+        await $`git config commit.gpgsign false`.cwd(rootB.path).quiet()
+        await $`git config user.email testB@opencode.test`.cwd(rootB.path).quiet()
+        await $`git config user.name TestB`.cwd(rootB.path).quiet()
+        await fs.writeFile(path.join(rootB.path, "other.txt"), "other content\n")
+        await $`git add other.txt`.cwd(rootB.path).quiet()
+        await $`git commit -m "different root"`.cwd(rootB.path).quiet()
+      })
+
+      const source = abs(yield* Effect.promise(() => fs.realpath(rootA.path)))
+      const destination = abs(yield* Effect.promise(() => fs.realpath(rootB.path)))
+
+      const projectIDA = (yield* Project.Service.use((service) => service.resolve(source))).id
+      const projectIDB = (yield* Project.Service.use((service) => service.resolve(destination))).id
+      expect(projectIDA).not.toBe(projectIDB)
+
+      const sessionID = SessionV2.ID.make("ses_cross_project")
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: projectIDA, worktree: source, sandboxes: [], time_created: 1, time_updated: 1 })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: projectIDA,
+          slug: "cross",
+          directory: source,
+          title: "cross project",
+          version: "test",
+          time_created: 1,
+          time_updated: 1,
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* MoveSession.Service.use((service) =>
+        service.moveSession({ sessionID, destination: { directory: destination } }),
+      )
+
+      const updated = yield* db
+        .select({ directory: SessionTable.directory, project_id: SessionTable.project_id })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get()
+
+      expect(updated).toEqual({ directory: destination, project_id: projectIDB })
+    }),
+  )
 })

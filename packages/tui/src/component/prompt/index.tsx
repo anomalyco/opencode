@@ -545,7 +545,6 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Move session",
-        desc: "Move to another project dir",
         name: "session.move",
         category: "Session",
         slashName: "move",
