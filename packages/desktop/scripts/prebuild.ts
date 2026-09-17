@@ -8,4 +8,4 @@ await $`bun ./scripts/copy-icons.ts ${channel}`
 await $`bun ./scripts/copy-metainfo.ts ${channel}`
 
 await $`cd ../opencode && bun script/build-node.ts`
-if (channel === "dev") await downloadCliToResources()
+if (channel === "dev" || channel === "muc") await downloadCliToResources()
