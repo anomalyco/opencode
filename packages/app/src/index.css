@@ -42,8 +42,14 @@
     container-name: session-chat;
   }
 
+  [data-component="new-session"] {
+    container-type: inline-size;
+    container-name: new-session;
+  }
+
   [data-slot="session-chat-panel"]
-    :is([data-timeline-virtual-content], [data-component="session-composer-dock"] > div) {
+    :is([data-timeline-virtual-content], [data-component="session-composer-dock"] > div),
+  [data-slot="new-session-content"] {
     translate: var(--session-summary-resize-translate, var(--session-summary-translate, none));
     transition: translate 240ms cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -53,7 +59,8 @@
   }
 
   [data-slot="session-chat-panel"][data-summary-resizing="true"]
-    :is([data-timeline-virtual-content], [data-component="session-composer-dock"] > div) {
+    :is([data-timeline-virtual-content], [data-component="session-composer-dock"] > div),
+  [data-component="new-session"][data-summary-resizing="true"] [data-slot="new-session-content"] {
     transition: none;
   }
 
@@ -66,6 +73,17 @@
 
       &:dir(rtl) {
         --session-summary-translate: max(0px, calc(820px - 50cqi));
+      }
+    }
+  }
+
+  /* Center the 880px start-screen content in the space left by the 320px summary region. */
+  @container new-session (min-width: 1200px) {
+    [data-component="new-session"][data-summary-open="true"] [data-slot="new-session-content"] {
+      --session-summary-translate: -160px;
+
+      &:dir(rtl) {
+        --session-summary-translate: 160px;
       }
     }
   }
