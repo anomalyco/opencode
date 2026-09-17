@@ -26,6 +26,7 @@ const TAURI_APP_IDS: Record<string, string> = {
   dev: "ai.opencode.desktop.dev",
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
+  muc: "cn.edu.muc.harness",
 }
 function tauriAppId() {
   return app.isPackaged ? TAURI_APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"

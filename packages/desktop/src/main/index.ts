@@ -336,8 +336,12 @@ const main = Effect.gen(function* () {
     },
   })
   registerWslIpcHandlers(wslServers)
-  // MUC Harness: server spawn 前把已存凭据注入进程内存（MUC_API_KEY）
-  yield* Effect.promise(() => mucController.restoreToProcessEnv())
+  // MUC Harness: 启动时恢复已存凭据到进程内存（MUC_API_KEY）。
+  // 限时 2.5s 且不阻塞主流程：Keychain 首次访问可能弹授权对话框，
+  // 若超时则本次启动未注入（模型列表回退），下次启动重试。
+  void mucController.restoreToProcessEnv().catch((e) =>
+    writeLog("main", "muc credential restore failed", { e: String(e) }, "error"),
+  )
   void updater.start()
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
   updateTimer.unref()
