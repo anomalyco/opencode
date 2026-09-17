@@ -306,6 +306,7 @@ describe("session.message-v2.toModelMessage", () => {
         role: "user",
         content: [
           { type: "text", text: "hello" },
+          { type: "text", text: "[Attached image/png: img.png]" },
           {
             type: "file",
             mediaType: "image/png",
@@ -314,6 +315,51 @@ describe("session.message-v2.toModelMessage", () => {
           },
           { type: "text", text: "What did we do so far?" },
           { type: "text", text: "The following tool was executed by the user" },
+        ],
+      },
+    ])
+  })
+
+  test("includes local image attachment path in model context", async () => {
+    const messageID = "m-image"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "text",
+            text: "[Image 1] can you see the filename?",
+          },
+          {
+            ...basePart(messageID, "p2"),
+            type: "file",
+            mime: "image/jpeg",
+            filename: "IMG_3480.JPG",
+            url: "data:image/jpeg;base64,aGVsbG8=",
+            source: {
+              type: "file",
+              path: "/Users/vogel/Pictures/IMG_3480.JPG",
+              text: { value: "[Image 1]", start: 0, end: 9 },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "[Image 1] can you see the filename?" },
+          { type: "text", text: "[Attached image/jpeg: /Users/vogel/Pictures/IMG_3480.JPG]" },
+          {
+            type: "file",
+            mediaType: "image/jpeg",
+            filename: "IMG_3480.JPG",
+            data: "data:image/jpeg;base64,aGVsbG8=",
+          },
         ],
       },
     ])
