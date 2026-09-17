@@ -4846,11 +4846,18 @@ describe("SessionRunnerLLM", () => {
       content: [{ type: "text", text: expect.stringContaining("MAXIMUM STEPS REACHED") }],
     })
     expect(s.executions).toEqual(["done"])
-    expect(yield* s.context).toMatchObject([
+    const context = yield* s.context
+    expect(context).toMatchObject([
       Expected.user("Finish at the limit"),
       Expected.assistant({}, [Expected.completedTool({ id: "call-terminal" }, {})]),
       Expected.assistant({}, [Expected.failedTool({ id: "call-forbidden" }, {})]),
     ])
+    // Only the forced final step records the limit, so clients can report it as the stop cause.
+    const started = yield* Effect.forEach(
+      context.filter((message) => message.type === "assistant"),
+      (message) => recordedStepSettlementEvents(sessionID, message.id),
+    ).pipe(Effect.map((events) => events.flat().filter((event) => event.type === "session.step.started.1")))
+    expect(started.map((event) => event.data.stepLimit)).toEqual([undefined, true])
   })
 
   scenario("resets the configured step allowance when steering input promotes", function* (s) {

@@ -4,6 +4,7 @@ import type {
   SessionConfigOption,
   SessionConfigSelectOption,
 } from "@agentclientprotocol/sdk"
+import { Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -64,7 +65,9 @@ description: Verifier compatibility skill.
 # Verifier Skill
 `
 
-export async function createAcpFixture(options: { readonly skill?: string } = {}) {
+export async function createAcpFixture(
+  options: { readonly skill?: string; readonly config?: Record<string, Schema.Json> } = {},
+) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-cli-acp-"))
   const home = path.join(root, "workspace")
   const config = path.join(root, "config")
@@ -92,7 +95,10 @@ export async function createAcpFixture(options: { readonly skill?: string } = {}
   })
   await Bun.write(
     path.join(config, "opencode.json"),
-    JSON.stringify(verifierConfig(`http://127.0.0.1:${llm.port}/v1`, options.skill ? skills : undefined)),
+    JSON.stringify({
+      ...verifierConfig(`http://127.0.0.1:${llm.port}/v1`, options.skill ? skills : undefined),
+      ...options.config,
+    }),
   )
   await Bun.write(models, "{}")
 

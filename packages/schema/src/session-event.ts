@@ -328,6 +328,9 @@ export namespace Step {
       agent: Agent.ID,
       model: Model.Ref,
       snapshot: Snapshot.ID.pipe(optional),
+      stepLimit: Schema.Boolean.pipe(optional).annotate({
+        description: "Set when the agent's step allowance forced this tools-disabled final step.",
+      }),
     },
   })
   export type Started = typeof Started.Type

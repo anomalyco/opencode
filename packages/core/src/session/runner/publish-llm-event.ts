@@ -21,6 +21,7 @@ type Input = {
   readonly providerMetadataKey: string
   readonly snapshot?: Snapshot.ID
   readonly assistantMessageID: SessionMessage.ID
+  readonly stepLimit?: boolean
 }
 
 const asRecord = (value: unknown): Record<string, unknown> =>
@@ -104,6 +105,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       model: input.model,
       assistantMessageID,
       snapshot: input.snapshot,
+      ...(input.stepLimit ? { stepLimit: true } : {}),
     })
     return assistantMessageID
   })

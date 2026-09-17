@@ -94,6 +94,7 @@ export async function streamTurn(input: {
   let started = false
   let assistantMessageID: string | undefined
   let finish: SessionMessageAssistant["finish"]
+  let stepLimit = false
   let executionError: { readonly type: string; readonly message: string } | undefined
   const tools = new Map<string, ToolState>()
   const children = new Map<string, ChildSession>()
@@ -185,7 +186,10 @@ export async function streamTurn(input: {
       }
 
       if (event.type === "session.step.started") {
-        if (!child) assistantMessageID = event.data.assistantMessageID
+        if (!child) {
+          assistantMessageID = event.data.assistantMessageID
+          stepLimit = event.data.stepLimit === true
+        }
         continue
       }
       if (event.type === "session.text.delta") {
@@ -349,14 +353,14 @@ export async function streamTurn(input: {
     if (input.action) {
       streamController.abort()
       await completed.catch(() => {})
-      return response(undefined, undefined, "succeeded", control.cancelled, undefined)
+      return response(undefined, undefined, "succeeded", control.cancelled, undefined, false)
     }
     if (control.cancelled) {
       await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
       if (!started) {
         streamController.abort()
         await completed.catch(() => {})
-        return response(undefined, undefined, "interrupted", true, undefined)
+        return response(undefined, undefined, "interrupted", true, undefined, false)
       }
     }
     const terminal = await completed
@@ -378,6 +382,7 @@ export async function streamTurn(input: {
       terminal,
       control.cancelled,
       finish,
+      stepLimit,
     )
   } catch (error) {
     streamController.abort()
@@ -557,6 +562,7 @@ function response(
   terminal: "succeeded" | "failed" | "interrupted",
   cancelled: boolean,
   finish: SessionMessageAssistant["finish"],
+  stepLimit: boolean,
 ): PromptResponse {
   const error = assistant?.error ?? executionError
   if (error?.type === "provider.auth") throw new ACPError.AuthRequiredError()
@@ -578,7 +584,7 @@ function response(
         ...(tokens.cache.write > 0 ? { cachedWriteTokens: tokens.cache.write } : {}),
       }
     : undefined
-  const stopReason = resolveStopReason({ terminal, cancelled, finish, error: error?.type })
+  const stopReason = resolveStopReason({ terminal, cancelled, finish, stepLimit, error: error?.type })
   return { stopReason, ...(usage ? { usage } : {}), _meta: {} }
 }
 
@@ -586,11 +592,14 @@ function resolveStopReason(input: {
   readonly terminal: "succeeded" | "failed" | "interrupted"
   readonly cancelled: boolean
   readonly finish: SessionMessageAssistant["finish"]
+  readonly stepLimit: boolean
   readonly error?: string
 }): PromptResponse["stopReason"] {
   if (input.cancelled || input.terminal === "interrupted" || input.error === "aborted") return "cancelled"
   if (input.finish === "length") return "max_tokens"
   if (input.finish === "content-filter" || input.error === "provider.content-filter") return "refusal"
+  // The runner disabled tools because the agent's step allowance ran out, so the model could not continue.
+  if (input.stepLimit) return "max_turn_requests"
   return "end_turn"
 }
 

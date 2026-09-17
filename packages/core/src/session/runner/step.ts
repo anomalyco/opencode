@@ -78,6 +78,7 @@ export const make = Effect.gen(function* () {
       model: input.model.ref,
       providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
       snapshot: startSnapshot,
+      stepLimit: input.prepared.request.toolChoice?.type === "none",
     })
     const toolRuns: Array<{
       readonly call: ToolCall
