@@ -27,6 +27,7 @@ const getWorkspaces = query(async () => {
           and(
             eq(UserTable.accountID, Actor.account()),
             isNull(WorkspaceTable.timeDeleted),
+            isNull(WorkspaceTable.migrated_at),
             isNull(UserTable.timeDeleted),
           ),
         ),
