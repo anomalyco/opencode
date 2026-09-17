@@ -20,11 +20,15 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
   const command = useCommand()
   const state = props.browser.active
   const address = () => (state()?.url === "about:blank" ? "" : (state()?.url ?? ""))
+  const empty = () => !address() && !state()?.loading
+  const failed = () => !!state()?.loadError
   const registration = props.browser.registration
   const button = { variant: "ghost", size: "large" } as const
   const [store, setStore] = createStore({
     address: "",
     editing: false,
+    submitted: false,
+    navigating: false,
     visible: typeof document === "undefined" || document.visibilityState === "visible",
   })
   let surface: HTMLDivElement | undefined
@@ -43,7 +47,7 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
       title: language.t("command.browser.reload"),
       category: language.t("command.category.view"),
       keybind: "f5",
-      disabled: !props.visible || !state(),
+      disabled: !props.visible || !address(),
       onSelect: () => {
         const tab = state()
         if (tab) props.browser.command({ type: "reload", tabID: tab.id })
@@ -71,7 +75,16 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
     const top = Math.round(rect.top * zoom)
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
-    const visible = props.visible && store.visible && !dialog.active && !covered(rect)
+    // Keep the themed surface visible until the destination is ready.
+    const visible =
+      props.visible &&
+      store.visible &&
+      !store.navigating &&
+      !tab.loading &&
+      !empty() &&
+      !failed() &&
+      !dialog.active &&
+      !covered(rect)
     // The cutout exposes the app backdrop outside the rounded Review card,
     // not the browser surface inside it.
     const color = getComputedStyle(
@@ -107,7 +120,20 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
     if (frame === undefined) frame = requestAnimationFrame(tick)
   }
 
-  createEffect(() => !store.editing && setStore("address", address()))
+  createEffect(on([() => state()?.id, address], () => !store.editing && setStore("address", address())))
+  createEffect(
+    on(
+      [() => state()?.id, () => state()?.generation],
+      (current, previous) => {
+        if (current[0] === previous?.[0] && current[1] === previous?.[1]) return
+        setStore("navigating", false)
+      },
+      { defer: true },
+    ),
+  )
+  createEffect(() => {
+    if (props.browser.error()) setStore("navigating", false)
+  })
   createEffect(
     on(registration, (current) => {
       // Session routes can change before this pane unmounts. Hide the registration
@@ -123,6 +149,10 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
         () => store.visible,
         () => props.visible,
         () => state()?.id,
+        () => state()?.loading,
+        () => store.navigating,
+        empty,
+        failed,
         registration,
       ],
       () => {
@@ -151,7 +181,7 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
 
   return (
     <aside id="browser-panel" class="relative size-full min-w-0 overflow-hidden bg-v2-background-bg-base flex flex-col">
-      <div class="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-v2-border-border-muted">
+      <div class="h-10 shrink-0 flex items-center gap-1 px-3 border-b border-v2-border-border-muted">
         <For each={["back", "forward"] as const}>
           {(direction) => (
             <Tooltip placement="top" value={language.t(direction === "back" ? "common.goBack" : "common.goForward")}>
@@ -187,7 +217,7 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
         >
           <IconButton
             {...button}
-            disabled={!state()}
+            disabled={!state()?.loading && !address()}
             aria-label={language.t(state()?.loading ? "prompt.action.stop" : "error.page.action.reload")}
             onClick={() => {
               const tab = state()
@@ -206,8 +236,14 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
           onSubmit={(event) => {
             event.preventDefault()
             const tab = state()
-            if (tab && store.address.trim())
-              props.browser.command({ type: "navigate", tabID: tab.id, url: store.address })
+            const url = store.address.trim()
+            if (!tab) return
+            if (url || failed()) {
+              setStore({ submitted: true, address: url, navigating: true })
+              registration()?.setLayout()
+              props.browser.command({ type: "navigate", tabID: tab.id, url: url || "about:blank" })
+            }
+            event.currentTarget.querySelector("input")?.blur()
           }}
         >
           <input
@@ -218,8 +254,14 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
             disabled={!state()}
             placeholder={language.t("session.browser.address.placeholder")}
             aria-label={language.t("session.browser.address")}
-            onFocus={() => setStore("editing", true)}
-            onBlur={() => setStore({ editing: false, address: address() })}
+            onFocus={(event) => {
+              setStore("editing", true)
+              event.currentTarget.select()
+            }}
+            onClick={(event) => event.currentTarget.select()}
+            onBlur={() =>
+              setStore({ editing: false, address: store.submitted ? store.address : address(), submitted: false })
+            }
             onInput={(event) => setStore("address", event.currentTarget.value)}
             onScroll={(event) => {
               if (addressDisplay) addressDisplay.scrollLeft = event.currentTarget.scrollLeft
@@ -237,12 +279,27 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
           </div>
         </form>
       </div>
-      <Show when={props.browser.error()}>
+      <Show when={props.browser.error() && !failed()}>
         <div class="shrink-0 px-3 py-1.5 text-12-regular text-text-danger-base border-b border-v2-border-border-muted">
           {props.browser.error()}
         </div>
       </Show>
       <div ref={surface} class="min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center">
+        <Show when={(empty() || failed()) && !props.browser.suspended()}>
+          {/* Add the 40px toolbar to the file empty state's 160px bottom padding to align their centers. */}
+          <div
+            dir="auto"
+            class="flex size-full flex-col items-center justify-center gap-2 p-6 pb-[200px] text-center text-text-weak"
+          >
+            <Icon name="globe" size="large" class="mb-2 shrink-0" />
+            <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
+              {language.t(failed() ? "session.browser.failed.title" : "session.browser.empty.title")}
+            </div>
+            <div class="text-13-regular leading-[var(--line-height-base)]">
+              {language.t(failed() ? "session.browser.failed.description" : "session.browser.empty.description")}
+            </div>
+          </div>
+        </Show>
         <Show when={props.browser.suspended()}>
           <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
             {language.t("session.browser.suspended")}

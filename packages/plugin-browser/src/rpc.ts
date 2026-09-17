@@ -54,6 +54,7 @@ export const Tab = Schema.Struct({
   url: Schema.String.check(Schema.isMaxLength(16_384)),
   title: short,
   loading: Schema.Boolean,
+  loadError: optional(short),
   canGoBack: Schema.Boolean,
   canGoForward: Schema.Boolean,
   generation: count,

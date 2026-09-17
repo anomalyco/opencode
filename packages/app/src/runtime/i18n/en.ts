@@ -904,6 +904,10 @@ export const dict = {
   "session.browser.replaced": "Browser control moved to another desktop window.",
   "session.browser.suspended": "Browser suspended. Interact with this session to reconnect.",
   "session.browser.address.placeholder": "Enter URL",
+  "session.browser.empty.title": "Enter URL",
+  "session.browser.empty.description": 'Or prompt "Open my app in the browser"',
+  "session.browser.failed.title": "URL can't be reached",
+  "session.browser.failed.description": "Check the URL and your connection, then try again.",
 
   "titlebar.update": "Update",
   "titlebar.tabs": "Tabs",
