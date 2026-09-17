@@ -6,7 +6,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Session as SessionNs } from "@/session/session"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
-import { mkdir } from "fs/promises"
+import { mkdir, readdir } from "fs/promises"
 import path from "path"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
@@ -135,6 +135,50 @@ describe("session.list", () => {
           (session) => session.id,
         )
         expect(nativeIDs).toContain(created.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "matches historical directory spellings when the filesystem confirms identity",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const base = path.join(test.directory, "case")
+        const upper = path.join(base, "Checkout")
+        const lower = path.join(base, "checkout")
+        yield* Effect.promise(() => mkdir(upper, { recursive: true }))
+        yield* Effect.promise(() => mkdir(lower, { recursive: true }).catch(() => undefined))
+        // One entry on case-insensitive volumes, two where case matters.
+        const same = (yield* Effect.promise(() => readdir(base))).length === 1
+
+        const first = yield* withSession({ title: "case-first" }).pipe(provideInstance(upper))
+        const second = yield* withSession({ title: "case-second" }).pipe(provideInstance(upper))
+        const { db } = yield* Database.Service
+        yield* db
+          .update(SessionTable)
+          .set({ directory: lower })
+          .where(eq(SessionTable.id, second.id))
+          .run()
+          .pipe(Effect.orDie)
+
+        const upperIDs = (yield* SessionNs.Service.use((session) => session.list({ directory: upper }))).map(
+          (session) => session.id,
+        )
+        const lowerIDs = (yield* SessionNs.Service.use((session) => session.list({ directory: lower }))).map(
+          (session) => session.id,
+        )
+        if (same) {
+          expect(upperIDs).toContain(first.id)
+          expect(upperIDs).toContain(second.id)
+          expect(lowerIDs).toContain(first.id)
+          expect(lowerIDs).toContain(second.id)
+          return
+        }
+        expect(upperIDs).toContain(first.id)
+        expect(upperIDs).not.toContain(second.id)
+        expect(lowerIDs).not.toContain(first.id)
+        expect(lowerIDs).toContain(second.id)
       }),
     { git: true },
   )
