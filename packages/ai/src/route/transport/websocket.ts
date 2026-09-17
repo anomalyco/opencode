@@ -39,6 +39,12 @@ type WebSocketConstructorWithHeaders = (
 ) => globalThis.WebSocket
 
 const MAX_FRAME_BYTES = 16 * 1024 * 1024
+const MAX_INBOUND_BYTES = 64 * 1024 * 1024
+const MAX_INBOUND_FRAMES = 4_096
+// Charge UTF-16 text or the binary backing buffer, plus an entry allowance.
+// The separate frame ceiling also bounds object overhead for empty/tiny frames.
+const retainedBytes = (message: string | Uint8Array) =>
+  (typeof message === "string" ? message.length * 2 : message.buffer.byteLength) + 64
 const transportError = (
   message: string,
   input: {
@@ -215,12 +221,17 @@ export const fromWebSocket = (
 ): Effect.Effect<WebSocketConnection, AIError> =>
   Effect.gen(function* () {
     yield* waitOpen(ws, input)
-    const messages = yield* Queue.bounded<string | Uint8Array, AIError | Cause.Done<void>>(128)
+    // The native message callback cannot suspend the sender. Bound both retained payload
+    // and per-frame overhead, allowing small delta bursts without an unbounded queue.
+    const messages = yield* Queue.bounded<string | Uint8Array, AIError | Cause.Done<void>>(MAX_INBOUND_FRAMES)
+    let bufferedBytes = 0
+    let stopped = false
 
     const oversized = (message: string | Uint8Array) =>
       typeof message === "string" ? new Blob([message]).size > MAX_FRAME_BYTES : message.byteLength > MAX_FRAME_BYTES
     const rejectOversized = (message: string | Uint8Array) => {
       if (!oversized(message)) return false
+      stopped = true
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
@@ -237,8 +248,14 @@ export const fromWebSocket = (
       return true
     }
     const offer = (message: string | Uint8Array) => {
+      if (stopped) return
       if (rejectOversized(message)) return
-      if (Queue.offerUnsafe(messages, message)) return
+      const bytes = retainedBytes(message)
+      if (bufferedBytes + bytes <= MAX_INBOUND_BYTES && Queue.offerUnsafe(messages, message)) {
+        bufferedBytes += bytes
+        return
+      }
+      stopped = true
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
@@ -251,12 +268,15 @@ export const fromWebSocket = (
           }),
         ),
       )
+      if (ws.readyState === globalThis.WebSocket.OPEN) ws.close(1009, "Inbound queue overflow")
     }
 
     const onMessage = (event: MessageEvent) => {
+      if (stopped) return
       if (typeof event.data === "string") return offer(event.data)
       const binary = binaryMessage(event.data)
       if (binary) return offer(binary)
+      stopped = true
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
@@ -271,6 +291,7 @@ export const fromWebSocket = (
       )
     }
     const onError = (event: Event) => {
+      stopped = true
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
@@ -285,6 +306,7 @@ export const fromWebSocket = (
       )
     }
     const onClose = (event: CloseEvent) => {
+      stopped = true
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
@@ -300,6 +322,8 @@ export const fromWebSocket = (
       )
     }
     const cleanup = Effect.sync(() => {
+      stopped = true
+      bufferedBytes = 0
       ws.removeEventListener("message", onMessage)
       ws.removeEventListener("error", onError)
       ws.removeEventListener("close", onClose)
@@ -333,7 +357,15 @@ export const fromWebSocket = (
               }),
           })
         }),
-      messages: Stream.fromQueue(messages),
+      // Taking a whole batch would release its budget while downstream still retains it.
+      messages: Stream.fromEffectRepeat(
+        Queue.take(messages).pipe(
+          Effect.map((message) => {
+            bufferedBytes -= retainedBytes(message)
+            return message
+          }),
+        ),
+      ),
       close: cleanup.pipe(
         Effect.andThen(
           Effect.sync(() => {
