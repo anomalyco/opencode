@@ -18,6 +18,18 @@ const channels = [
 ] as const
 
 for (const channel of channels) {
+  test(`disables security code AutoFill by default for ${channel.channel}`, async () => {
+    const previous = process.env.OPENCODE_CHANNEL
+    process.env.OPENCODE_CHANNEL = channel.channel
+    try {
+      const config = (await import(`./electron-builder.config.ts?autofill=${channel.channel}`)).default as Configuration
+      expect(config.mac?.extendInfo?.NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac).toBe(true)
+    } finally {
+      if (previous === undefined) delete process.env.OPENCODE_CHANNEL
+      else process.env.OPENCODE_CHANNEL = previous
+    }
+  })
+
   test(`includes the Windows sandbox permission hook for ${channel.channel}`, async () => {
     const previous = process.env.OPENCODE_CHANNEL
     process.env.OPENCODE_CHANNEL = channel.channel
