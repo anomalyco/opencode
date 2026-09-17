@@ -13,6 +13,7 @@ import type {
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
+import { pathKey } from "@/utils/path-key"
 import { dropSessionCaches } from "./session-cache"
 import { diffs as list, message as clean } from "@/utils/diffs"
 import { messageKey } from "@/utils/session-message"
@@ -135,6 +136,11 @@ export function applyDirectoryEvent(input: {
         input.setStore("session", result.index, reconcile(info))
         break
       }
+      // Workspace-bound sessions are created under the instance directory of
+      // the request that spawned them but live in their workspace directory;
+      // only the matching context may add them (the workspace context loads
+      // them via its own session list).
+      if (info.workspaceID && pathKey(info.directory) !== pathKey(input.directory)) break
       const next = input.store.session.slice()
       next.splice(result.index, 0, info)
       const trimmed = trimSessions(next, { limit, permission: input.permission ?? input.store.permission })
@@ -164,6 +170,7 @@ export function applyDirectoryEvent(input: {
         input.setStore("session", result.index, reconcile(info))
         break
       }
+      if (info.workspaceID && pathKey(info.directory) !== pathKey(input.directory)) break
       const next = input.store.session.slice()
       next.splice(result.index, 0, info)
       const trimmed = trimSessions(next, { limit, permission: input.permission ?? input.store.permission })
