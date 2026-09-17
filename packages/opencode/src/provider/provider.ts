@@ -31,8 +31,37 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { SUB2API, sub2apiDefaultProvider, fetchSub2APIModels } from "./muc"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
+
+// MUC harness: 为网关动态发现的模型构造安全默认元数据（已知家族给更大上下文）
+function mucDynamicModel(providerID: string, modelID: string, baseURL: string, npm?: string): Model {
+  const context = modelID.startsWith("claude") ? 200_000 : 128_000
+  return {
+    id: ModelV2.ID.make(modelID),
+    providerID: ProviderV2.ID.make(providerID),
+    name: modelID,
+    family: modelID.split("-")[0] ?? "",
+    api: { id: modelID, npm: npm ?? SUB2API.npm, url: baseURL },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context, output: 32_000 },
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      interleaved: false,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+    },
+    release_date: "",
+    variants: {},
+  }
+}
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -1441,7 +1470,12 @@ const layer = Layer.effect(
         const plugins = yield* plugin.list()
 
         // now read config providers - includes any modifications from plugin config() hook
-        const configProviders = Object.entries(cfg.provider ?? {})
+        // MUC harness: 烧入默认 Sub2API provider（用户配置已有 sub2api 时让位）
+        const mucDefault = sub2apiDefaultProvider(cfg.provider)
+        const configProviders = Object.entries({
+          ...(mucDefault ? { [SUB2API.id]: mucDefault } : {}),
+          ...(cfg.provider ?? {}),
+        })
         const disabled = new Set(cfg.disabled_providers ?? [])
         const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
 
@@ -1488,6 +1522,24 @@ const layer = Layer.effect(
             options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
             source: "config",
             models: existing?.models ?? {},
+          }
+
+          // MUC harness: Sub2API 供应商从网关 /v1/models 动态展开——源头有什么模型就能用什么。
+          // 静态配置的同名模型仍会在此后的解析循环中覆盖动态默认值。
+          const mucOptions = (provider.options ?? {}) as Record<string, any>
+          const mucBaseURL = typeof mucOptions.baseURL === "string" ? mucOptions.baseURL : undefined
+          const mucDynamic =
+            mucOptions.dynamicModels === true ||
+            providerID.startsWith("sub2api") ||
+            (mucBaseURL?.includes(SUB2API.host) ?? false)
+          if (mucDynamic && mucBaseURL) {
+            const discovered = yield* Effect.promise(() =>
+              fetchSub2APIModels(mucBaseURL, mucOptions.apiKey),
+            ).pipe(Effect.orElseSucceed(() => [] as string[]))
+            for (const mucModelID of discovered) {
+              if (parsed.models[mucModelID] || provider.models?.[mucModelID]) continue
+              parsed.models[mucModelID] = mucDynamicModel(providerID, mucModelID, mucBaseURL, provider.npm)
+            }
           }
 
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
