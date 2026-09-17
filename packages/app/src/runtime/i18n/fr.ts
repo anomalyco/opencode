@@ -385,10 +385,7 @@ export const dict = {
   "prompt.attachment.remove": "Supprimer la pièce jointe",
   "prompt.action.send": "Envoyer",
   "prompt.action.stop": "Arrêter",
-  "prompt.toast.pasteUnsupported.title": "Pièce jointe non prise en charge",
   "prompt.toast.attachmentDuplicate.title": "Ce fichier a déjà été téléversé",
-  "prompt.toast.pasteUnsupported.description":
-    "Seules les images, les PDF ou les fichiers texte peuvent être joints ici.",
   "prompt.toast.modelAgentRequired.title": "Sélectionnez un agent et un modèle",
   "prompt.toast.modelAgentRequired.description": "Choisissez un agent et un modèle avant d'envoyer une invite.",
   "prompt.toast.worktreeCreateFailed.title": "Échec de la création de l'arbre de travail",

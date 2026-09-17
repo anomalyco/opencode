@@ -284,8 +284,6 @@ export const dict = {
   "prompt.attachment.remove": "Rimuovi l'allegato",
   "prompt.action.send": "Invia",
   "prompt.action.stop": "Interrompi",
-  "prompt.toast.pasteUnsupported.title": "Allegato non supportato",
-  "prompt.toast.pasteUnsupported.description": "Qui è possibile allegare solo immagini, PDF o file di testo.",
   "prompt.toast.attachmentDuplicate.title": "Questo file è già stato caricato",
   "prompt.toast.modelAgentRequired.title": "Seleziona un agente e un modello",
   "prompt.toast.modelAgentRequired.description": "Scegli un agente e un modello prima di inviare un prompt.",

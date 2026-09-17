@@ -379,8 +379,6 @@ export const dict = {
   "prompt.attachment.remove": "Fjarlægðu viðhengi",
   "prompt.action.send": "Senda",
   "prompt.action.stop": "Stöðva",
-  "prompt.toast.pasteUnsupported.title": "Óstudd viðhengi",
-  "prompt.toast.pasteUnsupported.description": "Aðeins er hægt að hengja myndir, PDF-skjöl eða textaskrár hér við.",
   "prompt.toast.attachmentDuplicate.title": "Þessari skrá hefur þegar verið hlaðið upp",
   "prompt.toast.modelAgentRequired.title": "Veldu fulltrúa og líkan",
   "prompt.toast.modelAgentRequired.description": "Veldu fulltrúa og líkan áður en þú sendir kvaðningu.",

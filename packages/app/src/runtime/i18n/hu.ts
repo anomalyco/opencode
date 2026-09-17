@@ -379,8 +379,6 @@ export const dict = {
   "prompt.attachment.remove": "Távolítsa el a mellékletet",
   "prompt.action.send": "Elküld",
   "prompt.action.stop": "Leállítás",
-  "prompt.toast.pasteUnsupported.title": "Nem támogatott melléklet",
-  "prompt.toast.pasteUnsupported.description": "Ide csak képeket, PDF-eket vagy szöveges fájlokat lehet csatolni.",
   "prompt.toast.attachmentDuplicate.title": "Ezt a fájlt már feltöltötték",
   "prompt.toast.modelAgentRequired.title": "Válasszon egy ügynököt és modellt",
   "prompt.toast.modelAgentRequired.description": "A felszólítás elküldése előtt válasszon ügynököt és modellt.",

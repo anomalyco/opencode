@@ -22,6 +22,7 @@ import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
 import { composerPlaceholder } from "./placeholder"
 import { createComposerSubmit } from "./submit"
+import { useAttachmentDestination } from "./attachments/deliver"
 
 export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
@@ -265,6 +266,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     resetHistory: () => controller.resetHistory(),
     setMode: (next) => controller.dispatch({ type: next === "shell" ? "mode.shell" : "mode.normal" }),
     closePopover: () => controller.dispatch({ type: "popover.close" }),
+    destination: useAttachmentDestination(adapter.controls),
     delivery: (alternate) => {
       const queue = options?.queue
       if (!queue) return "steer"
@@ -339,11 +341,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       picker: platform.openAttachmentPickerDialog,
       directory: () => sdk().directory,
       isDialogActive: () => !!dialog.active,
-      warn: () =>
-        showToast({
-          title: language.t("prompt.toast.pasteUnsupported.title"),
-          description: language.t("prompt.toast.pasteUnsupported.description"),
-        }),
       duplicate: () => showToast({ title: language.t("prompt.toast.attachmentDuplicate.title") }),
       onError: (error) =>
         showToast({

@@ -374,8 +374,6 @@ export const dict = {
   "prompt.attachment.remove": "Elimină atașamentul",
   "prompt.action.send": "Trimite",
   "prompt.action.stop": "Oprește",
-  "prompt.toast.pasteUnsupported.title": "Atașament neacceptat",
-  "prompt.toast.pasteUnsupported.description": "Poți atașa doar imagini, PDF-uri sau fișiere text aici.",
   "prompt.toast.attachmentDuplicate.title": "Acest fișier a fost deja încărcat",
   "prompt.toast.modelAgentRequired.title": "Selectează un agent și un model",
   "prompt.toast.modelAgentRequired.description": "Alege un agent și un model înainte de a trimite un prompt.",

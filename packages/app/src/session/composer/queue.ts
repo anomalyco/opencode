@@ -8,7 +8,8 @@ import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ImageAttachmentPart, Prompt } from "@/composer/state"
 import { clonePrompt, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
-import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
+import { deliverAttachments, type AttachmentDestination } from "@/composer/attachments/deliver"
+import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -29,6 +30,7 @@ export function createSessionQueue(input: {
   draft: ComposerStateTarget
   working: Accessor<boolean>
   behavior: Accessor<ComposerDelivery>
+  destination: () => AttachmentDestination
   restoreFocus: (cursor: number) => void
 }) {
   const data = useData()
@@ -59,6 +61,7 @@ export function createSessionQueue(input: {
         change.item,
         change.prompt,
         change.text,
+        input.destination(),
       )
       // Admit before cancelling so a failed replacement never discards the original.
       const admitted = await data.session.prompt({
@@ -289,13 +292,13 @@ async function editedPromptInput(
   item: QueuedPrompt | undefined,
   prompt: Prompt,
   text: string,
+  destination: AttachmentDestination,
 ) {
-  const images = await Promise.all(
-    prompt
-      .filter((part): part is ImageAttachmentPart => part.type === "image")
-      .map(async (part) => ({ ...part, dataUrl: await blobDataUrl(part.blob, part.mime) })),
+  const attachments = await deliverAttachments(
+    prompt.filter((part): part is ImageAttachmentPart => part.type === "image"),
+    destination,
   )
-  const request = buildPromptRequest({ prompt, context: [], images, text, sessionDirectory: directory })
+  const request = buildPromptRequest({ prompt, context: [], attachments, text, sessionDirectory: directory })
   const payload = item?.payload
   const display = item ? queuedPromptText(item) : ""
   const notes = payload && display && payload.text.startsWith(display) ? payload.text.slice(display.length) : ""
@@ -340,6 +343,6 @@ async function editedPromptInput(
     ],
     agents: agents.map((agent) => ({ name: agent.name, mention: mention(agent.mention) })),
     skills: skills.map((skill) => ({ id: skill.id, mention: mention(skill.mention) })),
-    metadata: { ...payload?.metadata, displayText: request.displayText },
+    metadata: { ...payload?.metadata, displayText: request.displayText, attachments: request.attachments },
   }
 }

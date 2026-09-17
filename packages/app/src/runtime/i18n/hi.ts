@@ -382,8 +382,6 @@ export const dict = {
   "prompt.attachment.remove": "अनुलग्नक हटाएँ",
   "prompt.action.send": "भेजें",
   "prompt.action.stop": "रोकें",
-  "prompt.toast.pasteUnsupported.title": "असमर्थित अनुलग्नक",
-  "prompt.toast.pasteUnsupported.description": "यहां केवल छवियां, PDFs, या टेक्स्ट फ़ाइलें संलग्न की जा सकती हैं।",
   "prompt.toast.attachmentDuplicate.title": "यह फ़ाइल पहले ही अपलोड की जा चुकी है",
   "prompt.toast.modelAgentRequired.title": "एक एजेंट और मॉडल चुनें",
   "prompt.toast.modelAgentRequired.description": "प्रॉम्प्ट भेजने से पहले एक एजेंट और मॉडल चुनें।",

@@ -376,8 +376,6 @@ export const dict = {
   "prompt.attachment.remove": "Κατάργηση συνημμένου",
   "prompt.action.send": "Αποστολή",
   "prompt.action.stop": "Διακοπή",
-  "prompt.toast.pasteUnsupported.title": "Μη υποστηριζόμενο συνημμένο",
-  "prompt.toast.pasteUnsupported.description": "Εδώ επισυνάπτονται μόνο εικόνες, αρχεία PDF ή αρχεία κειμένου.",
   "prompt.toast.attachmentDuplicate.title": "Αυτό το αρχείο έχει ήδη μεταφορτωθεί",
   "prompt.toast.modelAgentRequired.title": "Επιλέξτε έναν πράκτορα και μοντέλο",
   "prompt.toast.modelAgentRequired.description":

@@ -380,8 +380,6 @@ export const dict = {
   "prompt.attachment.remove": "Pašalinti priedą",
   "prompt.action.send": "Siųsti",
   "prompt.action.stop": "Stabdyti",
-  "prompt.toast.pasteUnsupported.title": "Nepalaikomas priedas",
-  "prompt.toast.pasteUnsupported.description": "Čia galima pridėti tik vaizdus, ​​PDF arba tekstinius failus.",
   "prompt.toast.attachmentDuplicate.title": "Šis failas jau buvo įkeltas",
   "prompt.toast.modelAgentRequired.title": "Pasirinkite agentą ir modelį",
   "prompt.toast.modelAgentRequired.description": "Prieš siųsdami raginimą, pasirinkite agentą ir modelį.",

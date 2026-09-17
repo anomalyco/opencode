@@ -384,8 +384,6 @@ export const dict = {
   "prompt.attachment.remove": "منسلکہ کو ہٹا دیں۔",
   "prompt.action.send": "بھیجیں۔",
   "prompt.action.stop": "روکیں",
-  "prompt.toast.pasteUnsupported.title": "غیر تعاون یافتہ منسلکہ",
-  "prompt.toast.pasteUnsupported.description": "یہاں صرف تصاویر، PDFs، یا ٹیکسٹ فائلیں منسلک کی جا سکتی ہیں۔",
   "prompt.toast.attachmentDuplicate.title": "یہ فائل پہلے ہی اپ لوڈ ہو چکی ہے",
   "prompt.toast.modelAgentRequired.title": "ایک ایجنٹ اور ماڈل منتخب کریں۔",
   "prompt.toast.modelAgentRequired.description": "پرامپٹ بھیجنے سے پہلے ایک ایجنٹ اور ماڈل کا انتخاب کریں۔",

@@ -380,9 +380,6 @@ export const dict = {
   "prompt.attachment.remove": "އެޓޭޗްމަންޓް ނަގާށެވެ",
   "prompt.action.send": "ފޮނުވުން",
   "prompt.action.stop": "ހުއްޓުން",
-  "prompt.toast.pasteUnsupported.title": "ސަޕޯޓް ނުކުރާ އެޓޭޗްމަންޓެވެ",
-  "prompt.toast.pasteUnsupported.description":
-    "މިތަނުގައި އެޓޭޗް ކުރެވޭނީ ހަމައެކަނި ތަސްވީރު، PDFs، ނުވަތަ ޓެކްސްޓް ފައިލްތަކެވެ.",
   "prompt.toast.attachmentDuplicate.title": "މި ފައިލް މިހާރު ވަނީ އަޕްލޯޑްކޮށްފައެވެ",
   "prompt.toast.modelAgentRequired.title": "އޭޖެންޓަކާއި މޮޑެލްއެއް ހޮވުން",
   "prompt.toast.modelAgentRequired.description": "ޕްރޮމްޕްޓެއް ފޮނުވުމުގެ ކުރިން އޭޖެންޓަކާއި މޮޑެލްއެއް ހޮވުން.",

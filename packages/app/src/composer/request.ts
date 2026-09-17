@@ -1,8 +1,14 @@
 import { getFilename } from "@opencode/util/path"
 import type { FileSelection } from "@/workspaces/files/model"
 import { encodeFilePath } from "@/workspaces/files/path"
-import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt, SkillPart } from "@/composer/state"
-import { formatCommentNote, type PromptComment } from "@/composer/comment-note"
+import type { AgentPart, FileAttachmentPart, Prompt, SkillPart } from "@/composer/state"
+import {
+  formatAttachmentReference,
+  formatCommentNote,
+  type PromptAttachmentReference,
+  type PromptComment,
+} from "@/composer/comment-note"
+import type { DeliveredAttachment } from "@/composer/attachments/deliver"
 
 // Network fields feed both boundaries; display fields keep desktop-only rendering details in the local echo.
 type PromptRequest = {
@@ -12,6 +18,7 @@ type PromptRequest = {
   agents: { name: string; mention?: { start: number; end: number; text: string } }[]
   skills: { id: string; name: string; mention?: { start: number; end: number; text: string } }[]
   comments: PromptComment[]
+  attachments: PromptAttachmentReference[]
 }
 
 type ContextFile = {
@@ -28,7 +35,7 @@ type ContextFile = {
 type BuildPromptRequestInput = {
   prompt: Prompt
   context: ContextFile[]
-  images: (Omit<ImageAttachmentPart, "blob"> & { dataUrl: string })[]
+  attachments: DeliveredAttachment[]
   text: string
   sessionDirectory: string
 }
@@ -106,18 +113,27 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     return [file, ...mentions]
   })
 
-  const images = input.images.map((attachment) => ({
-    uri: attachment.dataUrl,
-    mime: attachment.mime,
-    name: attachment.sourcePath ?? attachment.filename,
-  }))
+  const inline = input.attachments.flatMap((item) =>
+    item.type === "inline"
+      ? [{ uri: item.dataUrl, mime: item.attachment.mime, name: item.attachment.sourcePath ?? item.attachment.filename }]
+      : [],
+  )
+  // Like comments, path references reach the model as text and the message UI through metadata.
+  const attachments = input.attachments.flatMap((item) =>
+    item.type === "path" ? [{ name: item.attachment.filename, mime: item.attachment.mime, path: item.path }] : [],
+  )
 
   return {
-    text: [...(input.text.trim() ? [input.text] : []), ...comments.map(formatCommentNote)].join("\n"),
+    text: [
+      ...(input.text.trim() ? [input.text] : []),
+      ...attachments.map(formatAttachmentReference),
+      ...comments.map(formatCommentNote),
+    ].join("\n"),
     displayText: input.text,
-    files: [...files, ...context, ...images],
+    files: [...files, ...context, ...inline],
     agents,
     skills,
     comments,
+    attachments,
   }
 }

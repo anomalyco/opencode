@@ -374,8 +374,6 @@ export const dict: Record<string, string> = {
   "prompt.attachment.remove": "ඇමුණුම ඉවත් කරන්න",
   "prompt.action.send": "යවන්න",
   "prompt.action.stop": "නවත්වන්න",
-  "prompt.toast.pasteUnsupported.title": "සහාය නොදක්වන ඇමුණුම",
-  "prompt.toast.pasteUnsupported.description": "පින්තූර, PDF හෝ පෙළ ගොනු පමණක් මෙහි ඇමිණිය හැක.",
   "prompt.toast.attachmentDuplicate.title": "මෙම ගොනුව දැනටමත් උඩුගත කර ඇත",
   "prompt.toast.modelAgentRequired.title": "නියෝජිතයෙකු සහ ආකෘතියක් තෝරන්න",
   "prompt.toast.modelAgentRequired.description": "ප්‍රොම්ප්ට් එකක් යැවීමට පෙර නියෝජිතයෙකු සහ ආකෘතියක් තෝරන්න.",

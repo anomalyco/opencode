@@ -371,8 +371,6 @@ export const dict = {
   "prompt.attachment.remove": "ዓባሪን አስወግድ",
   "prompt.action.send": "ላክ",
   "prompt.action.stop": "አቁም",
-  "prompt.toast.pasteUnsupported.title": "የማይደገፍ ዓባሪ",
-  "prompt.toast.pasteUnsupported.description": "ምስሎች፣ ፒዲኤፎች ወይም የጽሑፍ ፋይሎች ብቻ እዚህ ጋር ሊጣመሩ ይችላሉ።",
   "prompt.toast.attachmentDuplicate.title": "ይህ ፋይል አስቀድሞ ተሰቅሏል",
   "prompt.toast.modelAgentRequired.title": "ወኪል እና ሞዴል ይምረጡ",
   "prompt.toast.modelAgentRequired.description": "ፕሮምፕት ከመላክዎ በፊት ወኪል እና ሞዴል ይምረጡ።",

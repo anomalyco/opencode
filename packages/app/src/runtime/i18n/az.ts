@@ -378,8 +378,6 @@ export const dict = {
   "prompt.attachment.remove": "Əlavəni sil",
   "prompt.action.send": "Göndər",
   "prompt.action.stop": "Dayandır",
-  "prompt.toast.pasteUnsupported.title": "Dəstəklənməyən əlavə",
-  "prompt.toast.pasteUnsupported.description": "Buraya yalnız şəkillər, PDF-lər və ya mətn faylları əlavə edilə bilər.",
   "prompt.toast.attachmentDuplicate.title": "Bu fayl artıq yüklənib",
   "prompt.toast.modelAgentRequired.title": "Agent və model seçin",
   "prompt.toast.modelAgentRequired.description": "Prompt göndərməzdən əvvəl agent və model seçin.",

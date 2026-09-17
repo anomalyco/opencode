@@ -376,9 +376,6 @@ export const dict = {
   "prompt.attachment.remove": "Замимаро хориҷ кунед",
   "prompt.action.send": "Фиристодан",
   "prompt.action.stop": "Ист",
-  "prompt.toast.pasteUnsupported.title": "Замимаи дастгирӣнашаванда",
-  "prompt.toast.pasteUnsupported.description":
-    "Дар ин ҷо танҳо тасвирҳо, PDFс ё файлҳои матнӣ замима кардан мумкин аст.",
   "prompt.toast.attachmentDuplicate.title": "Ин файл аллакай бор карда шудааст",
   "prompt.toast.modelAgentRequired.title": "Агент ва моделро интихоб кунед",
   "prompt.toast.modelAgentRequired.description": "Пеш аз фиристодани промпт агент ва моделро интихоб кунед.",

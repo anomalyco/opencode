@@ -379,9 +379,6 @@ export const dict: Record<string, string> = {
   "prompt.attachment.remove": "མཉམ་སྦྲགས་རྩ་བསྐྲད་གཏང་།",
   "prompt.action.send": "བཏང༌ནི",
   "prompt.action.stop": "བཀག་པ",
-  "prompt.toast.pasteUnsupported.title": "རྒྱབ་སྐྱོར་མེད་པའི་མཉམ་སྦྲགས།",
-  "prompt.toast.pasteUnsupported.description":
-    "པར་རིས་དང་པི་ཌི་ཨེཕ་ ཡང་ན་ ཚིག་ཡིག་ཡིག་སྣོད་ཚུ་རྐྱངམ་ཅིག་ ནཱ་ལུ་མཉམ་སྦྲགས་འབད་བཏུབ།",
   "prompt.toast.attachmentDuplicate.title": "ཡིག་སྣོད་འདི་ཧེ་མ་ལས་སྐྱེལ་བཙུགས་འབད་ཡི།",
   "prompt.toast.modelAgentRequired.title": "ལས་ཚབ་དང་དཔེ་ཚད་ཅིག་སེལ་འཐུ་འབད།",
   "prompt.toast.modelAgentRequired.description": "བརྡ་སྟོན་མ་གཏང་པའི་ཧེ་མ་ ལས་ཚབ་དང་དཔེ་ཚད་གདམ་ཁ་རྐྱབས།",

@@ -375,8 +375,6 @@ export const dict = {
   "prompt.attachment.remove": "Buang lampiran",
   "prompt.action.send": "Hantar",
   "prompt.action.stop": "Henti",
-  "prompt.toast.pasteUnsupported.title": "Lampiran tidak disokong",
-  "prompt.toast.pasteUnsupported.description": "Hanya imej, PDF, atau fail teks boleh dilampirkan di sini.",
   "prompt.toast.attachmentDuplicate.title": "Fail ini telah dimuat naik",
   "prompt.toast.modelAgentRequired.title": "Pilih ejen dan model",
   "prompt.toast.modelAgentRequired.description": "Pilih ejen dan model sebelum menghantar prompt.",

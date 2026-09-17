@@ -374,8 +374,6 @@ export const dict = {
   "prompt.attachment.remove": "ເອົາໄຟລ໌ແນບອອກ",
   "prompt.action.send": "ສົ່ງ",
   "prompt.action.stop": "ຢຸດ",
-  "prompt.toast.pasteUnsupported.title": "ບໍ່ຮອງຮັບໄຟລ໌ແນບ",
-  "prompt.toast.pasteUnsupported.description": "ພຽງແຕ່ຮູບພາບ, PDFs, ຫຼືໄຟລ໌ຂໍ້ຄວາມສາມາດຕິດຢູ່ນີ້.",
   "prompt.toast.attachmentDuplicate.title": "ໄຟລ໌ນີ້ໄດ້ຖືກອັບໂຫລດໄປກ່ອນແລ້ວ",
   "prompt.toast.modelAgentRequired.title": "ເລືອກຕົວແທນ ແລະຕົວແບບ",
   "prompt.toast.modelAgentRequired.description": "ເລືອກຕົວແທນ ແລະຕົວແບບກ່ອນສົ່ງ prompt.",

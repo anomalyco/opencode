@@ -375,8 +375,6 @@ export const dict = {
   "prompt.attachment.remove": "Odstraňte přílohu",
   "prompt.action.send": "Odeslat",
   "prompt.action.stop": "Přestaň",
-  "prompt.toast.pasteUnsupported.title": "Nepodporovaná příloha",
-  "prompt.toast.pasteUnsupported.description": "Zde lze připojit pouze obrázky, PDFs nebo textové soubory.",
   "prompt.toast.attachmentDuplicate.title": "Tento soubor již byl nahrán",
   "prompt.toast.modelAgentRequired.title": "Vyberte agenta a model",
   "prompt.toast.modelAgentRequired.description": "Před odesláním výzvy vyberte zástupce a model.",

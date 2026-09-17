@@ -377,8 +377,6 @@ export const dict = {
   "prompt.attachment.remove": "Qo'shimchani olib tashlang",
   "prompt.action.send": "Yuborish",
   "prompt.action.stop": "To'xtang",
-  "prompt.toast.pasteUnsupported.title": "Qoʻllab-quvvatlanmaydigan biriktirma",
-  "prompt.toast.pasteUnsupported.description": "Bu yerda faqat rasmlar, PDF yoki matnli fayllar biriktirilishi mumkin.",
   "prompt.toast.attachmentDuplicate.title": "Bu fayl allaqachon yuklangan",
   "prompt.toast.modelAgentRequired.title": "Agent va modelni tanlang",
   "prompt.toast.modelAgentRequired.description": "So'rov yuborishdan oldin agent va modelni tanlang.",

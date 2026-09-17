@@ -403,8 +403,6 @@ export const dict = {
   "prompt.action.send": "Kirim",
   "prompt.action.stop": "Hentikan",
 
-  "prompt.toast.pasteUnsupported.title": "Lampiran tidak didukung",
-  "prompt.toast.pasteUnsupported.description": "Hanya gambar, PDF, atau berkas teks yang dapat dilampirkan di sini.",
   "prompt.toast.attachmentDuplicate.title": "Berkas ini sudah diunggah",
   "prompt.toast.modelAgentRequired.title": "Pilih agen dan model",
   "prompt.toast.modelAgentRequired.description": "Pilih agen dan model sebelum mengirim prompt.",

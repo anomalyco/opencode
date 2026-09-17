@@ -375,8 +375,6 @@ export const dict = {
   "prompt.attachment.remove": "Noņemt pielikumu",
   "prompt.action.send": "Sūtīt",
   "prompt.action.stop": "Apturēt",
-  "prompt.toast.pasteUnsupported.title": "Neatbalstīts pielikums",
-  "prompt.toast.pasteUnsupported.description": "Šeit var pievienot tikai attēlus, PDF vai teksta failus.",
   "prompt.toast.attachmentDuplicate.title": "Šis fails jau ir augšupielādēts",
   "prompt.toast.modelAgentRequired.title": "Izvēlieties aģentu un modeli",
   "prompt.toast.modelAgentRequired.description": "Pirms nosūtīšanas izvēlieties aģentu un modeli.",

@@ -377,8 +377,6 @@ export const dict = {
   "prompt.attachment.remove": "Հեռացնել հավելվածը",
   "prompt.action.send": "Ուղարկել",
   "prompt.action.stop": "Կանգնեցնել",
-  "prompt.toast.pasteUnsupported.title": "Չաջակցվող հավելված",
-  "prompt.toast.pasteUnsupported.description": "Այստեղ կարող են կցվել միայն պատկերներ, PDF կամ տեքստային ֆայլեր։",
   "prompt.toast.attachmentDuplicate.title": "Այս ֆայլն արդեն վերբեռնվել է",
   "prompt.toast.modelAgentRequired.title": "Ընտրեք գործակալ և մոդել",
   "prompt.toast.modelAgentRequired.description": "Ընտրեք գործակալ և մոդել՝ նախքան հուշում ուղարկելը։",

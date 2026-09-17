@@ -381,9 +381,6 @@ export const dict = {
   "prompt.attachment.remove": "منسلکہ ہٹا دیو",
   "prompt.action.send": "گھلو",
   "prompt.action.stop": "روکو",
-  "prompt.toast.pasteUnsupported.title": "غیر تعاون یافتہ منسلکہ",
-  "prompt.toast.pasteUnsupported.description":
-    "ایتھے صرف تصویراں، پی ڈی ایف، یا ٹیکسٹ فائلاں منسلک کیتیاں جا سکدیاں نیں۔",
   "prompt.toast.attachmentDuplicate.title": "ایہہ فائل پہلے ای اپ لوڈ ہو چکی اے",
   "prompt.toast.modelAgentRequired.title": "اک ایجنٹ تے ماڈل چنو",
   "prompt.toast.modelAgentRequired.description": "پرامپٹ بھیجن توں پہلاں اک ایجنٹ تے ماڈل دا انتخاب کرو۔",

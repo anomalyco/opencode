@@ -375,8 +375,6 @@ export const dict = {
   "prompt.attachment.remove": "Goşundyny aýyryň",
   "prompt.action.send": "Iber",
   "prompt.action.stop": "Dur",
-  "prompt.toast.pasteUnsupported.title": "Goldaw berilmeýän goşundy",
-  "prompt.toast.pasteUnsupported.description": "Bu ýerde diňe suratlar, PDF ýa-da tekst faýllary birikdirilip bilner.",
   "prompt.toast.attachmentDuplicate.title": "Bu faýl eýýäm ýüklendi",
   "prompt.toast.modelAgentRequired.title": "Agent we model saýlaň",
   "prompt.toast.modelAgentRequired.description": "Sorag ibermezden ozal agent we model saýlaň.",

@@ -375,9 +375,6 @@ export const dict = {
   "prompt.attachment.remove": "Hiq shtojcën",
   "prompt.action.send": "Dërgo",
   "prompt.action.stop": "Ndalo",
-  "prompt.toast.pasteUnsupported.title": "Bashkëngjitje e pambështetur",
-  "prompt.toast.pasteUnsupported.description":
-    "Këtu mund të bashkëngjiten vetëm imazhe, skedarë PDF ose skedarë teksti.",
   "prompt.toast.attachmentDuplicate.title": "Ky skedar tashmë është ngarkuar",
   "prompt.toast.modelAgentRequired.title": "Zgjidhni një agjent dhe model",
   "prompt.toast.modelAgentRequired.description": "Zgjidhni një agjent dhe model përpara se të dërgoni një kërkesë.",

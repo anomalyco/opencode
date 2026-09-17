@@ -379,8 +379,6 @@ export const dict = {
   "prompt.attachment.remove": "Ukloni privitak",
   "prompt.action.send": "Poslati",
   "prompt.action.stop": "Zaustavi",
-  "prompt.toast.pasteUnsupported.title": "Nepodržani privitak",
-  "prompt.toast.pasteUnsupported.description": "Ovdje se mogu priložiti samo slike, PDF-ovi ili tekstualne datoteke.",
   "prompt.toast.attachmentDuplicate.title": "Ova datoteka je već učitana",
   "prompt.toast.modelAgentRequired.title": "Odaberite agenta i model",
   "prompt.toast.modelAgentRequired.description": "Odaberite agenta i model prije slanja upita.",

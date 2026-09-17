@@ -373,8 +373,6 @@ export const dict = {
   "prompt.attachment.remove": "הסר את הקובץ המצורף",
   "prompt.action.send": "שלח",
   "prompt.action.stop": "עצור",
-  "prompt.toast.pasteUnsupported.title": "קובץ מצורף לא נתמך",
-  "prompt.toast.pasteUnsupported.description": "ניתן לצרף כאן רק תמונות, קובצי PDF או קבצי טקסט.",
   "prompt.toast.attachmentDuplicate.title": "הקובץ הזה כבר הועלה",
   "prompt.toast.modelAgentRequired.title": "בחר סוכן ומודל",
   "prompt.toast.modelAgentRequired.description": "יש לבחור סוכן ומודל לפני שליחת פרומפט.",

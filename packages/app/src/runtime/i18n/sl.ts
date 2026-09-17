@@ -374,8 +374,6 @@ export const dict = {
   "prompt.attachment.remove": "Odstrani prilogo",
   "prompt.action.send": "Pošlji",
   "prompt.action.stop": "Ustavi",
-  "prompt.toast.pasteUnsupported.title": "Nepodprta priloga",
-  "prompt.toast.pasteUnsupported.description": "Sem lahko priložite samo slike, datoteke PDF ali besedilne datoteke.",
   "prompt.toast.attachmentDuplicate.title": "Ta datoteka je že naložena",
   "prompt.toast.modelAgentRequired.title": "Izberite agenta in model",
   "prompt.toast.modelAgentRequired.description": "Preden pošljete poziv, izberite agenta in model.",

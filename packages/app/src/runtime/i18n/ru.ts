@@ -401,9 +401,7 @@ export const dict = {
   "prompt.action.send": "Отправить",
   "prompt.action.stop": "Остановить",
 
-  "prompt.toast.pasteUnsupported.title": "Неподдерживаемое вложение",
   "prompt.toast.attachmentDuplicate.title": "Этот файл уже загружен",
-  "prompt.toast.pasteUnsupported.description": "Здесь можно прикрепить только изображения, PDF или текстовые файлы.",
   "prompt.toast.modelAgentRequired.title": "Выберите агента и модель",
   "prompt.toast.modelAgentRequired.description": "Выберите агента и модель перед отправкой запроса.",
   "prompt.toast.worktreeCreateFailed.title": "Не удалось создать worktree",

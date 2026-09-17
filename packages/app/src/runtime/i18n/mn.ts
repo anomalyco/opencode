@@ -378,8 +378,6 @@ export const dict = {
   "prompt.attachment.remove": "Хавсралтыг устгана уу",
   "prompt.action.send": "Илгээх",
   "prompt.action.stop": "Зогс",
-  "prompt.toast.pasteUnsupported.title": "Дэмжигдээгүй хавсралт",
-  "prompt.toast.pasteUnsupported.description": "Энд зөвхөн зураг, PDFс, эсвэл текст файлыг хавсаргах боломжтой.",
   "prompt.toast.attachmentDuplicate.title": "Энэ файлыг аль хэдийн байршуулсан байна",
   "prompt.toast.modelAgentRequired.title": "Агент болон загварыг сонгоно уу",
   "prompt.toast.modelAgentRequired.description": "Промпт илгээхээсээ өмнө агент болон загварыг сонгоно уу.",

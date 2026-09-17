@@ -403,10 +403,7 @@ export const dict = {
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Detener",
 
-  "prompt.toast.pasteUnsupported.title": "Adjunto no compatible",
   "prompt.toast.attachmentDuplicate.title": "Este archivo ya se ha subido",
-  "prompt.toast.pasteUnsupported.description":
-    "Aquí solo se pueden adjuntar imágenes, archivos PDF o archivos de texto.",
   "prompt.toast.modelAgentRequired.title": "Selecciona un agente y modelo",
   "prompt.toast.modelAgentRequired.description": "Elige un agente y modelo antes de enviar un prompt.",
   "prompt.toast.worktreeCreateFailed.title": "Fallo al crear el árbol de trabajo",

@@ -375,9 +375,6 @@ export const dict = {
   "prompt.attachment.remove": "Bijlage verwijderen",
   "prompt.action.send": "Verzenden",
   "prompt.action.stop": "Stop",
-  "prompt.toast.pasteUnsupported.title": "Niet-ondersteunde bijlage",
-  "prompt.toast.pasteUnsupported.description":
-    "Hier kunnen alleen afbeeldingen, pdf's of tekstbestanden worden bijgevoegd.",
   "prompt.toast.attachmentDuplicate.title": "Dit bestand is al geüpload",
   "prompt.toast.modelAgentRequired.title": "Selecteer een agent en model",
   "prompt.toast.modelAgentRequired.description": "Kies een agent en model voordat je een prompt verzendt.",

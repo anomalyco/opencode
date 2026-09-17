@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import { Skill } from "@opencode/schema/skill"
-import type { Prompt } from "@/composer/state"
+import type { ImageAttachmentPart, Prompt } from "@/composer/state"
+import type { DeliveredAttachment } from "./attachments/deliver"
 import { buildPromptRequest } from "./request"
+
+function inline(filename: string, mime: string, extra?: Partial<ImageAttachmentPart>): DeliveredAttachment {
+  return {
+    type: "inline",
+    attachment: { type: "image", id: `img_${filename}`, filename, mime, blob: { id: filename, url: "" }, ...extra },
+    dataUrl: `data:${mime};base64,AAA`,
+  }
+}
 
 describe("buildPromptRequest", () => {
   test("builds text, files, and agents from the prompt", () => {
@@ -21,9 +30,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt,
       context: [{ key: "ctx:1", type: "file", path: "src/bar.ts", comment: "check this" }],
-      images: [
-        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
-      ],
+      attachments: [inline("a.png", "image/png")],
       text: "hello @src/foo.ts @planner",
       sessionDirectory: "/repo",
     })
@@ -45,16 +52,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt: [{ type: "text", content: "check these", start: 0, end: 11 }],
       context: [],
-      images: [
-        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
-        {
-          type: "image",
-          id: "img_2",
-          filename: "b.pdf",
-          mime: "application/pdf",
-          dataUrl: "data:application/pdf;base64,BBB",
-        },
-      ],
+      attachments: [inline("a.png", "image/png"), inline("b.pdf", "application/pdf")],
       text: "check these",
       sessionDirectory: "/repo",
     })
@@ -69,15 +67,10 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt: [],
       context: [],
-      images: [
-        {
-          type: "image",
-          id: "img_external",
-          filename: "opencode.global.dat",
+      attachments: [
+        inline("opencode.global.dat", "text/plain", {
           sourcePath: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
-          mime: "text/plain",
-          dataUrl: "data:text/plain;base64,AAA",
-        },
+        }),
       ],
       text: "inspect this",
       sessionDirectory: "C:\\Repos\\sst\\opencode",
@@ -102,7 +95,7 @@ describe("buildPromptRequest", () => {
         },
       ],
       context: [],
-      images: [],
+      attachments: [],
       text: "@docs",
       sessionDirectory: "/repo/app",
     })
@@ -124,7 +117,7 @@ describe("buildPromptRequest", () => {
         { key: "ctx:dup", type: "file", path: "src/foo.ts" },
         { key: "ctx:comment", type: "file", path: "src/foo.ts", comment: "focus here" },
       ],
-      images: [],
+      attachments: [],
       text: "@src/foo.ts",
       sessionDirectory: "/repo",
     })
@@ -146,7 +139,7 @@ describe("buildPromptRequest", () => {
           comment: "Compare with @src/shared.ts and @src/review.ts.",
         },
       ],
-      images: [],
+      attachments: [],
       text: "look",
       sessionDirectory: "/repo",
     })
@@ -162,7 +155,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@src\\foo.ts",
       sessionDirectory: "D:\\projects\\myapp", // Windows path
     })
@@ -183,7 +176,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@file#name.txt",
       sessionDirectory: "C:\\Users\\test\\Documents", // Windows path
     })
@@ -204,7 +197,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@src/app.ts",
       sessionDirectory: "/home/user/project",
     })
@@ -218,7 +211,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@README.md",
       sessionDirectory: "/Users/kelvin/Projects/opencode",
     })
@@ -233,7 +226,7 @@ describe("buildPromptRequest", () => {
         { key: "ctx:1", type: "file", path: "src\\utils\\helper.ts" },
         { key: "ctx:2", type: "file", path: "test\\unit.test.ts", comment: "check tests" },
       ],
-      images: [],
+      attachments: [],
       text: "test",
       sessionDirectory: "D:\\workspace\\app",
     })
@@ -255,7 +248,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@D:\\other\\project\\file.ts",
       sessionDirectory: "C:\\current\\project",
     })
@@ -282,7 +275,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@src\\App.tsx",
       sessionDirectory: "C:\\project",
     })
@@ -307,7 +300,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@..\\..\\shared\\util.ts",
       sessionDirectory: "C:\\projects\\myapp\\src",
     })
@@ -337,7 +330,7 @@ describe("buildPromptRequest", () => {
         },
       ],
       context: [],
-      images: [],
+      attachments: [],
       text: "@review",
       sessionDirectory: "/repo",
     })

@@ -377,8 +377,6 @@ export const dict = {
   "prompt.attachment.remove": "Elimina el fitxer adjunt",
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Atureu-vos",
-  "prompt.toast.pasteUnsupported.title": "Fitxer adjunt no compatible",
-  "prompt.toast.pasteUnsupported.description": "Aquí només es poden adjuntar imatges, PDFs o fitxers de text.",
   "prompt.toast.attachmentDuplicate.title": "Aquest fitxer ja s'ha penjat",
   "prompt.toast.modelAgentRequired.title": "Seleccioneu un agent i un model",
   "prompt.toast.modelAgentRequired.description": "Trieu un agent i un model abans d'enviar una sol·licitud.",

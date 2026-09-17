@@ -375,8 +375,6 @@ export const dict: Record<string, string> = {
   "prompt.attachment.remove": "সংযুক্তি সরান",
   "prompt.action.send": "পাঠান",
   "prompt.action.stop": "থামো",
-  "prompt.toast.pasteUnsupported.title": "অসমর্থিত সংযুক্তি",
-  "prompt.toast.pasteUnsupported.description": "এখানে শুধুমাত্র ছবি, পিডিএফ বা টেক্সট ফাইল সংযুক্ত করা যাবে।",
   "prompt.toast.attachmentDuplicate.title": "এই ফাইল ইতিমধ্যে আপলোড করা হয়েছে",
   "prompt.toast.modelAgentRequired.title": "একটি এজেন্ট এবং মডেল নির্বাচন করুন",
   "prompt.toast.modelAgentRequired.description": "প্রম্পট পাঠানোর আগে একটি এজেন্ট এবং মডেল বেছে নিন।",
