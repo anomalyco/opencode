@@ -4,7 +4,9 @@ import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import open from "open"
-import { networkInterfaces } from "os"
+import { existsSync } from "fs"
+import { join } from "path"
+import { networkInterfaces, platform } from "os"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -26,6 +28,33 @@ function getNetworkIPs() {
   }
 
   return results
+}
+
+function findInPath(bin: string): boolean {
+  const pathDirs = process.env.PATH?.split(":") ?? []
+  return pathDirs.some((dir) => dir && existsSync(join(dir, bin)))
+}
+
+function canOpenBrowser(): boolean {
+  if (platform() === "linux") {
+    // Headless Linux (containers, CI, WSL without WSLg) has no display
+    if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return false
+    // Even with a display, the opener binary must exist
+    if (!findInPath("xdg-open")) return false
+  }
+  return true
+}
+
+function openBrowser(url: string) {
+  if (!canOpenBrowser()) {
+    UI.println(
+      UI.Style.TEXT_WARNING_BOLD + "  No browser detected; skipping auto-open.",
+      UI.Style.TEXT_NORMAL,
+      `Visit ${url} to open the web interface.`,
+    )
+    return
+  }
+  open(url).catch(() => {})
 }
 
 export const WebCommand = effectCmd({
@@ -72,11 +101,11 @@ export const WebCommand = effectCmd({
       }
 
       // Open localhost in browser
-      open(localhostUrl).catch(() => {})
+      openBrowser(localhostUrl)
     } else {
       const displayUrl = server.url.toString()
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
-      open(displayUrl).catch(() => {})
+      openBrowser(displayUrl)
     }
 
     yield* Effect.never
