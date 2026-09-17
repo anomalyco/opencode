@@ -87,9 +87,9 @@ testEffect(fixedResponse("")).effect(
         prompt: "hello",
       })
       expect(LLMClient.canCompact(request)).toBe(false)
-      const error = yield* LLMClient.compact(
-        request as unknown as Parameters<typeof LLMClient.compact>[0],
-      ).pipe(Effect.flip)
+      const error = yield* LLMClient.compact(request as unknown as Parameters<typeof LLMClient.compact>[0]).pipe(
+        Effect.flip,
+      )
       expect(error.reason._tag).toBe("UnsupportedOperation")
       expect(error.message).toContain("does not support explicit compaction")
       if (error.reason._tag === "UnsupportedOperation") {

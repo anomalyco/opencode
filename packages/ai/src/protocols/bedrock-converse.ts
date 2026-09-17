@@ -303,15 +303,7 @@ const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent
       content.push({ text: item.text })
       continue
     }
-    const media = yield* BedrockMedia.lower(
-      {
-        type: "media",
-        mediaType: item.mime,
-        data: item.uri,
-        filename: item.name,
-      },
-      documentNames,
-    )
+    const media = yield* BedrockMedia.lower(ProviderShared.toolFileMedia(item), documentNames)
     content.push(...media)
   }
   return content

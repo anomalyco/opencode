@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, ImageInput } from "../../src/index.js"
+import { Image, Media } from "../../src/index.js"
 import { XAI } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -22,13 +22,13 @@ describe("xAI Images recorded", () => {
       const response = yield* Image.generate({
         model,
         prompt: "A simple flat black diamond centered on a plain white background.",
-        options: { aspectRatio: "1:1", resolution: "1k", responseFormat: "b64_json" },
+        aspectRatio: "1:1",
+        providerOptions: { resolution: "1k", responseFormat: "b64_json" },
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image?.mediaType.startsWith("image/")).toBe(true)
-      expect(response.image?.data).toBeInstanceOf(Uint8Array)
-      expect(response.image?.data.length).toBeGreaterThan(0)
+      expect(response.image.mediaType.startsWith("image/")).toBe(true)
+      expect((yield* response.image.bytes()).length).toBeGreaterThan(0)
     }),
   )
 
@@ -38,18 +38,17 @@ describe("xAI Images recorded", () => {
         model,
         prompt: "Keep the simple shape and change it from black to bright purple.",
         images: [
-          ImageInput.bytes(
+          Media.bytes(
             yield* Effect.promise(() => Bun.file("test/fixtures/images/edit-source.jpg").bytes()),
             "image/jpeg",
           ),
         ],
-        options: { aspectRatio: "1:1", resolution: "1k", responseFormat: "b64_json" },
+        aspectRatio: "1:1",
+        providerOptions: { resolution: "1k", responseFormat: "b64_json" },
       })
 
-      expect(response.image?.mediaType).toMatch(/^image\/(jpeg|png)$/)
-      expect(response.image?.data).toBeInstanceOf(Uint8Array)
-      if (!(response.image?.data instanceof Uint8Array)) throw new Error("Expected owned xAI image bytes")
-      expect(dimensions(response.image.data)).toEqual({ width: 1024, height: 1024 })
+      expect(response.image.mediaType).toMatch(/^image\/(jpeg|png)$/)
+      expect(dimensions(yield* response.image.bytes())).toEqual({ width: 1024, height: 1024 })
     }),
   )
 })

@@ -224,11 +224,13 @@ type MistralEvent = Schema.Schema.Type<typeof MistralEvent>
 const MistralStreamEvent = Schema.Union([Schema.Literal(DONE), Protocol.jsonEvent(MistralEvent)])
 
 const lowerMedia = Effect.fn("MistralChat.lowerMedia")(function* (part: MediaPart) {
-  const media = ProviderShared.normalizeMedia(part)
-  const url = typeof part.data === "string" && /^(?:https?:|data:)/.test(part.data) ? part.data : media.dataUrl
-  if (media.mime.startsWith("image/")) return { type: "image_url" as const, image_url: url }
-  if (media.mime === "application/pdf") return { type: "document_url" as const, document_url: url }
-  return yield* ProviderShared.invalidRequest(`Mistral Chat does not support media type ${part.mediaType}`)
+  const mime = part.media.mediaType.toLowerCase()
+  const url =
+    ProviderShared.mediaUrl(part.media) ??
+    (yield* ProviderShared.requireInlineMedia("Mistral Chat", part.media)).dataUrl
+  if (mime.startsWith("image/")) return { type: "image_url" as const, image_url: url }
+  if (mime === "application/pdf") return { type: "document_url" as const, document_url: url }
+  return yield* ProviderShared.invalidRequest(`Mistral Chat does not support media type ${part.media.mediaType}`)
 })
 
 const lowerUser = Effect.fn("MistralChat.lowerUser")(function* (message: LLMRequest["messages"][number]) {
@@ -316,7 +318,7 @@ const lowerToolResults = Effect.fn("MistralChat.lowerToolResults")(function* (
         content.push({ type: "text", text: item.text })
         continue
       }
-      content.push(yield* lowerMedia({ type: "media", mediaType: item.mime, data: item.uri, filename: item.name }))
+      content.push(yield* lowerMedia(ProviderShared.toolFileMedia(item)))
     }
     output.push({
       role: "tool",

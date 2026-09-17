@@ -7,6 +7,7 @@ import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { ProviderShared } from "../protocols/shared.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
+import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("azure")
 const routeAuth = Auth.remove("authorization")
@@ -131,13 +132,13 @@ export const configure = (input: Config) => {
       .with(withOpenAIOptions(modelID, modelDefaults))
       .model<OpenAIProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } })
 
-  return {
+  return ModelRef.facade({
     id,
     model: responses,
     responses,
     chat,
     configure,
-  }
+  })
 }
 
 export const provider = {

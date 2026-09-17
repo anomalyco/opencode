@@ -8,18 +8,15 @@ import {
   JsonSchema,
   LanguageModelSchema,
   type LanguageModel,
+  ProviderMetadata,
   ProviderOptions,
   ReasoningEffort,
 } from "./options.js"
 import { ProviderID } from "./ids.js"
+import { Media } from "../media.js"
 
 export const MessageRole = Schema.Literals(["system", "user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
-
-export const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown)).annotate({
-  identifier: "LLM.ProviderMetadata",
-})
-export type ProviderMetadata = Schema.Schema.Type<typeof ProviderMetadata>
 
 const systemPartSchema = Schema.Struct({
   type: Schema.Literal("text"),
@@ -50,8 +47,7 @@ export type TextPart = Schema.Schema.Type<typeof TextPart>
 
 export const MediaPart = Schema.Struct({
   type: Schema.Literal("media"),
-  mediaType: Schema.String,
-  data: Schema.Union([Schema.String, Schema.Uint8Array]),
+  media: Media.AssetSchema,
   filename: Schema.optional(Schema.String),
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
@@ -254,6 +250,12 @@ export namespace Message {
   }
 
   export const text = (value: string): ContentPart => ({ type: "text", text: value })
+
+  export const media = (asset: Media.Asset, options?: Omit<MediaPart, "type" | "media">): MediaPart => ({
+    type: "media",
+    media: asset,
+    ...options,
+  })
 
   export const content = (input: ContentInput) =>
     typeof input === "string" ? [text(input)] : Array.isArray(input) ? [...input] : [input]

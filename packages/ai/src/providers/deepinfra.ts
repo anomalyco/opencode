@@ -5,6 +5,7 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("deepinfra")
 const baseURL = "https://api.deepinfra.com/v1/openai"
@@ -42,15 +43,20 @@ export const configure = (input: LanguageModelOptions = {}) => {
     },
     auth: AuthOptions.bearer(input, "DEEPINFRA_API_KEY"),
   })
-  return {
+  return ModelRef.facade({
     id,
     model: (modelID: string | ModelID) =>
       configured.model<OpenAIProviderOptionsInput>({
         id: modelID,
-        compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning_content", supportsStore: false, supportsPromptCacheKey: true },
+        compatibility: {
+          maxTokensField: "max_tokens",
+          reasoningField: "reasoning_content",
+          supportsStore: false,
+          supportsPromptCacheKey: true,
+        },
       }),
     configure,
-  }
+  })
 }
 
 export const provider = configure()

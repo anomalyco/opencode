@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Option, Schema, Stream } from "effect"
+import { Cause, Effect, Layer, Option, Schema, Stream } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -9,23 +9,10 @@ import {
 } from "effect/unstable/http"
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
+import { Service, type HttpMiddleware, type Interface } from "./executor-service.js"
 
-export interface Interface {
-  readonly execute: (
-    request: HttpClientRequest.HttpClientRequest,
-    middleware?: HttpMiddleware,
-  ) => Effect.Effect<HttpClientResponse.HttpClientResponse, AIError>
-}
-
-export type HttpHandler = (
-  request: HttpClientRequest.HttpClientRequest,
-) => Effect.Effect<HttpClientResponse.HttpClientResponse, Error>
-export type HttpMiddleware = (
-  request: HttpClientRequest.HttpClientRequest,
-  handler: HttpHandler,
-) => Effect.Effect<HttpClientResponse.HttpClientResponse, Error>
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/AI/RequestExecutor") {}
+export { Service } from "./executor-service.js"
+export type { HttpHandler, HttpMiddleware, Interface } from "./executor-service.js"
 
 const headerDetails = (headers: Headers.Headers) =>
   Object.fromEntries(Object.entries(headers).map(([name, value]) => [name, String(value)]))

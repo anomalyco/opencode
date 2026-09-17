@@ -17,7 +17,7 @@ export type Handler = (
   input: HandlerInput,
 ) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
 
-const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
+export const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
   Layer.succeed(
     HttpClient.HttpClient,
     HttpClient.make((request) =>

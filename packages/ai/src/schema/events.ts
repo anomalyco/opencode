@@ -4,18 +4,18 @@ import { ContentBlockID, ToolCallID } from "./ids.js"
 import {
   Message,
   CompactionPart,
-  ProviderMetadata,
   ToolCallPart,
   ToolOutput,
   ToolResultPart,
   ToolResultValue,
   type ContentPart,
 } from "./messages.js"
+import { ProviderMetadata } from "./options.js"
 import { ProviderFailureClassification } from "./errors.js"
+import { Media } from "../media.js"
 
 export const FinishReason = LLM.FinishReason
 export type FinishReason = Schema.Schema.Type<typeof FinishReason>
-export { ProviderMetadata } from "./messages.js"
 
 /**
  * Token usage reported by an LLM provider.
@@ -90,6 +90,27 @@ export class Usage extends Schema.Class<Usage>("AI.Usage")({
 }
 
 export type UsageInput = Usage | ConstructorParameters<typeof Usage>[0]
+
+/**
+ * Usage reported by media routes. Providers bill images, video, speech, and transcription in different units, so
+ * each response carries the unit it was actually metered in instead of forcing everything into tokens.
+ */
+export const MediaUsage = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("tokens"),
+    input: Schema.optional(Schema.Number),
+    output: Schema.optional(Schema.Number),
+    total: Schema.optional(Schema.Number),
+    details: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+  Schema.Struct({ type: Schema.Literal("seconds"), seconds: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("characters"), characters: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("credits"), credits: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("compute"), seconds: Schema.Number }),
+])
+  .pipe(Schema.toTaggedUnion("type"))
+  .annotate({ identifier: "AI.MediaUsage" })
+export type MediaUsage = Schema.Schema.Type<typeof MediaUsage>
 
 /** A replacement context window, not an assistant message to append to prior history. */
 export class CompactionResponse extends Schema.Class<CompactionResponse>("LLM.CompactionResponse")({
@@ -263,6 +284,14 @@ export const Finish = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.Finish" })
 export type Finish = Schema.Schema.Type<typeof Finish>
 
+/** A generated media asset (image, audio, …) emitted by the model as first-class output rather than a tool result. */
+export const MediaEvent = Schema.Struct({
+  type: Schema.tag("media"),
+  media: Media.AssetSchema,
+  providerMetadata: Schema.optional(ProviderMetadata),
+}).annotate({ identifier: "LLM.Event.Media" })
+export type MediaEvent = Schema.Schema.Type<typeof MediaEvent>
+
 export const ProviderErrorEvent = Schema.Struct({
   type: Schema.tag("provider-error"),
   message: Schema.String,
@@ -287,6 +316,7 @@ const llmEventTagged = Schema.Union([
   ToolCall,
   ToolResult,
   ToolError,
+  MediaEvent,
   StepFinish,
   Finish,
   ProviderErrorEvent,
@@ -332,6 +362,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
       output: input.output === undefined ? undefined : ToolOutput.make(input.output.structured, input.output.content),
     }),
   toolError: (input: WithID<ToolError, ToolCallID>) => ToolError.make({ ...input, id: toolCallID(input.id) }),
+  media: MediaEvent.make,
   stepFinish: (input: WithUsage<StepFinish>) =>
     StepFinish.make({
       ...input,
@@ -359,6 +390,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     toolCall: llmEventTagged.guards["tool-call"],
     toolResult: llmEventTagged.guards["tool-result"],
     toolError: llmEventTagged.guards["tool-error"],
+    media: llmEventTagged.guards.media,
     stepFinish: llmEventTagged.guards["step-finish"],
     finish: llmEventTagged.guards.finish,
     providerError: llmEventTagged.guards["provider-error"],
@@ -634,6 +666,13 @@ const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseSta
       return reduceToolCall(next, event)
     case "tool-result":
       return appendContent(next, toolResultContent(event))
+    case "media":
+      return appendContent(
+        next,
+        event.providerMetadata === undefined
+          ? { type: "media", media: event.media }
+          : { type: "media", media: event.media, providerMetadata: event.providerMetadata },
+      )
     default:
       return next
   }

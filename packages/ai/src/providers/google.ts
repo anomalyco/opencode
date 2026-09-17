@@ -5,6 +5,7 @@ import type { ProviderPackage } from "../provider-package.js"
 import { HttpOptions, ProviderID, mergeHttpOptions, type ModelID } from "../schema/index.js"
 import { Gemini } from "../protocols/gemini.js"
 import { GoogleImages } from "../protocols/google-images.js"
+import { ModelRef } from "../model-ref.js"
 
 export type { GoogleImageOptions } from "../protocols/google-images.js"
 export type GeminiOptionsInput = Gemini.OptionsInput
@@ -48,12 +49,12 @@ export const configure = (input: Config = {}) => {
       headers: input.headers,
       http: mergeHttpOptions(input.http === undefined ? undefined : HttpOptions.make(input.http)),
     })
-  return {
+  return ModelRef.facade({
     id,
     model: (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID }),
     image,
     configure,
-  }
+  })
 }
 
 export const provider = configure()

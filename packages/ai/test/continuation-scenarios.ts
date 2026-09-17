@@ -1,5 +1,6 @@
 import {
   LLM,
+  Media,
   Message,
   ToolCallPart,
   ToolDefinition,
@@ -59,7 +60,7 @@ export function continuationRequest(input: {
 
   if (features.has("user-text")) firstUser.push({ type: "text", text: "What is shown here?" })
   if (features.has("user-image"))
-    firstUser.push({ type: "media", mediaType: "image/png", data: input.image ?? "AAECAw==" })
+    firstUser.push({ type: "media", media: Media.base64(input.image ?? "AAECAw==", "image/png") })
   if (firstUser.length > 0) messages.push(Message.user(firstUser))
 
   if (features.has("assistant-reasoning"))

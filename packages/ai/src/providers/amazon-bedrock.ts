@@ -4,6 +4,7 @@ import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/
 import * as BedrockConverse from "../protocols/bedrock-converse.js"
 import type { BedrockCredentials } from "../protocols/bedrock-converse.js"
 import { BedrockAuth } from "../protocols/utils/bedrock-auth.js"
+import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("amazon-bedrock")
 
@@ -54,11 +55,11 @@ const configuredRoute = (input: Config) => {
 
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
-  return {
+  return ModelRef.facade({
     id,
     model: (modelID: string | ModelID) => route.model({ id: modelID }),
     configure,
-  }
+  })
 }
 
 export const provider = configure()

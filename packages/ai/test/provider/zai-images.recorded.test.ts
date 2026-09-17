@@ -19,13 +19,14 @@ describe("Z.ai Images recorded", () => {
       const response = yield* Image.generate({
         model,
         prompt: "A simple flat red circle centered on a plain white background.",
-        options: { size: "1024x1024", quality: "standard", userID: "opencode-image-test" },
+        size: "1024x1024",
+        providerOptions: { quality: "standard", userID: "opencode-image-test" },
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image?.mediaType).toBe("application/octet-stream")
-      expect(response.image?.data).toBeString()
-      expect(response.image?.data).toStartWith("https://")
+      expect(response.image.mediaType).toBe("application/octet-stream")
+      expect(response.image.source.type).toBe("url")
+      expect(response.image.source.type === "url" && response.image.source.url).toStartWith("https://")
       expect(response.providerMetadata?.zai).toBeDefined()
     }),
   )

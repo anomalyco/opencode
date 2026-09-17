@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMEvent, Message, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMEvent, Message, ToolDefinition, Media } from "../../src/index.js"
 import { Mistral } from "../../src/providers/index.js"
 import { MistralChat } from "../../src/protocols/index.js"
 import { LLMClient } from "../../src/route.js"
@@ -46,8 +46,8 @@ describe("Mistral Chat", () => {
             Message.system("Updated"),
             Message.user([
               { type: "text", text: "Inspect" },
-              { type: "media", mediaType: "image/png", data: "aW1hZ2U=" },
-              { type: "media", mediaType: "application/pdf", data: "cGRm" },
+              { type: "media", media: Media.base64("aW1hZ2U=", "image/png") },
+              { type: "media", media: Media.base64("cGRm", "application/pdf") },
             ]),
             Message.assistant([
               { type: "reasoning", text: "Think" },
@@ -230,8 +230,7 @@ describe("Mistral Chat", () => {
           messages: [
             Message.user({
               type: "media",
-              mediaType: "image/png",
-              data: "https://assets.example.test/input.png",
+              media: Media.url("https://assets.example.test/input.png", { mediaType: "image/png" }),
             }),
             Message.tool({
               id: "Ab12Cd34E",

@@ -5,6 +5,7 @@ import type { ProviderPackage } from "../provider-package.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { AnthropicCompatible } from "./anthropic-compatible.js"
+import { ModelRef } from "../model-ref.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
 export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
@@ -44,11 +45,11 @@ export const configure = (input: Config = {}) => {
     baseURL: baseURL ?? AnthropicMessages.DEFAULT_BASE_URL,
     provider: id,
   })
-  return {
+  return ModelRef.facade({
     id,
     model: (modelID: string | ModelID) => compatible.model(modelID),
     configure,
-  }
+  })
 }
 
 export const provider = configure()

@@ -5,6 +5,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("google-vertex")
 
@@ -63,11 +64,11 @@ const configuredRoute = (input: Config) => {
 
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
-  return {
+  return ModelRef.facade({
     id,
     model: (modelID: string | ModelID) => route.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     configure,
-  }
+  })
 }
 
 export const provider = {

@@ -4,6 +4,7 @@ import { Auth } from "../route/auth.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ModelRef } from "../model-ref.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
 export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
@@ -49,11 +50,11 @@ export const configure = (input: Config) => {
     endpoint: { baseURL },
     auth: auth(input),
   })
-  return {
+  return ModelRef.facade({
     id: ProviderID.make(provider),
     model: (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
     configure,
-  }
+  })
 }
 
 export const provider = {

@@ -17,6 +17,7 @@ import { RequestExecutor } from "../../route/executor.js"
 import { HttpTransport } from "../../route/transport/index.js"
 import { OpenResponses } from "../open-responses.js"
 import { JsonObject, optionalNull, ProviderShared } from "../shared.js"
+import { Media } from "../../media.js"
 
 const Body = Schema.Struct({
   model: Schema.String,
@@ -157,20 +158,22 @@ function toMessage(item: (typeof Response.Type.output)[number], model: LLMReques
       if (part.type === "input_image")
         return {
           type: "media",
-          data: part.image_url,
-          mediaType: /^data:([^;,]+)/.exec(part.image_url)?.[1] ?? "image/*",
+          media: replayMedia(part.image_url, "image/*"),
           providerMetadata: part.detail === undefined ? undefined : { [key]: { detail: part.detail } },
         }
-      const data = part.file_url === undefined ? part.file_data : part.file_url
       return {
         type: "media",
-        data,
+        media: replayMedia(part.file_url === undefined ? part.file_data : part.file_url, "application/octet-stream"),
         filename: part.filename,
-        mediaType: /^data:([^;,]+)/.exec(data)?.[1] ?? "application/octet-stream",
         providerMetadata: part.detail === undefined ? undefined : { [key]: { detail: part.detail } },
       }
     }),
   })
 }
+
+/** Replayed compaction items carry either a data URL or a remote URL; the data URL's own type wins when present. */
+const replayMedia = (value: string, fallbackType: string) =>
+  Media.parseDataUrl(value) ??
+  (/^https?:\/\//.test(value) ? Media.url(value, { mediaType: fallbackType }) : Media.base64(value, fallbackType))
 
 export * as ResponsesCompaction from "./responses-compaction.js"

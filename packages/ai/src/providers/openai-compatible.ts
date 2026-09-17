@@ -4,6 +4,7 @@ import type { RouteDefaultsInput } from "../route/client.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { ProviderPackage } from "../provider-package.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("openai-compatible")
 
@@ -32,12 +33,12 @@ export const configure = (input: GenericModelOptions) => {
     endpoint: { baseURL },
     auth: AuthOptions.bearer(input, []),
   })
-  return {
+  return ModelRef.facade({
     id: ProviderID.make(provider),
     model: (modelID: string | ModelID) =>
       route.model<OpenAIProviderOptionsInput>({ id: modelID, provider: ProviderID.make(provider) }),
     configure,
-  }
+  })
 }
 
 export const provider = {

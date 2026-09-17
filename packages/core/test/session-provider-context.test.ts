@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { CompactionPart, LanguageModel, Message, ToolCallPart } from "@opencode/ai"
+import { CompactionPart, LanguageModel, Message, ToolCallPart, Media } from "@opencode/ai"
 import { OpenAIResponses } from "@opencode/ai/protocols"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
@@ -100,13 +100,12 @@ test("canonical provider context round-trips tools, opaque checkpoints and binar
     ...replacement,
     Message.assistant(ToolCallPart.make({ id: "call_1", name: "read", input: { path: "file" } })),
     Message.tool({ id: "call_1", name: "read", result: { text: "result" } }),
-    Message.user({ type: "media", mediaType: "image/png", data: new Uint8Array([1, 2, 3]) }),
+    Message.user({ type: "media", media: Media.bytes(new Uint8Array([1, 2, 3]), "image/png") }),
   ]
   const context = SessionProviderContext.encode(providerContext.provenance, messages)
   const stored = Schema.decodeUnknownSync(Schema.fromJsonString(SessionProviderContext.Info))(JSON.stringify(context))
   const decoded = SessionProviderContext.decode(stored)
-  expect(decoded.slice(0, -1)).toEqual(messages.slice(0, -1))
-  expect(decoded.at(-1)?.content).toEqual([{ type: "media", mediaType: "image/png", data: "AQID" }])
+  expect(decoded).toEqual(messages)
   const optionalMetadata = SessionProviderContext.encode(providerContext.provenance, [
     Message.make({
       role: "user",

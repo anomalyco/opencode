@@ -45,24 +45,13 @@ export const isCheckpoint = (
   message.type === "compaction" && message.status === "completed" && message.providerContext !== undefined
 
 /** Stores the canonical replacement, not a local summary or transport continuation.
- * Provider and attachment metadata can contain optional undefined entries. Use JSON's
- * omission semantics, while preserving canonical binary media as equivalent base64.
+ * Provider and attachment metadata can contain optional undefined entries, which the Schema JSON
+ * codec rejects, so use JSON's omission semantics; `Media.Asset.toJSON` keeps binary media as base64.
  */
 export const encode = (provenance: Provenance, replacement: ReadonlyArray<Message>): Info => ({
   version: 1,
   provenance,
-  messages: Schema.decodeSync(Schema.fromJsonString(Schema.Json))(
-    JSON.stringify(
-      replacement.map((message) => ({
-        ...message,
-        content: message.content.map((part) =>
-          part.type === "media" && part.data instanceof Uint8Array
-            ? { ...part, data: Buffer.from(part.data).toString("base64") }
-            : part,
-        ),
-      })),
-    ),
-  ),
+  messages: Schema.decodeSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(replacement)),
 })
 
 export const decode = (context: Info) => Schema.decodeUnknownSync(messages)(context.messages)

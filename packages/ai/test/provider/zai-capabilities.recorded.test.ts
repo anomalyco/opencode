@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, Message, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMEvent, Message, ToolDefinition, Media } from "../../src/index.js"
 import { ZAI } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
@@ -92,7 +92,7 @@ recorded.effect.with(
           messages: [
             Message.user([
               { type: "text", text: "Read the three words in this image. Reply with only the words in order." },
-              { type: "media", mediaType: "image/png", data: bytes },
+              { type: "media", media: Media.bytes(bytes, "image/png") },
             ]),
           ],
           generation: { maxTokens: 4096 },
