@@ -35,6 +35,15 @@ describe("upgrade command", () => {
     expect(result.events).toEqual([{ method: "bun", version: "2.0.0" }])
   })
 
+  test("mise is a method choice and explicit targets request a pin", async () => {
+    const result = await cli(["2.3.4", "--method", "mise"])
+    expect(result.exitCode).toBe(0)
+    expect(result.events).toEqual([{ method: "mise", version: "2.3.4", pin: true }])
+    const latest = await cli([], { UPGRADE_TEST_METHOD: "mise" })
+    expect(latest.exitCode).toBe(0)
+    expect(latest.events).toEqual(["method", "latest", { method: "mise", version: "0.0.0-beta-new", pin: false }])
+  })
+
   test("skips the already installed version", async () => {
     const result = await cli(["v0.0.0-beta-old"])
     expect(result.exitCode).toBe(0)

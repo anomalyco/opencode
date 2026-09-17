@@ -28,9 +28,9 @@ await Effect.runPromise(
             ? Effect.fail(new Error("Update check failed"))
             : Effect.succeed("0.0.0-beta-new")
         }),
-      upgrade: (method, version) =>
+      upgrade: (method, version, options) =>
         Effect.suspend(() => {
-          record({ method, version })
+          record({ method, version, ...(method === "mise" ? { pin: options?.pin } : {}) })
           return process.env.UPGRADE_TEST_INSTALL_ERROR ? Effect.fail(new Error("Permission denied")) : Effect.void
         }),
     }),
