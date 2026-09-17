@@ -1,7 +1,7 @@
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
-import { Context, Duration, Effect, FileSystem, Layer, Ref, Schedule } from "effect"
+import { Context, Effect, FileSystem, Layer, Ref } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
@@ -23,18 +23,6 @@ export interface Interface {
     | { readonly command: ReadonlyArray<string>; readonly run: Effect.Effect<void, Error> }
     | undefined
 }
-
-export const pollUpdates = Effect.fnUntraced(function* (input: {
-  readonly check: Effect.Effect<unknown>
-  readonly initialDelay?: Duration.Input
-  readonly interval?: Duration.Input
-}) {
-  const interval = input.interval ?? "10 minutes"
-  return yield* input.check.pipe(
-    Effect.repeat(Schedule.spaced(interval)),
-    Effect.delay(input.initialDelay ?? "1 minute"),
-  )
-})
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
 
