@@ -968,7 +968,8 @@ function App(props: { pair?: DialogPairCredentials }) {
             {
               name: "opencode.update",
               title: "Update OpenCode",
-              slash: { name: "update", aliases: ["upgrade"] },
+              description: "Update OpenCode (upgrade)",
+              slash: { name: "update" },
               run: () => updater.open?.("manual"),
               category: "System",
             },
