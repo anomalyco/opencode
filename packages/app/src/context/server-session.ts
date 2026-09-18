@@ -1380,13 +1380,16 @@ export function createServerSession(
     async todo(sessionID: string, request?: { force?: boolean }) {
       touch(sessionID)
       if (data.todo[sessionID] !== undefined && !request?.force) return
-      if ((await options?.protocol) === "v2") {
-        setData("todo", sessionID, [])
-        return
-      }
       return runInflight(inflightTodo, sessionID, () => {
         const active = generation(sessionID)
-        return (options?.retry ?? retry)(() => client.session.todo({ sessionID })).then((result) => {
+        const directory = data.info[sessionID]?.directory
+        return (options?.retry ?? retry)(async () => {
+          // v2 routes instance APIs by directory; v1 servers reject the extra query param.
+          return client.session.todo({
+            sessionID,
+            directory: (await options?.protocol) === "v2" ? directory : undefined,
+          })
+        }).then((result) => {
           if (generations.get(sessionID) !== active) return
           setData("todo", sessionID, reconcile(result.data ?? [], { key: "id" }))
         })

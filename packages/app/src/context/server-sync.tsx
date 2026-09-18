@@ -169,6 +169,15 @@ export function seedActiveSessionStatuses(
   session: Pick<ServerSession, "data" | "set">,
   active: SessionActiveOutput | Record<string, SessionStatus>,
 ) {
+  // Fresh server truth: a session absent from the snapshot (or explicitly idle
+  // in it) is not running, so clear client statuses stuck busy by execution
+  // events missed across an SSE gap. Entries kept rich by events (e.g. retry
+  // attempt/message) are only skipped while the server agrees they are active.
+  for (const sessionID of Object.keys(session.data.session_status)) {
+    const status = active[sessionID]
+    if (status && status.type !== "idle") continue
+    session.set("session_status", sessionID, { type: "idle" })
+  }
   for (const sessionID of Object.keys(active)) {
     if (session.data.session_status[sessionID] !== undefined) continue
     const status = active[sessionID]
@@ -544,8 +553,11 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     if (eventType === "integration.connection.updated") void refreshProviders()
 
     if (directory === "global") {
-      if (eventType === "server.connected" && activeSessionsQuery.data === undefined && !activeSessionsQuery.isFetching)
+      if (eventType === "server.connected" && !activeSessionsQuery.isFetching) {
+        // Reconcile after any (re)connect: events missed while the stream was
+        // down leave stale busy statuses and stale todo lists behind.
         void activeSessionsQuery.refetch()
+      }
       applyGlobalEvent({
         event,
         project: globalStore.project,

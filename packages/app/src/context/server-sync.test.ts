@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
+import type { OpencodeClient, SessionStatus } from "@opencode-ai/sdk/v2/client"
 import type {
   McpListInput,
   McpResourceCatalogInput,
@@ -99,6 +99,40 @@ describe("active session query", () => {
       message: "retrying",
       next: 10,
     })
+  })
+
+  test("clears statuses stuck busy when the server reports the session inactive", () => {
+    const session = createServerSession({} as OpencodeClient)
+    session.set("session_status", "ses_stale", { type: "busy" })
+    session.set("session_status", "ses_active", { type: "busy" })
+    session.set("session_status", "ses_rich", { type: "retry", attempt: 2, message: "retrying", next: 10 })
+
+    seedActiveSessionStatuses(session, {
+      ses_active: { type: "running" },
+      ses_rich: { type: "running" },
+    })
+
+    expect(session.data.session_status.ses_stale).toEqual({ type: "idle" })
+    expect(session.data.session_status.ses_active).toEqual({ type: "busy" })
+    expect(session.data.session_status.ses_rich).toEqual({
+      type: "retry",
+      attempt: 2,
+      message: "retrying",
+      next: 10,
+    })
+  })
+
+  test("clears statuses stuck busy for sessions the server reports idle", () => {
+    const session = createServerSession({} as OpencodeClient)
+    session.set("session_status", "ses_stale", { type: "busy" })
+
+    const statuses: Record<string, SessionStatus> = {
+      ses_running: { type: "busy" },
+      ses_stale: { type: "idle" },
+    }
+    seedActiveSessionStatuses(session, statuses)
+
+    expect(session.data.session_status.ses_stale).toEqual({ type: "idle" })
   })
 })
 
