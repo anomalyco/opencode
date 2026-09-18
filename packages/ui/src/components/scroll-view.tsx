@@ -236,17 +236,13 @@ export function ScrollView(props: ScrollViewProps) {
       local.viewportRef(viewportRef)
     }
 
+    // The observer reports every target once when it starts observing (including a thumb mount that
+    // appears later), after layout. Measuring here as well would force a synchronous layout per
+    // ScrollView while the page is still rendering.
     createResizeObserver(
       () => [viewportRef, viewportRef.firstElementChild, thumbMount()].filter(Boolean) as HTMLElement[],
       updateThumb,
     )
-
-    updateThumb()
-  })
-
-  createEffect(() => {
-    thumbMount()
-    updateThumb()
   })
 
   createEffect(() => {
