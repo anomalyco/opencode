@@ -1,21 +1,30 @@
 #!/usr/bin/env bun
 // Cold-start benchmark for a packaged desktop build.
 //
-//   bun run bench:startup -- [--exe <path>] [--runs 5] [--service warm|cold] [--seed <userData dir>]
-//                            [--profile-main] [--profile-renderer] [--trace] [--out <dir>] [--home <dir>]
+//   bun run bench:startup -- [--exe <path>] [--compare <path>] [--runs 5] [--warmup 1] [--service warm|cold]
+//                            [--fresh] [--offline] [--seed <userData dir>] [--profile-main] [--profile-renderer]
+//                            [--trace] [--out <dir>] [--home <dir>]
 //
 // The app runs in an isolated home directory (its own %APPDATA%, XDG dirs, OpenCode DB, config and
-// service registration), so it never attaches to, restarts or reads the developer's live service or
-// state. `warm` starts one service from the bundled CLI before the runs and lets every launch reuse
-// it; `cold` stops it before each run so the desktop has to spawn it. Milestones come from the main
-// log, the renderer's performance timeline and DOM readiness polled over CDP. `--profile-main`
-// records a main-process CPU profile from the first statement (via --inspect-brk) on the first run,
+// service registration) with the developer's OPENCODE_* / OTEL_* environment stripped, so it never
+// attaches to, restarts or reads the developer's live service or state and does not inherit their
+// telemetry configuration. `warm` starts one service from the bundled CLI before the runs and lets
+// every launch reuse it; `cold` stops it before each run so the desktop has to spawn it. `--fresh`
+// wipes the profile before each launch to measure the first launch after an install. `--compare`
+// alternates launches of a second build so machine drift affects both equally, and `--warmup`
+// launches are discarded (the first launch of a new binary pays the antivirus scan).
+//
+// Milestones come from the main log, the renderer's performance timeline and DOM readiness polled
+// over CDP, plus Node's own bootstrap timing read from the main process afterwards over --inspect
+// (nothing attaches until the run is over), which splits the time before the first log line into
+// Electron/Chromium native init, Node bootstrap and our main bundle. `--profile-main` records a
+// main-process CPU profile from the first statement (via --inspect-brk) on the first run,
 // `--profile-renderer` records the renderer main thread from the moment its debug target appears,
 // and `--trace` records Chromium's startup trace on the last run. Raw samples are written as JSON.
 import { spawn } from "node:child_process"
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { createServer } from "node:net"
-import { homedir, tmpdir } from "node:os"
+import { tmpdir } from "node:os"
 import { basename, dirname, join, relative, resolve } from "node:path"
 import { parseArgs } from "node:util"
 
@@ -23,8 +32,12 @@ const args = parseArgs({
   args: process.argv.slice(2),
   options: {
     exe: { type: "string" },
+    compare: { type: "string" },
     runs: { type: "string", default: "5" },
+    warmup: { type: "string", default: "1" },
     service: { type: "string", default: "warm" },
+    fresh: { type: "boolean", default: false },
+    offline: { type: "boolean", default: false },
     seed: { type: "string" },
     home: { type: "string" },
     out: { type: "string" },
@@ -36,17 +49,26 @@ const args = parseArgs({
   allowPositionals: true,
 })
 const packageDir = resolve(import.meta.dirname, "..")
-const exe = resolve(args.values.exe ?? defaultExe())
+const builds = [
+  { label: args.values.compare ? "A" : "", exe: resolve(args.values.exe ?? defaultExe()) },
+  ...(args.values.compare ? [{ label: "B", exe: resolve(args.values.compare) }] : []),
+]
 const runs = Number(args.values.runs)
+const warmup = Number(args.values.warmup)
 const service = args.values.service === "cold" ? "cold" : "warm"
 const settleMs = Number(args.values["settle-ms"])
 const outDir = resolve(args.values.out ?? join(packageDir, "dist", "bench-startup"))
 const home = resolve(args.values.home ?? join(tmpdir(), "opencode-bench-startup"))
-if (!existsSync(exe)) throw new Error(`Packaged executable not found: ${exe}. Run 'bun run build && bun run package:win' (or pass --exe).`)
+for (const build of builds) {
+  if (!existsSync(build.exe))
+    throw new Error(`Packaged executable not found: ${build.exe}. Run 'bun run build && bun run package:win' (or pass --exe).`)
+}
 if (!Number.isSafeInteger(runs) || runs < 1) throw new Error("--runs must be a positive integer")
+if (!Number.isSafeInteger(warmup) || warmup < 0) throw new Error("--warmup must be a non-negative integer")
 mkdirSync(outDir, { recursive: true })
 
-const appId = appIdFor(exe)
+const appId = appIdFor(builds[0].exe)
+if (builds.some((build) => appIdFor(build.exe) !== appId)) throw new Error("Compared builds must be the same channel")
 const userData = join(home, "AppData", "Roaming", appId)
 const paths = {
   home,
@@ -60,8 +82,10 @@ const paths = {
 }
 prepareHome()
 // The desktop deletes XDG_STATE_HOME on Windows, so isolation goes through the home directory.
+// OPENCODE_* and OTEL_* from the developer's shell would otherwise leak into the measured app and
+// its service (an OTLP endpoint alone adds a network round trip to every CLI exit).
 const env = {
-  ...process.env,
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(OPENCODE_|OTEL_|SENTRY_)/.test(key))),
   USERPROFILE: home,
   HOME: home,
   APPDATA: paths.appData,
@@ -73,6 +97,8 @@ const env = {
   XDG_CACHE_HOME: join(home, ".cache"),
   OPENCODE_DB: paths.db,
   OPENCODE_CONFIG_DIR: paths.config,
+  // Beta and prod builds check for updates on start; a closed proxy port fails that fast and offline.
+  ...(args.values.offline || appId !== "ai.opencode.desktop.dev" ? { HTTPS_PROXY: "http://127.0.0.1:9" } : {}),
 }
 const cdpPort = await freePort()
 // A private service port keeps a cold launch's own service away from the developer's service.
@@ -92,36 +118,110 @@ const probe = `(() => ({
   home: !!document.querySelector('[data-action="home-new-session"], [data-action="home-add-project-row"]'),
   url: location.pathname + location.search,
 }))()`
+// Main-process bootstrap timing, read after the run: when the process was created, when Node
+// started inside it, and when Node's own bootstrap finished and handed control to the entry module.
+const mainTiming = `JSON.stringify({ created: process.getCreationTime(), origin: performance.timeOrigin, ...performance.nodeTiming.toJSON() })`
 
-console.log(`bench: ${exe}`)
+for (const build of builds) console.log(`bench${build.label ? ` ${build.label}` : ""}: ${build.exe}`)
 console.log(`home:  ${home}`)
-console.log(`service: ${service}, runs: ${runs}, cdp ${cdpPort}, inspect ${inspectPort}`)
+console.log(`service: ${service}, runs: ${runs} (+${warmup} warm-up), cdp ${cdpPort}, inspect ${inspectPort}${args.values.fresh ? ", fresh profile per launch" : ""}`)
 
 if (service === "warm") await warmService()
 
 const samples: Sample[] = []
-for (let run = 1; run <= runs; run++) {
+for (let run = 1 - warmup; run <= runs; run++) {
+  for (const build of builds) {
+    const sample = await launch(build, run)
+    if (run < 1) {
+      console.log(`warm-up${build.label ? ` ${build.label}` : ""}: shell ${sample.msSinceSpawn.shellVisible} ms`)
+      continue
+    }
+    samples.push(sample)
+    console.log(JSON.stringify(sample))
+  }
+}
+await killApp()
+if (service === "warm") await stopService()
+
+const summaries = Object.fromEntries(
+  builds.map((build) => {
+    const own = samples.filter((s) => s.build === build.label)
+    const timed = own.filter((s) => !s.profiled && !s.traced)
+    return [build.label || "A", summarize(timed.length ? timed : own)]
+  }),
+)
+const report = { builds, service, runs, warmup, fresh: args.values.fresh, home, summaries, samples }
+const reportPath = join(outDir, `startup-${Date.now()}.json`)
+writeFileSync(reportPath, JSON.stringify(report, null, 2))
+console.log(`\n${service} service${args.values.fresh ? ", fresh profile" : ""} — median (min…max) ms since spawn over ${runs} runs`)
+const labels = Object.keys(summaries)
+const keys = [...new Set(labels.flatMap((label) => Object.keys(summaries[label])))]
+console.log(`${"".padEnd(24)}${labels.map((label) => (labels.length > 1 ? label : "").padStart(6).padEnd(22)).join("")}`)
+for (const key of keys) {
+  const cells = labels.map((label) => {
+    const v = summaries[label][key]
+    return v ? `${String(v.median).padStart(6)}  (${v.min}…${v.max})`.padEnd(22) : "".padEnd(22)
+  })
+  console.log(`${key.padEnd(24)}${cells.join("")}`)
+}
+console.log(`\nreport: ${reportPath}`)
+process.exit(0)
+
+// ---------------------------------------------------------------------------------------------
+
+type Probe = {
+  origin: number
+  firstPaint?: number
+  domInteractive?: number
+  shell: boolean
+  editor: boolean
+  rows: number
+  home: boolean
+  url: string
+}
+type Sample = {
+  build: string
+  run: number
+  profiled: boolean
+  traced?: string
+  mainProfile?: string
+  rendererProfile?: string
+  msSinceSpawn: Record<string, number | undefined>
+  final: { url?: string; timelineRows?: number }
+  rendererCpu: { taskMs: number; scriptMs: number }
+}
+
+async function launch(build: { label: string; exe: string }, run: number): Promise<Sample> {
   await killApp()
   if (service === "cold") await stopService()
+  if (args.values.fresh) rmSync(userData, { recursive: true, force: true })
   const profile = args.values["profile-main"] && run === 1
   const trace = args.values.trace && run === runs
   const tracePath = join(outDir, `startup-trace-${Date.now()}.json`)
-  const launch = [
+  const launchArgs = [
     `--remote-debugging-port=${cdpPort}`,
-    ...(profile ? [`--inspect-brk=${inspectPort}`] : []),
+    profile ? `--inspect-brk=${inspectPort}` : `--inspect=${inspectPort}`,
     ...(trace
-      ? ["--trace-startup=*,disabled-by-default-v8.cpu_profiler", "--trace-startup-duration=6", "--trace-startup-format=json", `--trace-startup-file=${tracePath}`]
+      ? [
+          "--trace-startup=*,disabled-by-default-v8.cpu_profiler",
+          "--trace-startup-duration=6",
+          "--trace-startup-format=json",
+          `--trace-startup-file=${tracePath}`,
+        ]
       : []),
   ]
   const spawnAt = Date.now()
-  const child = spawn(exe, launch, { env, detached: true, stdio: "ignore" })
+  const child = spawn(build.exe, launchArgs, { env, detached: true, stdio: "ignore" })
   child.unref()
   appPid = child.pid
 
   let mainProfile: Promise<unknown> | undefined
   if (profile) mainProfile = profileMain(spawnAt)
 
-  const page = await waitFor(() => targets(cdpPort).then((list) => list.find((t) => t.type === "page" && t.url.startsWith("oc://"))), 60_000)
+  const page = await waitFor(
+    () => targets(cdpPort).then((list) => list.find((t) => t.type === "page" && t.url.startsWith("oc://"))),
+    60_000,
+  )
   const cdp = await connect(page.webSocketDebuggerUrl)
   await cdp.send("Runtime.enable")
   await cdp.send("Performance.enable")
@@ -168,17 +268,22 @@ for (let run = 1; run <= runs; run++) {
     console.log("renderer profile:", rendererProfilePath)
   }
   cdp.close()
+  const boot = profile ? undefined : await mainBootTiming()
   await sleep(300)
   // Chromium writes the startup trace when --trace-startup-duration elapses; keep the app alive until then.
   if (trace) await waitFor(async () => (existsSync(tracePath) && statSync(tracePath).size > 0 ? true : undefined), 20_000)
   const main = mainLog()
   const origin = last?.origin ? Math.round(last.origin - spawnAt) : undefined
   const sample: Sample = {
+    build: build.label,
     run,
     profiled: profile || !!rendererProfile,
     traced: trace ? tracePath : undefined,
     rendererProfile: rendererProfilePath,
     msSinceSpawn: {
+      processCreated: boot && Math.round(boot.created - spawnAt),
+      nodeStart: boot && Math.round(boot.origin + boot.nodeStart - spawnAt),
+      nodeBootstrapped: boot && Math.round(boot.origin + boot.bootstrapComplete - spawnAt),
       appStarting: main.appStarting && main.appStarting - spawnAt,
       cliVersionStart: main.versionStart && main.versionStart - spawnAt,
       cliVersionDone: main.versionDone && main.versionDone - spawnAt,
@@ -186,7 +291,8 @@ for (let run = 1; run <= runs; run++) {
       serviceReady: main.serviceReady && main.serviceReady - spawnAt,
       rendererProcess: origin,
       windowVisible: main.windowVisible && main.windowVisible - spawnAt,
-      domInteractive: last?.domInteractive !== undefined && origin !== undefined ? Math.round(origin + last.domInteractive) : undefined,
+      domInteractive:
+        last?.domInteractive !== undefined && origin !== undefined ? Math.round(origin + last.domInteractive) : undefined,
       firstPaint: last?.firstPaint !== undefined && origin !== undefined ? Math.round(origin + last.firstPaint) : undefined,
       ...seen,
       rendererIdle: rendererIdleMs,
@@ -194,49 +300,25 @@ for (let run = 1; run <= runs; run++) {
     final: { url: last?.url, timelineRows: last?.rows },
     rendererCpu: { taskMs: Math.round(taskMs), scriptMs: Math.round(scriptMs) },
   }
-  samples.push(sample)
-  console.log(JSON.stringify(sample))
   if (mainProfile) {
     const profilePath = join(outDir, `main-${Date.now()}.cpuprofile`)
     writeFileSync(profilePath, JSON.stringify(await mainProfile))
     sample.mainProfile = profilePath
     console.log("main profile:", profilePath)
   }
+  return sample
 }
-await killApp()
-if (service === "warm") await stopService()
 
-const timed = samples.filter((s) => !s.profiled && !s.traced)
-const summary = summarize(timed.length ? timed : samples)
-const report = { exe, service, runs, home, summary, samples }
-const reportPath = join(outDir, `startup-${Date.now()}.json`)
-writeFileSync(reportPath, JSON.stringify(report, null, 2))
-console.log(`\n${service} service — median (min…max) ms since spawn over ${timed.length || samples.length} runs`)
-for (const [k, v] of Object.entries(summary)) console.log(`${k.padEnd(18)} ${String(v.median).padStart(6)}  (${v.min}…${v.max})`)
-console.log(`\nreport: ${reportPath}`)
-process.exit(0)
-
-// ---------------------------------------------------------------------------------------------
-
-type Probe = {
-  origin: number
-  firstPaint?: number
-  domInteractive?: number
-  shell: boolean
-  editor: boolean
-  rows: number
-  home: boolean
-  url: string
-}
-type Sample = {
-  run: number
-  profiled: boolean
-  traced?: string
-  mainProfile?: string
-  rendererProfile?: string
-  msSinceSpawn: Record<string, number | undefined>
-  final: { url?: string; timelineRows?: number }
-  rendererCpu: { taskMs: number; scriptMs: number }
+// Read after the run, so the inspector attach cannot influence what was measured.
+async function mainBootTiming() {
+  const target = (await targets(inspectPort)).find((t) => t.type === "node")
+  if (!target) return undefined
+  const cdp = await connect(target.webSocketDebuggerUrl)
+  const result = await cdp.send("Runtime.evaluate", { expression: mainTiming, returnByValue: true })
+  cdp.close()
+  const value = result.result?.result?.value
+  if (typeof value !== "string") return undefined
+  return JSON.parse(value) as { created: number; origin: number; nodeStart: number; bootstrapComplete: number; loopStart: number }
 }
 
 function defaultExe() {
@@ -360,7 +442,11 @@ function mainLog() {
 }
 
 function summarize(list: Sample[]) {
-  const values = (s: Sample): Record<string, number | undefined> => ({ ...s.msSinceSpawn, rendererTaskMs: s.rendererCpu.taskMs, rendererScriptMs: s.rendererCpu.scriptMs })
+  const values = (s: Sample): Record<string, number | undefined> => ({
+    ...s.msSinceSpawn,
+    rendererTaskMs: s.rendererCpu.taskMs,
+    rendererScriptMs: s.rendererCpu.scriptMs,
+  })
   const keys = [...new Set(list.flatMap((s) => Object.keys(values(s))))]
   const out: Record<string, { median: number; min: number; max: number }> = {}
   for (const key of keys) {
@@ -371,17 +457,19 @@ function summarize(list: Sample[]) {
   return out
 }
 
-// The service must come from the CLI bundled with this executable: the desktop restarts a service
+// The service must come from the CLI bundled with the executable: the desktop restarts a service
 // whose version differs from its bundled CLI, which would turn a warm run into a cold one.
-function bundledCli() {
+function bundledCli(exe: string) {
   const resources = process.platform === "darwin" ? join(dirname(exe), "..", "Resources") : join(dirname(exe), "resources")
   return join(resources, process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli")
 }
 
 async function warmService() {
   await stopService()
-  const cli = bundledCli()
-  serviceProcess = spawn(cli, ["serve", "--service"], { env, detached: true, stdio: "ignore" })
+  const clis = builds.map((build) => bundledCli(build.exe))
+  if (new Set(clis.map((cli) => statSync(cli).size)).size > 1)
+    console.warn("warning: the compared builds bundle different CLIs; the desktop will restart the service on the mismatch")
+  serviceProcess = spawn(clis[0], ["serve", "--service"], { env, detached: true, stdio: "ignore" })
   serviceProcess.unref()
   const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
