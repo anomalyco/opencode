@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process"
-import * as pty from "@lydell/node-pty"
 import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "@opencode/app/wsl/types"
 import { Effect, FileSystem, Path } from "effect"
 import { nativeT } from "../native/translations"
@@ -117,7 +116,14 @@ function runCommand(command: string, args: string[], opts: RunWslOptions = {}) {
   })
 }
 
-function runInteractiveCommand(command: string, args: string[], opts: RunWslOptions = {}, defaultTimeoutMs: number) {
+async function runInteractiveCommand(
+  command: string,
+  args: string[],
+  opts: RunWslOptions = {},
+  defaultTimeoutMs: number,
+) {
+  // The native addon is only needed for interactive installs; loading it here keeps it out of startup.
+  const pty = await import("@lydell/node-pty")
   return new Promise<WslCommandResult>((resolve, reject) => {
     const child = pty.spawn(command, args, {
       name: "xterm-color",
