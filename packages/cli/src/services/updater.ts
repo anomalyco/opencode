@@ -13,7 +13,7 @@ export type RunResult = { readonly type: "available" | "installed"; readonly ver
 export type CheckResult = RunResult | { readonly type: "unavailable"; readonly message: string }
 
 export interface Interface {
-  readonly run: () => Effect.Effect<RunResult | undefined>
+  readonly run: (onInstall?: (version: string) => void) => Effect.Effect<RunResult | undefined>
   readonly check: () => Effect.Effect<CheckResult | undefined, Error>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
@@ -275,10 +275,11 @@ const make = Effect.gen(function* () {
   })
 
   const run = Effect.fn("cli.updater.run")(
-    function* () {
+    function* (onInstall: (version: string) => void = () => {}) {
       const result = yield* inspect()
       if (!result) return undefined
       if (result.policy === "notify") return { type: "available" as const, version: result.version }
+      onInstall(result.version)
       if (!(yield* install(result.version))) return yield* Effect.fail(new Error("Installation method not found"))
       return { type: "installed" as const, version: result.version }
     },

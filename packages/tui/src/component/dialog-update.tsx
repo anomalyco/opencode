@@ -32,12 +32,14 @@ export function DialogUpdate(props: {
       }),
   )
   const state = createMemo(() => {
+    const message = error()
+    if (message) return { type: "check-failed" as const, message }
+    const current = props.state()
+    if (current?.type === "installing") return current
     if (check.loading) return { type: "checking" as const }
     const unavailable = check()
     if (unavailable) return { type: "unavailable" as const, message: unavailable }
-    const message = error()
-    if (message) return { type: "check-failed" as const, message }
-    return props.state() ?? { type: "current" as const }
+    return current ?? { type: "current" as const }
   })
   const buttons = createMemo(() => {
     const type = state().type
@@ -87,9 +89,11 @@ export function DialogUpdate(props: {
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-          {state().type === "available" || state().type === "installing" || state().type === "failed"
-            ? "Update available"
-            : "Update"}
+          {state().type === "installing"
+            ? "Updating OpenCode"
+            : state().type === "available" || state().type === "failed"
+              ? "Update available"
+              : "Update"}
         </text>
         <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
           esc
