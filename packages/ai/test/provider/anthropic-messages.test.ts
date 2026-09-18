@@ -221,7 +221,6 @@ describe("Anthropic Messages route", () => {
         LLMRequest.update(request, {
           providerOptions: {
             service_tier: "future-tier",
-            cache_control: { type: "ephemeral", ttl: "future-ttl" },
             thinking: { type: "adaptive", display: "future-display" },
           },
         }),
@@ -229,7 +228,6 @@ describe("Anthropic Messages route", () => {
 
       expect(prepared.body).toMatchObject({
         service_tier: "future-tier",
-        cache_control: { type: "ephemeral", ttl: "future-ttl" },
         thinking: { type: "adaptive", display: "future-display" },
       })
     }),
@@ -241,7 +239,7 @@ describe("Anthropic Messages route", () => {
       const malformed = [
         { service_tier: 1 },
         { metadata: { user_id: 42 } },
-        { cache_control: { type: "ephemeral", ttl: 60 } },
+        { cache_control: { type: "ephemeral", ttl: "future-ttl" } },
         { output_config: { format: { type: "text" } } },
         { thinking: { type: "automatic" } },
       ]

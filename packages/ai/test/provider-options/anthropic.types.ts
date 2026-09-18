@@ -9,8 +9,15 @@ LLM.request({
   prompt: "Hello",
   providerOptions: {
     serviceTier: "future-tier",
-    cacheControl: { type: "ephemeral", ttl: "future-ttl" },
     thinking: { type: "adaptive", display: "future-display" },
+  },
+})
+LLM.request({
+  model,
+  prompt: "Hello",
+  providerOptions: {
+    // @ts-expect-error Anthropic cache TTL values are protocol constraints.
+    cacheControl: { type: "ephemeral", ttl: "future-ttl" },
   },
 })
 

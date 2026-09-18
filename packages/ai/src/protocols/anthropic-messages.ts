@@ -81,7 +81,7 @@ export type ContextManagement = typeof ContextManagement.Type
 // =============================================================================
 const AnthropicCacheControl = Schema.Struct({
   type: Schema.tag("ephemeral"),
-  ttl: Schema.optional(knownString<"5m" | "1h">()),
+  ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
 })
 const AnthropicServiceTier = knownString<"auto" | "standard_only">()
 
