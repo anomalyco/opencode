@@ -178,21 +178,4 @@ export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(fun
   return message?.type === "user" ? message : undefined
 })
 
-/** Returns the session's first synthetic message. */
-export const firstSyntheticMessage = Effect.fn("SessionHistory.firstSyntheticMessage")(function* (
-  db: DatabaseService,
-  sessionID: SessionSchema.ID,
-) {
-  const row = yield* db
-    .select()
-    .from(SessionMessageTable)
-    .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "synthetic")))
-    .orderBy(asc(SessionMessageTable.seq))
-    .get()
-    .pipe(Effect.orDie)
-  if (!row) return undefined
-  const message = yield* decodeMessageRow(row).pipe(Effect.orElseSucceed(() => undefined))
-  return message?.type === "synthetic" ? message : undefined
-})
-
 export * as SessionHistory from "./history.js"
