@@ -153,6 +153,17 @@ function getConfig() {
         protocols: { name: "MUC Connect", schemes: ["muc", "opencode"] },
         mac: { ...base.mac, icon: "resources/muc/icon.icns" },
         dmg: { ...base.dmg, icon: "resources/muc/icon.icns" },
+        // MUC Harness: 跨平台构建免 wine（exe 不内嵌图标/版本信息，v1 可接受）
+        win: {
+          signAndEditExecutable: false,
+          target: [{ target: "nsis", arch: ["x64"] }],
+          icon: "resources/muc/icon.ico",
+        },
+        nsis: {
+          oneClick: true,
+          installerIcon: "resources/muc/icon.ico",
+          uninstallerIcon: "resources/muc/icon.ico",
+        },
       }
     }
     case "prod": {
