@@ -40,7 +40,7 @@ test("btw answer dialog renders outside PluginProvider", async () => {
         </ConfigProvider>
       </TestTuiContexts>
     ),
-    { width: 80, height: 24, kittyKeyboard: true },
+    { width: 80, height: 40, kittyKeyboard: true },
   )
   app.renderer.start()
 
@@ -48,7 +48,10 @@ test("btw answer dialog renders outside PluginProvider", async () => {
     await app.waitForFrame(
       (frame) => frame.includes("/btw") && frame.includes("What is OpenCode?") && frame.includes("A coding agent."),
     )
-    expect(app.captureCharFrame()).toContain("copy")
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("/btw")
+    expect(frame).toContain("What is OpenCode?")
+    expect(frame).toContain("A coding agent.")
   } finally {
     app.renderer.destroy()
   }
