@@ -10,6 +10,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { Global } from "@opencode-ai/core/global"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { validateSession } from "../../src/cli/tui/validate-session"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -341,6 +342,25 @@ describe("HttpApi SDK", () => {
       const sdk = yield* client("raw")
       const health = yield* call(() => sdk.global.health())
       const log = yield* call(() => sdk.app.log({ service: "httpapi-sdk-test", level: "info", message: "hello" }))
+      const configDir = yield* tmpdirScoped()
+      const previous = Global.Path.config
+      ;(Global.Path as { config: string }).config = configDir
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          ;(Global.Path as { config: string }).config = previous
+        }),
+      )
+      yield* FSUtil.use.writeWithDirs(
+        path.join(configDir, "opencode.jsonc"),
+        `{
+  // keep
+  "username": "sdk-test"
+}
+`,
+      )
+      const updated = yield* call(() =>
+        sdk.global.config.update({ config: { model: "opencode/gpt-5.1-codex" } }),
+      )
 
       expect(health.response.status).toBe(200)
       expect(health.data).toMatchObject({ healthy: true })
@@ -349,6 +369,12 @@ describe("HttpApi SDK", () => {
       })
       expect(log.response.status).toBe(200)
       expect(log.data).toBe(true)
+      expect(updated.response.status).toBe(200)
+      expect(updated.error).toBeUndefined()
+      expect(updated.data).toMatchObject({ model: "opencode/gpt-5.1-codex", username: "sdk-test" })
+      const written = yield* FSUtil.use.readFileString(path.join(configDir, "opencode.jsonc"))
+      expect(written).toContain("// keep")
+      expect(written).toContain('"model": "opencode/gpt-5.1-codex"')
       yield* expectStatus(() => sdk.auth.set({ providerID: "test" }), 400)
     }),
   )
