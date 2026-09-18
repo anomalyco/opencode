@@ -181,6 +181,7 @@ test.each([40, 120])("subagent completion notices navigate to the child session 
   )
   try {
     await setup.waitForFrame((frame) => frame.includes("General finished"))
+    await setup.waitForVisualIdle()
     const lines = setup.captureCharFrame().split("\n")
     const y = lines.findIndex((line) => line.includes("General finished"))
     const x = lines[y].indexOf("General finished")
