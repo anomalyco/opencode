@@ -86,10 +86,20 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
   return { version, binary, command: [binary] }
 })
 
-// Spawning the bundled executable for `--version` costs ~400 ms of startup on a 200 MB binary, so
-// the answer is remembered per executable identity and only re-read after an update replaces it.
+// Spawning the bundled executable for `--version` costs ~400 ms of startup on a 200 MB binary (and
+// several seconds on the first launch after an update, while the antivirus scans it). The build
+// writes the version next to the executable, so a packaged app never spawns; the per-identity cache
+// covers executables that arrived without that file.
 const bundledVersion = Effect.fn("DesktopCli.bundledVersion")(function* (bundled: string) {
   const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const shipped = yield* fs
+    .readFileString(path.join(path.dirname(bundled), "opencode-cli.version"))
+    .pipe(Effect.map((text) => text.trim()), Effect.orElseSucceed(() => ""))
+  if (shipped) {
+    yield* Effect.logInfo("v2 CLI version bundled", { version: shipped })
+    return shipped
+  }
   const stat = yield* fs.stat(bundled).pipe(Effect.orElseSucceed(() => undefined))
   const identity = stat ? `${stat.size}:${Option.getOrUndefined(stat.mtime)?.getTime() ?? ""}` : undefined
   const store = getStore()

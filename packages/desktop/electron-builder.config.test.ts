@@ -202,7 +202,7 @@ for (const channel of ["dev", "beta"] as const) {
       {
         from: "resources/",
         to: "",
-        filter: ["opencode-cli", "opencode-cli.exe"],
+        filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
       },
     ])
   })

@@ -90,7 +90,7 @@ const getBase = (appId: string): Configuration => ({
     {
       from: "resources/",
       to: "",
-      filter: ["opencode-cli", "opencode-cli.exe"],
+      filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
     },
   ],
   afterPack: async (context) => {
@@ -100,6 +100,8 @@ const getBase = (appId: string): Configuration => ({
     )
     const file = await stat(cli)
     if (!file.isFile() || file.size === 0) throw new Error(`Bundled CLI must be a non-empty file: ${cli}`)
+    const version = path.join(path.dirname(cli), "opencode-cli.version")
+    if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
   },
   mac: {
     category: "public.app-category.developer-tools",
