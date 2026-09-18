@@ -7,7 +7,7 @@ import { registerOpencodeSpinner } from "./register-spinner"
 
 registerOpencodeSpinner()
 
-export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+export const SPINNER_FRAMES = ["|", "/", "-", "\\"]
 
 export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
   const { theme } = useTheme()
