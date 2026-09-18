@@ -17,6 +17,8 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       supportFetchAPI: true,
       stream: true,
+      // Let Chromium keep V8 bytecode for the renderer bundle between launches.
+      codeCache: true,
     },
   },
 ])
