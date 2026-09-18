@@ -24,7 +24,6 @@
   },
   "main": "./out/main/index.js",
   "dependencies": {
-    "@opencode-ai/brand": "workspace:*",
     "@zip.js/zip.js": "2.7.62",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
@@ -38,6 +37,7 @@
     "@actions/artifact": "4.0.0",
     "@lydell/node-pty": "catalog:",
     "@opencode-ai/app": "workspace:*",
+    "@opencode-ai/brand": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@sentry/solid": "catalog:",
     "@sentry/vite-plugin": "catalog:",
