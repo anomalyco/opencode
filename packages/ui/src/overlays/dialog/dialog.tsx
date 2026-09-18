@@ -10,6 +10,8 @@ export interface DialogProps extends ParentProps {
   containerClass?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   fit?: boolean
+  onCloseAutoFocus?: ComponentProps<typeof Content>["onCloseAutoFocus"]
+  preventBackdropDismiss?: boolean
 }
 
 export interface DialogHeaderProps extends ParentProps {
@@ -19,7 +21,7 @@ export interface DialogHeaderProps extends ParentProps {
 
 export interface DialogTitleGroupProps {
   title?: JSXElement
-  description: JSXElement
+  description?: JSXElement
 }
 
 export function DialogFooter(props: ParentProps) {
@@ -46,7 +48,7 @@ export function DialogTitleGroup(props: DialogTitleGroupProps) {
   return (
     <div data-slot="dialog-title-group">
       <Show when={title()}>{(t) => <Title data-slot="dialog-title">{t()}</Title>}</Show>
-      <Description data-slot="dialog-description">{description()}</Description>
+      <Show when={description()}>{(value) => <Description data-slot="dialog-description">{value()}</Description>}</Show>
     </div>
   )
 }
@@ -82,7 +84,17 @@ export function DialogHeader(props: DialogHeaderProps) {
 }
 
 export function Dialog(props: DialogProps) {
-  const [local] = splitProps(props, ["size", "variant", "class", "containerClass", "classList", "fit", "children"])
+  const [local] = splitProps(props, [
+    "size",
+    "variant",
+    "class",
+    "containerClass",
+    "classList",
+    "fit",
+    "children",
+    "onCloseAutoFocus",
+    "preventBackdropDismiss",
+  ])
 
   return (
     <div
@@ -90,10 +102,15 @@ export function Dialog(props: DialogProps) {
       data-variant={local.variant === "settings" ? "settings" : undefined}
       data-fit={local.fit ? true : undefined}
       data-size={local.size || "normal"}
+      data-prevent-backdrop-dismiss={local.preventBackdropDismiss ? "" : undefined}
     >
       <div data-slot="dialog-container" class={local.containerClass}>
         <Content
           data-slot="dialog-content"
+          onCloseAutoFocus={local.onCloseAutoFocus}
+          onPointerDownOutside={(event) => {
+            if (local.preventBackdropDismiss) event.preventDefault()
+          }}
           classList={{
             ...local.classList,
             [local.class ?? ""]: !!local.class,

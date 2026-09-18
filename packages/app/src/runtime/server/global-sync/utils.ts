@@ -51,6 +51,8 @@ export function normalizeProviderList(
   for (const provider of providers) {
     all.set(provider.id, {
       id: provider.id,
+      canonical: provider.canonical,
+      integrationID: provider.integrationID,
       name: provider.name,
       source: "custom",
       env: [],

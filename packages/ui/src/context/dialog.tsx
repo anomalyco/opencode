@@ -80,6 +80,7 @@ function init() {
     const zIndex = 50 + layer * 10
     let dispose: (() => void) | undefined
     let setClosing: ((closing: boolean) => void) | undefined
+    let layerElement: HTMLDivElement | undefined
 
     // Stacked dialogs render as sibling portals, so only the top layer may own the focus trap.
     const node = runWithOwner(owner, () =>
@@ -100,9 +101,18 @@ function init() {
               <Kobalte.Overlay
                 data-component="dialog-overlay"
                 style={{ "z-index": String(zIndex) }}
-                onClick={() => close(id)}
+                onClick={() => {
+                  if (
+                    layerElement
+                      ?.querySelector<HTMLElement>('[data-component="dialog-v2"]')
+                      ?.hasAttribute("data-prevent-backdrop-dismiss")
+                  )
+                    return
+                  close(id)
+                }}
               />
               <div
+                ref={layerElement}
                 data-dialog-layer={layer}
                 style={{
                   position: "fixed",

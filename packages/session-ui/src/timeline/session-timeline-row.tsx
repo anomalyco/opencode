@@ -392,7 +392,6 @@ export function createSessionTimelineRowRenderer(input: {
       if (value?.type !== "model-switched") return undefined
       const match = data.store.provider?.all?.get(value.model.providerID)
       return {
-        providerID: value.model.providerID,
         variant: value.model.variant,
         label: i18n.t("ui.sessionTimeline.notice.modelSwitched", {
           model: match?.models?.[value.model.id]?.name ?? value.model.id,
@@ -508,7 +507,7 @@ export function createSessionTimelineRowRenderer(input: {
             >
               {(model) => (
                 <div data-slot="session-timeline-notice" data-type="model-switched" class={`w-full py-2 ${inset()}`}>
-                  <TimelineSeparator label={model().label} providerID={model().providerID} variant={model().variant} />
+                  <TimelineSeparator label={model().label} logo variant={model().variant} />
                 </div>
               )}
             </Show>

@@ -1,13 +1,15 @@
-import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { Mark } from "@opencode/ui/logo"
 import { Show } from "solid-js"
 
-export function TimelineSeparator(props: { label: string; providerID?: string; variant?: string }) {
+export function TimelineSeparator(props: { label: string; logo?: boolean; variant?: string }) {
   return (
     <div class="flex h-8 w-full items-center gap-3 text-v2-text-text-faint">
       <span class="h-px min-w-0 flex-1 bg-v2-border-border-strong" />
       <span class="flex min-w-0 items-center gap-1 text-[13px] font-[440] leading-text-compact tracking-[-0.04px]">
-        <Show when={props.providerID}>
-          {(providerID) => <ProviderIcon id={providerID()} class="text-v2-icon-icon-faint" aria-hidden="true" />}
+        <Show when={props.logo}>
+          <span class="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+            <Mark class="h-4 w-[13px]" />
+          </span>
         </Show>
         <span class="flex min-w-0 items-center gap-1.5">
           <bdi dir="auto" class="truncate" title={props.label}>

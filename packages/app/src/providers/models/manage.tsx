@@ -1,12 +1,12 @@
 import { Button } from "@opencode/ui/button"
+import { Badge } from "@opencode/ui/badge"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
-import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { Switch } from "@opencode/ui/switch"
 import { TextInput } from "@opencode/ui/text-input"
 import { useFilteredList } from "@opencode/ui/hooks"
-import { For, Show, type Component } from "solid-js"
+import { createMemo, For, Show, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/providers/models/selection"
 import { popularProviders } from "@/providers/catalog/providers"
@@ -16,9 +16,19 @@ import { DialogConnectProvider } from "@/providers/connect/dialog"
 import { decode64 } from "@/runtime/persistence/base64"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
+import { OpenCodeLogo } from "@/providers/opencode-logo"
+import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
+import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
 import "@/settings/settings.css"
 
 type ModelItem = ReturnType<ReturnType<typeof useLocal>["model"]["list"]>[number]
+type ModelGroup = { category: string; items: ModelItem[] }
+type ConsoleGroup = NonNullable<ReturnType<typeof consoleProviderGroup<ModelItem["provider"]>>>
+type DisplayGroup =
+  | { type: "provider"; group: ModelGroup }
+  | { type: "console"; managed: ConsoleGroup; providers: ModelGroup[] }
+
+const CONSOLE_GROUP_KEY = "console:opencode"
 
 export const DialogManageModels: Component = () => {
   const local = useLocal()
@@ -54,9 +64,59 @@ export const DialogManageModels: Component = () => {
       const bPopular = bRank >= 0
       if (aPopular && !bPopular) return -1
       if (!aPopular && bPopular) return 1
-      return aRank - bRank
+      if (aPopular && bPopular) return aRank - bRank
+      return a.items[0].provider.name.localeCompare(b.items[0].provider.name)
     },
   })
+  const consoleGroup = createMemo(() =>
+    consoleProviderGroup([...new Map(local.model.list().map((item) => [item.provider.id, item.provider])).values()]),
+  )
+  const groups = createMemo<DisplayGroup[]>(() => {
+    const managed = consoleGroup()
+    if (!managed) return list.grouped.latest.map((group) => ({ type: "provider" as const, group }))
+    const ids = new Set(managed.providers.map((provider) => provider.id))
+    const providers = list.grouped.latest.filter((group) => ids.has(group.category))
+    if (providers.length === 0) return list.grouped.latest.map((group) => ({ type: "provider" as const, group }))
+    const first = list.grouped.latest.findIndex((group) => ids.has(group.category))
+    return list.grouped.latest.flatMap<DisplayGroup>((group, index) => {
+      if (!ids.has(group.category)) return [{ type: "provider" as const, group }]
+      if (index !== first) return []
+      return [{ type: "console" as const, managed, providers }]
+    })
+  })
+  const searching = () => list.filter().length > 0
+  const expanded = (key: string) => searching() || !store.collapsed[key]
+  const providerName = (provider: ModelItem["provider"]) =>
+    provider.id === "opencode" ? language.t("provider.connect.opencode.freeName") : provider.name
+  const enabled = createMemo(() =>
+    local.model.list().reduce((counts, item) => {
+      if (!local.model.visible({ providerID: item.provider.id, modelID: item.id })) return counts
+      counts.set(item.provider.id, (counts.get(item.provider.id) ?? 0) + 1)
+      return counts
+    }, new Map<string, number>()),
+  )
+
+  function ModelRows(props: { items: ModelItem[] }) {
+    return (
+      <SettingsList variant="catalog">
+        <For each={props.items}>
+          {(item) => (
+            <SettingsRow title={item.name} description="">
+              <div>
+                <Switch
+                  checked={local.model.visible({ modelID: item.id, providerID: item.provider.id })}
+                  onChange={(checked) => setModelVisibility(item, checked)}
+                  hideLabel
+                >
+                  {item.name}
+                </Switch>
+              </div>
+            </SettingsRow>
+          )}
+        </For>
+      </SettingsList>
+    )
+  }
 
   return (
     <Dialog size="large" variant="settings" class="settings-manage-models-dialog">
@@ -100,7 +160,7 @@ export const DialogManageModels: Component = () => {
           </div>
         </div>
         <div data-slot="manage-models-scroll" class="relative min-h-0 flex-1">
-          <div class="settings-panel settings-models h-full px-4 pt-4 pb-4">
+          <div class="settings-panel settings-models h-full px-4 pt-1 pb-4">
             <Show
               when={!list.grouped.loading}
               fallback={
@@ -121,68 +181,112 @@ export const DialogManageModels: Component = () => {
                   </div>
                 }
               >
-                <For each={list.grouped.latest}>
-                  {(group) => {
-                    const searching = () => list.filter().length > 0
-                    const expanded = () => searching() || !store.collapsed[group.category]
-
-                    return (
-                      <div
-                        class="settings-section"
-                        data-component="settings-models-provider"
-                        data-expanded={expanded() ? "" : undefined}
-                      >
-                        <div class="settings-models-group-header justify-between">
-                          <button
-                            type="button"
-                            class="settings-models-group-trigger"
-                            aria-expanded={expanded()}
-                            disabled={searching()}
-                            onClick={() => setStore("collapsed", group.category, expanded())}
-                          >
-                            <span class="settings-models-group-chevron">
-                              <Icon
-                                name="chevron-down"
-                                size="small"
-                                classList={{ "-rotate-90 rtl:rotate-90": !expanded() }}
-                              />
-                            </span>
-                            <span class="settings-models-group-label">
-                              <ProviderIcon id={group.category} width={16} height={16} class="shrink-0" />
-                              <span class="settings-models-group-title">{group.items[0].provider.name}</span>
-                            </span>
-                          </button>
-                          <Switch
-                            class="me-6"
-                            checked={providerVisible(group.category)}
-                            onChange={(checked) => setProviderVisibility(group.category, checked)}
-                            hideLabel
-                          >
-                            {group.items[0].provider.name}
-                          </Switch>
-                        </div>
-                        <Show when={expanded()}>
-                          <SettingsList variant="catalog">
-                            <For each={group.items}>
-                              {(item) => (
-                                <SettingsRow title={item.name} description="">
-                                  <div>
-                                    <Switch
-                                      checked={local.model.visible({ modelID: item.id, providerID: item.provider.id })}
-                                      onChange={(checked) => setModelVisibility(item, checked)}
-                                      hideLabel
-                                    >
-                                      {item.name}
-                                    </Switch>
-                                  </div>
-                                </SettingsRow>
-                              )}
-                            </For>
-                          </SettingsList>
+                <For each={groups()}>
+                  {(item) => (
+                    <Show
+                      when={item.type === "console" ? item : undefined}
+                      fallback={
+                        <Show when={item.type === "provider" ? item.group : undefined}>
+                          {(group) => (
+                            <div
+                              class="settings-section"
+                              data-component="settings-models-provider"
+                              data-expanded={expanded(group().category) ? "" : undefined}
+                            >
+                              <div class="settings-models-group-header justify-between">
+                                <button
+                                  type="button"
+                                  class="settings-models-group-trigger"
+                                  aria-expanded={expanded(group().category)}
+                                  disabled={searching()}
+                                  onClick={() => setStore("collapsed", group().category, expanded(group().category))}
+                                >
+                                  <span class="settings-models-group-chevron">
+                                    <Icon
+                                      name="chevron-down"
+                                      size="small"
+                                      classList={{ collapsed: !expanded(group().category) }}
+                                    />
+                                  </span>
+                                  <span class="settings-models-group-label">
+                                    <ProviderModelIcon provider={group().items[0].provider} class="shrink-0" />
+                                    <bdi class="settings-models-group-title">
+                                      {providerName(group().items[0].provider)}
+                                    </bdi>
+                                  </span>
+                                </button>
+                                <Switch
+                                  class="me-6"
+                                  checked={providerVisible(group().category)}
+                                  onChange={(checked) => setProviderVisibility(group().category, checked)}
+                                  hideLabel
+                                >
+                                  {group().items[0].provider.name}
+                                </Switch>
+                              </div>
+                              <Show when={expanded(group().category)}>
+                                <ModelRows items={group().items} />
+                              </Show>
+                            </div>
+                          )}
                         </Show>
-                      </div>
-                    )
-                  }}
+                      }
+                    >
+                      {(console) => (
+                        <div
+                          class="settings-section settings-models-console"
+                          data-component="manage-models-console"
+                          data-expanded={expanded(CONSOLE_GROUP_KEY) ? "" : undefined}
+                        >
+                          <div class="settings-models-group-header">
+                            <button
+                              type="button"
+                              class="settings-models-group-trigger"
+                              aria-expanded={expanded(CONSOLE_GROUP_KEY)}
+                              disabled={searching()}
+                              onClick={() => setStore("collapsed", CONSOLE_GROUP_KEY, expanded(CONSOLE_GROUP_KEY))}
+                            >
+                              <span class="settings-models-group-chevron">
+                                <Icon
+                                  name="chevron-down"
+                                  size="small"
+                                  classList={{ collapsed: !expanded(CONSOLE_GROUP_KEY) }}
+                                />
+                              </span>
+                              <span class="settings-models-group-label">
+                                <OpenCodeLogo class="settings-models-provider-icon size-4 shrink-0" />
+                                <span class="settings-models-group-title">
+                                  {language.t("provider.connect.opencode.name")}
+                                </span>
+                                <Badge>{console().managed.workspace}</Badge>
+                              </span>
+                            </button>
+                          </div>
+                          <Show when={expanded(CONSOLE_GROUP_KEY)}>
+                            <div class="provider-model-groups settings-models-console-groups">
+                              <For each={console().providers}>
+                                {(group) => {
+                                  const count = () => enabled().get(group.category) ?? 0
+                                  return (
+                                    <ProviderModelGroup
+                                      provider={group.items[0].provider}
+                                      name={consoleProviderName(console().managed, group.items[0].provider.name)}
+                                      expanded={expanded(group.category)}
+                                      disabled={searching()}
+                                      detail={language.plural("settings.models.enabled", count(), { count: count() })}
+                                      onExpandedChange={(value) => setStore("collapsed", group.category, !value)}
+                                    >
+                                      <ModelRows items={group.items} />
+                                    </ProviderModelGroup>
+                                  )
+                                }}
+                              </For>
+                            </div>
+                          </Show>
+                        </div>
+                      )}
+                    </Show>
+                  )}
                 </For>
               </Show>
             </Show>

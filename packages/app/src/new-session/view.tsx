@@ -19,6 +19,7 @@ import {
 import { useLanguage } from "@/runtime/i18n/language"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useProviders } from "@/providers/catalog/providers"
+import { useIntegrations } from "@/providers/catalog/integrations"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -152,6 +153,8 @@ export function NewSessionView(props: {
           </div>
         </div>
         <NewSessionTips
+          selection={props.composer.model.selection}
+          onDone={props.composer.restoreFocus}
           workspaceEligible={
             !!props.project.selected() &&
             props.workspace.bar.visible() &&
@@ -165,13 +168,19 @@ export function NewSessionView(props: {
   )
 }
 
-function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => void }) {
+function NewSessionTips(props: {
+  selection: ComposerModel["model"]["selection"]
+  onDone: () => void
+  workspaceEligible: boolean
+  onWorkspace: () => void
+}) {
   const language = useLanguage()
   const dialog = useDialog()
   const sdk = useWorkspaceLocation()
   const providers = useProviders(() => sdk().directory)
+  const integrations = useIntegrations(() => sdk().directory)
   const [providerState, setProviderState, , providerReady] = persisted(
-    Persist.global("new-session.provider-tip"),
+    Persist.global("new-session.provider-tip-v3"),
     ProviderTipSchema,
     { dismissedAt: 0 },
   )
@@ -190,7 +199,10 @@ function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => 
     () =>
       providers.ready() &&
       providerReady() &&
-      providers.paid().length === 0 &&
+      !integrations.list().some((integration) => integration.connections.length > 0) &&
+      !providers
+        .connected()
+        .some((provider) => provider.id !== "opencode" && Object.keys(provider.models).length > 0) &&
       Date.now() - providerState.dismissedAt >= providerTipDismissalDuration,
   )
   const tip = createMemo<"workspace" | "provider" | undefined>(() => {
@@ -212,7 +224,9 @@ function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => 
       return
     }
     void import("@/providers/connect/dialog").then(({ DialogConnectProvider }) => {
-      void dialog.show(() => <DialogConnectProvider directory={sdk().directory} />)
+      void dialog.show(() => (
+        <DialogConnectProvider directory={sdk().directory} selection={props.selection} onDone={props.onDone} />
+      ))
     })
   }
   const dismiss = () => {

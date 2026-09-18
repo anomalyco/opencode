@@ -3,7 +3,7 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
-import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { ComposerEditor } from "./editor/editor"
 import { ModelSelectorPopover } from "@/providers/models/select-dialog"
@@ -35,7 +35,7 @@ export function Composer(props: { class?: string; model: ComposerModel; borderUn
             title={language.t("command.model.choose")}
             keybind={command.keybindParts("model.choose")}
             model={props.model.model.selection}
-            providerID={props.model.model.selection.current()?.provider?.id}
+            provider={props.model.model.selection.current()?.provider}
             modelName={props.model.model.selection.current()?.name ?? language.t("dialog.model.select.title")}
             onClose={props.model.restoreFocus}
             onUnpaidClick={() => dialog.show(() => <DialogSelectModelUnpaid model={props.model.model.selection} />)}
@@ -52,7 +52,7 @@ function ComposerModelControl(props: {
   title: string
   keybind: string[]
   model: ComposerModel["model"]["selection"]
-  providerID?: string
+  provider?: { id: string; canonical?: string; name: string }
   modelName: string
   onClose: () => void
   onUnpaidClick: () => void
@@ -60,12 +60,11 @@ function ComposerModelControl(props: {
   const shouldAnimate = createMemo<boolean>((previous) => previous ?? props.loading)
   const content = () => (
     <>
-      <Show when={props.providerID}>
-        {(providerID) => (
-          <ProviderIcon
-            id={providerID()}
-            class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-            style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+      <Show when={props.provider}>
+        {(provider) => (
+          <ProviderModelIcon
+            provider={provider()}
+            class="shrink-0 opacity-40 transition-opacity duration-150 group-hover:opacity-100"
           />
         )}
       </Show>
