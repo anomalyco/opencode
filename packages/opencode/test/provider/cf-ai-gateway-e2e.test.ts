@@ -165,7 +165,8 @@ function extractUpstreamHeaders(body: unknown): Record<string, unknown> | undefi
 function gatewayModel(apiId: string, gatewayToken = "test") {
   const aigateway = createAiGateway({ accountId: "test", gateway: "test", apiKey: gatewayToken })
   if (apiId.startsWith("openai/")) return aigateway(createOpenAI()(apiId.slice("openai/".length)))
-  if (apiId.startsWith("anthropic/")) return aigateway(createAnthropic()(apiId.slice("anthropic/".length)))
+  if (apiId.startsWith("anthropic/"))
+    return aigateway(createAnthropic()(apiId.slice("anthropic/".length).replaceAll(".", "-")))
   const isWorkersAi = apiId.startsWith("workers-ai/") || apiId.startsWith("@cf/")
   const unified = createUnified(isWorkersAi ? { apiKey: gatewayToken } : {})
   return aigateway(unified(apiId))
@@ -193,6 +194,17 @@ describe("cf-ai-gateway routing", () => {
     expect(step?.endpoint).toBe("v1/messages")
     const upstream = extractUpstreamQuery(captured?.outerBody)
     expect(upstream?.model).toBe("claude-sonnet-4-6")
+  })
+
+  test("anthropic/* with a dotted models.dev id reaches Anthropic as a dashed native slug", async () => {
+    // models.dev ids are dotted (claude-haiku-4.5); Anthropic's Messages API 404s unless the
+    // version is dashed (claude-haiku-4-5). Regression guard for the dotted-id translation.
+    await callThroughGateway("anthropic/claude-haiku-4.5", {})
+    const step = firstStep(captured?.outerBody)
+    expect(step?.provider).toBe("anthropic")
+    expect(step?.endpoint).toBe("v1/messages")
+    const upstream = extractUpstreamQuery(captured?.outerBody)
+    expect(upstream?.model).toBe("claude-haiku-4-5")
   })
 
   test("workers-ai models stay on the unified /compat route", async () => {

@@ -25,12 +25,15 @@ Ispod su primjeri za popularne uređivače koji podržavaju ACP.
 
 ### Zed
 
-Dodajte u svoju [Zed](https://zed.dev) konfiguraciju (`~/.config/zed/settings.json`):
+Instalirajte OpenCode iz [Zed ACP registra](https://zed.dev/docs/ai/external-agents#registry) pokretanjem naredbe `zed: acp registry` u komandnoj paleti.
+
+Ako umjesto toga želite koristiti prilagođenu OpenCode izvršnu datoteku, dodajte je u svoju [Zed](https://zed.dev) konfiguraciju (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }

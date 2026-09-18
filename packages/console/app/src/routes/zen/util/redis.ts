@@ -16,3 +16,11 @@ export function getRedis() {
 export function buildRateLimitKey(kind: string, identifier: string, interval?: string) {
   return `${Resource.App.stage}:ratelimit:${kind}:${identifier}${interval ? `:${interval}` : ""}`
 }
+
+export async function checkCheckoutRateLimit(accountID: string) {
+  const redis = getRedis()
+  const key = buildRateLimitKey("checkout", accountID)
+  const count = await redis.incr(key)
+  if (count === 1) await redis.expire(key, 60 * 60)
+  if (count > 5) throw new Error("Too many payment attempts. Please try again later.")
+}

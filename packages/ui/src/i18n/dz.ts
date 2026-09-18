@@ -71,7 +71,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "སྐྱིན་འགྲུལ་ཁ་སྐོང་བརྐྱབ།",
   "dialog.usageExceeded.freeTier.title": "རིན་མེད་ཚད་ལུ་ལྷོད་ཡོདཔ།",
   "dialog.usageExceeded.freeTier.description":
-    "OpenCode ལུ་མཁོ་མངགས་འབད། $5/month ལས་འགོ་བཙུགས་ཏེ་ ཁ་ཕྱེ་ཡོད་པའི་ཐོན་ཁུངས་དཔེ་ཚད་དྲག་ཤོས་ཚུ་ལུ་བློ་གཏད་ཅན་གྱི་འཛུལ་སྤྱོད་ཀྱི་དོན་ལུ་འགྱོ།",
+    "OpenCode Go ལུ་ཟླཝ་རེར་ $10 གྱིས་མཁོ་མངགས་འབད་དེ་ ཁ་ཕྱེ་ཡོད་པའི་ཐོན་ཁུངས་དཔེ་ཚད་དྲག་ཤོས་ཚུ་ལུ་བློ་གཏད་ཅན་གྱི་འཛུལ་སྤྱོད་ཐོབ།",
   "dialog.usageExceeded.freeTier.actionLabel": "མཁོ་མངགས་འབད།",
   "dialog.usageExceeded.accountRateLimit.title": "འགྱོ་ཚད་ལུ་ལྷོད་ཡོདཔ།",
   "dialog.usageExceeded.accountRateLimit.description":
