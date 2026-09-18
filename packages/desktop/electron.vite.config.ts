@@ -7,7 +7,7 @@ const OPENCODE_SERVER_DIST = "../opencode/dist/node"
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
-  if (raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc") return raw
+  if (raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc" || raw === "hubu") return raw
   if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
   return "dev"
 })()

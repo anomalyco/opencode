@@ -36,15 +36,17 @@ export async function exchangeMucCode(gateway: string, code: string, deviceName:
     throw new MucExchangeError("network", "cannot reach authorization server")
   }
 
-  const body = (await res.json().catch(() => null)) as any
+  const raw = (await res.json().catch(() => null)) as any
+  // 服务端 response.Success 把载荷包在 data 里（{code:0,data:{...}}）；兼容顶层平铺
+  const body = raw?.data ?? raw
 
-  if (res.status === 404 || body?.error === "code_not_found") {
+  if (res.status === 404 || raw?.error === "code_not_found" || body?.error === "code_not_found") {
     throw new MucExchangeError("invalid", "authorization code not found")
   }
-  if (res.status === 410 || body?.error === "code_expired") {
+  if (res.status === 410 || raw?.error === "code_expired" || body?.error === "code_expired") {
     throw new MucExchangeError("expired", "authorization code expired, please reconnect from the website")
   }
-  if (res.status === 409 || body?.error === "code_used") {
+  if (res.status === 409 || raw?.error === "code_used" || body?.error === "code_used") {
     throw new MucExchangeError("used", "authorization code already used, please request a new one")
   }
   if (res.status === 401 || res.status === 403) {

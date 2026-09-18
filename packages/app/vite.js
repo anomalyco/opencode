@@ -7,7 +7,7 @@ const theme = fileURLToPath(new URL("./public/oc-theme-preload.js", import.meta.
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
-  if (raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc") return raw
+  if (raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc" || raw === "hubu") return raw
   if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
   return "dev"
 })()
