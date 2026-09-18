@@ -52,6 +52,7 @@ const models = [
   { name: "DeepSeek V4 Flash Vision Exp", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy4 preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Union Alpha Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
 ] as const
 
 export default function Home() {
@@ -84,7 +85,7 @@ export default function Home() {
             <div data-component="desktop-app-banner">
               <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
               <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.promo.deepseek")}</span>
+                <span data-slot="text">{i18n.t("go.promo.unionAlpha")}</span>
               </div>
             </div>
             <div data-slot="hero-copy">

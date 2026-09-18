@@ -6,6 +6,7 @@ import {
   EXCLUDED_MODELS,
   FREE_MODELS,
   MODEL_AUTHOR_RULES,
+  MODEL_NAME_MAX_LENGTH,
   MODEL_NAME_ALIASES,
   RETIRED_STAT_PROVIDERS,
   STEALTH_MODELS,
@@ -466,12 +467,16 @@ function statModelSql(model: string, providerModel: string) {
       WHEN lower(${model}) = 'big-pickle' THEN regexp_replace(NULLIF(${providerModel}, ''), '^.*/', '')
       ELSE ${model}
     END, '(-free|:free|:global)+$', '')`
-  return `COALESCE(NULLIF(CASE
+  const value = `CASE
 ${Object.entries(MODEL_NAME_ALIASES)
   .map(([from, to]) => `      WHEN lower(${normalized}) = ${sqlString(from)} THEN ${sqlString(to)}`)
   .join("\n")}
       ELSE ${normalized}
-    END, ''), 'unknown')`
+    END`
+  return `CASE
+      WHEN length(${value}) > ${MODEL_NAME_MAX_LENGTH} THEN 'unknown'
+      ELSE COALESCE(NULLIF(${value}, ''), 'unknown')
+    END`
 }
 
 function freeTierSql(tier: string, model: string) {
