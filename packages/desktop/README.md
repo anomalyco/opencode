@@ -54,6 +54,6 @@ bun run bench:startup -- --seed "%APPDATA%\ai.opencode.desktop.dev"   # restore 
 
 The app runs in an isolated home (`%TEMP%\opencode-bench-startup`): its own `%APPDATA%`, XDG directories, OpenCode
 database, config and service registration. It never attaches to or restarts the developer's live service.
-`--service cold` makes each launch spawn the service; the desktop spawns it on the default port, so that mode needs
-no other OpenCode service running on the machine. Milestones (ms since spawn) come from the main log, the renderer's
+`--service cold` stops the service before each launch so the desktop has to spawn it; the isolated config directory
+gives that service a private port, so it never collides with another OpenCode service on the machine. Milestones (ms since spawn) come from the main log, the renderer's
 performance timeline and DOM readiness polled over CDP; raw samples are written to `dist/bench-startup`.
