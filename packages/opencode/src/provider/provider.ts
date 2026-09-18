@@ -1482,6 +1482,13 @@ const layer = Layer.effect(
         const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
 
         function isProviderAllowed(providerID: ProviderV2.ID): boolean {
+          // MUC Harness: 产品版只提供 MUC 网关的模型（源头 /v1/models 有什么就有什么），
+          // models.dev 目录里的其他 provider（Zen 免费/DeepSeek 等）全部隐藏。
+          // 开发期可用环境变量 MUC_ALLOW_ALL_PROVIDERS=1 放开。
+          if (process.env.MUC_ALLOW_ALL_PROVIDERS !== "1") {
+            const isMuc = providerID === MUC.id || providerID.startsWith("sub2api")
+            if (!isMuc) return false
+          }
           if (enabled && !enabled.has(providerID)) return false
           if (disabled.has(providerID)) return false
           return true
