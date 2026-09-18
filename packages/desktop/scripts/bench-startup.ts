@@ -2,7 +2,7 @@
 // Cold-start benchmark for a packaged desktop build.
 //
 //   bun run bench:startup -- [--exe <path>] [--runs 5] [--service warm|cold] [--seed <userData dir>]
-//                            [--profile-main] [--trace] [--out <dir>] [--home <dir>]
+//                            [--profile-main] [--profile-renderer] [--trace] [--out <dir>] [--home <dir>]
 //
 // The app runs in an isolated home directory (its own %APPDATA%, XDG dirs, OpenCode DB, config and
 // service registration), so it never attaches to, restarts or reads the developer's live service or
@@ -10,6 +10,7 @@
 // it; `cold` stops it before each run so the desktop has to spawn it. Milestones come from the main
 // log, the renderer's performance timeline and DOM readiness polled over CDP. `--profile-main`
 // records a main-process CPU profile from the first statement (via --inspect-brk) on the first run,
+// `--profile-renderer` records the renderer main thread from the moment its debug target appears,
 // and `--trace` records Chromium's startup trace on the last run. Raw samples are written as JSON.
 import { spawn } from "node:child_process"
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
@@ -28,6 +29,7 @@ const args = parseArgs({
     home: { type: "string" },
     out: { type: "string" },
     "profile-main": { type: "boolean", default: false },
+    "profile-renderer": { type: "boolean", default: false },
     trace: { type: "boolean", default: false },
     "settle-ms": { type: "string", default: "1500" },
   },
@@ -73,8 +75,11 @@ const env = {
   OPENCODE_CONFIG_DIR: paths.config,
 }
 const cdpPort = await freePort()
+// A private service port keeps a cold launch's own service away from the developer's service.
+const servicePort = await freePort()
+writeFileSync(join(paths.config, "service.json"), JSON.stringify({ port: servicePort }))
 const inspectPort = await freePort()
-const exeName = basename(exe, ".exe")
+let appPid: number | undefined
 let serviceProcess: ReturnType<typeof spawn> | undefined
 // Renderer readiness, read over CDP: paint timing plus the DOM states the user actually waits for.
 const probe = `(() => ({
@@ -111,6 +116,7 @@ for (let run = 1; run <= runs; run++) {
   const spawnAt = Date.now()
   const child = spawn(exe, launch, { env, detached: true, stdio: "ignore" })
   child.unref()
+  appPid = child.pid
 
   let mainProfile: Promise<unknown> | undefined
   if (profile) mainProfile = profileMain(spawnAt)
@@ -119,6 +125,12 @@ for (let run = 1; run <= runs; run++) {
   const cdp = await connect(page.webSocketDebuggerUrl)
   await cdp.send("Runtime.enable")
   await cdp.send("Performance.enable")
+  const rendererProfile = args.values["profile-renderer"] && run === 1
+  if (rendererProfile) {
+    await cdp.send("Profiler.enable")
+    await cdp.send("Profiler.setSamplingInterval", { interval: 100 })
+    await cdp.send("Profiler.start")
+  }
   // Poll DOM readiness and the renderer's cumulative main-thread task time together. The run ends
   // when the shell is up and the main thread has spent under 10 % of any 500 ms window in tasks for `settleMs`.
   const seen: Record<string, number> = {}
@@ -149,6 +161,12 @@ for (let run = 1; run <= runs; run++) {
     await sleep(50)
   }
   const rendererIdleMs = quietSince ? quietSince - spawnAt : undefined
+  const rendererProfilePath = rendererProfile ? join(outDir, `renderer-${Date.now()}.cpuprofile`) : undefined
+  if (rendererProfilePath) {
+    const stopped = await cdp.send("Profiler.stop")
+    writeFileSync(rendererProfilePath, JSON.stringify(stopped.result.profile))
+    console.log("renderer profile:", rendererProfilePath)
+  }
   cdp.close()
   await sleep(300)
   // Chromium writes the startup trace when --trace-startup-duration elapses; keep the app alive until then.
@@ -157,8 +175,9 @@ for (let run = 1; run <= runs; run++) {
   const origin = last?.origin ? Math.round(last.origin - spawnAt) : undefined
   const sample: Sample = {
     run,
-    profiled: profile,
+    profiled: profile || !!rendererProfile,
     traced: trace ? tracePath : undefined,
+    rendererProfile: rendererProfilePath,
     msSinceSpawn: {
       appStarting: main.appStarting && main.appStarting - spawnAt,
       cliVersionStart: main.versionStart && main.versionStart - spawnAt,
@@ -214,6 +233,7 @@ type Sample = {
   profiled: boolean
   traced?: string
   mainProfile?: string
+  rendererProfile?: string
   msSinceSpawn: Record<string, number | undefined>
   final: { url?: string; timelineRows?: number }
   rendererCpu: { taskMs: number; scriptMs: number }
@@ -361,7 +381,7 @@ function bundledCli() {
 async function warmService() {
   await stopService()
   const cli = bundledCli()
-  serviceProcess = spawn(cli, ["serve", "--service", "--port", "0"], { env, detached: true, stdio: "ignore" })
+  serviceProcess = spawn(cli, ["serve", "--service"], { env, detached: true, stdio: "ignore" })
   serviceProcess.unref()
   const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
@@ -396,13 +416,34 @@ async function stopService() {
   await sleep(500)
 }
 
+// Only ever touches the process this run spawned (a prod-channel build shares its executable name
+// with the developer's installed app). Ask it to quit first so it exits the way a user's session
+// ends (Node and Chromium flush their caches on a normal exit); force-kill the tree if it lingers.
 async function killApp() {
-  if (process.platform === "win32") {
-    spawn("taskkill", ["/IM", `${exeName}.exe`, "/F", "/T"], { stdio: "ignore" })
-  } else {
-    spawn("pkill", ["-f", exe], { stdio: "ignore" })
+  const pid = appPid
+  if (!pid) return
+  appPid = undefined
+  const running = () =>
+    new Promise<boolean>((done) => {
+      const check =
+        process.platform === "win32"
+          ? spawn("tasklist", ["/FI", `PID eq ${pid}`, "/NH"], { stdio: ["ignore", "pipe", "ignore"] })
+          : spawn("kill", ["-0", String(pid)], { stdio: "ignore" })
+      let out = ""
+      check.stdout?.on("data", (chunk) => (out += chunk))
+      check.on("close", (code) => done(process.platform === "win32" ? out.includes(String(pid)) : code === 0))
+    })
+  if (!(await running())) return
+  if (process.platform === "win32") spawn("taskkill", ["/PID", String(pid)], { stdio: "ignore" })
+  else process.kill(pid, "SIGTERM")
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline && (await running())) await sleep(100)
+  if (await running()) {
+    if (process.platform === "win32") spawn("taskkill", ["/PID", String(pid), "/F", "/T"], { stdio: "ignore" })
+    else process.kill(pid, "SIGKILL")
+    await sleep(1000)
   }
-  await sleep(1500)
+  await sleep(500)
 }
 
 function sleep(ms: number) {
