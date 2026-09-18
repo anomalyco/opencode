@@ -62,17 +62,20 @@ The `system` theme is available when OpenCode can read your terminal palette.
 
 ## Files
 
-To create a global theme named `ocean`, save this file:
+To create a global theme named `ocean`, use the theme tool to generate a complete file in the global theme directory.
+Its relevant structure looks like this:
 
-```json title="~/.config/opencode/themes/ocean.json"
+```json title="~/.config/opencode/themes/ocean.json (excerpt)"
 {
   "version": 2,
+  "base": {
+    "text": {
+      "default": "#d8f3ff"
+    }
+  },
   "dark": {
     "hue": {
       "accent": "$hue.cyan"
-    },
-    "text": {
-      "default": "#d8f3ff"
     }
   }
 }
@@ -91,45 +94,29 @@ same name.
 
 ## Format
 
-Every V2 theme declares `version: 2` and at least one of `light` or `dark`:
+Every V2 theme declares `version: 2`, one complete `base` token tree, and at least one `light` or `dark` hue palette.
+Modes inherit only from that file's base; they do not inherit from the built-in OpenCode theme or from each other. Use
+the theme tool to generate a complete base before customizing it.
+
+The examples below show only the sections relevant to each concept; they are not complete theme files.
 
 ```json title="themes/ocean.json"
 {
   "version": 2,
-  "light": {
+  "base": {
     "text": {
       "default": "#16324f"
     }
   },
-  "dark": {
-    "text": {
-      "default": "#d8f3ff"
-    }
-  }
-}
-```
-
-Custom themes inherit unspecified values from the built-in OpenCode theme. To base one mode on the other, add
-`mergeMode: true` to the mode containing the overrides:
-
-```json title="themes/ocean.json"
-{
-  "version": 2,
   "light": {
-    "text": {
-      "default": "#16324f"
-    }
+    "hue": {}
   },
   "dark": {
-    "mergeMode": true,
-    "text": {
-      "default": "#d8f3ff"
-    }
+    "hue": {},
+    "text": { "default": "#d8f3ff" }
   }
 }
 ```
-
-Only one mode can use `mergeMode`, and the other mode must be present.
 
 ## Colors
 
@@ -138,7 +125,7 @@ Use a hex color, `transparent`, or a reference to another theme color:
 ```json title="themes/ocean.json"
 {
   "version": 2,
-  "dark": {
+  "base": {
     "text": {
       "default": "#d8f3ff",
       "subdued": "$hue.neutral.400"
@@ -160,12 +147,14 @@ Override a hue alias to change a family of related colors at once:
 ```json title="themes/ocean.json"
 {
   "version": 2,
+  "base": {
+    "categorical": ["accent", "purple", "green"]
+  },
   "dark": {
     "hue": {
       "accent": "$hue.cyan",
       "interactive": "$hue.blue"
-    },
-    "categorical": ["accent", "purple", "green"]
+    }
   }
 }
 ```
@@ -189,7 +178,7 @@ Use state keys to change interactive colors. Unspecified states use the nearest 
 ```json title="themes/ocean.json"
 {
   "version": 2,
-  "dark": {
+  "base": {
     "text": {
       "action": {
         "primary": {
@@ -212,12 +201,13 @@ Form fields use the same state keys directly under `text.formfield` or `backgrou
 
 ## Tokens
 
-Override only the token groups your theme needs:
+The complete `base` contains every token group. A mode may override any part of it after providing its complete hue
+palette:
 
 ```json title="themes/ocean.json"
 {
   "version": 2,
-  "dark": {
+  "base": {
     "border": {
       "default": "$hue.neutral.700"
     },
@@ -258,7 +248,7 @@ contextual `@dialog` surface. The TUI re-resolves the palette after applying `@d
 ```json title="themes/ocean.json"
 {
   "version": 2,
-  "dark": {
+  "base": {
     "background": {
       "default": "#071521",
       "raised": {

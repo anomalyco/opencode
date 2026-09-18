@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TerminalColors } from "@opentui/core"
+import { DEFAULT_THEME } from "@opencode/theme/tui"
 import { DEFAULT_THEMES, hasTheme, parseTheme, resolveTheme } from "../src/theme"
 import { discoverThemes } from "../src/theme/discovery"
 import { configDirectories } from "../src/util/config-directories"
@@ -26,7 +27,11 @@ test("parses unversioned and explicit V1 themes lazily once", () => {
 })
 
 test("decodes native V2 themes lazily once", () => {
-  const source = { version: 2, light: { categorical: ["red"] } } as const
+  const source = {
+    version: 2,
+    base: DEFAULT_THEME.base,
+    light: { ...DEFAULT_THEME.light, categorical: ["red"] },
+  } as const
 
   const document = parseTheme(source)
   expect(document.light?.categorical).toEqual(["red"])

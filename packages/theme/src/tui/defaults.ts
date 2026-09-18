@@ -1,4 +1,4 @@
-import type { HueName, ThemeDocument } from "./schema.js"
+import type { BaseThemeDefinition, HueName, Mode, ThemeDefinition, ThemeDocument } from "./schema.js"
 
 export const DEFAULT_CATEGORICAL = [
   "blue",
@@ -9,8 +9,7 @@ export const DEFAULT_CATEGORICAL = [
   "cyan",
 ] as const satisfies readonly HueName[]
 
-export const DEFAULT_THEME = {
-  version: 2,
+const modes = {
   light: {
     hue: {
       gray: {
@@ -441,4 +440,13 @@ export const DEFAULT_THEME = {
       },
     },
   },
+} satisfies Record<Mode, ThemeDefinition>
+
+const { hue: _, ...base } = modes.light
+
+export const DEFAULT_THEME = {
+  version: 2,
+  base: base satisfies BaseThemeDefinition,
+  light: { hue: modes.light.hue },
+  dark: modes.dark,
 } satisfies ThemeDocument

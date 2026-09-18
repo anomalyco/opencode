@@ -2,6 +2,7 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
+import { DEFAULT_THEME } from "@opencode/theme/tui"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 import { DEFAULT_THEMES } from "../../../src/theme"
 import { ConfigProvider } from "../../../src/config"
@@ -25,7 +26,11 @@ test("uses an available mode while retaining the pinned preference", async () =>
   const darkOnly = structuredClone(DEFAULT_THEMES.opencode)
   darkOnly.theme.background = "#111111"
   darkOnly.theme.text = "#eeeeee"
-  const native = { version: 2, dark: { text: { default: "#abcdef" } } } as const
+  const native = {
+    version: 2,
+    base: { ...DEFAULT_THEME.base, text: { ...DEFAULT_THEME.base.text, default: "#abcdef" } },
+    dark: { hue: DEFAULT_THEME.dark.hue },
+  } as const
   let themes: ReturnType<typeof useThemes> | undefined
 
   function Probe() {
@@ -79,7 +84,7 @@ test("uses an available mode while retaining the pinned preference", async () =>
 
 test.each([
   ["schema", { version: 2, light: { categorical: [] } }],
-  ["mode merging", { version: 2, light: { mergeMode: true } }],
+  ["partial mode", { version: 2, light: { text: { default: "#ffffff" } } }],
   ["token reference", { version: 2, light: { text: { default: "$missing" } } }],
 ] as const)("falls back to OpenCode when configured V2 theme %s is invalid", async (_label, source) => {
   let themes: ReturnType<typeof useThemes> | undefined

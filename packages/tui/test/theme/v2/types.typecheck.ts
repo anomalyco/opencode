@@ -1,3 +1,4 @@
+import { DEFAULT_THEME, selectTheme } from "@opencode/theme/tui"
 import type { BackgroundDefinition, TextDefinition, ThemeDefinition, ThemeDocument } from "@opencode/theme/tui"
 
 const text = {
@@ -38,16 +39,19 @@ const background = {
 } satisfies BackgroundDefinition
 
 const definition = {
-  hue: {} as ThemeDefinition["hue"],
-  categorical: ["blue", "accent"],
-  text,
-  background,
-  border: { default: "$hue.neutral.300" },
+  ...selectTheme(DEFAULT_THEME, "light"),
   "@dialog": { background: { default: "$background.raised.base" } },
 } satisfies ThemeDefinition
 
-export const document = { version: 2, light: definition, dark: definition } satisfies ThemeDocument
-export const lightOnly = { version: 2, light: definition } satisfies ThemeDocument
-export const darkOnly = { version: 2, dark: definition } satisfies ThemeDocument
+export const document = {
+  version: 2,
+  base: DEFAULT_THEME.base,
+  light: { hue: definition.hue },
+  dark: definition,
+} satisfies ThemeDocument
+export const lightOnly = { version: 2, base: DEFAULT_THEME.base, light: { hue: definition.hue } } satisfies ThemeDocument
+export const darkOnly = { version: 2, base: DEFAULT_THEME.base, dark: definition } satisfies ThemeDocument
 // @ts-expect-error A theme document must provide at least one mode.
 export const empty = { version: 2 } satisfies ThemeDocument
+// @ts-expect-error A base mode must be complete; partial tokens are only valid under @dialog.
+export const partial = { version: 2, base: { text, background }, light: { hue: definition.hue } } satisfies ThemeDocument

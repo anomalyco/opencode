@@ -1,7 +1,7 @@
 import { RGBA } from "@opentui/core"
 import { oklchToHex, rgbToOklch } from "./color.js"
-import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"
-import type { FileThemeDefinition, Mode, ThemeDocument } from "./index.js"
+import { DEFAULT_CATEGORICAL } from "./defaults.js"
+import type { BaseThemeDefinition, HueDefinition, Mode, ThemeDefinition, ThemeDocument } from "./index.js"
 import { HueStep } from "./schema.js"
 import type { Theme, ThemeV1Json } from "./v1.js"
 
@@ -13,6 +13,27 @@ const chromaticHues: readonly ChromaticHue[] = ["red", "orange", "yellow", "gree
 const categoricalTokens: readonly V1HueToken[] = ["secondary", "accent", "success", "warning", "primary", "error"]
 const minimumChroma = 0.03
 const lightThreshold = 0.6
+// Canonical OKLCH hue angles classify arbitrary V1 colors without coupling migration to a built-in theme.
+const hueAngles = {
+  light: {
+    red: 19.571,
+    orange: 66.29,
+    yellow: 98.111,
+    green: 154.449,
+    cyan: 207.078,
+    blue: 251.813,
+    purple: 306.383,
+  },
+  dark: {
+    red: 27.518,
+    orange: 38.402,
+    yellow: 66.442,
+    green: 150.069,
+    cyan: 223.128,
+    blue: 264.376,
+    purple: 301.924,
+  },
+} satisfies Record<"light" | "dark", Record<ChromaticHue, number>>
 
 export function migrateV1(theme: ThemeV1Json): ThemeDocument {
   const light = resolveV1(theme, "light")
@@ -21,16 +42,24 @@ export function migrateV1(theme: ThemeV1Json): ThemeDocument {
     const lightMode = detectMode(light)
     const darkMode = detectMode(dark)
     if (lightMode === darkMode) {
-      if (lightMode === "light") return { version: 2, standalone: true, light: migrateMode(light, "light") }
-      return { version: 2, standalone: true, dark: migrateMode(dark, "dark") }
+      const definition = migrateMode(lightMode === "light" ? light : dark, lightMode)
+      if (lightMode === "light") return { version: 2, base: base(definition), light: { hue: definition.hue } }
+      return { version: 2, base: base(definition), dark: { hue: definition.hue } }
     }
   }
+  const lightDefinition = migrateMode(light, "light")
+  const darkDefinition = migrateMode(dark, "dark")
   return {
     version: 2,
-    standalone: true,
-    light: migrateMode(light, "light"),
-    dark: migrateMode(dark, "dark"),
+    base: base(lightDefinition),
+    light: { hue: lightDefinition.hue },
+    dark: darkDefinition,
   }
+}
+
+function base(definition: ThemeDefinition): BaseThemeDefinition {
+  const { hue: _, ...base } = definition
+  return base
 }
 
 function detectMode(theme: Theme): Mode {
@@ -41,11 +70,11 @@ function luminance(color: RGBA) {
   return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
 }
 
-function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
+function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
   const color = (key: ThemeColor) => hex(theme[key])
   const selected = hex(selectedForeground(theme, theme.primary))
   const destructive = hex(selectedForeground(theme, theme.error))
-  const hues = inferHues(theme, mode)
+  const hues = inferHues(theme)
   const categorical = categoricalTokens.flatMap((token) => {
     const hue = hues.byToken[token]
     return hue ? [hue] : []
@@ -71,7 +100,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
       accent: hues.byToken.accent ? `$hue.${hues.byToken.accent}` : "$hue.gray",
       interactive: hues.byToken.primary ? `$hue.${hues.byToken.primary}` : "$hue.gray",
       neutral: "$hue.gray",
-    },
+    } as HueDefinition,
     categorical: uniqueCategorical.length ? uniqueCategorical : DEFAULT_CATEGORICAL,
     text: {
       default: text,
@@ -93,6 +122,12 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
         $pressed: primary,
         $disabled: textMuted,
         $selected: primary,
+      },
+      status: {
+        running: "$hue.interactive.200",
+        question: "$text.status.unread",
+        permission: "$text.status.unread",
+        unread: "$hue.accent.200",
       },
       feedback: {
         error: { default: color("error") },
@@ -182,7 +217,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
   })
 }
 
-function referenceHues(theme: FileThemeDefinition): FileThemeDefinition {
+function referenceHues(theme: ThemeDefinition): ThemeDefinition {
   const definitions = theme.hue as Record<string, string | Partial<Record<HueStep, string>>> | undefined
   if (!definitions) return theme
   const scales = new Map<string, Partial<Record<HueStep, string>>>()
@@ -228,10 +263,10 @@ function referenceHues(theme: FileThemeDefinition): FileThemeDefinition {
 
   return Object.fromEntries(
     Object.entries(theme).map(([key, value]) => [key, key === "hue" || key === "categorical" ? value : replace(value)]),
-  ) as FileThemeDefinition
+  ) as ThemeDefinition
 }
 
-function inferHues(theme: Theme, mode: "light" | "dark") {
+function inferHues(theme: Theme) {
   const colors: readonly [V1HueToken, RGBA][] = [
     ["accent", theme.accent],
     ["success", theme.success],
@@ -246,7 +281,7 @@ function inferHues(theme: Theme, mode: "light" | "dark") {
     byToken: Partial<Record<V1HueToken, ChromaticHue>>
   }>(
     (result, [token, color]) => {
-      const nearest = inferHue(color, mode)
+      const nearest = inferHue(color)
       if (!nearest) return result
       const current = result.byHue[nearest.name]
       return {
@@ -265,7 +300,7 @@ function inferHues(theme: Theme, mode: "light" | "dark") {
       ["primary", theme.primary],
     ] as const
   ).reduce((result, [token, color]) => {
-    const nearest = inferHue(color, mode)
+    const nearest = inferHue(color)
     if (!nearest) return result
     return {
       byHue: { ...result.byHue, [nearest.name]: { color, distance: nearest.distance } },
@@ -274,21 +309,16 @@ function inferHues(theme: Theme, mode: "light" | "dark") {
   }, inferred)
 }
 
-function inferHue(color: RGBA, mode: Mode) {
+function inferHue(color: RGBA) {
   const value = toOklch(color)
   if (ambiguous(color, value.c)) return
-  const anchor = inferenceAnchor(value.l, mode)
+  const reference = value.l >= lightThreshold ? hueAngles.light : hueAngles.dark
   return chromaticHues
     .map((name) => ({
       name,
-      distance: hueDistance(value.h, toOklch(RGBA.fromHex(DEFAULT_THEME[mode].hue[name][anchor])).h),
+      distance: hueDistance(value.h, reference[name]),
     }))
     .sort((first, second) => first.distance - second.distance)[0]
-}
-
-function inferenceAnchor(lightness: number, mode: Mode): HueStep {
-  if (mode === "light") return lightness >= lightThreshold ? 700 : 300
-  return lightness >= lightThreshold ? 300 : 700
 }
 
 function hueDistance(first: number, second: number) {

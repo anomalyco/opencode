@@ -1,8 +1,6 @@
 import { RGBA } from "@opentui/core"
 import { Schema } from "effect"
-import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"
-import { expandTheme, expandTokens, mergeTheme } from "./expand.js"
-import { fallback } from "./fallback.js"
+import { expandTheme, mergeTheme } from "./expand.js"
 import {
   ActionState,
   ActionVariant,
@@ -26,7 +24,7 @@ import type {
   StatefulColorDefinition,
   ThemeTokensDefinition,
 } from "./index.js"
-import { selectTheme, selectThemeMode } from "./select.js"
+import { selectThemeMode } from "./select.js"
 
 const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition, { reportInput: true })
 
@@ -46,15 +44,8 @@ export function themeDecodeError(error: unknown, name: string) {
 
 export function resolveThemeDocument(document: ThemeDocument, mode?: Mode) {
   const selected = selectThemeMode(document, mode)
-  const definition = selected.expanded ? selected.theme : expandTheme(selected.theme)
-  const defaults = expandTheme(selectTheme(DEFAULT_THEME, selected.mode))
-  const core = expandTokens(fallback(selected.mode))
-  const merged = document.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
-  if (!merged["hue"]) throw new Error("Standalone themes must provide hues")
-  return resolveExpandedTheme({
-    ...merged,
-    categorical: merged["categorical"] ?? DEFAULT_CATEGORICAL,
-  } as ThemeDefinition)
+  const definition = expandTheme(selected.theme)
+  return resolveExpandedTheme(definition)
 }
 
 export function resolveTheme(definition: ThemeDefinition): ResolvedTheme {
@@ -63,7 +54,7 @@ export function resolveTheme(definition: ThemeDefinition): ResolvedTheme {
 
 function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
   const hue = resolveHue(definition.hue)
-  const categorical = (definition.categorical ?? DEFAULT_CATEGORICAL).map((name) => hue[name])
+  const categorical = definition.categorical.map((name) => hue[name])
   const hueSteps = compileHueSteps(hue)
   const base = tokens(definition)
   const views = {} as Record<SurfaceName, ResolvedTheme>

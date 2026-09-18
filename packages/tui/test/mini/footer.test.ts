@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { CliRenderEvents, RGBA, TextRenderable } from "@opentui/core"
+import { DEFAULT_THEME } from "@opencode/theme/tui"
 import path from "node:path"
 import { Writable } from "node:stream"
 import { coalesceProgressCommit, resolveRunAgent, RunFooter } from "../../src/mini/footer"
@@ -370,7 +371,11 @@ test("explicit theme refresh reloads custom colors without a palette event", asy
     for (const color of ["#123456", "#abcdef"]) {
       await Bun.write(
         path.join(tmp.path, "themes", "mini-refresh.json"),
-        JSON.stringify({ version: 2, dark: { text: { default: color } } }),
+        JSON.stringify({
+          version: 2,
+          base: { ...DEFAULT_THEME.base, text: { ...DEFAULT_THEME.base.text, default: color } },
+          dark: { hue: DEFAULT_THEME.dark.hue },
+        }),
       )
       await app.footer.refreshTheme()
       await app.renderOnce()

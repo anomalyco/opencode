@@ -27,7 +27,7 @@ export function mergeTheme(...values: unknown[]): Record<string, unknown> {
   return values.reduce<Record<string, unknown>>((result, value) => {
     if (!isRecord(value)) return result
     return Object.entries(value).reduce<Record<string, unknown>>((next, [key, item]) => {
-      if (item === undefined || key === "mergeMode") return next
+      if (item === undefined) return next
       return {
         ...next,
         [key]: isRecord(item) ? mergeTheme(next[key], item) : item,

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import path from "node:path"
 import { RGBA, type CliRenderer, type TerminalColors } from "@opentui/core"
-import { DEFAULT_THEME, resolveThemeDocument, type ResolvedTheme } from "@opencode/theme/tui"
+import { DEFAULT_THEME, resolveThemeDocument, selectTheme, type ResolvedTheme } from "@opencode/theme/tui"
 import {
   RUN_THEME_MONO,
   RUN_THEME_FALLBACK,
@@ -185,30 +185,50 @@ test.each(["light", "dark"] as const)("shares the %s system scheme while retaini
 })
 
 test.each(["light", "dark"] as const)(
-  "loads %s custom files with shared partial and standalone fallback",
+  "loads complete %s custom theme files",
   async (mode) => {
-    for (const standalone of [false, true]) {
-      const source = {
-        version: 2,
-        standalone,
-        [mode]: {
-          hue: DEFAULT_THEME[mode].hue,
-          text: {
-            default: "#123456",
-            action: { primary: { $focused: "#56789a" } },
-            formfield: { default: "#234567", $selected: "#345678", $focused: "#6789ab" },
-            feedback: { warning: { default: "#456789" } },
-          },
-          background: { action: { primary: { $focused: "#789abc" } }, formfield: { $focused: "#89abcd" } },
+    const base = selectTheme(DEFAULT_THEME, mode)
+    const definition = {
+      ...base,
+      text: {
+        ...base.text,
+        default: "#123456",
+        action: {
+          ...base.text.action,
+          primary: { ...base.text.action.primary, $focused: "#56789a" },
         },
-      }
-      await Bun.write(path.join(tmp.path, "themes", "mini-custom.json"), JSON.stringify(source))
-      const theme = await resolveRunTheme(renderer({ colors: terminalColors({}, mode) }), { name: "mini-custom", mode })
-      try {
-        expectFooter(theme, resolveThemeDocument(parseTheme(source), mode))
-      } finally {
-        theme.block.syntax?.destroy()
-      }
+        formfield: {
+          ...base.text.formfield,
+          default: "#234567",
+          $selected: "#345678",
+          $focused: "#6789ab",
+        },
+        feedback: {
+          ...base.text.feedback,
+          warning: { ...base.text.feedback.warning, default: "#456789" },
+        },
+      },
+      background: {
+        ...base.background,
+        action: {
+          ...base.background.action,
+          primary: { ...base.background.action.primary, $focused: "#789abc" },
+        },
+        formfield: { ...base.background.formfield, $focused: "#89abcd" },
+      },
+    }
+    const { hue, ...tokens } = definition
+    const source = {
+      version: 2,
+      base: tokens,
+      [mode]: { hue },
+    }
+    await Bun.write(path.join(tmp.path, "themes", "mini-custom.json"), JSON.stringify(source))
+    const theme = await resolveRunTheme(renderer({ colors: terminalColors({}, mode) }), { name: "mini-custom", mode })
+    try {
+      expectFooter(theme, resolveThemeDocument(parseTheme(source), mode))
+    } finally {
+      theme.block.syntax?.destroy()
     }
   },
 )
@@ -253,7 +273,10 @@ test.each(["light", "dark"] as const)("resolves dark-only Aura on an automatic %
 test.each(["light", "dark"] as const)(
   "falls back only for unsupported modes of a %s-only custom theme",
   async (mode) => {
-    const source = { version: 2, [mode]: { text: { default: "#123456" } } }
+    const base = selectTheme(DEFAULT_THEME, mode)
+    const definition = { ...base, text: { ...base.text, default: "#123456" } }
+    const { hue, ...tokens } = definition
+    const source = { version: 2, base: tokens, [mode]: { hue } }
     await Bun.write(path.join(tmp.path, "themes", "mini-one-mode.json"), JSON.stringify(source))
     for (const requested of ["light", "dark"] as const) {
       const theme = await resolveRunTheme(renderer({ colors: terminalColors({}, requested) }), {

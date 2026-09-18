@@ -15,24 +15,23 @@ test("migrates resolved V1 modes into V2 tokens", () => {
   const legacy = resolveV1(DEFAULT_THEMES.opencode, "light")
   const resolved = resolveThemeDocument(migrated, "light")
 
-  expect(migrated.standalone).toBeTrue()
-  expect(migrated.light.categorical?.length).toBeGreaterThan(0)
+  expect(migrated.base.categorical?.length).toBeGreaterThan(0)
   expect(migrated.dark.categorical?.length).toBeGreaterThan(0)
   expect(migrated.light.hue?.accent).toMatch(/^\$hue\.[^.]+$/)
   expect(migrated.light.hue?.interactive).toMatch(/^\$hue\.[^.]+$/)
-  expect(migrated.light.text?.default).toBe("$hue.neutral.200")
-  expect(migrated.light.text?.subdued).toBe("$hue.neutral.400")
-  expect(migrated.light.background?.action?.primary?.default).toBe("transparent")
-  expect(migrated.light.background?.default).toBe("$hue.neutral.800")
-  expect(migrated.light.background?.raised?.base).toBe("$hue.neutral.700")
-  expect(migrated.light.background?.raised?.high).toBe("$hue.neutral.600")
+  expect(migrated.base.text?.default).toBe("$hue.neutral.200")
+  expect(migrated.base.text?.subdued).toBe("$hue.neutral.400")
+  expect(migrated.base.background?.action?.primary?.default).toBe("transparent")
+  expect(migrated.base.background?.default).toBe("$hue.neutral.800")
+  expect(migrated.base.background?.raised?.base).toBe("$hue.neutral.700")
+  expect(migrated.base.background?.raised?.high).toBe("$hue.neutral.600")
   expect(migrated.dark.background?.default).toBe("$hue.neutral.800")
   expect(migrated.dark.background?.raised?.base).toBe("$hue.neutral.700")
   expect(migrated.dark.background?.raised?.high).toBe("$hue.neutral.600")
-  expect(migrated.light.text?.action?.primary?.default).toBe("$text.default")
-  expect(migrated.light.text?.action?.secondary?.default).toBe("$text.subdued")
-  expect(migrated.light.text?.action?.secondary?.$hovered).toBe("$text.default")
-  expect(migrated.light.background?.action?.primary?.$selected).toBe("transparent")
+  expect(migrated.base.text?.action?.primary?.default).toBe("$text.default")
+  expect(migrated.base.text?.action?.secondary?.default).toBe("$text.subdued")
+  expect(migrated.base.text?.action?.secondary?.$hovered).toBe("$text.default")
+  expect(migrated.base.background?.action?.primary?.$selected).toBe("transparent")
   expect(resolved.background.raised.base.toInts()).toEqual(legacy.backgroundPanel.toInts())
   expect(resolved.background.raised.high.toInts()).toEqual(legacy.backgroundElement.toInts())
   expect(resolved.background.formfield.selected.toInts()).toEqual(legacy.background.toInts())
@@ -62,10 +61,10 @@ test("references generated hues from matching token colors", () => {
   const migrated = migrateV1(source)
   if (!migrated.light) throw new Error("Expected light mode")
 
-  expect(migrated.light.border?.default).toBe("$hue.interactive.200")
-  expect(migrated.light.scrollbar?.default).toBe("$hue.accent.200")
-  expect(migrated.light.syntax?.keyword).toMatch(/^\$hue\.[^.]+\.200$/)
-  expect(migrated.light.markdown?.emphasis).toBe("#123456")
+  expect(migrated.base.border?.default).toBe("$hue.interactive.200")
+  expect(migrated.base.scrollbar?.default).toBe("$hue.accent.200")
+  expect(migrated.base.syntax?.keyword).toMatch(/^\$hue\.[^.]+\.200$/)
+  expect(migrated.base.markdown?.emphasis).toBe("#123456")
 })
 
 test("infers chromatic hues, anchors light and dark colors, and aliases ambiguous hues to gray", () => {
@@ -115,11 +114,11 @@ test("orders categorical hues by V1 semantic color mapping", () => {
   source.theme.error = mapped("red")
 
   const migrated = migrateV1(source)
-  expect(migrated.light?.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
+  expect(migrated.base.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
   expect(migrated.dark?.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
 
   source.theme.accent = source.theme.secondary
-  expect(migrateV1(source).light?.categorical).toEqual(["purple", "green", "yellow", "blue", "red"])
+  expect(migrateV1(source).base.categorical).toEqual(["purple", "green", "yellow", "blue", "red"])
 })
 
 test("gives accent and primary ownership of their inferred hues", () => {
@@ -159,7 +158,7 @@ test("uses default categorical hues when V1 semantic colors are ambiguous", () =
   source.theme.error = "transparent"
 
   const migrated = migrateV1(source)
-  expect(migrated.light?.categorical).toEqual(DEFAULT_CATEGORICAL)
+  expect(migrated.base.categorical).toEqual(DEFAULT_CATEGORICAL)
   expect(migrated.dark?.categorical).toEqual(DEFAULT_CATEGORICAL)
 })
 
@@ -210,7 +209,7 @@ test("uses the default text reference for primary actions on transparent backgro
   const migrated = migrateV1(source)
   if (!migrated.light || !migrated.dark) throw new Error("Expected both modes")
 
-  expect(migrated.light.text?.action?.primary?.default).toBe("$text.default")
+  expect(migrated.base.text?.action?.primary?.default).toBe("$text.default")
   expect(migrated.dark.text?.action?.primary?.default).toBe("$text.default")
 })
 
