@@ -7,6 +7,8 @@ import { UserTable } from "./schema/user.sql"
 import { BillingTable } from "./schema/billing.sql"
 import { WorkspaceTable } from "./schema/workspace.sql"
 import { AccountTable } from "./schema/account.sql"
+import { AuthTable } from "./schema/auth.sql"
+import { KeyTable } from "./schema/key.sql"
 import { Key } from "./key"
 import { and, eq, isNull, sql } from "drizzle-orm"
 
@@ -103,6 +105,48 @@ export namespace Workspace {
         .where(eq(WorkspaceTable.id, Actor.workspace())),
     )
   })
+
+  export const removeExact = fn(
+    z.object({
+      workspaceID: Identifier.schema("workspace"),
+      requesterEmail: z.email(),
+    }),
+    async (input) => {
+      await Database.transaction(async (tx) => {
+        const requester = await tx
+          .select({ id: UserTable.id })
+          .from(AuthTable)
+          .innerJoin(
+            UserTable,
+            and(
+              eq(UserTable.accountID, AuthTable.accountID),
+              eq(UserTable.workspaceID, input.workspaceID),
+              eq(UserTable.role, "admin"),
+              isNull(UserTable.timeDeleted),
+            ),
+          )
+          .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, input.workspaceID))
+          .where(
+            and(
+              eq(AuthTable.provider, "email"),
+              eq(AuthTable.subject, input.requesterEmail),
+              isNull(AuthTable.timeDeleted),
+            ),
+          )
+          .then((rows) => rows[0])
+        if (!requester) throw new Error("Requester is not an administrator of this workspace")
+
+        await tx
+          .update(WorkspaceTable)
+          .set({ timeDeleted: sql`now()` })
+          .where(and(eq(WorkspaceTable.id, input.workspaceID), isNull(WorkspaceTable.timeDeleted)))
+        await tx
+          .update(KeyTable)
+          .set({ timeDeleted: sql`now()` })
+          .where(and(eq(KeyTable.workspaceID, input.workspaceID), isNull(KeyTable.timeDeleted)))
+      })
+    },
+  )
 
   export const unblock = fn(z.string().startsWith("wrk_"), async (workspaceID) => {
     await Database.transaction(async (tx) => {
