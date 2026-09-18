@@ -12,7 +12,7 @@
 // records a main-process CPU profile from the first statement (via --inspect-brk) on the first run,
 // and `--trace` records Chromium's startup trace on the last run. Raw samples are written as JSON.
 import { spawn } from "node:child_process"
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { basename, dirname, join, relative, resolve } from "node:path"
@@ -342,14 +342,9 @@ function summarize(list: Sample[]) {
   return out
 }
 
-// The bundled CLI staged by the desktop lives under userData/cli/<version>; before the first launch
-// the executable next to the app is used directly.
+// The service must come from the CLI bundled with this executable: the desktop restarts a service
+// whose version differs from its bundled CLI, which would turn a warm run into a cold one.
 function bundledCli() {
-  const staged = join(userData, "cli")
-  if (existsSync(staged)) {
-    const versions = readdirSync(staged).map((v) => join(staged, v, process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli")).filter(existsSync)
-    if (versions.length) return versions.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
-  }
   const resources = process.platform === "darwin" ? join(dirname(exe), "..", "Resources") : join(dirname(exe), "resources")
   return join(resources, process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli")
 }
