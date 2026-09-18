@@ -1,13 +1,14 @@
 import type { MessagePortMain, WebContents } from "electron"
 import { Context, Effect, Layer, Option, Queue, Stream } from "effect"
 import { RpcMessage, RpcSerialization, RpcServer } from "effect/unstable/rpc"
+import { createIpcCodec } from "../shared/ipc-codec"
 import { bindIpcEvents } from "./ipc-events"
 
 type PortBinding = {
   readonly id: number
   readonly sender: WebContents
   readonly port: MessagePortMain
-  readonly parser: RpcSerialization.Parser
+  readonly parser: ReturnType<typeof createIpcCodec>
   readonly onMessage: (event: Electron.MessageEvent) => void
   readonly onClose: () => void
   readonly unbindEvents: Effect.Effect<void>
@@ -58,7 +59,7 @@ export const IpcServerProtocolLive = Layer.unwrap(
             }
 
             const id = nextClientId++
-            const parser = serialization.makeUnsafe()
+            const parser = createIpcCodec(serialization)
             const onMessage = (event: Electron.MessageEvent) => {
               try {
                 parser

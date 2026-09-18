@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, ManagedRuntime, Queue, Stream } from "effect"
 import { RpcClient, RpcMessage, RpcSerialization } from "effect/unstable/rpc"
+import { createIpcCodec } from "../shared/ipc-codec"
 import { DesktopRpcs, type DesktopRpcClient } from "../shared/ipc-rpc"
 import type { DesktopEvent } from "../shared/ipc-rpc/events"
 import { IpcTransportPort } from "../shared/ipc-transport"
@@ -85,7 +86,7 @@ function clientProtocol(value: MessagePort) {
     RpcClient.Protocol.make(
       Effect.fnUntraced(function* (writeResponse, clientIds) {
         const serialization = yield* RpcSerialization.RpcSerialization
-        const parser = serialization.makeUnsafe()
+        const parser = createIpcCodec(serialization)
         const inbound = yield* Queue.unbounded<RpcMessage.FromServerEncoded>()
         const onMessage = (event: MessageEvent) => {
           try {
