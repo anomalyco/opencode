@@ -341,6 +341,39 @@ describe("tool.shell permissions", () => {
     ),
   )
 
+  if (process.platform !== "win32") {
+    it.live("treats backslash-escaped path args as in-project (regression #49671)", () =>
+      Effect.gen(function* () {
+        // Project directory contains a space. The agent writes the same in-project path with
+        // backslash-escaped spaces (`/var/folders/.../opencode-test-xyz/my\ project/sub`) instead
+        // of quoting. Without unescaping, the resolved path literalises the backslash and
+        // `path.relative()` reports it as outside the project root, so the tool wrongly asks for
+        // `external_directory` permission.
+        const outer = yield* tmpdirScoped()
+        const project = path.join(outer, "my project").replaceAll("\\", "/")
+        yield* Effect.promise(async () => {
+          await Bun.write(path.join(project, "x.txt"), "ok")
+        })
+        yield* runIn(
+          project,
+          Effect.gen(function* () {
+            const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+            const inner = `${project}/x.txt`.replaceAll(" ", "\\ ")
+            const result = yield* run(
+              {
+                command: `cat ${inner}`,
+              },
+              capture(requests),
+            )
+            expect(result.metadata.exit).toBe(0)
+            expect(result.output).toContain("ok")
+            expect(requests.find((r) => r.permission === "external_directory")).toBeUndefined()
+          }),
+        )
+      }),
+    )
+  }
+
   if (process.platform === "win32") {
     if (bash) {
       it.live("asks for nested bash command permissions [bash]", () =>
