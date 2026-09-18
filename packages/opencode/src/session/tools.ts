@@ -400,19 +400,20 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // resolved for the rest of the session).
   const mcpTools = yield* mcp.tools()
   const resolvedIds = yield* toolSearch.resolved(input.session.id)
-  const searchable = new Map(
+  // enabledFor depends only on the server, so compute it once per unique server
+  // rather than per tool, and pass the already-known visible count so the auto
+  // path does not rebuild the catalog for each server.
+  const surfaceSize = Object.keys(Permission.visibleTools(mcpTools, ruleset)).length
+  const serverEnabled = new Map(
     yield* Effect.forEach(
-      Object.keys(mcpTools),
-      (key) =>
-        toolSearch
-          .enabledFor(mcpTools[key]!.server)
-          .pipe(Effect.map((on) => [key, on] as const)),
+      [...new Set(Object.values(mcpTools).map((entry) => entry.server))],
+      (server) => toolSearch.enabledFor(server, surfaceSize).pipe(Effect.map((on) => [server, on] as const)),
       { concurrency: "unbounded" },
     ),
   )
 
   for (const [key, entry] of Object.entries(mcpTools)) {
-    if (searchable.get(key) && !resolvedIds.has(key)) continue
+    if (serverEnabled.get(entry.server) && !resolvedIds.has(key)) continue
     const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
     const execute = item.execute
     if (!execute) continue

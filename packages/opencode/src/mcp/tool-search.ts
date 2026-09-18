@@ -19,8 +19,12 @@ export interface Match {
 }
 
 export interface Interface {
-  /** Whether tool search is active for the given server, given the global setting. */
-  readonly enabledFor: (server: string) => Effect.Effect<boolean>
+  /**
+   * Whether tool search is active for the given server, given the global setting.
+   * `surfaceSize` lets callers that already computed the visible-tool count avoid
+   * a redundant catalog rebuild on the "auto" path.
+   */
+  readonly enabledFor: (server: string, surfaceSize?: number) => Effect.Effect<boolean>
   /** All connected MCP tools, minus those hidden by permission, grouped for search. */
   readonly catalog: (
     ruleset: PermissionV1.Ruleset,
@@ -58,7 +62,10 @@ const layer = Layer.effect(
       return Permission.visibleTools(all, ruleset)
     })
 
-    const enabledFor: Interface["enabledFor"] = Effect.fn("McpToolSearch.enabledFor")(function* (server) {
+    const enabledFor: Interface["enabledFor"] = Effect.fn("McpToolSearch.enabledFor")(function* (
+      server,
+      surfaceSize,
+    ) {
       const cfg = yield* config.get()
       const entry = cfg.mcp?.[server]
       const override =
@@ -68,8 +75,8 @@ const layer = Layer.effect(
       const setting = override ?? cfg.mcp_tool_search ?? "off"
       if (setting === "off") return false
       if (setting === "always") return true
-      const visible = yield* catalog([])
-      return Object.keys(visible).length >= AUTO_MIN_TOOLS
+      const visible = surfaceSize ?? Object.keys(yield* catalog([])).length
+      return visible >= AUTO_MIN_TOOLS
     })
 
     const resolved: Interface["resolved"] = Effect.fn("McpToolSearch.resolved")(function* (sessionID) {

@@ -300,10 +300,11 @@ const layer = Layer.effect(
       // and keeps the search tool.
       const ruleset = Permission.merge(input.agent.permission, input.permission ?? [])
       const mcpTools = Permission.visibleTools(yield* mcp.tools(), ruleset)
+      const surfaceSize = Object.keys(mcpTools).length
       const searchServers = Object.keys(yield* mcp.clients())
       const heldBack = yield* Effect.forEach(
         searchServers,
-        (server) => toolSearch.enabledFor(server),
+        (server) => toolSearch.enabledFor(server, surfaceSize),
         { concurrency: "unbounded" },
       ).pipe(Effect.map((flags) => searchServers.filter((_, i) => flags[i])))
       const anyHeldBack = heldBack.some((server) =>
