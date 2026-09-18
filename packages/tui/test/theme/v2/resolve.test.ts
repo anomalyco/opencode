@@ -42,7 +42,7 @@ function resolveSource(source: ThemeDocumentSource, mode?: Mode, name?: string) 
 function complete(mode: Mode, value: unknown = {}): ThemeDocumentSource {
   const definition = override(mode === "light" ? light : dark, value)
   const { hue, ...base } = definition
-  return { version: 2, base, [mode]: { hue } }
+  return { base, [mode]: { hue } }
 }
 
 test("resolves complete one-mode documents in the available mode", () => {
@@ -56,7 +56,7 @@ test("resolves complete one-mode documents in the available mode", () => {
 })
 
 test("rejects theme documents without a mode", () => {
-  expect(() => resolveSource({ version: 2 })).toThrow("Invalid theme")
+  expect(() => resolveSource({})).toThrow("Invalid theme")
 })
 
 test("validates and resolves categorical hues in configured order", () => {
@@ -81,8 +81,8 @@ test("generates syntax with one categorical hue", () => {
 })
 
 test("rejects incomplete themes instead of merging defaults", () => {
-  expect(() => resolveSource({ version: 2, light: { hue: light.hue } }, "light")).toThrow("Invalid theme")
-  expect(() => resolveSource({ version: 2, light: { ...light, categorical: undefined } }, "light")).toThrow(
+  expect(() => resolveSource({ light: { hue: light.hue } }, "light")).toThrow("Invalid theme")
+  expect(() => resolveSource({ light: { ...light, categorical: undefined } }, "light")).toThrow(
     "Invalid theme",
   )
 })
@@ -186,7 +186,6 @@ test("resolves complete light and dark definitions independently", () => {
   })
   const { hue, ...base } = lightDefinition
   const document = {
-    version: 2,
     base,
     light: { hue },
     dark,

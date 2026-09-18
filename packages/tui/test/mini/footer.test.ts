@@ -372,7 +372,6 @@ test("explicit theme refresh reloads custom colors without a palette event", asy
       await Bun.write(
         path.join(tmp.path, "themes", "mini-refresh.json"),
         JSON.stringify({
-          version: 2,
           base: { ...getOpenCodeTheme().base, text: { ...getOpenCodeTheme().base.text, base: color } },
           dark: { hue: getOpenCodeTheme().dark.hue },
         }),

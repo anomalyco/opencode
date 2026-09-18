@@ -50,14 +50,13 @@ export function migrateV1(theme: ThemeV1Json): ThemeDocument {
     const darkMode = detectMode(dark)
     if (lightMode === darkMode) {
       const definition = migrateMode(lightMode === "light" ? light : dark, lightMode)
-      if (lightMode === "light") return { version: 2, base: base(definition), light: { hue: definition.hue } }
-      return { version: 2, base: base(definition), dark: { hue: definition.hue } }
+      if (lightMode === "light") return { base: base(definition), light: { hue: definition.hue } }
+      return { base: base(definition), dark: { hue: definition.hue } }
     }
   }
   const lightDefinition = migrateMode(light, "light")
   const darkDefinition = migrateMode(dark, "dark")
   return {
-    version: 2,
     base: base(lightDefinition),
     light: { hue: lightDefinition.hue },
     dark: darkDefinition,

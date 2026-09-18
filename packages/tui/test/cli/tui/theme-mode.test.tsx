@@ -29,7 +29,6 @@ test("uses an available mode while retaining the pinned preference", async () =>
   darkOnly.theme.background = "#111111"
   darkOnly.theme.text = "#eeeeee"
   const native = {
-    version: 2,
     base: { ...getOpenCodeTheme().base, text: { ...getOpenCodeTheme().base.text, base: "#abcdef" } },
     dark: { hue: getOpenCodeTheme().dark.hue },
   } as const
@@ -85,9 +84,15 @@ test("uses an available mode while retaining the pinned preference", async () =>
 })
 
 test.each([
-  ["schema", { version: 2, light: { categorical: [] } }],
-  ["partial mode", { version: 2, light: { text: { base: "#ffffff" } } }],
-  ["token reference", { version: 2, light: { text: { base: "$missing" } } }],
+  ["schema", { base: {}, light: {} }],
+  ["partial mode", { base: { text: { base: "#ffffff" } }, light: {} }],
+  [
+    "token reference",
+    {
+      base: { ...getOpenCodeTheme().base, text: { ...getOpenCodeTheme().base.text, base: "$missing" } },
+      light: getOpenCodeTheme().light,
+    },
+  ],
 ] as const)("falls back to OpenCode when configured V2 theme %s is invalid", async (_label, source) => {
   let themes: ReturnType<typeof useThemes> | undefined
   let failure: ThemeError | undefined

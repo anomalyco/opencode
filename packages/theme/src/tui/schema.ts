@@ -286,7 +286,6 @@ export type ModeDefinition = Schema.Schema.Type<typeof ModeDefinition>
 
 const FileMetadata = {
   $schema: Schema.optional(Schema.String),
-  version: Schema.Literal(2),
 }
 export const ThemeDocument = Schema.Union([
   Schema.Struct({

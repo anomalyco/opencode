@@ -12,31 +12,30 @@ import { tmpdir } from "./fixture/fixture"
 
 const opencodeV1 = opencodeSource as ThemeV1Json
 
-test("parseTheme delegates malformed V1 sources and rejects unknown versions", () => {
+test("rejects unrecognized theme structures", () => {
   expect(() => parseTheme({})).toThrow()
-  expect(() => parseTheme({ version: 3 })).toThrow("Unsupported theme version: 3")
+  expect(() => parseTheme({ version: 3 })).toThrow("Invalid theme")
 })
 
 test("registers opencode as a native V2 theme", () => {
   expect(allThemes().opencode).toBe(getOpenCodeTheme())
-  expect(parseTheme(getOpenCodeTheme()).version).toBe(2)
+  expect(parseTheme(getOpenCodeTheme()).base).toBeDefined()
 })
 
-test("parses unversioned and explicit V1 themes lazily once", () => {
+test("detects V1 themes from their theme field and caches migrations", () => {
   const unversioned = structuredClone(opencodeV1)
   const explicit = { ...structuredClone(opencodeV1), version: 1 }
   const first = parseTheme(unversioned, "unversioned")
   const second = parseTheme(explicit, "explicit")
 
-  expect(first.version).toBe(2)
-  expect(second.version).toBe(2)
+  expect(first.base).toBeDefined()
+  expect(second.base).toBeDefined()
   expect(parseTheme(unversioned, "unversioned")).toBe(first)
   expect(parseTheme(explicit, "explicit")).toBe(second)
 })
 
 test("decodes native V2 themes lazily once", () => {
   const source = {
-    version: 2,
     base: getOpenCodeTheme().base,
     light: { ...getOpenCodeTheme().light, categorical: ["red"] },
   } as const
@@ -47,7 +46,7 @@ test("decodes native V2 themes lazily once", () => {
 })
 
 test("rejects invalid V2 themes when parsing", () => {
-  expect(() => parseTheme({ version: 2, light: { categorical: [] } }, "invalid-v2")).toThrow(
+  expect(() => parseTheme({ light: { categorical: [] } }, "invalid-v2")).toThrow(
     "Invalid theme: invalid-v2",
   )
 })

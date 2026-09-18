@@ -45,14 +45,13 @@ const definition = {
 } satisfies ThemeDefinition
 
 export const document = {
-  version: 2,
   base: getOpenCodeTheme().base,
   light: { hue: definition.hue },
   dark: definition,
 } satisfies ThemeDocument
-export const lightOnly = { version: 2, base: getOpenCodeTheme().base, light: { hue: definition.hue } } satisfies ThemeDocument
-export const darkOnly = { version: 2, base: getOpenCodeTheme().base, dark: definition } satisfies ThemeDocument
+export const lightOnly = { base: getOpenCodeTheme().base, light: { hue: definition.hue } } satisfies ThemeDocument
+export const darkOnly = { base: getOpenCodeTheme().base, dark: definition } satisfies ThemeDocument
 // @ts-expect-error A theme document must provide at least one mode.
-export const empty = { version: 2 } satisfies ThemeDocument
+export const empty = {} satisfies ThemeDocument
 // @ts-expect-error A base mode must be complete; partial tokens are only valid under @dialog.
-export const partial = { version: 2, base: { text, background }, light: { hue: definition.hue } } satisfies ThemeDocument
+export const partial = { base: { text, background }, light: { hue: definition.hue } } satisfies ThemeDocument

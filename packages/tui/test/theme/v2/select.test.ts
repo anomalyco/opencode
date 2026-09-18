@@ -13,8 +13,8 @@ test("selects complete light and dark themes independently", () => {
 })
 
 test("selects the available mode when the requested mode is missing", () => {
-  const lightOnly = { version: 2, base: getOpenCodeTheme().base, light: getOpenCodeTheme().light } as const
-  const darkOnly = { version: 2, base: getOpenCodeTheme().base, dark: getOpenCodeTheme().dark } as const
+  const lightOnly = { base: getOpenCodeTheme().base, light: getOpenCodeTheme().light } as const
+  const darkOnly = { base: getOpenCodeTheme().base, dark: getOpenCodeTheme().dark } as const
 
   expect(themeModes(lightOnly)).toEqual(["light"])
   expect(themeModes(darkOnly)).toEqual(["dark"])

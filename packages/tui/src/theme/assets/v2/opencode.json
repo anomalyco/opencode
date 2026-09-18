@@ -1,6 +1,5 @@
 {
   "$schema": "https://opencode.ai/theme.json",
-  "version": 2,
   "base": {
     "categorical": [
       "purple",

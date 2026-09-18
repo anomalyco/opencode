@@ -52,20 +52,14 @@ export function allThemes() {
 
 export function isThemeSource(source: unknown): source is ThemeDocumentSource {
   if (typeof source !== "object" || source === null || Array.isArray(source)) return false
-  return "theme" in source || "version" in source
+  return "theme" in source || "base" in source
 }
 
 export function parseTheme(source: ThemeDocumentSource, name = "theme") {
   const cached = parsed.get(source)
   if (cached) return cached
 
-  const version = source.version ?? 1
-  const document =
-    version === 1
-      ? migrateV1(source as ThemeV1Json)
-      : version === 2
-        ? decodeV2Theme(source, name)
-        : unsupportedThemeVersion(version)
+  const document = "theme" in source ? migrateV1(source as ThemeV1Json) : decodeV2Theme(source, name)
 
   parsed.set(source, document)
   return document
@@ -129,8 +123,4 @@ function decodeV2Theme(source: ThemeDocumentSource, name: string) {
   } catch (error) {
     throw themeDecodeError(error, name)
   }
-}
-
-function unsupportedThemeVersion(version: unknown): never {
-  throw new Error(`Unsupported theme version: ${String(version)}`)
 }

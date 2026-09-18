@@ -67,7 +67,6 @@ Its relevant structure looks like this:
 
 ```json title="~/.config/opencode/themes/ocean.json (excerpt)"
 {
-  "version": 2,
   "base": {
     "text": {
       "base": "#d8f3ff"
@@ -94,7 +93,7 @@ same name.
 
 ## Format
 
-Every V2 theme declares `version: 2`, one complete `base` token tree, and at least one `light` or `dark` hue palette.
+Every V2 theme declares one complete `base` token tree and at least one `light` or `dark` hue palette.
 Modes inherit only from that file's base; they do not inherit from the built-in OpenCode theme or from each other. Use
 the theme tool to generate a complete base before customizing it.
 
@@ -102,7 +101,6 @@ The examples below show only the sections relevant to each concept; they are not
 
 ```json title="themes/ocean.json"
 {
-  "version": 2,
   "base": {
     "text": {
       "base": "#16324f"
@@ -124,7 +122,6 @@ Use a hex color, `transparent`, or a reference to another theme color:
 
 ```json title="themes/ocean.json"
 {
-  "version": 2,
   "base": {
     "text": {
       "base": "#d8f3ff",
@@ -146,7 +143,6 @@ Override a hue alias to change a family of related colors at once:
 
 ```json title="themes/ocean.json"
 {
-  "version": 2,
   "base": {
     "categorical": ["accent", "purple", "green"]
   },
@@ -177,7 +173,6 @@ Use state keys to change interactive colors. Unspecified states use the nearest 
 
 ```json title="themes/ocean.json"
 {
-  "version": 2,
   "base": {
     "text": {
       "action": {
@@ -206,7 +201,6 @@ palette:
 
 ```json title="themes/ocean.json"
 {
-  "version": 2,
   "base": {
     "border": {
       "base": "$hue.neutral.700"
@@ -247,7 +241,6 @@ contextual `@dialog` surface. The TUI re-resolves the palette after applying `@d
 
 ```json title="themes/ocean.json"
 {
-  "version": 2,
   "base": {
     "background": {
       "base": "#071521",

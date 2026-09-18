@@ -222,7 +222,6 @@ test.each(["light", "dark"] as const)(
     }
     const { hue, ...tokens } = definition
     const source = {
-      version: 2,
       base: tokens,
       [mode]: { hue },
     }
@@ -241,8 +240,8 @@ test.each(["light", "dark"] as const)(
   async (mode) => {
     const expected = resolveThemeDocument(getOpenCodeTheme(), mode)
     for (const source of [
-      { version: 2, [mode]: { categorical: [] } },
-      { version: 2, [mode]: { text: { base: "$missing" } } },
+      { [mode]: { categorical: [] } },
+      { [mode]: { text: { base: "$missing" } } },
       undefined,
     ]) {
       if (source) await Bun.write(path.join(tmp.path, "themes", "mini-invalid.json"), JSON.stringify(source))
@@ -282,7 +281,7 @@ test.each(["light", "dark"] as const)(
     const base = selectTheme(getOpenCodeTheme(), mode)
     const definition = { ...base, text: { ...base.text, base: "#123456" } }
     const { hue, ...tokens } = definition
-    const source = { version: 2, base: tokens, [mode]: { hue } }
+    const source = { base: tokens, [mode]: { hue } }
     await Bun.write(path.join(tmp.path, "themes", "mini-one-mode.json"), JSON.stringify(source))
     for (const requested of ["light", "dark"] as const) {
       const theme = await resolveRunTheme(renderer({ colors: terminalColors({}, requested) }), {
