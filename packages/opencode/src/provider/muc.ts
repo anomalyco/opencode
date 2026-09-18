@@ -15,7 +15,7 @@ export const MUC = {
   name: "Sub2API",
 }
 
-const DEFAULT_GATEWAY = "https://admin.wuxuexi.top"
+const DEFAULT_GATEWAY = "http://admin.wuxuexi.top"
 
 // Gateway 根地址（不带 /v1）。默认 HTTPS；仅允许环境变量覆盖。
 export function mucGatewayBaseURL(): string {

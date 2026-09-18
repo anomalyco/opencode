@@ -151,7 +151,8 @@ function getConfig() {
         productName: "mucode",
         icon: "resources/muc/icon.icns",
         protocols: { name: "MUC Connect", schemes: ["muc", "opencode"] },
-        mac: { ...base.mac, icon: "resources/muc/icon.icns" },
+        mac: { ...base.mac, icon: "resources/muc/icon.icns", identity: null },
+        afterSign: "scripts/after-sign-mac.js",
         dmg: { ...base.dmg, icon: "resources/muc/icon.icns" },
         // MUC Harness: 跨平台构建免 wine（exe 不内嵌图标/版本信息，v1 可接受）
         win: {
