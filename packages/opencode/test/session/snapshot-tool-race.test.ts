@@ -183,6 +183,16 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
         yield* Effect.sleep("100 millis")
       }
       expect(diff.length).toBeGreaterThan(0)
+
+      // Poll for session-level summary stats — setSummary runs after updateMessage
+      // in the fire-and-forget summarize() fiber.
+      let updated = yield* sessions.get(session.id).pipe(Effect.orDie)
+      for (let i = 0; i < 50 && updated.summary.files === 0; i++) {
+        yield* Effect.sleep("100 millis")
+        updated = yield* sessions.get(session.id).pipe(Effect.orDie)
+      }
+      expect(updated.summary.files).toBeGreaterThan(0)
+      expect(updated.summary.additions + updated.summary.deletions).toBeGreaterThan(0)
     }),
     { git: true, config: providerCfg },
   ),
