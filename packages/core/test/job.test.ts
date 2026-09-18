@@ -275,6 +275,34 @@ describe("Job", () => {
     }),
   )
 
+  it.live("waits for background acknowledgment before releasing an observer", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const job = yield* jobs.start({
+        type: "shell",
+        recovery: {
+          kind: "shell",
+          sessionID: SessionSchema.ID.make("ses_background_await"),
+          shellID: "shell_background_await",
+          command: "echo done",
+        },
+        run: Effect.succeed("done"),
+      })
+      const background = yield* jobs.background(job.id)
+      if (!background?.notificationID) return yield* Effect.die("background marker missing")
+
+      // Settlement alone must not release an observer; only acknowledgment does.
+      const waiting = yield* jobs
+        .awaitBackground(background.notificationID)
+        .pipe(Effect.forkIn(yield* Scope.Scope, { startImmediately: true }))
+      expect(yield* Fiber.await(waiting).pipe(Effect.timeoutOption("20 millis"))).toMatchObject({ _tag: "None" })
+
+      yield* jobs.completeBackground(background.notificationID)
+      yield* Fiber.join(waiting)
+      expect(yield* jobs.pendingBackground).toEqual([])
+    }),
+  )
+
   it.live("persists backgroundAll ownership before releasing a blocked subagent", () =>
     Effect.gen(function* () {
       const jobs = yield* Job.Service
