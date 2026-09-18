@@ -36,6 +36,29 @@ test("provides reactive properties, states, surfaces, and color operations", () 
   expect(theme.background.action.primary.pressed).toBe(resolved().background.action.primary.pressed)
   expect(theme.background.action.primary.disabled).toBe(resolved().background.action.primary.disabled)
   expect(theme.background.action.primary.default).toBe(resolved().background.action.primary.default)
+  expect(
+    theme.background.action.primary.state({
+      disabled: true,
+      pressed: true,
+      focused: true,
+      selected: true,
+      hovered: true,
+    }),
+  ).toBe(theme.background.action.primary.disabled)
+  expect(theme.background.action.primary.state({ pressed: true, focused: true, selected: true, hovered: true })).toBe(
+    theme.background.action.primary.pressed,
+  )
+  expect(theme.background.action.primary.state({ focused: true, selected: true, hovered: true })).toBe(
+    theme.background.action.primary.focused,
+  )
+  expect(theme.background.action.primary.state({ selected: true, hovered: true })).toBe(
+    theme.background.action.primary.selected,
+  )
+  expect(theme.background.action.primary.state({ hovered: true })).toBe(theme.background.action.primary.hovered)
+  expect(theme.background.action.primary.state({ disabled: false, hovered: false })).toBe(
+    theme.background.action.primary.default,
+  )
+  expect(theme.text.formfield.state({ focused: true, selected: true })).toBe(theme.text.formfield.focused)
   expect(theme.background.action.destructive.disabled).toBe(resolved().background.action.destructive.disabled)
   expect(theme.background.formfield.hovered).toBe(resolved().background.formfield.hovered)
   expect(theme.background.formfield.selected).toBe(resolved().background.formfield.selected)

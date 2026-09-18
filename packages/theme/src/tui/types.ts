@@ -17,7 +17,10 @@ export type HueScale = Readonly<Record<HueStep, RGBA>>
 export type Hue = Readonly<Record<BaseHue | HueAlias, HueScale>>
 export type HueSource = Readonly<{ hue: BaseHue | HueAlias; step: HueStep }>
 export type Categorical = readonly HueScale[]
-export type StatefulColor = Readonly<Record<ResolvedActionState, RGBA>>
+export type ActionStates = Readonly<Partial<Record<ActionState, boolean>>>
+export type StatefulColor = Readonly<Record<ResolvedActionState, RGBA>> & {
+  readonly state: (states: ActionStates) => RGBA
+}
 export type FormfieldColor = StatefulColor
 
 export type ResolvedThemeTokens = {
