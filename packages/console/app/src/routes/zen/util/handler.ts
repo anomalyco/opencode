@@ -33,6 +33,7 @@ import { anthropicHelper } from "./provider/anthropic"
 import { googleHelper } from "./provider/google"
 import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
+import { systemoneHelper } from "./provider/systemone"
 import { createRateLimiter as createIpRateLimiter } from "./ipRateLimiter"
 import { createRateLimiter as createKeyRateLimiter } from "./keyRateLimiter"
 import { createTrialLimiter } from "./trialLimiter"
@@ -685,6 +686,7 @@ export async function handler(
         if (format === "anthropic") return anthropicHelper(opts)
         if (format === "google") return googleHelper(opts)
         if (format === "openai") return openaiHelper(opts)
+        if (format === "systemone") return systemoneHelper(opts)
         return oaCompatHelper(opts)
       })(),
     }
