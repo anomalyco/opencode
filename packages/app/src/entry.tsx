@@ -11,6 +11,13 @@ import { dict as zh } from "@/i18n/zh"
 import { authFromToken } from "@/utils/server"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
+import { resolveBrand } from "@opencode-ai/brand"
+
+// 校园 Harness: 渲染层声明品牌（theme.css 的 HUBU 调色板经 data-brand 挂载）
+const campusBrand = resolveBrand()
+if (campusBrand.campus && typeof document !== "undefined") {
+  document.documentElement.dataset.brand = campusBrand.id
+}
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 

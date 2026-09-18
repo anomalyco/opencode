@@ -1,9 +1,12 @@
 // MUC Harness: 连接控制器 —— 把 deep link code 变成本机安全凭据，
 // 并以内存环境变量 MUC_API_KEY 注入 opencode 核心（不落盘）。
 
+import { resolveBrand } from "@opencode-ai/brand"
 import { MucSecretStore, type MucConnectionState } from "./secret-store"
 import { exchangeMucCode, countGatewayModels, MucExchangeError } from "./connect"
 import { mucGatewayBaseURL } from "./gateway"
+
+const brand = resolveBrand()
 
 export class MucConnectController {
   constructor(private store: MucSecretStore) {}
@@ -15,7 +18,7 @@ export class MucConnectController {
   async connect(code: string): Promise<{ state: MucConnectionState; modelCount?: number }> {
     const gateway = mucGatewayBaseURL()
     const deviceName = this.store.getDeviceId().slice(0, 8)
-    const result = await exchangeMucCode(gateway, code, `MUC-${deviceName}`)
+    const result = await exchangeMucCode(gateway, code, `${brand.shortName}-${deviceName}`)
     const state = await this.store.set({
       gateway: result.gateway,
       apiKey: result.apiKey,
@@ -30,7 +33,7 @@ export class MucConnectController {
 
   async disconnect(): Promise<MucConnectionState> {
     await this.store.clear()
-    delete process.env.MUC_API_KEY
+    delete process.env[brand.apiKeyEnvVar]
     return { connected: false }
   }
 
@@ -43,7 +46,7 @@ export class MucConnectController {
   }
 
   private applyToProcessEnv(apiKey: string): void {
-    process.env.MUC_API_KEY = apiKey
+    process.env[brand.apiKeyEnvVar] = apiKey
   }
 }
 

@@ -6,6 +6,7 @@ import { safeStorage } from "electron"
 import fs from "node:fs"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
+import { resolveBrand } from "@opencode-ai/brand"
 
 export type MucCredential = {
   gateway: string
@@ -32,9 +33,11 @@ export class MucSecretStore {
   private deviceId: string
 
   constructor(userDataDir: string) {
-    this.file = path.join(userDataDir, "muc-credential.bin")
+    // 各品牌凭据文件隔离（muc 保持历史文件名，老用户凭据不失效）
+    const prefix = resolveBrand().id === "muc" ? "muc" : resolveBrand().id
+    this.file = path.join(userDataDir, `${prefix}-credential.bin`)
     // 设备 ID 非机密，明文存放，用于 per-device Key 撤销对账
-    const idFile = path.join(userDataDir, "muc-device-id")
+    const idFile = path.join(userDataDir, `${prefix}-device-id`)
     try {
       this.deviceId = fs.readFileSync(idFile, "utf8").trim()
     } catch {

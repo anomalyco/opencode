@@ -1,0 +1,19 @@
+{
+  "name": "@opencode-ai/brand",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./logos": "./src/logos.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "catalog:",
+    "@types/node": "catalog:",
+    "@types/bun": "catalog:"
+  }
+}

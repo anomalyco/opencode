@@ -1,0 +1,42 @@
+{
+  "id": "muc",
+  "campus": true,
+  "name": "中央民族大学",
+  "englishName": "Minzu University of China",
+  "shortName": "MUC",
+  "productName": "MUC AI Harness",
+  "motto": "美美与共，知行合一",
+  "mottoDisplay": "美美与共 · 知行合一",
+  "founded": "1941",
+  "appId": "cn.edu.muc.harness",
+  "appName": "mucode",
+  "protocolScheme": "muc",
+  "gatewayURL": "http://admin.wuxuexi.top",
+  "gatewayEnvVar": "MUC_GATEWAY_URL",
+  "apiKeyEnvVar": "MUC_API_KEY",
+  "exchangePath": "/api/v1/muc/exchange",
+  "sitePath": "/muc",
+  "tuiTheme": "minzu",
+  "colors": {
+    "primary": "#AC0E0F",
+    "primaryDark": "#8f0c0d",
+    "gold": "#D9A94E",
+    "goldBright": "#E8C97C",
+    "background": "#0d0a0b",
+    "surface": "#171113",
+    "onDark": "#F5EDE4",
+    "mutedOnDark": "#BCA992",
+    "onDarkSoft": "#c9bfb2"
+  },
+  "downloads": {
+    "macArm": "mucode-mac-arm64.dmg",
+    "macIntel": "mucode-mac-x64.dmg",
+    "win": "mucode-win-x64.exe"
+  },
+  "splash": {
+    "title": "MUC AI Harness",
+    "subtitle": "中央民族大学",
+    "footer": "",
+    "showFounded": false
+  }
+}

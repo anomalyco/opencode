@@ -1,4 +1,14 @@
-const logo = {
+// 各品牌 TUI ASCII 画与横幅数据。muc 画与历史版本逐字节一致（勿改笔画）；
+// hubu 为块状 "HUBU" 字样（左 HU / 右 BU，与 muc 相同的左右拼接 API）。
+
+export interface CampusLogo {
+  left: string[]
+  right: string[]
+  motto: string
+  school: string
+}
+
+export const logoMuc: CampusLogo = {
   left: [
     "      ▄█              █▄        ▄▄▄▄▄▄▄▄▄▄▄▄",
     " ▄▄▄▄▄██▄▄▄▄▄▄   ▓██████████    ██▀▓▓▓▓▓▓▓██",
@@ -19,43 +29,30 @@ const logo = {
     "▄█▀▄██▓▄█▀ ▀█▄▓ ▄██▀      ▀██▄     ▄▄▄█▓",
     " ▓ ▀▀  ▀     ▀  ▀▓          ▓      ▓▀▀▓",
   ],
+  motto: "美美与共 · 知行合一",
+  school: "MINZU UNIVERSITY OF CHINA",
 }
 
-const reset = "\x1b[0m"
-const bold = "\x1b[1m"
-const dim = "\x1b[90m"
-
-// 校园 harness: 会话尾声用品牌色校名 + 金色校训（muc 民大红金 / hubu 深绿青铜）
-import { resolveBrand } from "@opencode-ai/brand"
-const isHubu = resolveBrand().id === "hubu"
-const mucRed = isHubu ? "\x1b[38;2;46;144;112m" : "\x1b[38;2;206;58;63m"
-const mucGold = isHubu ? "\x1b[38;2;188;157;83m" : "\x1b[38;2;217;169;78m"
-
-function wordmark(pad = "") {
-  const draw = (line: string, fg: string) =>
-    [...line]
-      .map((char) => {
-        if (char === " ") return " "
-        return `${fg}${char}${reset}`
-      })
-      .join("")
-
-  return logo.left.map((line, index) => {
-    const left = draw(line, mucRed)
-    const right = draw(logo.right[index] ?? "", mucRed)
-    return `${pad}${left} ${right}`
-  })
-}
-
-export function sessionEpilogue(input: { title: string; sessionID?: string }) {
-  const weak = (text: string) => `${dim}${text.padEnd(10, " ")}${reset}`
-  return [
-    ...wordmark("  "),
-    "",
-    `  ${mucGold}美美与共 · 知行合一${reset}`,
-    "",
-    `  ${weak("Session")}${bold}${input.title}${reset}`,
-    `  ${weak("Continue")}${bold}opencode -s ${input.sessionID}${reset}`,
-    "",
-  ].join("\n")
+// HUBU（湖北大学）：块状 "HUBU" 半块字符画，7 行 × 每半 16 列
+export const logoHubu: CampusLogo = {
+  left: [
+    "██   ██  ██   ██",
+    "██   ██  ██   ██",
+    "██   ██  ██   ██",
+    "███████  ██   ██",
+    "██   ██  ██   ██",
+    "██   ██  ██▄ ▄██",
+    "██   ██  ▀█████▀",
+  ],
+  right: [
+    "██████   ██   ██",
+    "██  ▀██  ██   ██",
+    "██████   ██   ██",
+    "██  ▄██  ██   ██",
+    "██████   ██   ██",
+    "██  ▀██  ██▄ ▄██",
+    "██████   ▀█████▀",
+  ],
+  motto: "日思日睿 · 笃志笃行",
+  school: "HUBEI UNIVERSITY · 1931",
 }

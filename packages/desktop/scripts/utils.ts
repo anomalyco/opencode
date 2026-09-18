@@ -5,11 +5,11 @@ import { join } from "node:path"
 
 const CLI_VERSION = "0.0.0-next-16350"
 
-export type Channel = "dev" | "beta" | "prod" | "muc"
+export type Channel = "dev" | "beta" | "prod" | "muc" | "hubu"
 
 export function resolveChannel(): Channel {
   const raw = Bun.env.OPENCODE_CHANNEL
-  if (raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc") return raw
+  if (raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc" || raw === "hubu") return raw
   return "dev"
 }
 

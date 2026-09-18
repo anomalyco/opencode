@@ -1,0 +1,42 @@
+{
+  "id": "hubu",
+  "campus": true,
+  "name": "湖北大学",
+  "englishName": "Hubei University",
+  "shortName": "HUBU",
+  "productName": "HUBU AI",
+  "motto": "日思日睿，笃志笃行",
+  "mottoDisplay": "日思日睿 · 笃志笃行",
+  "founded": "1931",
+  "appId": "cn.edu.hubu.harness",
+  "appName": "HUBU AI",
+  "protocolScheme": "hubu",
+  "gatewayURL": "http://localhost:8081",
+  "gatewayEnvVar": "HUBU_GATEWAY_URL",
+  "apiKeyEnvVar": "HUBU_API_KEY",
+  "exchangePath": "/api/v1/hubu/exchange",
+  "sitePath": "/hubu",
+  "tuiTheme": "hubu",
+  "colors": {
+    "primary": "#135440",
+    "primaryDark": "#0F4433",
+    "gold": "#BC9D53",
+    "goldBright": "#E0C57C",
+    "background": "#0B1F17",
+    "surface": "#142B21",
+    "onDark": "#F2F0E6",
+    "mutedOnDark": "#9DB5A8",
+    "onDarkSoft": "#A8C0B4"
+  },
+  "downloads": {
+    "macArm": "hubu-ai-mac-arm64.dmg",
+    "macIntel": "hubu-ai-mac-x64.dmg",
+    "win": "hubu-ai-win-x64.exe"
+  },
+  "splash": {
+    "title": "HUBU AI",
+    "subtitle": "湖北大学 HUBEI UNIVERSITY",
+    "footer": "Powered by HUBU AI Harness",
+    "showFounded": true
+  }
+}

@@ -4,8 +4,9 @@
 import { ipcMain } from "electron"
 import { MucSecretStore } from "./secret-store"
 import { MucConnectController } from "./controller"
-import { parseMucUrl } from "./deep-link"
+import { parseCampusUrl } from "./deep-link"
 import { isMucExchangeError } from "./controller"
+import { resolveBrand } from "@opencode-ai/brand"
 
 export type MucDeps = {
   getPendingConnectCode: () => string | null
@@ -20,7 +21,10 @@ export function registerMucIpcHandlers(userDataDir: string, deps: MucDeps): MucC
   })
 
   ipcMain.handle("muc:connect", async (_event, code: unknown) => {
-    if (typeof code !== "string" || !parseMucUrl(`muc://connect?code=${code}`)) {
+    if (
+      typeof code !== "string" ||
+      !parseCampusUrl(`${resolveBrand().protocolScheme}://connect?code=${code}`)
+    ) {
       return { ok: false, error: "invalid_code" as const }
     }
     try {

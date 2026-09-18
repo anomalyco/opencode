@@ -2,13 +2,17 @@ import { RGBA, TextAttributes } from "@opentui/core"
 import { For, type JSX } from "solid-js"
 import { tint, useTheme } from "../context/theme"
 import { logo, logoMotto, logoSchool } from "../logo"
+import { resolveBrand } from "@opencode-ai/brand"
 
 export function Logo() {
   const { theme } = useTheme()
-  // MUC harness: 校名横幅用烧入的民大红/校训金渲染，不随主题变化
-  const mucRed = RGBA.fromHex("#CE3A3F")
-  const mucGold = RGBA.fromHex("#D9A94E")
-  const mucMuted = RGBA.fromHex("#BCA992")
+  // 校园 harness: 校名横幅用烧入的品牌色渲染，不随主题变化
+  // muc：民大红亮部/校训金/暖沙；hubu：深湖大绿亮部/青铜金/灰绿
+  const brand = resolveBrand()
+  const isHubu = brand.id === "hubu"
+  const mucRed = RGBA.fromHex(isHubu ? "#2E9070" : "#CE3A3F")
+  const mucGold = RGBA.fromHex(isHubu ? "#BC9D53" : "#D9A94E")
+  const mucMuted = RGBA.fromHex(isHubu ? "#9DB5A8" : "#BCA992")
 
   const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
     const shadow = tint(theme.background, fg, 0.25)

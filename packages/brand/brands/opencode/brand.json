@@ -1,0 +1,42 @@
+{
+  "id": "opencode",
+  "campus": false,
+  "name": "OpenCode",
+  "englishName": "OpenCode",
+  "shortName": "OpenCode",
+  "productName": "OpenCode",
+  "motto": "",
+  "mottoDisplay": "",
+  "founded": "",
+  "appId": "ai.opencode.desktop",
+  "appName": "OpenCode",
+  "protocolScheme": "opencode",
+  "gatewayURL": "",
+  "gatewayEnvVar": "OPENCODE_GATEWAY_URL",
+  "apiKeyEnvVar": "OPENCODE_API_KEY",
+  "exchangePath": "",
+  "sitePath": "",
+  "tuiTheme": "opencode",
+  "colors": {
+    "primary": "#8B5CF6",
+    "primaryDark": "#7C3AED",
+    "gold": "#D9A94E",
+    "goldBright": "#E8C97C",
+    "background": "#0B0B0C",
+    "surface": "#17181A",
+    "onDark": "#F5F5F4",
+    "mutedOnDark": "#A8A29E",
+    "onDarkSoft": "#D6D3D1"
+  },
+  "downloads": {
+    "macArm": "",
+    "macIntel": "",
+    "win": ""
+  },
+  "splash": {
+    "title": "OpenCode",
+    "subtitle": "",
+    "footer": "",
+    "showFounded": false
+  }
+}

@@ -1,6 +1,10 @@
-// MUC Harness: 一次性授权码交换客户端。
+// 校园 Harness: 一次性授权码交换客户端（MUC / HUBU 共用）。
 // 只与用户自己的网关通信；请求体不含任何管理员凭据。
 // 服务器返回的是该用户（per-device）自己的 API Key。
+
+import { resolveBrand } from "@opencode-ai/brand"
+
+const brand = resolveBrand()
 
 export type MucExchangeResult = {
   gateway: string
@@ -19,7 +23,7 @@ export class MucExchangeError extends Error {
 }
 
 export async function exchangeMucCode(gateway: string, code: string, deviceName: string): Promise<MucExchangeResult> {
-  const url = gateway.replace(/\/+$/, "") + "/api/v1/muc/exchange"
+  const url = gateway.replace(/\/+$/, "") + brand.exchangePath
   let res: Response
   try {
     res = await fetch(url, {
@@ -53,7 +57,7 @@ export async function exchangeMucCode(gateway: string, code: string, deviceName:
   return {
     gateway: String(body.gateway).replace(/\/+$/, ""),
     apiKey: String(body.api_key),
-    keyName: String(body.key_name ?? "MUC"),
+    keyName: String(body.key_name ?? brand.shortName),
     user: String(body.user ?? ""),
   }
 }

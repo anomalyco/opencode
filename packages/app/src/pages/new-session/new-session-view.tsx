@@ -3,7 +3,12 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { WordmarkV2 } from "@opencode-ai/ui/v2/wordmark-v2"
-import campusImg from "@/assets/muc/campus.png"  // MUC Harness: 校门插画
+import mucCampusImg from "@/assets/muc/campus.png" // MUC Harness: 校门插画
+import hubuHeroImg from "@/assets/hubu/hubu-hero.png" // HUBU: 主视觉
+import { resolveBrand } from "@opencode-ai/brand"
+
+const campusBrand = resolveBrand()
+const campusImg = campusBrand.id === "hubu" ? hubuHeroImg : mucCampusImg
 import { Show, createMemo, createSignal, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
@@ -43,12 +48,27 @@ export function NewSessionView(props: {
           alt=""
           class="pointer-events-none absolute inset-0 h-full w-full object-cover"
         />
-        <div class="pointer-events-none absolute inset-x-0 top-0 h-[55%] bg-gradient-to-b from-[#FBF6ED] via-[#FBF6ED]/85 to-transparent" />
+        {campusBrand.id === "hubu" ? (
+          <div
+            class="pointer-events-none absolute inset-x-0 top-0 h-[55%]"
+            style={{
+              background:
+                "linear-gradient(to bottom, rgba(247,243,231,1), rgba(247,243,231,0.85) 50%, transparent)",
+            }}
+          />
+        ) : (
+          <div class="pointer-events-none absolute inset-x-0 top-0 h-[55%] bg-gradient-to-b from-[#FBF6ED] via-[#FBF6ED]/85 to-transparent" />
+        )}
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <WordmarkV2 class="h-auto w-full" />
-            <p class="mt-2 text-center text-xs font-medium tracking-[0.2em] text-[#8f6a3c]">
-              中央民族大学 · 美美与共 知行合一
+            <p
+              class="mt-2 text-center text-xs font-medium tracking-[0.2em]"
+              style={{ color: campusBrand.id === "hubu" ? campusBrand.colors.primary : "#8f6a3c" }}
+            >
+              {campusBrand.id === "hubu"
+                ? `${campusBrand.name} · ${campusBrand.mottoDisplay}`
+                : "中央民族大学 · 美美与共 知行合一"}
             </p>
             <div class="mt-8 flex flex-col gap-8">
               <PromptInputV2Composer controller={props.input} />

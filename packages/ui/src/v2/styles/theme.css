@@ -527,3 +527,32 @@
   --v2-border-border-focus: #ac0e0f;
   --v2-border-border-strong: #b39b7d;
 }
+
+
+/* ── HUBU: 湖北大学 campus palette ──
+   仅当渲染层在 <html> 上设置 data-brand="hubu" 时生效；
+   muc 品牌不设置该属性，此块完全不参与（历史样式零变化）。
+   色值采样自湖北大学主视觉图（深湖大绿/青铜金），非官方 VI 标准色。 */
+:root[data-brand="hubu"],
+:root[data-brand="hubu"]:not([data-theme="light"]),
+:root[data-brand="hubu"] [data-color-scheme="light"],
+:root[data-brand="hubu"] [data-color-scheme="dark"] {
+  --v2-background-bg-base: #f3f6ef;
+  --v2-background-bg-deep: #e9efe4;
+  --v2-background-bg-layer-01: #ecf1e7;
+  --v2-background-bg-layer-02: #e4ebdf;
+  --v2-background-bg-layer-03: #dbe4d5;
+  --v2-background-bg-inverse: #1e2b23;
+  --v2-background-bg-contrast: #eef2ea;
+  --v2-background-bg-accent: #135440;
+  --v2-text-text-base: #1c2822;
+  --v2-text-text-accent: #135440;
+  --v2-text-text-accent-hover: #0f4433;
+  --v2-text-text-code-accent: #0f4433;
+  --v2-icon-icon-accent: #135440;
+  --v2-icon-icon-accent-hover: #0f4433;
+  --v2-icon-icon-base: #3c4a42;
+  --v2-icon-icon-muted: #7a8a80;
+  --v2-border-border-focus: #135440;
+  --v2-border-border-strong: #93a89a;
+}

@@ -49,20 +49,26 @@ import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
-import { parseMucUrl } from "./muc/deep-link"
+import { parseCampusUrl } from "./muc/deep-link"
 import { registerMucIpcHandlers } from "./muc/ipc"
+import { BRANDS, resolveBrand } from "@opencode-ai/brand"
+
+// 校园 Harness: 品牌由通道（BRAND > OPENCODE_CHANNEL）解析；muc 通道保持历史行为
+const BRAND = resolveBrand()
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
   beta: "OpenCode Beta",
   prod: "OpenCode",
   muc: "mucode",
+  hubu: BRANDS.hubu.appName,
 }
 const APP_IDS: Record<string, string> = {
   dev: "ai.opencode.desktop.dev",
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
   muc: "cn.edu.muc.harness",
+  hubu: BRANDS.hubu.appId,
 }
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const SIDECAR_VERSION = process.env.OPENCODE_SIDECAR_V2 === "1" ? "v2" : "v1"
@@ -72,7 +78,7 @@ let logger: ReturnType<typeof initLogging>
 let server: SidecarListener | null = null
 
 const pendingDeepLinks: string[] = []
-// MUC Harness: 最近一次 muc://connect?code= 的授权码（一次性消费）
+// 校园 Harness: 最近一次 <scheme>://connect?code= 的授权码（一次性消费）
 let pendingMucConnectCode: string | null = null
 
 function useEnvProxy() {
@@ -86,12 +92,12 @@ function useEnvProxy() {
 
 function emitDeepLinks(urls: string[]) {
   if (urls.length === 0) return
-  // MUC Harness: muc://connect?code=... → 捕获授权码（不写入日志）
+  // 校园 Harness: <scheme>://connect?code=... → 捕获授权码（不写入日志）
   for (const url of urls) {
-    const link = parseMucUrl(url)
+    const link = parseCampusUrl(url, BRAND.protocolScheme)
     if (link) {
       pendingMucConnectCode = link.code
-      logger.log("muc connect deep link received")
+      logger.log("campus connect deep link received", { scheme: BRAND.protocolScheme })
     }
   }
   pendingDeepLinks.push(...urls)
@@ -217,7 +223,9 @@ const main = Effect.gen(function* () {
   const shellEnv = preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
-    const urls = argv.filter((arg: string) => arg.startsWith("opencode://") || arg.startsWith("muc://"))
+    const urls = argv.filter(
+      (arg: string) => arg.startsWith("opencode://") || arg.startsWith(`${BRAND.protocolScheme}://`),
+    )
     if (urls.length) {
       logger.log("deep link received via second-instance", { count: urls.length, kinds: urls.map((u) => u.split("?")[0]) })
       emitDeepLinks(urls)
@@ -283,8 +291,10 @@ const main = Effect.gen(function* () {
     ),
   )
   app.setAsDefaultProtocolClient("opencode")
-  // MUC Harness: 注册 muc:// 协议（muc://connect?code=...）
-  app.setAsDefaultProtocolClient("muc")
+  // 校园 Harness: 注册品牌深链协议（muc:// / hubu://）
+  if (BRAND.campus) app.setAsDefaultProtocolClient(BRAND.protocolScheme)
+  // 校园 Harness: 把品牌传给内嵌 opencode sidecar（核心按 BRAND 解析网关/凭据变量）
+  if (BRAND.campus) process.env.BRAND = BRAND.id
   registerRendererProtocol()
   setDockIcon()
   const updater = setupAutoUpdater(stopSidecars)

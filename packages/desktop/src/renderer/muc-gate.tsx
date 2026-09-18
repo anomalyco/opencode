@@ -1,8 +1,21 @@
-// MUC Harness: 首次连接门 —— 未连接账户时以品牌页拦截主界面；
-// 处理 muc://connect?code= 冷/热启动流程：验证授权 → 存凭据 → 同步模型 → 进入主界面。
+// 校园 Harness（MUC / HUBU 共用）：首次连接门 —— 未连接账户时以品牌页拦截主界面；
+// 处理 <scheme>://connect?code= 冷/热启动流程：验证授权 → 存凭据 → 同步模型 → 进入主界面。
+// 品牌数据来自 @opencode-ai/brand（muc 渲染与历史版本一致）。
 
 import { Show, createContext, createSignal, useContext, onMount, onCleanup, type JSX, type Accessor } from "solid-js"
-import campusImg from "./assets/muc-campus.png"
+import { resolveBrand } from "@opencode-ai/brand"
+import mucCampusImg from "./assets/muc-campus.png"
+import hubuHeroImg from "./assets/hubu-hero.png"
+
+const brand = resolveBrand()
+const campusImg = brand.id === "hubu" ? hubuHeroImg : mucCampusImg
+const siteOrigin = (): string => {
+  // muc 保持历史逻辑（本地渲染时跳正式站）；hubu 走品牌网关
+  if (brand.id === "muc") {
+    return `${location.protocol}//${location.hostname === "localhost" ? "admin.wuxuexi.top" : location.hostname}`
+  }
+  return brand.gatewayURL
+}
 
 type MucState =
   | { connected: false }
@@ -69,11 +82,11 @@ export function createMucGate(): { ready: Accessor<boolean>; MucGate: (props: { 
     })()
   })
 
-  // 热启动深链：连接门挂起期间收到新的 muc://connect
+  // 热启动深链：连接门挂起期间收到新的 <scheme>://connect
   const onDeepLink = (event: Event): void => {
     const detail = (event as CustomEvent<{ urls: string[] }>).detail
     for (const url of detail?.urls ?? []) {
-      if (!url.startsWith("muc://")) continue
+      if (!url.startsWith(`${brand.protocolScheme}://`)) continue
       try {
         const u = new URL(url)
         const code = u.searchParams.get("code")
@@ -103,13 +116,33 @@ function MucConnectPage(props: { phase: Phase; onRetry: () => void }): JSX.Eleme
     return "正在同步模型..."
   }
   return (
-    <div class="relative flex h-screen w-screen flex-col items-center justify-center overflow-hidden bg-[#0d0a0b] text-white">
-      <img src={campusImg} alt="" class="pointer-events-none absolute inset-x-0 bottom-0 w-full object-cover opacity-90" />
-      <div class="absolute inset-0 bg-gradient-to-b from-[#0d0a0b] via-[#0d0a0b]/70 to-transparent" style={{ "background-size": "100% 60%", "background-repeat": "no-repeat", "background-position": "top" }} />
+    <div
+      class="relative flex h-screen w-screen flex-col items-center justify-center overflow-hidden text-white"
+      style={{ "background-color": brand.colors.background }}
+    >
+      <img src={campusImg} alt="" class="pointer-events-none absolute inset-x-0 bottom-0 w-full object-cover object-bottom opacity-90" />
+      <div
+        class="absolute inset-0"
+        style={{
+          background: `linear-gradient(to bottom, ${brand.colors.background}, ${brand.colors.background}b3 70%, transparent)`,
+          "background-size": "100% 60%",
+          "background-repeat": "no-repeat",
+          "background-position": "top",
+        }}
+      />
       <div class="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
-        <h1 class="text-3xl font-bold tracking-widest">中央民族大学</h1>
-        <p class="text-sm text-[#c9bfb2]">MUC AI Harness</p>
-        <p class="mt-2 text-[#d9a94e]">美美与共 · 知行合一</p>
+        <h1 class="text-3xl font-bold tracking-widest">{brand.name}</h1>
+        <p class="text-sm" style={{ color: brand.colors.onDarkSoft }}>
+          {brand.splash.subtitle}
+        </p>
+        <Show when={brand.splash.showFounded}>
+          <p class="text-xs tracking-[0.3em]" style={{ color: brand.colors.gold }}>
+            {brand.founded}
+          </p>
+        </Show>
+        <p class="mt-2" style={{ color: brand.colors.gold }}>
+          {brand.mottoDisplay}
+        </p>
       </div>
       <div class="relative z-10 mt-10 flex w-[420px] max-w-[90vw] flex-col items-center gap-4">
         <Show
@@ -118,12 +151,13 @@ function MucConnectPage(props: { phase: Phase; onRetry: () => void }): JSX.Eleme
             <>
               <p class="text-sm text-gray-300">尚未连接账户</p>
               <button
-                class="rounded-xl bg-[#AC0E0F] px-8 py-3 text-sm font-semibold text-white shadow transition hover:bg-[#8f0c0d]"
-                onClick={() => window.open(`${location.protocol}//${location.hostname === "localhost" ? "admin.wuxuexi.top" : location.hostname}/muc`, "_blank")}
+                class="rounded-xl px-8 py-3 text-sm font-semibold text-white shadow transition"
+                style={{ "background-color": brand.colors.primary }}
+                onClick={() => window.open(`${siteOrigin()}${brand.sitePath}`, "_blank")}
               >
-                从网站连接 MUC
+                从网站连接 {brand.shortName}
               </button>
-              <p class="text-xs text-gray-400">等待网站授权... 登录网站后点击「一键连接 MUC」</p>
+              <p class="text-xs text-gray-400">等待网站授权... 登录网站后点击「一键连接 {brand.shortName}」</p>
             </>
           }
         >
@@ -131,7 +165,7 @@ function MucConnectPage(props: { phase: Phase; onRetry: () => void }): JSX.Eleme
             when={props.phase.kind !== "connecting"}
             fallback={
               <div class="flex flex-col items-center gap-3">
-                <div class="h-8 w-8 animate-spin rounded-full border-2 border-[#AC0E0F] border-t-transparent" />
+                <div class="h-8 w-8 animate-spin rounded-full border-2" style={{ "border-color": brand.colors.primary, "border-top-color": "transparent" }} />
                 <p class="text-sm text-gray-200">{connectingLabel()}</p>
               </div>
             }
@@ -142,7 +176,7 @@ function MucConnectPage(props: { phase: Phase; onRetry: () => void }): JSX.Eleme
                 <div class="rounded-xl border border-red-800 bg-red-950/60 p-4 text-sm text-red-200">
                   <p class="font-medium">连接失败</p>
                   <p class="mt-1">{props.phase.kind === "error" ? props.phase.error : ""}</p>
-                  <button class="mt-3 rounded-lg bg-[#AC0E0F] px-4 py-2 text-xs text-white" onClick={() => props.onRetry()}>
+                  <button class="mt-3 rounded-lg px-4 py-2 text-xs text-white" style={{ "background-color": brand.colors.primary }} onClick={() => props.onRetry()}>
                     返回
                   </button>
                 </div>
@@ -155,7 +189,8 @@ function MucConnectPage(props: { phase: Phase; onRetry: () => void }): JSX.Eleme
                   ✓ 已同步{props.phase.kind === "success" && props.phase.modelCount ? ` ${props.phase.modelCount} 个` : ""}模型
                 </p>
                 <button
-                  class="mt-4 w-full rounded-xl bg-[#AC0E0F] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#8f0c0d]"
+                  class="mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition"
+                  style={{ "background-color": brand.colors.primary }}
                   onClick={() => window.api.relaunch()}
                 >
                   开始使用
@@ -165,6 +200,11 @@ function MucConnectPage(props: { phase: Phase; onRetry: () => void }): JSX.Eleme
           </Show>
         </Show>
       </div>
+      <Show when={brand.splash.footer}>
+        <p class="absolute bottom-5 left-0 right-0 z-10 text-center text-xs" style={{ color: brand.colors.mutedOnDark }}>
+          {brand.splash.footer}
+        </p>
+      </Show>
     </div>
   )
 }

@@ -31,19 +31,36 @@ async function signWindows(configuration: { path: string }) {
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
-  if (raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc") return raw
+  if (raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc" || raw === "hubu") return raw
   return "dev"
 })()
+
+// 校园品牌档案镜像（node 侧 fs 读取，避免 TS 模块解析差异）
+import { readFileSync } from "node:fs"
+const brandOf = (id: string) =>
+  JSON.parse(readFileSync(path.join(packageDir, "../brand/brands", id, "brand.json"), "utf-8")) as {
+    appId: string
+    appName: string
+    protocolScheme: string
+    downloads: { macArm: string; macIntel: string; win: string }
+  }
+const HUBU = brandOf("hubu")
 
 const APP_IDS = {
   dev: "ai.opencode.desktop.dev",
   beta: "ai.opencode.desktop.beta",
   prod: "ai.opencode.desktop",
   muc: "cn.edu.muc.harness",
+  hubu: HUBU.appId,
 } as const
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: channel === "muc" ? "mucode-${os}-${arch}.${ext}" : "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName:
+    channel === "muc"
+      ? "mucode-${os}-${arch}.${ext}"
+      : channel === "hubu"
+        ? "hubu-ai-${os}-${arch}.${ext}"
+        : "opencode-desktop-${os}-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -58,7 +75,7 @@ const getBase = (appId: string): Configuration => ({
   },
   files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
   extraResources: [
-    ...(channel === "dev" || channel === "muc"
+    ...(channel === "dev" || channel === "muc" || channel === "hubu"
       ? [
           {
             from: "resources/",
@@ -164,6 +181,29 @@ function getConfig() {
           oneClick: true,
           installerIcon: "resources/muc/icon.ico",
           uninstallerIcon: "resources/muc/icon.ico",
+        },
+      }
+    }
+    case "hubu": {
+      return {
+        ...base,
+        appId,
+        productName: HUBU.appName,
+        icon: "resources/hubu/icon.icns",
+        protocols: { name: "HUBU Connect", schemes: [HUBU.protocolScheme, "opencode"] },
+        mac: { ...base.mac, icon: "resources/hubu/icon.icns", identity: null },
+        afterSign: "scripts/after-sign-mac.js",
+        dmg: { ...base.dmg, icon: "resources/hubu/icon.icns" },
+        // 与 muc 一致：跨平台构建免 wine（exe 不内嵌图标/版本信息，v1 可接受）
+        win: {
+          signAndEditExecutable: false,
+          target: [{ target: "nsis", arch: ["x64"] }],
+          icon: "resources/hubu/icon.ico",
+        },
+        nsis: {
+          oneClick: true,
+          installerIcon: "resources/hubu/icon.ico",
+          uninstallerIcon: "resources/hubu/icon.ico",
         },
       }
     }
