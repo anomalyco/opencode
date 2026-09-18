@@ -39,3 +39,21 @@ CLI preparation uses these channel rules:
 `bun dev` is separate from packaging: it uses local renderer/server mode, the dev app identity, and the CLI source by
 default. `bun dev --download-server <version>` instead downloads that CLI version for local development. Neither path
 requires `OPENCODE_CLI_DIST` or runs the production prebuild.
+
+## Startup benchmark
+
+`bun run bench:startup` measures a **packaged** build from process spawn to the restored tab being ready and the
+renderer going idle, so dev-server and bundling costs are not part of the numbers.
+
+```bash
+OPENCODE_CHANNEL=dev bun run build && bunx electron-builder --win --dir --config electron-builder.config.ts
+bun run bench:startup -- --runs 5                          # warm service (started once, reused by every launch)
+bun run bench:startup -- --runs 5 --profile-main --trace   # + main-process CPU profile, Chromium startup trace
+bun run bench:startup -- --seed "%APPDATA%\ai.opencode.desktop.dev"   # restore tabs and drafts from an existing profile
+```
+
+The app runs in an isolated home (`%TEMP%\opencode-bench-startup`): its own `%APPDATA%`, XDG directories, OpenCode
+database, config and service registration. It never attaches to or restarts the developer's live service.
+`--service cold` makes each launch spawn the service; the desktop spawns it on the default port, so that mode needs
+no other OpenCode service running on the machine. Milestones (ms since spawn) come from the main log, the renderer's
+performance timeline and DOM readiness polled over CDP; raw samples are written to `dist/bench-startup`.
