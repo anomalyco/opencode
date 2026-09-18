@@ -58,8 +58,10 @@ export function setDockIcon(path: Path.Path, paths: DesktopPaths.Resolved) {
 }
 
 export function setBackgroundColor(color: string) {
+  // The renderer reports its theme background on every boot; electron-store rewrites and fsyncs the
+  // settings file on each set, so only persist a change.
+  if (getBackgroundColor() !== color) getStore().set(BACKGROUND_COLOR_KEY, color)
   backgroundColor = color
-  getStore().set(BACKGROUND_COLOR_KEY, color)
   BrowserWindow.getAllWindows().forEach((win) => {
     win.setBackgroundColor(color)
     if (process.platform === "darwin") win.invalidateShadow()
