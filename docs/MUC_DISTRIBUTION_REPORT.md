@@ -74,7 +74,8 @@ opencode core (fork: packages/opencode/src/provider/muc.ts)
   - 内嵌 fork CLI sidecar（`resources/opencode-cli`，版本 `0.0.0-muc-harness-*`，冒烟通过）
   - Info.plist：URL Schemes `muc`/`opencode`；已移除 `ElectronAsarIntegrity`（换皮需求）
 - **BLOCKED**：本机 `security find-identity` 无 Apple Developer ID 证书 → 当前 DMG 为 ad-hoc 开发测试签名，不可正式公网分发；正式发布需 Developer ID Application 证书 + Hardened Runtime + notarization + staple。
-- Windows：第二阶段（`package:win` 脚本已就绪）。
+- Windows：✅ 已完成 `mucode-windows-x64.exe`（NSIS 一键安装，免 wine：`signAndEditExecutable:false`，需 Rosetta 运行 makensis）。exe 未内嵌自定义图标/版本信息（该步骤需 Windows/wine），功能不受影响。
+- Linux：CLI 侧车已产出（`opencode-linux-*`），AppImage/deb 打包按需追加。
 
 ## 7. E2E Tests（实际执行证据）
 | 验收 | 测试 | 结果 |
@@ -89,7 +90,7 @@ opencode core (fork: packages/opencode/src/provider/muc.ts)
 | J 重启免授权 | 连接 → 杀进程 → 重启 → `mucGetState` connected:true | ✅ |
 | K 断开删除 | `mucDisconnect` → `muc-credential.bin` 不存在 | ✅ |
 | L 原版无影响 | `/Applications/OpenCode.app` 未修改 | ✅ |
-| M DMG | `dist/MUC-mac-arm64.dmg` | ✅ |
+| M DMG | `dist/mucode-mac-arm64.dmg` + `mucode-mac-x64.dmg` + `mucode-win-x64.exe` | ✅ |
 | N 真实推理 | **受阻**：网关 3 把旧 Key 失效 + claude 分组上游 "Service temporarily unavailable"（curl 复现，与代码无关）| ⏸ |
 | C URL 无 Key | 解析器拒绝 key 参数 + 网站端只发 code | ✅ |
 
