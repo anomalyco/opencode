@@ -88,3 +88,40 @@ export function DialogMessage(props: {
     />
   )
 }
+
+export function DialogAssistantMessage(props: { messageID: string; sessionID: string }) {
+  const data = useData()
+  const clipboard = useClipboard()
+  const toast = useToast()
+  const message = createMemo(() => data.session.message.get(props.sessionID, props.messageID))
+
+  return (
+    <DialogSelect
+      title="Message Actions"
+      options={[
+        {
+          title: "Copy",
+          value: "message.copy",
+          description: "message text to clipboard",
+          onSelect: async (dialog) => {
+            const value = message()
+            const text =
+              value?.type === "assistant"
+                ? value.content
+                    .filter((content) => content.type === "text")
+                    .map((content) => content.text)
+                    .join("\n")
+                    .trim()
+                : ""
+            try {
+              await clipboard.write(text)
+              dialog.clear()
+            } catch (error) {
+              toast.error(error)
+            }
+          },
+        },
+      ]}
+    />
+  )
+}

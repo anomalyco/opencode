@@ -24,7 +24,7 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { createSyntaxStyleMemo, ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseButton, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   SessionMessageInfo,
@@ -59,7 +59,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogImagePreview } from "../../component/dialog-image-preview"
-import { DialogMessage } from "./dialog-message"
+import { DialogAssistantMessage, DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
 import { Composer } from "./composer"
@@ -1706,7 +1706,10 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
 }
 
 function SessionPartView(props: { partRef: PartRef; message: (messageID: string) => SessionMessageInfo | undefined }) {
+  const ctx = use()
   const message = createMemo(() => props.message(props.partRef.messageID))
+  const dialog = useDialog()
+  const renderer = useRenderer()
   const part = createMemo(() => {
     const item = message()
     if (item?.type !== "assistant") return
@@ -1721,6 +1724,13 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
               part={item() as SessionMessageAssistantText}
               message={message() as SessionMessageAssistant}
               last={false}
+              onMouseUp={(event) => {
+                if (event.button !== MouseButton.RIGHT) return
+                if (renderer.getSelection()?.getSelectedText()) return
+                dialog.replace(() => (
+                  <DialogAssistantMessage messageID={props.partRef.messageID} sessionID={ctx.sessionID} />
+                ))
+              }}
             />
           </Match>
           <Match when={item().type === "reasoning"}>
