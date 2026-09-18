@@ -13,6 +13,7 @@ export {
   MarkdownDefinition,
   MarkdownToken,
   ModeDefinition,
+  SurfaceName,
   SyntaxDefinition,
   SyntaxToken,
   ThemeDefinition,
@@ -26,14 +27,12 @@ export {
   type MergeModeDefinition,
   type Mode,
   type StatefulColorDefinition,
-  type ContextKey,
   type TextDefinition,
   type ThemeTokensDefinition,
 } from "./schema.js"
 
 export type {
   Categorical,
-  ContextName,
   FormfieldColor,
   Hue,
   HueSource,

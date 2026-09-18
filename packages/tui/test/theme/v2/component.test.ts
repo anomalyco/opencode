@@ -1,18 +1,13 @@
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { RGBA } from "@opentui/core"
-import { DEFAULT_THEME, resolveTheme, selectTheme, type ContextName } from "@opencode/theme/tui"
-import { createComponentTheme, createComponentThemeView } from "../../../src/theme/component"
+import { DEFAULT_THEME, resolveTheme, selectTheme } from "@opencode/theme/tui"
+import { createComponentTheme } from "../../../src/theme/component"
 
-test("provides reactive properties, states, contexts, and color operations", () => {
-  const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(DEFAULT_THEME, "light")))
-  const [mode, setMode] = createSignal<"light" | "dark">("light")
-  const theme = createComponentTheme(resolved, mode)
-  const [context, setContext] = createSignal<ContextName>()
-  const current = () => {
-    const name = context()
-    return name ? theme.contextual[name] : theme
-  }
+test("provides reactive properties, states, surfaces, and color operations", () => {
+  const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(DEFAULT_THEME, "light"), "light"))
+  const theme = createComponentTheme(resolved)
+  const current = theme.surface("dialog")
 
   expect(theme.text.default).toBe(resolved().text.default)
   expect(theme.hue.accent[500]).toBe(resolved().hue.accent[500])
@@ -51,35 +46,18 @@ test("provides reactive properties, states, contexts, and color operations", () 
   expect(theme.scrollbar.default).toBe(resolved().scrollbar.default)
   expect(theme.diff.text.added).toBe(resolved().diff.text.added)
 
-  setContext("elevated")
-  expect("contexts" in current()).toBeFalse()
-  expect(current().categorical.map((scale) => scale[500])).toEqual(resolved().categorical.map((scale) => scale[500]))
-  expect(current().text.default).toBe(resolved().contextual.elevated.text.default)
-  expect(current().background.action.primary.focused).toBe(
-    resolved().contextual.elevated.background.action.primary.focused,
-  )
-  expect(current().background.action.primary.hovered).toBe(resolved().background.raised.high)
-  expect(current().background.formfield.selected).toBe(resolved().contextual.elevated.background.formfield.selected)
+  expect(theme.surface("dialog")).toBe(current)
+  expect(current.surface("dialog")).toBe(current)
+  expect(current.categorical.map((scale) => scale[500])).toEqual(resolved().categorical.map((scale) => scale[500]))
+  expect(current.text.default).toBe(resolved().surface("dialog").text.default)
+  expect(current.background.default).toBe(resolved().background.raised.base)
+  expect(current.background.action.primary.focused).toBe(resolved().surface("dialog").background.action.primary.focused)
+  expect(current.background.action.primary.hovered).toBe(resolved().background.raised.high)
+  expect(current.background.formfield.selected).toBe(resolved().surface("dialog").background.formfield.selected)
 
-  setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
-  setMode("dark")
-  expect(current().text.default).toBe(resolved().contextual.elevated.text.default)
-  expect(current().decrease(current().background.raised.base, 1)).toBe(resolved().hue.neutral[600])
-  expect(current().raise(current().background.raised.base)).toBe(resolved().hue.neutral[600])
-})
-
-test("a stable component theme view follows presentation context changes", () => {
-  const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
-  const [context, setContext] = createSignal<ContextName>()
-  const theme = createComponentThemeView(
-    () => (context() ? resolved().contextual[context()!] : resolved()),
-    () => "dark",
-  )
-  expect(theme.background.default).toBe(resolved().background.default)
-  setContext("elevated")
-  expect(theme.background.default).toBe(resolved().contextual.elevated.background.default)
-  setContext(undefined)
-  expect(theme.background.default).toBe(resolved().background.default)
-  setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "light")))
-  expect(theme.text.default).toBe(resolved().text.default)
+  setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "dark"), "dark"))
+  expect(current.text.default).toBe(resolved().surface("dialog").text.default)
+  expect(current.background.default).toBe(resolved().background.raised.base)
+  expect(current.decrease(current.background.raised.base, 1)).toBe(resolved().hue.neutral[600])
+  expect(current.raise(current.background.raised.base)).toBe(resolved().hue.neutral[600])
 })

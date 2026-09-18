@@ -214,7 +214,7 @@ function DiffBaseDialog(props: {
   current?: string
   onSelect: (ref: string) => void
 }) {
-  const theme = props.context.theme.contextual.elevated
+  const theme = props.context.theme.surface("dialog")
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [branches] = createResource(search, (search) =>
     props.context.client.vcs.branch.list({ location: props.location, search, limit: 100 }),
@@ -1079,7 +1079,7 @@ export function DiffViewerContent(props: {
 
 function DiffViewerHelpDialog(props: { context: Plugin.Context; single: boolean }) {
   const dimensions = useTerminalDimensions()
-  const theme = props.context.theme.contextual.elevated
+  const theme = props.context.theme.surface("dialog")
   const shortcut =
     (...ids: string[]) =>
     () =>

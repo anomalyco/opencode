@@ -9,7 +9,7 @@ import { Keymap } from "../../tui/src/context/keymap"
 export function ErrorOverlay(props: { component: string; error: unknown; onClose: () => void }) {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const focus = renderer.currentFocusedRenderable
   onCleanup(Keymap.use().mode.push("modal"))
   Keymap.createLayer(() => ({

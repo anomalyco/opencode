@@ -32,7 +32,7 @@ export function TerminalPane(props: {
   const client = useClient()
   const keymap = Keymap.use()
   const leader = Keymap.useLeaderActive()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const themes = useThemes()
   const renderer = useRenderer()
   const [failure, setFailure] = createSignal<string>()
@@ -155,8 +155,8 @@ export function TerminalPane(props: {
   })
 
   createEffect(() => {
-    const tokens = themes.currentTokens().contextual.elevated
-    terminalTheme = terminalPalette(tokens, themes.mode(), tokens.background.default)
+    const tokens = themes.currentTokens()
+    terminalTheme = terminalPalette(tokens, themes.mode(), tokens.background.raised.base)
     applyTerminalTheme()
   })
 
@@ -284,7 +284,7 @@ export function TerminalPane(props: {
       minWidth={0}
       minHeight={0}
       overflow="hidden"
-      backgroundColor={themes.currentTokens().contextual.elevated.background.default}
+      backgroundColor={themes.currentTokens().background.raised.base}
       onSizeChange={function () {
         size = { cols: Math.max(1, this.width - 2), rows: this.height }
         if (controller && restored) interact()

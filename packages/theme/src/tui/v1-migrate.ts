@@ -173,13 +173,12 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
       imageText: color("markdownImageText"),
       codeBlock: color("markdownCodeBlock"),
     },
-    "@context:elevated": {
+    "@dialog": {
       background: {
         default: "$background.raised.base",
         action: { primary: { $hovered: "$background.raised.high" } },
       },
     },
-    "@context:overlay": { background: { default: "$background.raised.high" } },
   })
 }
 

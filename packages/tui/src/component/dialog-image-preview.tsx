@@ -13,7 +13,7 @@ type ImagePreviewItem = Readonly<{
 export function DialogImagePreview(props: { images: readonly ImagePreviewItem[]; initial: number }) {
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const [index, setIndex] = createSignal(Math.max(0, Math.min(props.images.length - 1, props.initial)))
   const [failed, setFailed] = createSignal(false)
   const current = createMemo(() => props.images[index()])

@@ -13,7 +13,7 @@ export function SessionLocationMissing(props: { directory: string; projectID: st
 
 export function SessionLocationUnavailable(props: { directory: string; onMove: () => void }) {
   const paths = useTuiPaths()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const directory = createMemo(() => Locale.truncateMiddle(abbreviateHome(props.directory, paths.home), 72))
 
   return (

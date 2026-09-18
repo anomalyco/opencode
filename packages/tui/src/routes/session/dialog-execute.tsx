@@ -21,7 +21,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   const dialog = useDialog()
   const clipboard = useClipboard()
   const toast = useToast()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const dimensions = useTerminalDimensions()
   const config = useConfig().data
   const [copied, setCopied] = createSignal<"code" | "output">()
@@ -224,7 +224,7 @@ function GutteredCode(props: {
   digits: number
   blocks: Set<CodeRenderable>
 }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const syntax = useThemes().currentSyntax
   const gutter = createMemo(() =>
     props.content

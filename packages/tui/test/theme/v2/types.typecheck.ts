@@ -43,11 +43,7 @@ const definition = {
   text,
   background,
   border: { default: "$hue.neutral.300" },
-  "@context:elevated": {
-    text: { default: "$hue.neutral.800" },
-    background: { default: "$hue.neutral.200" },
-  },
-  "@context:overlay": { background: { default: "$hue.neutral.300" } },
+  "@dialog": { background: { default: "$background.raised.base" } },
 } satisfies ThemeDefinition
 
 export const document = { version: 2, light: definition, dark: definition } satisfies ThemeDocument

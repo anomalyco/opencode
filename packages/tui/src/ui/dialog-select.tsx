@@ -107,7 +107,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const dialog = useDialog()
   const themes = useThemes()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const mode = themes.mode
   const config = useConfig().data
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -843,7 +843,7 @@ function Option(props: {
   activeColor?: RGBA
   onMouseOver?: () => void
 }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const text = createMemo(() => {
     if (props.active && !props.muted) return props.activeColor ?? theme.text.action.primary.focused
     if (props.muted && (props.active || props.current)) return theme.text.subdued

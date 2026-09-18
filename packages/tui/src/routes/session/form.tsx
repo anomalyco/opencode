@@ -59,7 +59,7 @@ const drafts = new Map<string, FormDraft>()
 export function FormPrompt(props: { form: FormWithLocation }) {
   const data = useData()
   const themes = useThemes()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const themeMode = themes.mode
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
@@ -768,7 +768,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
   return (
     <box
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.raised.base}
       border={["left"]}
       borderColor={theme.hue.interactive[themeMode() === "light" ? 800 : 200]}
       customBorderChars={SplitBorder.customBorderChars}
@@ -813,7 +813,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                         ? theme.background.formfield.selected
                         : tabHover() === index()
                           ? theme.background.formfield.focused
-                          : theme.background.default
+                          : theme.background.raised.base
                     }
                     onMouseOver={() => setTabHover(index())}
                     onMouseOut={() => setTabHover(null)}
@@ -835,7 +835,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   ? theme.background.formfield.selected
                   : tabHover() === "confirm"
                     ? theme.background.formfield.focused
-                    : theme.background.default
+                    : theme.background.raised.base
               }
               onMouseOver={() => setTabHover("confirm")}
               onMouseOut={() => setTabHover(null)}
@@ -943,7 +943,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       >
                         <box flexDirection="row">
                           <box
-                            backgroundColor={active() ? theme.background.formfield.focused : theme.background.default}
+                            backgroundColor={active() ? theme.background.formfield.focused : theme.background.raised.base}
                             paddingRight={1}
                           >
                             <text
@@ -951,7 +951,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                             >{`${i() + 1}.`}</text>
                           </box>
                           <box
-                            backgroundColor={active() ? theme.background.formfield.focused : theme.background.default}
+                            backgroundColor={active() ? theme.background.formfield.focused : theme.background.raised.base}
                             flexDirection="row"
                           >
                             <Show when={multi()}>
@@ -997,7 +997,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   >
                     <box flexDirection="row">
                       <box
-                        backgroundColor={other() ? theme.background.formfield.focused : theme.background.default}
+                        backgroundColor={other() ? theme.background.formfield.focused : theme.background.raised.base}
                         paddingRight={1}
                       >
                         <text fg={other() ? theme.text.formfield.focused : theme.text.subdued}>
@@ -1007,7 +1007,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       <box
                         flexDirection="row"
                         flexGrow={1}
-                        backgroundColor={other() ? theme.background.formfield.focused : theme.background.default}
+                        backgroundColor={other() ? theme.background.formfield.focused : theme.background.raised.base}
                       >
                         <Show when={multi()}>
                           <text

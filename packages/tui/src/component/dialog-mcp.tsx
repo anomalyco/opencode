@@ -40,7 +40,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   const client = useClient()
   const location = useLocation()
   const toast = useToast()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const current = () => location.ref ?? data.location.default()
   const servers = createMemo(() =>
     pipe(

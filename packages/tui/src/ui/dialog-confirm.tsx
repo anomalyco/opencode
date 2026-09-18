@@ -19,7 +19,7 @@ export type DialogConfirmProps = {
 
 export function DialogConfirm(props: DialogConfirmProps) {
   const dialog = useDialog()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const [store, setStore] = createStore({
     active: "confirm" as "confirm" | "cancel",
   })

@@ -115,7 +115,6 @@ function map(
   syntax?: SyntaxStyle,
   system = false,
 ): RunTheme {
-  const elevated = theme.contextual.elevated
   // V1 system migration serializes colors; restore terminal defaults before quantizing scrollback.
   const exact = (color: RGBA) => {
     if (system && color.equals(theme.text.default)) return RGBA.defaultForeground(color)
@@ -137,13 +136,13 @@ function map(
   return {
     background: RGBA.defaultBackground(theme.background.default),
     footer: {
-      actionSecondaryText: exact(elevated.text.action.secondary.default),
-      actionFocusedBg: exact(elevated.background.action.primary.focused),
-      actionFocusedText: exact(elevated.text.action.primary.focused),
-      formfieldText: exact(elevated.text.formfield.default),
-      formfieldFocusedBg: exact(elevated.background.formfield.focused),
-      formfieldFocusedText: exact(elevated.text.formfield.focused),
-      selection: exact(elevated.text.formfield.selected),
+      actionSecondaryText: exact(theme.text.action.secondary.default),
+      actionFocusedBg: exact(theme.background.action.primary.focused),
+      actionFocusedText: exact(theme.text.action.primary.focused),
+      formfieldText: exact(theme.text.formfield.default),
+      formfieldFocusedBg: exact(theme.background.formfield.focused),
+      formfieldFocusedText: exact(theme.text.formfield.focused),
+      selection: exact(theme.text.formfield.selected),
       running: exact(theme.text.status.running),
       question: exact(theme.text.status.question),
       permission: exact(theme.text.status.permission),
@@ -157,9 +156,9 @@ function map(
       error: exact(theme.text.feedback.error.default),
       muted: exact(theme.text.subdued),
       text: exact(theme.text.default),
-      shade: exact(elevated.background.default),
-      surface: exact(elevated.background.default),
-      pane: exact(theme.contextual.overlay.background.default),
+      shade: exact(theme.background.raised.base),
+      surface: exact(theme.background.raised.base),
+      pane: exact(theme.background.raised.high),
       border: exact(theme.border.default),
       line: exact(theme.background.raised.high),
     },

@@ -44,7 +44,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const sessionTabs = useSessionTabs()
   const toast = useToast()
   const themes = useThemes()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const mode = themes.mode
   const paths = useTuiPaths()
   const dimensions = useTerminalDimensions()

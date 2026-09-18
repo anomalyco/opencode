@@ -38,7 +38,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     let theme!: ReturnType<typeof useTheme>
     function Colors() {
       config = useConfig()
-      theme = orientation === "vertical" ? useTheme("elevated") : useTheme()
+      theme = orientation === "vertical" ? useTheme() : useTheme()
       return null
     }
     const controller = {

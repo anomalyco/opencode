@@ -47,11 +47,9 @@ test("migrates resolved V1 modes into V2 tokens", () => {
   expect(resolved.text.action.secondary.default.toInts()).toEqual(legacy.textMuted.toInts())
   expect(resolved.text.action.secondary.hovered.toInts()).toEqual(legacy.text.toInts())
   expect(resolved.background.feedback.error.default.toInts()).toEqual(legacy.background.toInts())
-  expect(resolved.contextual.elevated.background.default.toInts()).toEqual(legacy.backgroundPanel.toInts())
-  expect(resolved.contextual.elevated.background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
-  expect(resolved.contextual.elevated.text.action.primary.default.toInts()).toEqual(legacy.text.toInts())
-  expect(resolved.contextual.overlay.background.default.toInts()).toEqual(legacy.backgroundMenu.toInts())
-  expect(resolved.contextual.overlay.background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
+  expect(resolved.surface("dialog").background.default.toInts()).toEqual(legacy.backgroundPanel.toInts())
+  expect(resolved.surface("dialog").background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
+  expect(resolved.surface("dialog").text.action.primary.default.toInts()).toEqual(legacy.text.toInts())
 })
 
 test("references generated hues from matching token colors", () => {

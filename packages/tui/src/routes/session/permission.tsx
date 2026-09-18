@@ -277,7 +277,7 @@ function RejectPrompt(props: {
 }) {
   let input: TextareaRenderable
   const enabled = useInteractivity()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
@@ -314,7 +314,7 @@ function RejectPrompt(props: {
         role: "dialog",
         label: `Reject permission: ${props.action}`,
       }))}
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.raised.base}
       border={["left"]}
       borderColor={theme.text.feedback.error.default}
       customBorderChars={SplitBorder.customBorderChars}
@@ -335,7 +335,7 @@ function RejectPrompt(props: {
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={theme.raise(theme.background.default)}
+        backgroundColor={theme.raise(theme.background.raised.base)}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
         gap={1}
@@ -418,7 +418,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   fullscreen?: boolean
   onSelect: (option: keyof T) => void
 }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
@@ -507,7 +507,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         label: props.semanticLabel ?? props.title,
         expanded: store.expanded,
       }))}
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.raised.base}
       border={["left"]}
       borderColor={theme.background.action.primary.focused}
       customBorderChars={SplitBorder.customBorderChars}
@@ -546,7 +546,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={theme.raise(theme.background.default)}
+        backgroundColor={theme.raise(theme.background.raised.base)}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
       >

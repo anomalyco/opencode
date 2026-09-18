@@ -86,8 +86,8 @@ function Answer(props: { question: string; answer: string }) {
   const toast = useToast()
   const clipboard = useClipboard()
   const plugins = usePlugin()
-  const theme = useTheme("elevated")
-  const overlay = useTheme("overlay")
+  const theme = useTheme().surface("dialog")
+  const overlay = useTheme()
   const syntax = useThemes().currentSyntax
   const config = useConfig().data
   const [copied, setCopied] = createSignal(false)
@@ -135,7 +135,7 @@ function Answer(props: { question: string; answer: string }) {
       <scrollbox
         ref={(element: ScrollBoxRenderable) => (scroll = element)}
         maxHeight={20}
-        backgroundColor={overlay.background.default}
+        backgroundColor={overlay.background.raised.high}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={getScrollAcceleration(config)}
       >
@@ -148,7 +148,7 @@ function Answer(props: { question: string; answer: string }) {
             internalBlockMode="top-level"
             tableOptions={{ style: "grid", cellPaddingX: 1 }}
             fg={overlay.markdown.text}
-            bg={overlay.background.default}
+            bg={overlay.background.raised.high}
           />
         </box>
       </scrollbox>

@@ -42,7 +42,7 @@ export type ComposerProps = {
 }
 
 export function Composer(props: ComposerProps) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const config = useConfig().data
 
   const [store, setStore] = createStore({
@@ -114,7 +114,7 @@ export function Composer(props: ComposerProps) {
           {...SplitBorder}
           border={["left"]}
           borderColor={theme.border.default}
-          backgroundColor={theme.background.default}
+          backgroundColor={theme.background.raised.base}
           paddingLeft={1}
           paddingRight={2}
           paddingTop={1}

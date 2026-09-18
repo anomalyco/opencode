@@ -7,6 +7,7 @@ import type {
   HueAlias,
   HueStep,
   MarkdownToken,
+  SurfaceName,
   SyntaxToken,
 } from "./schema.js"
 
@@ -69,8 +70,9 @@ export type ResolvedThemeTokens = {
   readonly markdown: Readonly<Record<MarkdownToken, RGBA>>
 }
 
-export type ContextName = "elevated" | "overlay"
-
 export type ResolvedTheme = ResolvedThemeTokens & {
-  readonly contextual: Readonly<Record<ContextName, ResolvedThemeTokens>>
+  /** Lift a ramp color one step away from the background: lighter in light mode, darker in dark mode. */
+  readonly raise: (color: RGBA) => RGBA
+  /** The same theme re-resolved on a raised surface. Absolute: every view's surfaces are the base theme's. */
+  readonly surface: (name: SurfaceName) => ResolvedTheme
 }

@@ -40,7 +40,7 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
   const dialog = useDialog()
   const client = useClient()
   const dimensions = useTerminalDimensions()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const sessionData = useData()
   const route = useRoute()
   const toast = useToast()

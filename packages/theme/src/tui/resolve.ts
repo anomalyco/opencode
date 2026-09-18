@@ -7,17 +7,17 @@ import {
   ActionState,
   ActionVariant,
   BaseHue,
-  FeedbackKind,
   HueAlias,
   HueStep,
+  SurfaceName,
   ThemeDefinition,
   ThemeDocument,
 } from "./schema.js"
 import type {
   ActionStateKey,
-  ContextName,
   HueDefinition,
   HueScale,
+  Mode,
   ResolvedActionState,
   ResolvedTheme,
   ResolvedThemeTokens,
@@ -42,40 +42,40 @@ export function themeDecodeError(error: unknown, name: string) {
   return new Error(`Invalid theme: ${name} ${value} is an invalid value`, { cause: error })
 }
 
-export function resolveThemeDocument(document: ThemeDocument, mode?: "light" | "dark") {
+export function resolveThemeDocument(document: ThemeDocument, mode?: Mode) {
   const selected = selectThemeMode(document, mode)
   const definition = selected.expanded ? selected.theme : expandTheme(selected.theme)
   const defaults = expandTheme(selectTheme(DEFAULT_THEME, selected.mode))
   const core = expandTokens(fallback(selected.mode))
   const merged = document.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
   if (!merged["hue"]) throw new Error("Standalone themes must provide hues")
-  return resolveExpandedTheme({
-    ...merged,
-    categorical: merged["categorical"] ?? DEFAULT_CATEGORICAL,
-  } as ThemeDefinition)
+  return resolveExpandedTheme(
+    {
+      ...merged,
+      categorical: merged["categorical"] ?? DEFAULT_CATEGORICAL,
+    } as ThemeDefinition,
+    selected.mode,
+  )
 }
 
-export function resolveTheme(definition: ThemeDefinition): ResolvedTheme {
-  return resolveExpandedTheme(expandTheme(decodeThemeDefinition(definition)))
+export function resolveTheme(definition: ThemeDefinition, mode: Mode): ResolvedTheme {
+  return resolveExpandedTheme(expandTheme(decodeThemeDefinition(definition)), mode)
 }
 
-function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
+function resolveExpandedTheme(definition: ThemeDefinition, mode: Mode): ResolvedTheme {
   const hue = resolveHue(definition.hue)
   const categorical = (definition.categorical ?? DEFAULT_CATEGORICAL).map((name) => hue[name])
   const hueSteps = compileHueSteps(hue)
+  const raise = (color: RGBA) => (mode === "light" ? hueSteps.increase(color) : hueSteps.decrease(color))
   const base = tokens(definition)
-  const resolved = resolveView(base, hue, categorical, hueSteps)
-  const context = (name: ContextName) => {
-    const override = definition[`@context:${name}`]
-    if (!override) return resolved
-    return resolveView(contextualize(base, override), hue, categorical, hueSteps)
-  }
-  const contextual = {
-    elevated: context("elevated"),
-    overlay: context("overlay"),
-  }
-
-  return { ...resolved, contextual } as ResolvedTheme
+  const views = {} as Record<SurfaceName, ResolvedTheme>
+  const view = (tokens: ThemeTokensDefinition): ResolvedTheme => ({
+    ...resolveView(tokens, hue, categorical, hueSteps),
+    raise,
+    surface: (name) => views[name],
+  })
+  views.dialog = definition["@dialog"] ? view(contextualize(base, definition["@dialog"])) : view(base)
+  return view(base)
 }
 
 function tokens(definition: ThemeDefinition): ThemeTokensDefinition {
@@ -92,27 +92,23 @@ function tokens(definition: ThemeDefinition): ThemeTokensDefinition {
 
 function contextualize(base: ThemeTokensDefinition, override: ThemeTokensDefinition) {
   const result = mergeTheme(base, override)
-  const baseText = base.text?.action
-  const contextText = override.text?.action
-  const baseBackground = base.background?.action
-  const contextBackground = override.background?.action
   const text = result["text"] as NonNullable<ThemeTokensDefinition["text"]>
   const background = result["background"] as NonNullable<ThemeTokensDefinition["background"]>
   return {
     ...result,
-    text: { ...text, action: contextualActions(baseText, contextText) },
-    background: { ...background, action: contextualActions(baseBackground, contextBackground) },
+    text: { ...text, action: contextualActions(base.text?.action, override.text?.action) },
+    background: { ...background, action: contextualActions(base.background?.action, override.background?.action) },
   } as ThemeTokensDefinition
 }
 
 function contextualActions(
   base: Partial<Record<ActionVariant, StatefulColorDefinition>> | undefined,
-  context: Partial<Record<ActionVariant, StatefulColorDefinition>> | undefined,
+  surface: Partial<Record<ActionVariant, StatefulColorDefinition>> | undefined,
 ) {
   return Object.fromEntries(
     ActionVariant.literals.map((variant) => {
       const baseVariant = base?.[variant]
-      const contextVariant = context?.[variant]
+      const surfaceVariant = surface?.[variant]
       return [
         variant,
         Object.fromEntries(
@@ -120,8 +116,8 @@ function contextualActions(
             const key = state === "default" ? undefined : (`$${state}` as ActionStateKey)
             return [
               key ?? "default",
-              (key ? contextVariant?.[key] : undefined) ??
-                contextVariant?.default ??
+              (key ? surfaceVariant?.[key] : undefined) ??
+                surfaceVariant?.default ??
                 (key ? baseVariant?.[key] : undefined) ??
                 baseVariant?.default,
             ]
