@@ -96,7 +96,7 @@ describe("layout persistence", () => {
   test("keeps scoped state and salvages valid tab entries", () => {
     const key = "local\u0000L3Byb2plY3Q/session"
     const value = decode({
-      sessionTabs: { old: { all: ["old"] }, [key]: { all: ["a", null, "a", "b"], active: 12 } },
+      sessionTabs: { old: { all: ["old"] }, [key]: { all: ["a", null, "a", "b", "btw"], active: "btw" } },
       sessionView: { old: { scroll: {} }, [key]: { scroll: {}, reviewOpen: ["a", null, "b"] } },
     })
     expect(value.sessionTabs).toEqual({ [key]: { all: ["a", "b"], active: undefined } })

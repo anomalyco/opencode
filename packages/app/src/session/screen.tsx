@@ -39,6 +39,7 @@ import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
 import { ArtifactMarkdownProvider, ArtifactOpenerProvider } from "./files/open-artifact"
+import { createSessionBtw } from "./btw/model"
 
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
@@ -71,6 +72,7 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
     return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
   })
   const isDesktop = session.isDesktop
+  const btw = createSessionBtw(session)
   const screen = createSessionScreenLayout(session)
   const timeline = createSessionTimelineInteraction(session)
   const timelineSearch = createTimelineSearchController({
@@ -451,7 +453,12 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                         setStore("sideReviewPresent", false)
                       }}
                     >
-                      <SessionDesktopReview review={review} browser={browser} present={store.sideReviewPresent} />
+                      <SessionDesktopReview
+                        review={review}
+                        browser={browser}
+                        btw={btw}
+                        present={store.sideReviewPresent}
+                      />
                     </div>
                   </Show>
                 </div>
