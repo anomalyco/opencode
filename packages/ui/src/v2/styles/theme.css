@@ -501,3 +501,29 @@
     --v2-illustration-illustration-layer-03: var(--v2-grey-700);
   }
 }
+
+/* ── MUC Harness: mucode campus palette ──
+   覆盖 oc-2 默认中性色：暖米色底 + 民大红 accent（非分层规则优先于 @layer） */
+:root,
+:root:not([data-theme="light"]),
+[data-color-scheme="light"],
+[data-color-scheme="dark"] {
+  --v2-background-bg-base: #fbf6ed;
+  --v2-background-bg-deep: #f4ecdd;
+  --v2-background-bg-layer-01: #f6efe2;
+  --v2-background-bg-layer-02: #efe6d3;
+  --v2-background-bg-layer-03: #e8dcc4;
+  --v2-background-bg-inverse: #2b2118;
+  --v2-background-bg-contrast: #f1e9da;
+  --v2-background-bg-accent: #ac0e0f;
+  --v2-text-text-base: #2b2118;
+  --v2-text-text-accent: #ac0e0f;
+  --v2-text-text-accent-hover: #8f0c0d;
+  --v2-text-text-code-accent: #8f0c0d;
+  --v2-icon-icon-accent: #ac0e0f;
+  --v2-icon-icon-accent-hover: #8f0c0d;
+  --v2-icon-icon-base: #4a3f35;
+  --v2-icon-icon-muted: #8a7a68;
+  --v2-border-border-focus: #ac0e0f;
+  --v2-border-border-strong: #b39b7d;
+}

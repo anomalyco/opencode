@@ -43,7 +43,7 @@ const APP_IDS = {
 } as const
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: channel === "muc" ? "MUC-${os}-${arch}.${ext}" : "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName: channel === "muc" ? "mucode-${os}-${arch}.${ext}" : "opencode-desktop-${os}-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -148,7 +148,7 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: "MUC",
+        productName: "mucode",
         icon: "resources/muc/icon.icns",
         protocols: { name: "MUC Connect", schemes: ["muc", "opencode"] },
         mac: { ...base.mac, icon: "resources/muc/icon.icns" },

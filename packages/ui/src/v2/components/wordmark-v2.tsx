@@ -1,10 +1,9 @@
-import { createUniqueId, type ComponentProps } from "solid-js"
+import { type ComponentProps } from "solid-js"
 
+// MUC Harness: mucode 文字水印（民大红渐变）——替换上游方块字 opencode。
+// 保留原组件 API（props.class）；渲染层用 class 控制颜色时可改回 currentColor。
 
 export function WordmarkV2(props: Pick<ComponentProps<"svg">, "class">) {
-  const mask = createUniqueId()
-  const maskGradient = createUniqueId()
-
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -13,31 +12,23 @@ export function WordmarkV2(props: Pick<ComponentProps<"svg">, "class">) {
       classList={{ [props.class ?? ""]: !!props.class }}
     >
       <defs>
-        <linearGradient id={maskGradient} x1="360" y1="68" x2="360" y2="129" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stop-color="white" stop-opacity="1" />
-          <stop offset="100%" stop-color="white" stop-opacity="0" />
+        <linearGradient id="mucode-fade" x1="360" y1="30" x2="360" y2="129" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#AC0E0F" />
+          <stop offset="100%" stop-color="#C9736F" />
         </linearGradient>
-        <mask id={mask}>
-          <rect x="0" y="0" width="720" height="129" fill={`url(#${maskGradient})`} />
-        </mask>
       </defs>
-      <g opacity="0.6">
-        <g mask={`url(#${mask})`}>
-          <text
-            x="360"
-            y="102"
-            text-anchor="middle"
-            font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif"
-            font-size="104"
-            font-weight="600"
-            letter-spacing="8"
-            fill="currentColor"
-            opacity="0.7"
-          >
-            中央民族大学
-          </text>
-        </g>
-      </g>
+      <text
+        x="360"
+        y="104"
+        text-anchor="middle"
+        font-family="'Inter','PingFang SC','Hiragino Sans GB',sans-serif"
+        font-size="128"
+        font-weight="800"
+        letter-spacing="-2"
+        fill="url(#mucode-fade)"
+      >
+        mucode
+      </text>
     </svg>
   )
 }

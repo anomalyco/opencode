@@ -1,6 +1,6 @@
 import { app } from "electron"
 
-type Channel = "dev" | "beta" | "prod" | "muc"
+type Channel = "dev" | "beta" | "prod" | "muc" | "muc"
 const raw = import.meta.env.OPENCODE_CHANNEL
 export const CHANNEL: Channel =
   raw === "dev" || raw === "beta" || raw === "prod" || raw === "muc" ? raw : "dev"

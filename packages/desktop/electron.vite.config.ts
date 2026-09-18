@@ -91,6 +91,10 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     },
   },
   renderer: {
+    define: {
+      // MUC Harness: 渲染层通道（titlebar 徽标按此判断；muc 不显示 DEV 徽标）
+      "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+    },
     plugins: [appPlugin, sentry],
     publicDir: "../../../app/public",
     root: "src/renderer",
