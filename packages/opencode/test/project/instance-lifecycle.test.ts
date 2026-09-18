@@ -1,11 +1,11 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { BackgroundJob } from "@/background/job"
 import { InstanceStore } from "../../src/project/instance-store"
+import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import {
   tmpdirScoped,
-  testInstanceStoreLayer,
   provideInstanceEffect,
   reloadInstance,
   disposeAllInstances,
@@ -17,9 +17,11 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
+const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+
 const it = testEffect(
-  Layer.mergeAll(BackgroundJob.defaultLayer, CrossSpawnSpawner.defaultLayer).pipe(
-    Layer.provide(testInstanceStoreLayer),
+  Layer.mergeAll(InstanceStore.defaultLayer, BackgroundJob.defaultLayer, CrossSpawnSpawner.defaultLayer).pipe(
+    Layer.provide(noopBootstrap),
   ),
 )
 
@@ -75,7 +77,7 @@ describe("instance lifecycle", () => {
           Effect.void,
           () => jobs.wait({ id: jobId }),
           (_, exit) =>
-            Exit.hasInterrupts(exit) ? jobs.cancel(jobId).pipe(Effect.ignore, Effect.forkDaemon, Effect.asVoid) : Effect.void,
+            Exit.hasInterrupts(exit) ? jobs.cancel(jobId).pipe(Effect.ignore, Effect.forkDetach, Effect.asVoid) : Effect.void,
         ).pipe(Effect.forkScoped)
 
         yield* Effect.yieldNow

@@ -258,7 +258,7 @@ describe("background.job", () => {
         .wait({ id: job.id })
         .pipe(
           Effect.flatMap((result) => Deferred.succeed(waiterDone, result.info?.status === "cancelled")),
-          Effect.forkDaemon,
+          Effect.forkDetach,
         )
       yield* Effect.yieldNow
 

@@ -349,7 +349,7 @@ export const TaskTool = Tool.define(
             if (Exit.hasInterrupts(exit))
               yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true }).pipe(
                 Effect.ignore,
-                Effect.forkDaemon,
+                Effect.forkDetach,
                 Effect.asVoid,
               )
           }).pipe(
