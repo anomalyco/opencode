@@ -1114,7 +1114,17 @@ export function Prompt(props: PromptProps) {
     if (!trimmed && (!props.sessionID || store.mode === "shell" || delivery === "queue"))
       return delivery === "steer" ? (await props.onEmptySubmit?.()) === true : false
     const exitWord = trimmed === "exit" || trimmed === "quit" || trimmed === ":q"
-    const slash = argumentSlash(store.prompt.text, keymapCommands())
+    const inputText = expandTrackedPastedText(
+      store.prompt.text,
+      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
+        const ref = store.extmarkToPart.get(extmark.id)
+        if (ref?.type !== "pasted") return []
+        const part = store.prompt.pasted[ref.index]
+        if (!part) return []
+        return [{ start: extmark.start, end: extmark.end, text: part.text }]
+      }),
+    )
+    const slash = argumentSlash(inputText, keymapCommands())
     if (delivery === "queue" && (store.mode === "shell" || exitWord || slash)) {
       toast.show({ message: "This prompt cannot be queued", variant: "warning" })
       return false
@@ -1128,16 +1138,6 @@ export function Prompt(props: PromptProps) {
       await slash.command.run(slash.input)
       return true
     }
-    const inputText = expandTrackedPastedText(
-      store.prompt.text,
-      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
-        const ref = store.extmarkToPart.get(extmark.id)
-        if (ref?.type !== "pasted") return []
-        const part = store.prompt.pasted[ref.index]
-        if (!part) return []
-        return [{ start: extmark.start, end: extmark.end, text: part.text }]
-      }),
-    )
     const slashHead = parseSlashHead(inputText, /\s/)
     const isCommand =
       slashHead !== undefined &&
