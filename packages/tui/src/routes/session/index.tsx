@@ -2016,9 +2016,14 @@ function SessionSwitchMessageV2(props: { message: SessionMessageInfo }) {
 function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const ctx = use()
   const theme = useTheme()
+  const renderer = useRenderer()
+  const { navigate } = useRoute()
+  const [hover, setHover] = createSignal(false)
   const metadata = () => (props.message.type === "synthetic" ? props.message.metadata : undefined)
   const source = () => stringValue(metadata()?.source)
   const completion = () => source() === "subagent" || source() === "shell"
+  const childID = () =>
+    source() === "subagent" ? (stringValue(metadata()?.childID) ?? stringValue(metadata()?.sessionID)) : undefined
   const state = () => stringValue(metadata()?.state)
   const actor = () => (source() === "shell" ? "Shell" : Locale.titlecase(stringValue(metadata()?.agent) ?? "Subagent"))
   const text = () => {
@@ -2035,6 +2040,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
   const heading = () => `${state() === "completed" ? "↳" : "!"} ${actor()} ${status()}`
   const suffix = () => Locale.truncateWidth(` · ${description()}`, Math.max(0, ctx.width - 3 - stringWidth(heading())))
   const color = () => {
+    if (hover() && childID()) return theme.text.default
     if (state() === "error") return theme.text.feedback.error.default
     if (state() === "cancelled") return theme.text.feedback.warning.default
     return theme.text.feedback.info.default
@@ -2048,7 +2054,16 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
         </InlineToolRow>
       }
     >
-      <box marginLeft={3}>
+      <box
+        marginLeft={3}
+        onMouseOver={() => childID() && setHover(true)}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={() => {
+          if (renderer.getSelection()?.getSelectedText()) return
+          const id = childID()
+          if (id) navigate({ type: "session", sessionID: id })
+        }}
+      >
         <text wrapMode="none">
           <span style={{ fg: color() }}>{heading()}</span>
           <span style={{ fg: theme.text.subdued }}>{suffix()}</span>
