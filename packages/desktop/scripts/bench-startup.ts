@@ -120,7 +120,20 @@ const probe = `(() => ({
 }))()`
 // Main-process bootstrap timing, read after the run: when the process was created, when Node
 // started inside it, and when Node's own bootstrap finished and handed control to the entry module.
-const mainTiming = `JSON.stringify({ created: process.getCreationTime(), origin: performance.timeOrigin, ...performance.nodeTiming.toJSON() })`
+const mainTiming = `JSON.stringify({ created: process.getCreationTime(), origin: performance.timeOrigin, ...performance.nodeTiming.toJSON(), cpu: process.cpuUsage(), rss: process.memoryUsage().rss })`
+// Renderer navigation and resource timing plus any marks the app emitted, read once the run is settled.
+const rendererTimeline = `(() => {
+  const nav = performance.getEntriesByType('navigation')[0]
+  const resources = performance.getEntriesByType('resource')
+  const scripts = resources.filter((r) => r.initiatorType === 'script' || r.name.endsWith('.js'))
+  return {
+    navigation: nav && { fetchStart: nav.fetchStart, responseEnd: nav.responseEnd, domInteractive: nav.domInteractive, domContentLoaded: nav.domContentLoadedEventEnd, load: nav.loadEventEnd },
+    resources: { count: resources.length, scripts: scripts.length, firstStart: Math.min(...resources.map((r) => r.startTime)), lastEnd: Math.max(...resources.map((r) => r.responseEnd)), bytes: resources.reduce((n, r) => n + (r.encodedBodySize || 0), 0) },
+    paint: Object.fromEntries(performance.getEntriesByType('paint').map((e) => [e.name, e.startTime])),
+    marks: performance.getEntriesByType('mark').map((e) => [e.name, Math.round(e.startTime)]),
+    measures: performance.getEntriesByType('measure').map((e) => [e.name, Math.round(e.startTime), Math.round(e.duration)]),
+  }
+})()`
 
 for (const build of builds) console.log(`bench${build.label ? ` ${build.label}` : ""}: ${build.exe}`)
 console.log(`home:  ${home}`)
@@ -150,19 +163,58 @@ const summaries = Object.fromEntries(
     return [build.label || "A", summarize(timed.length ? timed : own)]
   }),
 )
-const report = { builds, service, runs, warmup, fresh: args.values.fresh, home, summaries, samples }
+// Durations between consecutive checkpoints, so "where did the time go" needs no subtraction.
+const phaseOrder = [
+  ["electron native init", "processCreated", "nodeStart"],
+  ["node bootstrap", "nodeStart", "nodeBootstrapped"],
+  ["electron js init + main bundle", "nodeBootstrapped", "appStarting"],
+  ["main layers → window created", "appStarting", "rendererProcess"],
+  ["renderer boot → first paint", "rendererProcess", "firstPaint"],
+  ["first paint → shell", "firstPaint", "shellVisible"],
+  ["shell → idle", "shellVisible", "rendererIdle"],
+] as const
+const phases = Object.fromEntries(
+  builds.map((build) => {
+    const own = samples.filter((s) => s.build === build.label && !s.profiled && !s.traced)
+    const out: Record<string, number> = {}
+    for (const [name, from, to] of phaseOrder) {
+      const deltas = own
+        .map((s) => (s.msSinceSpawn[to] ?? NaN) - (s.msSinceSpawn[from] ?? NaN))
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b)
+      if (deltas.length) out[name] = deltas[Math.floor(deltas.length / 2)]
+    }
+    return [build.label || "A", out]
+  }),
+)
+const report = { builds, service, runs, warmup, fresh: args.values.fresh, home, summaries, phases, samples }
 const reportPath = join(outDir, `startup-${Date.now()}.json`)
 writeFileSync(reportPath, JSON.stringify(report, null, 2))
-console.log(`\n${service} service${args.values.fresh ? ", fresh profile" : ""} — median (min…max) ms since spawn over ${runs} runs`)
 const labels = Object.keys(summaries)
-const keys = [...new Set(labels.flatMap((label) => Object.keys(summaries[label])))]
-console.log(`${"".padEnd(24)}${labels.map((label) => (labels.length > 1 ? label : "").padStart(6).padEnd(22)).join("")}`)
-for (const key of keys) {
+const header = `${"".padEnd(32)}${labels.map((label) => (labels.length > 1 ? label : "").padStart(6).padEnd(22)).join("")}`
+console.log(`\n${service} service${args.values.fresh ? ", fresh profile" : ""} — median (min…max) ms since spawn over ${runs} runs`)
+console.log(header)
+for (const key of [...new Set(labels.flatMap((label) => Object.keys(summaries[label])))]) {
   const cells = labels.map((label) => {
     const v = summaries[label][key]
     return v ? `${String(v.median).padStart(6)}  (${v.min}…${v.max})`.padEnd(22) : "".padEnd(22)
   })
-  console.log(`${key.padEnd(24)}${cells.join("")}`)
+  console.log(`${key.padEnd(32)}${cells.join("")}`)
+}
+console.log(`\nphases — median ms`)
+console.log(header)
+for (const [name] of phaseOrder) {
+  const cells = labels.map((label) => String(phases[label][name] ?? "").padStart(6).padEnd(22))
+  console.log(`${name.padEnd(32)}${cells.join("")}`)
+}
+const idle = (label: string) => samples.filter((s) => s.build === label && !s.profiled && !s.traced).at(-1)
+console.log(`\nmemory once idle (last run) — working set MB per process, main CPU ms`)
+for (const label of labels) {
+  const s = idle(label === "A" && labels.length === 1 ? "" : label)
+  if (!s) continue
+  const total = s.processes.reduce((n, p) => n + p.rssMB, 0)
+  console.log(`${(labels.length > 1 ? label : "").padEnd(4)}total ${total} MB · main cpu ${s.mainCpuMs ?? "?"} ms · renderer heap ${s.renderer.jsHeapMB} MB, ${s.renderer.domNodes} nodes, layout ${s.renderer.layoutMs} ms/${s.renderer.layouts}×, style ${s.renderer.styleMs} ms/${s.renderer.styleRecalcs}×`)
+  console.log(`    ${s.processes.map((p) => `${p.name} ${p.rssMB}`).join(" · ")}`)
 }
 console.log(`\nreport: ${reportPath}`)
 process.exit(0)
@@ -189,6 +241,16 @@ type Sample = {
   msSinceSpawn: Record<string, number | undefined>
   final: { url?: string; timelineRows?: number }
   rendererCpu: { taskMs: number; scriptMs: number }
+  // Renderer main-thread breakdown from Performance.getMetrics at the end of the run.
+  renderer: Record<string, number>
+  rendererTimeline: unknown
+  // Working set per process in the app's tree (main, renderer, GPU, utility) once idle, in MB, and
+  // the main process's CPU time.
+  processes: { name: string; pid: number; rssMB: number }[]
+  mainCpuMs?: number
+  // Every timestamped line from the run's log directory (main, crash, onboarding, window, …) as
+  // [ms since spawn, file, message].
+  timeline: [number, string, string][]
 }
 
 async function launch(build: { label: string; exe: string }, run: number): Promise<Sample> {
@@ -267,7 +329,21 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
     writeFileSync(rendererProfilePath, JSON.stringify(stopped.result.profile))
     console.log("renderer profile:", rendererProfilePath)
   }
+  const finalMetrics = (await cdp.send("Performance.getMetrics")).result?.metrics as { name: string; value: number }[]
+  const metric = (name: string) => finalMetrics.find((m) => m.name === name)?.value ?? 0
+  const renderer = {
+    taskMs: Math.round(metric("TaskDuration") * 1000),
+    scriptMs: Math.round(metric("ScriptDuration") * 1000),
+    layoutMs: Math.round(metric("LayoutDuration") * 1000),
+    styleMs: Math.round(metric("RecalcStyleDuration") * 1000),
+    layouts: metric("LayoutCount"),
+    styleRecalcs: metric("RecalcStyleCount"),
+    domNodes: metric("Nodes"),
+    jsHeapMB: Math.round(metric("JSHeapUsedSize") / 1048576),
+  }
+  const timelineResult = await cdp.send("Runtime.evaluate", { expression: rendererTimeline, returnByValue: true })
   cdp.close()
+  const processes = appPid ? await processTree(appPid) : []
   const boot = profile ? undefined : await mainBootTiming()
   await sleep(300)
   // Chromium writes the startup trace when --trace-startup-duration elapses; keep the app alive until then.
@@ -299,6 +375,11 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
     },
     final: { url: last?.url, timelineRows: last?.rows },
     rendererCpu: { taskMs: Math.round(taskMs), scriptMs: Math.round(scriptMs) },
+    renderer,
+    rendererTimeline: timelineResult.result?.result?.value,
+    processes,
+    mainCpuMs: boot && Math.round((boot.cpu.user + boot.cpu.system) / 1000),
+    timeline: main.timeline.map(([at, file, message]) => [at - spawnAt, file, message]),
   }
   if (mainProfile) {
     const profilePath = join(outDir, `main-${Date.now()}.cpuprofile`)
@@ -318,7 +399,14 @@ async function mainBootTiming() {
   cdp.close()
   const value = result.result?.result?.value
   if (typeof value !== "string") return undefined
-  return JSON.parse(value) as { created: number; origin: number; nodeStart: number; bootstrapComplete: number; loopStart: number }
+  return JSON.parse(value) as {
+    created: number
+    origin: number
+    nodeStart: number
+    bootstrapComplete: number
+    cpu: { user: number; system: number }
+    rss: number
+  }
 }
 
 function defaultExe() {
@@ -422,16 +510,24 @@ async function profileMain(spawnAt: number) {
   return result.result.profile
 }
 
+// Every timestamped line of the run's log directory, merged across the main log and the scoped logs
+// (crash, onboarding, window, …) that electron-log writes next to it.
 function mainLog() {
   const dirs = existsSync(paths.logs) ? readdirSync(paths.logs).sort().reverse() : []
-  const file = dirs.map((d) => join(paths.logs, d, "main.log")).find((f) => existsSync(f))
-  const text = file ? readFileSync(file, "utf8") : ""
-  const at = (pattern: RegExp) => {
-    const line = text.split("\n").find((l) => pattern.test(l))
-    const m = line?.match(/^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3})\]/)
-    return m ? new Date(m[1].replace(" ", "T")).getTime() : undefined
+  const dir = dirs.map((d) => join(paths.logs, d)).find((d) => existsSync(join(d, "main.log")))
+  const timeline: [number, string, string][] = []
+  for (const name of dir ? readdirSync(dir).filter((f) => f.endsWith(".log")) : []) {
+    for (const line of readFileSync(join(dir!, name), "utf8").split(/\r?\n/)) {
+      const m = line.match(/^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3})\]\s+\[\w+\]\s+(?:\([\w-]+\)\s+)?(.*)$/)
+      if (!m) continue
+      const message = m[2].replace(/\s*\{.*$/, "").trim()
+      timeline.push([new Date(m[1].replace(" ", "T")).getTime(), name.replace(/\.log$/, ""), message])
+    }
   }
+  timeline.sort((a, b) => a[0] - b[0])
+  const at = (pattern: RegExp) => timeline.find(([, , message]) => pattern.test(message))?.[0]
   return {
+    timeline,
     appStarting: at(/app starting/),
     versionStart: at(/v2 CLI command started/),
     versionDone: at(/v2 CLI command completed/),
@@ -439,6 +535,35 @@ function mainLog() {
     serviceReady: at(/background service ready/),
     windowVisible: at(/main window visible/),
   }
+}
+
+// Working set of every process in the launched app's tree once it is idle.
+async function processTree(root: number) {
+  const script =
+    process.platform === "win32"
+      ? [
+          "powershell",
+          [
+            "-NoProfile",
+            "-Command",
+            `$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, WorkingSetSize, CommandLine; $ids = @(${root}); do { $before = $ids.Count; $ids = @($ids + ($all | Where-Object { $ids -contains $_.ParentProcessId } | ForEach-Object ProcessId) | Sort-Object -Unique) } while ($ids.Count -ne $before); $all | Where-Object { $ids -contains $_.ProcessId } | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.ProcessId, $_.Name, $_.WorkingSetSize, (($_.CommandLine -split ' ' | Where-Object { $_ -like '--type=*' }) -join '') } `,
+          ],
+        ]
+      : ["sh", ["-c", `ps -eo pid=,ppid=,rss=,comm= | awk -v r=${root} 'BEGIN{ids[r]=1} {p[$1]=$2; rss[$1]=$3; c[$1]=$4} END{for(k=0;k<8;k++) for(i in p) if(p[i] in ids) ids[i]=1; for(i in ids) if(i in rss) print i "|" c[i] "|" rss[i]*1024 "|"}'`]]
+  const out = await new Promise<string>((done) => {
+    const child = spawn(script[0] as string, script[1] as string[], { stdio: ["ignore", "pipe", "ignore"] })
+    let text = ""
+    child.stdout?.on("data", (chunk) => (text += chunk))
+    child.on("close", () => done(text))
+  })
+  return out
+    .trim()
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => {
+      const [pid, name, rss, type] = line.split("|")
+      return { pid: Number(pid), name: `${name}${type ? ` ${type.replace("--type=", "")}` : ""}`, rssMB: Math.round(Number(rss) / 1048576) }
+    })
 }
 
 function summarize(list: Sample[]) {
