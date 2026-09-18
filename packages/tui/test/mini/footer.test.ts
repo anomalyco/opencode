@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { CliRenderEvents, RGBA, TextRenderable } from "@opentui/core"
-import { DEFAULT_THEME } from "@opencode/theme/tui"
 import path from "node:path"
 import { Writable } from "node:stream"
 import { coalesceProgressCommit, resolveRunAgent, RunFooter } from "../../src/mini/footer"
@@ -12,6 +11,7 @@ import type { MiniSettingChange, MiniSettings, RunAgent, RunTuiConfig, StreamCom
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { tmpdir } from "../fixture/fixture"
 import { createFooterApiFixture } from "./fixture/footer-api"
+import { getOpenCodeTheme } from "../../src/theme"
 
 function progress(input: Partial<StreamCommit> = {}): StreamCommit {
   return {
@@ -373,8 +373,8 @@ test("explicit theme refresh reloads custom colors without a palette event", asy
         path.join(tmp.path, "themes", "mini-refresh.json"),
         JSON.stringify({
           version: 2,
-          base: { ...DEFAULT_THEME.base, text: { ...DEFAULT_THEME.base.text, base: color } },
-          dark: { hue: DEFAULT_THEME.dark.hue },
+          base: { ...getOpenCodeTheme().base, text: { ...getOpenCodeTheme().base.text, base: color } },
+          dark: { hue: getOpenCodeTheme().dark.hue },
         }),
       )
       await app.footer.refreshTheme()

@@ -1,7 +1,8 @@
 import { Schema } from "effect"
-import { migrateV1, resolveThemeDocument, ThemeDocument, themeDecodeError } from "@opencode/theme/tui"
+import { migrateV1, resolveThemeDocument, ThemeDocument, themeDecodeError, type ModeDefinition } from "@opencode/theme/tui"
 import { resolveThemeColors } from "./resolve"
 import { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
+import opencode from "./assets/v2/opencode.json" with { type: "json" }
 
 export { DEFAULT_THEMES, generateSyntax, selectedForeground, type Theme, type ThemeV1Json } from "./v1"
 export { resolveThemeDocument, type ThemeDocument }
@@ -14,11 +15,23 @@ let systemTheme: ThemeDocumentSource | undefined
 const listeners = new Set<(themes: Record<string, ThemeDocumentSource>) => void>()
 const parsed = new WeakMap<object, ThemeDocument>()
 const decodeThemeDocument = Schema.decodeUnknownSync(ThemeDocument, { reportInput: true })
+let opencodeTheme: (ThemeDocument & {
+  readonly light: ModeDefinition
+  readonly dark: ModeDefinition
+}) | undefined
+
+export function getOpenCodeTheme() {
+  if (opencodeTheme) return opencodeTheme
+  const decoded = decodeThemeDocument(opencode) as NonNullable<typeof opencodeTheme>
+  opencodeTheme = decoded
+  return decoded
+}
 
 function listThemes(): Record<string, ThemeDocumentSource> {
   // Priority: defaults < plugin installs < custom files < generated system.
   const themes: Record<string, ThemeDocumentSource> = {
     ...DEFAULT_THEMES,
+    opencode: getOpenCodeTheme(),
     ...pluginThemes,
     ...customThemes,
   }

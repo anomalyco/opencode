@@ -93,14 +93,6 @@ const TextDefinition = Schema.Struct({
   muted: Schema.optional(ColorValue),
   action: Schema.optional(ActionColorDefinition),
   formfield: Schema.optional(StatefulColorDefinition),
-  status: Schema.optional(
-    Schema.Struct({
-      running: Schema.optional(ColorValue),
-      question: Schema.optional(ColorValue),
-      permission: Schema.optional(ColorValue),
-      unread: Schema.optional(ColorValue),
-    }),
-  ),
   feedback: Schema.optional(
     Schema.Struct({
       error: Schema.optional(TextFeedbackDefinition),
@@ -234,12 +226,6 @@ const CompleteThemeTokensDefinition = Schema.Struct({
     muted: ColorValue,
     action: CompleteActionColorDefinition,
     formfield: CompleteStatefulColorDefinition,
-    status: Schema.Struct({
-      running: ColorValue,
-      question: ColorValue,
-      permission: ColorValue,
-      unread: ColorValue,
-    }),
     feedback: Schema.Struct({
       error: CompleteTextFeedbackDefinition,
       warning: CompleteTextFeedbackDefinition,

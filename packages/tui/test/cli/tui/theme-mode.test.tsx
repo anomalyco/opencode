@@ -2,9 +2,10 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
-import { DEFAULT_THEME } from "@opencode/theme/tui"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { DEFAULT_THEMES } from "../../../src/theme"
+import { getOpenCodeTheme } from "../../../src/theme"
+import opencodeSource from "../../../src/theme/assets/opencode.json" with { type: "json" }
+import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 import { ConfigProvider } from "../../../src/config"
 import { ThemeContextProvider, ThemeProvider, type ThemeError, useTheme, useThemes } from "../../../src/context/theme"
 
@@ -17,19 +18,20 @@ async function wait(fn: () => boolean) {
 }
 
 test("uses an available mode while retaining the pinned preference", async () => {
-  const lightOnly = structuredClone(DEFAULT_THEMES.opencode)
+  const opencodeV1 = opencodeSource as ThemeV1Json
+  const lightOnly = structuredClone(opencodeV1)
   lightOnly.theme.background = "#eeeeee"
   lightOnly.theme.text = "#111111"
-  const dual = structuredClone(DEFAULT_THEMES.opencode)
+  const dual = structuredClone(opencodeV1)
   dual.theme.background = { light: "#eeeeee", dark: "#111111" }
   dual.theme.text = { light: "#111111", dark: "#eeeeee" }
-  const darkOnly = structuredClone(DEFAULT_THEMES.opencode)
+  const darkOnly = structuredClone(opencodeV1)
   darkOnly.theme.background = "#111111"
   darkOnly.theme.text = "#eeeeee"
   const native = {
     version: 2,
-    base: { ...DEFAULT_THEME.base, text: { ...DEFAULT_THEME.base.text, base: "#abcdef" } },
-    dark: { hue: DEFAULT_THEME.dark.hue },
+    base: { ...getOpenCodeTheme().base, text: { ...getOpenCodeTheme().base.text, base: "#abcdef" } },
+    dark: { hue: getOpenCodeTheme().dark.hue },
   } as const
   let themes: ReturnType<typeof useThemes> | undefined
 

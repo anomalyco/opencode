@@ -1,6 +1,6 @@
 import { RGBA } from "@opentui/core"
 import { oklchToHex, rgbToOklch } from "./color.js"
-import { DEFAULT_CATEGORICAL } from "./defaults.js"
+import { DEFAULT_CATEGORICAL } from "./categorical.js"
 import type { BaseThemeDefinition, HueDefinition, Mode, ThemeDefinition, ThemeDocument } from "./index.js"
 import { HueStep } from "./schema.js"
 import type { Theme, ThemeV1Json } from "./v1.js"
@@ -129,12 +129,6 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
         $pressed: primary,
         $disabled: textMuted,
         $selected: primary,
-      },
-      status: {
-        running: "$hue.interactive.200",
-        question: "$text.status.unread",
-        permission: "$text.status.unread",
-        unread: "$hue.accent.200",
       },
       feedback: {
         error: { base: color("error") },

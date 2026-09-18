@@ -1,30 +1,25 @@
 import { expect, test } from "bun:test"
-import { DEFAULT_THEME, selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "@opencode/theme/tui"
+import { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "@opencode/theme/tui"
+import { getOpenCodeTheme } from "../../../src/theme"
 
 test("selects complete light and dark themes independently", () => {
-  expect(selectTheme(DEFAULT_THEME)).toEqual({ ...DEFAULT_THEME.base, ...DEFAULT_THEME.light })
-  expect(selectTheme(DEFAULT_THEME, "light")).toEqual({ ...DEFAULT_THEME.base, ...DEFAULT_THEME.light })
-  expect(selectTheme(DEFAULT_THEME, "dark")).toEqual({ ...DEFAULT_THEME.base, ...DEFAULT_THEME.dark })
-  expect(selectThemeMode(DEFAULT_THEME, "dark")).toEqual({
-    theme: { ...DEFAULT_THEME.base, ...DEFAULT_THEME.dark },
-    mode: "dark",
-  })
+  const light = selectTheme(getOpenCodeTheme(), "light")
+  const dark = selectTheme(getOpenCodeTheme(), "dark")
+  expect(selectTheme(getOpenCodeTheme())).toEqual(light)
+  expect(light.hue).toEqual(getOpenCodeTheme().light.hue)
+  expect(light.text).toEqual(getOpenCodeTheme().base.text)
+  expect(dark.hue).toEqual(getOpenCodeTheme().dark.hue)
+  expect(selectThemeMode(getOpenCodeTheme(), "dark")).toEqual({ theme: dark, mode: "dark" })
 })
 
 test("selects the available mode when the requested mode is missing", () => {
-  const lightOnly = { version: 2, base: DEFAULT_THEME.base, light: DEFAULT_THEME.light } as const
-  const darkOnly = { version: 2, base: DEFAULT_THEME.base, dark: DEFAULT_THEME.dark } as const
+  const lightOnly = { version: 2, base: getOpenCodeTheme().base, light: getOpenCodeTheme().light } as const
+  const darkOnly = { version: 2, base: getOpenCodeTheme().base, dark: getOpenCodeTheme().dark } as const
 
   expect(themeModes(lightOnly)).toEqual(["light"])
   expect(themeModes(darkOnly)).toEqual(["dark"])
   expect(supportsThemeMode(lightOnly, "light")).toBeTrue()
   expect(supportsThemeMode(lightOnly, "dark")).toBeFalse()
-  expect(selectThemeMode(lightOnly, "dark")).toEqual({
-    theme: { ...DEFAULT_THEME.base, ...DEFAULT_THEME.light },
-    mode: "light",
-  })
-  expect(selectThemeMode(darkOnly, "light")).toEqual({
-    theme: { ...DEFAULT_THEME.base, ...DEFAULT_THEME.dark },
-    mode: "dark",
-  })
+  expect(selectThemeMode(lightOnly, "dark")).toEqual({ theme: selectTheme(getOpenCodeTheme(), "light"), mode: "light" })
+  expect(selectThemeMode(darkOnly, "light")).toEqual({ theme: selectTheme(getOpenCodeTheme(), "dark"), mode: "dark" })
 })

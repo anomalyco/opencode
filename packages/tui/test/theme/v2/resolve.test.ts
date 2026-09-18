@@ -2,7 +2,6 @@ import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
 import {
   BaseHue,
-  DEFAULT_THEME,
   generateSyntax,
   resolveTheme,
   resolveThemeDocument,
@@ -10,10 +9,20 @@ import {
   type Mode,
   type ThemeDefinition,
 } from "@opencode/theme/tui"
-import { parseTheme, type ThemeDocumentSource } from "../../../src/theme"
+import { getOpenCodeTheme, parseTheme, type ThemeDocumentSource } from "../../../src/theme"
 
-const light = selectTheme(DEFAULT_THEME, "light")
-const dark = selectTheme(DEFAULT_THEME, "dark")
+const opencodeLight = selectTheme(getOpenCodeTheme(), "light")
+const opencodeDark = selectTheme(getOpenCodeTheme(), "dark")
+const light = {
+  ...opencodeLight,
+  categorical: ["blue", "purple"],
+  hue: { ...opencodeLight.hue, accent: "$hue.blue", interactive: "$hue.blue", neutral: "$hue.gray" },
+} satisfies ThemeDefinition
+const dark = {
+  ...opencodeDark,
+  categorical: ["blue", "purple"],
+  hue: { ...opencodeDark.hue, accent: "$hue.blue", interactive: "$hue.blue", neutral: "$hue.gray" },
+} satisfies ThemeDefinition
 
 test("orders light hues dark-to-light and dark hues light-to-dark", () => {
   const lightTheme = resolveTheme(light)
@@ -102,16 +111,16 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.background.raised.base).toBe(lightTheme.hue.neutral[700])
   expect(lightTheme.background.raised.high).toBe(lightTheme.hue.neutral[600])
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
-  expect(lightTheme.text.action.primary.base).toBe(lightTheme.hue.neutral[800])
+  expect(lightTheme.text.action.primary.base).toBe(lightTheme.text.base)
   // Surfaces re-resolve the palette after applying their theme-provided overrides.
   const dialog = lightTheme.surface("dialog")
   expect(dialog.background.base).toBe(lightTheme.background.raised.base)
   expect(dialog.background.formfield.base).toBe(lightTheme.background.raised.base)
   expect(dialog.background.feedback.error.base).toBe(lightTheme.background.raised.base)
   expect(dialog.background.action.primary.hovered).toBe(lightTheme.background.raised.high)
-  expect(dialog.background.action.primary.base).toBe(lightTheme.hue.interactive[500])
-  expect(dialog.background.action.primary.focused).toBe(lightTheme.hue.interactive[500])
-  expect(dialog.text.action.primary.base).toBe(lightTheme.hue.neutral[900])
+  expect(dialog.background.action.primary.base.equals(lightTheme.background.action.primary.base)).toBeTrue()
+  expect(dialog.background.action.primary.focused.equals(lightTheme.background.action.primary.focused)).toBeTrue()
+  expect(dialog.text.action.primary.base.equals(lightTheme.text.action.primary.base)).toBeTrue()
   expect(dialog.surface("dialog")).toBe(dialog)
   expect(darkTheme.surface("dialog").background.base).toBe(darkTheme.background.raised.base)
 })

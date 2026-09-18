@@ -42,7 +42,7 @@ export type {
   ResolvedThemeTokens,
   StatefulColor,
 } from "./types.js"
-export { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"
+export { DEFAULT_CATEGORICAL } from "./categorical.js"
 export { expandTheme } from "./expand.js"
 export { migrateV1 } from "./v1-migrate.js"
 export { resolveTheme, resolveThemeDocument, themeDecodeError } from "./resolve.js"

@@ -2,21 +2,29 @@ import { expect, test } from "bun:test"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TerminalColors } from "@opentui/core"
-import { DEFAULT_THEME } from "@opencode/theme/tui"
-import { DEFAULT_THEMES, hasTheme, parseTheme, resolveTheme } from "../src/theme"
+import { allThemes, hasTheme, getOpenCodeTheme, parseTheme, resolveTheme } from "../src/theme"
 import { discoverThemes } from "../src/theme/discovery"
 import { configDirectories } from "../src/util/config-directories"
 import { terminalMode } from "../src/theme/system"
+import opencodeSource from "../src/theme/assets/opencode.json" with { type: "json" }
+import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 import { tmpdir } from "./fixture/fixture"
+
+const opencodeV1 = opencodeSource as ThemeV1Json
 
 test("parseTheme delegates malformed V1 sources and rejects unknown versions", () => {
   expect(() => parseTheme({})).toThrow()
   expect(() => parseTheme({ version: 3 })).toThrow("Unsupported theme version: 3")
 })
 
+test("registers opencode as a native V2 theme", () => {
+  expect(allThemes().opencode).toBe(getOpenCodeTheme())
+  expect(parseTheme(getOpenCodeTheme()).version).toBe(2)
+})
+
 test("parses unversioned and explicit V1 themes lazily once", () => {
-  const unversioned = structuredClone(DEFAULT_THEMES.opencode)
-  const explicit = { ...structuredClone(DEFAULT_THEMES.opencode), version: 1 }
+  const unversioned = structuredClone(opencodeV1)
+  const explicit = { ...structuredClone(opencodeV1), version: 1 }
   const first = parseTheme(unversioned, "unversioned")
   const second = parseTheme(explicit, "explicit")
 
@@ -29,8 +37,8 @@ test("parses unversioned and explicit V1 themes lazily once", () => {
 test("decodes native V2 themes lazily once", () => {
   const source = {
     version: 2,
-    base: DEFAULT_THEME.base,
-    light: { ...DEFAULT_THEME.light, categorical: ["red"] },
+    base: getOpenCodeTheme().base,
+    light: { ...getOpenCodeTheme().light, categorical: ["red"] },
   } as const
 
   const document = parseTheme(source)
@@ -45,7 +53,7 @@ test("rejects invalid V2 themes when parsing", () => {
 })
 
 test("rejects invalid V1 themes when parsing", () => {
-  const source = structuredClone(DEFAULT_THEMES.opencode)
+  const source = structuredClone(opencodeV1)
   source.defs = { ...source.defs, one: "two", two: "one" }
   source.theme.primary = "one"
 
@@ -53,8 +61,8 @@ test("rejects invalid V1 themes when parsing", () => {
 })
 
 test("replacement sources receive independent parse caches", () => {
-  const first = structuredClone(DEFAULT_THEMES.opencode)
-  const second = structuredClone(DEFAULT_THEMES.opencode)
+  const first = structuredClone(opencodeV1)
+  const second = structuredClone(opencodeV1)
   second.theme.primary = "#123456"
 
   const previous = parseTheme(first)
@@ -69,14 +77,14 @@ test("hasTheme checks theme presence", () => {
 })
 
 test("resolveTheme rejects circular color refs", () => {
-  const item = structuredClone(DEFAULT_THEMES.opencode)
+  const item = structuredClone(opencodeV1)
   item.defs = { ...item.defs, one: "two", two: "one" }
   item.theme.primary = "one"
   expect(() => resolveTheme(item, "dark")).toThrow("Circular color reference")
 })
 
 test("resolveTheme preserves full theme numeric color and marker semantics", () => {
-  const item = structuredClone(DEFAULT_THEMES.opencode)
+  const item = structuredClone(opencodeV1)
   item.theme.primary = 6
   delete item.theme.selectedListItemText
 
