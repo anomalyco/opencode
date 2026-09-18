@@ -5,7 +5,7 @@ import { useDialog, type DialogContext } from "./dialog"
 
 export function DialogExportResult(props: { path: string; onClose?: () => void }) {
   const dialog = useDialog()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
 
   const close = () => {
     props.onClose?.()

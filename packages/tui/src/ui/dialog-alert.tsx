@@ -11,7 +11,7 @@ export type DialogAlertProps = {
 
 export function DialogAlert(props: DialogAlertProps) {
   const dialog = useDialog()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
 
   Keymap.createLayer(() => ({
     mode: "modal",

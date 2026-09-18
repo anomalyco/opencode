@@ -27,7 +27,7 @@ export type DiffViewerFileTreeProps = {
 }
 
 export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const [sourceHovered, setSourceHovered] = createSignal(false)
   const list = () => props.layout === "list"
   const tree = createMemo(() => buildFileTree(props.files))
@@ -37,9 +37,9 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
       : flattenFileTree(tree(), props.expandedNodes),
   )
   // Quieter than subdued text: markers are affordances, not content.
-  const faint = createMemo(() => tint(theme.text.subdued, theme.background.default, 0.45))
+  const faint = createMemo(() => tint(theme.text.subdued, theme.background.raised.base, 0.45))
   // Rails are pure texture; keep them barely above the surface.
-  const rail = createMemo(() => tint(theme.text.subdued, theme.background.default, 0.7))
+  const rail = createMemo(() => tint(theme.text.subdued, theme.background.raised.base, 0.7))
   const reviewedCount = createMemo(() => props.files.filter((file) => props.reviewedFileNames?.has(file.file)).length)
   const contentWidth = () => Math.max(0, props.width - 4 - FILE_TREE_STATUS_WIDTH - 1)
   let scroll: ScrollBoxRenderable | undefined
@@ -56,7 +56,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
 
   return (
     <box width={props.width} height="100%" minWidth={0} minHeight={0} flexShrink={0} flexDirection="column">
-      <box id="diff-tree-top-edge" height={1} flexShrink={0} backgroundColor={theme.background.default} />
+      <box id="diff-tree-top-edge" height={1} flexShrink={0} backgroundColor={theme.background.raised.base} />
       <box
         flexGrow={1}
         minWidth={0}
@@ -64,7 +64,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={2}
-        backgroundColor={theme.background.default}
+        backgroundColor={theme.background.raised.base}
       >
         <box id="diff-source-header" height={1} flexShrink={0} flexDirection="row" marginBottom={1} gap={1}>
           <box
@@ -137,8 +137,8 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                     }
                     const background = () => {
                       // Elevated context maps this to a quiet neutral surface step, not the loud accent.
-                      if (hovered()) return theme.background.action.primary.hovered
-                      return theme.background.default
+                      if (hovered()) return theme.background.raised.high
+                      return theme.background.raised.base
                     }
                     const marker = () => {
                       if (row.kind !== "directory") return "≡ "

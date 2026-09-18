@@ -1,30 +1,25 @@
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { RGBA } from "@opentui/core"
-import { DEFAULT_THEME, resolveTheme, selectTheme, type ContextName } from "@opencode/theme/tui"
-import { createComponentTheme, createComponentThemeView } from "../../../src/theme/component"
+import { DEFAULT_THEME, resolveTheme, selectTheme } from "@opencode/theme/tui"
+import { createComponentTheme } from "../../../src/theme/component"
 
-test("provides reactive properties, states, contexts, and color operations", () => {
+test("provides reactive properties, states, surfaces, and color operations", () => {
   const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(DEFAULT_THEME, "light")))
-  const [mode, setMode] = createSignal<"light" | "dark">("light")
-  const theme = createComponentTheme(resolved, mode)
-  const [context, setContext] = createSignal<ContextName>()
-  const current = () => {
-    const name = context()
-    return name ? theme.contextual[name] : theme
-  }
+  const theme = createComponentTheme(resolved)
+  const current = theme.surface("dialog")
 
   expect(theme.text.default).toBe(resolved().text.default)
   expect(theme.hue.accent[500]).toBe(resolved().hue.accent[500])
   expect(theme.hue.interactive[500]).toBe(resolved().hue.interactive[500])
   expect(theme.hue.gray[200]).toBe(resolved().hue.gray[200])
   expect(theme.categorical.map((scale) => scale[500])).toEqual(resolved().categorical.map((scale) => scale[500]))
-  expect(theme.increase(theme.background.raised.base, 1)).toBe(resolved().hue.neutral[400])
-  expect(theme.raise(theme.background.raised.base)).toBe(resolved().hue.neutral[400])
+  expect(theme.increase(theme.background.raised.base, 1)).toBe(resolved().hue.neutral[800])
+  expect(theme.decrease(theme.background.raised.base)).toBe(resolved().hue.neutral[600])
   expect(theme.decrease(theme.hue.red[300], 2)).toBe(resolved().hue.red[100])
   expect(theme.increase(theme.hue.red[900], 3)).toBe(resolved().hue.red[900])
   expect(theme.decrease(theme.hue.red[100], 3)).toBe(resolved().hue.red[100])
-  expect(theme.source(theme.background.raised.base)).toEqual({ hue: "neutral", step: 300 })
+  expect(theme.source(theme.background.raised.base)).toEqual({ hue: "neutral", step: 700 })
   const equivalent = RGBA.fromInts(...resolved().hue.green[500].toInts())
   expect(theme.source(equivalent)).toBeUndefined()
   expect(theme.increase(equivalent, 1)).toBe(equivalent)
@@ -41,6 +36,29 @@ test("provides reactive properties, states, contexts, and color operations", () 
   expect(theme.background.action.primary.pressed).toBe(resolved().background.action.primary.pressed)
   expect(theme.background.action.primary.disabled).toBe(resolved().background.action.primary.disabled)
   expect(theme.background.action.primary.default).toBe(resolved().background.action.primary.default)
+  expect(
+    theme.background.action.primary.state({
+      disabled: true,
+      pressed: true,
+      focused: true,
+      selected: true,
+      hovered: true,
+    }),
+  ).toBe(theme.background.action.primary.disabled)
+  expect(theme.background.action.primary.state({ pressed: true, focused: true, selected: true, hovered: true })).toBe(
+    theme.background.action.primary.pressed,
+  )
+  expect(theme.background.action.primary.state({ focused: true, selected: true, hovered: true })).toBe(
+    theme.background.action.primary.focused,
+  )
+  expect(theme.background.action.primary.state({ selected: true, hovered: true })).toBe(
+    theme.background.action.primary.selected,
+  )
+  expect(theme.background.action.primary.state({ hovered: true })).toBe(theme.background.action.primary.hovered)
+  expect(theme.background.action.primary.state({ disabled: false, hovered: false })).toBe(
+    theme.background.action.primary.default,
+  )
+  expect(theme.text.formfield.state({ focused: true, selected: true })).toBe(theme.text.formfield.focused)
   expect(theme.background.action.destructive.disabled).toBe(resolved().background.action.destructive.disabled)
   expect(theme.background.formfield.hovered).toBe(resolved().background.formfield.hovered)
   expect(theme.background.formfield.selected).toBe(resolved().background.formfield.selected)
@@ -51,35 +69,18 @@ test("provides reactive properties, states, contexts, and color operations", () 
   expect(theme.scrollbar.default).toBe(resolved().scrollbar.default)
   expect(theme.diff.text.added).toBe(resolved().diff.text.added)
 
-  setContext("elevated")
-  expect("contexts" in current()).toBeFalse()
-  expect(current().categorical.map((scale) => scale[500])).toEqual(resolved().categorical.map((scale) => scale[500]))
-  expect(current().text.default).toBe(resolved().contextual.elevated.text.default)
-  expect(current().background.action.primary.focused).toBe(
-    resolved().contextual.elevated.background.action.primary.focused,
-  )
-  expect(current().background.action.primary.hovered).toBe(resolved().background.raised.high)
-  expect(current().background.formfield.selected).toBe(resolved().contextual.elevated.background.formfield.selected)
+  expect(theme.surface("dialog")).toBe(current)
+  expect(current.surface("dialog")).toBe(current)
+  expect(current.categorical.map((scale) => scale[500])).toEqual(resolved().categorical.map((scale) => scale[500]))
+  expect(current.text.default).toBe(resolved().surface("dialog").text.default)
+  expect(current.background.default).toBe(resolved().background.raised.base)
+  expect(current.background.action.primary.focused).toBe(resolved().surface("dialog").background.action.primary.focused)
+  expect(current.background.action.primary.hovered).toBe(resolved().background.raised.high)
+  expect(current.background.formfield.selected).toBe(resolved().surface("dialog").background.formfield.selected)
 
   setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
-  setMode("dark")
-  expect(current().text.default).toBe(resolved().contextual.elevated.text.default)
-  expect(current().decrease(current().background.raised.base, 1)).toBe(resolved().hue.neutral[600])
-  expect(current().raise(current().background.raised.base)).toBe(resolved().hue.neutral[600])
-})
-
-test("a stable component theme view follows presentation context changes", () => {
-  const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(DEFAULT_THEME, "dark")))
-  const [context, setContext] = createSignal<ContextName>()
-  const theme = createComponentThemeView(
-    () => (context() ? resolved().contextual[context()!] : resolved()),
-    () => "dark",
-  )
-  expect(theme.background.default).toBe(resolved().background.default)
-  setContext("elevated")
-  expect(theme.background.default).toBe(resolved().contextual.elevated.background.default)
-  setContext(undefined)
-  expect(theme.background.default).toBe(resolved().background.default)
-  setResolved(resolveTheme(selectTheme(DEFAULT_THEME, "light")))
-  expect(theme.text.default).toBe(resolved().text.default)
+  expect(current.text.default).toBe(resolved().surface("dialog").text.default)
+  expect(current.background.default).toBe(resolved().background.raised.base)
+  expect(current.decrease(current.background.raised.base, 1)).toBe(resolved().hue.neutral[600])
+  expect(current.decrease(current.background.raised.base)).toBe(resolved().hue.neutral[600])
 })

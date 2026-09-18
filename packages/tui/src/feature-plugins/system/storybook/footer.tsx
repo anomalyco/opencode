@@ -14,10 +14,10 @@ export function StoryFooter(props: {
   message?: string
   controls: readonly StoryFooterControl[]
 }) {
-  const theme = props.context.theme.contextual.elevated
+  const theme = props.context.theme
 
   return (
-    <box flexShrink={0} flexDirection="column" backgroundColor={theme.background.default}>
+    <box flexShrink={0} flexDirection="column" backgroundColor={theme.background.raised.base}>
       <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row">
         <text fg={theme.text.default}>{props.title}</text>
         <Show when={props.details?.length}>

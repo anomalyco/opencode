@@ -19,7 +19,7 @@ for (const mode of ["dark", "light"] as const) {
     let theme!: ReturnType<typeof useTheme>
     let parent!: BoxRenderable
     function Pane() {
-      theme = useTheme("elevated")
+      theme = useTheme()
       resize = createPaneResize({
         value,
         defaultValue: () => 16,
@@ -78,11 +78,11 @@ for (const mode of ["dark", "light"] as const) {
       await app.renderOnce()
       expect(resize.hovered()).toBe(true)
       expect(resize.resizing()).toBe(false)
-      expect(line.backgroundColor.toInts()).toEqual(theme.background.action.primary.hovered.toInts())
+      expect(line.backgroundColor.toInts()).toEqual(theme.background.raised.high.toInts())
       expect(handle.backgroundColor.a).toBe(0)
       for (const row of app.captureSpans().lines) {
         const colors = row.spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg.toInts()))
-        expect(colors[23]).toEqual(theme.background.action.primary.hovered.toInts())
+        expect(colors[23]).toEqual(theme.background.raised.high.toInts())
         expect(colors[24]).not.toEqual(colors[23])
       }
 
@@ -107,7 +107,7 @@ for (const mode of ["dark", "light"] as const) {
       expect(handle.x).toBe(39)
       expect(resize.hovered()).toBe(false)
       expect(resize.resizing()).toBe(true)
-      expect(line.backgroundColor.toInts()).toEqual(theme.background.action.primary.hovered.toInts())
+      expect(line.backgroundColor.toInts()).toEqual(theme.background.raised.high.toInts())
       expect(commits).toEqual([])
 
       await app.mockMouse.release(55, 2)

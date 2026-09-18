@@ -83,21 +83,21 @@ function expectFooter(actual: RunTheme, theme: ResolvedTheme) {
     muted: theme.text.subdued,
     warning: theme.text.feedback.warning.default,
     error: theme.text.feedback.error.default,
-    actionSecondaryText: theme.contextual.elevated.text.action.secondary.default,
-    actionFocusedBg: theme.contextual.elevated.background.action.primary.focused,
-    actionFocusedText: theme.contextual.elevated.text.action.primary.focused,
-    formfieldText: theme.contextual.elevated.text.formfield.default,
-    formfieldFocusedBg: theme.contextual.elevated.background.formfield.focused,
-    formfieldFocusedText: theme.contextual.elevated.text.formfield.focused,
-    selection: theme.contextual.elevated.text.formfield.selected,
+    actionSecondaryText: theme.text.action.secondary.default,
+    actionFocusedBg: theme.background.action.primary.focused,
+    actionFocusedText: theme.text.action.primary.focused,
+    formfieldText: theme.text.formfield.default,
+    formfieldFocusedBg: theme.background.formfield.focused,
+    formfieldFocusedText: theme.text.formfield.focused,
+    selection: theme.text.formfield.selected,
     running: theme.text.status.running,
     question: theme.text.status.question,
     permission: theme.text.status.permission,
     success: theme.text.feedback.success.default,
     link: theme.markdown.link,
-    shade: theme.contextual.elevated.background.default,
-    surface: theme.contextual.elevated.background.default,
-    pane: theme.contextual.overlay.background.default,
+    shade: theme.background.raised.base,
+    surface: theme.background.raised.base,
+    pane: theme.background.raised.high,
     border: theme.border.default,
     line: theme.background.raised.high,
   }
@@ -141,7 +141,7 @@ test.each(["light", "dark"] as const)("uses shared %s defaults and named built-i
       expectFooter(theme, expected)
       expect(rgba(theme.background).toInts()).toEqual(RGBA.fromHex(colors.defaultBackground!).toInts())
       expect(theme.footer.categorical.map((color) => rgba(color).toInts())).toEqual(
-        expected.categorical.map((scale) => scale[mode === "light" ? 800 : 200].toInts()),
+        expected.categorical.map((scale) => scale[200].toInts()),
       )
       expect(theme.block.syntax?.getAllStyles().size).toBeGreaterThan(0)
       for (const color of [
@@ -195,13 +195,11 @@ test.each(["light", "dark"] as const)(
           hue: DEFAULT_THEME[mode].hue,
           text: {
             default: "#123456",
-            formfield: { default: "#234567", $selected: "#345678" },
+            action: { primary: { $focused: "#56789a" } },
+            formfield: { default: "#234567", $selected: "#345678", $focused: "#6789ab" },
             feedback: { warning: { default: "#456789" } },
           },
-          "@context:elevated": {
-            text: { action: { primary: { $focused: "#56789a" } }, formfield: { $focused: "#6789ab" } },
-            background: { action: { primary: { $focused: "#789abc" } }, formfield: { $focused: "#89abcd" } },
-          },
+          background: { action: { primary: { $focused: "#789abc" } }, formfield: { $focused: "#89abcd" } },
         },
       }
       await Bun.write(path.join(tmp.path, "themes", "mini-custom.json"), JSON.stringify(source))

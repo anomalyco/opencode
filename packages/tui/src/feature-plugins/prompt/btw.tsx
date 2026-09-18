@@ -93,8 +93,8 @@ export function Answer(props: {
   const dialog = useDialog()
   const toast = useToast()
   const clipboard = useClipboard()
-  const theme = useTheme("elevated")
-  const overlay = useTheme("overlay")
+  const theme = useTheme().surface("dialog")
+  const overlay = useTheme()
   const syntax = useThemes().currentSyntax
   const config = useConfig().data
   const [copied, setCopied] = createSignal(false)
@@ -142,7 +142,7 @@ export function Answer(props: {
       <scrollbox
         ref={(element: ScrollBoxRenderable) => (scroll = element)}
         maxHeight={20}
-        backgroundColor={overlay.background.default}
+        backgroundColor={overlay.background.raised.high}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={getScrollAcceleration(config)}
       >
@@ -155,7 +155,7 @@ export function Answer(props: {
             internalBlockMode="top-level"
             tableOptions={{ style: "grid", cellPaddingX: 1 }}
             fg={overlay.markdown.text}
-            bg={overlay.background.default}
+            bg={overlay.background.raised.high}
           />
         </box>
       </scrollbox>

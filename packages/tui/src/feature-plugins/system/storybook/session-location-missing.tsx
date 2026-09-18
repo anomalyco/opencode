@@ -11,7 +11,7 @@ const directory = "/Users/kit/code/open-source/opencode-workerd-profile"
 
 function SessionLocationMissingStory(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
-  const theme = props.context.theme.contextual.elevated
+  const theme = props.context.theme
   const [message, setMessage] = createSignal("Choose another directory to continue")
   const open = () =>
     props.context.ui.dialog.show(() => (
@@ -45,7 +45,7 @@ function SessionLocationMissingStory(props: { context: Plugin.Context }) {
   }))
 
   return (
-    <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background.default}>
+    <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background.raised.base}>
       <box paddingLeft={2} paddingRight={2} paddingTop={1} flexGrow={1}>
         <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
           Workerd Modal workspace driver

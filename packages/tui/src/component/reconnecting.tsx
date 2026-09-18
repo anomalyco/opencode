@@ -3,7 +3,7 @@ import { useTheme } from "../context/theme"
 import { Spinner } from "./spinner"
 
 export function Reconnecting(props: { managed?: boolean }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
 
   return (
     <box
@@ -21,7 +21,7 @@ export function Reconnecting(props: { managed?: boolean }) {
         width={48}
         maxWidth="90%"
         flexDirection="column"
-        backgroundColor={theme.background.default}
+        backgroundColor={theme.background.raised.base}
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}

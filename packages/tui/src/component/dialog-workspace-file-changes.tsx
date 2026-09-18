@@ -31,8 +31,8 @@ export function DialogWorkspaceFileChanges(props: {
   message?: string
 }) {
   const dialog = useDialog()
-  const theme = useTheme("elevated")
-  const overlayTheme = useTheme("overlay")
+  const theme = useTheme().surface("dialog")
+  const overlayTheme = useTheme()
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -86,7 +86,7 @@ export function DialogWorkspaceFileChanges(props: {
       </box>
       <scrollbox
         height={height()}
-        backgroundColor={overlayTheme.background.default}
+        backgroundColor={overlayTheme.background.raised.high}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}
       >

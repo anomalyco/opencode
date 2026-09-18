@@ -78,7 +78,7 @@ export function DialogIntegration(
   const data = useData()
   const currentLocation = useLocation()
   const dialog = useDialog()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const location = currentLocation.ref ?? data.location.default()
   const integrations = createMemo(() =>
     integrationOptions(data.location.integration.list(location) ?? []).filter(
@@ -153,7 +153,7 @@ function manageConnections(
     const data = useData()
     const client = useClient()
     const toast = useToast()
-    const theme = useTheme("elevated")
+    const theme = useTheme().surface("dialog")
     const shortcuts = Keymap.useShortcuts()
     const [deleting, setDeleting] = createSignal<string>()
     const [selected, setSelected] = createSignal(methods.length ? "add" : credentialConnections(integration)[0]?.id)
@@ -427,8 +427,8 @@ function CommandPending(props: {
 
 function CommandView(props: { title: string; output: string; message: string }) {
   const dialog = useDialog()
-  const theme = useTheme("elevated")
-  const overlayTheme = useTheme("overlay")
+  const theme = useTheme().surface("dialog")
+  const overlayTheme = useTheme()
   onMount(() => dialog.setSize("large"))
   return (
     <box gap={1} paddingBottom={1}>
@@ -441,7 +441,7 @@ function CommandView(props: { title: string; output: string; message: string }) 
         </text>
       </box>
       <box
-        backgroundColor={overlayTheme.background.default}
+        backgroundColor={overlayTheme.background.raised.high}
         paddingLeft={2}
         paddingRight={2}
         paddingTop={1}
@@ -467,7 +467,7 @@ function KeyMethod(props: {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const [error, setError] = createSignal<string>()
 
   return (
@@ -672,7 +672,7 @@ function OAuthCode(props: {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const [error, setError] = createSignal<string>()
   let settled = false
 
@@ -724,7 +724,7 @@ function OAuthView(props: {
   open?: boolean
 }) {
   const dialog = useDialog()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
@@ -852,7 +852,7 @@ function textAnswer(
   return new Promise<FormValue | undefined | typeof CANCELLED>((resolve) => {
     dialog.replace(
       () => {
-        const theme = useTheme("elevated")
+        const theme = useTheme().surface("dialog")
         const [error, setError] = createSignal<string>()
         return (
           <DialogPrompt

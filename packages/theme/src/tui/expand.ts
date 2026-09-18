@@ -11,11 +11,7 @@ export function expandTheme<Definition extends ModeDefinition>(definition: Defin
   return {
     ...definition,
     ...expandTokens(definition),
-    ...Object.fromEntries(
-      Object.entries(definition)
-        .filter(([key]) => key.startsWith("@context:"))
-        .map(([key, value]) => [key, expandTokens(value as ThemeTokensDefinition)]),
-    ),
+    ...(definition["@dialog"] ? { "@dialog": expandTokens(definition["@dialog"]) } : {}),
   }
 }
 

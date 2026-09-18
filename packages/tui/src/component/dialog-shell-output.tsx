@@ -13,7 +13,7 @@ const PAGE_BYTES = 64 * 1024
 export function DialogShellOutput(props: { shell: ShellInfo; location: LocationRef }) {
   const client = useClient()
   const dialog = useDialog()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const dimensions = useTerminalDimensions()
   const [info, setInfo] = createSignal(props.shell)
   const [output, setOutput] = createSignal<string>()

@@ -176,6 +176,9 @@ Override a hue alias to change a family of related colors at once:
 | Alias   | `accent`, `interactive`, `neutral`                                 |
 | Step    | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900`      |
 
+Hue steps follow the mode's contrast direction: light themes run from dark at `100` to light at `900`, while dark
+themes run from light at `100` to dark at `900`.
+
 `categorical` sets the ordered hues used to distinguish agents and other repeated items. It must contain at least one
 base hue or alias.
 
@@ -246,24 +249,32 @@ Syntax keys are `comment`, `keyword`, `function`, `variable`, `string`, `number`
 `punctuation`. Markdown keys are `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`,
 `horizontalRule`, `listItem`, `listEnumeration`, `image`, `imageText`, and `codeBlock`.
 
-## Contexts
+## Raised surfaces
 
-Use context overrides for elevated panels and overlays while keeping the base theme elsewhere:
+Panels, dialogs, menus, and toasts select their depth from `background.raised`. Dialogs additionally support a
+contextual `@dialog` surface. The TUI re-resolves the palette after applying `@dialog`, so tokens that reference
+`$background.default` follow the dialog background:
 
 ```json title="themes/ocean.json"
 {
   "version": 2,
   "dark": {
     "background": {
-      "default": "#071521"
+      "default": "#071521",
+      "raised": {
+        "base": "#0c1f2e",
+        "high": "#102a3c",
+        "max": "#16364b"
+      }
     },
-    "@context:overlay": {
+    "@dialog": {
       "background": {
-        "default": "#102a3c"
+        "default": "$background.raised.base"
       }
     }
   }
 }
 ```
 
-The available keys are `@context:elevated` and `@context:overlay`. Each accepts the same token groups as the base mode.
+`@dialog` accepts the same token groups as the base mode. An action's contextual `default` also becomes the fallback
+for its unspecified states; an explicit state override still wins.

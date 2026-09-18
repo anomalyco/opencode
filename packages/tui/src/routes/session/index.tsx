@@ -23,7 +23,7 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
-import { createSyntaxStyleMemo, ThemeContextProvider, useTheme, useThemes } from "../../context/theme"
+import { createSyntaxStyleMemo, useTheme, useThemes } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
@@ -1292,7 +1292,7 @@ export function Session(props: {
                   paddingLeft: 1,
                   visible: showScrollbar(),
                   trackOptions: {
-                    backgroundColor: theme.raise(theme.background.raised.base),
+                    backgroundColor: theme.decrease(theme.background.raised.base),
                     foregroundColor: theme.border.default,
                   },
                 }}
@@ -1836,7 +1836,7 @@ function SessionReasoningGroupView(props: {
                         <box
                           border={["left"]}
                           customBorderChars={SplitBorder.customBorderChars}
-                          borderColor={theme.raise(theme.background.raised.base)}
+                          borderColor={theme.decrease(theme.background.raised.base)}
                           paddingLeft={1}
                         >
                           <code
@@ -1936,7 +1936,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const config = useConfig()
   const data = useData()
   const local = useLocal()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const model = createMemo(
     () =>
       ctx
@@ -2179,7 +2179,7 @@ function RevertMessage(props: {
   }>
 }) {
   const ctx = use()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const route = useRouteData("session")
   const client = useClient()
   const toast = useToast()
@@ -2204,13 +2204,13 @@ function RevertMessage(props: {
       marginTop={1}
       border={["left"]}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.background.default}
+      borderColor={theme.background.raised.base}
     >
       <box
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
-        backgroundColor={hover() ? theme.raise(theme.background.default) : theme.background.default}
+        backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
       >
         <text fg={theme.text.subdued}>
           {props.count} message{props.count === 1 ? "" : "s"} reverted
@@ -2282,7 +2282,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
     ),
   )
   const themes = useThemes()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const mode = themes.mode
   const [hover, setHover] = createSignal(false)
   const color = createMemo(() => local.agent.color(data.session.get(ctx.sessionID)?.agent ?? "build"))
@@ -2301,7 +2301,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
         border={["left"]}
         borderColor={delivery() ? theme.border.default : color()}
         customBorderChars={SplitBorder.customBorderChars}
-        backgroundColor={theme.background.default}
+        backgroundColor={theme.background.raised.base}
       >
         <SessionImages images={images()} paddingLeft={2} />
         <box
@@ -2339,7 +2339,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           paddingTop={1}
           paddingBottom={1}
           paddingLeft={2}
-          backgroundColor={hover() ? theme.raise(theme.background.default) : theme.background.default}
+          backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
           <text fg={theme.text.default}>{props.message.text}</text>
@@ -2350,14 +2350,14 @@ function UserMessage(props: { message: SessionMessageUser }) {
                   <text fg={theme.text.default}>
                     <span
                       style={{
-                        bg: theme.hue.accent[mode() === "light" ? 700 : 200],
-                        fg: theme.background.default,
+                        bg: theme.hue.accent[mode() === "light" ? 300 : 200],
+                        fg: theme.background.raised.base,
                         bold: true,
                       }}
                     >
                       {" skill "}
                     </span>
-                    <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}>
+                    <span style={{ bg: theme.decrease(theme.background.raised.base), fg: theme.text.subdued }}>
                       {` ${skill.name} `}
                     </span>
                   </text>
@@ -2374,14 +2374,14 @@ function UserMessage(props: { message: SessionMessageUser }) {
                     <text fg={theme.text.default}>
                       <span
                         style={{
-                          bg: theme.hue.accent[mode() === "light" ? 700 : 200],
-                          fg: theme.background.default,
+                          bg: theme.hue.accent[mode() === "light" ? 300 : 200],
+                          fg: theme.background.raised.base,
                           bold: true,
                         }}
                       >
                         {` ${label} `}
                       </span>
-                      <span style={{ bg: theme.raise(theme.background.default), fg: theme.text.subdued }}>
+                      <span style={{ bg: theme.decrease(theme.background.raised.base), fg: theme.text.subdued }}>
                         {" "}
                         {file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}{" "}
                       </span>
@@ -2398,7 +2398,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
 }
 
 function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOpen: () => void }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const [hover, setHover] = createSignal(false)
   const next = createMemo(() => props.prompts[0]?.text.replaceAll("\n", " "))
 
@@ -2417,7 +2417,7 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={1}
-        backgroundColor={hover() ? theme.raise(theme.background.default) : theme.background.default}
+        backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
         flexDirection="row"
       >
         <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
@@ -2758,10 +2758,11 @@ function InlineTool(props: {
   )
 }
 
-function StatusBadge(props: { children: string }) {
+function StatusBadge(props: { children: string; raised?: boolean }) {
   const theme = useTheme()
+  const background = () => (props.raised ? theme.background.raised.base : theme.background.default)
   return (
-    <text flexShrink={0} bg={theme.raise(theme.background.default)} fg={theme.text.subdued}>
+    <text flexShrink={0} bg={theme.decrease(background())} fg={theme.text.subdued}>
       {" "}
       {props.children}{" "}
     </text>
@@ -2781,16 +2782,8 @@ type BlockToolProps = {
 }
 
 function BlockTool(props: BlockToolProps) {
-  const parentTheme = useTheme()
-  return (
-    <ThemeContextProvider context="elevated">
-      <BlockToolContent {...props} borderColor={parentTheme.background.default} />
-    </ThemeContextProvider>
-  )
-}
-
-function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
   const theme = useTheme()
+  const background = () => theme.background.raised.base
   const ctx = use()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
@@ -2806,9 +2799,9 @@ function BlockToolContent(props: BlockToolProps & { borderColor: RGBA }) {
       paddingBottom={1}
       paddingLeft={2}
       gap={1}
-      backgroundColor={hover() ? theme.raise(theme.background.default) : theme.background.default}
+      backgroundColor={hover() ? theme.decrease(background()) : background()}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={props.borderColor}
+      borderColor={theme.background.default}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -3041,7 +3034,7 @@ function ShellDisplay(props: {
           </Show>
         </Show>
         <Show when={props.background}>
-          <StatusBadge>Background</StatusBadge>
+          <StatusBadge raised>Background</StatusBadge>
         </Show>
       </box>
     </BlockTool>
@@ -3241,7 +3234,7 @@ function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
   const [hover, setHover] = createSignal(false)
   const input = createMemo(() => Object.entries(props.call().input ?? {}))
   const expandable = createMemo(() => input().length > 0)
-  const expandedColor = createMemo(() => theme.raise(theme.text.subdued))
+  const expandedColor = createMemo(() => theme.decrease(theme.text.subdued))
   const color = createMemo(() => {
     if (props.call().status === "error") return theme.text.feedback.error.default
     if (hover()) return theme.text.default

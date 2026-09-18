@@ -16,6 +16,9 @@ export const ActionState = Schema.Literals(["disabled", "pressed", "focused", "s
 export type ActionState = Schema.Schema.Type<typeof ActionState>
 export type ActionStateKey = `$${ActionState}`
 
+export const SurfaceName = Schema.Literal("dialog")
+export type SurfaceName = Schema.Schema.Type<typeof SurfaceName>
+
 export const FormfieldState = ActionState
 export type FormfieldState = ActionState
 export type FormfieldStateKey = `$${FormfieldState}`
@@ -39,9 +42,6 @@ export type HueName = Schema.Schema.Type<typeof HueName>
 export const CategoricalDefinition = Schema.Array(HueName).check(Schema.isMinLength(1))
 export type CategoricalDefinition = Schema.Schema.Type<typeof CategoricalDefinition>
 const HueColorValue = Schema.Union([HexColor, Schema.TemplateLiteral(["$hue.", HueName, ".", HueStep])])
-
-const ContextKey = Schema.Literals(["@context:elevated", "@context:overlay"])
-export type ContextKey = Schema.Schema.Type<typeof ContextKey>
 
 const HueScaleDefinition = Schema.Record(HueStep, HexColor)
 const HueValueDefinition = Schema.Union([Schema.TemplateLiteral(["$hue.", HueName]), HueScaleDefinition])
@@ -229,8 +229,7 @@ const ThemeDefinitionFields = Schema.Struct({
   hue: HueDefinition,
   categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
-  "@context:elevated": Schema.optional(ThemeTokensDefinition),
-  "@context:overlay": Schema.optional(ThemeTokensDefinition),
+  "@dialog": Schema.optional(ThemeTokensDefinition),
 })
 export const ThemeDefinition = ThemeDefinitionFields
 export type ThemeDefinition = Schema.Schema.Type<typeof ThemeDefinition>
@@ -239,8 +238,7 @@ const FileThemeDefinition = Schema.Struct({
   hue: Schema.optional(HueOverrideDefinition),
   categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
-  "@context:elevated": Schema.optional(ThemeTokensDefinition),
-  "@context:overlay": Schema.optional(ThemeTokensDefinition),
+  "@dialog": Schema.optional(ThemeTokensDefinition),
 })
 export type FileThemeDefinition = Schema.Schema.Type<typeof FileThemeDefinition>
 
@@ -249,8 +247,7 @@ const MergeModeDefinition = Schema.Struct({
   hue: Schema.optional(HueOverrideDefinition),
   categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
-  "@context:elevated": Schema.optional(ThemeTokensDefinition),
-  "@context:overlay": Schema.optional(ThemeTokensDefinition),
+  "@dialog": Schema.optional(ThemeTokensDefinition),
 })
 export type MergeModeDefinition = Schema.Schema.Type<typeof MergeModeDefinition>
 export const ModeDefinition = Schema.Union([MergeModeDefinition, FileThemeDefinition])

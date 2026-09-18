@@ -11,7 +11,7 @@ import { locationKey, useData } from "../context/data"
 import { useClient } from "../context/client"
 import { useLocation } from "../context/location"
 import { useSessionTabs } from "../context/session-tabs"
-import { useTheme, useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { Keymap } from "../context/keymap"
 import { Locale } from "../util/locale"
 import { abbreviateHome } from "../runtime"
@@ -43,9 +43,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const location = useLocation()
   const sessionTabs = useSessionTabs()
   const toast = useToast()
-  const themes = useThemes()
-  const theme = useTheme("elevated")
-  const mode = themes.mode
+  const theme = useTheme().surface("dialog")
   const paths = useTuiPaths()
   const dimensions = useTerminalDimensions()
   const shortcuts = Keymap.useShortcuts()
@@ -201,7 +199,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         gutter: running
           ? (color: RGBA) => <Spinner color={color} />
           : tabs.has(session.id)
-            ? () => <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]}>▪</text>
+            ? () => <text fg={theme.hue.accent[200]}>▪</text>
             : undefined,
       }
     })

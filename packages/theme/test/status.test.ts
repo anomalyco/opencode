@@ -10,11 +10,11 @@ test.each(["light", "dark"] as const)("built-in %s themes resolve status colors"
   ).json()
   for (const document of [DEFAULT_THEME, migrateV1(source)]) {
     const theme = resolveThemeDocument(document, mode)
-    expect(theme.text.status.running.equals(theme.hue.interactive[mode === "light" ? 800 : 200])).toBeTrue()
+    expect(theme.text.status.running.equals(theme.hue.interactive[200])).toBeTrue()
     expect(theme.text.status.question.equals(theme.text.status.unread)).toBeTrue()
     expect(theme.text.status.permission.equals(theme.text.status.unread)).toBeTrue()
-    expect(theme.text.status.unread.equals(theme.hue.accent[mode === "light" ? 800 : 200])).toBeTrue()
-    expect(theme.contextual.elevated.text.status).toEqual(theme.text.status)
+    expect(theme.text.status.unread.equals(theme.hue.accent[200])).toBeTrue()
+    expect(theme.surface("dialog").text.status).toEqual(theme.text.status)
   }
 })
 
@@ -34,7 +34,7 @@ test.each(["light", "dark"] as const)("custom %s themes inherit the unread atten
     expect(theme.text.status.unread.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
     expect(theme.text.status.question.equals(theme.text.status.unread)).toBeTrue()
     expect(theme.text.status.permission.equals(theme.text.status.unread)).toBeTrue()
-    expect(theme.contextual.elevated.text.status).toEqual(theme.text.status)
+    expect(theme.surface("dialog").text.status).toEqual(theme.text.status)
   }
 })
 
@@ -53,8 +53,8 @@ test.each(["light", "dark"] as const)("custom %s themes inherit and override sta
       }),
       mode,
     )
-    expect(theme.text.status.running.equals(theme.hue.purple[mode === "light" ? 800 : 200])).toBeTrue()
-    expect(theme.text.status.unread.equals(theme.hue.orange[mode === "light" ? 800 : 200])).toBeTrue()
+    expect(theme.text.status.running.equals(theme.hue.purple[200])).toBeTrue()
+    expect(theme.text.status.unread.equals(theme.hue.orange[200])).toBeTrue()
     expect(theme.text.status.question.equals(RGBA.fromHex("#123456"))).toBeTrue()
     expect(theme.text.status.permission.equals(RGBA.fromHex("#654321"))).toBeTrue()
   }

@@ -23,8 +23,8 @@ type Active = ExportFormat | "thinking" | "tools" | "sanitize" | "copy" | "expor
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const dialog = useDialog()
-  const theme = useTheme("elevated")
-  const overlayTheme = useTheme("overlay")
+  const theme = useTheme().surface("dialog")
+  const overlayTheme = useTheme()
   const [store, setStore] = createStore({
     format: "markdown" as ExportFormat,
     thinking: props.defaultThinking,
@@ -247,7 +247,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
         <box
           paddingLeft={4}
           paddingRight={4}
-          backgroundColor={overlayTheme.background.default}
+          backgroundColor={overlayTheme.background.raised.high}
           onMouseUp={() => confirm("copy")}
         >
           <text fg={overlayTheme.text.default}>Copy</text>

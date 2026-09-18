@@ -1,7 +1,7 @@
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, createEffect, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { Keymap } from "../context/keymap"
-import { useTheme } from "../context/theme"
+import { ThemeContextProvider, useTheme } from "../context/theme"
 import { InputRenderable, MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
@@ -25,12 +25,13 @@ export function Dialog(
   }>,
 ) {
   const dimensions = useTerminalDimensions()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const renderer = useRenderer()
 
   let dismiss = false
   return (
-    <box
+    <ThemeContextProvider context="dialog">
+      <box
       onMouseDown={() => {
         dismiss = !!renderer.getSelection()
       }}
@@ -67,7 +68,8 @@ export function Dialog(
       >
         {props.children}
       </box>
-    </box>
+      </box>
+    </ThemeContextProvider>
   )
 }
 

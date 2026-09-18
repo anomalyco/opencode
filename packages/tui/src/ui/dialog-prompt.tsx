@@ -22,7 +22,7 @@ export type DialogPromptProps = {
 export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
   const renderer = useRenderer()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const shortcuts = Keymap.useShortcuts()
   const config = useConfig().data
   const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()

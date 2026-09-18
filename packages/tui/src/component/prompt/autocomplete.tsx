@@ -77,7 +77,7 @@ export function Autocomplete(props: {
   const data = useData()
   const keymap = Keymap.use()
   const keymapCommands = Keymap.useCommands()
-  const theme = useTheme("overlay")
+  const theme = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const config = useConfig().data
@@ -887,7 +887,7 @@ export function Autocomplete(props: {
           scroll = r
           scroll.verticalScrollBar.on("change", syncSelectionWindow)
         }}
-        backgroundColor={theme.background.default}
+        backgroundColor={theme.background.raised.high}
         height={height()}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}

@@ -39,7 +39,7 @@ export function DevToolsBar() {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const { current: theme, mode, supports, setMode } = themes
-  const elevatedTheme = useTheme("elevated")
+  const elevatedTheme = useTheme()
   const [panel, setPanel] = createSignal<Panel>()
   const [dumping, setDumping] = createSignal(false)
   const [dumpPath, setDumpPath] = createSignal<string>()
@@ -229,7 +229,7 @@ export function DevToolsBar() {
   }
 
   return (
-    <box height={1} flexShrink={0} flexDirection="row" backgroundColor={theme.raise(theme.background.default)}>
+    <box height={1} flexShrink={0} flexDirection="row" backgroundColor={theme.decrease(theme.background.default)}>
       <Show when={panel()}>
         <box
           position="absolute"
@@ -474,7 +474,7 @@ function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
 }
 
 function PanelBox(props: ParentProps) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const renderer = useRenderer()
   return (
     <box
@@ -487,7 +487,7 @@ function PanelBox(props: ParentProps) {
       paddingRight={2}
       paddingTop={1}
       paddingBottom={1}
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.raised.base}
       flexDirection="column"
       onMouseUp={(event) => {
         if (renderer.getSelection()?.getSelectedText()) return
@@ -500,7 +500,7 @@ function PanelBox(props: ParentProps) {
 }
 
 function PanelTitle(props: ParentProps) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   return (
     <text fg={theme.text.default} attributes={TextAttributes.BOLD} marginBottom={1}>
       {props.children}
@@ -509,7 +509,7 @@ function PanelTitle(props: ParentProps) {
 }
 
 function Row(props: { label: string; value: string }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   return (
     <box flexDirection="row">
       <text fg={theme.text.subdued}>{props.label}</text>
@@ -520,12 +520,12 @@ function Row(props: { label: string; value: string }) {
 }
 
 function Action(props: ParentProps<{ onClick: () => void; disabled?: boolean; hoverBackground?: boolean }>) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const [hovered, setHovered] = createSignal(false)
   return (
     <box
       backgroundColor={
-        props.hoverBackground && hovered() && !props.disabled ? theme.background.action.primary.hovered : undefined
+        props.hoverBackground && hovered() && !props.disabled ? theme.background.raised.high : undefined
       }
       onMouseOver={() => setHovered(true)}
       onMouseOut={() => setHovered(false)}
@@ -545,7 +545,7 @@ function cpuPercent(microseconds: number, milliseconds: number) {
 }
 
 function ProcessStat(props: { label: string; values: readonly number[]; unit: string; decimals?: number }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const value = () => {
     const value = props.values.at(-1)
     if (value === undefined) return "--"

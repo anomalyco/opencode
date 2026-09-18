@@ -6,7 +6,7 @@ import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export function DialogStatus() {
   const data = useData()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const dialog = useDialog()
 
   const mcp = createMemo(() => data.location.mcp.server.list() ?? [])

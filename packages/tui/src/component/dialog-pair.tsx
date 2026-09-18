@@ -17,7 +17,7 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
   const client = useClient()
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const [loadError, setLoadError] = createSignal<unknown>()
   const [showPassword, setShowPassword] = createSignal(false)
   const [passwordHover, setPasswordHover] = createSignal(false)

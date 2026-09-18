@@ -111,11 +111,9 @@ function nearestIndexed(indexed: RGBA[], color: RGBA): RGBA {
 function map(
   theme: ResolvedTheme,
   indexed: RGBA[],
-  mode: "light" | "dark",
   syntax?: SyntaxStyle,
   system = false,
 ): RunTheme {
-  const elevated = theme.contextual.elevated
   // V1 system migration serializes colors; restore terminal defaults before quantizing scrollback.
   const exact = (color: RGBA) => {
     if (system && color.equals(theme.text.default)) return RGBA.defaultForeground(color)
@@ -137,29 +135,29 @@ function map(
   return {
     background: RGBA.defaultBackground(theme.background.default),
     footer: {
-      actionSecondaryText: exact(elevated.text.action.secondary.default),
-      actionFocusedBg: exact(elevated.background.action.primary.focused),
-      actionFocusedText: exact(elevated.text.action.primary.focused),
-      formfieldText: exact(elevated.text.formfield.default),
-      formfieldFocusedBg: exact(elevated.background.formfield.focused),
-      formfieldFocusedText: exact(elevated.text.formfield.focused),
-      selection: exact(elevated.text.formfield.selected),
+      actionSecondaryText: exact(theme.text.action.secondary.default),
+      actionFocusedBg: exact(theme.background.action.primary.focused),
+      actionFocusedText: exact(theme.text.action.primary.focused),
+      formfieldText: exact(theme.text.formfield.default),
+      formfieldFocusedBg: exact(theme.background.formfield.focused),
+      formfieldFocusedText: exact(theme.text.formfield.focused),
+      selection: exact(theme.text.formfield.selected),
       running: exact(theme.text.status.running),
       question: exact(theme.text.status.question),
       permission: exact(theme.text.status.permission),
       success: exact(theme.text.feedback.success.default),
       link: exact(theme.markdown.link),
       categorical: dedupeWith(
-        theme.categorical.map((scale) => exact(scale[mode === "light" ? 800 : 200])),
+        theme.categorical.map((scale) => exact(scale[200])),
         (a, b) => a.equals(b),
       ),
       warning: exact(theme.text.feedback.warning.default),
       error: exact(theme.text.feedback.error.default),
       muted: exact(theme.text.subdued),
       text: exact(theme.text.default),
-      shade: exact(elevated.background.default),
-      surface: exact(elevated.background.default),
-      pane: exact(theme.contextual.overlay.background.default),
+      shade: exact(theme.background.raised.base),
+      surface: exact(theme.background.raised.base),
+      pane: exact(theme.background.raised.high),
       border: exact(theme.border.default),
       line: exact(theme.background.raised.high),
     },
@@ -196,12 +194,10 @@ function map(
 export const RUN_THEME_FALLBACK = map(
   resolveThemeDocument(parseTheme(DEFAULT_THEMES.opencode), "dark"),
   ansiPalette,
-  "dark",
 )
 export const RUN_THEME_FALLBACK_LIGHT = map(
   resolveThemeDocument(parseTheme(DEFAULT_THEMES.opencode), "light"),
   ansiPalette,
-  "light",
 )
 
 function monoTheme(mode: "dark" | "light"): RunTheme {
@@ -301,7 +297,7 @@ export async function resolveRunTheme(
     ? ansiPalette.map((color, index) => (colors.palette[index] ? RGBA.fromIndex(index, colors.palette[index]!) : color))
     : ansiPalette
   return {
-    ...map(theme, indexed, mode, generateSyntax(theme, mode), name === "system" && resolved !== undefined),
+    ...map(theme, indexed, generateSyntax(theme), name === "system" && resolved !== undefined),
     background: RGBA.defaultBackground(colors?.defaultBackground ?? theme.background.default),
   }
 }
