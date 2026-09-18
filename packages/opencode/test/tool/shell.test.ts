@@ -1058,6 +1058,50 @@ describe("tool.shell abort", () => {
   )
 
   it.live(
+    "timeout bounds the call when a descendant keeps stdio open",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        // The detached grandchild survives the kill and holds the inherited pipes for 8 seconds.
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(tmp, "hold.js"),
+            'require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 8_000)"], { detached: true, stdio: "inherit" }).unref(); console.log("spawned"); setInterval(() => {}, 10_000)',
+          ),
+        )
+        const started = Date.now()
+        const result = yield* runIn(tmp, run({ command: `${PS.has(sh()) ? "& " : ""}${bin} hold.js`, timeout: 500 }))
+        expect(Date.now() - started).toBeLessThan(6_000)
+        expect(result.output).toContain("spawned")
+        expect(result.output).toContain("exceeding timeout 500 ms")
+      }),
+    15_000,
+  )
+
+  it.live(
+    "returns after the command exits when a descendant keeps stdio open",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(tmp, "detach.js"),
+            'require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 8_000)"], { detached: true, stdio: "inherit" }).unref(); console.log("spawned")',
+          ),
+        )
+        const started = Date.now()
+        const result = yield* runIn(
+          tmp,
+          run({ command: `${PS.has(sh()) ? "& " : ""}${bin} detach.js`, timeout: 30_000 }),
+        )
+        expect(Date.now() - started).toBeLessThan(6_000)
+        expect(result.output).toContain("spawned")
+        expect(result.metadata.exit).toBe(0)
+      }),
+    15_000,
+  )
+
+  it.live(
     "uses RuntimeFlags bashDefaultTimeoutMs when timeout is omitted",
     () =>
       runIn(
