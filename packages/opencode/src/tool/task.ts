@@ -347,7 +347,11 @@ export const TaskTool = Tool.define(
         (_, exit) =>
           Effect.gen(function* () {
             if (Exit.hasInterrupts(exit))
-              yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
+              yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true }).pipe(
+                Effect.ignore,
+                Effect.forkDaemon,
+                Effect.asVoid,
+              )
           }).pipe(
             Effect.ensuring(
               Effect.sync(() => {
