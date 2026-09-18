@@ -136,9 +136,10 @@ export const DEFAULT_THEME = {
     },
     background: {
       default: "$hue.neutral.200",
-      surface: {
-        offset: "$hue.neutral.300",
-        overlay: "$hue.neutral.400",
+      raised: {
+        base: "$hue.neutral.300",
+        high: "$hue.neutral.400",
+        max: "$hue.neutral.500",
       },
       action: {
         primary: {
@@ -161,7 +162,7 @@ export const DEFAULT_THEME = {
       },
       formfield: {
         default: "$background.default",
-        $hovered: "$background.surface.offset",
+        $hovered: "$background.raised.base",
         $focused: "$background.action.primary.default",
         $pressed: "$hue.interactive.800",
         $disabled: "$background.default",
@@ -220,14 +221,14 @@ export const DEFAULT_THEME = {
     "@context:elevated": {
       text: { action: { primary: { default: "$hue.neutral.100" } } },
       background: {
-        default: "$background.surface.offset",
-        action: { primary: { default: "$hue.interactive.500", $hovered: "$background.surface.overlay" } },
+        default: "$background.raised.base",
+        action: { primary: { default: "$hue.interactive.500", $hovered: "$background.raised.high" } },
       },
     },
     "@context:overlay": {
       text: { action: { primary: { default: "$hue.neutral.100" } } },
       background: {
-        default: "$background.surface.overlay",
+        default: "$background.raised.high",
         action: { primary: { default: "$hue.interactive.500" } },
       },
     },
@@ -357,9 +358,10 @@ export const DEFAULT_THEME = {
     },
     background: {
       default: "$hue.neutral.800",
-      surface: {
-        offset: "$hue.neutral.700",
-        overlay: "$hue.neutral.600",
+      raised: {
+        base: "$hue.neutral.700",
+        high: "$hue.neutral.600",
+        max: "$hue.neutral.500",
       },
       action: {
         primary: {
@@ -382,7 +384,7 @@ export const DEFAULT_THEME = {
       },
       formfield: {
         default: "$background.default",
-        $hovered: "$background.surface.offset",
+        $hovered: "$background.raised.base",
         $focused: "$background.action.primary.default",
         $pressed: "$hue.interactive.800",
         $disabled: "$background.default",
@@ -441,14 +443,14 @@ export const DEFAULT_THEME = {
     "@context:elevated": {
       text: { action: { primary: { default: "$hue.neutral.200" } } },
       background: {
-        default: "$background.surface.offset",
-        action: { primary: { default: "$hue.interactive.400", $hovered: "$background.surface.overlay" } },
+        default: "$background.raised.base",
+        action: { primary: { default: "$hue.interactive.400", $hovered: "$background.raised.high" } },
       },
     },
     "@context:overlay": {
       text: { action: { primary: { default: "$hue.neutral.200" } } },
       background: {
-        default: "$background.surface.overlay",
+        default: "$background.raised.high",
         action: { primary: { default: "$hue.interactive.400" } },
       },
     },

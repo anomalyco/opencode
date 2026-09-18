@@ -71,21 +71,21 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.categorical[0]).toBe(lightTheme.hue.blue)
   expect(lightTheme.source(lightTheme.hue.blue[500])).toEqual({ hue: "blue", step: 500 })
   expect(lightTheme.source(lightTheme.hue.neutral[200])).toEqual({ hue: "neutral", step: 200 })
-  expect(lightTheme.source(lightTheme.background.surface.offset)).toEqual({ hue: "neutral", step: 300 })
+  expect(lightTheme.source(lightTheme.background.raised.base)).toEqual({ hue: "neutral", step: 300 })
   expect(lightTheme.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
   expect(lightTheme.decrease(lightTheme.hue.red[200])).toBe(lightTheme.hue.red[100])
   expect(lightTheme.contextual.elevated.increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
   expect(lightTheme.text.default).toBeInstanceOf(RGBA)
   expect(darkTheme.background.default).toBeInstanceOf(RGBA)
-  expect(lightTheme.background.surface.offset).toBe(lightTheme.hue.neutral[300])
-  expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[400])
+  expect(lightTheme.background.raised.base).toBe(lightTheme.hue.neutral[300])
+  expect(lightTheme.background.raised.high).toBe(lightTheme.hue.neutral[400])
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
   expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[200])
   expect(lightTheme.contextual.elevated.background.action.primary.default).toBe(lightTheme.hue.interactive[500])
-  expect(lightTheme.contextual.elevated.background.default).toBe(lightTheme.background.surface.offset)
+  expect(lightTheme.contextual.elevated.background.default).toBe(lightTheme.background.raised.base)
   expect(lightTheme.contextual.elevated.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
   expect(lightTheme.contextual.overlay.background.action.primary.default).toBe(lightTheme.hue.interactive[500])
-  expect(lightTheme.contextual.overlay.background.default).toBe(lightTheme.background.surface.overlay)
+  expect(lightTheme.contextual.overlay.background.default).toBe(lightTheme.background.raised.high)
   expect(lightTheme.contextual.overlay.text.action.primary.default).toBe(lightTheme.hue.neutral[100])
   expect(darkTheme.contextual.elevated.background.action.primary.default).toBe(darkTheme.hue.interactive[400])
   expect(darkTheme.contextual.elevated.text.action.primary.default).toBe(darkTheme.hue.neutral[200])
@@ -244,7 +244,7 @@ test("resolves elevated hover surfaces from direct colors", () => {
   const theme = resolveSource(
     {
       version: 2,
-      light: { background: { surface: { offset: "#123456", overlay: "#234567" } } },
+      light: { background: { raised: { base: "#123456", high: "#234567" } } },
       dark: {},
     },
     "light",

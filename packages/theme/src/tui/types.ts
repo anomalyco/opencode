@@ -40,9 +40,10 @@ export type ResolvedThemeTokens = {
   }
   readonly background: {
     readonly default: RGBA
-    readonly surface: {
-      readonly offset: RGBA
-      readonly overlay: RGBA
+    readonly raised: {
+      readonly base: RGBA
+      readonly high: RGBA
+      readonly max: RGBA
     }
     readonly action: Readonly<Record<ActionVariant, StatefulColor>>
     readonly formfield: FormfieldColor

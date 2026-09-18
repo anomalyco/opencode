@@ -19,7 +19,7 @@ const text = {
 
 const background = {
   default: "$hue.neutral.100",
-  surface: { offset: "$hue.neutral.200", overlay: "$hue.neutral.300" },
+  raised: { base: "$hue.neutral.200", high: "$hue.neutral.300", max: "$hue.neutral.400" },
   action: {
     primary: {
       default: "$hue.interactive.600",

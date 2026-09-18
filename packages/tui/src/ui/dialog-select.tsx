@@ -762,7 +762,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                             backgroundColor={
                               active()
                                 ? actionFocused()
-                                  ? theme.background.surface.overlay
+                                  ? theme.background.raised.high
                                   : (option.bg ?? theme.background.action.primary.focused)
                                 : RGBA.fromInts(0, 0, 0, 0)
                             }

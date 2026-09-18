@@ -129,10 +129,11 @@ export type TextDefinition = Schema.Schema.Type<typeof TextDefinition>
 
 const BackgroundDefinition = Schema.Struct({
   default: Schema.optional(ColorValue),
-  surface: Schema.optional(
+  raised: Schema.optional(
     Schema.Struct({
-      offset: Schema.optional(ColorValue),
-      overlay: Schema.optional(ColorValue),
+      base: Schema.optional(ColorValue),
+      high: Schema.optional(ColorValue),
+      max: Schema.optional(ColorValue),
     }),
   ),
   action: Schema.optional(ActionColorDefinition),

@@ -161,7 +161,7 @@ function map(
       surface: exact(elevated.background.default),
       pane: exact(theme.contextual.overlay.background.default),
       border: exact(theme.border.default),
-      line: exact(theme.background.surface.overlay),
+      line: exact(theme.background.raised.high),
     },
     entry: {
       system: { body: scrollback(theme.text.subdued) },
@@ -174,7 +174,7 @@ function map(
     splash: {
       left: nearestIndexed(indexed, theme.text.subdued),
       right: nearestIndexed(indexed, theme.text.default),
-      leftShadow: nearestIndexed(indexed, theme.background.surface.offset),
+      leftShadow: nearestIndexed(indexed, theme.background.raised.base),
     },
     block: {
       text: scrollback(theme.text.default),

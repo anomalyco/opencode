@@ -350,7 +350,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    input.cursorColor = disabled() ? theme.background.surface.offset : theme.text.default
+    input.cursorColor = disabled() ? theme.background.raised.base : theme.text.default
     if (config.cursor) input.cursorStyle = config.cursor
   })
 
@@ -1666,7 +1666,7 @@ export function Prompt(props: PromptProps) {
   })
   const maxHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height / 3)))
 
-  const promptBg = createMemo(() => theme.raise(theme.background.surface.offset))
+  const promptBg = createMemo(() => theme.raise(theme.background.raised.base))
 
   return (
     <>
@@ -1823,7 +1823,7 @@ export function Prompt(props: PromptProps) {
                 setTimeout(() => {
                   // setTimeout is a workaround and needs to be addressed properly
                   if (!input || input.isDestroyed) return
-                  input.cursorColor = disabled() ? theme.background.surface.offset : theme.text.default
+                  input.cursorColor = disabled() ? theme.background.raised.base : theme.text.default
                   if (config.cursor) input.cursorStyle = config.cursor
                 }, 0)
               }}
@@ -1842,7 +1842,7 @@ export function Prompt(props: PromptProps) {
                 r.stopPropagation()
               }}
               focusedBackgroundColor="transparent"
-              cursorColor={disabled() ? theme.background.surface.offset : theme.text.default}
+              cursorColor={disabled() ? theme.background.raised.base : theme.text.default}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">

@@ -99,7 +99,7 @@ function expectFooter(actual: RunTheme, theme: ResolvedTheme) {
     surface: theme.contextual.elevated.background.default,
     pane: theme.contextual.overlay.background.default,
     border: theme.border.default,
-    line: theme.background.surface.overlay,
+    line: theme.background.raised.high,
   }
   Object.entries(expected).forEach(([key, color]) => {
     expect(rgba(actual.footer[key as keyof typeof expected]).toInts()).toEqual(color.toInts())

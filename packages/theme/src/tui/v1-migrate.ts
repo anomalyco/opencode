@@ -57,6 +57,7 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
   const background = mode === "light" ? "$hue.neutral.200" : "$hue.neutral.800"
   const backgroundPanel = mode === "light" ? "$hue.neutral.300" : "$hue.neutral.700"
   const backgroundMenu = mode === "light" ? "$hue.neutral.400" : "$hue.neutral.600"
+  const backgroundRaisedMax = "$hue.neutral.500"
 
   return referenceHues({
     hue: {
@@ -102,9 +103,10 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
     },
     background: {
       default: background,
-      surface: {
-        offset: backgroundPanel,
-        overlay: backgroundMenu,
+      raised: {
+        base: backgroundPanel,
+        high: backgroundMenu,
+        max: backgroundRaisedMax,
       },
       action: {
         primary: { default: "transparent", $hovered: backgroundPanel, $focused: primary, $selected: "transparent" },
@@ -173,11 +175,11 @@ function migrateMode(theme: Theme, mode: Mode): FileThemeDefinition {
     },
     "@context:elevated": {
       background: {
-        default: "$background.surface.offset",
-        action: { primary: { $hovered: "$background.surface.overlay" } },
+        default: "$background.raised.base",
+        action: { primary: { $hovered: "$background.raised.high" } },
       },
     },
-    "@context:overlay": { background: { default: "$background.surface.overlay" } },
+    "@context:overlay": { background: { default: "$background.raised.high" } },
   })
 }
 

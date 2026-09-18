@@ -887,7 +887,7 @@ export function DiffViewerContent(props: {
                       )
                       edge.backgroundColor =
                         entry && reviewedFileNames().has(entry.file.file)
-                          ? theme.background.surface.overlay
+                          ? theme.background.raised.high
                           : theme.diff.background.context
                     }
                     renderer.registerLifecyclePass(edge)
@@ -911,7 +911,7 @@ export function DiffViewerContent(props: {
                     {(entry, index) => {
                       const reviewed = () => reviewedFileNames().has(entry.file.file)
                       const background = () =>
-                        reviewed() ? theme.background.surface.overlay : theme.diff.background.context
+                        reviewed() ? theme.background.raised.high : theme.diff.background.context
                       const image = () => isDiffImageFile(entry.file.file)
                       const countsWidth = () =>
                         (image() ? 6 : String(entry.file.additions).length + String(entry.file.deletions).length + 5) +

@@ -15,7 +15,7 @@ export function fallback(mode: Mode): ThemeTokensDefinition {
     },
     background: {
       default: red,
-      surface: { offset: red, overlay: red },
+      raised: { base: red, high: red, max: red },
       action: Object.fromEntries(ActionVariant.literals.map((variant) => [variant, { default: red }])),
       formfield: { default: red },
       feedback: Object.fromEntries(FeedbackKind.literals.map((kind) => [kind, { default: red }])),
