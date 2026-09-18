@@ -22,30 +22,19 @@ function run(input: unknown, inputSchema: JsonSchema.JsonSchema) {
     "execute.before": event,
     "execute.after": { ...event, status: "error", error: new Tool.Error({ message: "unused" }) },
   }
+  const tool = {
+    id: "test",
+    name: "test",
+    description: "Test repair",
+    input: inputSchema,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
   const base = host()
   return ToolInputRepairPlugin.Plugin.effect(
     host({
       tool: {
         ...base.tool,
-        transform: (callback) =>
-          Effect.sync(() => {
-            const tool = {
-              id: "test",
-              name: "test",
-              description: "Test repair",
-              input: inputSchema,
-              execute: () => Effect.succeed({ content: "unused" }),
-            }
-            callback({
-              list: () => [tool],
-              get: (id) => (id === tool.id ? tool : undefined),
-              add: () => {},
-              namespace: () => {},
-              update: () => {},
-              remove: () => {},
-            })
-            return { dispose: Effect.void }
-          }),
+        list: () => Effect.succeed([tool]),
         hook: (name, callback) => callback(events[name]).pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
       },
     }),

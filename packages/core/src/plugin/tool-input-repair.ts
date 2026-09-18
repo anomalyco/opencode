@@ -1,7 +1,6 @@
 export * as ToolInputRepairPlugin from "./tool-input-repair.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import type { ToolEditor } from "@opencode/plugin/effect/tool"
 import { Effect, JsonSchema, Option, Predicate, Schema } from "effect"
 import { definition } from "../tool/runtime.js"
 
@@ -21,25 +20,19 @@ const maxDepth = 6
 
 export const Plugin = define({
   id: "opencode.tool.input.repair",
-  effect: Effect.fn(function* (ctx) {
-    let get: ToolEditor["get"] = () => undefined
-    yield* ctx.tool.transform((draft) => {
-      // The draft sees later tool transforms too; reload replaces this lookup.
-      get = draft.get
-    })
-    yield* ctx.tool.hook("execute.before", (event) =>
-      Effect.sync(() => {
+  effect: (ctx) =>
+    ctx.tool.hook("execute.before", (event) =>
+      Effect.gen(function* () {
         // The outer Code Mode tool is built per snapshot rather than registered, so it cannot be
         // looked up here. Its `{ code }` input is trivial; the tools it calls are repaired normally.
         if (event.tool === "execute") return
-        const tool = get(event.tool)
+        const tool = (yield* ctx.tool.list()).find((tool) => tool.id === event.tool)
         if (!tool) return
         const schema = definition(tool).inputSchema
         if (schema.type !== "object") return
         event.input = repair(event.input, schema, schema, 0)
       }),
-    )
-  }),
+    ),
 })
 
 function repair(value: unknown, schema: JsonSchema.JsonSchema, root: JsonSchema.JsonSchema, depth: number): unknown {

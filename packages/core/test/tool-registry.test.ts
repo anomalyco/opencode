@@ -855,6 +855,21 @@ describe("Tool", () => {
       ])
     }),
   )
+  it.effect("lists registered tools by effective name", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { echo: make() }, { codemode: false })
+      yield* transform(service, { count: { ...constant("1"), name: "count" } }, { namespace: "acme" })
+
+      expect((yield* service.list()).map((tool) => [tool.id, tool.name])).toEqual([
+        ["echo", "echo"],
+        ["acme_count", "count"],
+      ])
+
+      yield* service.transform((editor) => editor.remove("echo"))
+      expect((yield* service.list()).map((tool) => tool.id)).toEqual(["acme_count"])
+    }),
+  )
   ;[
     { name: "string", content: "hooked", text: "hooked" },
     { name: "empty string", content: "", text: "" },
