@@ -101,3 +101,5 @@ sudo docker compose up -d --no-deps sub2api
 3. **EXE 元数据**：Windows 包未内嵌图标/版本信息（免 wine 权衡），功能无损。
 4. **单实例部署**：生产为单容器单副本，重启存在秒级中断。
 5. 旧 4 把 Key（opencode.json 里的 8d60/9235/3975/d99e）已失效——需在网站重新签发或使用「一键连接」自动签发的新 Key。
+6. **上游官方 OpenCode Windows 桌面版（BETA）存在启动崩溃 bug**：报 `Cannot find module './windowsTerminal'`（其安装目录 `AppData\Local\Programs\@opencode-aidesktop`）。与 mucode 包无关（mucode 安装目录为 `Programs\mucode`）。如师生在 Windows 装了官方桌面版遇到此错，属上游缺陷；mucode 的 Windows 包安装目录不同，不受影响。
+7. mucode Windows 包未在真机 Windows 上做过启动实测（本环境无 Windows）；NSIS 包为标准 electron-builder 产物，风险低。
