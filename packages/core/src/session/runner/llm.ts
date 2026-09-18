@@ -6,6 +6,7 @@ import {
   Message,
   SystemPart,
   isContextOverflowFailure,
+  isTruncatedToolArgumentFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
@@ -89,6 +90,8 @@ import { llmClient } from "../../effect/app-node-platform"
  * provider turn. Registry definitions are advertised, local tool calls are settled durably, and an
  * explicit loop starts the next provider turn after local settlement. Configured agent step limits bound the loop.
  */
+
+const MAX_TRUNCATED_TOOL_ARGS_RECOVERIES = 3
 
 const layer = Layer.effect(
   Service,
@@ -174,6 +177,7 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
+      recoverTruncatedToolArgs: boolean,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
     ) {
       const session = yield* getSession(sessionID)
@@ -236,6 +240,7 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
+      let truncatedToolArgs: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
@@ -243,6 +248,10 @@ const layer = Layer.effect(
             if (LLMEvent.is.providerError(event)) {
               if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
                 overflowFailure = event
+                return
+              }
+              if (recoverTruncatedToolArgs && isTruncatedToolArgumentFailure(event)) {
+                truncatedToolArgs = event
                 return
               }
             }
@@ -295,7 +304,24 @@ const layer = Layer.effect(
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
-          if (llmFailure && !publisher.hasProviderError()) {
+          const invalidToolArgsFailure =
+            recoverTruncatedToolArgs &&
+            llmFailure?.reason._tag === "InvalidProviderOutput" &&
+            !publisher.hasProviderError() &&
+            publisher.hasUnsettledLocalTools()
+              ? llmFailure
+              : undefined
+          if (truncatedToolArgs) {
+            yield* withPublication(
+              publisher.failUnsettledTools(`${truncatedToolArgs.message}. Please re-emit the tool call.`),
+            )
+          } else if (invalidToolArgsFailure) {
+            yield* withPublication(
+              publisher.failUnsettledTools(
+                `Tool arguments were malformed or truncated. Error: ${invalidToolArgsFailure.reason.message}. Please re-emit the tool call.`,
+              ),
+            )
+          } else if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
             yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
           }
@@ -346,10 +372,17 @@ const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           if (stream._tag === "Success" && !publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
-          if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
+          if (stream._tag === "Failure" && !invalidToolArgsFailure) return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
-          return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
+          return {
+            needsContinuation:
+              truncatedToolArgs !== undefined ||
+              invalidToolArgsFailure !== undefined ||
+              (!publisher.hasProviderError() && needsContinuation),
+            step: currentStep,
+            recoveredTruncatedToolArgs: truncatedToolArgs !== undefined || invalidToolArgsFailure !== undefined,
+          }
         }),
       )
     }, Effect.scoped)
@@ -357,31 +390,60 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-    ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
+      recoverTruncatedToolArgs: boolean,
+    ) => Effect.Effect<
+      {
+        readonly needsContinuation: boolean
+        readonly step: number
+        readonly recoveredTruncatedToolArgs: boolean
+      },
+      RunError
+    >
 
-    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step).pipe(
+    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (
+      sessionID,
+      promotion,
+      step,
+      recoverTruncatedToolArgs,
+    ) {
+      return yield* runTurnAttempt(sessionID, promotion, step, recoverTruncatedToolArgs).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+            return yield* runAfterOverflowCompaction(
+              sessionID,
+              undefined,
+              defect.transition.step,
+              recoverTruncatedToolArgs,
+            )
           }),
         ),
       )
     })
 
-    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow).pipe(
+    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, recoverTruncatedToolArgs) {
+      return yield* runTurnAttempt(
+        sessionID,
+        promotion,
+        step,
+        recoverTruncatedToolArgs,
+        compaction.compactAfterOverflow,
+      ).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
-            return yield* runTurn(sessionID, undefined, defect.transition.step)
+              return yield* runAfterOverflowCompaction(
+                sessionID,
+                undefined,
+                defect.transition.step,
+                recoverTruncatedToolArgs,
+              )
+            return yield* runTurn(sessionID, undefined, defect.transition.step, recoverTruncatedToolArgs)
           }),
         ),
       )
@@ -397,11 +459,18 @@ const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
+      let truncatedToolArgsRecoveries = 0
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
         while (needsContinuation) {
-          const result = yield* runTurn(input.sessionID, promotion, step)
+          const result = yield* runTurn(
+            input.sessionID,
+            promotion,
+            step,
+            truncatedToolArgsRecoveries < MAX_TRUNCATED_TOOL_ARGS_RECOVERIES,
+          )
+          if (result.recoveredTruncatedToolArgs) truncatedToolArgsRecoveries++
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"
