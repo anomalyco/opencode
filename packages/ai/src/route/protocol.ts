@@ -41,8 +41,6 @@ export interface Protocol<Body, Frame, Event, State> {
   readonly body: ProtocolBody<Body>
   /** Response side: streaming state machine. */
   readonly stream: ProtocolStream<Frame, Event, State>
-  /** Whether `body.from` lowers `Message.effort(...)` markers; wrappers around another `body.from` must forward it. */
-  readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
 }
 
 export interface ProtocolBody<Body> {

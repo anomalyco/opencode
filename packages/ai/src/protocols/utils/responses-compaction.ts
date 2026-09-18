@@ -11,7 +11,6 @@ import {
   mergeJsonRecords,
 } from "../../schema/index.js"
 import type { CompactOperation } from "../../route/client.js"
-import { stripEffortUpdates } from "../../effort-updates.js"
 import { Endpoint } from "../../route/endpoint.js"
 import { RequestExecutor } from "../../route/executor.js"
 import { HttpTransport } from "../../route/transport/index.js"
@@ -76,8 +75,7 @@ const Response = Schema.Struct({
 export const make = (adapter: OpenResponses.ProviderAdapter): CompactOperation =>
   Effect.fn("ResponsesCompaction.execute")(function* (request, executor, options) {
     const route = request.model.route
-    // The standalone compaction endpoint rejects histories containing configuration updates.
-    const native = yield* OpenResponses.lowerConversation(stripEffortUpdates(request), adapter)
+    const native = yield* OpenResponses.lowerConversation(request, adapter)
     const body = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
       mergeJsonRecords(
         {

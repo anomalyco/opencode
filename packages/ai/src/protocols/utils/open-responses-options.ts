@@ -1,7 +1,12 @@
 import { Option, Schema } from "effect"
-import { ReasoningEffort, ReasoningEfforts, type LLMRequest } from "../../schema/index.js"
+import type { LLMRequest } from "../../schema/index.js"
 
-export { ReasoningEffort, ReasoningEfforts }
+export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
+export type ReasoningEffort = (typeof ReasoningEfforts)[number] | (string & {})
+export const ReasoningEffort = Schema.declare<ReasoningEffort>(
+  (value): value is ReasoningEffort => typeof value === "string",
+  { title: "ReasoningEffort" },
+)
 
 export const TextVerbosities = ["low", "medium", "high"] as const
 export type TextVerbosity = (typeof TextVerbosities)[number] | (string & {})
