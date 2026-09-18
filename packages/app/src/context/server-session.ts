@@ -211,6 +211,10 @@ export function createServerSession(
   const requests = new Map<string, Promise<Session>>()
   const inflight = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
+  // Sessions whose todos the client wiped at a turn boundary (or on submit).
+  // Forced refetches are suppressed until a todo.updated event proves the
+  // server state is fresh, so stale server rows can't resurrect the dock.
+  const todoCleared = new Set<string>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
   const v2 = createV2SessionReducer()
   const messageLoads = new Map<string, MessageLoadState>()
@@ -486,6 +490,7 @@ export function createServerSession(
       requests.delete(sessionID)
       inflight.delete(sessionID)
       inflightTodo.delete(sessionID)
+      todoCleared.delete(sessionID)
       messageLoads.delete(sessionID)
       v2.clear(sessionID)
       pendingParts.delete(sessionID)
@@ -1019,6 +1024,8 @@ export function createServerSession(
       }
       case "todo.updated": {
         const props = event.properties as { sessionID: string; todos: Todo[] }
+        // A fresh server event re-enables todo refetches after a client wipe.
+        todoCleared.delete(props.sessionID)
         setData("todo", props.sessionID, reconcile(props.todos, { key: "id" }))
         return
       }
@@ -1295,7 +1302,11 @@ export function createServerSession(
 
   return {
     data,
-    set: setData,
+    set: ((...args: unknown[]) => {
+      if (args[0] === "todo" && typeof args[1] === "string" && Array.isArray(args[2]) && args[2].length === 0)
+        todoCleared.add(args[1])
+      return (setData as unknown as (...args: unknown[]) => unknown)(...args)
+    }) as typeof setData,
     get: (sessionID: string) => data.info[sessionID],
     peek: (sessionID: string) => data.info[sessionID],
     remember,
@@ -1380,6 +1391,7 @@ export function createServerSession(
     async todo(sessionID: string, request?: { force?: boolean }) {
       touch(sessionID)
       if (data.todo[sessionID] !== undefined && !request?.force) return
+      if (todoCleared.has(sessionID)) return
       return runInflight(inflightTodo, sessionID, () => {
         const active = generation(sessionID)
         const directory = data.info[sessionID]?.directory

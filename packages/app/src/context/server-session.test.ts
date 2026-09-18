@@ -1673,4 +1673,34 @@ describe("server session", () => {
     expect(calls).toHaveLength(2)
     expect(store.data.todo.child).toEqual(todos)
   })
+
+  test("suppresses forced todo refetch after a client wipe until a fresh event", async () => {
+    const todos = [{ content: "fresh", status: "pending", priority: "high" }]
+    const calls: unknown[] = []
+    const client = {
+      session: {
+        get: async () => ({ data: session("child") }),
+        messages: async () => response(),
+        diff: async () => ({ data: [] }),
+        todo: async (input: unknown) => {
+          calls.push(input)
+          return { data: todos }
+        },
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client, { protocol: Promise.resolve("v2"), retry: retryImmediately })
+    store.remember(session("child"))
+
+    // Turn-boundary wipe (composer / optimistic submit path).
+    store.set("todo", "child", [])
+    await store.todo("child", { force: true })
+    expect(calls).toHaveLength(0)
+    expect(store.data.todo.child).toEqual([])
+
+    // A fresh server event re-enables reconciliation.
+    store.apply({ type: "todo.updated", properties: { sessionID: "child", todos: todos } })
+    await store.todo("child", { force: true })
+    expect(calls).toHaveLength(1)
+    expect(store.data.todo.child).toEqual(todos)
+  })
 })
