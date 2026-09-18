@@ -8,6 +8,7 @@ import { AISDK } from "./aisdk.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
 import { Capabilities, ID, Info, Model, Ref, VariantID } from "./model.js"
+import type { RuntimeInfo } from "./model.js"
 import { Npm } from "@opencode/util/npm"
 import { Provider } from "./provider.js"
 
@@ -117,9 +118,9 @@ export interface Resolved {
   readonly cost: Info["cost"]
   /** Catalog token limits used by Core for context management. */
   readonly limit: Info["limit"]
-  /** Model policy overrides the provider policy; omitted means local compaction. */
+  /** Model policy overrides the provider policy; omitted means summary compaction. */
   readonly compaction?: Provider.Compaction
-  /** Model transport overrides the provider transport; omitted means HTTP. */
+  /** Provider transport policy; omitted means HTTP. */
   readonly transport?: Provider.Transport
 }
 
@@ -149,7 +150,7 @@ export const withVariant = (
     variant
       ? {
           ...model,
-          settings: Provider.mergeOverlay(model.settings, variant.settings),
+          settings: Provider.mergeOverlay(model.settings, Provider.modelSettings(variant.settings)),
           headers: Provider.mergeHeaders(model.headers, variant.headers),
           body: Provider.mergeOverlay(model.body, variant.body),
         }
@@ -159,11 +160,11 @@ export const withVariant = (
 
 export interface Dependencies {
   readonly loadPackage?: (specifier: string) => Effect.Effect<Provider.ProviderPackage, Provider.LoadError>
-  readonly loadAISDK?: (model: Info) => Effect.Effect<LanguageModel, AISDK.InitError>
+  readonly loadAISDK?: (model: RuntimeInfo) => Effect.Effect<LanguageModel, AISDK.InitError>
 }
 
 export const fromCatalogModel = (
-  model: Info,
+  model: RuntimeInfo,
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ): Effect.Effect<
@@ -191,7 +192,7 @@ export const fromCatalogModel = (
   )
 
 const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(function* (
-  model: Info,
+  model: RuntimeInfo,
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) {
@@ -248,7 +249,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   })
 })
 
-function prepareRuntimeModel(model: Info, credential: Credential.Value | undefined) {
+function prepareRuntimeModel(model: RuntimeInfo, credential: Credential.Value | undefined) {
   if (model.settings?.apiKey !== "" && (credential?.type !== "key" || credential.metadata === undefined)) return model
   return {
     ...model,
@@ -260,7 +261,7 @@ function prepareRuntimeModel(model: Info, credential: Credential.Value | undefin
 }
 
 function validateProviderVariables(
-  model: Info,
+  model: RuntimeInfo,
   resolved: LanguageModel,
 ): Effect.Effect<LanguageModel, UnresolvedProviderVariablesError> {
   const baseURL = resolved.route.endpoint.baseURL
@@ -270,7 +271,7 @@ function validateProviderVariables(
 }
 
 function prepareProviderSettings(
-  model: Info,
+  model: RuntimeInfo,
   settings: Readonly<Record<string, unknown>>,
 ): Effect.Effect<Readonly<Record<string, unknown>>, UnresolvedProviderVariablesError> {
   const baseURL = settings.baseURL
@@ -280,14 +281,14 @@ function prepareProviderSettings(
   )
 }
 
-function prepareProviderURL(model: Info, baseURL: string): Effect.Effect<string, UnresolvedProviderVariablesError> {
+function prepareProviderURL(model: RuntimeInfo, baseURL: string): Effect.Effect<string, UnresolvedProviderVariablesError> {
   if (!baseURL.includes("${")) return Effect.succeed(baseURL)
   const prepared = baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => process.env[name] ?? placeholder)
   const failure = unresolvedProviderVariables(model, prepared)
   return failure ? Effect.fail(failure) : Effect.succeed(prepared)
 }
 
-function unresolvedProviderVariables(model: Info, baseURL: string) {
+function unresolvedProviderVariables(model: RuntimeInfo, baseURL: string) {
   const variables = new Set(Array.from(baseURL.matchAll(/\$\{([^}]+)\}/g), (match) => match[1]))
   if (variables.size === 0) return
   return new UnresolvedProviderVariablesError({
@@ -310,14 +311,14 @@ const nativeCredentialSettings = (specifier: string, credential: Credential.Valu
   return { apiKey: credential.access }
 }
 
-const unsupported = (model: Info) =>
+const unsupported = (model: RuntimeInfo) =>
   new UnsupportedPackageError({
     providerID: model.providerID,
     modelID: model.id,
     package: model.package ?? "unknown",
   })
 
-const initialization = (model: Info, phase: InitializationPhase, cause: unknown) =>
+const initialization = (model: RuntimeInfo, phase: InitializationPhase, cause: unknown) =>
   new ModelInitializationError({
     providerID: model.providerID,
     modelID: model.id,
@@ -359,7 +360,11 @@ export const layer = Layer.effect(
         provider?.integrationID ?? Integration.ID.make(selected.providerID),
       )
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
-      const runtimeInfo = yield* withVariant(selected, variant)
+      const selectedVariant = yield* withVariant(selected, variant)
+      const runtimeInfo: RuntimeInfo = {
+        ...selectedVariant,
+        settings: Provider.mergeOverlay(provider?.settings, Provider.modelSettings(selectedVariant.settings)),
+      }
       const model = yield* fromCatalogModel(runtimeInfo, credential, {
         loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
         loadAISDK: (model) => aisdk.model(model),
@@ -382,7 +387,7 @@ export const layer = Layer.effect(
         cost: selected.cost,
         limit: selected.limit,
         compaction: runtimeInfo.settings?.compaction,
-        transport: runtimeInfo.settings?.transport,
+        transport: provider?.settings?.transport,
       }
     })
     return Service.of({
@@ -406,7 +411,7 @@ export const layer = Layer.effect(
   }),
 )
 
-function hasConfiguredAuth(model: Info) {
+function hasConfiguredAuth(model: RuntimeInfo) {
   return [model.settings?.apiKey, model.settings?.authToken, model.settings?.accessToken].some(
     (value) => typeof value === "string" && value !== "",
   )

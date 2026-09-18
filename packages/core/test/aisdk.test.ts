@@ -27,14 +27,15 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
 
-const model = (packageName: string, settings: Record<string, unknown> = {}) =>
-  Model.Info.make({
+const model = (packageName: string, settings: Provider.Settings = {}): Model.RuntimeInfo => ({
+  ...Model.Info.make({
     ...Model.Info.default(Provider.ID.make("test-provider"), Model.ID.make("catalog-model")),
     modelID: Model.ID.make("api-model"),
     package: Provider.aisdk(packageName),
-    settings,
     limit: { context: 100, output: 20 },
-  })
+  }),
+  settings,
+})
 
 const streamModel = (events: ReadonlyArray<LanguageModelV3StreamPart>): LanguageModelV3 => ({
   specificationVersion: "v3",
