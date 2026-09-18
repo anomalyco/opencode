@@ -892,6 +892,14 @@ interface StorageScanResult {
 
 ### Tools
 
+Read the tools currently registered, after every transform, outside of a transform callback. Each tool has an `id`
+containing its effective name.
+
+```ts
+const tools = await ctx.tool.list()
+const read = tools.find((tool) => tool.id === "read")
+```
+
 Register, update, and remove tools with a synchronous transform, including in Promise plugins. Load external data
 before registering or reloading. A later valid registration overrides the same effective tool name.
 
@@ -964,6 +972,7 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 
 ```ts
 interface ToolContext {
+  list(): Promise<readonly (ToolInfo & { readonly id: string })[]>
   transform(callback: (editor: ToolEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
