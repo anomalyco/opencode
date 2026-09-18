@@ -55,3 +55,14 @@ export type Info = {
   /** Private service password, when authentication is enabled. */
   readonly password?: string
 }
+
+/** Rewrite wildcard bind addresses to loopback for local client connections. */
+export function loopbackURL(value: string) {
+  const url = new URL(value)
+  // Bun keeps IPv6 brackets on hostname (`[::]`); WHATWG/Node use `::`.
+  if (url.hostname !== "0.0.0.0" && url.hostname !== "::" && url.hostname !== "[::]") return value
+  if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
+  if (url.hostname === "::") url.hostname = "::1"
+  if (url.hostname === "[::]") url.hostname = "[::1]"
+  return value.endsWith("/") ? url.href : url.origin
+}

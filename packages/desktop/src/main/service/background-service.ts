@@ -49,14 +49,13 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     }),
   )
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
-  const url = new URL(service.url)
-  if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
+  const url = client.loopbackURL(service.url)
   yield* Effect.logInfo("v2 CLI background service ready", {
     version,
-    ...endpoint(url.origin),
+    ...endpoint(url),
   })
   if (mode === "initial" && isolated && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
-  const ready = { url: url.origin, password: service.auth.password } satisfies SidecarCredentials.Data
+  const ready = { url, password: service.auth.password } satisfies SidecarCredentials.Data
   SidecarCredentials.set(ready)
   return ready
 })

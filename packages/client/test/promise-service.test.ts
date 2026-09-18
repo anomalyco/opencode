@@ -17,6 +17,21 @@ test("discovers a registered service", async () => {
   expect(await Service.discover({ file: registration, version: "other" })).toBeUndefined()
 })
 
+test("discovers a wildcard registration through loopback", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  fixture.spawn("graceful")
+  await fixture.waitForFile()
+  const info = await Bun.file(registration).json()
+  const wildcard = new URL(info.url)
+  wildcard.hostname = "0.0.0.0"
+  await Bun.write(registration, JSON.stringify({ ...info, url: wildcard.origin }))
+
+  expect(await Service.discover({ file: registration, version: "test" })).toEqual(
+    expect.objectContaining({ url: `http://127.0.0.1:${wildcard.port}` }),
+  )
+})
+
 test("discovers a compatible registered service", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
