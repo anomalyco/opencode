@@ -24,6 +24,7 @@ import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
 import { createReferralFromCookie } from "~/lib/referral-invite"
 import { getRequestEvent } from "solid-js/web"
 import { countryFromRequest } from "~/lib/request-country"
+import { checkCheckoutRateLimit } from "~/routes/zen/util/redis"
 
 import { IconAlipay, IconChevron, IconUpi } from "~/component/icon"
 import { buildLiteUsageBreakdown, getModelQuotaLimit, getUsagePercent } from "~/lib/lite-usage"
@@ -219,6 +220,7 @@ const createLiteCheckoutUrl = action(
     "use server"
     return json(
       await withActor(async () => {
+        await checkCheckoutRateLimit(Actor.account())
         const data = await Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
         await createReferralFromCookie()
         return { error: undefined, data }
@@ -638,8 +640,9 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
           </p>
           <h3 data-slot="promo-models-title">{i18n.t("workspace.lite.promo.modelsTitle")}</h3>
           <ul data-slot="promo-models">
-            <li>Grok 4.5</li>
+            <li>Grok 4.6</li>
             <li>GPT 5.6 Luna</li>
+            <li>GLM-5.3-Flash</li>
             <li>GLM-5.3</li>
             <li>GLM-5.2</li>
             <li>GLM-5.1</li>
@@ -649,19 +652,23 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>LongCat-2.0</li>
             <li>MiniMax M3</li>
             <li>MiniMax M2.7</li>
+            <li>Muse Spark 1.3 Contributor</li>
             <li>Muse Spark 1.2 Contributor</li>
             <li>Qwen3.8 Max</li>
+            <li>Qwen3.8 Flash</li>
             <li>Qwen3.7 Max</li>
             <li>Qwen3.7 Plus</li>
             <li>Qwen3.6 Plus</li>
+            <li>DeepSeek V4.1 Flash — {i18n.t("go.graph.bonus", { count: 4 })}</li>
             <li>DeepSeek V4 Pro</li>
             <li>DeepSeek V4 Flash</li>
             <li>DeepSeek V4 Flash Vision Exp</li>
             <li>MiMo-V2.5</li>
             <li>MiMo-V2.5-Pro</li>
+            <li>Hy4 preview</li>
             <li>Hy3</li>
-            <li>Ox Alpha Free</li>
           </ul>
+          <p data-slot="promo-description">{i18n.t("go.promo.deepseek")}</p>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
           <div data-slot="subscribe-actions">
             <button

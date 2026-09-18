@@ -72,4 +72,62 @@ describe("Go usage breakdown", () => {
     expect(result.rows.map((row) => row.multiplier)).toEqual([2, 1])
     expect(result.rows.map((row) => row.contributionPercent)).toEqual([40, 10])
   })
+
+  test.each([false, true])("merges same-rate usage (estimated first: %s)", (estimated) => {
+    const sources = [
+      { model: "deepseek-v4-flash", name: "DeepSeek V4 Flash", cost: 200, quotaCost: 400, multiplier: 2, estimated },
+      { model: "other", name: "Other", cost: 500, quotaCost: 500, multiplier: 1, estimated: false },
+      {
+        model: "deepseek-v4-flash",
+        name: "DeepSeek V4 Flash",
+        cost: 100,
+        quotaCost: 199,
+        multiplier: 2,
+        estimated: !estimated,
+      },
+    ]
+    const original = structuredClone(sources)
+    const result = buildLiteUsageBreakdown({ usage: 1_050, limit: 6_000, sources })
+
+    expect(result.rows).toHaveLength(2)
+    expect(result.rows[0]).toMatchObject({
+      model: "deepseek-v4-flash",
+      cost: 300,
+      quotaCost: 599,
+      multiplier: 2,
+      estimated: true,
+    })
+    expect(getModelQuotaLimit(result.limit, result.rows[0].multiplier)).toBe(3_000)
+    expect(result.usage).toBe(1_050)
+    expect(result.usagePercent).toBe(17.5)
+    expect(result.rows.reduce((total, row) => total + row.contributionPercent, 0)).toBeCloseTo(result.usagePercent)
+    expect(sources).toEqual(original)
+  })
+
+  test("keeps distinct model IDs with the same display name separate", () => {
+    const result = buildLiteUsageBreakdown({
+      usage: 300,
+      limit: 1_000,
+      sources: [
+        { model: "first", name: "Model", cost: 100, quotaCost: 100, multiplier: 1, estimated: false },
+        { model: "second", name: "Model", cost: 200, quotaCost: 200, multiplier: 1, estimated: false },
+      ],
+    })
+
+    expect(result.rows.map((row) => row.model)).toEqual(["second", "first"])
+  })
+
+  test("does not merge unknown rates with recorded rates", () => {
+    const result = buildLiteUsageBreakdown({
+      usage: 300,
+      limit: 1_000,
+      sources: [
+        { model: "glm", name: "GLM", cost: 100, quotaCost: 100, estimated: true },
+        { model: "glm", name: "GLM", cost: 200, quotaCost: 200, multiplier: 1, estimated: false },
+      ],
+    })
+
+    expect(result.rows.map((row) => row.multiplier)).toEqual([1, undefined])
+    expect(getModelQuotaLimit(result.limit, result.rows[1].multiplier)).toBeUndefined()
+  })
 })
