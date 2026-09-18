@@ -22,6 +22,8 @@ export type FileDiff = typeof FileDiff.Type
 
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
+const restoreFileLimit = 500
+const restoreLineLimit = 50_000
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -383,6 +385,44 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           return yield* locked(
             Effect.gen(function* () {
               yield* Effect.logInfo("restore", { commit: snapshot })
+              // Refresh the shadow index before measuring the restore. A stale index can otherwise
+              // make an old tree look current and allow checkout-index to overwrite the worktree.
+              yield* add()
+              const preview = yield* git(
+                [
+                  ...quote,
+                  ...args(["diff", "--cached", "--numstat", "--no-renames", "--diff-filter=DM", snapshot, "--", "."]),
+                ],
+                { cwd: state.directory },
+              )
+              if (preview.code !== 0) {
+                yield* Effect.logError("failed to inspect snapshot restore", {
+                  snapshot,
+                  exitCode: preview.code,
+                  stderr: preview.stderr,
+                })
+                return
+              }
+              const changes = preview.text
+                .trim()
+                .split("\n")
+                .filter(Boolean)
+                .map((line) => line.split("\t"))
+              const lines = changes.reduce((total, item) => {
+                const additions = item[0] === "-" ? 0 : Number(item[0])
+                const deletions = item[1] === "-" ? 0 : Number(item[1])
+                return total + additions + deletions
+              }, 0)
+              if (changes.length > restoreFileLimit || lines > restoreLineLimit) {
+                yield* Effect.logError("refusing unusually large snapshot restore", {
+                  snapshot,
+                  files: changes.length,
+                  lines,
+                  fileLimit: restoreFileLimit,
+                  lineLimit: restoreLineLimit,
+                })
+                return
+              }
               const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
               if (result.code === 0) {
                 const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
