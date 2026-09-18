@@ -318,7 +318,9 @@ describe("PermissionV2", () => {
           : Effect.void,
       )
       yield* Effect.addFinalizer(() => unsubscribe)
-      const fiber = yield* service.assert(assertion({ save: ["src/*"] })).pipe(Effect.forkScoped)
+      const fiber = yield* service
+        .assert(assertion({ save: ["src/*"], reason: "Read project source." }))
+        .pipe(Effect.forkScoped)
       const request = yield* Deferred.await(asked)
       yield* service.reply({ requestID: request.id, reply: "always" })
       yield* Fiber.join(fiber)
@@ -331,6 +333,13 @@ describe("PermissionV2", () => {
       const id = (yield* saved.list())[0]!.id
       expect(yield* saved.list()).toEqual([{ id, projectID: Project.ID.global, action: "read", resource: "src/*" }])
       yield* service.assert(assertion({ id: PermissionV2.ID.create("per_next"), resources: ["src/next.ts"] }))
+      yield* service.assert(
+        assertion({
+          id: PermissionV2.ID.create("per_other"),
+          resources: ["src/other.ts"],
+          reason: "A different explanation.",
+        }),
+      )
       yield* saved.remove(id)
       expect(yield* saved.list()).toEqual([])
     }),

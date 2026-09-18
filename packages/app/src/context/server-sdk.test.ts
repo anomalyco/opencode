@@ -29,7 +29,10 @@ describe("adaptServerEvent", () => {
       properties: { id: "perm_1", sessionID: "ses_1", permission: "read", patterns: ["src/**"], reason: "Read source." },
       current,
     })
-    expect(adaptServerEvent({ ...current, data: { ...current.data, reason: undefined } } as OpenCodeEvent).properties).not.toHaveProperty("reason", "Read source.")
+    const absent = adaptServerEvent({ ...current, data: { ...current.data, reason: undefined } } as OpenCodeEvent)
+    expect(absent.type).toBe("permission.asked")
+    if (absent.type !== "permission.asked") throw new Error("Expected a permission request")
+    expect(absent.properties.reason).toBeUndefined()
   })
 })
 
