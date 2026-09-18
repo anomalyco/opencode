@@ -19,36 +19,36 @@ test("migrates resolved V1 modes into V2 tokens", () => {
   expect(migrated.dark.categorical?.length).toBeGreaterThan(0)
   expect(migrated.light.hue?.accent).toMatch(/^\$hue\.[^.]+$/)
   expect(migrated.light.hue?.interactive).toMatch(/^\$hue\.[^.]+$/)
-  expect(migrated.base.text?.default).toBe("$hue.neutral.200")
-  expect(migrated.base.text?.subdued).toBe("$hue.neutral.400")
-  expect(migrated.base.background?.action?.primary?.default).toBe("transparent")
-  expect(migrated.base.background?.default).toBe("$hue.neutral.800")
+  expect(migrated.base.text?.base).toBe("$hue.neutral.200")
+  expect(migrated.base.text?.muted).toBe("$hue.neutral.400")
+  expect(migrated.base.background?.action?.primary?.base).toBe("transparent")
+  expect(migrated.base.background?.base).toBe("$hue.neutral.800")
   expect(migrated.base.background?.raised?.base).toBe("$hue.neutral.700")
   expect(migrated.base.background?.raised?.high).toBe("$hue.neutral.600")
-  expect(migrated.dark.background?.default).toBe("$hue.neutral.800")
+  expect(migrated.dark.background?.base).toBe("$hue.neutral.800")
   expect(migrated.dark.background?.raised?.base).toBe("$hue.neutral.700")
   expect(migrated.dark.background?.raised?.high).toBe("$hue.neutral.600")
-  expect(migrated.base.text?.action?.primary?.default).toBe("$text.default")
-  expect(migrated.base.text?.action?.secondary?.default).toBe("$text.subdued")
-  expect(migrated.base.text?.action?.secondary?.$hovered).toBe("$text.default")
+  expect(migrated.base.text?.action?.primary?.base).toBe("$text.base")
+  expect(migrated.base.text?.action?.secondary?.base).toBe("$text.muted")
+  expect(migrated.base.text?.action?.secondary?.$hovered).toBe("$text.base")
   expect(migrated.base.background?.action?.primary?.$selected).toBe("transparent")
   expect(resolved.background.raised.base.toInts()).toEqual(legacy.backgroundPanel.toInts())
   expect(resolved.background.raised.high.toInts()).toEqual(legacy.backgroundElement.toInts())
   expect(resolved.background.formfield.selected.toInts()).toEqual(legacy.background.toInts())
   expect(resolved.background.formfield.focused.toInts()).toEqual(legacy.background.toInts())
-  expect(resolved.text.formfield.default.toInts()).toEqual(legacy.text.toInts())
+  expect(resolved.text.formfield.base.toInts()).toEqual(legacy.text.toInts())
   expect(resolved.text.formfield.selected.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.text.formfield.focused.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.hue.accent[200].toInts()).toEqual(legacy.accent.toInts())
   expect(resolved.hue.interactive[200].toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.background.action.primary.selected.toInts()).toEqual([0, 0, 0, 0])
   expect(resolved.text.action.primary.selected.toInts()).toEqual(legacy.primary.toInts())
-  expect(resolved.text.action.secondary.default.toInts()).toEqual(legacy.textMuted.toInts())
+  expect(resolved.text.action.secondary.base.toInts()).toEqual(legacy.textMuted.toInts())
   expect(resolved.text.action.secondary.hovered.toInts()).toEqual(legacy.text.toInts())
-  expect(resolved.background.feedback.error.default.toInts()).toEqual(legacy.background.toInts())
-  expect(resolved.surface("dialog").background.default.toInts()).toEqual(legacy.backgroundPanel.toInts())
-  expect(resolved.surface("dialog").background.action.primary.default.toInts()).toEqual([0, 0, 0, 0])
-  expect(resolved.surface("dialog").text.action.primary.default.toInts()).toEqual(legacy.text.toInts())
+  expect(resolved.background.feedback.error.base.toInts()).toEqual(legacy.background.toInts())
+  expect(resolved.surface("dialog").background.base.toInts()).toEqual(legacy.backgroundPanel.toInts())
+  expect(resolved.surface("dialog").background.action.primary.base.toInts()).toEqual([0, 0, 0, 0])
+  expect(resolved.surface("dialog").text.action.primary.base.toInts()).toEqual(legacy.text.toInts())
 })
 
 test("references generated hues from matching token colors", () => {
@@ -61,8 +61,8 @@ test("references generated hues from matching token colors", () => {
   const migrated = migrateV1(source)
   if (!migrated.light) throw new Error("Expected light mode")
 
-  expect(migrated.base.border?.default).toBe("$hue.interactive.200")
-  expect(migrated.base.scrollbar?.default).toBe("$hue.accent.200")
+  expect(migrated.base.border?.base).toBe("$hue.interactive.200")
+  expect(migrated.base.scrollbar?.base).toBe("$hue.accent.200")
   expect(migrated.base.syntax?.keyword).toMatch(/^\$hue\.[^.]+\.200$/)
   expect(migrated.base.markdown?.emphasis).toBe("#123456")
 })
@@ -201,7 +201,7 @@ test("builds and extrapolates gray from V1 surfaces and text without using menus
   expect(withBorders.dark?.hue?.gray).toEqual(darkGray)
 })
 
-test("uses the default text reference for primary actions on transparent backgrounds", () => {
+test("uses the base text reference for primary actions on transparent backgrounds", () => {
   const source = structuredClone(DEFAULT_THEMES.opencode)
   source.theme.background = "transparent"
   source.theme.primary = { light: "#ffffff", dark: "#000000" }
@@ -209,8 +209,8 @@ test("uses the default text reference for primary actions on transparent backgro
   const migrated = migrateV1(source)
   if (!migrated.light || !migrated.dark) throw new Error("Expected both modes")
 
-  expect(migrated.base.text?.action?.primary?.default).toBe("$text.default")
-  expect(migrated.dark.text?.action?.primary?.default).toBe("$text.default")
+  expect(migrated.base.text?.action?.primary?.base).toBe("$text.base")
+  expect(migrated.dark.text?.action?.primary?.base).toBe("$text.base")
 })
 
 test("retains V1 circular reference errors", () => {
@@ -225,7 +225,7 @@ test("migrates every built-in V1 theme in its supported modes", () => {
   for (const source of Object.values(DEFAULT_THEMES)) {
     const migrated = migrateV1(source)
     for (const mode of themeModes(migrated)) {
-      expect(resolveThemeDocument(migrated, mode).text.default).toBeDefined()
+      expect(resolveThemeDocument(migrated, mode).text.base).toBeDefined()
     }
   }
 })

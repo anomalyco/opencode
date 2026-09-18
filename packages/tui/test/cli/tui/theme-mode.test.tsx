@@ -28,7 +28,7 @@ test("uses an available mode while retaining the pinned preference", async () =>
   darkOnly.theme.text = "#eeeeee"
   const native = {
     version: 2,
-    base: { ...DEFAULT_THEME.base, text: { ...DEFAULT_THEME.base.text, default: "#abcdef" } },
+    base: { ...DEFAULT_THEME.base, text: { ...DEFAULT_THEME.base.text, base: "#abcdef" } },
     dark: { hue: DEFAULT_THEME.dark.hue },
   } as const
   let themes: ReturnType<typeof useThemes> | undefined
@@ -76,7 +76,7 @@ test("uses an available mode while retaining the pinned preference", async () =>
     expect(current().set("native")).toBeTrue()
     await wait(() => current().selected === "native")
     expect(current().modes()).toEqual(["dark"])
-    expect(current().current.text.default.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
+    expect(current().current.text.base.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
   } finally {
     app.renderer.destroy()
   }
@@ -84,8 +84,8 @@ test("uses an available mode while retaining the pinned preference", async () =>
 
 test.each([
   ["schema", { version: 2, light: { categorical: [] } }],
-  ["partial mode", { version: 2, light: { text: { default: "#ffffff" } } }],
-  ["token reference", { version: 2, light: { text: { default: "$missing" } } }],
+  ["partial mode", { version: 2, light: { text: { base: "#ffffff" } } }],
+  ["token reference", { version: 2, light: { text: { base: "$missing" } } }],
 ] as const)("falls back to OpenCode when configured V2 theme %s is invalid", async (_label, source) => {
   let themes: ReturnType<typeof useThemes> | undefined
   let failure: ThemeError | undefined
@@ -131,7 +131,7 @@ test("dialog surfaces are absolute and can be inherited through the theme contex
 
   function ContextProbe() {
     contextual = useTheme()
-    return <text>{contextual.text.default.toString()}</text>
+    return <text>{contextual.text.base.toString()}</text>
   }
 
   function Probe() {
@@ -162,9 +162,9 @@ test("dialog surfaces are absolute and can be inherited through the theme contex
     const dialog = theme.surface("dialog")
     expect(theme.surface("dialog")).toBe(dialog)
     expect(dialog.surface("dialog")).toBe(dialog)
-    expect(dialog.background.default).toBe(themes.currentTokens().background.raised.base)
-    expect(contextual.background.default).toBe(dialog.background.default)
-    expect(contextual.text.default).toBe(dialog.text.default)
+    expect(dialog.background.base).toBe(themes.currentTokens().background.raised.base)
+    expect(contextual.background.base).toBe(dialog.background.base)
+    expect(contextual.text.base).toBe(dialog.text.base)
     expect(dialog.decrease(dialog.background.raised.base)).toBe(themes.currentTokens().hue.neutral[600])
   } finally {
     app.renderer.destroy()

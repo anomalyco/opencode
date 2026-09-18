@@ -194,7 +194,7 @@ export function SubagentsTab(props: { sessionID: string }) {
       <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
         <Show
           when={entries().length > 0}
-          fallback={<text fg={theme.text.subdued}> No {store.active ? "active" : "inactive"} subagents</text>}
+          fallback={<text fg={theme.text.muted}> No {store.active ? "active" : "inactive"} subagents</text>}
         >
           <For each={entries()}>
             {(entry, index) => {
@@ -213,7 +213,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                       ? theme.background.action.primary.focused
                       : entry.current
                         ? theme.background.action.primary.selected
-                        : theme.background.action.primary.default
+                        : theme.background.action.primary.base
                   }
                   onMouseMove={() => setStore("selected", index())}
                   onMouseUp={() => {
@@ -228,7 +228,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                           ? theme.text.action.primary.focused
                           : entry.current
                             ? theme.text.action.primary.selected
-                            : theme.text.action.primary.default
+                            : theme.text.action.primary.base
                       }
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
@@ -238,7 +238,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                     </text>
                   </box>
                   <Show when={status()}>
-                    <text fg={active() ? theme.text.action.primary.focused : theme.text.subdued} wrapMode="none">
+                    <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
                       {status()}
                     </text>
                   </Show>

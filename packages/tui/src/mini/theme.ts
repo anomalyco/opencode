@@ -116,8 +116,8 @@ function map(
 ): RunTheme {
   // V1 system migration serializes colors; restore terminal defaults before quantizing scrollback.
   const exact = (color: RGBA) => {
-    if (system && color.equals(theme.text.default)) return RGBA.defaultForeground(color)
-    if (system && color.equals(theme.background.default)) return RGBA.defaultBackground(color)
+    if (system && color.equals(theme.text.base)) return RGBA.defaultForeground(color)
+    if (system && color.equals(theme.background.base)) return RGBA.defaultBackground(color)
     return color
   }
   const scrollback = (color: RGBA) => {
@@ -133,50 +133,50 @@ function map(
   })
 
   return {
-    background: RGBA.defaultBackground(theme.background.default),
+    background: RGBA.defaultBackground(theme.background.base),
     footer: {
-      actionSecondaryText: exact(theme.text.action.secondary.default),
+      actionSecondaryText: exact(theme.text.action.secondary.base),
       actionFocusedBg: exact(theme.background.action.primary.focused),
       actionFocusedText: exact(theme.text.action.primary.focused),
-      formfieldText: exact(theme.text.formfield.default),
+      formfieldText: exact(theme.text.formfield.base),
       formfieldFocusedBg: exact(theme.background.formfield.focused),
       formfieldFocusedText: exact(theme.text.formfield.focused),
       selection: exact(theme.text.formfield.selected),
       running: exact(theme.text.status.running),
       question: exact(theme.text.status.question),
       permission: exact(theme.text.status.permission),
-      success: exact(theme.text.feedback.success.default),
+      success: exact(theme.text.feedback.success.base),
       link: exact(theme.markdown.link),
       categorical: dedupeWith(
         theme.categorical.map((scale) => exact(scale[200])),
         (a, b) => a.equals(b),
       ),
-      warning: exact(theme.text.feedback.warning.default),
-      error: exact(theme.text.feedback.error.default),
-      muted: exact(theme.text.subdued),
-      text: exact(theme.text.default),
+      warning: exact(theme.text.feedback.warning.base),
+      error: exact(theme.text.feedback.error.base),
+      muted: exact(theme.text.muted),
+      text: exact(theme.text.base),
       shade: exact(theme.background.raised.base),
       surface: exact(theme.background.raised.base),
       pane: exact(theme.background.raised.high),
-      border: exact(theme.border.default),
+      border: exact(theme.border.base),
       line: exact(theme.background.raised.high),
     },
     entry: {
-      system: { body: scrollback(theme.text.subdued) },
-      user: { body: scrollback(theme.text.default) },
+      system: { body: scrollback(theme.text.muted) },
+      user: { body: scrollback(theme.text.base) },
       assistant: { body: scrollback(theme.markdown.text) },
-      reasoning: { body: scrollback(theme.text.subdued) },
-      tool: { body: scrollback(theme.text.subdued), start: scrollback(theme.text.subdued) },
-      error: { body: scrollback(theme.text.feedback.error.default) },
+      reasoning: { body: scrollback(theme.text.muted) },
+      tool: { body: scrollback(theme.text.muted), start: scrollback(theme.text.muted) },
+      error: { body: scrollback(theme.text.feedback.error.base) },
     },
     splash: {
-      left: nearestIndexed(indexed, theme.text.subdued),
-      right: nearestIndexed(indexed, theme.text.default),
+      left: nearestIndexed(indexed, theme.text.muted),
+      right: nearestIndexed(indexed, theme.text.base),
       leftShadow: nearestIndexed(indexed, theme.background.raised.base),
     },
     block: {
-      text: scrollback(theme.text.default),
-      muted: scrollback(theme.text.subdued),
+      text: scrollback(theme.text.base),
+      muted: scrollback(theme.text.muted),
       syntax,
       diffRemoved: scrollback(theme.diff.text.removed),
       diffAddedBg: scrollback(theme.diff.background.added),
@@ -298,7 +298,7 @@ export async function resolveRunTheme(
     : ansiPalette
   return {
     ...map(theme, indexed, generateSyntax(theme), name === "system" && resolved !== undefined),
-    background: RGBA.defaultBackground(colors?.defaultBackground ?? theme.background.default),
+    background: RGBA.defaultBackground(colors?.defaultBackground ?? theme.background.base),
   }
 }
 

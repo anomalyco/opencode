@@ -70,7 +70,7 @@ Its relevant structure looks like this:
   "version": 2,
   "base": {
     "text": {
-      "default": "#d8f3ff"
+      "base": "#d8f3ff"
     }
   },
   "dark": {
@@ -105,7 +105,7 @@ The examples below show only the sections relevant to each concept; they are not
   "version": 2,
   "base": {
     "text": {
-      "default": "#16324f"
+      "base": "#16324f"
     }
   },
   "light": {
@@ -113,7 +113,7 @@ The examples below show only the sections relevant to each concept; they are not
   },
   "dark": {
     "hue": {},
-    "text": { "default": "#d8f3ff" }
+    "text": { "base": "#d8f3ff" }
   }
 }
 ```
@@ -127,11 +127,11 @@ Use a hex color, `transparent`, or a reference to another theme color:
   "version": 2,
   "base": {
     "text": {
-      "default": "#d8f3ff",
-      "subdued": "$hue.neutral.400"
+      "base": "#d8f3ff",
+      "muted": "$hue.neutral.400"
     },
     "background": {
-      "default": "transparent"
+      "base": "transparent"
     }
   }
 }
@@ -173,7 +173,7 @@ base hue or alias.
 
 ## States
 
-Use state keys to change interactive colors. Unspecified states use the nearest default value:
+Use state keys to change interactive colors. Unspecified states use the nearest base value:
 
 ```json title="themes/ocean.json"
 {
@@ -182,7 +182,7 @@ Use state keys to change interactive colors. Unspecified states use the nearest 
     "text": {
       "action": {
         "primary": {
-          "default": "$hue.interactive.400",
+          "base": "$hue.interactive.400",
           "$hovered": "$hue.interactive.300",
           "$disabled": "$hue.neutral.600"
         }
@@ -209,7 +209,7 @@ palette:
   "version": 2,
   "base": {
     "border": {
-      "default": "$hue.neutral.700"
+      "base": "$hue.neutral.700"
     },
     "syntax": {
       "comment": "$hue.neutral.500",
@@ -227,8 +227,8 @@ palette:
 
 | Group        | Purpose                                                       |
 | ------------ | ------------------------------------------------------------- |
-| `text`       | Default, subdued, action, form-field, status, and feedback text |
-| `background` | Default, surfaces, actions, form fields, and feedback fills    |
+| `text`       | Base, muted, action, form-field, status, and feedback text |
+| `background` | Base, surfaces, actions, form fields, and feedback fills    |
 | `border`     | Borders                                                       |
 | `scrollbar`  | Scrollbars                                                    |
 | `diff`       | Added, removed, context, highlight, and line-number colors     |
@@ -243,14 +243,14 @@ Syntax keys are `comment`, `keyword`, `function`, `variable`, `string`, `number`
 
 Panels, dialogs, menus, and toasts select their depth from `background.raised`. Dialogs additionally support a
 contextual `@dialog` surface. The TUI re-resolves the palette after applying `@dialog`, so tokens that reference
-`$background.default` follow the dialog background:
+`$background.base` follow the dialog background:
 
 ```json title="themes/ocean.json"
 {
   "version": 2,
   "base": {
     "background": {
-      "default": "#071521",
+      "base": "#071521",
       "raised": {
         "base": "#0c1f2e",
         "high": "#102a3c",
@@ -259,12 +259,12 @@ contextual `@dialog` surface. The TUI re-resolves the palette after applying `@d
     },
     "@dialog": {
       "background": {
-        "default": "$background.raised.base"
+        "base": "$background.raised.base"
       }
     }
   }
 }
 ```
 
-`@dialog` accepts the same token groups as the base mode. An action's contextual `default` also becomes the fallback
+`@dialog` accepts the same token groups as the base mode. An action's contextual `base` also becomes the fallback
 for its unspecified states; an explicit state override still wins.

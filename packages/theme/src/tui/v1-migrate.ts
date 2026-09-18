@@ -103,20 +103,20 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
     } as HueDefinition,
     categorical: uniqueCategorical.length ? uniqueCategorical : DEFAULT_CATEGORICAL,
     text: {
-      default: text,
-      subdued: textMuted,
+      base: text,
+      muted: textMuted,
       action: {
         primary: {
-          default: "$text.default",
+          base: "$text.base",
           $disabled: textMuted,
           $focused: selected,
           $selected: primary,
         },
-        secondary: { default: "$text.subdued", $hovered: "$text.default" },
-        destructive: { default: destructive, $disabled: textMuted },
+        secondary: { base: "$text.muted", $hovered: "$text.base" },
+        destructive: { base: destructive, $disabled: textMuted },
       },
       formfield: {
-        default: text,
+        base: text,
         $hovered: primary,
         $focused: primary,
         $pressed: primary,
@@ -130,36 +130,36 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
         unread: "$hue.accent.200",
       },
       feedback: {
-        error: { default: color("error") },
-        warning: { default: color("warning") },
-        success: { default: color("success") },
-        info: { default: color("info") },
+        error: { base: color("error") },
+        warning: { base: color("warning") },
+        success: { base: color("success") },
+        info: { base: color("info") },
       },
     },
     background: {
-      default: background,
+      base: background,
       raised: {
         base: backgroundPanel,
         high: backgroundMenu,
         max: backgroundRaisedMax,
       },
       action: {
-        primary: { default: "transparent", $hovered: backgroundPanel, $focused: primary, $selected: "transparent" },
-        secondary: { default: "transparent" },
-        destructive: { default: color("error") },
+        primary: { base: "transparent", $hovered: backgroundPanel, $focused: primary, $selected: "transparent" },
+        secondary: { base: "transparent" },
+        destructive: { base: color("error") },
       },
       formfield: {
-        default: "$background.default",
+        base: "$background.base",
       },
       feedback: {
-        error: { default: "$background.default" },
-        warning: { default: "$background.default" },
-        success: { default: "$background.default" },
-        info: { default: "$background.default" },
+        error: { base: "$background.base" },
+        warning: { base: "$background.base" },
+        success: { base: "$background.base" },
+        info: { base: "$background.base" },
       },
     },
-    border: { default: color("border") },
-    scrollbar: { default: color("borderActive") },
+    border: { base: color("border") },
+    scrollbar: { base: color("borderActive") },
     diff: {
       text: {
         added: color("diffAdded"),
@@ -210,7 +210,7 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
     },
     "@dialog": {
       background: {
-        default: "$background.raised.base",
+        base: "$background.raised.base",
         action: { primary: { $hovered: "$background.raised.high" } },
       },
     },

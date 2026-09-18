@@ -62,7 +62,7 @@ const HueDefinition = Schema.Struct({
 export type HueDefinition = Schema.Schema.Type<typeof HueDefinition>
 
 const StatefulColorDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
+  base: Schema.optional(ColorValue),
   $hovered: Schema.optional(ColorValue),
   $focused: Schema.optional(ColorValue),
   $pressed: Schema.optional(ColorValue),
@@ -80,17 +80,17 @@ const ActionColorDefinition = Schema.Struct({
 })
 
 const TextFeedbackDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
-  subdued: Schema.optional(ColorValue),
+  base: Schema.optional(ColorValue),
+  muted: Schema.optional(ColorValue),
 })
 
 const BackgroundFeedbackDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
+  base: Schema.optional(ColorValue),
 })
 
 const TextDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
-  subdued: Schema.optional(ColorValue),
+  base: Schema.optional(ColorValue),
+  muted: Schema.optional(ColorValue),
   action: Schema.optional(ActionColorDefinition),
   formfield: Schema.optional(StatefulColorDefinition),
   status: Schema.optional(
@@ -113,7 +113,7 @@ const TextDefinition = Schema.Struct({
 export type TextDefinition = Schema.Schema.Type<typeof TextDefinition>
 
 const BackgroundDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
+  base: Schema.optional(ColorValue),
   raised: Schema.optional(
     Schema.Struct({
       base: Schema.optional(ColorValue),
@@ -202,8 +202,8 @@ export type DiffDefinition = Schema.Schema.Type<typeof DiffDefinition>
 const ThemeTokensDefinition = Schema.Struct({
   text: Schema.optional(TextDefinition),
   background: Schema.optional(BackgroundDefinition),
-  border: Schema.optional(Schema.Struct({ default: Schema.optional(ColorValue) })),
-  scrollbar: Schema.optional(Schema.Struct({ default: Schema.optional(ColorValue) })),
+  border: Schema.optional(Schema.Struct({ base: Schema.optional(ColorValue) })),
+  scrollbar: Schema.optional(Schema.Struct({ base: Schema.optional(ColorValue) })),
   diff: Schema.optional(DiffDefinition),
   syntax: Schema.optional(SyntaxDefinition),
   markdown: Schema.optional(MarkdownDefinition),
@@ -211,7 +211,7 @@ const ThemeTokensDefinition = Schema.Struct({
 export type ThemeTokensDefinition = Schema.Schema.Type<typeof ThemeTokensDefinition>
 
 const CompleteStatefulColorDefinition = Schema.Struct({
-  default: ColorValue,
+  base: ColorValue,
   $hovered: Schema.optional(ColorValue),
   $focused: Schema.optional(ColorValue),
   $pressed: Schema.optional(ColorValue),
@@ -225,13 +225,13 @@ const CompleteActionColorDefinition = Schema.Struct({
   destructive: CompleteStatefulColorDefinition,
 })
 
-const CompleteTextFeedbackDefinition = Schema.Struct({ default: ColorValue, subdued: Schema.optional(ColorValue) })
-const CompleteBackgroundFeedbackDefinition = Schema.Struct({ default: ColorValue })
+const CompleteTextFeedbackDefinition = Schema.Struct({ base: ColorValue, muted: Schema.optional(ColorValue) })
+const CompleteBackgroundFeedbackDefinition = Schema.Struct({ base: ColorValue })
 
 const CompleteThemeTokensDefinition = Schema.Struct({
   text: Schema.Struct({
-    default: ColorValue,
-    subdued: ColorValue,
+    base: ColorValue,
+    muted: ColorValue,
     action: CompleteActionColorDefinition,
     formfield: CompleteStatefulColorDefinition,
     status: Schema.Struct({
@@ -248,7 +248,7 @@ const CompleteThemeTokensDefinition = Schema.Struct({
     }),
   }),
   background: Schema.Struct({
-    default: ColorValue,
+    base: ColorValue,
     raised: Schema.Struct({ base: ColorValue, high: ColorValue, max: ColorValue }),
     action: CompleteActionColorDefinition,
     formfield: CompleteStatefulColorDefinition,
@@ -259,8 +259,8 @@ const CompleteThemeTokensDefinition = Schema.Struct({
       info: CompleteBackgroundFeedbackDefinition,
     }),
   }),
-  border: Schema.Struct({ default: ColorValue }),
-  scrollbar: Schema.Struct({ default: ColorValue }),
+  border: Schema.Struct({ base: ColorValue }),
+  scrollbar: Schema.Struct({ base: ColorValue }),
   diff: Schema.Struct({
     text: Schema.Struct({ added: ColorValue, removed: ColorValue, context: ColorValue, hunkHeader: ColorValue }),
     background: Schema.Struct({ added: ColorValue, removed: ColorValue, context: ColorValue }),

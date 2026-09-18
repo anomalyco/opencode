@@ -10,7 +10,7 @@ export function Logo() {
   const dimensions = useTerminalDimensions()
 
   const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
-    const shadow = tint(theme.background.default, fg, 0.25)
+    const shadow = tint(theme.background.base, fg, 0.25)
     const attrs = bold ? TextAttributes.BOLD : undefined
     return Array.from(line).map((char) => {
       if (char === "_") {
@@ -53,23 +53,23 @@ export function Logo() {
     <box>
       {dimensions().height < 12 ? null : dimensions().width < 22 ? (
         <For each={go.right.slice(1)}>
-          {(line) => <box flexDirection="row">{renderLine(line, theme.text.default, true)}</box>}
+          {(line) => <box flexDirection="row">{renderLine(line, theme.text.base, true)}</box>}
         </For>
       ) : dimensions().width < 44 ? (
         <>
           <For each={logo.left.slice(1)}>
-            {(line) => <box flexDirection="row">{renderLine(line, theme.text.subdued, false)}</box>}
+            {(line) => <box flexDirection="row">{renderLine(line, theme.text.muted, false)}</box>}
           </For>
           <For each={logo.right}>
-            {(line) => <box flexDirection="row">{renderLine(line, theme.text.default, true)}</box>}
+            {(line) => <box flexDirection="row">{renderLine(line, theme.text.base, true)}</box>}
           </For>
         </>
       ) : (
         <For each={logo.left}>
           {(line, index) => (
             <box flexDirection="row" gap={1}>
-              <box flexDirection="row">{renderLine(line, theme.text.subdued, false)}</box>
-              <box flexDirection="row">{renderLine(logo.right[index()], theme.text.default, true)}</box>
+              <box flexDirection="row">{renderLine(line, theme.text.muted, false)}</box>
+              <box flexDirection="row">{renderLine(logo.right[index()], theme.text.base, true)}</box>
             </box>
           )}
         </For>

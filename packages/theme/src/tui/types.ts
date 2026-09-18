@@ -11,7 +11,7 @@ import type {
   SyntaxToken,
 } from "./schema.js"
 
-export type ResolvedActionState = "default" | ActionState
+export type ResolvedActionState = "base" | ActionState
 export type ResolvedFormfieldState = ResolvedActionState
 export type HueScale = Readonly<Record<HueStep, RGBA>>
 export type Hue = Readonly<Record<BaseHue | HueAlias, HueScale>>
@@ -30,8 +30,8 @@ export type ResolvedThemeTokens = {
   readonly increase: (color: RGBA, amount?: number) => RGBA
   readonly decrease: (color: RGBA, amount?: number) => RGBA
   readonly text: {
-    readonly default: RGBA
-    readonly subdued: RGBA
+    readonly base: RGBA
+    readonly muted: RGBA
     readonly action: Readonly<Record<ActionVariant, StatefulColor>>
     readonly formfield: FormfieldColor
     readonly status: {
@@ -40,10 +40,10 @@ export type ResolvedThemeTokens = {
       readonly permission: RGBA
       readonly unread: RGBA
     }
-    readonly feedback: Readonly<Record<FeedbackKind, { readonly default: RGBA; readonly subdued: RGBA }>>
+    readonly feedback: Readonly<Record<FeedbackKind, { readonly base: RGBA; readonly muted: RGBA }>>
   }
   readonly background: {
-    readonly default: RGBA
+    readonly base: RGBA
     readonly raised: {
       readonly base: RGBA
       readonly high: RGBA
@@ -51,10 +51,10 @@ export type ResolvedThemeTokens = {
     }
     readonly action: Readonly<Record<ActionVariant, StatefulColor>>
     readonly formfield: FormfieldColor
-    readonly feedback: Readonly<Record<FeedbackKind, { readonly default: RGBA }>>
+    readonly feedback: Readonly<Record<FeedbackKind, { readonly base: RGBA }>>
   }
-  readonly border: { readonly default: RGBA }
-  readonly scrollbar: { readonly default: RGBA }
+  readonly border: { readonly base: RGBA }
+  readonly scrollbar: { readonly base: RGBA }
   readonly diff: {
     readonly text: {
       readonly added: RGBA

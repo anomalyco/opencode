@@ -127,12 +127,12 @@ function OneCellSpinnerStory(props: { context: Plugin.Context }) {
     <box
       width={dimensions().width}
       height={dimensions().height}
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.base}
       justifyContent={solo() ? "center" : undefined}
       alignItems={solo() ? "center" : undefined}
     >
       <Show when={!solo()}>
-        <text fg={theme.text.default} flexShrink={0}>
+        <text fg={theme.text.base} flexShrink={0}>
           one-cell motion lab.
         </text>
       </Show>
@@ -141,17 +141,17 @@ function OneCellSpinnerStory(props: { context: Plugin.Context }) {
           <>
             <Show when={!solo()}>
               <box flexDirection="row" height={1} flexShrink={0} paddingLeft={1}>
-                <text width={22} fg={theme.text.subdued}>
+                <text width={22} fg={theme.text.muted}>
                   pattern
                 </text>
                 <For each={speeds()}>
                   {(value) => (
-                    <text width={7} fg={theme.text.subdued}>
+                    <text width={7} fg={theme.text.muted}>
                       {value}x
                     </text>
                   )}
                 </For>
-                <text fg={theme.text.subdued}>cycle @1x</text>
+                <text fg={theme.text.muted}>cycle @1x</text>
               </box>
               <scrollbox
                 ref={scroll}
@@ -166,7 +166,7 @@ function OneCellSpinnerStory(props: { context: Plugin.Context }) {
                       <text
                         width={22}
                         wrapMode="none"
-                        fg={index() === selected() ? theme.text.formfield.selected : theme.text.formfield.default}
+                        fg={index() === selected() ? theme.text.formfield.selected : theme.text.formfield.base}
                       >
                         {index() === selected() ? ">" : " "}
                         {String(index() + 1).padStart(2)} {item.name.toLowerCase()}.
@@ -186,11 +186,11 @@ function OneCellSpinnerStory(props: { context: Plugin.Context }) {
                           </box>
                         )}
                       </For>
-                      <text width={10} fg={theme.text.subdued}>
+                      <text width={10} fg={theme.text.muted}>
                         {item.pace ? "adaptive" : `${item.frames.length * item.interval}ms`}
                       </text>
                       <Show when={dimensions().width >= 80}>
-                        <text fg={theme.text.subdued}>
+                        <text fg={theme.text.muted}>
                           {[...new Set(item.frames)].join(" ")}
                           {item.levels ? "  + intensity" : ""}
                         </text>
@@ -207,15 +207,15 @@ function OneCellSpinnerStory(props: { context: Plugin.Context }) {
               paddingRight={1}
               alignItems={solo() ? "center" : undefined}
             >
-              <text fg={theme.text.default} maxWidth="100%" attributes={solo() ? TextAttributes.BOLD : 0}>
+              <text fg={theme.text.base} maxWidth="100%" attributes={solo() ? TextAttributes.BOLD : 0}>
                 <Show when={!solo()}>{String(selected() + 1).padStart(2, "0")} / </Show>
                 {animation().name.toLowerCase()}.
               </text>
               <Show when={!solo()}>
-                <text fg={theme.text.subdued} maxWidth="100%">
+                <text fg={theme.text.muted} maxWidth="100%">
                   {animation().description}
                 </text>
-                <text fg={theme.text.subdued}>
+                <text fg={theme.text.muted}>
                   {speed()}x: {timing()}
                 </text>
               </Show>
@@ -226,7 +226,7 @@ function OneCellSpinnerStory(props: { context: Plugin.Context }) {
                 marginTop={solo() ? 1 : 0}
               >
                 <box height={1} flexDirection="row">
-                  <text width={7} fg={theme.text.subdued}>
+                  <text width={7} fg={theme.text.muted}>
                     work
                   </text>
                   <OneCellSpinner
@@ -238,10 +238,10 @@ function OneCellSpinnerStory(props: { context: Plugin.Context }) {
                     glow={glow()}
                     color={theme.text.status.running}
                   />
-                  <text fg={theme.text.default}> esc stop</text>
+                  <text fg={theme.text.base}> esc stop</text>
                 </box>
                 <box height={1} flexDirection="row">
-                  <text width={7} fg={theme.text.subdued}>
+                  <text width={7} fg={theme.text.muted}>
                     launch
                   </text>
                   <OneCellSpinner
@@ -250,11 +250,11 @@ function OneCellSpinnerStory(props: { context: Plugin.Context }) {
                     animations={animations()}
                     paused={paused()}
                     glow={glow()}
-                    color={theme.text.default}
+                    color={theme.text.base}
                   />
-                  <text fg={theme.text.default} wrapMode="none">
+                  <text fg={theme.text.base} wrapMode="none">
                     {splash().label.slice(1)}
-                    <span style={{ fg: theme.text.subdued }}>{splash().metadata}</span>
+                    <span style={{ fg: theme.text.muted }}>{splash().metadata}</span>
                   </text>
                 </box>
               </box>

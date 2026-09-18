@@ -373,7 +373,7 @@ test("explicit theme refresh reloads custom colors without a palette event", asy
         path.join(tmp.path, "themes", "mini-refresh.json"),
         JSON.stringify({
           version: 2,
-          base: { ...DEFAULT_THEME.base, text: { ...DEFAULT_THEME.base.text, default: color } },
+          base: { ...DEFAULT_THEME.base, text: { ...DEFAULT_THEME.base.text, base: color } },
           dark: { hue: DEFAULT_THEME.dark.hue },
         }),
       )

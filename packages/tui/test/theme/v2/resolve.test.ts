@@ -40,8 +40,8 @@ test("resolves complete one-mode documents in the available mode", () => {
   const resolvedLight = resolveSource(complete("light"), "dark")
   const resolvedDark = resolveSource(complete("dark"), "light")
 
-  expect(resolvedLight.background.default.equals(resolveTheme(light).background.default)).toBeTrue()
-  expect(resolvedDark.background.default.equals(resolveTheme(dark).background.default)).toBeTrue()
+  expect(resolvedLight.background.base.equals(resolveTheme(light).background.base)).toBeTrue()
+  expect(resolvedDark.background.base.equals(resolveTheme(dark).background.base)).toBeTrue()
   expect(resolvedLight.categorical.length).toBeGreaterThan(0)
   expect(resolvedDark.categorical.length).toBeGreaterThan(0)
 })
@@ -97,23 +97,23 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.surface("dialog").increase(lightTheme.hue.red[100])).toBe(lightTheme.hue.red[200])
   expect(lightTheme.decrease(lightTheme.hue.red[200])).toBe(lightTheme.hue.red[100])
   expect(darkTheme.decrease(darkTheme.hue.red[200])).toBe(darkTheme.hue.red[100])
-  expect(lightTheme.text.default).toBeInstanceOf(RGBA)
-  expect(darkTheme.background.default).toBeInstanceOf(RGBA)
+  expect(lightTheme.text.base).toBeInstanceOf(RGBA)
+  expect(darkTheme.background.base).toBeInstanceOf(RGBA)
   expect(lightTheme.background.raised.base).toBe(lightTheme.hue.neutral[700])
   expect(lightTheme.background.raised.high).toBe(lightTheme.hue.neutral[600])
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
-  expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[800])
+  expect(lightTheme.text.action.primary.base).toBe(lightTheme.hue.neutral[800])
   // Surfaces re-resolve the palette after applying their theme-provided overrides.
   const dialog = lightTheme.surface("dialog")
-  expect(dialog.background.default).toBe(lightTheme.background.raised.base)
-  expect(dialog.background.formfield.default).toBe(lightTheme.background.raised.base)
-  expect(dialog.background.feedback.error.default).toBe(lightTheme.background.raised.base)
+  expect(dialog.background.base).toBe(lightTheme.background.raised.base)
+  expect(dialog.background.formfield.base).toBe(lightTheme.background.raised.base)
+  expect(dialog.background.feedback.error.base).toBe(lightTheme.background.raised.base)
   expect(dialog.background.action.primary.hovered).toBe(lightTheme.background.raised.high)
-  expect(dialog.background.action.primary.default).toBe(lightTheme.hue.interactive[500])
+  expect(dialog.background.action.primary.base).toBe(lightTheme.hue.interactive[500])
   expect(dialog.background.action.primary.focused).toBe(lightTheme.hue.interactive[500])
-  expect(dialog.text.action.primary.default).toBe(lightTheme.hue.neutral[900])
+  expect(dialog.text.action.primary.base).toBe(lightTheme.hue.neutral[900])
   expect(dialog.surface("dialog")).toBe(dialog)
-  expect(darkTheme.surface("dialog").background.default).toBe(darkTheme.background.raised.base)
+  expect(darkTheme.surface("dialog").background.base).toBe(darkTheme.background.raised.base)
 })
 
 test("resolves base hue aliases and rejects circular hue aliases", () => {
@@ -172,7 +172,7 @@ test("resolves complete light and dark definitions independently", () => {
   const lightDefinition = override(light, {
     text: {
       ...light.text,
-      action: { ...light.text.action, secondary: { default: "#123456", $hovered: "#234567" } },
+      action: { ...light.text.action, secondary: { base: "#123456", $hovered: "#234567" } },
     },
   })
   const { hue, ...base } = lightDefinition
@@ -185,10 +185,10 @@ test("resolves complete light and dark definitions independently", () => {
   const lightTheme = resolveSource(document, "light")
   const darkTheme = resolveSource(document, "dark")
 
-  expect(lightTheme.text.action.secondary.default.toInts()).toEqual([18, 52, 86, 255])
+  expect(lightTheme.text.action.secondary.base.toInts()).toEqual([18, 52, 86, 255])
   expect(lightTheme.text.action.secondary.hovered.toInts()).toEqual([35, 69, 103, 255])
-  expect(darkTheme.text.action.secondary.default).toBe(darkTheme.text.subdued)
-  expect(darkTheme.text.action.secondary.hovered).toBe(darkTheme.text.default)
+  expect(darkTheme.text.action.secondary.base).toBe(darkTheme.text.muted)
+  expect(darkTheme.text.action.secondary.hovered).toBe(darkTheme.text.base)
 })
 
 test("expands structural state fallbacks within a complete theme", () => {
@@ -198,7 +198,7 @@ test("expands structural state fallbacks within a complete theme", () => {
       ...light.background,
       action: {
         ...light.background.action,
-        primary: { default: "#123456" },
+        primary: { base: "#123456" },
       },
     },
   })
@@ -212,8 +212,8 @@ test("resolves matched action variants and states", () => {
   expect(theme.text.action.primary.pressed).toBeInstanceOf(RGBA)
   expect(theme.text.action.primary.hovered).toBeInstanceOf(RGBA)
   expect(theme.text.action.primary.selected).toBeInstanceOf(RGBA)
-  expect(theme.text.action.secondary.default).toBe(theme.text.subdued)
-  expect(theme.text.action.secondary.hovered).toBe(theme.text.default)
+  expect(theme.text.action.secondary.base).toBe(theme.text.muted)
+  expect(theme.text.action.secondary.hovered).toBe(theme.text.base)
   expect(theme.background.action.primary.pressed).toBeInstanceOf(RGBA)
   expect(theme.background.action.primary.hovered).toBeInstanceOf(RGBA)
   expect(theme.background.action.primary.selected).toBeInstanceOf(RGBA)
@@ -234,56 +234,56 @@ test("resolves dialog surfaces from direct colors", () => {
     "light",
   )
 
-  expect(theme.surface("dialog").background.default.toInts()).toEqual([18, 52, 86, 255])
+  expect(theme.surface("dialog").background.base.toInts()).toEqual([18, 52, 86, 255])
   expect(theme.surface("dialog").background.action.primary.hovered.toInts()).toEqual([35, 69, 103, 255])
 })
 
 test("resolves transparent colors", () => {
   const theme = resolveSource(complete("light", {
-    background: { ...light.background, formfield: { default: "transparent" } },
+    background: { ...light.background, formfield: { base: "transparent" } },
   }))
-  expect(theme.background.formfield.default.toInts()).toEqual([0, 0, 0, 0])
+  expect(theme.background.formfield.base.toInts()).toEqual([0, 0, 0, 0])
 })
 
 test("reports theme decoding failures as native errors", () => {
   expect(() =>
     resolveSource(
-      complete("light", { text: { ...light.text, default: "opaque" } }) as never,
+      complete("light", { text: { ...light.text, base: "opaque" } }) as never,
       "light",
       "custom",
     ),
   ).toThrow('Invalid theme: custom "opaque" is an invalid value')
 })
 
-test("surface overrides rewire references and reset action states from their default", () => {
+test("surface overrides rewire references and reset action states from their base", () => {
   const theme = resolveTheme(
     override(light, {
       text: {
-        default: "#111111",
-        action: { primary: { default: "$text.default", $pressed: "#222222" } },
+        base: "#111111",
+        action: { primary: { base: "$text.base", $pressed: "#222222" } },
       },
       "@dialog": {
         text: {
-          default: "#333333",
-          action: { primary: { default: "#444444", $focused: "#555555" } },
+          base: "#333333",
+          action: { primary: { base: "#444444", $focused: "#555555" } },
         },
       },
     }),
   )
   const raised = theme.surface("dialog")
-  expect(raised.text.default.toInts()).toEqual([51, 51, 51, 255])
+  expect(raised.text.base.toInts()).toEqual([51, 51, 51, 255])
   expect(raised.text.action.primary.pressed.toInts()).toEqual([68, 68, 68, 255])
   expect(raised.text.action.primary.focused.toInts()).toEqual([85, 85, 85, 255])
 })
 
 test("rejects missing and circular references", () => {
-  expect(() => resolveTheme(override(light, { text: { default: "$missing" } }))).toThrow(
+  expect(() => resolveTheme(override(light, { text: { base: "$missing" } }))).toThrow(
     'Theme reference "$missing" was not found',
   )
   expect(() =>
     resolveTheme(
       override(light, {
-        text: { default: "$text.subdued", subdued: "$text.default" },
+        text: { base: "$text.muted", muted: "$text.base" },
       }),
     ),
   ).toThrow("Circular theme reference")
@@ -302,10 +302,10 @@ test("validates complete hues, resolved groups, and hue-only syntax", () => {
     resolveTheme(
       {
         ...light,
-        syntax: { ...light.syntax, keyword: "$text.default" },
+        syntax: { ...light.syntax, keyword: "$text.base" },
       } as unknown as ThemeDefinition,
     ),
-  ).toThrow("$text.default")
+  ).toThrow("$text.base")
 })
 
 function override(base: ThemeDefinition, value: unknown) {

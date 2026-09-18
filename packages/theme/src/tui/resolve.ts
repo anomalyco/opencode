@@ -100,14 +100,14 @@ function contextualActions(
       return [
         variant,
         Object.fromEntries(
-          (["default", ...ActionState.literals] as readonly ResolvedActionState[]).map((state) => {
-            const key = state === "default" ? undefined : (`$${state}` as ActionStateKey)
+          (["base", ...ActionState.literals] as readonly ResolvedActionState[]).map((state) => {
+            const key = state === "base" ? undefined : (`$${state}` as ActionStateKey)
             return [
-              key ?? "default",
+              key ?? "base",
               (key ? surfaceVariant?.[key] : undefined) ??
-                surfaceVariant?.default ??
+                surfaceVariant?.base ??
                 (key ? baseVariant?.[key] : undefined) ??
-                baseVariant?.default,
+                baseVariant?.base,
             ]
           }),
         ),
@@ -151,7 +151,7 @@ function statefulActions(actions: Readonly<Record<ActionVariant, StatefulColor>>
 function statefulColor(color: StatefulColor): StatefulColor {
   return {
     ...color,
-    state: (states: ActionStates) => color[ActionState.literals.find((state) => states[state]) ?? "default"],
+    state: (states: ActionStates) => color[ActionState.literals.find((state) => states[state]) ?? "base"],
   }
 }
 

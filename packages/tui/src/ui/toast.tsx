@@ -36,7 +36,7 @@ function ToastSurface(props: {
       marginLeft={2}
       wrapMode="none"
       attributes={hovered() && props.toast.action ? TextAttributes.BOLD : undefined}
-      fg={hovered() ? theme.text.action.primary.default : theme.text.subdued}
+      fg={hovered() ? theme.text.action.primary.base : theme.text.muted}
     >
       {props.toast.action ? `› ${props.toast.action.label}` : "x"}
     </text>
@@ -50,7 +50,7 @@ function ToastSurface(props: {
       maxWidth={Math.min(60, dimensions().width - 6)}
       justifyContent="center"
       alignItems="flex-start"
-      borderColor={theme.text.feedback[props.toast.variant].default}
+      borderColor={theme.text.feedback[props.toast.variant].base}
       border={["left", "right"]}
       customBorderChars={SplitBorder.customBorderChars}
       onMouseOver={() => hover(true)}
@@ -72,7 +72,7 @@ function ToastSurface(props: {
           when={props.toast.title}
           fallback={
             <box flexDirection="row" width="100%">
-              <text fg={theme.text.default} wrapMode="word" flexGrow={1}>
+              <text fg={theme.text.base} wrapMode="word" flexGrow={1}>
                 {props.toast.message}
               </text>
               {affordance()}
@@ -80,18 +80,18 @@ function ToastSurface(props: {
           }
         >
           <box flexDirection="row" width="100%" marginBottom={1}>
-            <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+            <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
               {props.toast.title}
             </text>
             <box flexGrow={1} />
             {affordance()}
           </box>
-          <text fg={theme.text.default} wrapMode="word" width="100%">
+          <text fg={theme.text.base} wrapMode="word" width="100%">
             {props.toast.message}
           </text>
         </Show>
         <Show when={props.pending}>
-          <text fg={theme.text.subdued} marginTop={1}>
+          <text fg={theme.text.muted} marginTop={1}>
             +{props.pending} more
           </text>
         </Show>

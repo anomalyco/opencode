@@ -172,7 +172,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
           .lines.flatMap((line) => line.spans)
           .find((span) => span.text.trim() === glyph)?.fg
         expect(color?.toInts()).toEqual(
-          (unread === "error" ? theme.text.feedback.error.default : theme.text.status.unread).toInts(),
+          (unread === "error" ? theme.text.feedback.error.base : theme.text.status.unread).toInts(),
         )
         await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
         await app.renderOnce()

@@ -56,10 +56,10 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   const [loading, setLoading] = createSignal<ReadonlySet<string>>(new Set())
 
   const statusColor = (status: McpServer["status"]) => {
-    if (status.status === "connected") return theme.text.feedback.success.default
-    if (status.status === "failed") return theme.text.feedback.error.default
-    if (status.status === "needs_auth") return theme.text.feedback.warning.default
-    return theme.text.subdued
+    if (status.status === "connected") return theme.text.feedback.success.base
+    if (status.status === "failed") return theme.text.feedback.error.base
+    if (status.status === "needs_auth") return theme.text.feedback.warning.base
+    return theme.text.muted
   }
 
   createEffect(() => {
@@ -76,7 +76,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
         value: server.name,
         title: server.name,
         footer: <Status status={server.status} loading={pending} />,
-        footerColor: pending ? theme.text.subdued : statusColor(server.status),
+        footerColor: pending ? theme.text.muted : statusColor(server.status),
       }
     })
   })
@@ -155,7 +155,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
             ]}
             footer={
               <Show when={focusedError()}>
-                <text fg={theme.text.subdued}>enter to view error</text>
+                <text fg={theme.text.muted}>enter to view error</text>
               </Show>
             }
           />

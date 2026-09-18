@@ -126,15 +126,15 @@ export function Answer(props: {
     <box gap={1}>
       <box paddingLeft={2} paddingRight={2}>
         <box flexDirection="row" justifyContent="space-between">
-          <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+          <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
             /btw
           </text>
-          <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+          <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
             esc
           </text>
         </box>
         <box paddingTop={1}>
-          <text fg={theme.text.subdued} wrapMode="word">
+          <text fg={theme.text.muted} wrapMode="word">
             {props.question}
           </text>
         </box>
@@ -161,12 +161,12 @@ export function Answer(props: {
       </scrollbox>
       <box flexDirection="row" gap={3} paddingLeft={2} paddingRight={2} paddingBottom={1}>
         <text onMouseUp={copy}>
-          <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
+          <span style={{ fg: copied() ? theme.text.feedback.success.base : theme.text.base }}>
             <b>{copied() ? "✓ copied" : "c"}</b>
           </span>
-          <span style={{ fg: theme.text.subdued }}>{copied() ? "" : " copy"}</span>
+          <span style={{ fg: theme.text.muted }}>{copied() ? "" : " copy"}</span>
         </text>
-        <text fg={theme.text.subdued}>↑/↓ scroll</text>
+        <text fg={theme.text.muted}>↑/↓ scroll</text>
       </box>
     </box>
   )

@@ -79,26 +79,26 @@ function rgba(color: unknown) {
 
 function expectFooter(actual: RunTheme, theme: ResolvedTheme) {
   const expected = {
-    text: theme.text.default,
-    muted: theme.text.subdued,
-    warning: theme.text.feedback.warning.default,
-    error: theme.text.feedback.error.default,
-    actionSecondaryText: theme.text.action.secondary.default,
+    text: theme.text.base,
+    muted: theme.text.muted,
+    warning: theme.text.feedback.warning.base,
+    error: theme.text.feedback.error.base,
+    actionSecondaryText: theme.text.action.secondary.base,
     actionFocusedBg: theme.background.action.primary.focused,
     actionFocusedText: theme.text.action.primary.focused,
-    formfieldText: theme.text.formfield.default,
+    formfieldText: theme.text.formfield.base,
     formfieldFocusedBg: theme.background.formfield.focused,
     formfieldFocusedText: theme.text.formfield.focused,
     selection: theme.text.formfield.selected,
     running: theme.text.status.running,
     question: theme.text.status.question,
     permission: theme.text.status.permission,
-    success: theme.text.feedback.success.default,
+    success: theme.text.feedback.success.base,
     link: theme.markdown.link,
     shade: theme.background.raised.base,
     surface: theme.background.raised.base,
     pane: theme.background.raised.high,
-    border: theme.border.default,
+    border: theme.border.base,
     line: theme.background.raised.high,
   }
   Object.entries(expected).forEach(([key, color]) => {
@@ -192,20 +192,20 @@ test.each(["light", "dark"] as const)(
       ...base,
       text: {
         ...base.text,
-        default: "#123456",
+        base: "#123456",
         action: {
           ...base.text.action,
           primary: { ...base.text.action.primary, $focused: "#56789a" },
         },
         formfield: {
           ...base.text.formfield,
-          default: "#234567",
+          base: "#234567",
           $selected: "#345678",
           $focused: "#6789ab",
         },
         feedback: {
           ...base.text.feedback,
-          warning: { ...base.text.feedback.warning, default: "#456789" },
+          warning: { ...base.text.feedback.warning, base: "#456789" },
         },
       },
       background: {
@@ -239,7 +239,7 @@ test.each(["light", "dark"] as const)(
     const expected = resolveThemeDocument(parseTheme(DEFAULT_THEMES.opencode), mode)
     for (const source of [
       { version: 2, [mode]: { categorical: [] } },
-      { version: 2, [mode]: { text: { default: "$missing" } } },
+      { version: 2, [mode]: { text: { base: "$missing" } } },
       undefined,
     ]) {
       if (source) await Bun.write(path.join(tmp.path, "themes", "mini-invalid.json"), JSON.stringify(source))
@@ -274,7 +274,7 @@ test.each(["light", "dark"] as const)(
   "falls back only for unsupported modes of a %s-only custom theme",
   async (mode) => {
     const base = selectTheme(DEFAULT_THEME, mode)
-    const definition = { ...base, text: { ...base.text, default: "#123456" } }
+    const definition = { ...base, text: { ...base.text, base: "#123456" } }
     const { hue, ...tokens } = definition
     const source = { version: 2, base: tokens, [mode]: { hue } }
     await Bun.write(path.join(tmp.path, "themes", "mini-one-mode.json"), JSON.stringify(source))

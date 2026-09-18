@@ -336,7 +336,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             emptyView={
               <Show when={!recent.loading && !projects.loading}>
                 <box paddingLeft={4} paddingRight={4}>
-                  <text fg={theme.text.subdued}>No recent sessions or projects</text>
+                  <text fg={theme.text.muted}>No recent sessions or projects</text>
                 </box>
               </Show>
             }
@@ -350,13 +350,13 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
               >
                 <box>
                   <Show when={projectID() && worktrees.loading}>
-                    <Spinner color={theme.text.subdued}>Loading worktrees…</Spinner>
+                    <Spinner color={theme.text.muted}>Loading worktrees…</Spinner>
                   </Show>
                   <Show when={!projectID() && (recent.loading || projects.loading)}>
-                    <Spinner color={theme.text.subdued}>Refreshing sessions and projects…</Spinner>
+                    <Spinner color={theme.text.muted}>Refreshing sessions and projects…</Spinner>
                   </Show>
                   <Show when={!projectID() && (recent() === false || projects() === false)}>
-                    <text fg={theme.text.feedback.error.default}>
+                    <text fg={theme.text.feedback.error.base}>
                       Could not refresh{" "}
                       {recent() === false ? (projects() === false ? "sessions and projects" : "sessions") : "projects"}.
                     </text>
@@ -402,7 +402,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             footerHints={[...(projectID() ? [{ title: "new worktree", label: "ctrl+n" }] : [])]}
             noMatchView={
               <box paddingLeft={4} paddingRight={4}>
-                <text fg={theme.text.subdued}>
+                <text fg={theme.text.muted}>
                   {projectID()
                     ? worktrees.loading
                       ? "Loading worktrees…"
@@ -434,7 +434,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           size="large"
           title={`${projectName(data.project.get(projectID()!)) ?? "Project"} / New worktree`}
           placeholder="Worktree name (optional)"
-          description={() => <text fg={theme.text.subdued}>Leave blank for a random name.</text>}
+          description={() => <text fg={theme.text.muted}>Leave blank for a random name.</text>}
           busy={creating()}
           busyText="Creating worktree…"
           onCancel={cancelCreation}

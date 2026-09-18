@@ -36,17 +36,17 @@ export function ErrorOverlay(props: { component: string; error: unknown; onClose
       <Dialog centered onClose={props.onClose}>
         <box maxHeight={Math.max(1, dimensions().height - 3)} paddingX={2} paddingBottom={1} gap={1}>
           <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
-            <text fg={theme.text.feedback.error.default} attributes={TextAttributes.BOLD}>
+            <text fg={theme.text.feedback.error.base} attributes={TextAttributes.BOLD}>
               Error while hot reloading
             </text>
-            <text fg={theme.text.subdued} onMouseUp={props.onClose}>
+            <text fg={theme.text.muted} onMouseUp={props.onClose}>
               esc
             </text>
           </box>
-          <text maxHeight={Math.max(1, dimensions().height - 9)} fg={theme.text.default}>
+          <text maxHeight={Math.max(1, dimensions().height - 9)} fg={theme.text.base}>
             {props.error instanceof Error ? props.error.message : String(props.error)}
           </text>
-          <text flexShrink={0} fg={theme.text.subdued}>
+          <text flexShrink={0} fg={theme.text.muted}>
             {props.component} · Fix the component and save to retry.
           </text>
         </box>
