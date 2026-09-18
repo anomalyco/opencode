@@ -448,8 +448,9 @@ export function Autocomplete(props: {
     const results: AutocompleteOption[] = [...slashes()]
 
     for (const serverCommand of sync.data.command) {
-      if (serverCommand.source === "skill") continue
-      const label = serverCommand.source === "mcp" ? ":mcp" : ""
+      // Include skills in slash autocomplete so they can be triggered by typing /
+      // fuzzy matching makes partial input hit the right skill
+      const label = serverCommand.source === "mcp" ? ":mcp" : serverCommand.source === "skill" ? ":skill" : ""
       results.push({
         display: "/" + serverCommand.name + label,
         description: serverCommand.description,
