@@ -13,27 +13,34 @@ const chromaticHues: readonly ChromaticHue[] = ["red", "orange", "yellow", "gree
 const categoricalTokens: readonly V1HueToken[] = ["secondary", "accent", "success", "warning", "primary", "error"]
 const minimumChroma = 0.03
 const lightThreshold = 0.6
-// Canonical OKLCH hue angles classify arbitrary V1 colors without coupling migration to a built-in theme.
-const hueAngles = {
+// Canonical swatches copied from the original default-theme classifier keep V1 migration self-contained.
+const hueReferences = {
   light: {
-    red: 19.571,
-    orange: 66.29,
-    yellow: 98.111,
-    green: 154.449,
-    cyan: 207.078,
-    blue: 251.813,
-    purple: 306.383,
+    red: "#fca5a5",
+    orange: "#fdba74",
+    yellow: "#fde047",
+    green: "#86efac",
+    cyan: "#67e8f9",
+    blue: "#93c5fd",
+    purple: "#d8b4fe",
   },
   dark: {
-    red: 27.518,
-    orange: 38.402,
-    yellow: 66.442,
-    green: 150.069,
-    cyan: 223.128,
-    blue: 264.376,
-    purple: 301.924,
+    red: "#b91c1c",
+    orange: "#c2410c",
+    yellow: "#a16207",
+    green: "#15803d",
+    cyan: "#0e7490",
+    blue: "#1d4ed8",
+    purple: "#7e22ce",
   },
-} satisfies Record<"light" | "dark", Record<ChromaticHue, number>>
+} satisfies Record<"light" | "dark", Record<ChromaticHue, string>>
+
+const hueAngles = Object.fromEntries(
+  Object.entries(hueReferences).map(([level, colors]) => [
+    level,
+    Object.fromEntries(Object.entries(colors).map(([name, color]) => [name, toOklch(RGBA.fromHex(color)).h])),
+  ]),
+) as Record<"light" | "dark", Record<ChromaticHue, number>>
 
 export function migrateV1(theme: ThemeV1Json): ThemeDocument {
   const light = resolveV1(theme, "light")
