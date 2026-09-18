@@ -27,7 +27,6 @@
     "@zip.js/zip.js": "2.7.62",
     "electron-context-menu": "4.1.2",
     "electron-log": "^5",
-    "electron-store": "11.0.2",
     "electron-updater": "6.8.9",
     "electron-window-state": "^5.0.3",
     "lighthouse": "13.4.1"
