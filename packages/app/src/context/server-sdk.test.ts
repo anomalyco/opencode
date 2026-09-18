@@ -29,6 +29,7 @@ describe("adaptServerEvent", () => {
       properties: { id: "perm_1", sessionID: "ses_1", permission: "read", patterns: ["src/**"], reason: "Read source." },
       current,
     })
+    expect(adaptServerEvent({ ...current, data: { ...current.data, reason: undefined } } as OpenCodeEvent).properties).not.toHaveProperty("reason", "Read source.")
   })
 })
 

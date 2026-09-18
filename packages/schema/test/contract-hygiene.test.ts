@@ -10,8 +10,40 @@ import { Session } from "../src/session"
 import { SessionEvent } from "../src/session-event"
 import { SessionTodo } from "../src/session-todo"
 import { optional } from "../src/schema"
+import { Permission } from "../src/permission"
+import { PermissionV1 } from "../src/permission-v1"
+import { SessionID } from "../src/session-id"
 
 describe("contract hygiene", () => {
+  test("permission reasons encode only when supplied", () => {
+    const current = {
+      id: Permission.ID.create("per_current"),
+      sessionID: SessionID.make("ses_test"),
+      action: "read",
+      resources: ["README.md"],
+    }
+    const legacy = {
+      id: PermissionV1.ID.ascending("per_legacy"),
+      sessionID: SessionID.make("ses_test"),
+      permission: "read",
+      patterns: ["README.md"],
+      metadata: {},
+      always: [],
+    }
+
+    for (const [schema, request] of [
+      [Permission.Request, current],
+      [PermissionV1.Request, legacy],
+    ] as const) {
+      expect(Schema.encodeSync(schema)({ ...request, reason: "Read the project instructions." })).toHaveProperty(
+        "reason",
+        "Read the project instructions.",
+      )
+      expect(Schema.encodeSync(schema)({ ...request, reason: " " })).toHaveProperty("reason", " ")
+      expect(Schema.encodeSync(schema)({ ...request, reason: undefined })).not.toHaveProperty("reason")
+    }
+  })
+
   test("optional properties preserve transformations and omit undefined while encoding", () => {
     const Value = Schema.Struct({ value: optional(Schema.FiniteFromString) })
     expect(Schema.decodeUnknownSync(Value)({ value: "1" })).toEqual({ value: 1 })
