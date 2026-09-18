@@ -279,7 +279,11 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
             break
           case "brew": {
             const formula = yield* getBrewFormula()
-            const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
+            const env = {
+              HOMEBREW_NO_AUTO_UPDATE: "1",
+              HOMEBREW_NO_INSTALL_CLEANUP: "1",
+              HOMEBREW_NO_AUTOREMOVE: "1",
+            }
             if (formula.includes("/")) {
               const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
               if (tap.code !== 0) {

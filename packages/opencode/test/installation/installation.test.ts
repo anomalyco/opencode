@@ -18,12 +18,15 @@ function mockHttpClient(handler: (request: HttpClientRequest.HttpClientRequest) 
 }
 
 function mockSpawner(
-  handler: (cmd: string, args: readonly string[]) => string | { code: number; stdout?: string; stderr?: string } = () =>
-    "",
+  handler: (
+    cmd: string,
+    args: readonly string[],
+    options: ChildProcess.CommandOptions,
+  ) => string | { code: number; stdout?: string; stderr?: string } = () => "",
 ) {
   const spawner = ChildProcessSpawner.make((command) => {
     const std = ChildProcess.isStandardCommand(command) ? command : undefined
-    const result = handler(std?.command ?? "", std?.args ?? [])
+    const result = handler(std?.command ?? "", std?.args ?? [], std?.options ?? {})
     const output = typeof result === "string" ? { code: 0, stdout: result, stderr: "" } : result
     return Effect.succeed(
       ChildProcessSpawner.makeHandle({
@@ -53,7 +56,7 @@ function jsonResponse(body: unknown) {
 
 function testLayer(
   httpHandler: (request: HttpClientRequest.HttpClientRequest) => Response,
-  spawnHandler?: (cmd: string, args: readonly string[]) => string | { code: number; stdout?: string; stderr?: string },
+  spawnHandler?: Parameters<typeof mockSpawner>[0],
 ) {
   const spawnerNode = makeGlobalNode({
     service: ChildProcessSpawner.ChildProcessSpawner,
@@ -182,6 +185,33 @@ describe("installation", () => {
   })
 
   describe("upgrade", () => {
+    for (const formula of ["opencode", "anomalyco/tap/opencode"]) {
+      const calls: Array<{ cmd: string; args: readonly string[]; options: ChildProcess.CommandOptions }> = []
+      testEffect(
+        testLayer(
+          () => jsonResponse({}),
+          (cmd, args, options) => {
+            calls.push({ cmd, args, options })
+            if (cmd === "brew" && args[0] === "list" && args[2] === formula) return "opencode"
+            if (cmd === "brew" && args[0] === "--repo") return "/tmp/homebrew-tap"
+            return ""
+          },
+        ),
+      ).effect(`disables cleanup and autoremove when upgrading ${formula}`, () =>
+        Effect.gen(function* () {
+          yield* Installation.use.upgrade("brew", "9.9.9")
+          const upgrade = calls.find((call) => call.cmd === "brew" && call.args[0] === "upgrade")
+          expect(upgrade?.args).toEqual(["upgrade", formula])
+          expect(upgrade?.options.env).toMatchObject({
+            HOMEBREW_NO_AUTO_UPDATE: "1",
+            HOMEBREW_NO_INSTALL_CLEANUP: "1",
+            HOMEBREW_NO_AUTOREMOVE: "1",
+          })
+          expect(upgrade?.options.extendEnv).toBe(true)
+        }),
+      )
+    }
+
     testEffect(
       testLayer(
         () => jsonResponse({}),
