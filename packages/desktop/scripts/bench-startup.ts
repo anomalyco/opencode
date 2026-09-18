@@ -12,7 +12,7 @@
 // records a main-process CPU profile from the first statement (via --inspect-brk) on the first run,
 // and `--trace` records Chromium's startup trace on the last run. Raw samples are written as JSON.
 import { spawn } from "node:child_process"
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { basename, dirname, join, relative, resolve } from "node:path"
@@ -118,35 +118,41 @@ for (let run = 1; run <= runs; run++) {
   const page = await waitFor(() => targets(cdpPort).then((list) => list.find((t) => t.type === "page" && t.url.startsWith("oc://"))), 60_000)
   const cdp = await connect(page.webSocketDebuggerUrl)
   await cdp.send("Runtime.enable")
+  await cdp.send("Performance.enable")
+  // Poll DOM readiness and the renderer's cumulative main-thread task time together. The run ends
+  // when the shell is up and the main thread has spent under 10 % of any 500 ms window in tasks for `settleMs`.
   const seen: Record<string, number> = {}
   let last: Probe | undefined
-  let changed = Date.now()
+  let quietSince: number | undefined
+  let taskMs = 0
+  let scriptMs = 0
+  const window: { at: number; task: number }[] = []
   const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
     const result = await cdp.send("Runtime.evaluate", { expression: probe, returnByValue: true })
     last = result.result?.result?.value as Probe | undefined
     const t = Date.now() - spawnAt
-    const before = Object.keys(seen).length
     if (last?.shell && !seen.shellVisible) seen.shellVisible = t
     if (last?.editor && !seen.composerEditable) seen.composerEditable = t
     if (last?.rows && !seen.timelineRows) seen.timelineRows = t
     if (last?.home && !seen.homeReady) seen.homeReady = t
-    if (Object.keys(seen).length !== before) changed = Date.now()
-    if (seen.composerEditable && seen.timelineRows) break
-    if (seen.homeReady) break
-    // A restored tab without a composer (draft on a disconnected server, error state): settle on the shell.
-    if (seen.shellVisible && Date.now() - changed > 2000) break
-    await sleep(25)
+    const metrics = (await cdp.send("Performance.getMetrics")).result?.metrics as { name: string; value: number }[]
+    const task = (metrics.find((m) => m.name === "TaskDuration")?.value ?? 0) * 1000
+    scriptMs = (metrics.find((m) => m.name === "ScriptDuration")?.value ?? 0) * 1000
+    if (process.env.BENCH_DEBUG && task - taskMs > 5) console.log(`busy +${Date.now() - spawnAt} ${Math.round(task - taskMs)} ms`)
+    taskMs = task
+    window.push({ at: Date.now(), task })
+    while (window.length > 1 && window[1].at <= Date.now() - 500) window.shift()
+    if (task - window[0].task > 50) quietSince = undefined
+    else quietSince ??= window[0].at
+    if (seen.shellVisible && quietSince && Date.now() - quietSince >= settleMs) break
+    await sleep(50)
   }
-  // Idle: no long tasks for `settleMs` after the last milestone.
-  const idleAt = await cdp.send("Runtime.evaluate", {
-    awaitPromise: true,
-    returnByValue: true,
-    expression: `new Promise((resolve) => { let last = performance.now(); const po = new PerformanceObserver((l) => { for (const e of l.getEntries()) last = Math.max(last, e.startTime + e.duration) }); po.observe({ type: 'longtask', buffered: true }); const tick = () => { if (performance.now() - last >= ${settleMs}) { po.disconnect(); resolve(last) } else setTimeout(tick, 50) }; tick() })`,
-  })
-  const rendererIdleMs = last?.origin ? Math.round(last.origin - spawnAt + Number(idleAt.result?.result?.value ?? 0)) : undefined
+  const rendererIdleMs = quietSince ? quietSince - spawnAt : undefined
   cdp.close()
   await sleep(300)
+  // Chromium writes the startup trace when --trace-startup-duration elapses; keep the app alive until then.
+  if (trace) await waitFor(async () => (existsSync(tracePath) && statSync(tracePath).size > 0 ? true : undefined), 20_000)
   const main = mainLog()
   const origin = last?.origin ? Math.round(last.origin - spawnAt) : undefined
   const sample: Sample = {
@@ -167,6 +173,7 @@ for (let run = 1; run <= runs; run++) {
       rendererIdle: rendererIdleMs,
     },
     final: { url: last?.url, timelineRows: last?.rows },
+    rendererCpu: { taskMs: Math.round(taskMs), scriptMs: Math.round(scriptMs) },
   }
   samples.push(sample)
   console.log(JSON.stringify(sample))
@@ -209,6 +216,7 @@ type Sample = {
   mainProfile?: string
   msSinceSpawn: Record<string, number | undefined>
   final: { url?: string; timelineRows?: number }
+  rendererCpu: { taskMs: number; scriptMs: number }
 }
 
 function defaultExe() {
@@ -332,12 +340,13 @@ function mainLog() {
 }
 
 function summarize(list: Sample[]) {
-  const keys = [...new Set(list.flatMap((s) => Object.keys(s.msSinceSpawn)))]
+  const values = (s: Sample): Record<string, number | undefined> => ({ ...s.msSinceSpawn, rendererTaskMs: s.rendererCpu.taskMs, rendererScriptMs: s.rendererCpu.scriptMs })
+  const keys = [...new Set(list.flatMap((s) => Object.keys(values(s))))]
   const out: Record<string, { median: number; min: number; max: number }> = {}
   for (const key of keys) {
-    const values = list.map((s) => s.msSinceSpawn[key]).filter((v): v is number => Number.isFinite(v)).sort((a, b) => a - b)
-    if (!values.length) continue
-    out[key] = { median: values[Math.floor(values.length / 2)], min: values[0], max: values[values.length - 1] }
+    const sorted = list.map((s) => values(s)[key]).filter((v): v is number => Number.isFinite(v)).sort((a, b) => a - b)
+    if (!sorted.length) continue
+    out[key] = { median: sorted[Math.floor(sorted.length / 2)], min: sorted[0], max: sorted[sorted.length - 1] }
   }
   return out
 }
