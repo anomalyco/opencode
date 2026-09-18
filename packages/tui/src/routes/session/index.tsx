@@ -886,17 +886,7 @@ export function Session() {
         }
 
         const parts = sync.data.part[lastAssistantMessage.id] ?? []
-        const textParts = parts.filter((part) => part.type === "text")
-        if (textParts.length === 0) {
-          toast.show({ message: "No text parts found in last assistant message", variant: "error" })
-          dialog.clear()
-          return
-        }
-
-        const text = textParts
-          .map((part) => part.text)
-          .join("\n")
-          .trim()
+        const text = assistantTextContent(parts)
         if (!text) {
           toast.show({
             message: "No text content found in last assistant message",
@@ -1466,11 +1456,23 @@ function UserMessage(props: {
   )
 }
 
+function assistantTextContent(parts: Part[]) {
+  return parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim()
+}
+
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const ctx = use()
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
+  const clipboard = useClipboard()
+  const toast = useToast()
+  const renderer = useRenderer()
+  const [copyHover, setCopyHover] = createSignal(false)
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
 
@@ -1547,7 +1549,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
-          <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
+          <box
+            ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+            paddingLeft={3}
+            flexDirection="row"
+          >
             <text marginTop={1}>
               <span
                 style={{
@@ -1568,6 +1574,33 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
               </Show>
             </text>
+            <Show
+              when={
+                (final() || props.message.error?.name === "MessageAbortedError") &&
+                assistantTextContent(props.parts).length > 0
+              }
+            >
+              <box
+                marginTop={1}
+                onMouseOver={() => setCopyHover(true)}
+                onMouseOut={() => setCopyHover(false)}
+                onMouseUp={(e: { stopPropagation(): void }) => {
+                  if (renderer.getSelection()?.getSelectedText()) return
+                  e.stopPropagation()
+                  const text = assistantTextContent(props.parts)
+                  if (!text) {
+                    toast.show({ message: "No text content to copy", variant: "error" })
+                    return
+                  }
+                  void clipboard
+                    .write?.(text)
+                    .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+                    .catch(toast.error)
+                }}
+              >
+                <text fg={copyHover() ? theme.text : theme.textMuted}> · [copy]</text>
+              </box>
+            </Show>
           </box>
         </Match>
       </Switch>
