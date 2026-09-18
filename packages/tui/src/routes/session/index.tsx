@@ -2783,7 +2783,7 @@ type BlockToolProps = {
 
 function BlockTool(props: BlockToolProps) {
   const theme = useTheme()
-  const background = theme.background.raised.base
+  const background = () => theme.background.raised.base
   const ctx = use()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
@@ -2799,7 +2799,7 @@ function BlockTool(props: BlockToolProps) {
       paddingBottom={1}
       paddingLeft={2}
       gap={1}
-      backgroundColor={hover() ? theme.raise(background) : background}
+      backgroundColor={hover() ? theme.raise(background()) : background()}
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={theme.background.default}
       onMouseOver={() => props.onClick && setHover(true)}

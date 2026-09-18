@@ -15,12 +15,14 @@ import {
 } from "./schema.js"
 import type {
   ActionStateKey,
+  ActionStates,
   HueDefinition,
   HueScale,
   Mode,
   ResolvedActionState,
   ResolvedTheme,
   ResolvedThemeTokens,
+  StatefulColor,
   StatefulColorDefinition,
   ThemeTokensDefinition,
 } from "./index.js"
@@ -135,7 +137,36 @@ function resolveView(
   hueSteps: Pick<ResolvedThemeTokens, "source" | "increase" | "decrease">,
 ): ResolvedThemeTokens {
   const source: Record<string, unknown> = { hue, ...definition }
-  return { ...(createResolver(source)(source, "theme") as ResolvedThemeTokens), hue, categorical, ...hueSteps }
+  const resolved = createResolver(source)(source, "theme") as ResolvedThemeTokens
+  return {
+    ...resolved,
+    hue,
+    categorical,
+    text: {
+      ...resolved.text,
+      action: statefulActions(resolved.text.action),
+      formfield: statefulColor(resolved.text.formfield),
+    },
+    background: {
+      ...resolved.background,
+      action: statefulActions(resolved.background.action),
+      formfield: statefulColor(resolved.background.formfield),
+    },
+    ...hueSteps,
+  }
+}
+
+function statefulActions(actions: Readonly<Record<ActionVariant, StatefulColor>>) {
+  return Object.fromEntries(ActionVariant.literals.map((variant) => [variant, statefulColor(actions[variant])])) as Readonly<
+    Record<ActionVariant, StatefulColor>
+  >
+}
+
+function statefulColor(color: StatefulColor): StatefulColor {
+  return {
+    ...color,
+    state: (states: ActionStates) => color[ActionState.literals.find((state) => states[state]) ?? "default"],
+  }
 }
 
 function compileHueSteps(

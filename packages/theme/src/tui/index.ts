@@ -32,6 +32,7 @@ export {
 } from "./schema.js"
 
 export type {
+  ActionStates,
   Categorical,
   FormfieldColor,
   Hue,
