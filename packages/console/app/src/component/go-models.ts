@@ -50,13 +50,4 @@ export const goModels = [
     allowance: 60,
     regions: true,
   },
-  {
-    id: "union-alpha",
-    name: "Union Alpha Free",
-    requests: Infinity,
-    allowance: Infinity,
-    featured: true,
-    fresh: true,
-    unlimited: true,
-  },
 ].sort((a, b) => a.requests - b.requests)
