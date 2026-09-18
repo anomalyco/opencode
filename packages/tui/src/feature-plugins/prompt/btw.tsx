@@ -43,6 +43,7 @@ export default Plugin.define({
       append: "app",
       render() {
         const toast = useToast()
+        const renderNode = usePlugin().markdown
         context.keymap.layer(() => ({
           mode: "global",
           commands: [
@@ -66,7 +67,9 @@ export default Plugin.define({
                 await context.client.session
                   .generate({ sessionID: route.sessionID, prompt: [instructions, question].join("\n\n") })
                   .then((result) => {
-                    context.ui.dialog.show(() => <Answer question={question} answer={result.text.trim()} />)
+                    context.ui.dialog.show(() => (
+                      <Answer question={question} answer={result.text.trim()} renderNode={renderNode()} />
+                    ))
                     context.ui.dialog.set({ size: "large", centered: true })
                   })
                   .catch((cause: unknown) => toast.error(cause))
@@ -81,11 +84,14 @@ export default Plugin.define({
   },
 })
 
-function Answer(props: { question: string; answer: string }) {
+function Answer(props: {
+  question: string
+  answer: string
+  renderNode: ReturnType<ReturnType<typeof usePlugin>["markdown"]>
+}) {
   const dialog = useDialog()
   const toast = useToast()
   const clipboard = useClipboard()
-  const plugins = usePlugin()
   const theme = useTheme().surface("dialog")
   const overlay = useTheme()
   const syntax = useThemes().currentSyntax
@@ -142,7 +148,7 @@ function Answer(props: { question: string; answer: string }) {
         <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
           <markdown
             syntaxStyle={syntax()}
-            renderNode={plugins.markdown()}
+            renderNode={props.renderNode}
             content={props.answer}
             conceal
             internalBlockMode="top-level"
