@@ -72,6 +72,10 @@ export function connectionSummary(integration: IntegrationInfo) {
     .join(", ")
 }
 
+export function integrationSummary(integration: IntegrationInfo) {
+  return connectionSummary(integration) || (integration.configured ? "Configured" : undefined)
+}
+
 export function DialogIntegration(
   props: { onConnected?: OnIntegrationConnected; integrationID?: string; autoConnect?: boolean } = {},
 ) {
@@ -109,11 +113,11 @@ export function DialogIntegration(
         title: integration.name,
         value: integration.id,
         description: methods.length === 0 ? "Environment only" : undefined,
-        footer: connectionSummary(integration) || undefined,
+        footer: integrationSummary(integration),
         category,
         disabled: methods.length === 0 && credentials.length === 0,
         gutter:
-          integration.connections.length > 0
+          integration.connections.length > 0 || integration.configured
             ? () => <text fg={theme.text.feedback.success.default}>✓</text>
             : undefined,
         onSelect: () => {
