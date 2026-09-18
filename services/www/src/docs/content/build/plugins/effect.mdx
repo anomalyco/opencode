@@ -998,9 +998,6 @@ Each model request captures a tool snapshot. Reload and disposal affect future s
 executors already captured by an existing request. Executors that close over mutable plugin data still observe
 that data; capture a value inside the transform when it must remain tied to that definition.
 
-`yield* ctx.tool.list()` reads the tools currently registered, after every transform, outside of a transform
-callback. Each tool has an `id` containing its effective name.
-
 Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#schema-Tool.TextContent),
 [`Tool.FileContent`](/api#schema-Tool.FileContent).
 
