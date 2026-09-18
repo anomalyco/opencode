@@ -3,16 +3,21 @@ import { useLocal } from "../context/local"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
+import { useToast } from "../ui/toast"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
+import { setDefaultModel } from "./set-default-model"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
+import { useSDK } from "../context/sdk"
 import { useSync } from "../context/sync"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
+  const sdk = useSDK()
+  const toast = useToast()
   const [query, setQuery] = createSignal("")
 
   const connected = useConnected()
@@ -171,6 +176,18 @@ export function DialogModel(props: { providerID?: string }) {
           hidden: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+          },
+        },
+        {
+          command: "model.dialog.set_default",
+          title: "Set as default",
+          hidden: !connected(),
+          onTrigger: (option) => {
+            void setDefaultModel({
+              sdk,
+              toast,
+              model: option.value as { providerID: string; modelID: string },
+            })
           },
         },
       ]}
