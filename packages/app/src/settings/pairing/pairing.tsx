@@ -9,20 +9,44 @@ import { createEffect, createMemo, onCleanup, Show } from "solid-js"
 import { renderSVG } from "uqr"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform, type PairingInfo } from "@/runtime/platform/platform"
+import { useServerCtx } from "@/runtime/server/runtime"
+import { ServerConnection } from "@/runtime/server/registry"
 import { pairingUrl } from "@/servers/connect/pairing"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 
-export function SettingsPairing() {
+export function SettingsPairing(props: { server: ServerConnection.Any }) {
   const language = useLanguage()
   const dialog = useDialog()
   const platform = usePlatform()
+  const context = useServerCtx(() => props.server)
   const queryClient = useQueryClient()
-  const pair = platform.pair
-  if (!pair) return null
+  const key = ServerConnection.key(props.server)
+  const pair = createMemo(() => {
+    if (ServerConnection.builtin(props.server)) return platform.pair
+    const sdk = context()
+    if (!sdk) return
+    const info = (value: { urls: readonly string[] }) => ({
+      urls: [...new Set([props.server.http.url, ...value.urls])],
+      username: "opencode" as const,
+      password: props.server.http.password ?? "",
+    })
+    return {
+      info: () => sdk.sdk.api.server.pairing.status().then(info),
+      tailscaleAvailable: () => sdk.sdk.api.server.pairing.status().then((value) => value.tailscale.available),
+      tailscaleStatus: () =>
+        sdk.sdk.api.server.pairing
+          .status()
+          .then((value) => (value.tailscale.urls.length ? info({ urls: value.tailscale.urls }) : null)),
+      openTailscale: () =>
+        sdk.sdk.api.server.pairing.tailscale.enable().then((value) => info({ urls: value.tailscale.urls })),
+      disableTailscale: () => sdk.sdk.api.server.pairing.tailscale.disable(),
+    }
+  })
   const local = useQuery(() => ({
-    queryKey: ["pairing", "local"],
-    queryFn: pair.info,
+    queryKey: ["pairing", key, "local"],
+    queryFn: () => pair()!.info(),
+    enabled: !!pair(),
   }))
   // Reading pending query data would suspend the entire settings surface.
   const localInfo = () => (local.isSuccess ? local.data : undefined)
@@ -42,28 +66,29 @@ export function SettingsPairing() {
   const screenActive = useQuery(() => ({
     queryKey: ["pairing", "screen-active"],
     queryFn: () => platform.getKeepScreenActive!(),
-    enabled: !!platform.getKeepScreenActive,
+    enabled: ServerConnection.builtin(props.server) && !!platform.getKeepScreenActive,
   }))
   const screenActivity = useMutation(() => ({
     mutationFn: async (enabled: boolean) => platform.setKeepScreenActive?.(enabled),
     onSuccess: (_, enabled) => queryClient.setQueryData(["pairing", "screen-active"], enabled),
   }))
   const tailscale = useQuery(() => ({
-    queryKey: ["pairing", "tailscale-available"],
-    queryFn: pair.tailscaleAvailable,
+    queryKey: ["pairing", key, "tailscale-available"],
+    queryFn: () => pair()!.tailscaleAvailable(),
+    enabled: !!pair(),
   }))
   const tailscaleStatus = useQuery(() => ({
-    queryKey: ["pairing", "tailscale-status"],
-    queryFn: pair.tailscaleStatus,
+    queryKey: ["pairing", key, "tailscale-status"],
+    queryFn: () => pair()!.tailscaleStatus(),
     enabled: tailscale.isSuccess && tailscale.data === true,
   }))
   const tailscaleServe = useMutation(() => ({
-    mutationFn: pair.openTailscale,
-    onSuccess: (value) => queryClient.setQueryData(["pairing", "tailscale-status"], value),
+    mutationFn: () => pair()!.openTailscale(),
+    onSuccess: (value) => queryClient.setQueryData(["pairing", key, "tailscale-status"], value),
   }))
   const tailscaleDisable = useMutation(() => ({
-    mutationFn: pair.disableTailscale,
-    onSuccess: () => queryClient.setQueryData(["pairing", "tailscale-status"], null),
+    mutationFn: () => pair()!.disableTailscale(),
+    onSuccess: () => queryClient.setQueryData(["pairing", key, "tailscale-status"], null),
   }))
   const tailscaleInfo = () => (tailscaleStatus.isSuccess ? tailscaleStatus.data : undefined)
 
@@ -101,7 +126,11 @@ export function SettingsPairing() {
                 {language.t("pair.local.open")}
               </Button>
             </SettingsRow>
-            <Show when={platform.getKeepScreenActive && platform.setKeepScreenActive}>
+            <Show
+              when={
+                ServerConnection.builtin(props.server) && platform.getKeepScreenActive && platform.setKeepScreenActive
+              }
+            >
               <div data-action="settings-keep-screen-active">
                 <SettingsRow
                   title={language.t("pair.screenActive.title")}

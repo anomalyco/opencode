@@ -5,6 +5,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { DialogSsh } from "@/servers/ssh/dialog"
 import { useUpdaterAction } from "@/shell/updates/action"
 import { useSettingsSurface } from "@/settings/surface"
+import { useSettingsServers } from "@/settings/servers/inventory"
 
 export function DesktopCommands() {
   const command = useCommand()
@@ -47,15 +48,22 @@ export function DesktopPairingCommand() {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettingsSurface()
+  const servers = useSettingsServers()
 
   command.register("desktop-pairing", () =>
-    platform.platform === "desktop" && platform.pair
+    platform.platform === "desktop" &&
+      servers().some((server) => server.connection && server.connection.type !== "ssh" && !server.ssh)
       ? [
           {
             id: "server.pair",
             title: language.t("command.server.pair"),
             category: language.t("command.category.server"),
-            onSelect: () => settings.open("pairing"),
+            onSelect: () => {
+              const server = servers().find(
+                (item) => item.connection && item.connection.type !== "ssh" && !item.ssh,
+              )
+              if (server) settings.openServer(server.key, "pairing")
+            },
           },
         ]
       : [],

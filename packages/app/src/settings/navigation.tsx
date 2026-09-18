@@ -2,6 +2,7 @@ import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { Tabs } from "@opencode/ui/tabs"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { For, Show, type ComponentProps, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettingsSurface } from "./surface"
@@ -13,6 +14,7 @@ export type SettingsNavItem = {
   label: string
   icon: ComponentProps<typeof Icon>["name"]
   disabled?: boolean
+  tooltip?: string
   onPrefetch?: () => void
 }
 
@@ -71,19 +73,21 @@ export function SettingsNavigation(props: {
                         </Show>
                         <For each={group.items}>
                           {(item) => (
-                            <Menu.RadioItem
-                              value={item.value}
-                              disabled={item.disabled}
-                              closeOnSelect
-                              onPointerEnter={(event: PointerEvent) => {
-                                if (item.disabled || event.pointerType === "touch") return
-                                item.onPrefetch?.()
-                              }}
-                              onFocus={() => !item.disabled && item.onPrefetch?.()}
-                            >
-                              <Icon name={item.icon} />
-                              {item.label}
-                            </Menu.RadioItem>
+                            <Tooltip class="contents" value={item.tooltip} inactive={!item.tooltip} placement="right">
+                              <Menu.RadioItem
+                                value={item.value}
+                                disabled={item.disabled}
+                                closeOnSelect
+                                onPointerEnter={(event: PointerEvent) => {
+                                  if (item.disabled || event.pointerType === "touch") return
+                                  item.onPrefetch?.()
+                                }}
+                                onFocus={() => !item.disabled && item.onPrefetch?.()}
+                              >
+                                <Icon name={item.icon} />
+                                {item.label}
+                              </Menu.RadioItem>
+                            </Tooltip>
                           )}
                         </For>
                       </>
@@ -117,18 +121,26 @@ export function SettingsNavigation(props: {
                     </Show>
                     <For each={group.items}>
                       {(item) => (
-                        <Tabs.Trigger
-                          value={item.value}
-                          disabled={item.disabled}
-                          onPointerEnter={(event: PointerEvent) => {
-                            if (item.disabled || event.pointerType === "touch") return
-                            item.onPrefetch?.()
-                          }}
-                          onFocus={() => !item.disabled && item.onPrefetch?.()}
+                        <Tooltip
+                          class="contents"
+                          value={item.tooltip}
+                          inactive={!item.tooltip}
+                          placement="right"
+                          triggerTabIndex={item.tooltip ? 0 : undefined}
                         >
-                          <Icon name={item.icon} />
-                          {item.label}
-                        </Tabs.Trigger>
+                          <Tabs.Trigger
+                            value={item.value}
+                            disabled={item.disabled}
+                            onPointerEnter={(event: PointerEvent) => {
+                              if (item.disabled || event.pointerType === "touch") return
+                              item.onPrefetch?.()
+                            }}
+                            onFocus={() => !item.disabled && item.onPrefetch?.()}
+                          >
+                            <Icon name={item.icon} />
+                            {item.label}
+                          </Tabs.Trigger>
+                        </Tooltip>
                       )}
                     </For>
                   </div>

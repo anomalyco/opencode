@@ -21,7 +21,14 @@ export type SettingsRootTab =
   | "experimental"
   | "about"
 
-export type SettingsServerTab = "general" | "projects" | "workspaces" | "providers" | "models" | "extensions"
+export type SettingsServerTab =
+  | "general"
+  | "pairing"
+  | "projects"
+  | "workspaces"
+  | "providers"
+  | "models"
+  | "extensions"
 export type SettingsProjectTab = "general" | "workspaces" | "extensions"
 
 export type SettingsView = (
@@ -57,6 +64,7 @@ const rootTabs: Record<SettingsRootTab, true> = {
 }
 const serverTabs: Record<SettingsServerTab, true> = {
   general: true,
+  pairing: true,
   projects: true,
   workspaces: true,
   providers: true,

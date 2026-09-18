@@ -20,20 +20,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "appearance", label: "settings.general.section.appearance" },
   { tab: "notifications", label: "settings.tab.notifications" },
   { tab: "shortcuts", label: "settings.shortcuts.title", keywords: "keybind keyboard hotkey" },
-  {
-    tab: "pairing",
-    label: "settings.pairing.title",
-    keywords: "pair device qr tailscale",
-    available: "desktop",
-  },
-  {
-    tab: "pairing",
-    label: "pair.screenActive.title",
-    description: "pair.screenActive.description",
-    target: "settings-keep-screen-active",
-    keywords: "display sleep awake local",
-    available: "desktop",
-  },
   { tab: "experimental", label: "settings.tab.experimental" },
   { tab: "about", label: "settings.tab.about", keywords: "version license credits" },
   { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
@@ -202,6 +188,7 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
 ]
 
 export const serverSettings: Entry<SettingsServerTab>[] = [
+  { tab: "pairing", label: "settings.pairing.title", keywords: "pair device qr tailscale", available: "desktop" },
   { tab: "projects", label: "settings.tab.projects" },
   { tab: "workspaces", label: "settings.tab.workspaces", keywords: "workspaces disk usage cleanup delete" },
   { tab: "providers", label: "settings.providers.title", keywords: "connect api key credentials" },

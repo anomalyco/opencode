@@ -3,7 +3,6 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { createEffect, createMemo, on, onCleanup, onMount, Show, Switch, Match, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName } from "@/shell/layout/helpers"
@@ -43,10 +42,10 @@ const rootClientTabs = [
   { value: "appearance", icon: pageIcons.appearance, label: "settings.general.section.appearance" },
   { value: "notifications", icon: pageIcons.notifications, label: "settings.tab.notifications" },
   { value: "shortcuts", icon: pageIcons.shortcuts, label: "settings.tab.shortcuts" },
-  { value: "pairing", icon: pageIcons.pairing, label: "settings.pairing.title" },
 ] as const
 
 const serverTabs = [
+  { value: "pairing", icon: pageIcons.pairing, label: "settings.pairing.title" },
   { value: "projects", icon: pageIcons.projects, label: "settings.tab.projects" },
   { value: "workspaces", icon: pageIcons.workspaces, label: "settings.tab.workspaces" },
   { value: "providers", icon: pageIcons.providers, label: "settings.providers.title" },
@@ -190,7 +189,6 @@ function RootSettings() {
   const tabs = useTabs()
   const servers = useServerCollectionController()
   const inventory = useSettingsServers()
-  const platform = usePlatform()
   const [state, setState] = createStore({ worktreeFilterReset: 0 })
   const list = servers.collection.items
   const singleEntry = createMemo(() => (inventory().length === 1 ? inventory()[0] : undefined))
@@ -220,11 +218,7 @@ function RootSettings() {
       <DialogServer mode="add" onSave={(server) => surface.openServer(ServerConnection.key(server))} />
     ))
   const groups = createMemo<SettingsNavGroup[]>(() => [
-    {
-      items: rootClientTabs
-        .filter((item) => item.value !== "pairing" || !!platform.pair)
-        .map((item) => ({ ...item, label: language.t(item.label) })),
-    },
+    { items: rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })) },
     ...(multiple()
       ? [
           {
@@ -243,7 +237,13 @@ function RootSettings() {
               ...serverTabs.map((item) => ({
                 ...item,
                 label: language.t(item.label),
-                disabled: !single(),
+                disabled:
+                  !single() ||
+                  (item.value === "pairing" && (singleEntry()?.connection?.type === "ssh" || !!singleEntry()?.ssh)),
+                tooltip:
+                  item.value === "pairing" && (singleEntry()?.connection?.type === "ssh" || singleEntry()?.ssh)
+                    ? language.t("settings.pairing.sshUnavailable")
+                    : undefined,
                 onPrefetch: item.value === "workspaces" ? prefetchWorkspaces : undefined,
               })),
               { value: "servers", icon: "server" as const, label: language.t("settings.section.server") },
@@ -257,6 +257,15 @@ function RootSettings() {
     const view = surface.view()
     if (view.type !== "root" || !multiple()) return
     if (["projects", "workspaces", "providers", "models", "extensions", "servers"].includes(view.tab))
+      surface.open("general")
+  })
+  createEffect(() => {
+    const view = surface.view()
+    if (
+      view.type === "root" &&
+      view.tab === "pairing" &&
+      (singleEntry()?.connection?.type === "ssh" || singleEntry()?.ssh)
+    )
       surface.open("general")
   })
 
@@ -290,9 +299,6 @@ function RootSettings() {
       <Tabs.Content value="shortcuts" class="settings-panel">
         <SettingsKeybinds active={surface.view().tab === "shortcuts"} autofocus={!surface.search.state.selected} />
       </Tabs.Content>
-      <Tabs.Content value="pairing" class="settings-panel">
-        <SettingsPairing />
-      </Tabs.Content>
       <Tabs.Content value="experimental" class="settings-panel">
         <SettingsExperimental />
       </Tabs.Content>
@@ -302,6 +308,9 @@ function RootSettings() {
       <Show when={single()} keyed>
         {(server) => (
           <SettingsServerDataScope server={server}>
+            <Tabs.Content value="pairing" class="settings-panel">
+              <SettingsPairing server={server} />
+            </Tabs.Content>
             <Tabs.Content value="projects" class="settings-panel">
               <SettingsProjects
                 server={server}
@@ -355,12 +364,24 @@ function ServerSettings(props: { entry: SettingsServer }) {
       items: nestedServerTabs.map((item) => ({
         ...item,
         label: item.value === "general" ? props.entry.name : language.t(item.label),
-        disabled: item.value !== "general" && !props.entry.connection,
+        disabled:
+          item.value !== "general" &&
+          (!props.entry.connection ||
+            (item.value === "pairing" && (props.entry.connection.type === "ssh" || !!props.entry.ssh))),
+        tooltip:
+          item.value === "pairing" && (props.entry.connection?.type === "ssh" || props.entry.ssh)
+            ? language.t("settings.pairing.sshUnavailable")
+            : undefined,
         onPrefetch: item.value === "workspaces" ? prefetchWorkspaces : undefined,
       })),
     },
   ])
   createEffect(() => {
+    if (
+      (!props.entry.connection || props.entry.connection.type === "ssh" || props.entry.ssh) &&
+      surface.view().tab === "pairing"
+    )
+      surface.select("general")
     if (!props.entry.connection && surface.view().tab !== "general") surface.select("general")
   })
   const change = (value: string) => {
@@ -386,6 +407,9 @@ function ServerSettings(props: { entry: SettingsServer }) {
       <Show when={props.entry.connection} keyed>
         {(server) => (
           <SettingsServerDataScope server={server}>
+            <Tabs.Content value="pairing" class="settings-panel">
+              <SettingsPairing server={server} />
+            </Tabs.Content>
             <Tabs.Content value="projects" class="settings-panel">
               <SettingsProjects
                 server={server}

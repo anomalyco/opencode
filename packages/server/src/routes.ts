@@ -30,6 +30,7 @@ import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
+import { KV } from "@opencode/core/kv"
 import { Workspace } from "@opencode/core/workspace"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { HttpRouter } from "effect/unstable/http"
@@ -47,10 +48,12 @@ import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
+import { ServerPairing } from "./pairing"
 
 const applicationServiceNodes = [
   Global.node,
   Database.node,
+  KV.node,
   Bus.node,
   EventLogger.node,
   httpClient,
@@ -72,6 +75,7 @@ const applicationServiceNodes = [
   LocationActivity.node,
   SessionRestart.node,
   Workspace.node,
+  ServerPairing.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 

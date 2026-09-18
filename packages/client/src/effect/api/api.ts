@@ -46,8 +46,36 @@ export type ServerStatusOutput = {
 }
 export type ServerStatusOperation<E = never> = () => Effect.Effect<ServerStatusOutput, E>
 
+export type ServerPairingStatusOutput = {
+  readonly urls: ReadonlyArray<string>
+  readonly tailscale: { readonly available: boolean; readonly urls: ReadonlyArray<string> }
+}
+export type ServerPairingStatusOperation<E = never> = () => Effect.Effect<ServerPairingStatusOutput, E>
+
+export type ServerPairingTailscaleEnableOutput = {
+  readonly urls: ReadonlyArray<string>
+  readonly tailscale: { readonly available: boolean; readonly urls: ReadonlyArray<string> }
+}
+export type ServerPairingTailscaleEnableOperation<E = never> = () => Effect.Effect<
+  ServerPairingTailscaleEnableOutput,
+  E
+>
+
+export type ServerPairingTailscaleDisableOutput = void
+export type ServerPairingTailscaleDisableOperation<E = never> = () => Effect.Effect<
+  ServerPairingTailscaleDisableOutput,
+  E
+>
+
 export interface ServerApi<E = never> {
   readonly status: ServerStatusOperation<E>
+  readonly pairing: {
+    readonly status: ServerPairingStatusOperation<E>
+    readonly tailscale: {
+      readonly enable: ServerPairingTailscaleEnableOperation<E>
+      readonly disable: ServerPairingTailscaleDisableOperation<E>
+    }
+  }
 }
 
 export type LocationGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

@@ -6,6 +6,9 @@ import { HttpApiClient } from "effect/unstable/httpapi"
 import { ClientApi } from "../../contract"
 import type {
   ServerStatusOutput,
+  ServerPairingStatusOutput,
+  ServerPairingTailscaleEnableOutput,
+  ServerPairingTailscaleDisableOutput,
   LocationGetInput,
   LocationGetOutput,
   AgentListInput,
@@ -288,7 +291,29 @@ const preserveStream =
 const EndpointServerStatus = (raw: RawClient["server.server"]) => () =>
   preserveEffect<ServerStatusOutput>()(raw["server.status"]({}).pipe(Effect.mapError(mapClientError)))
 
-const adaptGroupServer = (raw: RawClient["server.server"]) => ({ status: EndpointServerStatus(raw) })
+const EndpointServerPairingStatus = (raw: RawClient["server.server"]) => () =>
+  preserveEffect<ServerPairingStatusOutput>()(raw["server.pairing.status"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointServerPairingTailscaleEnable = (raw: RawClient["server.server"]) => () =>
+  preserveEffect<ServerPairingTailscaleEnableOutput>()(
+    raw["server.pairing.tailscale.enable"]({}).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointServerPairingTailscaleDisable = (raw: RawClient["server.server"]) => () =>
+  preserveEffect<ServerPairingTailscaleDisableOutput>()(
+    raw["server.pairing.tailscale.disable"]({}).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupServer = (raw: RawClient["server.server"]) => ({
+  status: EndpointServerStatus(raw),
+  pairing: {
+    status: EndpointServerPairingStatus(raw),
+    tailscale: {
+      enable: EndpointServerPairingTailscaleEnable(raw),
+      disable: EndpointServerPairingTailscaleDisable(raw),
+    },
+  },
+})
 
 const EndpointLocationGet = (raw: RawClient["server.location"]) => (input?: LocationGetInput) =>
   preserveEffect<LocationGetOutput>()(

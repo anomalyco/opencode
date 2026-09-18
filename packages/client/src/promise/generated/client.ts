@@ -1,5 +1,8 @@
 import type {
   ServerStatusOutput,
+  ServerPairingStatusOutput,
+  ServerPairingTailscaleEnableOutput,
+  ServerPairingTailscaleDisableOutput,
   LocationGetInput,
   LocationGetOutput,
   AgentListInput,
@@ -410,6 +413,43 @@ export function make(options: ClientOptions) {
           { method: "GET", path: `/api/status`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
           requestOptions,
         ),
+      pairing: {
+        status: (requestOptions?: RequestOptions) =>
+          request<ServerPairingStatusOutput>(
+            {
+              method: "GET",
+              path: `/api/server/pairing`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        tailscale: {
+          enable: (requestOptions?: RequestOptions) =>
+            request<ServerPairingTailscaleEnableOutput>(
+              {
+                method: "POST",
+                path: `/api/server/pairing/tailscale`,
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ),
+          disable: (requestOptions?: RequestOptions) =>
+            request<ServerPairingTailscaleDisableOutput>(
+              {
+                method: "DELETE",
+                path: `/api/server/pairing/tailscale`,
+                successStatus: 204,
+                declaredStatuses: [400, 401],
+                empty: true,
+              },
+              requestOptions,
+            ),
+        },
+      },
     },
     location: {
       get: (input?: LocationGetInput, requestOptions?: RequestOptions) =>

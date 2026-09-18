@@ -439,6 +439,7 @@ export const dict = {
     "Could not open the camera. Allow camera access or enter your connection details manually.",
   "command.server.pair": "Pair device",
   "settings.pairing.title": "Pairing",
+  "settings.pairing.sshUnavailable": "Pairing is not available for SSH servers.",
   "settings.pairing.connection": "Local Network",
   "pair.local.description": "View connection details and a QR code to connect a device on the same network.",
   "pair.local.open": "Show details",
