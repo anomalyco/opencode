@@ -1,6 +1,6 @@
 import { CliRenderEvents, InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { Keymap, type KeymapCommand } from "../context/keymap"
-import { useTheme, useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
 import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -106,9 +106,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   type VisibleAction = (Action & { label: string }) | FooterHint
 
   const dialog = useDialog()
-  const themes = useThemes()
   const theme = useTheme().surface("dialog")
-  const mode = themes.mode
   const config = useConfig().data
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const renderer = useRenderer()
@@ -718,7 +716,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       <Show
                         when={options[0]?.categoryView}
                         fallback={
-                          <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]} attributes={TextAttributes.BOLD}>
+                          <text fg={theme.hue.accent[200]} attributes={TextAttributes.BOLD}>
                             {category}
                           </text>
                         }

@@ -335,7 +335,7 @@ function RejectPrompt(props: {
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={theme.raise(theme.background.raised.base)}
+        backgroundColor={theme.decrease(theme.background.raised.base)}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
         gap={1}
@@ -546,7 +546,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={theme.raise(theme.background.raised.base)}
+        backgroundColor={theme.decrease(theme.background.raised.base)}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
       >

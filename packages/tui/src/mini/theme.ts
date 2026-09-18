@@ -111,7 +111,6 @@ function nearestIndexed(indexed: RGBA[], color: RGBA): RGBA {
 function map(
   theme: ResolvedTheme,
   indexed: RGBA[],
-  mode: "light" | "dark",
   syntax?: SyntaxStyle,
   system = false,
 ): RunTheme {
@@ -149,7 +148,7 @@ function map(
       success: exact(theme.text.feedback.success.default),
       link: exact(theme.markdown.link),
       categorical: dedupeWith(
-        theme.categorical.map((scale) => exact(scale[mode === "light" ? 800 : 200])),
+        theme.categorical.map((scale) => exact(scale[200])),
         (a, b) => a.equals(b),
       ),
       warning: exact(theme.text.feedback.warning.default),
@@ -195,12 +194,10 @@ function map(
 export const RUN_THEME_FALLBACK = map(
   resolveThemeDocument(parseTheme(DEFAULT_THEMES.opencode), "dark"),
   ansiPalette,
-  "dark",
 )
 export const RUN_THEME_FALLBACK_LIGHT = map(
   resolveThemeDocument(parseTheme(DEFAULT_THEMES.opencode), "light"),
   ansiPalette,
-  "light",
 )
 
 function monoTheme(mode: "dark" | "light"): RunTheme {
@@ -300,7 +297,7 @@ export async function resolveRunTheme(
     ? ansiPalette.map((color, index) => (colors.palette[index] ? RGBA.fromIndex(index, colors.palette[index]!) : color))
     : ansiPalette
   return {
-    ...map(theme, indexed, mode, generateSyntax(theme, mode), name === "system" && resolved !== undefined),
+    ...map(theme, indexed, generateSyntax(theme), name === "system" && resolved !== undefined),
     background: RGBA.defaultBackground(colors?.defaultBackground ?? theme.background.default),
   }
 }

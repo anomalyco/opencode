@@ -1292,7 +1292,7 @@ export function Session(props: {
                   paddingLeft: 1,
                   visible: showScrollbar(),
                   trackOptions: {
-                    backgroundColor: theme.raise(theme.background.raised.base),
+                    backgroundColor: theme.decrease(theme.background.raised.base),
                     foregroundColor: theme.border.default,
                   },
                 }}
@@ -1836,7 +1836,7 @@ function SessionReasoningGroupView(props: {
                         <box
                           border={["left"]}
                           customBorderChars={SplitBorder.customBorderChars}
-                          borderColor={theme.raise(theme.background.raised.base)}
+                          borderColor={theme.decrease(theme.background.raised.base)}
                           paddingLeft={1}
                         >
                           <code
@@ -2210,7 +2210,7 @@ function RevertMessage(props: {
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
-        backgroundColor={hover() ? theme.raise(theme.background.raised.base) : theme.background.raised.base}
+        backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
       >
         <text fg={theme.text.subdued}>
           {props.count} message{props.count === 1 ? "" : "s"} reverted
@@ -2339,7 +2339,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
           paddingTop={1}
           paddingBottom={1}
           paddingLeft={2}
-          backgroundColor={hover() ? theme.raise(theme.background.raised.base) : theme.background.raised.base}
+          backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
           <text fg={theme.text.default}>{props.message.text}</text>
@@ -2350,14 +2350,14 @@ function UserMessage(props: { message: SessionMessageUser }) {
                   <text fg={theme.text.default}>
                     <span
                       style={{
-                        bg: theme.hue.accent[mode() === "light" ? 700 : 200],
+                        bg: theme.hue.accent[mode() === "light" ? 300 : 200],
                         fg: theme.background.raised.base,
                         bold: true,
                       }}
                     >
                       {" skill "}
                     </span>
-                    <span style={{ bg: theme.raise(theme.background.raised.base), fg: theme.text.subdued }}>
+                    <span style={{ bg: theme.decrease(theme.background.raised.base), fg: theme.text.subdued }}>
                       {` ${skill.name} `}
                     </span>
                   </text>
@@ -2374,14 +2374,14 @@ function UserMessage(props: { message: SessionMessageUser }) {
                     <text fg={theme.text.default}>
                       <span
                         style={{
-                          bg: theme.hue.accent[mode() === "light" ? 700 : 200],
+                          bg: theme.hue.accent[mode() === "light" ? 300 : 200],
                           fg: theme.background.raised.base,
                           bold: true,
                         }}
                       >
                         {` ${label} `}
                       </span>
-                      <span style={{ bg: theme.raise(theme.background.raised.base), fg: theme.text.subdued }}>
+                      <span style={{ bg: theme.decrease(theme.background.raised.base), fg: theme.text.subdued }}>
                         {" "}
                         {file.name ?? (file.source.type === "uri" ? file.source.uri : "attachment")}{" "}
                       </span>
@@ -2417,7 +2417,7 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={1}
-        backgroundColor={hover() ? theme.raise(theme.background.raised.base) : theme.background.raised.base}
+        backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
         flexDirection="row"
       >
         <text fg={theme.text.subdued} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
@@ -2762,7 +2762,7 @@ function StatusBadge(props: { children: string; raised?: boolean }) {
   const theme = useTheme()
   const background = () => (props.raised ? theme.background.raised.base : theme.background.default)
   return (
-    <text flexShrink={0} bg={theme.raise(background())} fg={theme.text.subdued}>
+    <text flexShrink={0} bg={theme.decrease(background())} fg={theme.text.subdued}>
       {" "}
       {props.children}{" "}
     </text>
@@ -2799,7 +2799,7 @@ function BlockTool(props: BlockToolProps) {
       paddingBottom={1}
       paddingLeft={2}
       gap={1}
-      backgroundColor={hover() ? theme.raise(background()) : background()}
+      backgroundColor={hover() ? theme.decrease(background()) : background()}
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={theme.background.default}
       onMouseOver={() => props.onClick && setHover(true)}
@@ -3234,7 +3234,7 @@ function ExecuteCallView(props: { call: Accessor<ExecuteCall> }) {
   const [hover, setHover] = createSignal(false)
   const input = createMemo(() => Object.entries(props.call().input ?? {}))
   const expandable = createMemo(() => input().length > 0)
-  const expandedColor = createMemo(() => theme.raise(theme.text.subdued))
+  const expandedColor = createMemo(() => theme.decrease(theme.text.subdued))
   const color = createMemo(() => {
     if (props.call().status === "error") return theme.text.feedback.error.default
     if (hover()) return theme.text.default

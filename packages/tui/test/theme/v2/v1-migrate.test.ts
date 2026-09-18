@@ -20,12 +20,12 @@ test("migrates resolved V1 modes into V2 tokens", () => {
   expect(migrated.dark.categorical?.length).toBeGreaterThan(0)
   expect(migrated.light.hue?.accent).toMatch(/^\$hue\.[^.]+$/)
   expect(migrated.light.hue?.interactive).toMatch(/^\$hue\.[^.]+$/)
-  expect(migrated.light.text?.default).toBe("$hue.neutral.800")
-  expect(migrated.light.text?.subdued).toBe("$hue.neutral.600")
+  expect(migrated.light.text?.default).toBe("$hue.neutral.200")
+  expect(migrated.light.text?.subdued).toBe("$hue.neutral.400")
   expect(migrated.light.background?.action?.primary?.default).toBe("transparent")
-  expect(migrated.light.background?.default).toBe("$hue.neutral.200")
-  expect(migrated.light.background?.raised?.base).toBe("$hue.neutral.300")
-  expect(migrated.light.background?.raised?.high).toBe("$hue.neutral.400")
+  expect(migrated.light.background?.default).toBe("$hue.neutral.800")
+  expect(migrated.light.background?.raised?.base).toBe("$hue.neutral.700")
+  expect(migrated.light.background?.raised?.high).toBe("$hue.neutral.600")
   expect(migrated.dark.background?.default).toBe("$hue.neutral.800")
   expect(migrated.dark.background?.raised?.base).toBe("$hue.neutral.700")
   expect(migrated.dark.background?.raised?.high).toBe("$hue.neutral.600")
@@ -40,8 +40,8 @@ test("migrates resolved V1 modes into V2 tokens", () => {
   expect(resolved.text.formfield.default.toInts()).toEqual(legacy.text.toInts())
   expect(resolved.text.formfield.selected.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.text.formfield.focused.toInts()).toEqual(legacy.primary.toInts())
-  expect(resolved.hue.accent[800].toInts()).toEqual(legacy.accent.toInts())
-  expect(resolved.hue.interactive[800].toInts()).toEqual(legacy.primary.toInts())
+  expect(resolved.hue.accent[200].toInts()).toEqual(legacy.accent.toInts())
+  expect(resolved.hue.interactive[200].toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.background.action.primary.selected.toInts()).toEqual([0, 0, 0, 0])
   expect(resolved.text.action.primary.selected.toInts()).toEqual(legacy.primary.toInts())
   expect(resolved.text.action.secondary.default.toInts()).toEqual(legacy.textMuted.toInts())
@@ -62,9 +62,9 @@ test("references generated hues from matching token colors", () => {
   const migrated = migrateV1(source)
   if (!migrated.light) throw new Error("Expected light mode")
 
-  expect(migrated.light.border?.default).toBe("$hue.interactive.800")
-  expect(migrated.light.scrollbar?.default).toBe("$hue.accent.800")
-  expect(migrated.light.syntax?.keyword).toMatch(/^\$hue\.[^.]+\.800$/)
+  expect(migrated.light.border?.default).toBe("$hue.interactive.200")
+  expect(migrated.light.scrollbar?.default).toBe("$hue.accent.200")
+  expect(migrated.light.syntax?.keyword).toMatch(/^\$hue\.[^.]+\.200$/)
   expect(migrated.light.markdown?.emphasis).toBe("#123456")
 })
 
@@ -85,9 +85,9 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
   const darkRed = migrated.dark.hue?.red
   if (typeof lightRed !== "object" || typeof darkRed !== "object") throw new Error("Expected generated red scales")
 
-  expect(lightRed[800]).toBe("#ff6666")
+  expect(lightRed[200]).toBe("#ff6666")
   expect(darkRed[200]).toBe("#450000")
-  expect(lightRed[900]).not.toBe(lightRed[800])
+  expect(lightRed[100]).not.toBe(lightRed[200])
   expect(darkRed[100]).not.toBe(darkRed[200])
   expect(migrated.light.hue?.orange).toBe("$hue.gray")
   expect(migrated.light.hue?.yellow).toBe("$hue.gray")
@@ -104,7 +104,7 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
 test("orders categorical hues by V1 semantic color mapping", () => {
   const source = structuredClone(DEFAULT_THEMES.opencode)
   const mapped = (name: "red" | "orange" | "yellow" | "green" | "blue" | "purple") => ({
-    light: DEFAULT_THEME.light.hue[name][700],
+    light: DEFAULT_THEME.light.hue[name][300],
     dark: DEFAULT_THEME.dark.hue[name][300],
   })
   source.theme.secondary = mapped("purple")
@@ -124,10 +124,10 @@ test("orders categorical hues by V1 semantic color mapping", () => {
 
 test("gives accent and primary ownership of their inferred hues", () => {
   const source = structuredClone(DEFAULT_THEMES.opencode)
-  source.theme.success = DEFAULT_THEME.light.hue.orange[300]
-  source.theme.accent = DEFAULT_THEME.light.hue.orange[400]
-  source.theme.info = DEFAULT_THEME.light.hue.blue[300]
-  source.theme.primary = DEFAULT_THEME.light.hue.blue[400]
+  source.theme.success = DEFAULT_THEME.light.hue.orange[700]
+  source.theme.accent = DEFAULT_THEME.light.hue.orange[600]
+  source.theme.info = DEFAULT_THEME.light.hue.blue[700]
+  source.theme.primary = DEFAULT_THEME.light.hue.blue[600]
 
   const migrated = migrateV1(source)
   if (!migrated.light) throw new Error("Expected light mode")
@@ -135,8 +135,8 @@ test("gives accent and primary ownership of their inferred hues", () => {
   const blue = migrated.light.hue?.blue
   if (typeof orange !== "object" || typeof blue !== "object") throw new Error("Expected concrete hue scales")
 
-  expect(orange[800]).toBe(source.theme.accent)
-  expect(blue[800]).toBe(source.theme.primary)
+  expect(orange[200]).toBe(source.theme.accent)
+  expect(blue[200]).toBe(source.theme.primary)
   expect(migrated.light.hue?.accent).toBe("$hue.orange")
   expect(migrated.light.hue?.interactive).toBe("$hue.blue")
 
@@ -144,7 +144,7 @@ test("gives accent and primary ownership of their inferred hues", () => {
   const collisionMode = migrateV1(source).light
   const collision = collisionMode?.hue?.orange
   if (typeof collision !== "object") throw new Error("Expected concrete orange scale")
-  expect(collision[800]).toBe(source.theme.primary)
+  expect(collision[200]).toBe(source.theme.primary)
   expect(collisionMode?.hue?.accent).toBe("$hue.orange")
   expect(collisionMode?.hue?.interactive).toBe("$hue.orange")
 })
@@ -180,11 +180,11 @@ test("builds and extrapolates gray from V1 surfaces and text without using menus
   if (typeof lightGray !== "object" || typeof darkGray !== "object") throw new Error("Expected concrete gray scales")
 
   expect(lightGray[100]).not.toBe(lightGray[200])
-  expect(lightGray[200]).toBe(hex(light.background))
-  expect(lightGray[300]).toBe(hex(light.backgroundPanel))
-  expect(lightGray[400]).toBe(hex(light.backgroundElement))
-  expect(lightGray[600]).toBe(hex(light.textMuted))
-  expect(lightGray[800]).toBe(hex(light.text))
+  expect(lightGray[200]).toBe(hex(light.text))
+  expect(lightGray[400]).toBe(hex(light.textMuted))
+  expect(lightGray[600]).toBe(hex(light.backgroundElement))
+  expect(lightGray[700]).toBe(hex(light.backgroundPanel))
+  expect(lightGray[800]).toBe(hex(light.background))
   expect(lightGray[900]).not.toBe(lightGray[800])
   expect(darkGray[100]).not.toBe(darkGray[200])
   expect(darkGray[200]).toBe(hex(dark.text))

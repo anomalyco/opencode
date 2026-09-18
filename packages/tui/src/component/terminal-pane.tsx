@@ -156,7 +156,7 @@ export function TerminalPane(props: {
 
   createEffect(() => {
     const tokens = themes.currentTokens()
-    terminalTheme = terminalPalette(tokens, themes.mode(), tokens.background.raised.base)
+    terminalTheme = terminalPalette(tokens, tokens.background.raised.base)
     applyTerminalTheme()
   })
 
@@ -335,9 +335,9 @@ function sameSize(first: TerminalSize | undefined, second: TerminalSize | undefi
   return !!first && !!second && first.cols === second.cols && first.rows === second.rows
 }
 
-function terminalPalette(theme: ResolvedThemeTokens, mode: "dark" | "light", background: RGBA) {
-  const base = mode === "dark" ? 200 : 800
-  const bright = mode === "dark" ? 100 : 900
+function terminalPalette(theme: ResolvedThemeTokens, background: RGBA) {
+  const base = 200
+  const bright = 100
   const colors = [
     background,
     theme.text.feedback.error.default,
@@ -354,7 +354,7 @@ function terminalPalette(theme: ResolvedThemeTokens, mode: "dark" | "light", bac
     theme.hue.blue[bright],
     theme.hue.purple[bright],
     theme.hue.cyan[bright],
-    theme.hue.neutral[mode === "dark" ? 100 : 900],
+    theme.hue.neutral[100],
   ]
   return Buffer.from(
     colors

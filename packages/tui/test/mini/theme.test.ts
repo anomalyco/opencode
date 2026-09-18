@@ -141,7 +141,7 @@ test.each(["light", "dark"] as const)("uses shared %s defaults and named built-i
       expectFooter(theme, expected)
       expect(rgba(theme.background).toInts()).toEqual(RGBA.fromHex(colors.defaultBackground!).toInts())
       expect(theme.footer.categorical.map((color) => rgba(color).toInts())).toEqual(
-        expected.categorical.map((scale) => scale[mode === "light" ? 800 : 200].toInts()),
+        expected.categorical.map((scale) => scale[200].toInts()),
       )
       expect(theme.block.syntax?.getAllStyles().size).toBeGreaterThan(0)
       for (const color of [

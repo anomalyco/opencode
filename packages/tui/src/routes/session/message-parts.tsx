@@ -52,7 +52,7 @@ export function ReasoningPart(props: {
         <box
           border={!inMinimal() || expanded() ? ["left"] : undefined}
           customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.raise(theme.background.default)}
+          borderColor={theme.decrease(theme.background.default)}
           paddingLeft={!inMinimal() || expanded() ? 1 : 0}
         >
           <box onMouseUp={toggle}>
@@ -70,7 +70,7 @@ export function ReasoningPart(props: {
             <box
               border={["left"]}
               customBorderChars={SplitBorder.customBorderChars}
-              borderColor={theme.raise(theme.background.default)}
+              borderColor={theme.decrease(theme.background.default)}
               paddingLeft={inMinimal() ? 3 : 1}
             >
               <code

@@ -51,29 +51,24 @@ export function resolveThemeDocument(document: ThemeDocument, mode?: Mode) {
   const core = expandTokens(fallback(selected.mode))
   const merged = document.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
   if (!merged["hue"]) throw new Error("Standalone themes must provide hues")
-  return resolveExpandedTheme(
-    {
-      ...merged,
-      categorical: merged["categorical"] ?? DEFAULT_CATEGORICAL,
-    } as ThemeDefinition,
-    selected.mode,
-  )
+  return resolveExpandedTheme({
+    ...merged,
+    categorical: merged["categorical"] ?? DEFAULT_CATEGORICAL,
+  } as ThemeDefinition)
 }
 
-export function resolveTheme(definition: ThemeDefinition, mode: Mode): ResolvedTheme {
-  return resolveExpandedTheme(expandTheme(decodeThemeDefinition(definition)), mode)
+export function resolveTheme(definition: ThemeDefinition): ResolvedTheme {
+  return resolveExpandedTheme(expandTheme(decodeThemeDefinition(definition)))
 }
 
-function resolveExpandedTheme(definition: ThemeDefinition, mode: Mode): ResolvedTheme {
+function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
   const hue = resolveHue(definition.hue)
   const categorical = (definition.categorical ?? DEFAULT_CATEGORICAL).map((name) => hue[name])
   const hueSteps = compileHueSteps(hue)
-  const raise = (color: RGBA) => (mode === "light" ? hueSteps.increase(color) : hueSteps.decrease(color))
   const base = tokens(definition)
   const views = {} as Record<SurfaceName, ResolvedTheme>
   const view = (tokens: ThemeTokensDefinition): ResolvedTheme => ({
     ...resolveView(tokens, hue, categorical, hueSteps),
-    raise,
     surface: (name) => views[name],
   })
   views.dialog = definition["@dialog"] ? view(contextualize(base, definition["@dialog"])) : view(base)

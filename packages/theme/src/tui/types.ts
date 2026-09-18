@@ -74,8 +74,6 @@ export type ResolvedThemeTokens = {
 }
 
 export type ResolvedTheme = ResolvedThemeTokens & {
-  /** Lift a ramp color one step away from the background: lighter in light mode, darker in dark mode. */
-  readonly raise: (color: RGBA) => RGBA
   /** The same theme re-resolved on a raised surface. Absolute: every view's surfaces are the base theme's. */
   readonly surface: (name: SurfaceName) => ResolvedTheme
 }

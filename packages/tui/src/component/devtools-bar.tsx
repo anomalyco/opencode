@@ -229,7 +229,7 @@ export function DevToolsBar() {
   }
 
   return (
-    <box height={1} flexShrink={0} flexDirection="row" backgroundColor={theme.raise(theme.background.default)}>
+    <box height={1} flexShrink={0} flexDirection="row" backgroundColor={theme.decrease(theme.background.default)}>
       <Show when={panel()}>
         <box
           position="absolute"

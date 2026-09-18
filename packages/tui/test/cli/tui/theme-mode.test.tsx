@@ -160,7 +160,7 @@ test("dialog surfaces are absolute and can be inherited through the theme contex
     expect(dialog.background.default).toBe(themes.currentTokens().background.raised.base)
     expect(contextual.background.default).toBe(dialog.background.default)
     expect(contextual.text.default).toBe(dialog.text.default)
-    expect(dialog.raise(dialog.background.raised.base)).toBe(themes.currentTokens().hue.neutral[600])
+    expect(dialog.decrease(dialog.background.raised.base)).toBe(themes.currentTokens().hue.neutral[600])
   } finally {
     app.renderer.destroy()
   }

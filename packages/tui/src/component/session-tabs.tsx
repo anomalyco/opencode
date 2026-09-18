@@ -1535,7 +1535,7 @@ function HorizontalSessionTabs(props: {
             const lifted = (hovered() === tab.sessionID || dragged()) && !selected()
             const base = lifted ? theme.background.action.primary.hovered : theme.background.default
             // A dragged tab lifts to full selected elevation while it is held.
-            return tint(base, theme.raise(theme.background.raised.base), dragged() ? 1 : selection())
+            return tint(base, theme.decrease(theme.background.raised.base), dragged() ? 1 : selection())
           })
           const pulseColor = () => tint(background(), theme.text.default, 0.45)
           // The edge flash washes toward a brighter stop on the same background-to-text ramp,
