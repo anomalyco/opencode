@@ -8,7 +8,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Cause, Context, Effect, Layer, PubSub, RcMap, Schema, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
-import { watch } from "node:fs"
+import { statSync, watch } from "node:fs"
 import path from "path"
 import loadBinding from "./watcher-binding.js"
 
@@ -208,10 +208,12 @@ export const nativeLayer = Layer.succeed(
       if (input.type === "file" || input.type === "entries") {
         return Effect.sync(() => {
           const directory = input.type === "file" ? path.dirname(input.target) : input.target
-          const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
+          const filter = createEntryEventFilter(
+            directory,
+            input.type === "entries" ? input.names : [path.basename(input.target)],
+          )
           const subscription = watch(directory, { recursive: false }, (_event, file) => {
-            if (file && !names.has(file)) return
-            for (const name of file ? [file] : names) {
+            for (const name of filter(file)) {
               input.publish({ path: path.join(directory, name), type: "update" })
             }
           })
@@ -233,6 +235,41 @@ export function configured(options?: Options) {
 }
 
 export const node = configured()
+
+/** @internal Exported for deterministic tests of filename-less native events. */
+export function createEntryEventFilter(
+  directory: string,
+  names: readonly string[],
+  snapshot: (file: string) => string | undefined = entrySnapshot,
+) {
+  const selected = new Set(names)
+  const previous = new Map(names.map((name) => [name, snapshot(path.join(directory, name))]))
+  return (file: string | null) => {
+    if (file) {
+      if (!selected.has(file)) return []
+      previous.set(file, snapshot(path.join(directory, file)))
+      return [file]
+    }
+    // macOS can omit the filename for a sibling update. Publish only entries
+    // whose own metadata changed; otherwise a .git/index write looks like a HEAD update.
+    return names.filter((name) => {
+      const next = snapshot(path.join(directory, name))
+      if (previous.get(name) === next) return false
+      previous.set(name, next)
+      return true
+    })
+  }
+}
+
+function entrySnapshot(file: string) {
+  try {
+    const info = statSync(file, { bigint: true })
+    return `${info.dev}:${info.ino}:${info.mode}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error) return `error:${error.code}`
+    return "error"
+  }
+}
 
 function subscribeDirectory(
   native: typeof ParcelWatcher | undefined,

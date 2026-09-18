@@ -1,5 +1,5 @@
 import { $ } from "bun"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Duration, Effect, Fiber, Layer, Option, Schedule, Stream } from "effect"
@@ -53,6 +53,31 @@ function countingNative() {
 }
 
 describe("Watcher lifecycle", () => {
+  test("filters filename-less sibling updates without losing changes to selected entries", () => {
+    const directory = "/repo/.git"
+    const values = new Map([
+      [path.join(directory, "HEAD"), "head-1"],
+      [path.join(directory, "config"), "config-1"],
+    ])
+    const filter = Watcher.createEntryEventFilter(directory, ["HEAD", "config"], (file) => values.get(file))
+
+    expect(filter(null)).toEqual([])
+    expect(filter("index")).toEqual([])
+
+    values.set(path.join(directory, "HEAD"), "head-2")
+    expect(filter(null)).toEqual(["HEAD"])
+    expect(filter(null)).toEqual([])
+
+    values.delete(path.join(directory, "config"))
+    expect(filter(null)).toEqual(["config"])
+    values.set(path.join(directory, "config"), "config-2")
+    expect(filter(null)).toEqual(["config"])
+
+    values.set(path.join(directory, "HEAD"), "head-3")
+    expect(filter("HEAD")).toEqual(["HEAD"])
+    expect(filter(null)).toEqual([])
+  })
+
   it.effect("signals readiness after acquisition and buffers updates published by the ready callback", () =>
     Effect.gen(function* () {
       const publish = yield* Deferred.make<(update: Watcher.Update) => void>()
