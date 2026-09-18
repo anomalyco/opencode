@@ -3,9 +3,11 @@ export * as DesktopCli from "./desktop-cli"
 import { execFile, spawn } from "node:child_process"
 import { promisify } from "node:util"
 import { app } from "electron"
-import { Context, Effect, FileSystem, Layer, Path } from "effect"
+import { Context, Effect, FileSystem, Layer, Option, Path } from "effect"
 import installer from "../../../../../install?raw"
 import { DesktopPaths } from "../paths"
+import { BUNDLED_CLI_VERSION_KEY } from "../storage/keys"
+import { getStore } from "../storage/store"
 import { parseCliVersion } from "./cli-version"
 
 const execFileAsync = promisify(execFile)
@@ -79,10 +81,35 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
     ? path.join(process.resourcesPath, executableName())
     : path.join(paths.developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
   yield* Effect.logInfo("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
-  const version = parseCliVersion(yield* run(bundled, ["--version"]))
+  const version = yield* bundledVersion(bundled)
   const binary = app.isPackaged || isolated ? yield* installCli(bundled, version) : bundled
   return { version, binary, command: [binary] }
 })
+
+// Spawning the bundled executable for `--version` costs ~400 ms of startup on a 200 MB binary, so
+// the answer is remembered per executable identity and only re-read after an update replaces it.
+const bundledVersion = Effect.fn("DesktopCli.bundledVersion")(function* (bundled: string) {
+  const fs = yield* FileSystem.FileSystem
+  const stat = yield* fs.stat(bundled).pipe(Effect.orElseSucceed(() => undefined))
+  const identity = stat ? `${stat.size}:${Option.getOrUndefined(stat.mtime)?.getTime() ?? ""}` : undefined
+  const store = getStore()
+  const cached = store.get(BUNDLED_CLI_VERSION_KEY)
+  if (identity && isVersionCache(cached) && cached.path === bundled && cached.identity === identity) {
+    yield* Effect.logInfo("v2 CLI version reused", { version: cached.version })
+    return cached.version
+  }
+  const version = parseCliVersion(yield* run(bundled, ["--version"]))
+  if (identity) store.set(BUNDLED_CLI_VERSION_KEY, { path: bundled, identity, version } satisfies VersionCache)
+  return version
+})
+
+type VersionCache = { path: string; identity: string; version: string }
+
+function isVersionCache(value: unknown): value is VersionCache {
+  if (!value || typeof value !== "object") return false
+  const cache = value as Record<string, unknown>
+  return typeof cache.path === "string" && typeof cache.identity === "string" && typeof cache.version === "string"
+}
 
 export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (binary: string) {
   const fs = yield* FileSystem.FileSystem
