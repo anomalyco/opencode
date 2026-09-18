@@ -1689,6 +1689,73 @@ export NVIDIA_API_KEY=nvapi-your-key-here
 
 ---
 
+### OCI Generative AI
+
+OCI Generative AI serves its models through an OpenAI-compatible endpoint, so OpenCode talks to it with a plain API key.
+
+1. Head over to the [OCI Console](https://cloud.oracle.com/), open the **Generative AI** service in a region that hosts it, such as **US Midwest (Chicago)**, and create an **API key** in your compartment. Copy the key; it is shown only once. You can also create it from the CLI:
+
+   ```bash
+   oci generative-ai api-key create --compartment-id YOUR_COMPARTMENT_OCID --region us-chicago-1 \
+     --display-name opencode --key-details '[{"keyName":"primary","timeExpiry":"2027-01-01T00:00:00Z"}]'
+   ```
+
+   :::note
+   The key needs an IAM policy in place _before_ it is created, otherwise every request returns `401`. Have an administrator add this statement first:
+
+   ```txt
+   allow any-user to use generative-ai-family in compartment YOUR_COMPARTMENT where request.principal.type='generativeaiapikey'
+   ```
+   :::
+
+2. Run the `/connect` command and search for **OCI Generative AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your OCI Generative AI API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+   Alternatively, you can set an environment variable instead of using `/connect`.
+
+   ```bash title="~/.bash_profile"
+   export OCI_GENAI_API_KEY=your-api-key
+   ```
+
+4. Run the `/models` command to select a model like _Grok 4.6_ or _GPT OSS 120B_.
+
+   ```txt
+   /models
+   ```
+
+   :::note
+   OpenCode lists the models OCI serves on this endpoint for API keys: Meta Llama, xAI Grok, and OpenAI gpt-oss. Llama models are listed without tool calling because the endpoint rejects tool requests that carry a leading system message. Other models in the OCI catalog use the native OCI API and are not available here.
+   :::
+
+5. Requests go to the Chicago region by default. To use another region, point the provider at that region's endpoint:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "oci": {
+         "options": {
+           "baseURL": "https://inference.generativeai.eu-frankfurt-1.oci.oraclecloud.com/openai/v1"
+         }
+       }
+     }
+   }
+   ```
+
+---
+
 ### Ollama
 
 You can configure opencode to use local models through Ollama.
