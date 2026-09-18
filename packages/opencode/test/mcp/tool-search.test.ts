@@ -160,6 +160,22 @@ describe("mcp tool search", () => {
 
   harness(
     withConfig({}, "always"),
+    catalog({
+      github_create_issue: tool("github", "create_issue", "Create a GitHub issue"),
+      github_list_repos: tool("github", "list_repos", "List repositories for a user"),
+    }),
+  ).instance("a blank query returns no matches and marks nothing resolved", () =>
+    Effect.gen(function* () {
+      yield* TestInstance
+      const svc = yield* McpToolSearch.Service
+      expect(yield* svc.search({ sessionID: sid, query: "", ruleset: [] })).toEqual([])
+      expect(yield* svc.search({ sessionID: sid, query: "   ", ruleset: [] })).toEqual([])
+      expect((yield* svc.resolved(sid)).size).toBe(0)
+    }),
+  )
+
+  harness(
+    withConfig({}, "always"),
     catalog({ github_create_issue: tool("github", "create_issue", "x") }),
   ).instance("resolved is session-scoped and cumulative", () =>
     Effect.gen(function* () {

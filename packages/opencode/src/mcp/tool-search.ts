@@ -98,24 +98,24 @@ const layer = Layer.effect(
     })
 
     const search: Interface["search"] = Effect.fn("McpToolSearch.search")(function* (input) {
-      const visible = yield* catalog(input.ruleset)
       const query = input.query.toLowerCase().trim()
       const terms = query.split(/\s+/).filter(Boolean)
+      // A blank query must not match everything: every visible tool would score
+      // 1 and the whole catalog would be marked resolved.
+      if (terms.length === 0) return []
+      const visible = yield* catalog(input.ruleset)
       const limit = input.limit ?? 10
 
       const scored = Object.entries(visible)
         .map(([id, tool]) => {
           const description = tool.def.description ?? ""
           const haystack = `${id} ${description}`.toLowerCase()
-          const score =
-            terms.length === 0
-              ? 1
-              : terms.reduce((acc, term) => {
-                  if (id.toLowerCase() === term) return acc + 100
-                  if (id.toLowerCase().includes(term)) return acc + 10
-                  if (haystack.includes(term)) return acc + 1
-                  return acc
-                }, 0)
+          const score = terms.reduce((acc, term) => {
+            if (id.toLowerCase() === term) return acc + 100
+            if (id.toLowerCase().includes(term)) return acc + 10
+            if (haystack.includes(term)) return acc + 1
+            return acc
+          }, 0)
           return { id, description, server: tool.server, score }
         })
         .filter((entry) => entry.score > 0)

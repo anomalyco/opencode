@@ -17,6 +17,8 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { McpToolSearch } from "@/mcp/tool-search"
+import { MCP } from "@/mcp"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -51,8 +53,18 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       Database.node,
       RuntimeFlags.node,
       Ripgrep.node,
+      McpToolSearch.node,
     ]),
-    [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
+    [
+      [RuntimeFlags.node, RuntimeFlags.layer(flags)],
+      [
+        MCP.node,
+        Layer.mock(MCP.Service, {
+          tools: () => Effect.succeed({}),
+          clients: () => Effect.succeed({}),
+        }),
+      ],
+    ],
   )
 
 const it = testEffect(layer())
@@ -368,6 +380,66 @@ describe("tool.task", () => {
       expect(failure.message).toBe(
         `Subagent failed (task_id: ${child?.id}): The user rejected permission to use this specific tool call.`,
       )
+    }),
+  )
+
+  it.instance("execute seeds the child session with the parent's resolved MCP tools", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const toolSearch = yield* McpToolSearch.Service
+      const { chat, assistant } = yield* seed()
+      yield* toolSearch.markResolved(chat.id, ["github_create_issue"])
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let childID: SessionID | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (childID = input.sessionID) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(childID).toBeDefined()
+      expect(childID).not.toBe(chat.id)
+      expect((yield* toolSearch.resolved(childID!)).has("github_create_issue")).toBe(true)
+
+      // Resuming the same child re-seeds: a tool resolved on the parent in the
+      // meantime shows up without a new search.
+      yield* toolSearch.markResolved(chat.id, ["github_list_repos"])
+      const resumed = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "keep looking",
+          subagent_type: "general",
+          task_id: result.metadata.sessionId as string,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps() },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      const resolved = yield* toolSearch.resolved(SessionID.make(resumed.metadata.sessionId as string))
+      expect(resolved.has("github_create_issue")).toBe(true)
+      expect(resolved.has("github_list_repos")).toBe(true)
     }),
   )
 
