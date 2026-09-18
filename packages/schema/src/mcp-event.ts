@@ -18,4 +18,12 @@ export const BrowserOpenFailed = Event.define({
   },
 })
 
-export const Definitions = Event.inventory(ToolsChanged, BrowserOpenFailed)
+export const ToolResolved = Event.define({
+  type: "mcp.tool.resolved",
+  schema: {
+    sessionID: Schema.String,
+    tools: Schema.mutable(Schema.Array(Schema.String)),
+  },
+})
+
+export const Definitions = Event.inventory(ToolsChanged, BrowserOpenFailed, ToolResolved)

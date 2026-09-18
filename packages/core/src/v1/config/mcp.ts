@@ -3,6 +3,13 @@ export * as ConfigMCPV1 from "./mcp"
 import { Schema } from "effect"
 import { PositiveInt } from "../../schema"
 
+export const ToolSearch = Schema.Literals(["auto", "always", "off"]).annotate({
+  identifier: "McpToolSearch",
+  description:
+    "When enabled, MCP tool schemas are kept out of the prompt and exposed through a search_tools tool instead. Discovered tools are registered for the rest of the session on first use. \"auto\" enables it when the MCP surface is large.",
+})
+export type ToolSearch = Schema.Schema.Type<typeof ToolSearch>
+
 export const Local = Schema.Struct({
   type: Schema.Literal("local").annotate({ description: "Type of MCP server connection" }),
   command: Schema.mutable(Schema.Array(Schema.String)).annotate({
@@ -16,6 +23,9 @@ export const Local = Schema.Struct({
   }),
   enabled: Schema.optional(Schema.Boolean).annotate({
     description: "Enable or disable the MCP server on startup",
+  }),
+  tool_search: Schema.optional(ToolSearch).annotate({
+    description: "Override the global mcp.tool_search behavior for this server.",
   }),
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
@@ -52,6 +62,9 @@ export const Remote = Schema.Struct({
   }),
   oauth: Schema.optional(Schema.Union([OAuth, Schema.Literal(false)])).annotate({
     description: "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
+  }),
+  tool_search: Schema.optional(ToolSearch).annotate({
+    description: "Override the global mcp.tool_search behavior for this server.",
   }),
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",

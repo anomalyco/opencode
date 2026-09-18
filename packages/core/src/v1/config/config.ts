@@ -113,6 +113,10 @@ export const Info = Schema.Struct({
   mcp: Schema.optional(
     Schema.Record(Schema.String, Schema.Union([ConfigMCPV1.Info, Schema.Struct({ enabled: Schema.Boolean })])),
   ).annotate({ description: "MCP (Model Context Protocol) server configurations" }),
+  mcp_tool_search: Schema.optional(ConfigMCPV1.ToolSearch).annotate({
+    description:
+      "Hide MCP tool schemas behind a search_tools tool (model-agnostic deferred tool loading). Applies to every MCP server unless overridden per-server with tool_search. Defaults to \"off\".",
+  }),
   formatter: Schema.optional(ConfigFormatterV1.Info).annotate({
     description:
       "Enable or configure formatters. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.",

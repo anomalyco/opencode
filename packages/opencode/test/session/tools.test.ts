@@ -12,6 +12,7 @@ import { SessionProcessor } from "@/session/processor"
 import { SessionTools } from "@/session/tools"
 import { Tool } from "@/tool/tool"
 import { ToolRegistry } from "@/tool/registry"
+import { McpToolSearch } from "@/mcp/tool-search"
 import { Truncate } from "@/tool/truncate"
 import { Plugin } from "@/plugin"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -61,10 +62,19 @@ const fakeTruncate = Truncate.Service.of({
   limits: () => Effect.succeed({ maxLines: 2000, maxBytes: 50 * 1024 }),
 } satisfies Truncate.Interface)
 
+const fakeToolSearch = McpToolSearch.Service.of({
+  enabledFor: () => Effect.succeed(false),
+  catalog: () => Effect.succeed({}),
+  search: () => Effect.succeed([]),
+  resolved: () => Effect.succeed(new Set<string>()),
+  markResolved: () => Effect.succeed([]),
+} satisfies McpToolSearch.Interface)
+
 const layer = Layer.mergeAll(
   Layer.succeed(Plugin.Service, fakePlugin),
   Layer.succeed(Permission.Service, fakePermission),
   Layer.succeed(MCP.Service, fakeMcp()),
+  Layer.succeed(McpToolSearch.Service, fakeToolSearch),
   Layer.succeed(Truncate.Service, fakeTruncate),
   RuntimeFlags.layer(),
   Layer.succeed(
