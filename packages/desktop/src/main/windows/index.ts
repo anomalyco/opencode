@@ -1,6 +1,5 @@
-import windowState from "electron-window-state"
 import { randomUUID } from "node:crypto"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, screen } from "electron"
 import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
@@ -25,9 +24,15 @@ import {
 import { loadWindow, registerRendererProtocol } from "./protocol"
 import { createWindowRegistry } from "./registry"
 import { makeWindowRecovery } from "./recovery"
+import { manageWindowState, readWindowState, resolveWindowState } from "./window-state"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
 const themeReady = new WeakMap<BrowserWindow, () => void>()
+const displays = {
+  all: () => screen.getAllDisplays().map((display) => display.bounds),
+  primary: () => screen.getPrimaryDisplay().bounds,
+  matching: (bounds: Electron.Rectangle) => screen.getDisplayMatching(bounds).bounds,
+}
 const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
@@ -88,7 +93,8 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
   }
 
   const create = (id: string = randomUUID()) => {
-    const state = windowState({ file: windowStateFile(id), defaultWidth: 1280, defaultHeight: 800 })
+    const stateFile = path.join(app.getPath("userData"), windowStateFile(id))
+    const state = resolveWindowState(readWindowState(stateFile), { width: 1280, height: 800 }, displays)
     const appearance = windowAppearance(path, paths)
     const win = new BrowserWindow({
       x: state.x,
@@ -108,7 +114,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     wireWindowRecovery(win, id, () => relaunchHandler())
     wireNavigationPolicy(win, (url) => runFork(openExternalURL(url)))
     wireRendererHeaders(win)
-    state.manage(win)
+    manageWindowState(win, stateFile, state, displays)
     register(win, id)
     wireFullscreen(win)
     loadWindow(win, "index.html")
