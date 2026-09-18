@@ -48,7 +48,8 @@ test("does not package external copies of bundled dependencies", () => {
   expect(pkg.devDependencies.effect).toBe("catalog:")
   expect(pkg.devDependencies["@effect/platform-node"]).toBe("catalog:")
   expect(pkg.devDependencies["drizzle-orm"]).toBe("catalog:")
-  expect(pkg.optionalDependencies["msgpackr-extract"]).toBe("3.0.4")
+  // IPC crosses the port by structured clone; no MessagePack runtime or native accelerator ships.
+  expect(Object.keys(pkg.optionalDependencies)).not.toContain("msgpackr-extract")
 })
 
 test("keeps PTY binaries without stale native packaging", () => {
@@ -101,6 +102,6 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
   expect(imports).toContain("node:sqlite")
   expect(chunks.some((chunk) => chunk.dynamicImports.includes("@zip.js/zip.js"))).toBe(true)
   expect(imports).toContain(`@lydell/node-pty-${process.platform}-${process.arch}`)
-  expect(modules.some((id) => id.includes("/node_modules/msgpackr-extract/"))).toBe(false)
-  expect(chunks.some((chunk) => chunk.code.includes("msgpackr-extract"))).toBe(true)
+  expect(modules.some((id) => id.includes("/node_modules/msgpackr"))).toBe(false)
+  expect(chunks.some((chunk) => chunk.code.includes("msgpackr"))).toBe(false)
 }, 30_000)

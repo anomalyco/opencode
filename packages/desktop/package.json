@@ -68,7 +68,6 @@
     "@lydell/node-pty-linux-arm64": "1.2.0-beta.12",
     "@lydell/node-pty-linux-x64": "1.2.0-beta.12",
     "@lydell/node-pty-win32-arm64": "1.2.0-beta.12",
-    "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
-    "msgpackr-extract": "3.0.4"
+    "@lydell/node-pty-win32-x64": "1.2.0-beta.12"
   }
 }
