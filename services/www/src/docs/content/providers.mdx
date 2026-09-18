@@ -133,6 +133,28 @@ Both fields can also be set on a model or variant when only part of a provider's
 }
 ```
 
+## Timeouts
+
+Requests wait up to five minutes for response headers and up to five minutes between streamed response chunks. Set
+`settings.headerTimeout` or `settings.chunkTimeout` to a number of milliseconds to change a limit, or to `false` to
+disable it.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "headerTimeout": 600000,
+        "chunkTimeout": false,
+      },
+    },
+  },
+}
+```
+
+A request that exceeds either limit fails with a transport error and follows the normal retry policy.
+
 ## Packages
 
 The `package` field selects the runtime that communicates with a provider. Use the compatible runtime for APIs that

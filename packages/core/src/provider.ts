@@ -1,10 +1,10 @@
 export * as Provider from "./provider.js"
 
-import { Context, Effect, Layer, Schema, Stream, Struct } from "effect"
+import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import type { ProviderPackageDefinition } from "@opencode/ai"
+import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai"
 import { isRecord } from "@opencode/ai/utils/record"
 import { Npm } from "@opencode/util/npm"
 import type { DeepMutable } from "./schema.js"
@@ -132,11 +132,22 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
-/** opencode transport settings consumed in aisdk.ts; native packages never receive them. */
-const TRANSPORT_KEYS = ["chunkTimeout", "fetch", "timeout"] as const
+/** opencode transport settings consumed by aisdk.ts and the model resolver; native packages never receive them. */
+const TRANSPORT_KEYS = ["chunkTimeout", "fetch", "headerTimeout", "timeout"] as const
 
 export function nativeSettings(settings: Settings): Settings {
   return Struct.omit(settings, TRANSPORT_KEYS)
+}
+
+const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)
+const DEFAULT_TIMEOUT_MS = 300_000
+
+/** Request timeouts from provider settings; unset or invalid values take opencode's default. */
+export function timeouts(settings: Readonly<Record<string, unknown>>) {
+  return {
+    headerTimeout: Option.getOrElse(decodeTimeout(settings.headerTimeout), () => DEFAULT_TIMEOUT_MS),
+    chunkTimeout: Option.getOrElse(decodeTimeout(settings.chunkTimeout), () => DEFAULT_TIMEOUT_MS),
+  }
 }
 
 export function mergeOverlay(

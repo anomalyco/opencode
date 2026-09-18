@@ -276,9 +276,12 @@ const resolveRequestOptions = (request: LLMRequest) => {
       modelDefaults?.providerOptions,
       normalized.providerOptions,
     ),
-    http: mergeHttpOptions(routeDefaults.http, modelDefaults?.http, normalized.http),
+    http: mergeHttpOptions(DEFAULT_HTTP, routeDefaults.http, modelDefaults?.http, normalized.http),
   })
 }
+
+/** Package-level transport policy; route, model, and request options override field by field. */
+const DEFAULT_HTTP = new HttpOptions({ headerTimeout: 300_000, chunkTimeout: 300_000 })
 
 export interface MakeInput<Body, Frame, Event, State> {
   readonly compact?: CompactionOperations
