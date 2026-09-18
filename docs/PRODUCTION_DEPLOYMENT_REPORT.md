@@ -80,12 +80,14 @@ sudo docker compose up -d --no-deps sub2api
 - **真实账号一键连接**（网站登录 → code → mucode）：待用户在浏览器执行一次（账号在用户侧，无法代操作）
 
 ## 14. Download Tests
-| 文件 | 大小 | 127.0.0.1:8080 | admin.wuxuexi.top/downloads |
+| 文件 | 大小（字节）| 服务器 127.0.0.1:8080 | admin.wuxuexi.top/downloads |
 |---|---|---|---|
-| mucode-mac-arm64.dmg | 305,394,478 | 200 ✅ | 200 ✅（Content-Length 一致）|
-| mucode-mac-x64.dmg | 236,697,276 | 200 ✅ | 200 ✅ |
-| mucode-win-x64.exe | 199,270,886 | 200 ✅ | 200 ✅ |
-SHA256 三方（本地源/服务器文件）一致。
+| mucode-mac-arm64.dmg | 304,827,748 | 200 ✅ | 200 ✅ |
+| mucode-mac-x64.dmg | 238,189,207 | 200 ✅ | 200 ✅ |
+| mucode-win-x64.exe | 199,271,879 | 200 ✅ | 200 ✅ |
+| SHA256SUMS.txt | 257 | 200 ✅ | 200 ✅ |
+
+三包均为 **http 网关默认版 sidecar**（v5 构建，与现网 http 匹配）；SHA256 本地源与服务器逐字节一致（清单已上线 `/downloads/SHA256SUMS.txt`）。
 
 ## 15. Rollback Procedure
 ```
@@ -103,3 +105,4 @@ sudo docker compose up -d --no-deps sub2api
 5. 旧 4 把 Key（opencode.json 里的 8d60/9235/3975/d99e）已失效——需在网站重新签发或使用「一键连接」自动签发的新 Key。
 6. **上游官方 OpenCode Windows 桌面版（BETA）存在启动崩溃 bug**：报 `Cannot find module './windowsTerminal'`（其安装目录 `AppData\Local\Programs\@opencode-aidesktop`）。与 mucode 包无关（mucode 安装目录为 `Programs\mucode`）。如师生在 Windows 装了官方桌面版遇到此错，属上游缺陷；mucode 的 Windows 包安装目录不同，不受影响。
 7. mucode Windows 包未在真机 Windows 上做过启动实测（本环境无 Windows）；NSIS 包为标准 electron-builder 产物，风险低。
+8. mucode 三包内嵌的网关默认值为 http（现网即 http）；HTTPS 上线后需重打三包（改回 https 默认）。
