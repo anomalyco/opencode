@@ -57,3 +57,7 @@ database, config and service registration. It never attaches to or restarts the 
 `--service cold` stops the service before each launch so the desktop has to spawn it; the isolated config directory
 gives that service a private port, so it never collides with another OpenCode service on the machine. Milestones (ms since spawn) come from the main log, the renderer's
 performance timeline and DOM readiness polled over CDP; raw samples are written to `dist/bench-startup`.
+
+A packaged beta or prod build registers itself as the `opencode://` handler when it starts, even from the bench; the
+installed app takes the registration back on its next launch. Point `HTTPS_PROXY` at a closed port while benchmarking
+those channels so the updater's first check fails fast instead of reaching GitHub.
