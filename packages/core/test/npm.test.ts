@@ -63,9 +63,10 @@ async function createRegistryFixture(directory: string) {
     await writePackage(path.join(root, "package"), {
       name: "@fixture/registry-plugin",
       version,
-      exports: "./index.js",
+      exports: { ".": "./index.js", "./v2": "./v2.js" },
     })
     await Bun.write(path.join(root, "package", "index.js"), `export const version = "${version}"\n`)
+    await Bun.write(path.join(root, "package", "v2.js"), `export const subpath = "${version}"\n`)
     await Bun.$`tar -czf package.tgz package`.cwd(root)
     tarballs.set(version, await Bun.file(path.join(root, "package.tgz")).bytes())
   }
@@ -130,6 +131,8 @@ describe("Npm.isRegistryPackage", () => {
     expect(await Npm.isRegistryPackage("plugin")).toBe(true)
     expect(await Npm.isRegistryPackage("@acme/plugin@beta")).toBe(true)
     expect(await Npm.isRegistryPackage("plugin@^1.2.0")).toBe(true)
+    expect(await Npm.isRegistryPackage("plugin/v2")).toBe(true)
+    expect(await Npm.isRegistryPackage("@acme/plugin/v2")).toBe(true)
     expect(await Npm.isRegistryPackage("./plugin")).toBe(false)
     expect(await Npm.isRegistryPackage("github:acme/plugin")).toBe(false)
     expect(await Npm.isRegistryPackage("alias@npm:plugin@1.0.0")).toBe(false)
@@ -139,6 +142,8 @@ describe("Npm.isRegistryPackage", () => {
 describe("Npm.isInstallablePackage", () => {
   test("accepts registry and npm-compatible Git specs", async () => {
     expect(await Npm.isInstallablePackage("plugin@^1.2.0")).toBe(true)
+    expect(await Npm.isInstallablePackage("plugin/v2")).toBe(true)
+    expect(await Npm.isInstallablePackage("@acme/plugin/v2")).toBe(true)
     expect(await Npm.isInstallablePackage("github:acme/plugin#main")).toBe(true)
     expect(await Npm.isInstallablePackage("git+ssh://git@github.com/acme/plugin.git#main")).toBe(true)
     expect(await Npm.isInstallablePackage("git@github.com:acme/plugin.git")).toBe(true)
@@ -166,6 +171,24 @@ describe("Npm.cacheKey", () => {
 })
 
 describe("Npm.add", () => {
+  test("installs a registry package root for an import subpath", async () => {
+    await using tmp = await tmpdir()
+    await using registry = await createRegistryFixture(tmp.path)
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/registry-plugin/v2"
+    await registry.configure(cache, spec)
+
+    const entry = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(entry.name).toBe("@fixture/registry-plugin")
+    expect(entry.specifier).toBe(spec)
+    expect(entry.directory).toEndWith(path.join("node_modules", "@fixture", "registry-plugin"))
+    expect(await fs.stat(path.join(entry.directory, "v2.js"))).toBeTruthy()
+  })
+
   test("locates cached scoped package specs without reifying", async () => {
     await using tmp = await tmpdir()
     const spec = "@fixture/provider@1.0.0"

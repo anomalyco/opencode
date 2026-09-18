@@ -104,6 +104,21 @@ describe("Host.resolve", () => {
     })
   })
 
+  it("resolves an installed package import subpath", async () => {
+    await using plugin = await fixture(
+      {
+        "package.json": JSON.stringify({ name, exports: { "./v2": "./dist/v2.js" } }),
+        "dist/v2.js": source,
+      },
+      true,
+    )
+    assert.deepEqual(Host.resolve({ ...plugin.target, specifier: `${name}/v2` }), {
+      server: plugin.url("dist/v2.js"),
+      tui: undefined,
+      rpc: undefined,
+    })
+  })
+
   it("falls back to the root export and uses import rather than require conditions", async () => {
     await using plugin = await fixture(
       {

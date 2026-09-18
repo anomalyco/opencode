@@ -6,6 +6,7 @@ import { importModule, resolveModule } from "@opencode/util/runtime-import"
 export interface Target {
   readonly directory: string
   readonly name?: string
+  readonly specifier?: string
 }
 
 export interface Entrypoints {
@@ -17,11 +18,12 @@ export interface Entrypoints {
 export function resolve(target: Target): Entrypoints {
   const entry = (subpaths: readonly string[]) => {
     for (const subpath of subpaths) {
-      const specifier = target.name
-        ? [target.name, subpath].filter(Boolean).join("/")
+      const specifier = target.specifier ?? target.name
+      const entrypoint = specifier
+        ? [specifier, subpath].filter(Boolean).join("/")
         : path.resolve(target.directory, subpath || "index")
       try {
-        return resolveModule(specifier, target.directory)
+        return resolveModule(entrypoint, target.directory)
       } catch (error) {
         if (
           !(error instanceof Error) ||

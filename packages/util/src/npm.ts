@@ -21,6 +21,7 @@ export class InstallFailedError extends Schema.TaggedError<InstallFailedError>()
 export interface Package {
   readonly directory: string
   readonly name: string
+  readonly specifier?: string
   readonly version?: string
   readonly revision?: string
 }
@@ -55,13 +56,21 @@ export async function cacheKey(pkg: string) {
 }
 
 type Target =
-  | { readonly type: "registry"; readonly name: string; readonly spec: string; readonly mutable: boolean }
+  | {
+      readonly type: "registry"
+      readonly name: string
+      readonly spec: string
+      readonly install: string
+      readonly specifier?: string
+      readonly mutable: boolean
+    }
   | { readonly type: "git"; readonly name?: string; readonly slug: string; readonly mutable: boolean }
 
 async function parse(pkg: string): Promise<Target | undefined> {
   const { default: npa } = await import("npm-package-arg")
   try {
-    const result = npa(pkg)
+    const subpath = registrySubpath(pkg)
+    const result = npa(subpath?.name ?? pkg)
     if (result.type === "git") {
       return {
         type: "git",
@@ -75,11 +84,23 @@ async function parse(pkg: string): Promise<Target | undefined> {
       type: "registry",
       name: result.name,
       spec: result.raw === result.name ? "latest" : result.rawSpec,
+      install: result.raw,
+      ...(subpath ? { specifier: pkg } : {}),
       mutable: result.type !== "version",
     }
   } catch {
     return
   }
+}
+
+function registrySubpath(pkg: string) {
+  if (pkg.includes("#") || pkg.includes("\\")) return
+  const parts = pkg.split("/")
+  const count = pkg.startsWith("@") ? 2 : 1
+  if (parts.length <= count) return
+  const name = parts.slice(0, count).join("/")
+  if (!pkg.startsWith("@") && (name.includes(":") || name.includes("@"))) return
+  return { name }
 }
 
 function key(pkg: string, target: Target | undefined) {
@@ -202,6 +223,7 @@ const layer = Layer.effect(
       return {
         directory: dir,
         name,
+        ...(target?.type === "registry" && target.specifier ? { specifier: target.specifier } : {}),
         ...(version ? { version } : {}),
         ...(revision ? { revision } : {}),
       }
@@ -269,7 +291,12 @@ const layer = Layer.effect(
       const root = yield* fs.realPath(dir).pipe(Effect.mapError((cause) => new InstallFailedError({ dir, cause })))
       const staging = path.join(root, `.staging-${startedAt}-${randomUUID()}`)
       const staged = yield* Effect.gen(function* () {
-        const tree = yield* reify({ dir: staging, config: dir, add: [pkg], update })
+        const tree = yield* reify({
+          dir: staging,
+          config: dir,
+          add: [target?.type === "registry" ? target.install : pkg],
+          update,
+        })
         const installed = tree.edgesOut.values().next().value?.to
         const installedNameValue = installed?.name ?? (yield* installedName(pkg, staging, target))
         const result = yield* metadata(
@@ -375,7 +402,9 @@ const layer = Layer.effect(
       const options = { ...(yield* NpmConfig.load(root)), preferOnline: true, noGitRevCache: true, ignoreScripts: true }
       const available = yield* Effect.tryPromise({
         try: async () =>
-          target.type === "git" ? gitRevision(await resolve(pkg, options)) : (await manifest(pkg, options)).version,
+          target.type === "git"
+            ? gitRevision(await resolve(pkg, options))
+            : (await manifest(target.install, options)).version,
         catch: (cause) => new InstallFailedError({ dir: root, cause }),
       })
       if (!available)
