@@ -39,7 +39,22 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     const svc = yield* ProviderAuth.Service
     const authStore = yield* Auth.Service
 
-    const list = Effect.fn("ProviderHttpApi.list")(function* () {
+    const list = Effect.fn("ProviderHttpApi.list")(function* (ctx: { query: { connected?: boolean } }) {
+      // `connected=true` answers from the connected providers alone and never touches the
+      // models.dev catalog or the config filter. The caller asked for what is usable right
+      // now and fetches the catalog separately.
+      if (ctx.query.connected) {
+        const providers = yield* provider.list()
+        return {
+          // Every entry here is connected by construction, so `connected` is the full key set.
+          // The full response additionally reports catalog providers that only have stored
+          // credentials; those need the catalog and appear once the caller fetches it.
+          all: Object.values(providers).map(Provider.toPublicInfo),
+          default: Provider.defaultModelIDs(providers),
+          connected: Object.keys(providers),
+        }
+      }
+
       const config = yield* cfg.get()
       const all = yield* ModelsDev.Service.use((s) => s.get())
       const disabled = new Set(config.disabled_providers ?? [])

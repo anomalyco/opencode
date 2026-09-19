@@ -3302,6 +3302,7 @@ export class Provider extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      connected?: boolean | "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3312,6 +3313,7 @@ export class Provider extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "connected" },
           ],
         },
       ],
