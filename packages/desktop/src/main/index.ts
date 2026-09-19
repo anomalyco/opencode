@@ -99,6 +99,20 @@ function emitDeepLinks(urls: string[]) {
   if (win) sendDeepLinks(win, urls)
 }
 
+// MUC Harness: 后台启动（窗口从未聚焦）时 getLastFocusedWindow() 为 null，
+// 深链只进了 pendingDeepLinks，渲染层仅在启动时消费一次 → 一次性授权码会丢。
+// 任意窗口聚焦后补发；渲染层尚未加载完成时短暂重试。
+const flushPendingDeepLinks = (attempts: number) => {
+  if (pendingDeepLinks.length === 0) return
+  const win = getLastFocusedWindow()
+  if (win && !win.isDestroyed() && !win.webContents.isLoadingMainFrame()) {
+    logger.log("flushing pending deep links", { count: pendingDeepLinks.length })
+    sendDeepLinks(win, pendingDeepLinks.splice(0))
+  } else if (attempts > 0) {
+    setTimeout(() => flushPendingDeepLinks(attempts - 1), 1000).unref?.()
+  }
+}
+
 async function killSidecar() {
   if (!server) return
   const current = server
@@ -234,6 +248,9 @@ const main = Effect.gen(function* () {
     logger.log("deep link received via open-url", { kind: url.split("?")[0] })
     emitDeepLinks([url])
   })
+
+  // MUC Harness: 窗口聚焦（含 open-url 激活应用后）补发未送达的深链
+  app.on("browser-window-focus", () => flushPendingDeepLinks(5))
 
   // MUC Harness / Windows 冷启动：应用未运行时点击 muc:// 链接，协议 URL 通过
   // 首实例 argv 传入（macOS 走 open-url 事件不受影响）。窗口尚未创建时
