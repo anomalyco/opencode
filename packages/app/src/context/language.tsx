@@ -111,6 +111,7 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   tg: () => merge(import("@/i18n/tg"), import("@opencode-ai/ui/i18n/tg")),
   tk: () => merge(import("@/i18n/tk"), import("@opencode-ai/ui/i18n/tk")),
   uz: () => merge(import("@/i18n/uz"), import("@opencode-ai/ui/i18n/uz")),
+  gl: () => merge(import("@/i18n/gl"), import("@opencode-ai/ui/i18n/gl")),
 }
 
 function loadDict(locale: Locale) {
