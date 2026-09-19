@@ -493,6 +493,38 @@ EOF`
     }),
   )
 
+  it.instance("parses heredoc-wrapped patch with non-word delimiters", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+      const patchText = `cat <<'PATCH-1'
+*** Begin Patch
+*** Add File: heredoc_dash.txt
++dash delimiter
+*** End Patch
+PATCH-1`
+
+      yield* execute({ patchText }, ctx)
+      expect(yield* readText(path.join(test.directory, "heredoc_dash.txt"))).toBe("dash delimiter\n")
+    }),
+  )
+
+  it.instance("parses heredoc-wrapped patch with unquoted non-word delimiters", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+      const patchText = `cat <<PATCH-1
+*** Begin Patch
+*** Add File: heredoc_unquoted_dash.txt
++unquoted dash delimiter
+*** End Patch
+PATCH-1`
+
+      yield* execute({ patchText }, ctx)
+      expect(yield* readText(path.join(test.directory, "heredoc_unquoted_dash.txt"))).toBe("unquoted dash delimiter\n")
+    }),
+  )
+
   it.instance("matches with trailing whitespace differences", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
