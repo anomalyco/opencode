@@ -80,6 +80,80 @@ const scenarios: Scenario[] = [
     ),
   http.protected.get("/global/config", "global.config.get").global().json(),
   http.protected
+    .get("/global/storage", "storage.status")
+    .global()
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.databaseBytes === "number", "storage status should report database bytes")
+      check(typeof body.walBytes === "number", "storage status should report WAL bytes")
+      check(typeof body.reusableBytes === "number", "storage status should report reusable bytes")
+    }),
+  http.protected
+    .get("/global/storage/progress", "storage.progress")
+    .global()
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.phase === "string", "storage progress should report a phase")
+      check(typeof body.completed === "number", "storage progress should report completed work")
+      check(typeof body.workers === "number", "storage progress should report workers")
+    }),
+  http.protected
+    .post("/global/storage/analyze", "storage.analyze")
+    .global()
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.candidates === "number", "storage analysis should report candidates")
+      check(typeof body.payloadBytesReclaimable === "number", "storage analysis should report reclaimable payload")
+    }),
+  http.protected
+    .post("/global/storage/backup", "storage.backup")
+    .global()
+    .mutating()
+    .at(() => ({ path: "/global/storage/backup", body: { confirmed: true } }))
+    .json(200, (body) => {
+      object(body)
+      check(body.integrity === "ok", "storage backup should pass integrity verification")
+      check(typeof body.path === "string", "storage backup should return its path")
+    }),
+  http.protected
+    .post("/global/storage/backup", "storage.backup.invalid")
+    .global()
+    .at(() => ({ path: "/global/storage/backup", body: { confirmed: false } }))
+    .status(400),
+  http.protected
+    .post("/global/storage/compact", "storage.compact")
+    .global()
+    .mutating()
+    .at(() => ({ path: "/global/storage/compact", body: { confirmed: true } }))
+    .json(200, (body) => {
+      object(body)
+      object(body.backup)
+      check(body.backup.integrity === "ok", "event compaction should create a verified backup")
+      check(typeof body.rewritten === "number", "event compaction should report rewritten events")
+    }),
+  http.protected
+    .post("/global/storage/checkpoint", "storage.checkpoint")
+    .global()
+    .mutating()
+    .at(() => ({ path: "/global/storage/checkpoint", body: { confirmed: true } }))
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.busy === "number", "WAL checkpoint should report busy state")
+      check(typeof body.checkpointedFrames === "number", "WAL checkpoint should report checkpointed frames")
+    }),
+  http.protected
+    .post("/global/storage/vacuum", "storage.vacuum")
+    .global()
+    .mutating()
+    .at(() => ({ path: "/global/storage/vacuum", body: { confirmed: true } }))
+    .json(200, (body) => {
+      object(body)
+      object(body.backup)
+      check(body.backup.integrity === "ok", "vacuum should create a verified backup")
+      check(typeof body.bytesReclaimed === "number", "vacuum should report reclaimed bytes")
+      check(typeof body.checkpointBusy === "number", "vacuum should report final checkpoint state")
+    }),
+  http.protected
     .patch("/global/config", "global.config.update")
     .global()
     .seeded(() =>
