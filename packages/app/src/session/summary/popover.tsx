@@ -3,16 +3,30 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { Show, type ParentProps } from "solid-js"
+import { createResource, Show, type ParentProps } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useData, useServer } from "@/runtime/server/current"
 import { useCommand } from "@/shell/commands/command"
+import { useSummaryStatus } from "./status"
 import "./summary.css"
 
 export function SummaryPopover(
-  props: ParentProps<{ active?: boolean; open: boolean; onOpenChange: (open: boolean) => void }>,
+  props: ParentProps<{ active?: boolean; directory?: string; open: boolean; onOpenChange: (open: boolean) => void }>,
 ) {
   const language = useLanguage()
   const command = useCommand()
+  const data = useData()
+  const server = useServer()
+  const status = useSummaryStatus(() => props.directory)
+  createResource(
+    () => {
+      const directory = props.directory
+      if (props.active === false || !directory || server.ctx.sdk.connection.status() !== "connected") return
+      if (data.location.mcp.server.list({ directory }) !== undefined) return
+      return directory
+    },
+    (directory) => data.location.mcp.server.sync({ directory }),
+  )
   // Cached timelines remain mounted; only the visible summary owns the command.
   command.register(() =>
     props.active === false
@@ -45,7 +59,20 @@ export function SummaryPopover(
       >
         <Popover.Trigger
           as={IconButton}
-          icon={<Icon name="window-analytics" />}
+          icon={
+            <span class="session-summary-trigger-icon">
+              <Icon name="window-analytics" />
+              <Show when={status().trigger}>
+                {(trigger) => (
+                  <span
+                    data-slot="status-indicator"
+                    class={`session-summary-trigger-status ${trigger()}`}
+                    aria-hidden="true"
+                  />
+                )}
+              </Show>
+            </span>
+          }
           variant="ghost-muted"
           size="large"
           state={props.open ? "pressed" : undefined}

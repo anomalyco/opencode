@@ -92,7 +92,11 @@ export function NewSessionView(props: {
           data-slot="new-session-summary"
           class="absolute inset-x-0 top-0 z-20 flex h-12 items-center justify-end px-3"
         >
-          <SummaryPopover open={store.summary} onOpenChange={(open) => setStore("summary", open)}>
+          <SummaryPopover
+            directory={props.project.selected() ? props.mcp.directory() : undefined}
+            open={store.summary}
+            onOpenChange={(open) => setStore("summary", open)}
+          >
             <Suspense>
               <NewSessionSummary
                 project={props.project.selected()}
