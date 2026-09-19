@@ -242,6 +242,7 @@ export function SessionSidePanel(props: {
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
   const closeTabKeybind = createMemo(() => command.keybindParts("tab.close"))
+  const reviewToggleKeybind = createMemo(() => command.keybindParts("review.toggle"))
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
   })
@@ -689,6 +690,28 @@ export function SessionSidePanel(props: {
                             onClick={(event) => event.stopPropagation()}
                           >
                             <OpenInAppV2 directory={projectDirectory} />
+                            <TooltipV2
+                              value={
+                                <>
+                                  {language.t("common.close")}
+                                  <Show when={reviewToggleKeybind().length > 0}>
+                                    <KeybindV2 keys={reviewToggleKeybind()} variant="neutral" />
+                                  </Show>
+                                </>
+                              }
+                              placement="bottom"
+                              class="flex items-center"
+                            >
+                              <IconButtonV2
+                                type="button"
+                                variant="ghost-muted"
+                                size="large"
+                                icon={<Icon name="close-small" />}
+                                onClick={() => view().reviewPanel.close()}
+                                aria-label={language.t("common.close")}
+                                aria-controls="review-panel"
+                              />
+                            </TooltipV2>
                           </div>
                         </div>
 
