@@ -68,6 +68,9 @@
     min-width: 0;
     color: var(--text-weaker);
     font-weight: var(--font-weight-regular);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .error-card {
