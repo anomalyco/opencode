@@ -63,7 +63,7 @@ import { PromptInputV2Composer, usePromptInputV2Controller } from "@/components/
 import { useSettingsCommand } from "@/components/settings-dialog"
 import { setCursorPosition } from "@/components/prompt-input/editor-dom"
 import { promptLength } from "@/components/prompt-input/history"
-import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
+import { type FollowupDelivery, type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import {
   createPromptInputController,
   createSessionComposerController,
@@ -1751,11 +1751,17 @@ export default function Page() {
     return followupMutation.variables?.id
   })
 
+  // Queueing is available while the session is busy and the composer is usable.
+  // The final queue-vs-steer routing uses the delivery (Enter follows the
+  // follow-up setting, Ctrl+Enter forces a steer), resolved in the submit path.
   const queueEnabled = createMemo(() => {
     const id = params.id
     if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
+    if (!busy(id) || composer.blocked() || isChildSession()) return false
+    return true
   })
+
+  const getDelivery = (): FollowupDelivery => settings.general.followup()
 
   const followupText = (item: FollowupDraft) => {
     const text = item.prompt
@@ -1777,7 +1783,7 @@ export default function Page() {
   const queueFollowup = (draft: FollowupDraft) => {
     setFollowup("items", draft.sessionID, (items) => [
       ...(items ?? []),
-      { id: Identifier.ascending("message"), ...draft },
+      { id: Identifier.ascending("message"), ...draft, delivery: draft.delivery ?? "queue" },
     ])
     setFollowup("failed", draft.sessionID, undefined)
     setFollowup("paused", draft.sessionID, undefined)
@@ -2197,6 +2203,7 @@ export default function Page() {
                       edit={editingFollowup()}
                       onEditLoaded={clearFollowupEdit}
                       shouldQueue={queueEnabled}
+                      getDelivery={getDelivery}
                       onQueue={queueFollowup}
                       onAbort={() => {
                         const id = params.id
@@ -2227,6 +2234,7 @@ export default function Page() {
                       },
                       onEditLoaded: clearFollowupEdit,
                       shouldQueue: queueEnabled,
+                      getDelivery,
                       onQueue: queueFollowup,
                       onAbort: () => {
                         const id = params.id

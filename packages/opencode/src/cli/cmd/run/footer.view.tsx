@@ -407,7 +407,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     if (busy()) {
-      return armed() ? "again to interrupt" : "interrupt"
+      return armed() ? "again to interrupt" : "interrupt · Enter queue · Ctrl+Enter steer"
     }
 
     if (stateStatus().length > 0) {
