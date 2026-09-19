@@ -3,13 +3,14 @@ import { Config } from "@/config/config"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 import { Auth } from "@/auth"
+import { DiscoverError, discoverOpenAICompatibleModels } from "@/provider/discover"
 
 import { mapValues } from "remeda"
 import { Effect, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { ProviderAuthApiError } from "../groups/provider"
+import { DiscoverModelsPayload, DiscoverModelsResult, ProviderAuthApiError } from "../groups/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
 function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R>) {
@@ -107,10 +108,39 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       return true
     })
 
+    const discover = Effect.fnUntraced(function* (ctx: { payload: typeof DiscoverModelsPayload.Type }) {
+      return yield* discoverModels(ctx.payload)
+    })
+
     return handlers
       .handle("list", list)
       .handle("auth", auth)
       .handleRaw("authorize", authorizeRaw)
       .handle("callback", callback)
+      .handle("discover", discover)
   }),
 )
+
+const decodeResult = Schema.decodeSync(DiscoverModelsResult)
+
+const discoverModels = Effect.fnUntraced(function* (input: typeof DiscoverModelsPayload.Type) {
+  const outcome = yield* Effect.promise(async () => {
+    try {
+      const ids = await discoverOpenAICompatibleModels({
+        baseURL: input.baseURL,
+        ...(input.apiKey ? { apiKey: input.apiKey } : {}),
+        ...(input.headers ? { headers: input.headers } : {}),
+        ...(typeof input.timeoutMs === "number" ? { timeoutMs: input.timeoutMs } : {}),
+      })
+      return { ok: true as const, ids }
+    } catch (error) {
+      if (error instanceof DiscoverError) {
+        return error.message
+          ? { ok: false as const, kind: error.kind, message: error.message }
+          : { ok: false as const, kind: error.kind }
+      }
+      return { ok: false as const, kind: "failed" as const }
+    }
+  })
+  return decodeResult(outcome)
+})
