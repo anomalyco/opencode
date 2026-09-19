@@ -249,7 +249,17 @@ export const layer = Layer.effect(
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
-        generation: Object.keys(generation).length === 0 ? undefined : generation,
+        // Always project an output limit: hook override, then model defaults, then route defaults,
+        // then the catalog limit. Without it providers apply their own implicit budget (Bedrock
+        // truncates long adaptive-thinking turns at 4096 output tokens).
+        generation: {
+          ...generation,
+          maxTokens:
+            generation.maxTokens ??
+            model.model.defaults?.generation?.maxTokens ??
+            model.model.route.defaults.generation?.maxTokens ??
+            model.limit.output,
+        },
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
       })
 
