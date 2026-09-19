@@ -163,6 +163,12 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 - `external_directory` — triggered when a tool touches paths outside the project working directory
 - `doom_loop` — triggered when the same tool call repeats 3 times with identical input
 
+Any other key is matched as a wildcard pattern against the underlying tool name — this is how you gate an MCP or custom tool, for example `"mymcp_*": "deny"`. A key that matches no permission above and no tool name parses without error but is never consulted, so it silently does nothing — double-check the key against this list and your installed tools if a rule doesn't seem to take effect.
+
+:::caution
+A common mistake is writing a `"write": {...}` block, expecting it to gate file writes separately from edits. `write` is not a permission key — it parses cleanly but is never consulted. File writes are already covered by `edit`; use that instead.
+:::
+
 ---
 
 ## Defaults
