@@ -1,0 +1,287 @@
+---
+title: Сервер
+description: Взаємодія з сервером opencode через HTTP.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+Команда `opencode serve` запускає безголовий HTTP-сервер, який надає кінцеву точку OpenAPI, яку може використовувати клієнт opencode.
+
+---
+
+### Використання
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### Параметри
+
+| Прапор          | Опис                                 | За замовчуванням |
+| --------------- | ------------------------------------ | ---------------- |
+| `--port`        | Порт для прослуховування             | `4096`           |
+| `--hostname`    | Ім'я хоста для прослуховування       | `127.0.0.1`      |
+| `--mdns`        | Увімкнути mDNS-виявлення             | `false`          |
+| `--mdns-domain` | Власне доменне ім'я для mDNS-сервісу | `opencode.local` |
+| `--cors`        | Додаткові джерела браузера           | `[]`             |
+
+`--cors` можна передавати кілька разів:
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### Автентифікація
+
+Встановіть `OPENCODE_SERVER_PASSWORD` для захисту сервера за допомогою HTTP basic auth. Ім'я користувача за замовчуванням — `opencode`, або встановіть `OPENCODE_SERVER_USERNAME` для його зміни. Це стосується як `opencode serve`, так і `opencode web`.
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### Як це працює
+
+Коли ви запускаєте `opencode`, він запускає TUI та сервер. TUI є
+клієнтом, який спілкується з сервером. Сервер надає кінцеву точку зі специфікацією OpenAPI 3.1.
+Ця кінцева точка також використовується для генерації [SDK](/docs/sdk).
+
+:::tip
+Використовуйте сервер opencode для програмної взаємодії з opencode.
+:::
+
+Така архітектура дозволяє opencode підтримувати кількох клієнтів і дає вам змогу взаємодіяти з opencode програмно.
+
+Ви можете запустити `opencode serve`, щоб запустити окремий сервер. Якщо у вас
+запущено TUI opencode, `opencode serve` запустить новий сервер.
+
+---
+
+#### Підключення до існуючого сервера
+
+Коли ви запускаєте TUI, він випадковим чином призначає порт та ім'я хоста. Натомість ви можете передати прапорці `--hostname` та `--port` [flags](/docs/cli). Потім використовуйте це для підключення до його сервера.
+
+Кінцева точка [`/tui`](#tui) може використовуватися для керування TUI через сервер. Наприклад, ви можете попередньо заповнити або запустити запит. Це налаштування використовується плагінами OpenCode [IDE](/docs/ide).
+
+---
+
+## Специфікація
+
+Сервер публікує специфікацію OpenAPI 3.1, яку можна переглянути за адресою:
+
+```
+http://<hostname>:<port>/doc
+```
+
+Наприклад, `http://localhost:4096/doc`. Використовуйте специфікацію для генерації клієнтів або перегляду типів запитів і відповідей. Або перегляньте її в оглядачі Swagger.
+
+---
+
+## API
+
+Сервер opencode надає наступні API.
+
+---
+
+### Global
+
+| Метод  | Шлях              | Опис                              | Відповідь                            |
+| ------ | ----------------- | --------------------------------- | ------------------------------------ |
+| `GET`  | `/global/health`  | Отримати стан та версію сервера   | `{ healthy: true, version: string }` |
+| `GET`  | `/global/event`   | Отримати глобальні події (SSE)    | Потік подій                          |
+
+---
+
+### Project
+
+| Метод  | Шлях                | Опис                   | Відповідь                                      |
+| ------ | ------------------- | ---------------------- | ---------------------------------------------- |
+| `GET`  | `/project`          | Список усіх проєктів   | <a href={typesUrl}><code>Project[]</code></a>  |
+| `GET`  | `/project/current`  | Отримати поточний проєкт | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+### Path & VCS
+
+| Метод  | Шлях    | Опис                                   | Відповідь                                   |
+| ------ | ------- | -------------------------------------- | ------------------------------------------- |
+| `GET`  | `/path` | Отримати поточний шлях                 | <a href={typesUrl}><code>Path</code></a>    |
+| `GET`  | `/vcs`  | Отримати VCS-інформацію для проєкту    | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### Instance
+
+| Метод  | Шлях                 | Опис                       | Відповідь  |
+| ------ | -------------------- | -------------------------- | ---------- |
+| `POST` | `/instance/dispose`  | Видалити поточний екземпляр | `boolean`  |
+
+---
+
+### Config
+
+| Метод   | Шлях                 | Опис                                   | Відповідь                                                                                |
+| ------- | -------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`            | Отримати інформацію про конфігурацію   | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`            | Оновити конфігурацію                   | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers`  | Список провайдерів та моделей за замовчуванням | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+
+---
+
+### Provider
+
+| Метод  | Шлях                              | Опис                               | Відповідь                                                                            |
+| ------ | --------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------ |
+| `GET`  | `/provider`                       | Список усіх провайдерів            | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }`  |
+| `GET`  | `/provider/auth`                  | Отримати методи автентифікації     | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`            |
+| `POST` | `/provider/{id}/oauth/authorize`  | Авторизувати провайдера через OAuth | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                        |
+| `POST` | `/provider/{id}/oauth/callback`   | Обробити OAuth-зворотний виклик    | `boolean`                                                                            |
+
+---
+
+### Sessions
+
+| Метод   | Шлях                                      | Опис                             | Примітки                                                                             |
+| ------- | ----------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------ |
+| `GET`   | `/session`                                | Список усіх сесій                | Повертає <a href={typesUrl}><code>Session[]</code></a>                               |
+| `POST`  | `/session`                                | Створити нову сесію              | body: `{ parentID?, title? }`, повертає <a href={typesUrl}><code>Session</code></a>  |
+| `GET`   | `/session/status`                         | Статус сесій для всіх сесій      | Повертає `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`           |
+| `GET`   | `/session/:id`                            | Отримати деталі сесії            | Повертає <a href={typesUrl}><code>Session</code></a>                                 |
+| `DELETE`| `/session/:id`                            | Видалити сесію та всі її дані    | Повертає `boolean`                                                                    |
+| `PATCH` | `/session/:id`                            | Оновити властивості сесії        | body: `{ title? }`, повертає <a href={typesUrl}><code>Session</code></a>             |
+| `GET`   | `/session/:id/children`                   | Отримати дочірні сесії           | Повертає <a href={typesUrl}><code>Session[]</code></a>                               |
+| `GET`   | `/session/:id/todo`                       | Отримати список завдань сесії    | Повертає <a href={typesUrl}><code>Todo[]</code></a>                                  |
+| `POST`  | `/session/:id/init`                       | Проаналізувати додаток та створити `AGENTS.md` | body: `{ messageID, providerID, modelID }`, повертає `boolean`        |
+| `POST`  | `/session/:id/fork`                       | Розгалузити існуючу сесію        | body: `{ messageID? }`, повертає <a href={typesUrl}><code>Session</code></a>         |
+| `POST`  | `/session/:id/abort`                      | Перервати запущену сесію         | Повертає `boolean`                                                                    |
+| `POST`  | `/session/:id/share`                      | Поділитися сесією                | Повертає <a href={typesUrl}><code>Session</code></a>                                 |
+| `DELETE`| `/session/:id/share`                      | Скасувати спільний доступ        | Повертає <a href={typesUrl}><code>Session</code></a>                                 |
+| `GET`   | `/session/:id/diff`                       | Отримати diff для цієї сесії     | query: `messageID?`, повертає <a href={typesUrl}><code>FileDiff[]</code></a>         |
+| `POST`  | `/session/:id/summarize`                  | Підсумувати сесію                | body: `{ providerID, modelID }`, повертає `boolean`                                  |
+| `POST`  | `/session/:id/revert`                     | Відкотити повідомлення           | body: `{ messageID, partID? }`, повертає `boolean`                                   |
+| `POST`  | `/session/:id/unrevert`                   | Відновити всі відкочені повідомлення | Повертає `boolean`                                                               |
+| `POST`  | `/session/:id/permissions/:permissionID`  | Відповісти на запит дозволу      | body: `{ response, remember? }`, повертає `boolean`                                  |
+
+---
+
+### Messages
+
+| Метод  | Шлях                               | Опис                                   | Примітки                                                                                                                                                                 |
+| ------ | ---------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/session/:id/message`             | Список повідомлень у сесії             | query: `limit?`, повертає `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                           |
+| `POST` | `/session/:id/message`             | Надіслати повідомлення та дочекатися відповіді | body: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, повертає `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `GET`  | `/session/:id/message/:messageID`  | Отримати деталі повідомлення           | Повертає `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                              |
+| `POST` | `/session/:id/prompt_async`        | Надіслати повідомлення асинхронно (без очікування) | body: те саме, що `/session/:id/message`, повертає `204 No Content`                                                                                                    |
+| `POST` | `/session/:id/command`             | Виконати слеш-команду                   | body: `{ messageID?, agent?, model?, command, arguments }`, повертає `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                  |
+| `POST` | `/session/:id/shell`               | Виконати команду оболонки               | body: `{ agent, model?, command }`, повертає `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                          |
+
+---
+
+### Commands
+
+| Метод  | Шлях        | Опис                | Відповідь                                      |
+| ------ | ----------- | ------------------- | --------------------------------------------- |
+| `GET`  | `/command`  | Список усіх команд  | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### Files
+
+| Метод  | Шлях                      | Опис                               | Відповідь                                                                                   |
+| ------ | ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET`  | `/find?pattern=<pat>`     | Пошук тексту у файлах              | Масив об'єктів збігів з `path`, `lines`, `line_number`, `absolute_offset`, `submatches`    |
+| `GET`  | `/find/file?query=<q>`    | Пошук файлів і каталогів за назвою | `string[]` (шляхи)                                                                          |
+| `GET`  | `/find/symbol?query=<q>`  | Пошук символів робочої області     | <a href={typesUrl}><code>Symbol[]</code></a>                                               |
+| `GET`  | `/file?path=<path>`       | Список файлів і каталогів          | <a href={typesUrl}><code>FileNode[]</code></a>                                             |
+| `GET`  | `/file/content?path=<p>`  | Читання файлу                      | <a href={typesUrl}><code>FileContent</code></a>                                            |
+| `GET`  | `/file/status`            | Статус відстежуваних файлів        | <a href={typesUrl}><code>File[]</code></a>                                                 |
+
+#### Параметри запиту `/find/file`
+
+- `query` (обов'язкове) — рядок пошуку (нечіткий збіг)
+- `type` (необов'язкове) — обмежити результати до `"file"` або `"directory"`
+- `directory` (необов'язкове) — перевизначити корінь проєкту для пошуку
+- `limit` (необов'язкове) — максимальна кількість результатів (1–200)
+- `dirs` (необов'язкове) — застарілий прапорець (`"false"` повертає лише файли)
+
+---
+
+### Tools (Експериментальні)
+
+| Метод  | Шлях                                         | Опис                                        | Відповідь                                    |
+| ------ | -------------------------------------------- | ------------------------------------------- | -------------------------------------------- |
+| `GET`  | `/experimental/tool/ids`                     | Список усіх ідентифікаторів інструментів     | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`  | `/experimental/tool?provider=<p>&model=<m>`  | Список інструментів з JSON-схемами для моделі | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP, Форматери та MCP
+
+| Метод  | Шлях          | Опис                     | Відповідь                                                |
+| ------ | ------------- | ------------------------ | -------------------------------------------------------- |
+| `GET`  | `/lsp`        | Статус LSP-сервера       | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter`  | Статус форматера         | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`        | Статус MCP-сервера       | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`        | Додати MCP-сервер динамічно | body: `{ name, config }`, повертає об'єкт статусу MCP  |
+
+---
+
+### Agents
+
+| Метод  | Шлях      | Опис                     | Відповідь                                   |
+| ------ | --------- | ------------------------ | ------------------------------------------- |
+| `GET`  | `/agent`  | Список усіх доступних агентів | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### Логування
+
+| Метод  | Шлях    | Опис                                                       | Відповідь  |
+| ------ | ------- | ---------------------------------------------------------- | ---------- |
+| `POST` | `/log`  | Запис у журнал. Тіло: `{ service, level, message, extra? }` | `boolean`  |
+
+---
+
+### TUI
+
+| Метод  | Шлях                     | Опис                                    | Відповідь              |
+| ------ | ------------------------ | --------------------------------------- | ---------------------- |
+| `POST` | `/tui/append-prompt`     | Додати текст до запиту                  | `boolean`              |
+| `POST` | `/tui/open-help`         | Відкрити довідку                        | `boolean`              |
+| `POST` | `/tui/open-sessions`     | Відкрити вибір сесій                    | `boolean`              |
+| `POST` | `/tui/open-themes`       | Відкрити вибір тем                      | `boolean`              |
+| `POST` | `/tui/open-models`       | Відкрити вибір моделей                  | `boolean`              |
+| `POST` | `/tui/submit-prompt`     | Надіслати поточний запит                | `boolean`              |
+| `POST` | `/tui/clear-prompt`      | Очистити запит                          | `boolean`              |
+| `POST` | `/tui/execute-command`   | Виконати команду (`{ command }`)        | `boolean`              |
+| `POST` | `/tui/show-toast`        | Показати сповіщення (`{ title?, message, variant }`) | `boolean` |
+| `GET`  | `/tui/control/next`      | Очікувати наступний запит керування     | Об'єкт запиту керування |
+| `POST` | `/tui/control/response`  | Відповісти на запит керування (`{ body }`) | `boolean`           |
+
+---
+
+### Auth
+
+| Метод  | Шлях         | Опис                                                           | Відповідь  |
+| ------ | ------------ | -------------------------------------------------------------- | ---------- |
+| `PUT`  | `/auth/:id`  | Встановити облікові дані. Тіло має відповідати схемі провайдера | `boolean`  |
+
+---
+
+### Events
+
+| Метод  | Шлях      | Опис                                                                        | Відповідь                 |
+| ------ | --------- | --------------------------------------------------------------------------- | ------------------------- |
+| `GET`  | `/event`  | Потік подій від сервера. Перша подія — `server.connected`, далі події шини  | Потік подій від сервера   |
+
+---
+
+### Docs
+
+| Метод  | Шлях    | Опис                     | Відповідь                        |
+| ------ | ------- | ------------------------ | -------------------------------- |
+| `GET`  | `/doc`  | Специфікація OpenAPI 3.1 | HTML-сторінка зі специфікацією   |
