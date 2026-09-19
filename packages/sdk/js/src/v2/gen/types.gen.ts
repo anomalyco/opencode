@@ -69,6 +69,7 @@ export type Event =
   | EventQuestionV2Rejected
   | EventTodoUpdated
   | EventLspUpdated
+  | EventCommandUpdated
   | EventPermissionAsked
   | EventPermissionReplied
   | EventTuiPromptAppend2
@@ -1369,6 +1370,13 @@ export type GlobalEvent = {
     | {
         id: string
         type: "lsp.updated"
+        properties: {
+          [key: string]: unknown
+        }
+      }
+    | {
+        id: string
+        type: "command.updated"
         properties: {
           [key: string]: unknown
         }
@@ -2920,6 +2928,7 @@ export type V2Event =
   | QuestionV2Rejected
   | TodoUpdated
   | LspUpdated
+  | CommandUpdated
   | PermissionAsked
   | PermissionReplied
   | TuiPromptAppend
@@ -5696,6 +5705,23 @@ export type LspUpdated = {
   }
 }
 
+export type CommandUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "command.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    [key: string]: unknown
+  }
+}
+
 export type PermissionAsked = {
   id: string
   metadata?: {
@@ -6854,6 +6880,14 @@ export type EventTodoUpdated = {
 export type EventLspUpdated = {
   id: string
   type: "lsp.updated"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventCommandUpdated = {
+  id: string
+  type: "command.updated"
   properties: {
     [key: string]: unknown
   }

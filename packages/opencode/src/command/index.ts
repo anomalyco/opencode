@@ -3,7 +3,9 @@ import path from "path"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance-context"
-import { Effect, Layer, Context, Schema } from "effect"
+import { CommandEvent } from "@opencode-ai/schema/command-event"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { Effect, Layer, Context, Schema, Deferred } from "effect"
 import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
@@ -13,6 +15,8 @@ import { LegacyEvent } from "@opencode-ai/schema/legacy-event"
 
 type State = {
   commands: Record<string, Info>
+  // Resolves once the background MCP prompt merge settles, successfully or not.
+  mcpSettled: Deferred.Deferred<void, never>
 }
 
 export const Event = {
@@ -51,6 +55,8 @@ export const Default = {
 export interface Interface {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
   readonly list: () => Effect.Effect<Info[]>
+  /** Resolves once MCP prompts have settled; file-based commands never wait on it. */
+  readonly ready: () => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Command") {}
@@ -61,6 +67,7 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const mcp = yield* MCP.Service
     const skill = yield* Skill.Service
+    const events = yield* EventV2Bridge.Service
 
     const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
       const cfg = yield* config.get()
@@ -102,35 +109,6 @@ const layer = Layer.effect(
         }
       }
 
-      for (const [name, prompt] of Object.entries(yield* mcp.prompts())) {
-        commands[name] = {
-          name,
-          source: "mcp",
-          description: prompt.description,
-          get template() {
-            return bridge.promise(
-              mcp
-                .getPrompt(
-                  prompt.client,
-                  prompt.name,
-                  prompt.arguments
-                    ? Object.fromEntries(prompt.arguments.map((argument, i) => [argument.name, `$${i + 1}`]))
-                    : {},
-                )
-                .pipe(
-                  Effect.map(
-                    (template) =>
-                      template?.messages
-                        .map((message) => (message.content.type === "text" ? message.content.text : ""))
-                        .join("\n") || "",
-                  ),
-                ),
-            )
-          },
-          hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
-        }
-      }
-
       for (const item of yield* skill.all()) {
         if (commands[item.name]) continue
         const dir = item.location === "<built-in>" ? undefined : path.dirname(item.location)
@@ -151,8 +129,60 @@ const layer = Layer.effect(
         }
       }
 
+      // MCP prompts block on every server connecting (seconds each). Load
+      // file-based commands now and merge MCP prompts in the background,
+      // publishing CommandEvent.Updated so clients re-fetch; MCP keeps its
+      // old name-precedence override.
+      const mcpSettled = yield* Deferred.make<void, never>()
+      const mergeMcpPrompts = Effect.fn("Command.mergeMcpPrompts")(function* () {
+        yield* Effect.ensuring(
+          Effect.gen(function* () {
+            const prompts = yield* mcp.prompts()
+            for (const [name, prompt] of Object.entries(prompts)) {
+              commands[name] = {
+                name,
+                source: "mcp",
+                description: prompt.description,
+                get template() {
+                  return bridge.promise(
+                    mcp
+                      .getPrompt(
+                        prompt.client,
+                        prompt.name,
+                        prompt.arguments
+                          ? Object.fromEntries(prompt.arguments.map((argument, i) => [argument.name, `$${i + 1}`]))
+                          : {},
+                      )
+                      .pipe(
+                        Effect.map(
+                          (template) =>
+                            template?.messages
+                              .map((message) => (message.content.type === "text" ? message.content.text : ""))
+                              .join("\n") || "",
+                        ),
+                      ),
+                  )
+                },
+                hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
+              }
+            }
+            if (Object.keys(prompts).length > 0) yield* events.publish(CommandEvent.Updated, {})
+          }),
+          // Settle even on failure so `ready()` awaiters never hang.
+          Deferred.succeed(mcpSettled, undefined),
+        )
+      })
+      yield* mergeMcpPrompts().pipe(
+        Effect.catchCause((cause) => Effect.logWarning("Command MCP prompt merge failed", { cause })),
+        Effect.forkScoped,
+      )
+      // Also settle from the entry scope in case the fiber is interrupted
+      // before its `ensuring` finalizer registers; double-succeed is a no-op.
+      yield* Effect.addFinalizer(() => Deferred.succeed(mcpSettled, undefined))
+
       return {
         commands,
+        mcpSettled,
       }
     })
 
@@ -168,10 +198,19 @@ const layer = Layer.effect(
       return Object.values(s.commands)
     })
 
-    return Service.of({ get, list })
+    const ready = Effect.fn("Command.ready")(function* () {
+      const s = yield* InstanceState.get(state)
+      return yield* Deferred.await(s.mcpSettled)
+    })
+
+    return Service.of({ get, list, ready })
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [Config.node, MCP.node, Skill.node] })
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Config.node, MCP.node, Skill.node, EventV2Bridge.node],
+})
 
 export * as Command from "."
