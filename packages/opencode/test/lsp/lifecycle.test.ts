@@ -87,7 +87,20 @@ describe("LSP service lifecycle", () => {
   it.instance("workspaceSymbol() returns empty array with no clients", () =>
     LSP.Service.use((lsp) =>
       Effect.gen(function* () {
-        const result = yield* lsp.workspaceSymbol("test")
+        const result = yield* lsp.workspaceSymbol("test", path.join((yield* TestInstance).directory, "test.ts"))
+        expect(Array.isArray(result)).toBe(true)
+        expect(result.length).toBe(0)
+      }),
+    ),
+  )
+
+  it.instance("workspaceSymbol() returns empty array for file outside instance", () =>
+    LSP.Service.use((lsp) =>
+      Effect.gen(function* () {
+        const result = yield* lsp.workspaceSymbol(
+          "test",
+          path.join((yield* TestInstance).directory, "..", "outside.ts"),
+        )
         expect(Array.isArray(result)).toBe(true)
         expect(result.length).toBe(0)
       }),
