@@ -7,6 +7,7 @@ import { serviceFixture } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
 
 const ensure = accelerate(Service.ensure)
+const stop = accelerate(Service.stop)
 
 test("a concurrent same-version start cannot invalidate a resolved endpoint", async () => {
   await using fixture = await serviceFixture()
@@ -161,6 +162,22 @@ test("signals an unresponsive registered service process", async () => {
   expect(await Bun.file(registration).exists()).toBe(false)
 })
 
+test("stop outlives a server that unregisters before releasing its port", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("lingering", "5000")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+
+  await run(stop({ file: registration }))
+
+  expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+  expect(() => process.kill(original.pid, 0)).toThrow()
+  await expectPortAvailable(Number(new URL(original.url).port))
+  expect(await Bun.file(registration).exists()).toBe(false)
+  await existing.exited
+}, 15_000)
+
 test("signals an incompatible service before starting its replacement", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
@@ -301,4 +318,9 @@ function run<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
 
 async function status(url: string) {
   return fetch(new URL("/api/info", url), { signal: AbortSignal.timeout(1_000) }).then((response) => response.json())
+}
+
+async function expectPortAvailable(port: number) {
+  const server = Bun.serve({ port, fetch: () => new Response() })
+  await server.stop(true)
 }

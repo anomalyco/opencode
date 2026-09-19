@@ -150,7 +150,7 @@ export const stop = Effect.fn("service.stop")(function* (options: StopOptions = 
       PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout),
     )
   else yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-  if (info !== undefined) yield* terminate(info, options, defaultEnsureTiming)
+  if (info !== undefined) yield* terminate(info, options, ensureTiming(options))
 })
 
 function fallback() {
@@ -291,9 +291,9 @@ const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly f
   if (current === undefined || !same(current, info)) return
   yield* signal(info.pid, "SIGTERM")
   const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
+  // A gracefully stopping server may remove its registration before it releases its port, so only
+  // the exact process we signalled can tell us when it is safe for a restart to continue.
   if (Option.isNone(done)) {
-    const latest = yield* read(options.file)
-    if (latest === undefined || !same(latest, info)) return
     yield* signal(info.pid, "SIGKILL")
     yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
   }

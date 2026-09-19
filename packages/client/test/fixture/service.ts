@@ -1,4 +1,4 @@
-import { appendFile, rename, writeFile } from "node:fs/promises"
+import { appendFile, rename, rm, writeFile } from "node:fs/promises"
 
 const [registration, mode, delay] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
@@ -98,6 +98,11 @@ await rename(registration + ".tmp", registration)
 
 async function shutdown(signal?: NodeJS.Signals) {
   if (signal !== undefined) await writeFile(registration + ".signal", signal)
+  // A lingering server removes its registration first and keeps its port while it winds down.
+  if (mode === "lingering") {
+    await rm(registration, { force: true })
+    await Bun.sleep(Number(delay))
+  }
   server.stop(true)
   process.exit()
 }
