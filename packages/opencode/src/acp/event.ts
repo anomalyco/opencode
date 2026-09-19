@@ -1,4 +1,4 @@
-import type { AgentSideConnection } from "@agentclientprotocol/sdk"
+import type { AgentSideConnection, PlanEntry } from "@agentclientprotocol/sdk"
 import type {
   Event,
   EventMessagePartDelta,
@@ -42,6 +42,7 @@ export class Subscription {
   private readonly toolStarts = new Set<string>()
   private readonly connectionWaiters = new Set<() => void>()
   private readonly idleWaiters = new Map<string, Set<ReturnType<typeof signal>>>()
+  private readonly lastPlanFingerprintBySession = new Map<string, string>()
   private readonly permission: ACPPermission.Handler
   private connected = false
   private started = false
@@ -102,6 +103,8 @@ export class Subscription {
         return this.handlePartUpdated(event)
       case "message.part.delta":
         return this.handlePartDelta(event)
+      case "todo.updated":
+        return this.handleTodoUpdated(event)
     }
   }
 
@@ -396,6 +399,46 @@ export class Subscription {
   private clearTool(toolCallId: string) {
     this.toolStarts.delete(toolCallId)
     this.shellSnapshots.delete(toolCallId)
+  }
+
+  private async handleTodoUpdated(event: Extract<Event, { type: "todo.updated" }>) {
+    const sessionId = event.properties.sessionID
+    const session = await Effect.runPromise(this.input.session.tryGet(sessionId))
+    if (!session) return
+    const entries = event.properties.todos.flatMap((todo) => {
+      const entry = toPlanEntry(todo)
+      return entry ? [entry] : []
+    })
+
+    const fingerprint = JSON.stringify(entries)
+    if (this.lastPlanFingerprintBySession.get(sessionId) === fingerprint) return
+    this.lastPlanFingerprintBySession.set(sessionId, fingerprint)
+    await this.input.connection.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: "plan",
+        entries,
+      },
+    })
+  }
+}
+
+// opencode's todowrite allows a "cancelled" status and free-form priority;
+// ACP's PlanEntry only models pending/in_progress/completed and high/medium/low,
+// so collapse cancelled into completed and default unknown priorities to medium.
+function toPlanEntry(raw: unknown): PlanEntry | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const todo = raw as { content?: unknown; status?: unknown; priority?: unknown }
+  if (typeof todo.content !== "string" || todo.content.length === 0) return undefined
+  return {
+    content: todo.content,
+    status:
+      todo.status === "in_progress"
+        ? "in_progress"
+        : todo.status === "completed" || todo.status === "cancelled"
+          ? "completed"
+          : "pending",
+    priority: todo.priority === "high" || todo.priority === "low" ? todo.priority : "medium",
   }
 }
 
