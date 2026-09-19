@@ -1,4 +1,4 @@
-export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/heic", "image/heif"]
 
 export const ACCEPTED_FILE_TYPES = [
   ...ACCEPTED_IMAGE_TYPES,
