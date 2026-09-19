@@ -144,6 +144,55 @@ describe("ConfigV2Compat.lower", () => {
     expect(result.diagnostics.filter((item) => item.kind === "conflict")).toHaveLength(3)
   })
 
+  test("preserves env block in MCP server configuration", () => {
+    const result = ConfigV2Compat.lower({
+      mcp: {
+        acmi: {
+          type: "local",
+          command: ["acmi-mcp"],
+          env: {
+            ACMI_BRIDGE_URL: "https://example.com/bridge",
+            ACMI_BRIDGE_TOKEN: "my-token",
+          },
+        },
+      },
+    })
+    const config = ConfigParse.schema(ConfigV1.Info, result.value, source)
+    expect(config.mcp?.acmi).toEqual({
+      type: "local",
+      command: ["acmi-mcp"],
+      env: {
+        ACMI_BRIDGE_URL: "https://example.com/bridge",
+        ACMI_BRIDGE_TOKEN: "my-token",
+      },
+    })
+  })
+
+  test("preserves env block in enveloped V2 MCP server configuration", () => {
+    const result = ConfigV2Compat.lower({
+      mcp: {
+        servers: {
+          acmi: {
+            type: "local",
+            command: ["acmi-mcp"],
+            env: {
+              ACMI_BRIDGE_URL: "https://example.com/bridge",
+            },
+          },
+        },
+      },
+    })
+    const config = ConfigParse.schema(ConfigV1.Info, result.value, source)
+    expect(config.mcp?.acmi).toEqual({
+      type: "local",
+      command: ["acmi-mcp"],
+      enabled: true,
+      env: {
+        ACMI_BRIDGE_URL: "https://example.com/bridge",
+      },
+    })
+  })
+
   test("does not diagnose ordinary V1 configuration or reject invalid V1 roots early", () => {
     expect(ConfigV2Compat.lower({ snapshot: false, mcp: { existing: { enabled: false } } }).diagnostics).toEqual([])
     expect(ConfigV2Compat.lower({ snapshot: false, snapshots: false }).diagnostics).toEqual([])

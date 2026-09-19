@@ -38,6 +38,7 @@ const Server = Schema.Union([
     command: Schema.Array(Schema.String),
     cwd: Schema.optional(Schema.String),
     environment: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+    env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
     disabled: Schema.optional(Schema.Boolean),
     codemode: Schema.optional(Schema.Boolean),
     timeout: Schema.optional(Timeout),

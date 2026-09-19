@@ -19,6 +19,7 @@ export class Local extends Schema.Class<Local>("ConfigV2.MCP.Local")({
     description: "Working directory for the MCP server process. Relative paths resolve from the workspace directory.",
   }),
   environment: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
+  env: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   disabled: Schema.Boolean.pipe(Schema.optional),
   timeout: Timeout.pipe(Schema.optional),
 }) {}

@@ -143,6 +143,7 @@ function migrateMcp(info: ConfigMCPV1.Info) {
       command: info.command,
       cwd: info.cwd,
       environment: info.environment,
+      env: info.env,
       disabled,
       timeout: info.timeout === undefined ? undefined : { request: info.timeout },
     }
