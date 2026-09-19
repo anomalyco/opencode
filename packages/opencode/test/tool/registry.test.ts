@@ -497,7 +497,10 @@ describe("tool.registry", () => {
         abort: new AbortController().signal,
         messages: [],
         metadata: () => Effect.void,
-        ask: (request) => Effect.sync(() => { requests.push(request) }),
+        ask: (request) =>
+          Effect.sync(() => {
+            requests.push(request)
+          }),
       } satisfies Tool.Context)
       expect(requests).toMatchObject([{ permission: "external_directory", reason: "Read the configuration." }])
     }),

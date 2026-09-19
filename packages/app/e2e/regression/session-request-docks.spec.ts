@@ -110,7 +110,9 @@ test("shows a pending permission dock", async ({ page }, testInfo) => {
 })
 
 for (const reason of [undefined, "", " \n\t", '<img src=x onerror="alert(1)"> **Review changes**']) {
-  test(`renders permission reason ${JSON.stringify(reason) ?? "absent"} as plain text or omits its section`, async ({ page }) => {
+  test(`renders permission reason ${JSON.stringify(reason) ?? "absent"} as plain text or omits its section`, async ({
+    page,
+  }) => {
     await mockServer(page, {
       permissions: [
         {

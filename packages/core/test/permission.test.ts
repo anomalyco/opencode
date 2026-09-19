@@ -130,7 +130,9 @@ describe("PermissionV2", () => {
           : Effect.void,
       )
       yield* Effect.addFinalizer(() => unsubscribe)
-      expect(yield* service.ask(assertion({ reason: "Read source to verify the fix." }))).toMatchObject({ effect: "ask" })
+      expect(yield* service.ask(assertion({ reason: "Read source to verify the fix." }))).toMatchObject({
+        effect: "ask",
+      })
       expect((yield* Deferred.await(asked)).reason).toBe("Read source to verify the fix.")
       expect((yield* service.list())[0]?.reason).toBe("Read source to verify the fix.")
       expect((yield* service.get(PermissionV2.ID.create("per_test")))?.reason).toBe("Read source to verify the fix.")

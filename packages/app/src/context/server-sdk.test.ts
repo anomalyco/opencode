@@ -26,7 +26,13 @@ describe("adaptServerEvent", () => {
 
     expect(adaptServerEvent(current)).toMatchObject({
       type: "permission.asked",
-      properties: { id: "perm_1", sessionID: "ses_1", permission: "read", patterns: ["src/**"], reason: "Read source." },
+      properties: {
+        id: "perm_1",
+        sessionID: "ses_1",
+        permission: "read",
+        patterns: ["src/**"],
+        reason: "Read source.",
+      },
       current,
     })
     const absent = adaptServerEvent({ ...current, data: { ...current.data, reason: undefined } } as OpenCodeEvent)
