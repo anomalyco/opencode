@@ -1,6 +1,6 @@
 export * as SessionMessage from "./session-message.js"
 
-import { Schema } from "effect"
+import { Predicate, Schema } from "effect"
 import { SessionProviderContext } from "./session-provider-context.js"
 import { optional } from "./schema.js"
 import { Content } from "./tool.js"
@@ -222,7 +222,7 @@ export const Assistant = Schema.Struct({
   }).pipe(optional),
   finish: FinishReason.pipe(optional),
   rawFinish: Schema.String.pipe(optional),
-  providerState: ProviderState.pipe(optional),
+  state: ProviderState.pipe(optional),
   cost: Money.USD.pipe(optional),
   tokens: TokenUsage.Info.pipe(optional),
   error: SessionError.Error.pipe(optional),
@@ -318,3 +318,11 @@ export type Info =
   | Compaction
   | Idle
 export type Type = Info["type"]
+
+/** Reads assistant rows stored before `providerState` was renamed to `state`. */
+export function persisted(input: unknown) {
+  if (!Predicate.isObject(input) || input.type !== "assistant" || "state" in input || !("providerState" in input))
+    return input
+  const { providerState, ...rest } = input
+  return { ...rest, state: providerState }
+}

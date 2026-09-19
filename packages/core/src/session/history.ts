@@ -60,7 +60,7 @@ export const latestCompaction = Effect.fnUntraced(function* (
 })
 
 export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
-  decode({ ...row.data, id: row.id, type: row.type }).pipe(
+  decode(SessionMessage.persisted({ ...row.data, id: row.id, type: row.type })).pipe(
     Effect.tap((message) =>
       SessionProviderContext.isCheckpoint(message)
         ? SessionProviderContext.validate(message.providerContext)

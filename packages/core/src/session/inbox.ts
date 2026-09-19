@@ -125,7 +125,7 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
   if (row === undefined) return undefined
   if (row.session_id !== sessionID || (row.type !== "user" && row.type !== "synthetic"))
     return yield* new LifecycleConflict({ id })
-  const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
+  const message = decodeMessage(SessionMessage.persisted({ ...row.data, id: row.id, type: row.type }))
   const base = { id, sessionID, time: { created: message.time.created }, delivery }
   if (message.type === "user")
     return User.make({

@@ -2228,7 +2228,7 @@ export type SessionMessageAssistant = {
   snapshot?: { start?: string; end?: string; files?: Array<string> }
   finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
   rawFinish?: string
-  providerState?: SessionMessageProviderState
+  state?: SessionMessageProviderState
   cost?: MoneyUSD
   tokens?: TokenUsageInfo
   error?: SessionStructuredError
@@ -3180,7 +3180,7 @@ export type SessionImportInput = {
           readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
           readonly finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
           readonly rawFinish?: string
-          readonly providerState?: { readonly [x: string]: JsonValue }
+          readonly state?: { readonly [x: string]: JsonValue }
           readonly cost?: number
           readonly tokens?: {
             readonly input: number
@@ -3497,7 +3497,7 @@ export type SessionImportInput = {
           readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
           readonly finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
           readonly rawFinish?: string
-          readonly providerState?: { readonly [x: string]: JsonValue }
+          readonly state?: { readonly [x: string]: JsonValue }
           readonly cost?: number
           readonly tokens?: {
             readonly input: number
@@ -3814,7 +3814,7 @@ export type SessionImportInput = {
           readonly snapshot?: { readonly start?: string; readonly end?: string; readonly files?: ReadonlyArray<string> }
           readonly finish?: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
           readonly rawFinish?: string
-          readonly providerState?: { readonly [x: string]: JsonValue }
+          readonly state?: { readonly [x: string]: JsonValue }
           readonly cost?: number
           readonly tokens?: {
             readonly input: number

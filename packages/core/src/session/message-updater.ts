@@ -222,7 +222,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 draft.error = undefined
                 draft.finish = undefined
                 draft.rawFinish = undefined
-                draft.providerState = undefined
+                draft.state = undefined
                 draft.time.created = DateTime.makeUnsafe(event.data.started)
                 draft.time.streamed = undefined
                 draft.time.completed = undefined
@@ -263,7 +263,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           draft.time.completed = created
           draft.finish = event.data.finish
           draft.rawFinish = event.data.rawFinish
-          draft.providerState = castDraft(event.data.providerState)
+          draft.state = castDraft(event.data.providerState)
           draft.cost = event.data.cost
           draft.tokens = event.data.tokens
           projectTerminalSnapshot(draft, event)
@@ -274,7 +274,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           draft.time.completed = created
           draft.finish = event.data.finish ?? "error"
           draft.rawFinish = event.data.rawFinish
-          draft.providerState = castDraft(event.data.providerState)
+          draft.state = castDraft(event.data.providerState)
           draft.error = castDraft(event.data.error)
           draft.retry = undefined
           if (event.data.cost !== undefined && event.data.tokens !== undefined) {

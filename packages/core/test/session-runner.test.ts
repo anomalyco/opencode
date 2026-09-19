@@ -4953,7 +4953,7 @@ describe("SessionRunnerLLM", () => {
         type: "assistant",
         finish: "stop",
         rawFinish: "end_turn",
-        providerState: { responseId: "response-1", serviceTier: "priority" },
+        state: { responseId: "response-1", serviceTier: "priority" },
         content: [Expected.text("Complete")],
       },
     ])
@@ -4984,7 +4984,7 @@ describe("SessionRunnerLLM", () => {
         type: "assistant",
         finish: "content-filter",
         rawFinish: "SAFETY",
-        providerState: {
+        state: {
           responseId: "response-blocked",
           refusal: { category: "safety", explanation: "Prompt blocked" },
         },

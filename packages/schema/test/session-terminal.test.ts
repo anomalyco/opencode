@@ -23,13 +23,22 @@ test("assistant terminal diagnostics remain optional and round trip", () => {
         ...assistant,
         finish: "content-filter",
         rawFinish: "SAFETY",
-        providerState: { promptFeedback: { blockReason: "SAFETY" } },
+        state: { promptFeedback: { blockReason: "SAFETY" } },
       }),
     ),
   ).toMatchObject({
     finish: "content-filter",
     rawFinish: "SAFETY",
+    state: { promptFeedback: { blockReason: "SAFETY" } },
+  })
+  const legacy = SessionMessage.persisted({
+    ...assistant,
     providerState: { promptFeedback: { blockReason: "SAFETY" } },
+  })
+  expect(decode(legacy).state).toEqual({ promptFeedback: { blockReason: "SAFETY" } })
+  expect(encode(decode(legacy))).toEqual({
+    ...assistant,
+    state: { promptFeedback: { blockReason: "SAFETY" } },
   })
 })
 
