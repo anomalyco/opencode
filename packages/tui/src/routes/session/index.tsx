@@ -75,6 +75,7 @@ import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
+import { formatShellCommand } from "../../util/format-command"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { getRevertDiffFiles } from "../../util/revert-diff"
@@ -2081,8 +2082,8 @@ function Shell(props: ToolProps) {
           onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
-              <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
+            <Show when={isRunning()} fallback={<text fg={theme.text}>$ {formatShellCommand(stringValue(props.input.command) ?? "")}</text>}>
+              <Spinner color={theme.text}>{formatShellCommand(stringValue(props.input.command) ?? "")}</Spinner>
             </Show>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
@@ -2095,7 +2096,7 @@ function Shell(props: ToolProps) {
       </Match>
       <Match when={true}>
         <InlineTool icon="$" pending="Writing command…" complete={stringValue(props.input.command)} part={props.part}>
-          {stringValue(props.input.command)}
+          {formatShellCommand(stringValue(props.input.command) ?? "")}
         </InlineTool>
       </Match>
     </Switch>
