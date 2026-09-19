@@ -158,6 +158,19 @@ describe("ModelsDevPlugin", () => {
               ],
               connections: [],
             }),
+            new Integration.Info({
+              id: Integration.ID.make("cloudy"),
+              name: "Cloudy",
+              methods: [
+                { type: "key" },
+                {
+                  // CLOUDY_ACCOUNT_ID is not a credential; only the key-shaped name is registered.
+                  type: "env",
+                  names: ["CLOUDY_API_KEY"],
+                },
+              ],
+              connections: [],
+            }),
           ])
         }).pipe(Effect.provide(AppNodeBuilder.build(ModelsDev.node))),
       (previous) =>
