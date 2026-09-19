@@ -37,6 +37,21 @@ The easiest way to install OpenCode is through the install script.
 curl -fsSL https://opencode.ai/install | bash
 ```
 
+The script updates your shell configuration to add OpenCode to `PATH` when needed. To manage `PATH` yourself, pass `--no-modify-path`:
+
+```bash
+curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+```
+
+Pass any of these options after `bash -s --`:
+
+| Option                    | Description                                                                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------- |
+| `-h, --help`              | Show the available options and examples.                                                      |
+| `-v, --version <version>` | Install a specific version, for example `--version 1.0.180`.                                  |
+| `-b, --binary <path>`     | Install a local binary instead of downloading one.                                            |
+| `--no-modify-path`        | Leave shell configuration files unchanged. Add the installation directory to `PATH` yourself. |
+
 You can also install it with the following commands:
 
 - **Using Node.js**
