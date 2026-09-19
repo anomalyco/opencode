@@ -15,6 +15,7 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Menu } from "@opencode/ui/menu"
 import type { FileDiffInfo } from "@opencode/client/promise"
+import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 
 import FileTree from "@/session/files/file-tree"
 import { normalizeFileTreeV2Path } from "@/session/files/file-tree-v2-model"
@@ -38,6 +39,8 @@ import { createFileTabListSync } from "@/session/files/file-tab-scroll"
 import {
   SESSION_OPEN_FILE_TAB,
   isSessionBrowserTab,
+  isSessionSubagentTab,
+  sessionIDFromSubagentTab,
   sessionBrowserTab,
   createOpenSessionFileTab,
   createSessionTabs,
@@ -74,6 +77,11 @@ export function SessionSidePanel(props: {
   size: Sizing
   stacked?: boolean
   browser: ReturnType<typeof createSessionBrowser>
+  subagent: {
+    title: (sessionID: string) => string
+    running: (sessionID: string) => boolean
+    panel: (sessionID: string) => JSX.Element
+  }
 }) {
   const layout = useLayout()
   const settings = useSettings()
@@ -227,7 +235,13 @@ export function SessionSidePanel(props: {
   })
   const fileBrowserVisible = createMemo(() => {
     const active = activeTab()
-    return active !== "review" && active !== "context" && active !== "empty" && !isSessionBrowserTab(active)
+    return (
+      active !== "review" &&
+      active !== "context" &&
+      active !== "empty" &&
+      !isSessionBrowserTab(active) &&
+      !isSessionSubagentTab(active)
+    )
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
   const openBrowserKeybind = createMemo(() => command.keybindParts("browser.open"))
@@ -406,6 +420,21 @@ export function SessionSidePanel(props: {
                                       </SortableTab>
                                     )}
                                   </Show>
+                                </Match>
+                                <Match when={sessionIDFromSubagentTab(tab)}>
+                                  {(sessionID) => (
+                                    <SortableTab tab={tab} index={tabs().all().indexOf(tab)} onTabClose={tabs().close}>
+                                      <div class="flex items-center gap-1.5">
+                                        <Show
+                                          when={props.subagent.running(sessionID())}
+                                          fallback={<Icon name="subagent" size="small" />}
+                                        >
+                                          <SessionProgressIndicatorV2 class="shrink-0" />
+                                        </Show>
+                                        <span class="max-w-40 truncate">{props.subagent.title(sessionID())}</span>
+                                      </div>
+                                    </SortableTab>
+                                  )}
                                 </Match>
                                 <Match when={tab === SESSION_OPEN_FILE_TAB}>
                                   <Tabs.Trigger
@@ -600,6 +629,19 @@ export function SessionSidePanel(props: {
                             visible={reviewOpen() && isSessionBrowserTab(activeTab())}
                           />
                         </div>
+                      </Show>
+
+                      <Show when={sessionIDFromSubagentTab(activeTab())} keyed>
+                        {(sessionID) => (
+                          <div
+                            role="tabpanel"
+                            data-slot="tabs-content"
+                            data-component="subagent-session-panel"
+                            class="h-full min-h-0 overflow-hidden"
+                          >
+                            {props.subagent.panel(sessionID)}
+                          </div>
+                        )}
                       </Show>
 
                       <Show when={fileBrowserMounted()}>

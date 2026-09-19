@@ -274,7 +274,7 @@ test("moves blocking work to the background with Ctrl+B", async ({ page }) => {
   await request
 })
 
-test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {
+test("opens a running subagent card in the side panel", async ({ page }) => {
   const childID = "ses_running_child"
   await setupTimeline(page, {
     settings: {
@@ -287,8 +287,11 @@ test("navigates from a running subagent card and hides background controls in th
 
   await expect(page.getByRole("button", { name: /move running work to the background/i })).toBeVisible()
   await page.locator('[data-component="task-tool-card"]').click()
-  await expect(page).toHaveURL(new RegExp(`/session/${childID}$`))
-  await expect(page.getByRole("button", { name: /move running work to the background/i })).toHaveCount(0)
+  await expect(page.locator('[data-component="subagent-session-panel"]')).toBeVisible()
+  await expect(
+    page.getByRole("tab", { name: "Inspect code" }).locator('[data-component="session-progress-indicator-v2"]'),
+  ).toBeVisible()
+  await expect(page).not.toHaveURL(new RegExp(`/session/${childID}$`))
 })
 
 for (const name of ["shell", "subagent"] as const) {

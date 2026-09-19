@@ -8,7 +8,13 @@ import type { SessionModel } from "../model"
 import { useSessionHashScroll } from "../use-session-hash-scroll"
 import { createTimelineModel } from "./model"
 
-export function createSessionTimelineInteraction(session: SessionModel) {
+type TimelineInteractionSession = {
+  identity: Pick<SessionModel["identity"], "params" | "sessionID" | "sessionKey">
+  history: Pick<SessionModel["history"], "messages" | "visibleUserMessages" | "lastUserMessage">
+  ownership: SessionModel["ownership"]
+}
+
+export function createSessionTimelineInteraction(session: TimelineInteractionSession) {
   const layout = useLayout()
   const location = useLocation()
   const timeline = createTimelineModel({ session })

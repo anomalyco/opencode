@@ -25,7 +25,7 @@ import { getSessionMessageHandoff } from "@/session/handoff"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
 const emptyMessages: SessionMessageInfo[] = []
-const taskDescription = (message: SessionMessageInfo, sessionID: string): string | undefined => {
+export const timelineTaskDescription = (message: SessionMessageInfo, sessionID: string): string | undefined => {
   if (message.type !== "assistant") return
   const tool = message.content.findLast((item) => {
     if (item.type !== "tool" || (item.name !== "task" && item.name !== "subagent")) return false
@@ -92,7 +92,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
     const id = input.session.identity.sessionID()
     if (!id) return undefined
     return parentMessages()
-      .map((message) => taskDescription(message, id))
+      .map((message) => timelineTaskDescription(message, id))
       .findLast((value): value is string => !!value)
   })
   const childTitle = createMemo(() => {

@@ -1,8 +1,13 @@
 export const SESSION_OPEN_FILE_TAB = "open-file"
 export const SESSION_BROWSER_TAB = "browser"
+export const SESSION_SUBAGENT_TAB = "subagent"
 export const sessionBrowserTab = (tabID: string) => `${SESSION_BROWSER_TAB}:${tabID}`
+export const sessionSubagentTab = (sessionID: string) => `${SESSION_SUBAGENT_TAB}:${sessionID}`
 export const isSessionBrowserTab = (tab: string | undefined) =>
   !!tab && (tab === SESSION_BROWSER_TAB || tab.startsWith(`${SESSION_BROWSER_TAB}:`))
+export const isSessionSubagentTab = (tab: string | undefined) => !!tab?.startsWith(`${SESSION_SUBAGENT_TAB}:`)
+export const sessionIDFromSubagentTab = (tab: string | undefined) =>
+  isSessionSubagentTab(tab) ? tab!.slice(SESSION_SUBAGENT_TAB.length + 1) : undefined
 
 export type SessionTabs = {
   active?: string

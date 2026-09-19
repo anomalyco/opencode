@@ -1,6 +1,7 @@
 import { DataProvider } from "@opencode/session-ui/context"
 import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
+import { createMediaQuery } from "@solid-primitives/media"
 import { createMemo, type ParentProps } from "solid-js"
 import { useProviders } from "@/providers/catalog/providers"
 import { LocalProvider } from "@/providers/models/selection"
@@ -10,6 +11,8 @@ import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { readLocalImage } from "@/runtime/server/image"
+import { useSessionLayout } from "@/session/session-layout"
+import { sessionSubagentTab } from "@/shell/state/session-tabs"
 
 export function SessionUIProvider(
   props: ParentProps<{
@@ -22,6 +25,8 @@ export function SessionUIProvider(
   const data = useData()
   const serverSDK = useServerSDK()
   const tabs = useTabs()
+  const layout = useSessionLayout()
+  const isDesktop = createMediaQuery("(min-width: 768px)")
   const directory = () => props.directory
   const readImage = createMemo<ReadMarkdownImage>(() => {
     const dir = directory()
@@ -29,6 +34,15 @@ export function SessionUIProvider(
   })
   const href = (sessionID: string) => sessionHref(props.server, sessionID)
   const navigateToSession = async (sessionID: string) => {
+    if (isDesktop()) {
+      layout.view().reviewPanel.open()
+      await layout.tabs().open(sessionSubagentTab(sessionID))
+      void Promise.all([
+        data.session.sync(sessionID).catch(() => undefined),
+        data.session.message.sync(sessionID).catch(() => undefined),
+      ])
+      return
+    }
     const tab = tabs.store.find(
       (item) =>
         item.type === "session" &&
@@ -64,7 +78,6 @@ export function SessionUIProvider(
       shellRunning={(id) => !!data.shell.get(id)}
       shellOutput={(input) => serverSDK.api.shell.output(input)}
       onNavigateToSession={navigateToSession}
-      onSessionHref={href}
     >
       <MarkdownProvider readImage={readImage()}>
         <LocalProvider>{props.children}</LocalProvider>

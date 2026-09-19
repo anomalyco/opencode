@@ -438,7 +438,12 @@ export function SessionScreen(props: { session: SessionModel }) {
                         setStore("sideReviewPresent", false)
                       }}
                     >
-                      <SessionDesktopReview review={review} browser={browser} present={store.sideReviewPresent} />
+                      <SessionDesktopReview
+                        review={review}
+                        browser={browser}
+                        session={session}
+                        present={store.sideReviewPresent}
+                      />
                     </div>
                   </Show>
                 </div>

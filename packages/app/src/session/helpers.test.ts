@@ -4,6 +4,7 @@ import { createStore } from "solid-js/store"
 import {
   SESSION_BROWSER_TAB,
   sessionBrowserTab,
+  sessionSubagentTab,
   SESSION_OPEN_FILE_TAB,
   createOpenReviewFile,
   createOpenSessionFileTab,
@@ -130,6 +131,25 @@ describe("getTabReorderIndex", () => {
 })
 
 describe("createSessionTabs", () => {
+  test("treats subagent tabs as closable panels rather than files", () => {
+    createRoot((dispose) => {
+      const subagent = sessionSubagentTab("child")
+      const [state] = createStore({ active: subagent as string | undefined, all: [subagent] })
+      const result = createSessionTabs({
+        tabs: createMemo(() => ({ active: () => state.active, all: () => state.all })),
+        pathFromTab: () => undefined,
+        normalizeTab: (tab) => tab,
+      })
+
+      expect(result.panelTabs()).toEqual([subagent])
+      expect(result.openedTabs()).toEqual([])
+      expect(result.activeTab()).toBe(subagent)
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.closableTab()).toBe(subagent)
+      dispose()
+    })
+  })
+
   test("normalizes the effective file tab", () => {
     createRoot((dispose) => {
       const [state] = createStore({

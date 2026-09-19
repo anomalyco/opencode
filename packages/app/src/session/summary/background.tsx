@@ -61,18 +61,16 @@ export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?:
           <For each={props.tasks.slice(0, 10)}>
             {(task) => (
               <Dynamic
-                component={task.type === "subagent" ? "a" : "div"}
+                component={task.type === "subagent" ? "button" : "div"}
+                type={task.type === "subagent" ? "button" : undefined}
                 data-component="session-background-list-item"
                 class="session-service-row"
                 classList={{
                   "hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none":
                     task.type === "subagent",
                 }}
-                href={task.type === "subagent" ? data.sessionHref?.(task.id) : undefined}
-                onClick={(event: MouseEvent) => {
+                onClick={() => {
                   if (task.type !== "subagent" || !data.navigateToSession) return
-                  if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
-                  event.preventDefault()
                   setStore("open", false)
                   data.navigateToSession(task.id)
                 }}

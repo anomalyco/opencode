@@ -1657,7 +1657,7 @@ ToolRegistry.register({
             status={props.status}
             trigger={trigger()}
             hideDetails
-            triggerAsLink
+            triggerAsLink={!!href()}
             triggerHref={href()}
             clickable={clickable()}
             onTriggerClick={navigate}

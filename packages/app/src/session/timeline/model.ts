@@ -11,7 +11,13 @@ export {
   selectVisibleSessionUserMessages as selectVisibleUserMessages,
 } from "../session-domain"
 
-export function createTimelineModel(input: { session: Pick<SessionModel, "identity" | "history" | "ownership"> }) {
+export function createTimelineModel(input: {
+  session: {
+    identity: Pick<SessionModel["identity"], "sessionID">
+    history: Pick<SessionModel["history"], "messages" | "visibleUserMessages" | "lastUserMessage">
+    ownership: SessionModel["ownership"]
+  }
+}) {
   const data = useData()
 
   const [resource] = createResource(

@@ -14,6 +14,11 @@ import { ReviewPanel } from "./panel"
 import { SessionReviewTab } from "./review-tab"
 import type { ChangeMode, SessionReviewModel } from "./model"
 import type { createSessionBrowser } from "../browser/model"
+import type { SessionModel } from "../model"
+import { SubagentPanel } from "../subagent-panel"
+import { sessionTitle } from "../title"
+import { timelineTaskDescription } from "../timeline/controller"
+import { timelineChildTitle } from "../timeline/controller-projection"
 
 const MobilePanelDrawer = lazy(async () => {
   const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
@@ -127,8 +132,29 @@ export function SessionMobileReview(props: { review: SessionReviewModel }) {
 export function SessionDesktopReview(props: {
   review: SessionReviewModel
   browser: ReturnType<typeof createSessionBrowser>
+  session: SessionModel
   present?: boolean
 }) {
+  const language = useLanguage()
+  const subagentTitle = (sessionID: string) => {
+    const data = props.session.shared.data.session
+    const info = data.get(sessionID)
+    const parentID = info?.parentID ?? props.session.identity.sessionID()
+    const messages =
+      parentID === props.session.identity.sessionID()
+        ? props.session.history.messages()
+        : parentID
+          ? data.message.list(parentID)
+          : []
+    return timelineChildTitle({
+      parentID,
+      taskDescription: messages
+        .map((message) => timelineTaskDescription(message, sessionID))
+        .findLast((value): value is string => !!value),
+      title: sessionTitle(info?.title),
+      fallback: language.t("ui.tool.agent.default"),
+    })
+  }
   return (
     <Suspense>
       <SessionSidePanel
@@ -153,6 +179,11 @@ export function SessionDesktopReview(props: {
         size={props.review.screen.size}
         stacked={props.review.screen.side.layout().stacked}
         browser={props.browser}
+        subagent={{
+          title: subagentTitle,
+          running: (sessionID) => props.session.shared.data.session.status(sessionID) === "running",
+          panel: (sessionID) => <SubagentPanel session={props.session} sessionID={sessionID} />,
+        }}
       />
     </Suspense>
   )
