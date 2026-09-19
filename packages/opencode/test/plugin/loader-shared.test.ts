@@ -173,6 +173,54 @@ describe("plugin.loader.shared", () => {
     ),
   )
 
+  it.live("rejects duplicate v1 plugin ids before initializing the duplicate", () =>
+    withTmp(
+      async (dir) => {
+        const first = path.join(dir, "first.ts")
+        const second = path.join(dir, "second.ts")
+        const firstMark = path.join(dir, "first.txt")
+        const secondMark = path.join(dir, "second.txt")
+        await Bun.write(
+          first,
+          [
+            "export default {",
+            '  id: "demo.duplicate",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(firstMark)}, "first")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(
+          second,
+          [
+            "export default {",
+            '  id: "demo.duplicate",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(secondMark)}, "second")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ plugin: [pathToFileURL(first).href, pathToFileURL(second).href] }, null, 2),
+        )
+        return { firstMark, secondMark }
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          expect(yield* Effect.promise(() => Bun.file(tmp.extra.firstMark).text())).toBe("first")
+          expect(yield* Effect.promise(() => Bun.file(tmp.extra.secondMark).exists())).toBe(false)
+        }),
+    ),
+  )
+
   it.live("rejects v1 file server plugin without id", () =>
     withTmp(
       async (dir) => {

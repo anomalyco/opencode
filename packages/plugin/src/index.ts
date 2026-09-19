@@ -221,6 +221,9 @@ export type AuthOuathResult = AuthOAuthResult
 
 export interface Hooks {
   dispose?: () => Promise<void>
+  http?: {
+    fetch(request: Request): Response | Promise<Response>
+  }
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
   tool?: {

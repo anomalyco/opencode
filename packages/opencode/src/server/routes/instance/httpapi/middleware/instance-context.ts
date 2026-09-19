@@ -20,7 +20,7 @@ function decode(input: string): string {
   }
 }
 
-function provideInstanceContext<E>(
+export function provideInstanceContext<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E>,
   store: InstanceStore.Interface,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext> {

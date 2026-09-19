@@ -353,6 +353,90 @@ describe("HttpApi Server.listen", () => {
     }
   })
 
+  test("dispatches authenticated plugin HTTP requests in instance context", async () => {
+    await using tmp = await tmpdir({
+      init: async (directory) => {
+        const plugin = path.join(directory, "plugin.ts")
+        await Bun.write(
+          plugin,
+          [
+            "export default {",
+            '  id: "http-probe",',
+            "  server: async (input) => ({",
+            "    http: {",
+            "      fetch: async (request) => new Response(JSON.stringify({",
+            "        directory: input.directory,",
+            "        method: request.method,",
+            "        url: request.url,",
+            '        header: request.headers.get("x-probe"),',
+            "        body: await request.text(),",
+            "        aborted: request.signal.aborted,",
+            "      }), {",
+            "        status: 202,",
+            '        headers: { "content-type": "application/json", "x-plugin": "http-probe" },',
+            "      }),",
+            "    },",
+            "  }),",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(
+          path.join(directory, "opencode.json"),
+          JSON.stringify({ formatter: false, lsp: false, plugin: [pathToFileURL(plugin).href] }),
+        )
+      },
+    })
+    const listener = await startListener()
+    try {
+      const path = `/api/plugins/http-probe/echo/nested?directory=${encodeURIComponent(tmp.path)}&value=kept`
+      const unauthorized = await fetch(new URL(path, listener.url), { method: "POST", body: "blocked" })
+      expect(unauthorized.status).toBe(401)
+
+      const missing = await fetch(
+        new URL(`/api/plugins/missing?directory=${encodeURIComponent(tmp.path)}`, listener.url),
+        {
+          headers: { authorization: authorization() },
+        },
+      )
+      expect(missing.status).toBe(404)
+
+      const base = await fetch(
+        new URL(`/api/plugins/http-probe?directory=${encodeURIComponent(tmp.path)}`, listener.url),
+        { headers: { authorization: authorization() } },
+      )
+      expect(base.status).toBe(202)
+      expect(await base.json()).toMatchObject({
+        directory: tmp.path,
+        method: "GET",
+        url: `http://${listener.hostname}:${listener.port}/?directory=${encodeURIComponent(tmp.path)}`,
+      })
+
+      const response = await fetch(new URL(path, listener.url), {
+        method: "POST",
+        headers: {
+          authorization: authorization(),
+          "content-type": "text/plain",
+          "x-probe": "preserved",
+        },
+        body: "streamed request",
+      })
+
+      expect(response.status).toBe(202)
+      expect(response.headers.get("x-plugin")).toBe("http-probe")
+      expect(await response.json()).toEqual({
+        directory: tmp.path,
+        method: "POST",
+        url: `http://${listener.hostname}:${listener.port}/echo/nested?directory=${encodeURIComponent(tmp.path)}&value=kept`,
+        header: "preserved",
+        body: "streamed request",
+        aborted: false,
+      })
+    } finally {
+      await stop(listener, "timed out cleaning up plugin HTTP listener").catch(() => undefined)
+    }
+  })
+
   test("port 0 prefers 4096 when free", async () => {
     if (!(await isPortFree(4096))) return
     const listener = await startListener()
