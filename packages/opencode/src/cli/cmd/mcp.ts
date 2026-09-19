@@ -17,7 +17,7 @@ import { InstanceRef } from "@/effect/instance-ref"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
-import { modify, applyEdits } from "jsonc-parser"
+import { modify, applyEdits, parseTree, findNodeAtLocation } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
 import { Effect } from "effect"
 
@@ -98,6 +98,7 @@ export const McpCommand = cmd({
   builder: (yargs) =>
     yargs
       .command(McpAddCommand)
+      .command(McpRemoveCommand)
       .command(McpListCommand)
       .command(McpAuthCommand)
       .command(McpLogoutCommand)
@@ -391,13 +392,19 @@ export const McpLogoutCommand = effectCmd({
   }),
 })
 
-async function resolveConfigPath(baseDir: string, global = false) {
+function resolveConfigCandidates(baseDir: string, global = false) {
   // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
   const candidates = [path.join(baseDir, "opencode.json"), path.join(baseDir, "opencode.jsonc")]
 
   if (!global) {
     candidates.push(path.join(baseDir, ".opencode", "opencode.json"), path.join(baseDir, ".opencode", "opencode.jsonc"))
   }
+
+  return candidates
+}
+
+async function resolveConfigPath(baseDir: string, global = false) {
+  const candidates = resolveConfigCandidates(baseDir, global)
 
   for (const candidate of candidates) {
     if (await Filesystem.exists(candidate)) {
@@ -407,6 +414,22 @@ async function resolveConfigPath(baseDir: string, global = false) {
 
   // Default to opencode.json if none exist
   return candidates[0]
+}
+
+// Locates the config file that defines an MCP server. Earlier base dirs win,
+// mirroring config precedence, so a project-level definition shadows global.
+async function findMcpConfigPath(name: string, baseDirs: string[]) {
+  for (const baseDir of baseDirs) {
+    const global = baseDir === Global.Path.config
+    for (const candidate of resolveConfigCandidates(baseDir, global)) {
+      if (!(await Filesystem.exists(candidate))) continue
+      const text = await Filesystem.readText(candidate)
+      const tree = parseTree(text)
+      if (!tree) continue
+      if (findNodeAtLocation(tree, ["mcp", name])) return { configPath: candidate, text }
+    }
+  }
+  return undefined
 }
 
 async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configPath: string) {
@@ -424,6 +447,28 @@ async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configP
   await Filesystem.write(configPath, result)
 
   return configPath
+}
+
+async function removeMcpFromConfig(name: string, configPath: string, text: string) {
+  // Passing undefined as the value makes jsonc-parser emit a delete edit
+  // for the property while preserving surrounding comments
+  const edits = modify(text, ["mcp", name], undefined, {
+    formattingOptions: { tabSize: 2, insertSpaces: true },
+  })
+
+  await Filesystem.write(configPath, applyEdits(text, edits))
+
+  return configPath
+}
+
+function parseKeyValueEntries(values: string[] | undefined, kind: string) {
+  return Object.fromEntries(
+    (values ?? []).map((entry) => {
+      const index = entry.indexOf("=")
+      if (index < 1) throw new Error(`Invalid ${kind}: ${entry}. Expected KEY=VALUE`)
+      return [entry.slice(0, index), entry.slice(index + 1)]
+    }),
+  )
 }
 
 export const McpAddCommand = effectCmd({
@@ -472,16 +517,8 @@ export const McpAddCommand = effectCmd({
           throw new Error("--header is only valid for remote MCP servers")
         }
 
-        const entries = (values: string[], kind: string) =>
-          Object.fromEntries(
-            values.map((entry) => {
-              const index = entry.indexOf("=")
-              if (index < 1) throw new Error(`Invalid ${kind}: ${entry}. Expected KEY=VALUE`)
-              return [entry.slice(0, index), entry.slice(index + 1)]
-            }),
-          )
-        const environment = entries(args.env ?? [], "environment variable")
-        const headers = entries(args.header ?? [], "HTTP header")
+        const environment = parseKeyValueEntries(args.env, "environment variable")
+        const headers = parseKeyValueEntries(args.header, "HTTP header")
         const mcpConfig: ConfigMCPV1.Info = args.url
           ? {
               type: "remote",
@@ -653,6 +690,67 @@ export const McpAddCommand = effectCmd({
 
       prompts.outro("MCP server added successfully")
     })
+  }),
+})
+
+export const McpRemoveCommand = effectCmd({
+  command: "remove [name]",
+  aliases: ["rm"],
+  describe: "remove an MCP server from config",
+  builder: (yargs) =>
+    yargs.positional("name", {
+      describe: "name of the MCP server",
+      type: "string",
+    }),
+  handler: Effect.fn("Cli.mcp.remove")(function* (args) {
+    const maybeCtx = yield* InstanceRef
+    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    const ctx = maybeCtx
+
+    let serverName = args.name
+
+    if (!serverName) {
+      UI.empty()
+      prompts.intro("Remove MCP Server")
+
+      const config = yield* Config.Service.use((cfg) => cfg.get())
+      const servers = configuredServers(config)
+
+      if (servers.length === 0) {
+        prompts.log.warn("No MCP servers configured")
+        prompts.outro("Done")
+        return
+      }
+
+      const selected = yield* Effect.promise(() =>
+        prompts.select({
+          message: "Select MCP server to remove",
+          options: servers.map(([name]) => ({ label: name, value: name })),
+        }),
+      )
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      serverName = selected
+    }
+
+    const found = yield* Effect.promise(() => findMcpConfigPath(serverName, [ctx.worktree, Global.Path.config]))
+    if (!found) {
+      throw new Error(`MCP server "${serverName}" not found in any config file`)
+    }
+
+    yield* Effect.promise(() => removeMcpFromConfig(serverName, found.configPath, found.text))
+
+    const hadTokens = yield* MCP.Service.use((mcp) => mcp.hasStoredTokens(serverName))
+    if (hadTokens) {
+      yield* MCP.Service.use((mcp) => mcp.removeAuth(serverName))
+    }
+
+    prompts.log.success(`MCP server "${serverName}" removed from ${found.configPath}`)
+    if (hadTokens) {
+      prompts.log.info("Also removed stored OAuth credentials")
+    }
+    if (!args.name) {
+      prompts.outro("MCP server removed successfully")
+    }
   }),
 })
 
