@@ -36,6 +36,7 @@ type ComposerSubmitInput = {
   setMode: (mode: "normal" | "shell") => void
   closePopover: () => void
   delivery?: (alternate: boolean) => ComposerDelivery
+  clientCommand?: (text: string) => (() => void | Promise<void>) | undefined
   notify: {
     missingSelection: () => void
     failed: (kind: "shell" | "command" | "prompt", error: unknown) => void
@@ -59,6 +60,21 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         selection: item.selection ? { ...item.selection } : undefined,
       })),
     })
+    const clientCommand =
+      input.mode() === "normal" ? input.clientCommand?.(submissionText(submission.prompt)) : undefined
+    if (clientCommand) {
+      if (submitting.has(input.adapter.state)) return
+      submitting.add(input.adapter.state)
+      try {
+        clearClientCommand(input, submission)
+        await clientCommand()
+      } catch (error) {
+        input.notify.failed("command", error)
+      } finally {
+        submitting.delete(input.adapter.state)
+      }
+      return
+    }
     const read = readSubmission(input, submission.prompt, submission.context, options?.alternate ?? false)
     if (!read) {
       if (input.adapter.working() && input.adapter.kind === "active-session") void input.adapter.interrupt()
@@ -149,6 +165,17 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
   }
 }
 
+function clearClientCommand(input: ComposerSubmitInput, submission: ReturnType<typeof createComposerSubmission>) {
+  const attachments = submission.prompt.filter(isAttachment)
+  clearSubmission(input, submission)
+  if (!attachments.length) return
+  submission.target().set([{ type: "text", content: "", start: 0, end: 0 }, ...attachments], 0)
+}
+
+function submissionText(prompt: Prompt) {
+  return prompt.map((part) => ("content" in part ? part.content : "")).join("")
+}
+
 function handoffMessage(value: ComposerSubmission): SessionMessageUser {
   return {
     id: value.id,
@@ -194,7 +221,7 @@ function readSubmission(
   context: ComposerSubmission["context"],
   alternate: boolean,
 ): ComposerSubmission | undefined {
-  const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
+  const text = submissionText(prompt)
   const mode = input.mode()
   if (mode === "shell" && !text.trim()) return
   const images = prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
@@ -302,7 +329,6 @@ function findCommand(commands: ReturnType<ComposerSubmitInput["commands"]>, text
   return { command, arguments: arguments_.join(" ") }
 }
 
-
 async function sendCommand(
   session: ComposerSession,
   value: ComposerSubmission,
@@ -387,7 +413,10 @@ async function sendPrompt(
 
 async function buildSubmissionRequest(session: ComposerSession, value: ComposerSubmission) {
   const images = await Promise.all(
-    value.images.map(async (attachment) => ({ ...attachment, dataUrl: await blobDataUrl(attachment.blob, attachment.mime) })),
+    value.images.map(async (attachment) => ({
+      ...attachment,
+      dataUrl: await blobDataUrl(attachment.blob, attachment.mime),
+    })),
   )
   return buildPromptRequest({
     prompt: value.prompt,

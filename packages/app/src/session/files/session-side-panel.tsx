@@ -37,6 +37,7 @@ import { useSettings } from "@/settings/model"
 import { createFileTabListSync } from "@/session/files/file-tab-scroll"
 import {
   SESSION_OPEN_FILE_TAB,
+  SESSION_BTW_TAB,
   isSessionBrowserTab,
   sessionBrowserTab,
   createOpenSessionFileTab,
@@ -74,6 +75,7 @@ export function SessionSidePanel(props: {
   size: Sizing
   stacked?: boolean
   browser: ReturnType<typeof createSessionBrowser>
+  btwPanel: () => JSX.Element
 }) {
   const layout = useLayout()
   const settings = useSettings()
@@ -227,7 +229,13 @@ export function SessionSidePanel(props: {
   })
   const fileBrowserVisible = createMemo(() => {
     const active = activeTab()
-    return active !== "review" && active !== "context" && active !== "empty" && !isSessionBrowserTab(active)
+    return (
+      active !== "review" &&
+      active !== "context" &&
+      active !== "empty" &&
+      active !== SESSION_BTW_TAB &&
+      !isSessionBrowserTab(active)
+    )
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
   const openBrowserKeybind = createMemo(() => command.keybindParts("browser.open"))
@@ -385,6 +393,26 @@ export function SessionSidePanel(props: {
                                   />
                                 }
                               >
+                                <Match when={tab === SESSION_BTW_TAB}>
+                                  <Tabs.Trigger
+                                    value={SESSION_BTW_TAB}
+                                    onMiddleClick={() => tabs().close(SESSION_BTW_TAB)}
+                                    closeButton={
+                                      <Tooltip value={language.t("common.closeTab")} placement="bottom" gutter={10}>
+                                        <Tabs.CloseButton
+                                          onClick={() => tabs().close(SESSION_BTW_TAB)}
+                                          aria-label={language.t("common.closeTab")}
+                                        />
+                                      </Tooltip>
+                                    }
+                                    hideCloseButton
+                                  >
+                                    <div class="flex items-center gap-1.5">
+                                      <Icon name="bubble-5" size="small" />
+                                      <span>{language.t("session.tab.btw")}</span>
+                                    </div>
+                                  </Tabs.Trigger>
+                                </Match>
                                 <Match when={isSessionBrowserTab(tab)}>
                                   <Show when={props.browser.tabs().find((item) => sessionBrowserTab(item.id) === tab)}>
                                     {(item) => (
@@ -580,6 +608,12 @@ export function SessionSidePanel(props: {
                           <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                             <SessionContextTab />
                           </div>
+                        </Tabs.Content>
+                      </Show>
+
+                      <Show when={activeTab() === SESSION_BTW_TAB}>
+                        <Tabs.Content value={SESSION_BTW_TAB} class="flex h-full min-h-0 flex-col overflow-hidden">
+                          {props.btwPanel()}
                         </Tabs.Content>
                       </Show>
 

@@ -24,6 +24,7 @@ import { createComposerHistory } from "./history/store"
 import { composerPlaceholder } from "./placeholder"
 import { createComposerSubmit } from "./submit"
 import { useAttachmentDestination } from "./attachments/destination"
+import { parseClientSlashCommand } from "./client-slash-command"
 
 export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
@@ -73,9 +74,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       return [...result, path]
     }, [])
   })
-  const attachments = createMemo(() =>
-    prompt.current().filter(isAttachment),
-  )
+  const attachments = createMemo(() => prompt.current().filter(isAttachment))
   const commentCount = createMemo(() => {
     if (mode() === "shell") return 0
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
@@ -242,6 +241,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         trigger: item.slash!,
         title: item.title,
         description: item.description,
+        arguments: item.slashArguments,
         type: "builtin" as const,
       })),
   ])
@@ -298,6 +298,11 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       clear: comments.clear,
       restore: restoreHistoryComments,
     },
+    clientCommand: (text) => {
+      const selected = parseClientSlashCommand(command.options, text)
+      if (!selected) return
+      return () => command.trigger(selected.id, "slash", selected.input)
+    },
   })
   const controller = createComposerEditor({
     store: prompt.store,
@@ -339,6 +344,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       if (item.kind !== "command") return
       const selected = slashCommands().find((entry) => entry.id === item.id)
       if (!selected || selected.type === "custom") return
+      if (selected.arguments) return
       return () => command.trigger(selected.id, "slash")
     },
     attachments: {
