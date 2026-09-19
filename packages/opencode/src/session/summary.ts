@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -103,15 +104,6 @@ const layer = Layer.effect(
       sessionID: SessionID
       messageID: MessageID
     }) {
-      yield* sessions.setSummary({
-        sessionID: input.sessionID,
-        summary: {
-          additions: 0,
-          deletions: 0,
-          files: 0,
-        },
-      })
-      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
       if ((yield* config.get()).snapshot === false) return
       const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
       if (!all.length) return
@@ -122,6 +114,16 @@ const layer = Layer.effect(
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
       const msgDiffs = yield* computeDiff({ messages })
+      if (isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
+      yield* sessions.setSummary({
+        sessionID: input.sessionID,
+        summary: {
+          additions: 0,
+          deletions: 0,
+          files: 0,
+        },
+      })
+      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
       target.info.summary = { ...target.info.summary, diffs: msgDiffs }
       yield* sessions.updateMessage(target.info)
     })
