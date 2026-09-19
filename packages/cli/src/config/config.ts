@@ -7,6 +7,7 @@ import { produce, type Draft } from "immer"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import path from "path"
 import { ConfigMigration } from "./migrate"
+import { ConfigPersistence } from "./persist"
 import { Info, SchemaURL } from "./schema"
 
 export * from "./schema"
@@ -37,13 +38,6 @@ export const layer = Layer.effect(
       const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
       if (text === undefined) return undefined
       return parseRecord(text)
-    })
-
-    const write = Effect.fnUntraced(function* (text: string) {
-      const temp = file + ".tmp"
-      yield* fs.makeDirectory(path.dirname(file), { recursive: true })
-      yield* fs.writeFileString(temp, text, { mode: 0o600 })
-      yield* fs.rename(temp, file)
     })
 
     const migrate = ConfigMigration.run({ file, config: global.config, state: global.state }).pipe(
@@ -103,7 +97,9 @@ export const layer = Layer.effect(
           const errors: ParseError[] = []
           const config = Option.getOrUndefined(decode(parse(updated, errors, { allowTrailingComma: true })))
           if (errors.length || config === undefined) return yield* Effect.fail(new Error("Invalid CLI config update"))
-          yield* write(updated.endsWith("\n") ? updated : updated + "\n")
+          yield* ConfigPersistence.write(file, updated.endsWith("\n") ? updated : updated + "\n").pipe(
+            Effect.provideService(FileSystem.FileSystem, fs),
+          )
           return merge(config, content)
         }),
       ).pipe(Effect.mapError((cause) => new Error("Failed to update CLI config", { cause }))),
@@ -117,12 +113,7 @@ type Edit = { readonly path: (string | number)[]; readonly value: any }
 
 function merge(...values: readonly (Info | undefined)[]) {
   return Option.getOrElse(
-    decode(
-      values.reduce<Record<string, unknown>>(
-        (result, value) => mergeRecords(result, value ?? {}),
-        {},
-      ),
-    ),
+    decode(values.reduce<Record<string, unknown>>((result, value) => mergeRecords(result, value ?? {}), {})),
     () => empty,
   )
 }
