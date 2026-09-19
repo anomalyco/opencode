@@ -412,7 +412,7 @@ const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.RevertEvent.Committed, (event) =>
       Effect.gen(function* () {
-        const boundary = yield* db
+        const message = yield* db
           .select({ seq: SessionMessageTable.seq })
           .from(SessionMessageTable)
           .where(
@@ -423,6 +423,19 @@ const layer = Layer.effectDiscard(
           )
           .get()
           .pipe(Effect.orDie)
+        const boundary =
+          message ??
+          (yield* db
+            .select({ seq: SessionInputTable.admitted_seq })
+            .from(SessionInputTable)
+            .where(
+              and(
+                eq(SessionInputTable.session_id, event.data.sessionID),
+                eq(SessionInputTable.id, event.data.messageID),
+              ),
+            )
+            .get()
+            .pipe(Effect.orDie))
         if (!boundary) return yield* Effect.die(`Revert boundary message not found: ${event.data.messageID}`)
         yield* db
           .delete(SessionMessageTable)
@@ -431,12 +444,16 @@ const layer = Layer.effectDiscard(
           )
           .run()
           .pipe(Effect.orDie)
+        const later = or(
+          gt(SessionInputTable.admitted_seq, boundary.seq),
+          gt(SessionInputTable.promoted_seq, boundary.seq),
+        )
         yield* db
           .delete(SessionInputTable)
           .where(
             and(
               eq(SessionInputTable.session_id, event.data.sessionID),
-              or(gt(SessionInputTable.admitted_seq, boundary.seq), gt(SessionInputTable.promoted_seq, boundary.seq)),
+              message ? later : or(eq(SessionInputTable.id, event.data.messageID), later),
             ),
           )
           .run()
