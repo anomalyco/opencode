@@ -43,6 +43,8 @@ export function resolve(target: Target): Entrypoints {
   return { server: entry(["server", ""]), tui: entry(["tui"]), rpc: entry(["rpc"]) }
 }
 
-export function load(entrypoint: string): Promise<unknown> {
+export async function load(entrypoint: string): Promise<unknown> {
+  const { ensureRuntimeModules } = await import("#plugin-runtime")
+  ensureRuntimeModules()
   return importModule(entrypoint)
 }
