@@ -1,0 +1,35 @@
+{
+  "name": "opencode-arm",
+  "productName": "OpenCode ARM",
+  "version": "0.1.0",
+  "description": "Stable native desktop coding agent for Windows on ARM64. Unofficial port of the OpenCode experience; not built by the OpenCode team.",
+  "license": "MIT",
+  "author": "OpenCode ARM contributors",
+  "type": "module",
+  "private": true,
+  "main": "dist/main/main.js",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-reporter=spec \"test/**/*.test.ts\"",
+    "verify": "npm run typecheck && npm test && npm run build",
+    "smoke": "node scripts/smoke.mjs",
+    "package": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.3.6",
+    "@types/node": "^24.0.0",
+    "electron": "^38.2.0",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.9.2"
+  },
+  "allowScripts": {
+    "electron@38.8.6": true,
+    "esbuild@0.25.12": true
+  }
+}
