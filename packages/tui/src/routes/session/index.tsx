@@ -2619,6 +2619,7 @@ type ToolProps = {
 }
 function GenericTool(props: ToolProps) {
   const theme = useTheme()
+  const ctx = use()
   const output = createMemo(() => props.output?.trim() ?? "")
   const input = createMemo(() => Object.entries(props.input))
   const [expanded, setExpanded] = createSignal(false)
@@ -2635,7 +2636,7 @@ function GenericTool(props: ToolProps) {
         part={props.part}
         onClick={expandable() ? () => setExpanded((value) => !value) : undefined}
       >
-        {genericToolSummary(props.tool, props.input)}
+        {genericToolSummary(props.tool, props.input, ctx.width - 3 - INLINE_TOOL_ICON_WIDTH)}
       </InlineTool>
       <Show when={expanded()}>
         <box paddingLeft={3 + INLINE_TOOL_ICON_WIDTH}>
@@ -2669,9 +2670,9 @@ function GenericTool(props: ToolProps) {
   )
 }
 
-export function genericToolSummary(tool: string, input: Record<string, unknown>) {
+export function genericToolSummary(tool: string, input: Record<string, unknown>, width: number) {
   const args = primitiveInputSummary(input).replace(/\s+/g, " ")
-  return `${tool}${args ? ` ${args}` : ""}`
+  return Locale.truncateWidth(`${tool}${args ? ` ${args}` : ""}`, width)
 }
 
 function useToolPermission(part: () => SessionMessageAssistantTool | undefined) {
