@@ -86,6 +86,14 @@ describe("Object.keys over arrays", () => {
     expect(await value(`return Object.keys({ a: 1, b: 2 })`)).toEqual(["a", "b"])
   })
 
+  test("Object.values and Object.entries enumerate arrays", async () => {
+    expect(await value(`return Object.values(["a", "b"])`)).toEqual(["a", "b"])
+    expect(await value(`return Object.entries(["a", "b"])`)).toEqual([
+      ["0", "a"],
+      ["1", "b"],
+    ])
+  })
+
   test("non-object inputs still fail clearly", async () => {
     const failure = await error(`return Object.keys("nope")`)
     expect(failure.message).toContain("Object.keys expects a data object or array")
