@@ -4231,6 +4231,27 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
+  test("ollama exposes reasoning toggles for openai-compatible models", () => {
+    const model = createMockModel({
+      id: "ollama/qwen3.8:27b",
+      providerID: "ollama",
+      api: {
+        id: "qwen3.8:27b",
+        url: "http://localhost:11434/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    const variants = ProviderTransform.variants(model)
+    expect(variants).toEqual({
+      none: { reasoningEffort: "none" },
+      high: { reasoningEffort: "high" },
+    })
+    if (!variants.high) throw new Error("missing high variant")
+    expect(ProviderTransform.providerOptions(model, variants.high)).toEqual({
+      ollama: { reasoningEffort: "high" },
+    })
+  })
+
   test("minimax returns empty object", () => {
     const model = createMockModel({
       id: "minimax/minimax-model",
