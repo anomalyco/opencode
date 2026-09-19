@@ -1,9 +1,9 @@
-const defaults: Record<string, string> = {
-  ask: "var(--icon-agent-ask-base)",
-  build: "var(--icon-agent-build-base)",
-  docs: "var(--icon-agent-docs-base)",
-  plan: "var(--icon-agent-plan-base)",
-}
+const defaults = new Map([
+  ["ask", "var(--icon-agent-ask-base)"],
+  ["build", "var(--icon-agent-build-base)"],
+  ["docs", "var(--icon-agent-docs-base)"],
+  ["plan", "var(--icon-agent-plan-base)"],
+])
 
 const palette = [
   "var(--icon-agent-ask-base)",
@@ -28,7 +28,7 @@ function tone(name: string) {
 
 export function agentColor(name: string, custom?: string) {
   if (custom) return custom
-  return defaults[name] ?? defaults[name.toLowerCase()] ?? tone(name.toLowerCase())
+  return defaults.get(name) ?? defaults.get(name.toLowerCase()) ?? tone(name.toLowerCase())
 }
 
 export function messageAgentColor(
