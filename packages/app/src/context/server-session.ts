@@ -648,6 +648,19 @@ export function createServerSession(
       }
       const parts = reconcileFetched(fetched, data.part[item.id] ?? [], { touched })
       if (!parts.length) {
+        // A refresh page without parts races parts confirmed by events between
+        // pages (the session may not be fully persisted yet). Accept the
+        // omission when this load marked the message's parts explicitly: on the
+        // first page, through a removal signal, or via in-flight event tracking.
+        const racy =
+          meta.limit[sessionID] !== undefined &&
+          !load?.clearedMessageParts.has(item.id) &&
+          !(load?.touchedParts.get(item.id)?.size ?? 0) &&
+          !(load?.carriedDeltaParts.get(item.id)?.size ?? 0)
+        if (racy) {
+          orphanParts.get(sessionID)?.delete(item.id)
+          continue
+        }
         orphanParts.get(sessionID)?.delete(item.id)
         setData(produce((draft) => deleteMessageParts(draft, item.id)))
         continue
@@ -723,7 +736,7 @@ export function createServerSession(
         }
         orphanParts.delete(sessionID)
       }
-      setMeta("limit", sessionID, messages.length)
+      setMeta("limit", sessionID, Math.max(meta.limit[sessionID] ?? initialMessagePageSize, messages.length))
       setMeta("cursor", sessionID, merged.cursor)
       setMeta("complete", sessionID, merged.complete)
       setMeta("at", sessionID, Date.now())
