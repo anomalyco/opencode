@@ -6,6 +6,7 @@ import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import * as path from "path"
 
 export const Event = PermissionV1.Event
 
@@ -37,6 +38,25 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Permi
   )
 }
 
+export function evaluateCandidates(
+  permission: string,
+  pattern: string,
+  worktree: string,
+  ...rulesets: PermissionV1.Ruleset[]
+): PermissionV1.Rule[] {
+  // Tool-produced patterns are worktree-relative (or de-rooted when the worktree
+  // is "/"), so absolute-path rules from config can never match them directly.
+  // Evaluate a second, absolutized candidate, but only against absolute
+  // (leading "/") rules so relative-semantic rules like "*" keep their original
+  // meaning and cannot accidentally allow paths outside the worktree.
+  const rules = [evaluate(permission, pattern, ...rulesets)]
+  if (!path.isAbsolute(pattern)) {
+    const absoluteRulesets = rulesets.map((ruleset) => ruleset.filter((rule) => rule.pattern.startsWith("/")))
+    rules.push(evaluate(permission, path.resolve(worktree, pattern), ...absoluteRulesets))
+  }
+  return rules
+}
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
 
 const layer = Layer.effect(
@@ -66,18 +86,23 @@ const layer = Layer.effect(
 
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
+      const instance = yield* InstanceState.context
       const { ruleset, ...request } = input
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
-        yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
-        if (rule.action === "deny") {
+        const rules = evaluateCandidates(request.permission, pattern, instance.worktree, ruleset, approved)
+        yield* Effect.logInfo("evaluated", {
+          permission: request.permission,
+          pattern,
+          action: rules.map((rule) => rule.action),
+        })
+        if (rules.some((rule) => rule.action === "deny")) {
           return yield* new PermissionV1.DeniedError({
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
           })
         }
-        if (rule.action === "allow") continue
+        if (rules.some((rule) => rule.action === "allow")) continue
         needsAsk = true
       }
 
