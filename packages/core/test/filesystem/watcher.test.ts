@@ -178,6 +178,60 @@ describeWatcher("Watcher", () => {
     ),
   )
 
+  it.live("watches config directories when hot reload is enabled", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (item) => Effect.promise(() => item[Symbol.asyncDispose]()),
+      )
+      const configDirectory = path.join(tmp.path, "config")
+      yield* Effect.promise(() => fs.mkdir(configDirectory, { recursive: true }))
+
+      const entriesLayer = Layer.succeed(
+        Config.Service,
+        Config.Service.of({
+          entries: () =>
+            Effect.succeed([
+              new Config.Directory({ type: "directory", path: AbsolutePath.make(configDirectory) }),
+            ]),
+        }),
+      )
+      const locationLayer = Layer.succeed(
+        Location.Service,
+        Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) }, {})),
+      )
+      const hotReloadFlags = ConfigProvider.layer(
+        ConfigProvider.fromUnknown({
+          OPENCODE_EXPERIMENTAL_FILEWATCHER: "false",
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
+          OPENCODE_EXPERIMENTAL_HOT_RELOAD: "true",
+        }),
+      )
+
+      yield* Effect.gen(function* () {
+        const util = yield* FSUtil.Service
+        yield* ready(configDirectory)
+        const skill = path.join(configDirectory, "skill", "demo", "SKILL.md")
+        expect(
+          yield* nextUpdate(
+            (event) => event.file === skill && event.event === "add",
+            util.writeWithDirs(skill, "---\nname: demo\n---\nbody"),
+          ),
+        ).toEqual({ file: skill, event: "add" })
+        // The project itself stays unwatched without the filewatcher flag.
+        const outside = path.join(tmp.path, "plain.txt")
+        yield* noUpdate((event) => event.file === outside, util.writeFileString(outside, "plain"))
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(Watcher.node, [
+            [Config.node, entriesLayer],
+            [Location.node, locationLayer],
+          ]).pipe(Layer.provide(hotReloadFlags)),
+        ),
+      )
+    }),
+  )
+
   it.live("cleanup stops publishing events", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
