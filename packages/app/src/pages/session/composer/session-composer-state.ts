@@ -75,10 +75,16 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     return store.responding === perm.id
   })
 
+  const permissionPersistent = createMemo(() => {
+    const perm = permissionRequest()
+    return !!perm?.always.length
+  })
+
   const decide = (response: "once" | "always" | "reject") => {
     const perm = permissionRequest()
     if (!perm) return
     if (store.responding === perm.id) return
+    if (response === "always" && !permissionPersistent()) return
 
     setStore("responding", perm.id)
     sdk()
@@ -190,6 +196,7 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     questionRequest,
     permissionRequest,
     permissionResponding,
+    permissionPersistent,
     decide,
     todos,
     dock: () =>
