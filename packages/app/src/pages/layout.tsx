@@ -541,7 +541,10 @@ export default function LegacyLayout(props: ParentProps) {
     await layout.ready.promise
     if (!untrack(() => state.autoselect)) return
 
-    const list = layout.projects.list()
+    // Autoselect restores what the user last opened, so it reads the persisted
+    // project store directly — layout.projects.list() also appends server-known
+    // projects that were never opened, which must not trigger auto-opening.
+    const list = server.projects.list()
     const last = server.projects.last()
 
     if (list.length === 0) {

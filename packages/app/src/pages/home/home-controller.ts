@@ -91,7 +91,9 @@ export function createHomeController() {
         if (!directory) return
         const ctx = global.ensureServerCtx(conn)
         directories.forEach((item) => {
-          if (ctx.projects.list().some((project) => project.worktree === item)) return
+          // Compare against user-opened projects only: server-known entries appended
+          // to projects.list() must not stop an explicit add from persisting.
+          if (ctx.projects.opened.some((project) => project.worktree === item)) return
           const location = { directory: item }
           void ctx.sdk.api.file
             .list({ path: ".", location })
