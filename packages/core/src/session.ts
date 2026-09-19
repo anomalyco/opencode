@@ -36,6 +36,7 @@ import { Snapshot } from "./snapshot"
 import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
+import { SessionDirectory } from "./session/directory"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 
 export const RevertState = Revert.State
@@ -271,7 +272,6 @@ const layer = Layer.effect(
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
         const sortColumn = SessionTable.time_created
         const conditions: SQL[] = []
-        if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
@@ -288,6 +288,7 @@ const layer = Layer.effect(
                 )!,
           )
         }
+        if ("directory" in input) conditions.push(yield* SessionDirectory.filter(db, input.directory, conditions))
         const query = db
           .select()
           .from(SessionTable)
