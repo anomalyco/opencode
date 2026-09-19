@@ -1,9 +1,10 @@
 export * as LocationActivity from "./location-activity.js"
 
-import { Clock, Context, Duration, Effect, Layer, RcMap, Schema } from "effect"
+import { Clock, Context, Duration, Effect, Layer, Option, RcMap, Schema } from "effect"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
+import { Pty } from "./pty.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
 import { SessionStore } from "./session/store.js"
@@ -29,6 +30,15 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         Effect.sync(() => {
           entries.set(key(ref), { ref, expiresAt: clock.currentTimeMillisUnsafe() + timeToLive })
         })
+      // Terminals are user-owned processes and the Pty finalizer kills them with the graph.
+      const terminals = Effect.fn("LocationActivity.terminals")(function* (ref: Location.Ref) {
+        const context = yield* locations.contextEffectOption(ref)
+        if (Option.isNone(context)) return false
+        const pty = Context.getOption(context.value, Pty.Service)
+        if (Option.isNone(pty)) return false
+        const infos = yield* pty.value.list()
+        return infos.some((info) => info.status === "running")
+      })
 
       const unsubscribe = yield* bus.listen((event) => {
         if (!isSessionEvent(event)) return Effect.void
@@ -55,6 +65,15 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           expired,
           (entry) =>
             Effect.gen(function* () {
+              // A graph that failed to build owns no terminals.
+              const busy = yield* terminals(entry.ref).pipe(
+                Effect.scoped,
+                Effect.orElseSucceed(() => false),
+              )
+              if (busy) {
+                yield* touch(entry.ref)
+                return
+              }
               const owners = active.flatMap((session) =>
                 session && key(session.location) === key(entry.ref) ? [session] : [],
               )
