@@ -1,3 +1,4 @@
+import { homedir } from "node:os"
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { BackgroundServiceState } from "./background-service-state"
@@ -31,17 +32,24 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
-  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  // A source-built server joins the TUI's `bun dev` service: the same `service-local.json` and the
+  // fixed local port, which is the lock between service contenders. A downloaded development server
+  // stays isolated in userData on a random port so it never replaces the installed service.
+  const local = !app.isPackaged && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+  const isolated = !app.isPackaged && !local && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
   const service = yield* Effect.tryPromise(() =>
     client.Service.ensure({
-      file:
-        isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-          ? path.join(app.getPath("userData"), "opencode", "service-local.json")
-          : undefined,
+      file: local
+        ? path.join(
+            process.env.XDG_STATE_HOME || path.join(homedir(), ".local", "state"),
+            "opencode",
+            "service-local.json",
+          )
+        : undefined,
       version,
       command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
       onStart: (reason, previousVersion) =>
