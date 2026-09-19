@@ -472,7 +472,6 @@ function ExaOutput(props: { output?: string }) {
                 onClick={(event) => event.stopPropagation()}
               >
                 <span data-slot="webfetch-link-text">{url}</span>
-                <Icon name="outline-square-arrow" class="webfetch-link-icon" />
               </a>
             )}
           </For>
@@ -1515,7 +1514,6 @@ ToolRegistry.register({
                   onClick={(event) => event.stopPropagation()}
                 >
                   <span data-slot="webfetch-link-text">{url()}</span>
-                  <Icon name="outline-square-arrow" class="webfetch-link-icon" />
                 </a>
               </Show>
             </div>
