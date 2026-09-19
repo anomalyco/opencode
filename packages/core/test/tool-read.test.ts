@@ -511,6 +511,26 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("returns out-of-range offsets to the model", () =>
+    Effect.gen(function* () {
+      readFailure = new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 100 })
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-offset",
+            name: "read",
+            input: { path: "short.txt", offset: 100 },
+          },
+        }),
+      ).toEqual({ type: "error", value: "Offset 100 is out of range" })
+    }),
+  )
+
   it.effect("preserves unexpected filesystem defects", () =>
     Effect.gen(function* () {
       resolveFailure = new Error("unexpected")
