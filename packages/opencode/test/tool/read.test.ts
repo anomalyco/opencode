@@ -482,6 +482,52 @@ describe("tool.read truncation", () => {
     }),
   )
 
+  Array.of(
+    { name: "a split emoji", text: "a".repeat(1999) + "😀tail", head: "a".repeat(1999) },
+    { name: "a complete emoji", text: "a".repeat(1998) + "😀tail", head: "a".repeat(1998) + "😀" },
+    { name: "ASCII", text: "a".repeat(2000) + "tail", head: "a".repeat(2000) },
+    { name: "BMP characters", text: "文".repeat(2000) + "tail", head: "文".repeat(2000) },
+  ).forEach((input) => {
+    it.instance(`preserves Unicode when truncating ${input.name} at EOF`, () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "unicode.txt")
+        yield* put(filepath, input.text)
+
+        const result = yield* run({ filePath: filepath })
+        const expected = input.head + "... (line truncated to 2000 chars)"
+
+        expect(result.output).toContain(`1: ${expected}\n\n(End of file - total 1 lines)`)
+        expect(result.output.isWellFormed()).toBe(true)
+        expect(Buffer.from(result.output).toString()).toBe(result.output)
+        expect(result.metadata.preview).toBe(expected)
+        expect(result.metadata.display).toMatchObject({ text: expected, lineStart: 1, lineEnd: 1 })
+        expect(yield* load(filepath)).toBe(input.text)
+      }),
+    )
+  })
+
+  it.instance("preserves exact-limit Unicode and pagination with CRLF", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const filepath = path.join(test.directory, "exact.txt")
+      const content = "a".repeat(1998) + "😀"
+      yield* put(filepath, content + "\r\nnext")
+
+      const result = yield* run({ filePath: filepath, limit: 1 })
+
+      expect(result.metadata.preview).toBe(content)
+      expect(result.metadata.display).toMatchObject({ text: content, lineStart: 1, lineEnd: 1, truncated: true })
+      expect(result.output).toContain("Use offset=2")
+      expect(result.output).not.toContain("line truncated")
+      expect(result.output.isWellFormed()).toBe(true)
+
+      const next = yield* run({ filePath: filepath, offset: 2, limit: 1 })
+      expect(next.metadata.preview).toBe("next")
+      expect(next.metadata.truncated).toBe(false)
+    }),
+  )
+
   it.live("image files set truncated to false", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
