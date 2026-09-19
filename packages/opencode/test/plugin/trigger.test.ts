@@ -105,4 +105,57 @@ describe("plugin.trigger", () => {
       }),
     ),
   )
+
+  it.instance("ignores helper exports that do not return hooks", () =>
+    withProject(
+      [
+        "export function helper() {}",
+        "export const plugin = async () => ({",
+        `  ${JSON.stringify(systemHook)}: (_input, output) => {`,
+        '    output.system.unshift("hooks")',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+      Effect.gen(function* () {
+        expect(yield* triggerSystemTransform()).toEqual(["hooks"])
+      }),
+    ),
+  )
+
+  it.instance("ignores non-function exports", () =>
+    withProject(
+      [
+        "export const VERSION = 1",
+        "export const plugin = async () => ({",
+        `  ${JSON.stringify(systemHook)}: (_input, output) => {`,
+        '    output.system.unshift("named")',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+      Effect.gen(function* () {
+        expect(yield* triggerSystemTransform()).toEqual(["named"])
+      }),
+    ),
+  )
+
+  it.instance("keeps loading when a helper export throws", () =>
+    withProject(
+      [
+        "export function helper() {",
+        '  throw new Error("helper called as a plugin")',
+        "}",
+        "export const plugin = async () => ({",
+        `  ${JSON.stringify(systemHook)}: (_input, output) => {`,
+        '    output.system.unshift("survived")',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+      Effect.gen(function* () {
+        expect(yield* triggerSystemTransform()).toEqual(["survived"])
+      }),
+    ),
+  )
 })
