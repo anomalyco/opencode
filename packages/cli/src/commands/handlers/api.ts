@@ -31,7 +31,7 @@ export default Runtime.handler(
     if (body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")
 
     const response = yield* Effect.tryPromise(() =>
-      fetch(new URL(request.path, transport.url), {
+      fetch(requestURL(transport.url, request.path), {
         method: request.method,
         headers,
         body,
@@ -66,7 +66,7 @@ function resolveRequest(
   if (raw) return Effect.succeed(raw)
   if (input.length !== 1) return Effect.fail(new Error("Expected an operation name or an HTTP method and path"))
   return Effect.tryPromise(async () => {
-    const response = await fetch(new URL("/openapi.json", transport.url), { headers: transport.headers })
+    const response = await fetch(requestURL(transport.url, "/openapi.json"), { headers: transport.headers })
     if (!response.ok) throw new Error(`Failed to load OpenAPI document: HTTP ${response.status}`)
     return resolveOperation((await response.json()) as OpenApi, input[0], params)
   })
@@ -82,4 +82,10 @@ function interpolate(path: string, params: Record<string, string>) {
   })
   const query = new URLSearchParams(Object.entries(params).filter(([name]) => !used.has(name))).toString()
   return query ? `${pathname}?${query}` : pathname
+}
+
+export function requestURL(server: string, path: string) {
+  const base = new URL(server)
+  base.pathname = base.pathname.replace(/\/+$/, "") + "/"
+  return new URL(path.replace(/^\/+/, ""), base)
 }

@@ -1,3 +1,4 @@
+import { appPath } from "@/utils/base-path"
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createStore, produce } from "solid-js/store"
@@ -157,7 +158,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       if (!tab) return
       const key = tabKey(tab)
       const draftID = tab.type === "draft" ? tab.draftID : undefined
-      const nextTab = nextTabAfterClose(store, index, recentKey() === key && location.pathname !== "/")
+      const nextTab = nextTabAfterClose(store, index, recentKey() === key && appPath(location.pathname) !== "/")
       closing.add(key)
       void startTransition(() => {
         setStore(
@@ -231,7 +232,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       promoteDraft(draftID: string, session: Omit<SessionTab, "type">) {
         // Keep the replacement and navigation atomic so /new-session never renders
         // after its backing draft tab has been removed from the store.
-        const active = location.pathname === "/new-session" && location.query.draftId === draftID
+        const active = appPath(location.pathname) === "/new-session" && location.query.draftId === draftID
         const next = { type: "session" as const, ...session }
         void startTransition(() => {
           setStore(
