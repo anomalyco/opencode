@@ -23,28 +23,54 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
   if (!userMessage) return input.messages
 
+  const persistReminder = Effect.fn("SessionReminders.persistReminder")(function* (text: string) {
+    const exists = userMessage.parts.some(
+      (part) => part.type === "text" && part.synthetic === true && part.text === text,
+    )
+    if (exists) return
+    const part = yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: userMessage.info.id,
+      sessionID: userMessage.info.sessionID,
+      type: "text",
+      text,
+      synthetic: true,
+    })
+    userMessage.parts.push(part)
+  })
+
   if (!flags.experimentalPlanMode) {
-    if (input.agent.name === "plan") {
-      userMessage.parts.push({
-        id: PartID.ascending(),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: PROMPT_PLAN,
-        synthetic: true,
-      })
-    }
+    const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
     const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
-    if (wasPlan && input.agent.name === "build") {
-      userMessage.parts.push({
-        id: PartID.ascending(),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: BUILD_SWITCH,
-        synthetic: true,
-      })
-    }
+    const reminder =
+      input.agent.name === "plan" ? PROMPT_PLAN : wasPlan && input.agent.name === "build" ? BUILD_SWITCH : undefined
+    const switching =
+      (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") ||
+      (input.agent.name === "build" && assistantMessage?.info.agent === "plan")
+    const reminders = input.messages.flatMap((message) =>
+      message.parts.flatMap((part) =>
+        part.type === "text" && part.synthetic === true && (part.text === PROMPT_PLAN || part.text === BUILD_SWITCH)
+          ? [{ message, part }]
+          : [],
+      ),
+    )
+    const keep = switching ? undefined : reminders.findLast((item) => item.part.text === reminder)
+    const stale = reminders.filter((item) => item !== keep)
+    yield* Effect.forEach(
+      stale,
+      (item) =>
+        sessions.removePart({
+          sessionID: item.message.info.sessionID,
+          messageID: item.message.info.id,
+          partID: item.part.id,
+        }),
+      { discard: true },
+    )
+    stale.forEach((item) => {
+      item.message.parts = item.message.parts.filter((part) => part.id !== item.part.id)
+    })
+    if (!reminder || keep) return input.messages
+    yield* persistReminder(reminder)
     return input.messages
   }
 
