@@ -1,6 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Image } from "@/image/image"
+import path from "path"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
 import * as Stream from "effect/Stream"
@@ -21,6 +22,7 @@ import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
+import { InstanceState } from "@/effect/instance-state"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
@@ -68,6 +70,7 @@ interface ProcessorContext extends Input {
   toolcalls: Record<string, ToolCall>
   shouldBreak: boolean
   snapshot: string | undefined
+  mutatedFiles: string[]
   blocked: boolean
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
@@ -99,7 +102,7 @@ const layer = Layer.effect(
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
       // may execute tools internally before emitting start-step events,
       // so capturing inside the event handler can be too late.
-      const initialSnapshot = yield* snapshot.track()
+      const initialSnapshot = yield* snapshot.track(input.sessionID)
       const ctx: ProcessorContext = {
         assistantMessage: input.assistantMessage,
         sessionID: input.sessionID,
@@ -107,6 +110,7 @@ const layer = Layer.effect(
         toolcalls: {},
         shouldBreak: false,
         snapshot: initialSnapshot,
+        mutatedFiles: [],
         blocked: false,
         needsCompaction: false,
         currentText: undefined,
@@ -157,6 +161,23 @@ const layer = Layer.effect(
         return part
       })
 
+      const recordMutatedFiles = Effect.fnUntraced(function* (part: SessionV1.ToolPart) {
+        const meta = part.state.status === "completed" && isRecord(part.state.metadata) ? part.state.metadata : undefined
+        const input = "input" in part.state && isRecord(part.state.input) ? part.state.input : undefined
+        const candidates: string[] = []
+        if (meta && typeof meta.filepath === "string") candidates.push(meta.filepath)
+        if (meta && Array.isArray(meta.files)) {
+          for (const item of meta.files) if (typeof item === "string") candidates.push(item)
+        }
+        if (input && typeof input.filePath === "string") candidates.push(input.filePath)
+        if (!candidates.length) return
+        const instance = yield* InstanceState.context.pipe(Effect.catch(() => Effect.succeed(undefined)))
+        for (const file of candidates) {
+          const absolute = path.isAbsolute(file) ? file : instance ? path.join(instance.worktree, file) : file
+          if (!ctx.mutatedFiles.includes(absolute)) ctx.mutatedFiles.push(absolute)
+        }
+      })
+
       const completeToolCall = Effect.fn("SessionProcessor.completeToolCall")(function* (
         toolCallID: string,
         output: {
@@ -168,7 +189,7 @@ const layer = Layer.effect(
       ) {
         const match = yield* readToolCall(toolCallID)
         if (!match || match.part.state.status !== "running") return
-        yield* session.updatePart({
+        const part = yield* session.updatePart({
           ...match.part,
           state: {
             status: "completed",
@@ -180,6 +201,7 @@ const layer = Layer.effect(
             attachments: output.attachments,
           },
         })
+        yield* recordMutatedFiles(part)
         yield* settleToolCall(toolCallID)
       })
 
@@ -422,7 +444,7 @@ const layer = Layer.effect(
             throw new Error(value.message)
 
           case "step-start":
-            if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
+            if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track(input.sessionID)
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -433,7 +455,7 @@ const layer = Layer.effect(
             return
 
           case "step-finish": {
-            const completedSnapshot = yield* snapshot.track()
+            const completedSnapshot = yield* snapshot.track(input.sessionID)
             yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
             // Anthropic reports thinking blocks it removed before the model saw the
             // prompt. Prefix mismatches mean opencode changed history behind a signed
@@ -469,7 +491,7 @@ const layer = Layer.effect(
             })
             yield* session.updateMessage(ctx.assistantMessage)
             if (ctx.snapshot) {
-              const patch = yield* snapshot.patch(ctx.snapshot)
+              const patch = yield* snapshot.patch(ctx.snapshot, ctx.mutatedFiles)
               if (patch.files.length) {
                 yield* session.updatePart({
                   id: PartID.ascending(),
@@ -481,6 +503,7 @@ const layer = Layer.effect(
                 })
               }
               ctx.snapshot = undefined
+              ctx.mutatedFiles = []
             }
             yield* summary
               .summarize({
@@ -552,7 +575,7 @@ const layer = Layer.effect(
 
       const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
         if (ctx.snapshot) {
-          const patch = yield* snapshot.patch(ctx.snapshot)
+          const patch = yield* snapshot.patch(ctx.snapshot, ctx.mutatedFiles)
           if (patch.files.length) {
             yield* session.updatePart({
               id: PartID.ascending(),
@@ -564,6 +587,7 @@ const layer = Layer.effect(
             })
           }
           ctx.snapshot = undefined
+          ctx.mutatedFiles = []
         }
 
         if (ctx.currentText) {
