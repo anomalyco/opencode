@@ -44,6 +44,26 @@ describe("partDefaultOpen", () => {
   test("preserves shell defaults", () => {
     expect(partDefaultOpen(tool("shell", {}), true, false)).toBe(true)
   })
+
+  test("returns undefined for reasoning parts (not a tool)", () => {
+    expect(partDefaultOpen(reasoning("thinking content"), false, false)).toBeUndefined()
+  })
+
+  test("returns undefined for text parts", () => {
+    expect(partDefaultOpen(text("hello"), false, false)).toBeUndefined()
+  })
+
+  test("returns undefined for webfetch tool (no special default)", () => {
+    expect(partDefaultOpen(tool("webfetch", {}), false, false)).toBeUndefined()
+  })
+
+  test("returns undefined for skill tool (no special default)", () => {
+    expect(partDefaultOpen(tool("skill", {}), false, false)).toBeUndefined()
+  })
+
+  test("returns undefined for task tool (no special default)", () => {
+    expect(partDefaultOpen(tool("task", {}), false, false)).toBeUndefined()
+  })
 })
 
 function tool(name: string, metadata: Record<string, unknown>): PartType {
@@ -62,5 +82,27 @@ function tool(name: string, metadata: Record<string, unknown>): PartType {
       metadata,
       time: { start: 0, end: 1 },
     },
+  }
+}
+
+function reasoning(text: string): PartType {
+  return {
+    id: "part_reasoning",
+    sessionID: "session",
+    messageID: "message",
+    type: "reasoning",
+    text,
+    time: { start: 0, end: 1 },
+  }
+}
+
+function text(text: string): PartType {
+  return {
+    id: "part_text",
+    sessionID: "session",
+    messageID: "message",
+    type: "text",
+    text,
+    time: { start: 0, end: 1 },
   }
 }
