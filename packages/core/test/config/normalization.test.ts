@@ -181,6 +181,58 @@ describe("ConfigNormalize", () => {
     expect(JSON.stringify(result.diagnostics)).not.toContain(secret)
   })
 
+  test("keeps a custom provider whose model capabilities omit tools", () => {
+    const result = normalized({
+      providers: {
+        acme: {
+          package: "aisdk:@ai-sdk/openai-compatible",
+          settings: { apiKey: "{env:ACME_API_KEY}", baseURL: "https://llm.example.com/v1" },
+          models: {
+            coder: {
+              limit: { context: 262144, output: 32768 },
+              capabilities: { input: ["text", "image"], output: ["text"] },
+            },
+          },
+        },
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+    expect(result.encoded.providers).toEqual({
+      acme: {
+        package: "aisdk:@ai-sdk/openai-compatible",
+        settings: { apiKey: "{env:ACME_API_KEY}", baseURL: "https://llm.example.com/v1" },
+        models: {
+          coder: {
+            limit: { context: 262144, output: 32768 },
+            capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+          },
+        },
+      },
+    })
+  })
+
+  test("names the offending field when a recognized provider value is malformed", () => {
+    const result = normalized({
+      providers: {
+        acme: {
+          models: {
+            coder: {
+              capabilities: { tools: "yes", input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    })
+    expect(result.encoded.providers).toEqual({})
+    expect(result.diagnostics.filter((item) => item.kind === "invalid")).toEqual([
+      {
+        kind: "invalid",
+        path: ["providers", "acme", "models", "coder", "capabilities", "tools"],
+        message: "skipped malformed recognized value",
+      },
+    ])
+  })
+
   test("recovers malformed named entries and retains a valid legacy collision", () => {
     const result = normalized({
       command: { fallback: { template: "legacy" } },

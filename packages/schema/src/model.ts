@@ -1,6 +1,6 @@
 export * as Model from "./model.js"
 
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Money } from "./money.js"
@@ -84,7 +84,8 @@ export const Compatibility = Schema.Struct({
 
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
-  tools: Schema.Boolean,
+  // Unknown models assume tool support; omitted tools must not fail decode.
+  tools: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
 })
