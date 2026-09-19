@@ -724,6 +724,7 @@ export const dict = {
   "session.todo.expand": "展開",
   "session.question.minimize": "質問を最小化",
   "session.question.restore": "質問を復元",
+  "session.question.build": "回答して Build エージェントで続行",
   "session.question.pending.one": "{{count}}件の保留中の質問",
   "session.question.pending.other": "{{count}}件の保留中の質問",
   "session.followupDock.summary.one": "{{count}} 件のメッセージが待機中",

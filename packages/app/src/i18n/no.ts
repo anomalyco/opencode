@@ -1216,6 +1216,7 @@ export const dict = {
   "session.review.noBranchChanges": "Ingen grenendringer ennå",
   "session.question.minimize": "Minimer spørsmål",
   "session.question.restore": "Gjenopprett spørsmål",
+  "session.question.build": "Svar og fortsett med Build-agenten",
   "session.question.pending.one": "{{count}} ventende spørsmål",
   "session.question.pending.other": "{{count}} ventende spørsmål",
   "session.new.project.new": "Nytt prosjekt",

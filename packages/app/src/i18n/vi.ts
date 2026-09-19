@@ -751,6 +751,7 @@ export const dict = {
   "session.question.progress": "{{current}} trong số {{total}} câu hỏi",
   "session.question.minimize": "Giảm thiểu câu hỏi",
   "session.question.restore": "Khôi phục câu hỏi",
+  "session.question.build": "Trả lời và tiếp tục với tác nhân Build",
   "session.question.pending.one": "{{count}} câu hỏi đang chờ xử lý",
   "session.question.pending.other": "{{count}} câu hỏi đang chờ xử lý",
   "session.followupDock.summary.one": "{{count}} tin nhắn đang chờ",

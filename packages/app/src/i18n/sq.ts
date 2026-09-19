@@ -744,6 +744,7 @@ export const dict = {
   "session.question.progress": "{{current}} e pyetjeve {{total}}",
   "session.question.minimize": "Minimizo pyetjen",
   "session.question.restore": "Rivendos pyetjen",
+  "session.question.build": "Përgjigju dhe vazhdo me agjentin Build",
   "session.question.pending.one": "{{count}} pyetje në pritje",
   "session.question.pending.other": "{{count}} pyetje në pritje",
   "session.followupDock.summary.one": "Mesazhi në radhë {{count}}",

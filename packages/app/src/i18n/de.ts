@@ -622,6 +622,7 @@ export const dict = {
   "session.todo.expand": "Ausklappen",
   "session.question.minimize": "Frage minimieren",
   "session.question.restore": "Frage wiederherstellen",
+  "session.question.build": "Antworten und mit Build-Agent fortfahren",
   "session.question.pending.one": "{{count}} ausstehende Frage",
   "session.question.pending.other": "{{count}} ausstehende Fragen",
   "session.followupDock.summary.one": "{{count}} Nachricht in der Warteschlange",

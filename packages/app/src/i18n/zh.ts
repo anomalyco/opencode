@@ -774,6 +774,7 @@ export const dict = {
   "session.todo.expand": "展开",
   "session.question.minimize": "收起问题",
   "session.question.restore": "展开问题",
+  "session.question.build": "回答并继续使用 Build 智能体",
   "session.question.pending.one": "{{count}} 个待处理问题",
   "session.question.pending.other": "{{count}} 个待处理问题",
   "session.followupDock.summary.one": "{{count}} 条排队消息",

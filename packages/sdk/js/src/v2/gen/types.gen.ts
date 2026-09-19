@@ -6123,6 +6123,7 @@ export type QuestionV2Reply = {
    * User answers in order of questions (each answer is an array of selected labels)
    */
   answers: Array<QuestionV2Answer>
+  agent?: string
 }
 
 export type ReferenceLocalSource = {
@@ -9169,6 +9170,7 @@ export type QuestionReplyData = {
      * User answers in order of questions (each answer is an array of selected labels)
      */
     answers: Array<QuestionAnswer>
+    agent?: string
   }
   path: {
     requestID: string

@@ -743,6 +743,7 @@ export const dict: Record<string, string> = {
   "session.question.progress": "{{total}} प्रश्नहरूको {{current}}",
   "session.question.minimize": "प्रश्न कम गर्नुहोस्",
   "session.question.restore": "प्रश्न पुनर्स्थापित गर्नुहोस्",
+  "session.question.build": "जवाफ दिनुहोस् र Build एजेन्टमा जारी राख्नुहोस्",
   "session.question.pending.one": "{{count}} विचाराधीन प्रश्न",
   "session.question.pending.other": "{{count}} विचाराधीन प्रश्नहरू",
   "session.followupDock.summary.one": "{{count}} लामबद्ध सन्देश",
