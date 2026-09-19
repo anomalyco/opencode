@@ -199,6 +199,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               useKittyKeyboard: {},
               autoFocus: false,
               openConsoleOnError: false,
+              // Always run terminal detection as if local, even over SSH: opentui's auto
+              // remote detection skips TERM/COLORTERM parsing and emits truecolor-only
+              // SGR that 256-color-only terminals (e.g. macOS Terminal) cannot render.
+              remote: false,
               useMouse: !Flag.OPENCODE_DISABLE_MOUSE && input.config.mouse,
               consoleOptions: {
                 keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
