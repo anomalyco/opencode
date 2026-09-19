@@ -133,6 +133,8 @@ const layer = Layer.effect(
 
       for (const item of yield* skill.all()) {
         if (commands[item.name]) continue
+        // Disabled skills are not exposed as slash commands.
+        if (!item.enabled) continue
         const dir = item.location === "<built-in>" ? undefined : path.dirname(item.location)
         commands[item.name] = {
           name: item.name,

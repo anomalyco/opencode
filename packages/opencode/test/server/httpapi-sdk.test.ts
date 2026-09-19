@@ -834,6 +834,81 @@ describe("HttpApi SDK", () => {
     ),
   )
 
+  httpapi(
+    "toggles skills through the generated SDK",
+    withProject(
+      "default",
+      { setup: writeProjectSkill },
+      ({ sdk }) =>
+        Effect.gen(function* () {
+          const listed = yield* capture(() => sdk.app.skills())
+          expect(listed.status).toBe(200)
+          const before = array(listed.data).find((skill) => skill.name === "project-rest-skill")
+          expect(before?.enabled).toBe(true)
+
+          const disabled = yield* capture(() => sdk.app.disableSkill({ name: "project-rest-skill" }))
+          expect(disabled.status).toBe(200)
+          expect(disabled.data).toBe(true)
+
+          const afterDisable = yield* capture(() => sdk.app.skills())
+          expect(array(afterDisable.data).find((skill) => skill.name === "project-rest-skill")?.enabled).toBe(false)
+
+          const enabled = yield* capture(() => sdk.app.enableSkill({ name: "project-rest-skill" }))
+          expect(enabled.status).toBe(200)
+          expect(enabled.data).toBe(true)
+
+          const afterEnable = yield* capture(() => sdk.app.skills())
+          expect(array(afterEnable.data).find((skill) => skill.name === "project-rest-skill")?.enabled).toBe(true)
+
+          const missing = yield* capture(() => sdk.app.disableSkill({ name: "missing-skill" }))
+          expect(missing.status).toBe(404)
+        }),
+    ),
+  )
+
+  httpapi(
+    "excludes disabled skills from the REST API prompt context",
+    withFakeLlmProject("default", { setup: writeProjectSkill }, ({ sdk, llm }) =>
+      Effect.gen(function* () {
+        yield* llm.text("skill context ok", { usage: { input: 11, output: 7 } })
+        const session = yield* capture(() =>
+          sdk.session.create({
+            title: "project skill toggle",
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          }),
+        )
+        const sessionID = String(record(session.data).id)
+
+        const promptBefore = yield* capture(() =>
+          sdk.session.prompt({
+            sessionID,
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "hello skill context" }],
+          }),
+        )
+        const inputsBefore = yield* llm.inputs
+        expect(promptBefore.status).toBe(200)
+        expect(JSON.stringify(inputsBefore[0])).toContain("project-rest-skill")
+
+        yield* capture(() => sdk.app.disableSkill({ name: "project-rest-skill" }))
+
+        yield* llm.text("skill context ok", { usage: { input: 11, output: 7 } })
+        const promptAfter = yield* capture(() =>
+          sdk.session.prompt({
+            sessionID,
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "hello skill context" }],
+          }),
+        )
+        const inputsAfter = yield* llm.inputs
+        expect(promptAfter.status).toBe(200)
+        expect(JSON.stringify(inputsAfter[inputsAfter.length - 1])).not.toContain("project-rest-skill")
+      }),
+    ),
+  )
+
   serverPathParity("matches generated SDK TUI validation and command routes", (serverPath) =>
     withStandardProject(serverPath, ({ sdk }) =>
       Effect.gen(function* () {

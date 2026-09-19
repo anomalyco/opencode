@@ -39,6 +39,7 @@ export const Info = Schema.Struct({
   description: Schema.optional(Schema.String),
   location: Schema.String,
   content: Schema.String,
+  enabled: Schema.Boolean,
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
@@ -82,6 +83,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ski
 type State = {
   skills: Record<string, Info>
   dirs: Set<string>
+  disabled: Set<string>
 }
 
 type DiscoveryState = {
@@ -100,6 +102,16 @@ export interface Interface {
   readonly all: () => Effect.Effect<Info[]>
   readonly dirs: () => Effect.Effect<string[]>
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+  readonly enable: (name: string) => Effect.Effect<void, NotFoundError>
+  readonly disable: (name: string) => Effect.Effect<void, NotFoundError>
+}
+
+// Runtime toggleable state: a skill disabled via `Skill.disable` stays
+// discoverable (it still shows up in listings so it can be re-enabled) but is
+// excluded from everything the model can reach: the system prompt
+// (`available`), the skill tool (`require`) and slash commands.
+function withEnabled(s: State, info: Info): Info {
+  return { ...info, enabled: !s.disabled.has(info.name) }
 }
 
 const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"]) {
@@ -136,6 +148,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
     description: md.data.description,
     location: match,
     content: md.content,
+    enabled: true,
   }
 })
 
@@ -272,7 +285,7 @@ const layer = Layer.effect(
     )
     const state = yield* InstanceState.make(
       Effect.fn("Skill.state")(function* () {
-        const s: State = { skills: {}, dirs: new Set() }
+        const s: State = { skills: {}, dirs: new Set(), disabled: new Set() }
         // Register the built-in skill BEFORE disk discovery so a user-disk
         // skill with the same name can override it.
         s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
@@ -280,27 +293,35 @@ const layer = Layer.effect(
           description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+          enabled: true,
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), events)
+        // Seed the runtime disabled set from config (mirrors how an MCP
+        // server with `enabled: false` starts up disabled). Runtime toggles
+        // are persisted back through Config.update, so the disabled list
+        // survives restarts.
+        const cfg = yield* config.get()
+        for (const name of cfg.skills?.disabled ?? []) s.disabled.add(name)
         return s
       }),
     )
 
     const get = Effect.fn("Skill.get")(function* (name: string) {
       const s = yield* InstanceState.get(state)
-      return s.skills[name]
+      const info = s.skills[name]
+      return info ? withEnabled(s, info) : undefined
     })
 
     const require = Effect.fn("Skill.require")(function* (name: string) {
       const s = yield* InstanceState.get(state)
       const info = s.skills[name]
-      if (info) return info
+      if (info && !s.disabled.has(name)) return withEnabled(s, info)
       return yield* new NotFoundError({ name, available: Object.keys(s.skills).toSorted() })
     })
 
     const all = Effect.fn("Skill.all")(function* () {
       const s = yield* InstanceState.get(state)
-      return Object.values(s.skills)
+      return Object.values(s.skills).map((info) => withEnabled(s, info))
     })
 
     const dirs = Effect.fn("Skill.dirs")(function* () {
@@ -309,12 +330,49 @@ const layer = Layer.effect(
 
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
       const s = yield* InstanceState.get(state)
-      const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
+      const list = Object.values(s.skills)
+        .filter((skill) => !s.disabled.has(skill.name))
+        .map((info) => withEnabled(s, info))
+        .toSorted((a, b) => a.name.localeCompare(b.name))
       if (!agent) return list
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
     })
 
-    return Service.of({ get, require, all, dirs, available })
+    // Persist the runtime disabled set through the global config channel
+    // (Config.updateGlobal writes ~/.config/opencode/config.json, which
+    // Config.loadGlobal reads back on the next start). Only the `disabled`
+    // key is patched so a toggle never rewrites unrelated config. An empty
+    // set is written as `undefined`, which remeda mergeDeep drops from the
+    // merged document.
+    //
+    // Note: skills.disabled declared in a user's opencode.json always wins
+    // over the runtime store at startup (config files are merged on top of
+    // config.json), mirroring how MCP servers with `enabled: false` behave.
+    const persistDisabled = Effect.fn("Skill.persistDisabled")(function* () {
+      const s = yield* InstanceState.get(state)
+      const disabled = [...s.disabled].toSorted()
+      yield* config.updateGlobal({
+        skills: {
+          disabled: disabled.length ? disabled : undefined,
+        },
+      })
+    })
+
+    const enable = Effect.fn("Skill.enable")(function* (name: string) {
+      const s = yield* InstanceState.get(state)
+      if (!s.skills[name]) return yield* new NotFoundError({ name, available: Object.keys(s.skills).toSorted() })
+      s.disabled.delete(name)
+      yield* persistDisabled()
+    })
+
+    const disable = Effect.fn("Skill.disable")(function* (name: string) {
+      const s = yield* InstanceState.get(state)
+      if (!s.skills[name]) return yield* new NotFoundError({ name, available: Object.keys(s.skills).toSorted() })
+      s.disabled.add(name)
+      yield* persistDisabled()
+    })
+
+    return Service.of({ get, require, all, dirs, available, enable, disable })
   }),
 )
 
