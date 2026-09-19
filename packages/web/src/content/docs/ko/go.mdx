@@ -91,6 +91,9 @@ OpenCode Go는 [OpenCode](https://opencode.ai) 및 유사한 유형의 요청을
 1. 일반적인 코딩 에이전트 트래픽을 전송합니다.
 2. 일반적인 SDK 또는 HTTP 라이브러리 이름이 아닌 `my-coding-agent/1.0`과 같은 자체 user agent로 식별합니다.
 3. 라우팅과 프롬프트 캐싱을 최적화할 수 있도록 각 대화에서 안정적인 세션 ID를 `x-opencode-session`으로 전송합니다.
+   요청마다 또는 프로세스마다 새 ID를 만들지 말고, 보조 호출을 포함한 대화의 모든 요청에서 같은 ID를 재사용하며,
+   클라이언트가 사용하는 모든 엔드포인트(`/responses`, `/chat/completions`, `/messages`)에 전송합니다.
+   하나의 SDK 미들웨어에서만 추가한 헤더는 다른 엔드포인트에는 전달되지 않습니다.
 
 ### 검증된 클라이언트
 
