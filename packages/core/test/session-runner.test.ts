@@ -6,6 +6,7 @@ import {
   Model,
   TransportReason,
   InvalidRequestReason,
+  InvalidProviderOutputReason,
   type LLMClientShape,
   type LLMRequest,
 } from "@opencode-ai/llm"
@@ -3261,6 +3262,169 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(1)
       expect(executions.slice(executionCount)).toEqual(["settled"])
+    }),
+  )
+
+  it.effect("recovers truncated tool arguments with a model-visible failed tool result", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Use echo" }), resume: false })
+      const executionCount = executions.length
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolInputStart({ id: "call-truncated", name: "echo" }),
+          LLMEvent.toolInputDelta({ id: "call-truncated", name: "echo", text: '{"text":"hel' }),
+          LLMEvent.toolInputEnd({ id: "call-truncated", name: "echo" }),
+          LLMEvent.providerError({
+            message:
+              "OpenAI Responses truncated tool call echo (12 argument bytes, response.incomplete, reason=max_output_tokens)",
+            classification: "truncated",
+            retryable: true,
+            providerMetadata: {
+              openai: {
+                toolArgumentFailure: "provider-truncated",
+                argumentBytes: 12,
+                terminalEvent: "response.incomplete",
+                itemFinalized: true,
+                incompleteReason: "max_output_tokens",
+              },
+            },
+          }),
+          LLMEvent.stepFinish({ index: 0, reason: "length" }),
+          LLMEvent.finish({ reason: "length" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-final" }),
+          LLMEvent.textDelta({ id: "text-final", text: "Recovered" }),
+          LLMEvent.textEnd({ id: "text-final" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(JSON.stringify(requests[1]?.messages)).toContain("Please re-emit the tool call")
+      expect(executions.slice(executionCount)).toEqual([])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Use echo" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-truncated",
+              state: {
+                status: "error",
+                error: {
+                  type: "unknown",
+                  message:
+                    "OpenAI Responses truncated tool call echo (12 argument bytes, response.incomplete, reason=max_output_tokens). Please re-emit the tool call.",
+                },
+              },
+            },
+          ],
+        },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
+    }),
+  )
+
+  it.effect("fails the step after exhausting truncated tool argument recoveries", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Use echo" }), resume: false })
+      const truncatedTurn = (id: string) => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id, name: "echo" }),
+        LLMEvent.toolInputDelta({ id, name: "echo", text: '{"text":"hel' }),
+        LLMEvent.toolInputEnd({ id, name: "echo" }),
+        LLMEvent.providerError({
+          message: "OpenAI Responses truncated tool call echo (12 argument bytes, response.incomplete)",
+          classification: "truncated",
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "error" }),
+        LLMEvent.finish({ reason: "error" }),
+      ]
+      requests.length = 0
+      responses = [
+        truncatedTurn("call-truncated-0"),
+        truncatedTurn("call-truncated-1"),
+        truncatedTurn("call-truncated-2"),
+        truncatedTurn("call-truncated-3"),
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(4)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Use echo" },
+        { type: "assistant", content: [{ type: "tool", id: "call-truncated-0", state: { status: "error" } }] },
+        { type: "assistant", content: [{ type: "tool", id: "call-truncated-1", state: { status: "error" } }] },
+        { type: "assistant", content: [{ type: "tool", id: "call-truncated-2", state: { status: "error" } }] },
+        {
+          type: "assistant",
+          finish: "error",
+          error: {
+            type: "unknown",
+            message: "OpenAI Responses truncated tool call echo (12 argument bytes, response.incomplete)",
+          },
+        },
+      ])
+    }),
+  )
+
+  it.effect("recovers InvalidProviderOutput when a local tool input is still pending", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Use echo" }), resume: false })
+      const executionCount = executions.length
+      requests.length = 0
+      responseStream = Stream.concat(
+        Stream.fromIterable([
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolInputStart({ id: "call-invalid-json", name: "echo" }),
+          LLMEvent.toolInputDelta({ id: "call-invalid-json", name: "echo", text: '{"text":"hel' }),
+        ]),
+        Stream.fail(
+          new LLMError({
+            module: "test",
+            method: "stream",
+            reason: new InvalidProviderOutputReason({
+              message: "Invalid JSON input for openai-responses tool call echo",
+            }),
+          }),
+        ),
+      )
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-final" }),
+        LLMEvent.textDelta({ id: "text-final", text: "Recovered" }),
+        LLMEvent.textEnd({ id: "text-final" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(JSON.stringify(requests[1]?.messages)).toContain("malformed or truncated")
+      expect(executions.slice(executionCount)).toEqual([])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Use echo" },
+        {
+          type: "assistant",
+          content: [{ type: "tool", id: "call-invalid-json", state: { status: "error" } }],
+        },
+        { type: "assistant", finish: "stop", content: [{ type: "text", text: "Recovered" }] },
+      ])
     }),
   )
 
