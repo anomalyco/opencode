@@ -181,6 +181,58 @@ describe("ConfigNormalize", () => {
     expect(JSON.stringify(result.diagnostics)).not.toContain(secret)
   })
 
+  test("keeps a custom provider whose model capabilities omit tools", () => {
+    const result = normalized({
+      providers: {
+        acme: {
+          package: "aisdk:@ai-sdk/openai-compatible",
+          settings: { apiKey: "{env:ACME_API_KEY}", baseURL: "https://llm.example.com/v1" },
+          models: {
+            coder: {
+              limit: { context: 262144, output: 32768 },
+              capabilities: { input: ["text", "image"], output: ["text"] },
+            },
+          },
+        },
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+    expect(result.encoded.providers).toEqual({
+      acme: {
+        package: "aisdk:@ai-sdk/openai-compatible",
+        settings: { apiKey: "{env:ACME_API_KEY}", baseURL: "https://llm.example.com/v1" },
+        models: {
+          coder: {
+            limit: { context: 262144, output: 32768 },
+            capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+          },
+        },
+      },
+    })
+  })
+
+  test("names the offending field when a recognized provider value is malformed", () => {
+    const result = normalized({
+      providers: {
+        acme: {
+          models: {
+            coder: {
+              capabilities: { tools: "yes", input: ["text"], output: ["text"] },
+            },
+          },
+        },
+      },
+    })
+    expect(result.encoded.providers).toEqual({})
+    expect(result.diagnostics.filter((item) => item.kind === "invalid")).toEqual([
+      {
+        kind: "invalid",
+        path: ["providers", "acme", "models", "coder", "capabilities", "tools"],
+        message: "skipped malformed recognized value",
+      },
+    ])
+  })
+
   test("recovers malformed named entries and retains a valid legacy collision", () => {
     const result = normalized({
       command: { fallback: { template: "legacy" } },
@@ -197,9 +249,9 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.commands).toEqual({ fallback: { template: "legacy" }, valid: { template: "native" } })
     expect(result.encoded.providers).toEqual({ valid: { name: "Valid" } })
     expect(result.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toEqual([
-      ["commands", "fallback"],
-      ["commands", "invalid"],
-      ["providers", "invalid"],
+      ["commands", "fallback", "template"],
+      ["commands", "invalid", "template"],
+      ["providers", "invalid", "env", "0"],
     ])
   })
 
@@ -214,6 +266,8 @@ describe("ConfigNormalize", () => {
     expect(result.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toContainEqual([
       "provider",
       "azure",
+      "env",
+      "0",
     ])
   })
 
@@ -292,8 +346,8 @@ describe("ConfigNormalize", () => {
     expect(invalid.encoded).not.toHaveProperty("formatter")
     expect(invalid.encoded).not.toHaveProperty("lsp")
     expect(invalid.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toEqual([
-      ["formatter", "prettier"],
-      ["lsp", "typescript"],
+      ["formatter", "prettier", "command", "0"],
+      ["lsp", "typescript", "command", "0"],
     ])
 
     expect(normalized({ formatter: {}, lsp: {} }).encoded).toMatchObject({ formatter: {}, lsp: {} })
@@ -328,7 +382,7 @@ describe("ConfigNormalize", () => {
       result.diagnostics.some((item) => item.kind === "conflict" && item.path.join(".") === "mcp.timeout.catalog"),
     ).toBe(true)
     expect(
-      result.diagnostics.some((item) => item.kind === "invalid" && item.path.join(".") === "mcp.servers.invalid"),
+      result.diagnostics.some((item) => item.kind === "invalid" && item.path.join(".") === "mcp.servers.invalid.command.0"),
     ).toBe(true)
   })
 
