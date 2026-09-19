@@ -4,6 +4,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
 
@@ -175,11 +176,16 @@ const layer = Layer.effect(
   }),
 )
 
-function expand(pattern: string): string {
-  if (pattern.startsWith("~/")) return os.homedir() + pattern.slice(1)
-  if (pattern === "~") return os.homedir()
-  if (pattern.startsWith("$HOME/")) return os.homedir() + pattern.slice(5)
-  if (pattern.startsWith("$HOME")) return os.homedir() + pattern.slice(5)
+export function expand(pattern: string): string {
+  if (pattern.startsWith("~/")) pattern = os.homedir() + pattern.slice(1)
+  if (pattern === "~") pattern = os.homedir()
+  if (pattern.startsWith("$HOME/")) pattern = os.homedir() + pattern.slice(5)
+  if (pattern.startsWith("$HOME")) pattern = os.homedir() + pattern.slice(5)
+  // On Windows, normalise absolute path patterns through the same realpath pass
+  // the runtime applies to ask targets. Otherwise whitelist entries written as
+  // symlinked/junction paths (e.g. ~/.claude resolving to ~/.codex) never match
+  // the canonicalised request and every external read prompts anyway.
+  if (process.platform === "win32" && /^[A-Za-z]:[\\/]/.test(pattern)) return FSUtil.normalizePathPattern(pattern)
   return pattern
 }
 

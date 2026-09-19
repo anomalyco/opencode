@@ -4,6 +4,7 @@ import os from "os"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Permission } from "../../src/permission"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
@@ -110,17 +111,22 @@ test("fromConfig - empty object", () => {
 
 test("fromConfig - expands tilde to home directory", () => {
   const result = Permission.fromConfig({ external_directory: { "~/projects/*": "allow" } })
-  expect(result).toEqual([{ permission: "external_directory", pattern: `${os.homedir()}/projects/*`, action: "allow" }])
+  const expected =
+    process.platform === "win32" ? FSUtil.normalizePathPattern(`${os.homedir()}/projects/*`) : `${os.homedir()}/projects/*`
+  expect(result).toEqual([{ permission: "external_directory", pattern: expected, action: "allow" }])
 })
 
 test("fromConfig - expands $HOME to home directory", () => {
   const result = Permission.fromConfig({ external_directory: { "$HOME/projects/*": "allow" } })
-  expect(result).toEqual([{ permission: "external_directory", pattern: `${os.homedir()}/projects/*`, action: "allow" }])
+  const expected =
+    process.platform === "win32" ? FSUtil.normalizePathPattern(`${os.homedir()}/projects/*`) : `${os.homedir()}/projects/*`
+  expect(result).toEqual([{ permission: "external_directory", pattern: expected, action: "allow" }])
 })
 
 test("fromConfig - expands $HOME without trailing slash", () => {
   const result = Permission.fromConfig({ external_directory: { $HOME: "allow" } })
-  expect(result).toEqual([{ permission: "external_directory", pattern: os.homedir(), action: "allow" }])
+  const expected = process.platform === "win32" ? FSUtil.normalizePath(`${os.homedir()}`) : os.homedir()
+  expect(result).toEqual([{ permission: "external_directory", pattern: expected, action: "allow" }])
 })
 
 test("fromConfig - does not expand tilde in middle of path", () => {
