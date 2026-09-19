@@ -72,6 +72,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  lastReasoningPart: SessionV1.ReasoningPart | undefined
 }
 
 type StreamEvent = LLMEvent
@@ -111,6 +112,7 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        lastReasoningPart: undefined,
       }
       let aborted = false
 
@@ -279,6 +281,16 @@ const layer = Layer.effect(
         switch (value.type) {
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
+            if (ctx.lastReasoningPart) {
+              ctx.reasoningMap[value.id] = {
+                ...ctx.lastReasoningPart,
+                time: { start: ctx.lastReasoningPart.time.start },
+                metadata: value.providerMetadata ?? ctx.lastReasoningPart.metadata,
+              }
+              ctx.lastReasoningPart = undefined
+              yield* session.updatePart(ctx.reasoningMap[value.id])
+              return
+            }
             ctx.reasoningMap[value.id] = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -309,10 +321,12 @@ const layer = Layer.effect(
             if (value.providerMetadata && value.id in ctx.reasoningMap) {
               ctx.reasoningMap[value.id].metadata = value.providerMetadata
             }
+            if (value.id in ctx.reasoningMap) ctx.lastReasoningPart = ctx.reasoningMap[value.id]
             yield* finishReasoning(value.id)
             return
 
           case "tool-input-start":
+            ctx.lastReasoningPart = undefined
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
@@ -329,6 +343,7 @@ const layer = Layer.effect(
           }
 
           case "tool-call": {
+            ctx.lastReasoningPart = undefined
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
@@ -422,6 +437,7 @@ const layer = Layer.effect(
             throw new Error(value.message)
 
           case "step-start":
+            ctx.lastReasoningPart = undefined
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
             yield* session.updatePart({
               id: PartID.ascending(),
@@ -433,6 +449,7 @@ const layer = Layer.effect(
             return
 
           case "step-finish": {
+            ctx.lastReasoningPart = undefined
             const completedSnapshot = yield* snapshot.track()
             yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
             // Anthropic reports thinking blocks it removed before the model saw the
@@ -498,6 +515,7 @@ const layer = Layer.effect(
           }
 
           case "text-start":
+            ctx.lastReasoningPart = undefined
             ctx.currentText = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -581,6 +599,7 @@ const layer = Layer.effect(
           })
         }
         ctx.reasoningMap = {}
+        ctx.lastReasoningPart = undefined
 
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
@@ -650,6 +669,7 @@ const layer = Layer.effect(
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
+            ctx.lastReasoningPart = undefined
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
@@ -662,6 +682,7 @@ const layer = Layer.effect(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
                 aborted = true
+                ctx.lastReasoningPart = undefined
                 if (!ctx.assistantMessage.error) {
                   yield* halt(new DOMException("Aborted", "AbortError"))
                 }
