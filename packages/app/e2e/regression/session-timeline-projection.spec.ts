@@ -166,6 +166,45 @@ test.describe("session timeline projection", () => {
     await expect(longNotice.locator("[title]")).toHaveAttribute("title", `Switched to ${longName}`)
     await expect.poll(() => longNotice.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
   })
+
+  test("does not repeat a review comment file as an attachment", async ({ page }) => {
+    const message = userMessage([
+      userText("what's goin on here", { id: "prt_user_review_comment" }),
+      {
+        id: "prt_user_review_file",
+        type: "file",
+        mime: "text/plain",
+        filename: "LiveRuntime.ts",
+        url: "file:///repo/LiveRuntime.ts?start=14&end=32",
+      },
+      {
+        id: "prt_user_unrelated_file",
+        type: "file",
+        mime: "text/plain",
+        filename: "notes.txt",
+        url: "data:text/plain;base64,bm90ZXM=",
+      },
+    ])
+    message.metadata = {
+      displayText: "what's goin on here",
+      comments: [
+        {
+          path: "LiveRuntime.ts",
+          comment: "what's goin on here",
+          selection: { startLine: 14, startChar: 0, endLine: 32, endChar: 0 },
+          origin: "review",
+        },
+      ],
+    }
+
+    await setupTimeline(page, { messages: [message, assistantMessage()] })
+
+    const user = page.locator('[data-component="user-message"]')
+    await expect(user.getByText("LiveRuntime.ts:14-32", { exact: true })).toBeVisible()
+    const attachments = user.locator('[data-slot="user-message-attachments"]')
+    await expect(attachments.getByText("LiveRuntime.ts", { exact: true })).toHaveCount(0)
+    await expect(attachments.getByText("notes.txt", { exact: true })).toBeVisible()
+  })
 })
 
 function patchFile(file: string, status: "added" | "modified" | "deleted") {

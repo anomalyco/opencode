@@ -42,7 +42,7 @@ export type ComposerProps = {
 }
 
 export function Composer(props: ComposerProps) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const config = useConfig().data
 
   const [store, setStore] = createStore({
@@ -113,8 +113,8 @@ export function Composer(props: ComposerProps) {
         <box
           {...SplitBorder}
           border={["left"]}
-          borderColor={theme.border.default}
-          backgroundColor={theme.background.default}
+          borderColor={theme.border.base}
+          backgroundColor={theme.background.raised.base}
           paddingLeft={1}
           paddingRight={2}
           paddingTop={1}
@@ -125,7 +125,7 @@ export function Composer(props: ComposerProps) {
               <Show
                 when={tabList().length > 1}
                 fallback={
-                  <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+                  <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
                     {tabList()[0]?.label ?? ""}
                   </text>
                 }
@@ -136,7 +136,7 @@ export function Composer(props: ComposerProps) {
                       const isActive = createMemo(() => store.active === t.id)
                       return (
                         <text
-                          fg={isActive() ? theme.text.default : theme.text.subdued}
+                          fg={isActive() ? theme.text.base : theme.text.muted}
                           attributes={isActive() ? TextAttributes.BOLD : undefined}
                         >
                           {t.label}
@@ -146,7 +146,7 @@ export function Composer(props: ComposerProps) {
                   </For>
                 </box>
               </Show>
-              <text fg={theme.text.subdued} onMouseUp={close}>
+              <text fg={theme.text.muted} onMouseUp={close}>
                 esc
               </text>
             </box>
@@ -159,19 +159,19 @@ export function Composer(props: ComposerProps) {
               <For each={footerHints()}>
                 {(hint) => (
                   <text>
-                    <span style={{ fg: theme.text.default }}>
+                    <span style={{ fg: theme.text.base }}>
                       <b>{hint.label}</b>{" "}
                     </span>
-                    <span style={{ fg: theme.text.subdued }}>{hint.shortcut}</span>
+                    <span style={{ fg: theme.text.muted }}>{hint.shortcut}</span>
                   </text>
                 )}
               </For>
               <Show when={tabList().length > 1}>
                 <text>
-                  <span style={{ fg: theme.text.default }}>
+                  <span style={{ fg: theme.text.base }}>
                     <b>tabs</b>{" "}
                   </span>
-                  <span style={{ fg: theme.text.subdued }}>←/→</span>
+                  <span style={{ fg: theme.text.muted }}>←/→</span>
                 </text>
               </Show>
             </box>

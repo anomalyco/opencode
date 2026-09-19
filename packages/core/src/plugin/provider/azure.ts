@@ -7,7 +7,6 @@ import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
-import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { iife } from "../../util/iife.js"
 import { which } from "../../util/which.js"
@@ -140,16 +139,18 @@ export const AzurePlugin = define({
         )
           continue
         const resourceName = resolveResourceName(item.provider.settings, loaded.resource)
-        if (resourceName)
-          evt.update(item.provider.id, (provider) => {
-            provider.settings = {
-              ...provider.settings,
-              resourceName,
-              ...(typeof provider.settings?.baseURL === "string"
-                ? { baseURL: expandResourceName(provider.settings.baseURL, resourceName) }
-                : {}),
-            }
-          })
+        const websocket = responsesWebSocketCapable(item.provider)
+        if (!resourceName && !websocket) continue
+        evt.update(item.provider.id, (provider) => {
+          provider.settings = {
+            ...provider.settings,
+            ...(resourceName === undefined ? {} : { resourceName }),
+            ...(websocket ? { transport: provider.settings?.transport ?? "websocket" } : {}),
+            ...(resourceName !== undefined && typeof provider.settings?.baseURL === "string"
+              ? { baseURL: expandResourceName(provider.settings.baseURL, resourceName) }
+              : {}),
+          }
+        })
       }
     })
     yield* ctx.model.transform((models) => {
@@ -167,8 +168,6 @@ export const AzurePlugin = define({
                 draft.settings.baseURL,
                 resolveResourceName(draft.settings, resourceName) ?? resourceName,
               )
-            if (responsesWebSocketCapable(item.provider, draft))
-              draft.transport = item.provider.transport ?? "websocket"
           })
         }
       }
@@ -240,9 +239,9 @@ function expandResourceName(baseURL: string, resourceName: string) {
     .replaceAll("${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}", resourceName)
 }
 
-function responsesWebSocketCapable(provider: Provider.Info, model: Model.Info) {
-  if ((model.package ?? provider.package) !== "@opencode/ai/providers/azure/responses") return false
-  const settings = Provider.mergeOverlay(provider.settings, model.settings)
+function responsesWebSocketCapable(provider: Provider.Info) {
+  if (provider.package !== "@opencode/ai/providers/azure/responses") return false
+  const settings = provider.settings
   if (settings?.useDeploymentBasedUrls === true) return false
   if (settings?.apiVersion !== undefined && settings.apiVersion !== "v1") return false
   if (typeof settings?.baseURL !== "string") return true

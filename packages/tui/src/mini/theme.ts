@@ -1,6 +1,6 @@
 import { RGBA, SyntaxStyle, type CliRenderer, type ColorInput, type TerminalColors } from "@opentui/core"
 import { generateSyntax, resolveThemeDocument, themeModes, type ResolvedTheme } from "@opencode/theme/tui"
-import { allThemes, DEFAULT_THEMES, isThemeSource, parseTheme, type ThemeDocumentSource } from "../theme"
+import { allThemes, getOpenCodeTheme, isThemeSource, parseTheme, type ThemeDocumentSource } from "../theme"
 import { ansiToRgba } from "../theme/color"
 import { discoverThemes } from "../theme/discovery"
 import { generateSystem, terminalMode } from "../theme/system"
@@ -111,15 +111,13 @@ function nearestIndexed(indexed: RGBA[], color: RGBA): RGBA {
 function map(
   theme: ResolvedTheme,
   indexed: RGBA[],
-  mode: "light" | "dark",
   syntax?: SyntaxStyle,
   system = false,
 ): RunTheme {
-  const elevated = theme.contextual.elevated
   // V1 system migration serializes colors; restore terminal defaults before quantizing scrollback.
   const exact = (color: RGBA) => {
-    if (system && color.equals(theme.text.default)) return RGBA.defaultForeground(color)
-    if (system && color.equals(theme.background.default)) return RGBA.defaultBackground(color)
+    if (system && color.equals(theme.text.base)) return RGBA.defaultForeground(color)
+    if (system && color.equals(theme.background.base)) return RGBA.defaultBackground(color)
     return color
   }
   const scrollback = (color: RGBA) => {
@@ -135,50 +133,50 @@ function map(
   })
 
   return {
-    background: RGBA.defaultBackground(theme.background.default),
+    background: RGBA.defaultBackground(theme.background.base),
     footer: {
-      actionSecondaryText: exact(elevated.text.action.secondary.default),
-      actionFocusedBg: exact(elevated.background.action.primary.focused),
-      actionFocusedText: exact(elevated.text.action.primary.focused),
-      formfieldText: exact(elevated.text.formfield.default),
-      formfieldFocusedBg: exact(elevated.background.formfield.focused),
-      formfieldFocusedText: exact(elevated.text.formfield.focused),
-      selection: exact(elevated.text.formfield.selected),
-      running: exact(theme.text.status.running),
-      question: exact(theme.text.status.question),
-      permission: exact(theme.text.status.permission),
-      success: exact(theme.text.feedback.success.default),
+      actionSecondaryText: exact(theme.text.action.secondary.base),
+      actionFocusedBg: exact(theme.background.action.primary.focused),
+      actionFocusedText: exact(theme.text.action.primary.focused),
+      formfieldText: exact(theme.text.formfield.base),
+      formfieldFocusedBg: exact(theme.background.formfield.focused),
+      formfieldFocusedText: exact(theme.text.formfield.focused),
+      selection: exact(theme.text.formfield.selected),
+      running: exact(theme.hue.interactive[200]),
+      question: exact(theme.hue.accent[200]),
+      permission: exact(theme.hue.accent[200]),
+      success: exact(theme.text.feedback.success.base),
       link: exact(theme.markdown.link),
       categorical: dedupeWith(
-        theme.categorical.map((scale) => exact(scale[mode === "light" ? 800 : 200])),
+        theme.categorical.map((scale) => exact(scale[200])),
         (a, b) => a.equals(b),
       ),
-      warning: exact(theme.text.feedback.warning.default),
-      error: exact(theme.text.feedback.error.default),
-      muted: exact(theme.text.subdued),
-      text: exact(theme.text.default),
-      shade: exact(elevated.background.default),
-      surface: exact(elevated.background.default),
-      pane: exact(theme.contextual.overlay.background.default),
-      border: exact(theme.border.default),
+      warning: exact(theme.text.feedback.warning.base),
+      error: exact(theme.text.feedback.error.base),
+      muted: exact(theme.text.muted),
+      text: exact(theme.text.base),
+      shade: exact(theme.background.raised.base),
+      surface: exact(theme.background.raised.base),
+      pane: exact(theme.background.raised.high),
+      border: exact(theme.border.base),
       line: exact(theme.background.raised.high),
     },
     entry: {
-      system: { body: scrollback(theme.text.subdued) },
-      user: { body: scrollback(theme.text.default) },
+      system: { body: scrollback(theme.text.muted) },
+      user: { body: scrollback(theme.text.base) },
       assistant: { body: scrollback(theme.markdown.text) },
-      reasoning: { body: scrollback(theme.text.subdued) },
-      tool: { body: scrollback(theme.text.subdued), start: scrollback(theme.text.subdued) },
-      error: { body: scrollback(theme.text.feedback.error.default) },
+      reasoning: { body: scrollback(theme.text.muted) },
+      tool: { body: scrollback(theme.text.muted), start: scrollback(theme.text.muted) },
+      error: { body: scrollback(theme.text.feedback.error.base) },
     },
     splash: {
-      left: nearestIndexed(indexed, theme.text.subdued),
-      right: nearestIndexed(indexed, theme.text.default),
+      left: nearestIndexed(indexed, theme.text.muted),
+      right: nearestIndexed(indexed, theme.text.base),
       leftShadow: nearestIndexed(indexed, theme.background.raised.base),
     },
     block: {
-      text: scrollback(theme.text.default),
-      muted: scrollback(theme.text.subdued),
+      text: scrollback(theme.text.base),
+      muted: scrollback(theme.text.muted),
       syntax,
       diffRemoved: scrollback(theme.diff.text.removed),
       diffAddedBg: scrollback(theme.diff.background.added),
@@ -194,14 +192,12 @@ function map(
 }
 
 export const RUN_THEME_FALLBACK = map(
-  resolveThemeDocument(parseTheme(DEFAULT_THEMES.opencode), "dark"),
+  resolveThemeDocument(parseTheme(getOpenCodeTheme()), "dark"),
   ansiPalette,
-  "dark",
 )
 export const RUN_THEME_FALLBACK_LIGHT = map(
-  resolveThemeDocument(parseTheme(DEFAULT_THEMES.opencode), "light"),
+  resolveThemeDocument(parseTheme(getOpenCodeTheme()), "light"),
   ansiPalette,
-  "light",
 )
 
 function monoTheme(mode: "dark" | "light"): RunTheme {
@@ -296,13 +292,13 @@ export async function resolveRunTheme(
       if (themeModes(document).includes(mode)) return resolveThemeDocument(document, mode)
     })
     .catch(() => undefined)
-  const theme = resolved ?? resolveThemeDocument(parseTheme(DEFAULT_THEMES.opencode), mode)
+  const theme = resolved ?? resolveThemeDocument(parseTheme(getOpenCodeTheme()), mode)
   const indexed = colors
     ? ansiPalette.map((color, index) => (colors.palette[index] ? RGBA.fromIndex(index, colors.palette[index]!) : color))
     : ansiPalette
   return {
-    ...map(theme, indexed, mode, generateSyntax(theme, mode), name === "system" && resolved !== undefined),
-    background: RGBA.defaultBackground(colors?.defaultBackground ?? theme.background.default),
+    ...map(theme, indexed, generateSyntax(theme), name === "system" && resolved !== undefined),
+    background: RGBA.defaultBackground(colors?.defaultBackground ?? theme.background.base),
   }
 }
 
@@ -316,6 +312,6 @@ async function themeSource(
   const custom = await discoverThemes(
     configDirectories(process.env.OPENCODE_CONFIG_DIR ?? Global.Path.config, process.cwd()),
   )
-  const source = custom[name] ?? allThemes()[name] ?? DEFAULT_THEMES.opencode
-  return isThemeSource(source) ? source : DEFAULT_THEMES.opencode
+  const source = custom[name] ?? allThemes()[name] ?? getOpenCodeTheme()
+  return isThemeSource(source) ? source : getOpenCodeTheme()
 }

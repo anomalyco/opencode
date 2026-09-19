@@ -1945,6 +1945,30 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("drops a malformed provider option without discarding its siblings", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "hi",
+          providerOptions: {
+            topLogprobs: 25,
+            metadata: { tenant: 7 },
+            reasoningEffort: "high",
+            serviceTier: "priority",
+            maxToolCalls: 4,
+          },
+        }),
+      )
+
+      expect(prepared.body.top_logprobs).toBeUndefined()
+      expect(prepared.body.metadata).toBeUndefined()
+      expect(prepared.body.reasoning).toEqual({ effort: "high" })
+      expect(prepared.body.service_tier).toBe("priority")
+      expect(prepared.body.max_tool_calls).toBe(4)
+    }),
+  )
+
   it.effect("accepts the full ResponseIncludable union", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

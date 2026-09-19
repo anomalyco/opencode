@@ -148,37 +148,26 @@ selected provider's native compaction for both automatic and manual requests:
   "$schema": "https://opencode.ai/config.json",
   "providers": {
     "openai": {
-      "compaction": { "mode": "provider", "threshold": 120000 },
+      "settings": { "compaction": { "type": "native" } },
       "models": {
-        "gpt-5.4-mini": { "compaction": { "mode": "provider" } },
-        "gpt-4.1": { "compaction": { "mode": "local" } },
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
       },
     },
   },
 }
 ```
 
-A model policy replaces the entire provider policy. In this example,
-`gpt-5.4-mini` therefore uses its own usable input ceiling rather than inheriting
-the provider's `120000` threshold.
+A model setting overrides the provider setting.
 
 | Topic | Provider behavior |
 | --- | --- |
-| Threshold | `threshold` is an optional positive integer in provider mode. When omitted, OpenCode uses the model's usable input ceiling; when larger than that ceiling, it is clamped. |
+| Threshold | OpenCode uses the model's usable input ceiling configured by its context, input, and output limits plus the global compaction buffer. |
 | Scheduling | Checkpoints run at normal safe step boundaries. `compaction.auto: false` disables all new automatic work. |
 | Usage | After a native checkpoint is installed, automatic checks wait for fresh model usage because encrypted checkpoint bytes cannot provide a meaningful token count. |
 | OpenAI | Responses routes use a streamed compaction trigger when supported; endpoint-only routes use the standalone compaction endpoint. Deployment and model support vary. |
 | Retries | Transient provider failures use the normal session retry policy and plugin hook. Nothing is installed until the provider returns a checkpoint. |
 | Routes | Unsupported routes fail during model resolution. Configure custom endpoints with provider or model `settings.baseURL`. Native compaction rejects endpoint rewrites made by a `model.request` hook. |
 | Replay | Native checkpoints are reused only with the same provider, model, protocol, and endpoint. An incompatible route falls back to an earlier compatible checkpoint or retained transcript. |
-
-Choose a threshold comfortably above `keep.tokens` plus the system prompt and
-tools. For example, avoid a 20,000-token threshold when the retained input alone
-is 15,000 tokens and the prompt and tools require another 8,000:
-
-```text
-15,000 retained + 8,000 prompt and tools > 20,000 threshold
-```
 
 Otherwise each fresh usage report can immediately trigger another checkpoint.
 Disabling automatic compaction does not remove a checkpoint already installed.

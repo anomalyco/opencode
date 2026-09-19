@@ -15,7 +15,7 @@ const pkg = JSON.parse(originalText) as {
   name: string
   version: string
   exports: Record<string, string | { import: string; types: string }>
-  imports: Record<string, Record<string, string>>
+  imports?: Record<string, Record<string, string>>
 }
 const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`
 const output = (value: string, types = false) =>
@@ -41,12 +41,14 @@ try {
       ]
     }),
   )
-  pkg.imports = Object.fromEntries(
-    Object.entries(pkg.imports).map(([key, conditions]) => [
-      key,
-      Object.fromEntries(Object.entries(conditions).map(([condition, value]) => [condition, output(value)])),
-    ]),
-  )
+  if (pkg.imports) {
+    pkg.imports = Object.fromEntries(
+      Object.entries(pkg.imports).map(([key, conditions]) => [
+        key,
+        Object.fromEntries(Object.entries(conditions).map(([condition, value]) => [condition, output(value)])),
+      ]),
+    )
+  }
   await Bun.write("package.json", JSON.stringify(pkg, null, 2) + "\n")
   await rm(tarball, { force: true })
   await $`bun pm pack`

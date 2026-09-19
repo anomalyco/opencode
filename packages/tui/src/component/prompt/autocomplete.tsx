@@ -77,7 +77,7 @@ export function Autocomplete(props: {
   const data = useData()
   const keymap = Keymap.use()
   const keymapCommands = Keymap.useCommands()
-  const theme = useTheme("overlay")
+  const theme = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const config = useConfig().data
@@ -879,7 +879,7 @@ export function Autocomplete(props: {
       width={position().width}
       zIndex={100}
       {...SplitBorder}
-      borderColor={theme.border.default}
+      borderColor={theme.border.base}
     >
       <scrollbox
         ref={(r: ScrollBoxRenderable) => {
@@ -887,7 +887,7 @@ export function Autocomplete(props: {
           scroll = r
           scroll.verticalScrollBar.on("change", syncSelectionWindow)
         }}
-        backgroundColor={theme.background.default}
+        backgroundColor={theme.background.raised.high}
         height={height()}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}
@@ -896,7 +896,7 @@ export function Autocomplete(props: {
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
-              <text fg={emptyError() ? theme.text.feedback.error.default : theme.text.subdued}>{emptyMessage()}</text>
+              <text fg={emptyError() ? theme.text.feedback.error.base : theme.text.muted}>{emptyMessage()}</text>
             </box>
           }
         >
@@ -928,7 +928,7 @@ export function Autocomplete(props: {
                       ? theme.text.action.destructive.focused
                       : index === store.selected
                         ? theme.text.action.primary.focused
-                        : theme.text.default
+                        : theme.text.base
                   }
                   flexShrink={0}
                 >
@@ -936,7 +936,7 @@ export function Autocomplete(props: {
                 </text>
                 <Show when={!confirmingAction() && option().description}>
                   <text
-                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.subdued}
+                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.muted}
                     wrapMode="none"
                   >
                     {" " + option().description?.replace(/\s+/g, " ").trim()}

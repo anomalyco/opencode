@@ -65,5 +65,7 @@ interface ToolHooks {
 export interface ToolDomain {
   readonly transform: Transform<ToolEditor>
   readonly reload: () => Promise<void>
+  /** Currently registered tools, after every transform, keyed by effective name. */
+  readonly list: () => Promise<readonly (Info & { readonly id: string })[]>
   readonly hook: Hooks<ToolHooks>
 }

@@ -6,6 +6,7 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } fr
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
+import { IntegrationConnection } from "../../integration/connection.js"
 import { Provider } from "../../provider.js"
 import { WebSearch } from "../../websearch.js"
 import { ConfigProvider } from "@opencode/schema/config/provider"
@@ -131,7 +132,13 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       const config = credential
         ? yield* fetchConfig(http, credential).pipe(
             Effect.catch((cause) =>
-              Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(Effect.as(undefined)),
+              Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(
+                Effect.as(
+                  IntegrationConnection.key(snapshot.connection) === IntegrationConnection.key(connection)
+                    ? snapshot.config
+                    : undefined,
+                ),
+              ),
             ),
           )
         : undefined

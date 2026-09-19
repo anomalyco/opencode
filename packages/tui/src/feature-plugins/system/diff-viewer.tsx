@@ -214,14 +214,14 @@ function DiffBaseDialog(props: {
   current?: string
   onSelect: (ref: string) => void
 }) {
-  const theme = props.context.theme.contextual.elevated
+  const theme = props.context.theme.surface("dialog")
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [branches] = createResource(search, (search) =>
     props.context.client.vcs.branch.list({ location: props.location, search, limit: 100 }),
   )
   const Empty = () => (
     <box paddingLeft={4} paddingRight={4}>
-      <text fg={branches.error ? theme.text.feedback.error.default : theme.text.subdued}>
+      <text fg={branches.error ? theme.text.feedback.error.base : theme.text.muted}>
         {branches.loading
           ? "Loading branches…"
           : branches.error
@@ -240,7 +240,7 @@ function DiffBaseDialog(props: {
       onFilter={setSearch}
       emptyView={<Empty />}
       noMatchView={<Empty />}
-      footer={<text fg={theme.text.subdued}>Remembered until the TUI exits</text>}
+      footer={<text fg={theme.text.muted}>Remembered until the TUI exits</text>}
       options={(branches.loading || branches.error ? [] : (branches()?.data ?? [])).map((name) => ({
         title: name,
         value: name,
@@ -758,7 +758,7 @@ export function DiffViewerContent(props: {
       {(shortcut) => (
         <text
           id="diff-help-shortcut"
-          fg={theme.text.default}
+          fg={theme.text.base}
           selectable={false}
           flexShrink={0}
           wrapMode="none"
@@ -770,7 +770,7 @@ export function DiffViewerContent(props: {
         >
           {props.compact ? "?" : shortcut()}
           <Show when={!props.compact}>
-            <span style={{ fg: theme.text.subdued }}> help</span>
+            <span style={{ fg: theme.text.muted }}> help</span>
           </Show>
         </text>
       )}
@@ -782,7 +782,7 @@ export function DiffViewerContent(props: {
   }))
 
   return (
-    <box width="100%" height="100%" backgroundColor={theme.background.default}>
+    <box width="100%" height="100%" backgroundColor={theme.background.base}>
       <Show when={!showFileTree()}>
         <box
           id="diff-source-header"
@@ -805,7 +805,7 @@ export function DiffViewerContent(props: {
             }}
           >
             <text
-              fg={theme.text.action.secondary.default}
+              fg={theme.text.action.secondary.base}
               attributes={TextAttributes.BOLD}
               selectable={false}
               flexShrink={0}
@@ -814,12 +814,12 @@ export function DiffViewerContent(props: {
               {diffSourceLabel(mode())}
             </text>
             <Show when={props.sourceDetail}>
-              <text fg={theme.text.subdued} selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate>
+              <text fg={theme.text.muted} selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate>
                 {` · ${props.sourceDetail}`}
               </text>
             </Show>
           </box>
-          <text id="diff-review-count" fg={theme.text.subdued} flexShrink={0} wrapMode="none">
+          <text id="diff-review-count" fg={theme.text.muted} flexShrink={0} wrapMode="none">
             {files().filter((file) => reviewedFileNames().has(file.file)).length}/{files().length}
           </text>
         </box>
@@ -828,12 +828,12 @@ export function DiffViewerContent(props: {
         <Switch>
           <Match when={props.loading}>
             <box flexGrow={1} padding={2}>
-              <text fg={theme.text.subdued}>Loading diff…</text>
+              <text fg={theme.text.muted}>Loading diff…</text>
             </box>
           </Match>
           <Match when={!props.loading && props.error}>
             <box flexGrow={1} padding={2}>
-              <text fg={theme.text.feedback.error.default}>
+              <text fg={theme.text.feedback.error.base}>
                 {!props.sourceBase && mode() !== "working"
                   ? "Could not load diff. Choose a base branch from Diff source, or select Uncommitted."
                   : "Could not load diff. Reopen the diff viewer to try again."}
@@ -842,14 +842,14 @@ export function DiffViewerContent(props: {
           </Match>
           <Match when={!props.loading && props.unavailable}>
             <box flexGrow={1} padding={2}>
-              <text fg={theme.text.subdued}>
+              <text fg={theme.text.muted}>
                 Committed comparison unavailable without base metadata. Choose a base branch from Diff source.
               </text>
             </box>
           </Match>
           <Match when={!props.loading && files().length === 0}>
             <box flexGrow={1} padding={2}>
-              <text fg={theme.text.subdued}>No changes to show</text>
+              <text fg={theme.text.muted}>No changes to show</text>
             </box>
           </Match>
           <Match when={!props.loading}>
@@ -924,7 +924,7 @@ export function DiffViewerContent(props: {
                               flexShrink={0}
                               border={["top"]}
                               borderColor={background()}
-                              backgroundColor={theme.background.default}
+                              backgroundColor={theme.background.base}
                               customBorderChars={{ ...EmptyBorder, horizontal: "▄" }}
                             />
                           </Show>
@@ -961,20 +961,20 @@ export function DiffViewerContent(props: {
                                 <FilePath
                                   value={entry.file.file}
                                   maxWidth={Math.max(1, patchPaneWidth() - countsWidth() - 2)}
-                                  fg={theme.text.subdued}
-                                  basenameFg={reviewed() ? theme.text.subdued : theme.text.default}
+                                  fg={theme.text.muted}
+                                  basenameFg={reviewed() ? theme.text.muted : theme.text.base}
                                 />
                               </box>
                               <Show when={reviewed()}>
-                                <text fg={theme.text.subdued} flexShrink={0}>
+                                <text fg={theme.text.muted} flexShrink={0}>
                                   ✓
                                 </text>
                               </Show>
-                              <Show when={!image()} fallback={<text fg={theme.text.subdued}>Image</text>}>
-                                <text flexShrink={0} fg={reviewed() ? theme.text.subdued : theme.diff.text.added}>
+                              <Show when={!image()} fallback={<text fg={theme.text.muted}>Image</text>}>
+                                <text flexShrink={0} fg={reviewed() ? theme.text.muted : theme.diff.text.added}>
                                   +{entry.file.additions}
                                 </text>
-                                <text flexShrink={0} fg={reviewed() ? theme.text.subdued : theme.diff.text.removed}>
+                                <text flexShrink={0} fg={reviewed() ? theme.text.muted : theme.diff.text.removed}>
                                   -{entry.file.deletions}
                                 </text>
                               </Show>
@@ -987,7 +987,7 @@ export function DiffViewerContent(props: {
                                   height={1}
                                   border={["bottom"]}
                                   borderColor={background()}
-                                  backgroundColor={theme.background.default}
+                                  backgroundColor={theme.background.base}
                                   customBorderChars={{ ...EmptyBorder, horizontal: "▀" }}
                                 />
                               </Show>
@@ -996,7 +996,7 @@ export function DiffViewerContent(props: {
                               <Switch
                                 fallback={
                                   <box width="100%" flexShrink={0} paddingLeft={1} paddingRight={1} paddingBottom={1}>
-                                    <text fg={theme.text.subdued}>
+                                    <text fg={theme.text.muted}>
                                       {mode() === "committed" && image()
                                         ? "Committed image preview unavailable. The working-tree image is not shown."
                                         : entry.file.status === "deleted" && image()
@@ -1031,7 +1031,7 @@ export function DiffViewerContent(props: {
                                       showLineNumbers={true}
                                       width="100%"
                                       wrapMode="char"
-                                      fg={theme.text.default}
+                                      fg={theme.text.base}
                                       addedBg={theme.diff.background.added}
                                       removedBg={theme.diff.background.removed}
                                       contextBg={theme.diff.background.context}
@@ -1079,7 +1079,7 @@ export function DiffViewerContent(props: {
 
 function DiffViewerHelpDialog(props: { context: Plugin.Context; single: boolean }) {
   const dimensions = useTerminalDimensions()
-  const theme = props.context.theme.contextual.elevated
+  const theme = props.context.theme.surface("dialog")
   const shortcut =
     (...ids: string[]) =>
     () =>
@@ -1125,10 +1125,10 @@ function DiffViewerHelpDialog(props: { context: Plugin.Context; single: boolean 
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
           Diff shortcuts
         </text>
-        <text fg={theme.text.subdued} selectable={false} onMouseUp={() => props.context.ui.dialog.clear()}>
+        <text fg={theme.text.muted} selectable={false} onMouseUp={() => props.context.ui.dialog.clear()}>
           esc close
         </text>
       </box>
@@ -1149,16 +1149,16 @@ function DiffViewerHelpDialog(props: { context: Plugin.Context; single: boolean 
           <For each={groups}>
             {(group) => (
               <box flexShrink={0}>
-                <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+                <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
                   {group.title}
                 </text>
                 <For each={group.rows}>
                   {(row) => (
                     <box flexDirection="row" gap={2}>
-                      <text fg={theme.text.default} width={17} flexShrink={0}>
+                      <text fg={theme.text.base} width={17} flexShrink={0}>
                         {row.shortcut() || "unbound"}
                       </text>
-                      <text fg={theme.text.subdued} flexGrow={1} minWidth={0}>
+                      <text fg={theme.text.muted} flexGrow={1} minWidth={0}>
                         {row.label}
                       </text>
                     </box>

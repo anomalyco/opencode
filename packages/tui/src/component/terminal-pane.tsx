@@ -32,7 +32,7 @@ export function TerminalPane(props: {
   const client = useClient()
   const keymap = Keymap.use()
   const leader = Keymap.useLeaderActive()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const themes = useThemes()
   const renderer = useRenderer()
   const [failure, setFailure] = createSignal<string>()
@@ -155,8 +155,8 @@ export function TerminalPane(props: {
   })
 
   createEffect(() => {
-    const tokens = themes.currentTokens().contextual.elevated
-    terminalTheme = terminalPalette(tokens, themes.mode(), tokens.background.default)
+    const tokens = themes.currentTokens()
+    terminalTheme = terminalPalette(tokens, tokens.background.raised.base)
     applyTerminalTheme()
   })
 
@@ -284,7 +284,7 @@ export function TerminalPane(props: {
       minWidth={0}
       minHeight={0}
       overflow="hidden"
-      backgroundColor={themes.currentTokens().contextual.elevated.background.default}
+      backgroundColor={themes.currentTokens().background.raised.base}
       onSizeChange={function () {
         size = { cols: Math.max(1, this.width - 2), rows: this.height }
         if (controller && restored) interact()
@@ -292,7 +292,7 @@ export function TerminalPane(props: {
       // TODO: Revisit when embedded terminal mouse handlers can compose without replacing its internal focus handler.
       onMouseDown={() => interact()}
     >
-      <Show when={!failure()} fallback={<text fg={theme.text.feedback.error.default}>{failure()}</text>}>
+      <Show when={!failure()} fallback={<text fg={theme.text.feedback.error.base}>{failure()}</text>}>
         <>
           <embeddedTerminal
             ref={(value) => {
@@ -335,31 +335,31 @@ function sameSize(first: TerminalSize | undefined, second: TerminalSize | undefi
   return !!first && !!second && first.cols === second.cols && first.rows === second.rows
 }
 
-function terminalPalette(theme: ResolvedThemeTokens, mode: "dark" | "light", background: RGBA) {
-  const base = mode === "dark" ? 200 : 800
-  const bright = mode === "dark" ? 100 : 900
+function terminalPalette(theme: ResolvedThemeTokens, background: RGBA) {
+  const base = 200
+  const bright = 100
   const colors = [
     background,
-    theme.text.feedback.error.default,
-    theme.text.feedback.success.default,
-    theme.text.feedback.warning.default,
+    theme.text.feedback.error.base,
+    theme.text.feedback.success.base,
+    theme.text.feedback.warning.base,
     theme.hue.blue[base],
     theme.hue.purple[base],
-    theme.text.feedback.info.default,
-    theme.text.default,
-    theme.text.subdued,
-    theme.text.feedback.error.subdued,
-    theme.text.feedback.success.subdued,
-    theme.text.feedback.warning.subdued,
+    theme.text.feedback.info.base,
+    theme.text.base,
+    theme.text.muted,
+    theme.text.feedback.error.muted,
+    theme.text.feedback.success.muted,
+    theme.text.feedback.warning.muted,
     theme.hue.blue[bright],
     theme.hue.purple[bright],
     theme.hue.cyan[bright],
-    theme.hue.neutral[mode === "dark" ? 100 : 900],
+    theme.hue.neutral[100],
   ]
   return Buffer.from(
     colors
       .map((color, index) => `\x1b]4;${index};${hex(color)}\x1b\\`)
-      .concat(`\x1b]10;${hex(theme.text.default)}\x1b\\`, `\x1b]11;${hex(background)}\x1b\\`)
+      .concat(`\x1b]10;${hex(theme.text.base)}\x1b\\`, `\x1b]11;${hex(background)}\x1b\\`)
       .join(""),
   )
 }

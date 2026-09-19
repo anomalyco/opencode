@@ -258,7 +258,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   // sessions; the tail line tracks the live status of the current run.
   const transcript = () => {
     const current = active()
-    if (!current) return [{ text: "no session selected", color: theme.text.subdued }]
+    if (!current) return [{ text: "no session selected", color: theme.text.muted }]
     const index = Math.max(
       0,
       FIXTURE_TABS.findIndex((fixture) => fixture.sessionID === current),
@@ -268,35 +268,35 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     const outcome = outcomes()[current]
     const file = TRANSCRIPT_FILES[index % TRANSCRIPT_FILES.length]
     const lines = [
-      { text: `> ${fixture.title}`, color: theme.text.default },
-      { text: "", color: theme.text.default },
+      { text: `> ${fixture.title}`, color: theme.text.base },
+      { text: "", color: theme.text.base },
     ]
     if (!status.busy && !status.attention && outcome === undefined) {
-      lines.push({ text: "no activity yet — press s to run this session", color: theme.text.subdued })
+      lines.push({ text: "no activity yet — press s to run this session", color: theme.text.muted })
       return lines
     }
     lines.push(
-      { text: "● Taking a look — reading the relevant code first.", color: theme.text.default },
-      { text: "", color: theme.text.default },
-      { text: `  ✱ Read ${file}`, color: theme.text.subdued },
-      { text: `  ✱ Edit ${file}`, color: theme.text.subdued },
-      { text: `  ✱ Bash bun run test`, color: theme.text.subdued },
-      { text: "", color: theme.text.default },
+      { text: "● Taking a look — reading the relevant code first.", color: theme.text.base },
+      { text: "", color: theme.text.base },
+      { text: `  ✱ Read ${file}`, color: theme.text.muted },
+      { text: `  ✱ Edit ${file}`, color: theme.text.muted },
+      { text: `  ✱ Bash bun run test`, color: theme.text.muted },
+      { text: "", color: theme.text.base },
     )
     if (status.attention === "question")
-      lines.push({ text: "? Which approach should I take?", color: theme.text.status.question })
+      lines.push({ text: "? Which approach should I take?", color: theme.hue.accent[200] })
     else if (status.attention === "permission")
-      lines.push({ text: "! Waiting for permission to run the command", color: theme.text.status.permission })
-    else if (status.busy) lines.push({ text: "● Working…", color: theme.text.status.running })
+      lines.push({ text: "! Waiting for permission to run the command", color: theme.hue.accent[200] })
+    else if (status.busy) lines.push({ text: "● Working…", color: theme.hue.interactive[200] })
     else if (outcome === "failed")
       lines.push({
         text: `✗ bun run test failed — 3 tests failing in ${file}`,
-        color: theme.text.feedback.error.default,
+        color: theme.text.feedback.error.base,
       })
     else
       lines.push({
         text: `✓ Done — updated ${file} and the tests pass.`,
-        color: theme.text.feedback.success.default,
+        color: theme.text.feedback.success.base,
       })
     return lines
   }
@@ -493,7 +493,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       width={dimensions().width}
       height={dimensions().height}
       flexDirection="column"
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.base}
     >
       <box
         flexGrow={1}

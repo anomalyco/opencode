@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer"
 import { Tool } from "@opencode/schema/tool"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import {
@@ -29,6 +29,16 @@ const isJson = Schema.is(Schema.Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
+/** Optional field whose malformed value decodes to `undefined` instead of failing the enclosing struct. */
+export const lenient = <const S extends Schema.Top>(schema: S) =>
+  Schema.optionalKey(
+    Schema.UndefinedOr(schema).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(undefined)))),
+  )
+/** Provider-defined string enum: known values for autocomplete, any string accepted at runtime. */
+export const knownString = <Known extends string>() =>
+  Schema.declare<Known | (string & {})>((value): value is Known | (string & {}) => typeof value === "string", {
+    expected: "string",
+  })
 
 export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
 
