@@ -3,7 +3,7 @@
 //
 //   bun run bench:startup -- [--exe <path>] [--compare <path>] [--runs 5] [--warmup 1] [--service warm|cold]
 //                            [--fresh] [--offline] [--seed <userData dir>] [--profile-main] [--profile-renderer]
-//                            [--trace] [--out <dir>] [--home <dir>]
+//                            [--trace] [--out <dir>] [--home <dir>] [--window-at x,y]
 //
 // The app runs in an isolated home directory (its own %APPDATA%, XDG dirs, OpenCode DB, config and
 // service registration) with the developer's OPENCODE_* / OTEL_* environment stripped, so it never
@@ -21,7 +21,15 @@
 // main-process CPU profile from the first statement (via --inspect-brk) on the first run,
 // `--profile-renderer` records the renderer main thread from the moment its debug target appears,
 // and `--trace` records Chromium's startup trace on the last run. Raw samples are written as JSON.
-import { spawn } from "node:child_process"
+//
+// What is on screen is sampled from the screen itself (Windows): a helper pins the window topmost
+// without activating it the moment it exists, then records when the window's pixels first differ
+// from the background colour (`screenPainted`) and when they stop changing (`screenSettled`).
+// Renderer paint timing alone is not enough: Chromium stops painting an occluded window, and a
+// splash or a fade reads as "painted" long before the interface is on screen. `--window-at` puts
+// the window somewhere the developer's foreground window does not cover. BENCH_SCREEN_DUMP=<dir>
+// also saves every sample as PNG, BENCH_EXTRA_ARGS passes extra Chromium switches to the app.
+import { execFileSync, spawn } from "node:child_process"
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
@@ -45,6 +53,9 @@ const args = parseArgs({
     "profile-renderer": { type: "boolean", default: false },
     trace: { type: "boolean", default: false },
     "settle-ms": { type: "string", default: "1500" },
+    // Restore the bench window at "x,y" (and treat that display as trusted), for example on a display
+    // that the developer's foreground window does not cover; Chromium stops painting an occluded window.
+    "window-at": { type: "string" },
   },
   allowPositionals: true,
 })
@@ -112,10 +123,12 @@ const probe = `(() => ({
   origin: performance.timeOrigin,
   firstPaint: performance.getEntriesByType('paint').find((e) => e.name === 'first-paint')?.startTime,
   domInteractive: performance.getEntriesByType('navigation')[0]?.domInteractive,
-  shell: !!document.querySelector('[data-titlebar-tab-link], [data-action="vertical-tabs-home"]'),
-  editor: !!document.querySelector('[data-component="composer-editor"][contenteditable="true"]'),
-  rows: document.querySelectorAll('[data-timeline-row]').length,
-  home: !!document.querySelector('[data-action="home-new-session"], [data-action="home-add-project-row"]'),
+  prepaint: !!document.getElementById('oc-prepaint'),
+  visible: document.visibilityState === 'visible',
+  shell: !!document.querySelector('#root [data-titlebar-tab-link], #root [data-action="vertical-tabs-home"]'),
+  editor: !!document.querySelector('#root [data-component="composer-editor"][contenteditable="true"]'),
+  rows: document.querySelectorAll('#root [data-timeline-row]').length,
+  home: !!document.querySelector('#root [data-action="home-new-session"], #root [data-action="home-add-project-row"]'),
   url: location.pathname + location.search,
 }))()`
 // Main-process bootstrap timing, read after the run: when the process was created, when Node
@@ -237,6 +250,8 @@ type Probe = {
   origin: number
   firstPaint?: number
   domInteractive?: number
+  prepaint: boolean
+  visible: boolean
   shell: boolean
   editor: boolean
   rows: number
@@ -273,6 +288,7 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
   const trace = args.values.trace && run === runs
   const tracePath = join(outDir, `startup-trace-${Date.now()}.json`)
   const launchArgs = [
+    ...(process.env.BENCH_EXTRA_ARGS?.split(" ").filter(Boolean) ?? []),
     `--remote-debugging-port=${cdpPort}`,
     profile ? `--inspect-brk=${inspectPort}` : `--inspect=${inspectPort}`,
     ...(trace
@@ -284,10 +300,12 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
         ]
       : []),
   ]
+  const raiser = await windowRaiser()
   const spawnAt = Date.now()
   const child = spawn(build.exe, launchArgs, { env, detached: true, stdio: "ignore" })
   child.unref()
   appPid = child.pid
+  raiser.raise(child.pid!)
 
   let mainProfile: Promise<unknown> | undefined
   if (profile) mainProfile = profileMain(spawnAt)
@@ -309,6 +327,7 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
   // when the shell is up and the main thread has spent under 10 % of any 500 ms window in tasks for `settleMs`.
   const seen: Record<string, number> = {}
   let last: Probe | undefined
+  let prepaintSeen = false
   let quietSince: number | undefined
   let taskMs = 0
   let scriptMs = 0
@@ -318,6 +337,9 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
     const result = await cdp.send("Runtime.evaluate", { expression: probe, returnByValue: true })
     last = result.result?.result?.value as Probe | undefined
     const t = Date.now() - spawnAt
+    if (last?.prepaint) prepaintSeen = true
+    // Chromium marks a window it considers occluded hidden and the renderer stops painting.
+    if (last?.visible && !seen.documentVisible) seen.documentVisible = t
     if (last?.shell && !seen.shellVisible) seen.shellVisible = t
     if (last?.editor && !seen.composerEditable) seen.composerEditable = t
     if (last?.rows && !seen.timelineRows) seen.timelineRows = t
@@ -356,6 +378,7 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
   const timelineResult = await cdp.send("Runtime.evaluate", { expression: rendererTimeline, returnByValue: true })
   cdp.close()
   const processes = appPid ? await processTree(appPid) : []
+  const screenChanges = await raiser.screen()
   const boot = profile ? undefined : await mainBootTiming()
   await sleep(300)
   // Chromium writes the startup trace when --trace-startup-duration elapses; keep the app alive until then.
@@ -385,7 +408,16 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
       domInteractive:
         last?.domInteractive !== undefined && origin !== undefined ? Math.round(origin + last.domInteractive) : undefined,
       firstPaint: last?.firstPaint !== undefined && origin !== undefined ? Math.round(origin + last.firstPaint) : undefined,
+      // With a shell snapshot in the early document, first paint is the snapshot, not the app.
+      prepaintVisible:
+        prepaintSeen && last?.firstPaint !== undefined && origin !== undefined
+          ? Math.round(origin + last.firstPaint)
+          : undefined,
       ...seen,
+      // First sampled screen change inside the window: the ground truth for "the user sees something".
+      screenPainted: screenChanges.changed[0],
+      // When the sampled window content stopped changing: the interface, not a splash, is on screen.
+      screenSettled: screenChanges.settled,
       rendererIdle: rendererIdleMs,
     },
     final: { url: last?.url, timelineRows: last?.rows },
@@ -451,6 +483,22 @@ function prepareHome() {
     })
   }
   mkdirSync(paths.logs, { recursive: true })
+  const at = args.values["window-at"]?.split(",").map(Number)
+  if (at?.length === 2 && existsSync(userData)) {
+    for (const file of readdirSync(userData).filter((name) => /^window-state-.*\.json$/.test(name))) {
+      const state = JSON.parse(readFileSync(join(userData, file), "utf8"))
+      const bounds = displayAt(at[0], at[1])
+      writeFileSync(join(userData, file), JSON.stringify({ ...state, x: at[0], y: at[1], isMaximized: false, isFullScreen: false, displayBounds: bounds }))
+    }
+  }
+}
+
+function displayAt(x: number, y: number) {
+  if (process.platform !== "win32") return undefined
+  const out = execFileSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens | ForEach-Object { \"$($_.Bounds.X),$($_.Bounds.Y),$($_.Bounds.Width),$($_.Bounds.Height)\" }"], { encoding: "utf8" })
+  const displays = out.trim().split(/\r?\n/).map((line) => line.split(",").map(Number))
+  const hit = displays.find(([dx, dy, dw, dh]) => x >= dx && y >= dy && x < dx + dw && y < dy + dh)
+  return hit ? { x: hit[0], y: hit[1], width: hit[2], height: hit[3] } : undefined
 }
 
 async function freePort() {
@@ -565,6 +613,86 @@ function mainLog() {
 }
 
 // Working set of every process in the launched app's tree once it is idle.
+// Windows places a window launched from a background process behind the foreground one, and
+// Chromium then marks it occluded and the renderer stops painting, so paint timings would depend on
+// what else is on screen. A helper started before the app polls for its main window and pins it
+// topmost without activating it, so the user keeps their focus and the bench window is visible.
+async function windowRaiser(): Promise<{ raise: (pid: number) => void; screen: () => Promise<number[]> }> {
+  if (process.platform !== "win32") return { raise: () => {}, screen: async () => [] }
+  const script = join(outDir, "raise-window.ps1")
+  writeFileSync(
+    script,
+    [
+      `Add-Type -AssemblyName System.Drawing`,
+      `Add-Type -Namespace Bench -Name User32 -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int w, int z, uint f); [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L; public int T; public int R; public int B; } [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);'`,
+      `[Console]::Out.WriteLine("ready")`,
+      `$target = [int][Console]::In.ReadLine()`,
+      `$clock = [Diagnostics.Stopwatch]::StartNew()`,
+      `$h = 0`,
+      `for ($i = 0; $i -lt 600; $i++) {`,
+      `  $h = (Get-Process -Id $target -ErrorAction SilentlyContinue).MainWindowHandle`,
+      `  if ($h -and $h -ne 0) { [Bench.User32]::SetWindowPos($h, [IntPtr](-1), 0, 0, 0, 0, 0x13) | Out-Null; [Console]::Out.WriteLine("raised " + $clock.ElapsedMilliseconds); break }`,
+      `  Start-Sleep -Milliseconds 10`,
+      `}`,
+      `if (-not $h -or $h -eq 0) { exit }`,
+      // Sample a 16x16 grid of pixels inside the window: cheap, and enough to tell the background
+      // colour, a splash and the interface apart.
+      `$r = New-Object Bench.User32+RECT`,
+      `while ($clock.ElapsedMilliseconds -lt 3000) {`,
+      `  [Bench.User32]::GetWindowRect($h, [ref]$r) | Out-Null`,
+      `  $w = $r.R - $r.L; $ht = $r.B - $r.T`,
+      `  if ($w -le 48 -or $ht -le 48) { Start-Sleep -Milliseconds 30; continue }`,
+      `  $t = $clock.ElapsedMilliseconds`,
+      `  $bmp = New-Object System.Drawing.Bitmap $w, $ht`,
+      `  $g = [System.Drawing.Graphics]::FromImage($bmp)`,
+      `  try { $g.CopyFromScreen($r.L, $r.T, 0, 0, $bmp.Size) } catch { $g.Dispose(); $bmp.Dispose(); Start-Sleep -Milliseconds 30; continue }`,
+      `  $sum = 0`,
+      `  for ($i = 1; $i -le 16; $i++) { for ($j = 1; $j -le 16; $j++) { $p = $bmp.GetPixel([int]($w * $j / 17), [int]($ht * $i / 17)); $sum += [int]$p.R + [int]$p.G + [int]$p.B } }`,
+      `  [Console]::Out.WriteLine("screen " + $t + " " + $sum)`,
+      `  if ($env:BENCH_SCREEN_DUMP) { $bmp.Save((Join-Path $env:BENCH_SCREEN_DUMP ("screen-" + $t.ToString().PadLeft(4, "0") + ".png"))) }`,
+      `  $g.Dispose(); $bmp.Dispose()`,
+      `  Start-Sleep -Milliseconds 30`,
+      `}`,
+    ].join("\n"),
+  )
+  const helper = spawn("pwsh", ["-NoProfile", "-NonInteractive", "-File", script], { stdio: ["pipe", "pipe", "pipe"] })
+  const lines: string[] = []
+  let buffer = ""
+  await new Promise<void>((resolve) => {
+    helper.stdout!.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString()
+      const parts = buffer.split(/\r?\n/)
+      buffer = parts.pop() ?? ""
+      for (const line of parts) {
+        if (line === "ready") resolve()
+        else lines.push(line)
+      }
+    })
+    helper.stderr!.on("data", (chunk: Buffer) => console.error(`raise-window: ${chunk.toString().trim()}`))
+    helper.on("exit", () => resolve())
+  })
+  const exited = new Promise<void>((resolve) => helper.on("exit", () => resolve()))
+  return {
+    raise: (pid) => helper.stdin!.write(`${pid}\n`),
+    // Resolves with the times (ms since the pid was sent, ~spawn) at which the sampled screen
+    // content differed from the first sample, i.e. when something other than the background colour
+    // was on screen.
+    screen: async () => {
+      await exited
+      const samples = lines
+        .filter((line) => line.startsWith("screen "))
+        .map((line) => line.split(" ").slice(1).map(Number) as [number, number])
+      if (process.env.BENCH_DEBUG) console.log(lines.filter((line) => line.startsWith("raised")).join(" "), `${samples.length} screen samples`)
+      const first = samples[0]?.[1]
+      const last = samples.at(-1)?.[1]
+      const differs = (a: number, b: number) => Math.abs(a - b) > 16 * 16 * 12
+      const changed = samples.filter(([, sum]) => differs(sum, first)).map(([t]) => t)
+      // The last sample that still differed from the final content, i.e. when the window stopped changing.
+      const settledIndex = samples.findLastIndex(([, sum]) => last !== undefined && differs(sum, last))
+      return { changed, settled: settledIndex >= 0 ? samples[settledIndex + 1]?.[0] : samples[0]?.[0] }
+    },
+  }
+}
 async function processTree(root: number) {
   const script =
     process.platform === "win32"
