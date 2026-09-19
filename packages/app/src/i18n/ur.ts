@@ -887,6 +887,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "اطلاعات کو صاف کریں۔",
   "sidebar.empty.title": "کوئی پروجیکٹ نہیں کھلا۔",
   "sidebar.empty.description": "شروع کرنے کے لیے ایک پروجیکٹ کھولیں۔",
+  "sidebar.history.runningChat": "چل رہا ہے: {{title}}",
   "debugBar.ariaLabel": "ترقیاتی کارکردگی کی تشخیص",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

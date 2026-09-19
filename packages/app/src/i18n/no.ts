@@ -1229,6 +1229,7 @@ export const dict = {
 
   "sidebar.empty.title": "Ingen åpne prosjekter",
   "sidebar.empty.description": "Åpne et prosjekt for å komme i gang",
+  "sidebar.history.runningChat": "Kjører: {{title}}",
 
   "settings.general.section.advanced": "Avansert",
   "settings.general.row.shell.title": "Terminalskall",

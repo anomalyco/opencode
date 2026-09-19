@@ -1,5 +1,5 @@
 import { benchmark, expect } from "../benchmark"
-import { expectSessionTitle } from "../../utils/waits"
+import { expectSessionTitle, sessionHistoryRow } from "../../utils/waits"
 import { measureNavigationMilestones } from "./navigation-milestones"
 import { fixture } from "./session-timeline-stress.fixture"
 import {
@@ -13,18 +13,18 @@ import { waitForStableTimeline } from "./session-tab-switch-probe"
 const homeRow = '[data-component="home-session-row"]'
 const homeShell = '[data-component="home-session-search"]'
 
-benchmark.describe("performance: home and tab navigation", () => {
-  benchmark("opens a home session and paints its titlebar tab", async ({ page, report }) => {
+benchmark.describe("performance: home and session navigation", () => {
+  benchmark("opens a home session and paints its history row", async ({ page, report }) => {
     await setup(page, [])
     await page.goto("/")
     const row = page.locator(homeRow).filter({ hasText: fixture.expected.targetTitle }).first()
     await expect(row).toBeVisible()
-    const href = stressSessionHref(fixture.targetID)
+    const historyRow = `[data-component="session-history-row"][data-session-id="${fixture.targetID}"]`
     const result = await measureNavigationMilestones(page, {
       triggerSelector: homeRow,
       milestones: {
         content: { selector: messageSelector(fixture.expected.targetMessageIDs.at(-1)!) },
-        tab: { selector: `[data-slot="titlebar-tabs"] a[href="${href}"]` },
+        row: { selector: `${historyRow}[aria-current="page"]` },
       },
       navigate: async () => {
         await row.click()
@@ -32,9 +32,7 @@ benchmark.describe("performance: home and tab navigation", () => {
       },
     })
     report(result)
-    await expect(page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`)).toContainText(
-      fixture.expected.targetTitle,
-    )
+    await expect(sessionHistoryRow(page, fixture.targetID)).toHaveAttribute("aria-current", "page")
   })
 
   benchmark("stages the review body after cold session content", async ({ page, report }) => {
@@ -78,24 +76,23 @@ benchmark.describe("performance: home and tab navigation", () => {
     await expect(page.locator('[data-component="session-review"]')).toBeVisible()
   })
 
-  benchmark("closes the only session tab and paints home", async ({ page, report }) => {
+  benchmark("returns home from a session and paints the session list", async ({ page, report }) => {
     await setup(page, [fixture.sourceID])
     const href = stressSessionHref(fixture.sourceID)
     await page.goto(href)
     await expectSessionTitle(page, fixture.expected.sourceTitle)
     await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
-    const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`).first()
-    const close = tab.locator("..").locator('[data-component="icon-button-v2"]')
-    await expect(close).toBeVisible()
+    const row = sessionHistoryRow(page, fixture.sourceID)
+    await expect(row).toBeVisible()
     const result = await measureNavigationMilestones(page, {
-      triggerSelector: '[data-slot="titlebar-tabs"] [data-component="icon-button-v2"]',
+      triggerSelector: `[data-component="session-history-row"][data-session-id="${fixture.sourceID}"]`,
       milestones: {
         home: { selector: homeShell },
         row: { selector: homeRow },
-        tabRemoved: { selector: `[data-slot="titlebar-tabs"] a[href="${href}"]`, visible: false },
       },
       navigate: async () => {
-        await close.click()
+        await row.click()
+        await page.goto("/")
         await expect(page).toHaveURL("/")
       },
     })

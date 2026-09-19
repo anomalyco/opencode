@@ -776,6 +776,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Tyhjennä ilmoitukset",
   "sidebar.empty.title": "Ei avoimia projekteja",
   "sidebar.empty.description": "Aloita avaamalla projekti",
+  "sidebar.history.runningChat": "Käynnissä: {{title}}",
   "debugBar.ariaLabel": "Kehityksen suorituskyvyn diagnostiikka",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

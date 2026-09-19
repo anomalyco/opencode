@@ -871,6 +871,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "ລຶບການແຈ້ງເຕືອນ",
   "sidebar.empty.title": "ບໍ່ມີໂຄງການເປີດ",
   "sidebar.empty.description": "ເປີດໂຄງການເພື່ອເລີ່ມຕົ້ນ",
+  "sidebar.history.runningChat": "ກຳລັງເຮັດວຽກ: {{title}}",
   "debugBar.ariaLabel": "ການວິນິດໄສປະສິດທິພາບການພັດທະນາ",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

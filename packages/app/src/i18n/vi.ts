@@ -888,6 +888,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Xóa thông báo",
   "sidebar.empty.title": "Không có dự án nào mở",
   "sidebar.empty.description": "Mở một dự án để bắt đầu",
+  "sidebar.history.runningChat": "Đang chạy: {{title}}",
   "debugBar.ariaLabel": "Chẩn đoán hiệu suất phát triển",
   "debugBar.na": "không có",
   "debugBar.nav.label": "NAV",

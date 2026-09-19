@@ -890,6 +890,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Išvalyti pranešimus",
   "sidebar.empty.title": "Jokių atvirų projektų",
   "sidebar.empty.description": "Norėdami pradėti, atidarykite projektą",
+  "sidebar.history.runningChat": "Vykdoma: {{title}}",
   "debugBar.ariaLabel": "Vystymosi veiklos diagnostika",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",
