@@ -494,6 +494,96 @@ describe("session.message-v2.toModelMessage", () => {
     })
   })
 
+  test.each([
+    ["openai.gpt-6-astra", "@ai-sdk/amazon-bedrock", true],
+    ["us.openai.gpt-6-astra", "@ai-sdk/amazon-bedrock", true],
+    ["global.openai.gpt-6-astra", "@ai-sdk/amazon-bedrock", true],
+    ["anthropic.claude-sonnet-4-6", "@ai-sdk/amazon-bedrock", false],
+    ["openai.gpt-6-astra", "@ai-sdk/amazon-bedrock/mantle", false],
+  ])("handles image tool results for %s via %s", async (id, npm, hoist) => {
+    const bedrockModel: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make("custom-alias"),
+      providerID: ProviderV2.ID.make("amazon-bedrock"),
+      api: { id, npm, url: "https://bedrock-runtime.us-east-2.amazonaws.com" },
+      capabilities: {
+        ...model.capabilities,
+        attachment: true,
+        input: { ...model.capabilities.input, image: true },
+      },
+    }
+    const userID = "m-user-bedrock-image"
+    const assistantID = "m-assistant-bedrock-image"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [{ ...basePart(userID, "u1-bedrock-image"), type: "text", text: "read image" }],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-bedrock-image"),
+            type: "tool",
+            callID: "call-bedrock-image-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/example.png" },
+              output: "Image read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-bedrock-image-1"),
+                  type: "file",
+                  mime: "image/png",
+                  url: "data:image/png;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, bedrockModel)
+    expect(result).toHaveLength(hoist ? 4 : 3)
+    expect(result[1]).toMatchObject({
+      role: "assistant",
+      content: [{ type: "tool-call", toolCallId: "call-bedrock-image-1", toolName: "read" }],
+    })
+    expect(result[2]).toMatchObject({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: "call-bedrock-image-1",
+          toolName: "read",
+          output: hoist
+            ? { type: "text", value: "Image read successfully" }
+            : {
+                type: "content",
+                value: [
+                  { type: "text", text: "Image read successfully" },
+                  { type: "media", mediaType: "image/png", data: "Zm9v" },
+                ],
+              },
+        },
+      ],
+    })
+    if (hoist) {
+      expect(result[3]).toMatchObject({
+        role: "user",
+        content: [
+          { type: "text", text: "Attached media from tool result:" },
+          { type: "file", mediaType: "image/png", data: "data:image/png;base64,Zm9v" },
+        ],
+      })
+    }
+  })
+
   test("moves bedrock pdf tool-result media into a separate user message", async () => {
     const bedrockModel: Provider.Model = {
       ...model,
