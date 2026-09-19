@@ -13,7 +13,7 @@ export const SkillGroup = HttpApiGroup.make("server.skill")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.skill.list",
+          identifier: "skill.list",
           summary: "List skills",
           description: "Retrieve currently registered skills.",
         }),

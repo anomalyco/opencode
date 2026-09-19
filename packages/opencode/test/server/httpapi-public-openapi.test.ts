@@ -18,6 +18,7 @@ type OpenApiResponse = {
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
 }
 type OpenApiOperation = {
+  readonly operationId?: string
   readonly parameters?: ReadonlyArray<{
     readonly name: string
     readonly in: string
@@ -70,6 +71,14 @@ function isBuiltInEndpointError(name: string) {
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
+  test("omits version prefixes from operation IDs", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    expect(v2Operations(spec).map(({ operation }) => operation.operationId)).not.toContainEqual(
+      expect.stringMatching(/v2/i),
+    )
+  })
+
   test("includes plugin-facing core schemas", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
