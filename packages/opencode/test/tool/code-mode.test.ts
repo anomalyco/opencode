@@ -34,6 +34,7 @@ function mcpTool(
     client: {
       callTool: async (params: { arguments?: Record<string, unknown> }) => handler(params.arguments ?? {}),
     } as unknown as MCP.McpTool["client"],
+    server: name.split("_")[0],
   }
 }
 
@@ -203,6 +204,7 @@ describe("code mode execute", () => {
           inputSchema: { type: "object", properties: { value: { type: "string" }, count: { type: "number" } } },
         } as MCPToolDef,
         client: { callTool: async () => ({ content: [] }) } as unknown as MCP.McpTool["client"],
+        server: "alpha",
       }
     }
     tools["zeta_only_tool"] = mcpTool("only_tool", () => "", {
