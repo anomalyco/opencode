@@ -519,6 +519,9 @@ export default function LegacyLayout(props: ParentProps) {
 
     const projects = layout.projects.list()
 
+    // Dual-check: sandbox first (more specific match) then direct worktree
+    // then fallback to child-store project ID. The pathKey comparison ensures
+    // that c:\foo and c:/foo resolve to the same project while c:\foo and d:\foo stay distinct.
     const sandbox = projects.find((p) => p.sandboxes?.some((item) => pathKey(item) === key))
     if (sandbox) return sandbox
 
@@ -532,8 +535,9 @@ export default function LegacyLayout(props: ParentProps) {
     const meta = serverSync().data.project.find((p) => p.id === id)
     const root = meta?.worktree
     if (!root) return
+    if (pathKey(root) !== key && !meta?.sandboxes?.some((sandbox) => pathKey(sandbox) === key)) return
 
-    return projects.find((p) => p.worktree === root)
+    return projects.find((p) => pathKey(p.worktree) === pathKey(root))
   })
 
   const [autoselecting] = createResource(async () => {
@@ -548,7 +552,8 @@ export default function LegacyLayout(props: ParentProps) {
       if (!last) return
       await openProject(last, true)
     } else {
-      const next = list.find((project) => project.worktree === last) ?? list[0]
+      const matched = last ? list.find((project) => pathKey(project.worktree) === pathKey(last)) : undefined
+      const next = matched ?? list[0]
       if (!next) return
       await openProject(next.worktree, true)
     }
@@ -820,7 +825,7 @@ export default function LegacyLayout(props: ParentProps) {
     const current = currentProject()?.worktree
     const fallback = currentDir() ? projectRoot(currentDir()) : undefined
     const active = current ?? fallback
-    const index = active ? projects.findIndex((project) => project.worktree === active) : -1
+    const index = active ? projects.findIndex((project) => pathKey(project.worktree) === pathKey(active)) : -1
 
     const target =
       index === -1
@@ -1127,7 +1132,10 @@ export default function LegacyLayout(props: ParentProps) {
     if (!id) return directory
 
     const meta = serverSync().data.project.find((item) => item.id === id)
-    return meta?.worktree ?? directory
+    if (!meta) return directory
+    if (pathKey(meta.worktree) === key) return meta.worktree
+    if (meta.sandboxes?.some((sandbox) => pathKey(sandbox) === key)) return meta.worktree
+    return directory
   }
 
   function activeProjectRoot(directory: string) {
@@ -1163,8 +1171,9 @@ export default function LegacyLayout(props: ParentProps) {
   async function navigateToProject(directory: string | undefined) {
     if (!directory) return
     const root = projectRoot(directory)
+    const rootKey = pathKey(root)
     server.projects.touch(root)
-    const project = layout.projects.list().find((item) => item.worktree === root)
+    const project = layout.projects.list().find((item) => pathKey(item.worktree) === rootKey)
     let dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
       : [root]
@@ -1173,7 +1182,7 @@ export default function LegacyLayout(props: ParentProps) {
       return dirs.some((item) => pathKey(item) === pathKey(value))
     }
     const refreshDirs = async (target?: string) => {
-      if (!target || target === root || canOpen(target)) return canOpen(target)
+      if (!target || pathKey(target) === pathKey(root) || canOpen(target)) return canOpen(target)
       const listed = await Promise.resolve(
         project?.id ?? serverSDK().api.project.current({ location: { directory: root } }),
       )
@@ -1377,7 +1386,7 @@ export default function LegacyLayout(props: ParentProps) {
   }
 
   const deleteWorkspace = async (root: string, directory: string, leaveDeletedWorkspace = false) => {
-    if (directory === root) return
+    if (pathKey(directory) === pathKey(root)) return
 
     const current = currentDir()
     const currentKey = pathKey(current)
@@ -1411,12 +1420,14 @@ export default function LegacyLayout(props: ParentProps) {
     serverSync().set(
       "project",
       produce((draft) => {
-        const project = draft.find((item) => item.worktree === root)
+        const project = draft.find((item) => pathKey(item.worktree) === pathKey(root))
         if (!project) return
-        project.sandboxes = (project.sandboxes ?? []).filter((sandbox) => sandbox !== directory)
+        project.sandboxes = (project.sandboxes ?? []).filter((sandbox) => pathKey(sandbox) !== pathKey(directory))
       }),
     )
-    setStore("workspaceOrder", root, (order) => (order ?? []).filter((workspace) => workspace !== directory))
+    setStore("workspaceOrder", root, (order) =>
+      (order ?? []).filter((workspace) => pathKey(workspace) !== pathKey(directory)),
+    )
 
     layout.projects.close(directory)
     layout.projects.open(root)
@@ -1425,19 +1436,19 @@ export default function LegacyLayout(props: ParentProps) {
 
     const nextCurrent = currentDir()
     const nextKey = pathKey(nextCurrent)
-    const project = layout.projects.list().find((item) => item.worktree === root)
+    const project = layout.projects.list().find((item) => pathKey(item.worktree) === pathKey(root))
     const dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
       : [root]
     const valid = dirs.some((item) => pathKey(item) === nextKey)
 
-    if (params.dir && projectRoot(nextCurrent) === root && !valid) {
+    if (params.dir && pathKey(projectRoot(nextCurrent)) === pathKey(root) && !valid) {
       navigateWithSidebarReset(`/${base64Encode(root)}/session`)
     }
   }
 
   const resetWorkspace = async (root: string, directory: string) => {
-    if (directory === root) return
+    if (pathKey(directory) === pathKey(root)) return
     setBusy(directory, true)
 
     const progress = showToast({

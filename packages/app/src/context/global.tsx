@@ -6,6 +6,7 @@ import { pathKey } from "@/utils/path-key"
 import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
 import { createServerSyncContext } from "./server-sync"
+import { enrichProject } from "./layout-helpers"
 import { getOwner } from "solid-js/web"
 import { QueryClient } from "@tanstack/solid-query"
 import type { ServerScope } from "@/utils/server-scope"
@@ -110,31 +111,14 @@ function createServerCtx(
   const sdk = createServerSdkContext(conn, scope)
   const sync = createServerSyncContext(sdk)
 
-  function enrich(project: { worktree: string; expanded: boolean }) {
-    const [childStore] = sync.child(project.worktree, { bootstrap: false })
-    const projectID = childStore.project
-    const metadata = projectID
-      ? sync.data.project.find((x) => x.id === projectID)
-      : sync.data.project.find((x) => x.worktree === project.worktree)
-
-    // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
-    // Without this, different subdirectories of the same git repo would share the same
-    // icon from the database instead of using their individual overrides.
-    const base = { ...metadata, ...project }
-    if (childStore.icon) {
-      return { ...base, icon: { ...base.icon, override: childStore.icon } }
-    }
-    return base
-  }
-
-  const projectsList = createMemo(() => projects.list().map(enrich))
+  const projectsList = createMemo(() => projects.list().map((project) => enrichProject({ project, sync })))
   const recentlyClosedList = createMemo(() => {
     const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
     return projects
       .recentlyClosed()
       .filter((worktree) => known.has(pathKey(worktree)))
       .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
-      .map((worktree) => enrich({ worktree, expanded: false }))
+      .map((worktree) => enrichProject({ project: { worktree, expanded: false }, sync }))
   })
 
   const isLocal =
