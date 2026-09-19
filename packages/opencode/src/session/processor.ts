@@ -550,6 +550,26 @@ const layer = Layer.effect(
         }
       })
 
+      // Finalize partially streamed parts so a failed attempt does not leave
+      // unclosed reasoning/text blocks behind before the stream is retried.
+      const sealPartialParts = Effect.fn("SessionProcessor.sealPartialParts")(function* () {
+        if (ctx.currentText) {
+          const end = Date.now()
+          ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
+          yield* session.updatePart(ctx.currentText)
+          ctx.currentText = undefined
+        }
+
+        for (const part of Object.values(ctx.reasoningMap)) {
+          const end = Date.now()
+          yield* session.updatePart({
+            ...part,
+            time: { start: part.time.start ?? end, end },
+          })
+        }
+        ctx.reasoningMap = {}
+      })
+
       const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
         if (ctx.snapshot) {
           const patch = yield* snapshot.patch(ctx.snapshot)
@@ -566,21 +586,7 @@ const layer = Layer.effect(
           ctx.snapshot = undefined
         }
 
-        if (ctx.currentText) {
-          const end = Date.now()
-          ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
-          yield* session.updatePart(ctx.currentText)
-          ctx.currentText = undefined
-        }
-
-        for (const part of Object.values(ctx.reasoningMap)) {
-          const end = Date.now()
-          yield* session.updatePart({
-            ...part,
-            time: { start: part.time.start ?? end, end },
-          })
-        }
-        ctx.reasoningMap = {}
+        yield* sealPartialParts()
 
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
@@ -648,8 +654,9 @@ const layer = Layer.effect(
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
-            ctx.currentText = undefined
-            ctx.reasoningMap = {}
+            // A retried attempt replays the request from scratch, so close out
+            // any reasoning/text parts the failed attempt left dangling.
+            yield* sealPartialParts()
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
