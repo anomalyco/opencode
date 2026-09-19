@@ -7,12 +7,22 @@ import type { MessageV2 } from "./message-v2"
 
 const COMPACTION_BUFFER = 20_000
 
+// Per-model compaction config merged over the global config. Model-level
+// fields win; anything unset falls back to the global compaction block.
+export function compactionConfig(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
+  return {
+    ...input.cfg.compaction,
+    ...input.model.compaction,
+  }
+}
+
 export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outputTokenMax?: number }) {
   const context = input.model.limit.context
   if (context === 0) return 0
 
+  const compaction = compactionConfig(input)
   const reserved =
-    input.cfg.compaction?.reserved ??
+    compaction.reserved ??
     Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
   return input.model.limit.input
     ? Math.max(0, input.model.limit.input - reserved)
@@ -25,7 +35,7 @@ export function isOverflow(input: {
   model: Provider.Model
   outputTokenMax?: number
 }) {
-  if (input.cfg.compaction?.auto === false) return false
+  if (compactionConfig(input).auto === false) return false
   if (input.model.limit.context === 0) return false
 
   const count =

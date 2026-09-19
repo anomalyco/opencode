@@ -1163,7 +1163,12 @@ const layer = Layer.effect(
             lastFinished.summary !== true &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
-            yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+            yield* compaction.create({
+              sessionID,
+              agent: lastUser.agent,
+              model: lastUser.model,
+              auto: model.compaction?.auto ?? true,
+            })
             continue
           }
 
@@ -1322,7 +1327,7 @@ const layer = Layer.effect(
                 sessionID,
                 agent: lastUser.agent,
                 model: lastUser.model,
-                auto: true,
+                auto: model.compaction?.auto ?? true,
                 overflow: !handle.message.finish,
               })
             }

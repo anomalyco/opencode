@@ -1,9 +1,28 @@
 export * as ConfigProviderV1 from "./provider"
 
 import { Schema } from "effect"
-import { PositiveInt } from "../../schema"
+import { NonNegativeInt, PositiveInt } from "../../schema"
 
 export const ModelStatus = Schema.Literals(["alpha", "beta", "deprecated", "active"])
+
+export const Compaction = Schema.Struct({
+  auto: Schema.optional(Schema.Boolean).annotate({
+    description: "Enable automatic compaction when context is full (default: true)",
+  }),
+  prune: Schema.optional(Schema.Boolean).annotate({
+    description: "Enable pruning of old tool outputs (default: false)",
+  }),
+  tail_turns: Schema.optional(NonNegativeInt).annotate({
+    description:
+      "Maximum number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction. By default retention is limited only by the preserved token budget.",
+  }),
+  preserve_recent_tokens: Schema.optional(NonNegativeInt).annotate({
+    description: "Maximum number of tokens from recent turns to preserve verbatim after compaction",
+  }),
+  reserved: Schema.optional(NonNegativeInt).annotate({
+    description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
+  }),
+})
 
 const InterleavedField = Schema.Union([
   Schema.Literals(["reasoning", "reasoning_content", "reasoning_text"]),
@@ -51,6 +70,9 @@ export const Model = Schema.Struct({
       output: Schema.Finite,
     }),
   ),
+  compaction: Schema.optional(Compaction).annotate({
+    description: "Per-model compaction overrides. Merged over the global compaction config.",
+  }),
   modalities: Schema.optional(
     Schema.Struct({
       input: Schema.optional(Schema.mutable(Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf"])))),
