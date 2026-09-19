@@ -938,7 +938,7 @@ export function Autocomplete(props: {
                   <box flexGrow={1} minWidth={2} />
                   <text
                     flexShrink={0}
-                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.subdued}
+                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.muted}
                   >
                     {label()}
                   </text>
