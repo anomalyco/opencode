@@ -1,4 +1,4 @@
-import { DatabaseSync, type SQLInputValue } from "node:sqlite"
+import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite"
 import { drizzle } from "drizzle-orm/node-sqlite"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
@@ -17,8 +17,32 @@ import { Sqlite } from "./sqlite"
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
 
+// Plain reads run on a second connection so they never queue behind the write semaphore.
+const READS = /^\s*(?:select|explain)\b/i
+
 const TypeId = "~@opencode-ai/core/database/SqliteNode" as const
 type TypeId = typeof TypeId
+
+// node:sqlite has no statement cache, so re-preparing on every call costs a
+// parse+plan per query. Cache per connection, evicting least-recently-used.
+const STATEMENT_CACHE_LIMIT = 256
+const statementCacheByTarget = new WeakMap<object, Map<string, StatementSync>>()
+
+function cachedStatement(target: DatabaseSync, mode: "all" | "values", query: string) {
+  const cache = statementCacheByTarget.get(target) ?? new Map<string, StatementSync>()
+  if (!statementCacheByTarget.has(target)) statementCacheByTarget.set(target, cache)
+  const key = `${mode}:${query}`
+  const cached = cache.get(key)
+  if (cached) {
+    cache.delete(key)
+    cache.set(key, cached)
+    return cached
+  }
+  const statement = target.prepare(query)
+  if (cache.size >= STATEMENT_CACHE_LIMIT) cache.delete(cache.keys().next().value!)
+  cache.set(key, statement)
+  return statement
+}
 
 interface SqliteClient extends Client.SqlClient {
   readonly [TypeId]: TypeId
@@ -53,9 +77,25 @@ const make = (options: Config) =>
       ? Statement.defaultTransforms(options.transformResultNames).array
       : undefined
 
-    const run = (query: string, params: ReadonlyArray<unknown> = []) =>
+    const inMemory = options.filename.includes(":memory:") || options.filename.includes("mode=memory")
+    const readNative =
+      inMemory || options.disableWAL
+        ? native
+        : new DatabaseSync(options.filename, {
+            readOnly: options.readonly,
+            timeout: options.timeout,
+            open: true,
+          })
+    if (readNative !== native) {
+      yield* Effect.addFinalizer(() => Effect.sync(() => readNative.close()))
+      readNative.exec("PRAGMA busy_timeout = 5000;")
+      readNative.exec("PRAGMA cache_size = -32000;")
+      readNative.exec("PRAGMA query_only = ON;")
+    }
+
+    const run = (target: DatabaseSync, query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
+        const statement = cachedStatement(target, "all", query)
         statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
         try {
           return Effect.succeed(statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>)
@@ -68,9 +108,9 @@ const make = (options: Config) =>
         }
       })
 
-    const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
+    const runValues = (target: DatabaseSync, query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
+        const statement = cachedStatement(target, "values", query)
         statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
         statement.setReturnArrays(true)
         try {
@@ -86,15 +126,15 @@ const make = (options: Config) =>
         }
       })
 
-    const connection = identity<SqliteConnection>({
+    const writer = identity<SqliteConnection>({
       execute(query, params, transformRows) {
-        return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
+        return transformRows ? Effect.map(run(native, query, params), transformRows) : run(native, query, params)
       },
       executeRaw(query, params) {
-        return run(query, params)
+        return run(native, query, params)
       },
       executeValues(query, params) {
-        return runValues(query, params)
+        return runValues(native, query, params)
       },
       executeUnprepared(query, params, transformRows) {
         return this.execute(query, params, transformRows)
@@ -113,13 +153,42 @@ const make = (options: Config) =>
     })
 
     const semaphore = yield* Semaphore.make(1)
-    const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
+    const gated = <A, E>(effect: Effect.Effect<A, E>) => semaphore.withPermits(1)(effect)
+
+    const connection = identity<SqliteConnection>({
+      execute(query, params, transformRows) {
+        const result =
+          READS.test(query) && readNative !== native
+            ? run(readNative, query, params)
+            : gated(run(native, query, params))
+        return transformRows ? Effect.map(result, transformRows) : result
+      },
+      executeRaw(query, params) {
+        return READS.test(query) && readNative !== native
+          ? run(readNative, query, params)
+          : gated(run(native, query, params))
+      },
+      executeValues(query, params) {
+        return READS.test(query) && readNative !== native
+          ? runValues(readNative, query, params)
+          : gated(runValues(native, query, params))
+      },
+      executeUnprepared(query, params, transformRows) {
+        return this.execute(query, params, transformRows)
+      },
+      executeStream() {
+        return Stream.die("executeStream not implemented")
+      },
+      loadExtension: (path) => writer.loadExtension(path),
+    })
+
+    const acquirer = Effect.succeed(connection)
     const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
       const fiber = Fiber.getCurrent()!
       const scope = Context.getUnsafe(fiber.context, Scope.Scope)
       return Effect.as(
         Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-        connection,
+        writer,
       )
     })
 
@@ -156,6 +225,7 @@ const nativeLayer = (config: Config) =>
         open: true,
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
+      if (config.readonly !== true) native.exec("PRAGMA busy_timeout = 5000;")
       if (config.disableWAL !== true && config.readonly !== true) native.exec("PRAGMA journal_mode = WAL;")
       return native
     }),

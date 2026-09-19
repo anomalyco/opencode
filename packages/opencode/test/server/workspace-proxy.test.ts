@@ -1,8 +1,15 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import Http from "node:http"
 import { describe, expect } from "bun:test"
-import { Context, Effect, Layer, Queue } from "effect"
-import { FetchHttpClient, HttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { Context, Effect, Exit, Layer, Queue, Stream } from "effect"
+import {
+  FetchHttpClient,
+  HttpClient,
+  HttpClientResponse,
+  HttpServer,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { HttpApiProxy } from "../../src/server/routes/instance/httpapi/middleware/proxy"
 import { testEffect } from "../lib/effect"
@@ -102,13 +109,16 @@ describe("HttpApi workspace proxy", () => {
     }),
   )
 
-  it.live("returns 500 when remote is unreachable", () =>
+  it.live("returns a typed 502 with a correlation ref when the remote is unreachable", () =>
     Effect.gen(function* () {
       const request = HttpServerRequest.fromWeb(new Request("http://localhost/anything"))
       const httpClient = yield* HttpClient.HttpClient
       const response = yield* HttpApiProxy.http(httpClient, "http://127.0.0.1:1/unreachable", undefined, request)
 
-      expect(response.status).toBe(500)
+      expect(response.status).toBe(502)
+      const body = (yield* HttpServerResponse.toClientResponse(response).json) as Record<string, unknown>
+      expect(body._tag).toBe("UpstreamError")
+      expect(body.ref).toMatch(/^err_[0-9a-f]{8}$/)
     }),
   )
 
@@ -154,6 +164,51 @@ describe("HttpApi workspace proxy", () => {
       expect(forwarded["x-opencode-workspace"]).toBeUndefined()
       expect(forwarded["x-custom"]).toBe("preserved")
       expect(forwarded["x-injected"]).toBe("extra")
+    }),
+  )
+
+  it.live("caps the buffered upstream 5xx error body", () =>
+    Effect.gen(function* () {
+      const big = "e".repeat(256 * 1024)
+      const client = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response(big, { status: 503, headers: { "content-type": "text/plain" } }),
+          ),
+        ),
+      )
+      const request = HttpServerRequest.fromWeb(new Request("http://localhost/x"))
+      const response = yield* HttpApiProxy.http(client, "http://upstream/x", undefined, request)
+
+      expect(response.status).toBe(503)
+      const body = yield* HttpServerResponse.toClientResponse(response).text
+      expect(body.length).toBe(64 * 1024)
+    }),
+  )
+
+  it.live("surfaces a mid-stream upstream failure instead of a clean EOF", () =>
+    Effect.gen(function* () {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("chunk"))
+          controller.error(new Error("upstream cut"))
+        },
+      })
+      const client = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } }),
+          ),
+        ),
+      )
+      const request = HttpServerRequest.fromWeb(new Request("http://localhost/event"))
+      const response = yield* HttpApiProxy.http(client, "http://upstream/event", undefined, request)
+
+      expect(response.status).toBe(200)
+      const exit = yield* HttpServerResponse.toClientResponse(response).stream.pipe(Stream.runDrain, Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
     }),
   )
 

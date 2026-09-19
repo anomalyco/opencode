@@ -24,17 +24,18 @@ import { NotFoundError } from "@/storage/storage"
 import { and } from "drizzle-orm"
 import { desc } from "drizzle-orm"
 import { eq } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
-import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageDiffTable, MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -98,6 +99,7 @@ const older = (row: Cursor) =>
 function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$inferSelect)[]) {
   const ids = rows.map((row) => row.id)
   const partByMessage = new Map<string, Part[]>()
+  const diffByMessage = new Map<string, (typeof MessageDiffTable.$inferSelect)["diffs"]>()
   return Effect.gen(function* () {
     if (ids.length > 0) {
       const partRows = yield* db
@@ -113,12 +115,23 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
         if (list) list.push(next)
         else partByMessage.set(row.message_id, [next])
       }
+      const diffRows = yield* db
+        .select()
+        .from(MessageDiffTable)
+        .where(inArray(MessageDiffTable.message_id, ids))
+        .all()
+        .pipe(Effect.orDie)
+      diffRows.forEach((row) => diffByMessage.set(row.message_id, row.diffs))
     }
 
-    return rows.map((row) => ({
-      info: info(row),
-      parts: partByMessage.get(row.id) ?? [],
-    }))
+    return rows.map((row) => {
+      const current = info(row)
+      const diffs = diffByMessage.get(row.id)
+      return {
+        info: current.role === "user" && diffs ? { ...current, summary: { ...current.summary, diffs } } : current,
+        parts: partByMessage.get(row.id) ?? [],
+      }
+    })
   })
 }
 
@@ -245,15 +258,15 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
       const media: Array<{ mime: string; url: string; filename?: string }> = []
 
-      if (
-        msg.info.error &&
+      // An errored turn is dropped so partial text/reasoning never reach the model, but
+      // completed tool results are different: their side effects already ran, so keep the
+      // tool parts and skip only the discarded text/reasoning (O2-14).
+      const skipErrorContent =
+        !!msg.info.error &&
         !(
           AbortedError.isInstance(msg.info.error) &&
           msg.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
         )
-      ) {
-        continue
-      }
       const assistantMessage: UIMessage = {
         id: msg.info.id,
         role: "assistant",
@@ -275,6 +288,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         return part.metadata?.anthropic?.signature != null
       })
       for (const part of msg.parts) {
+        if (skipErrorContent && (part.type === "text" || part.type === "reasoning")) continue
         if (part.type === "text") {
           const text = part.text === "" && hasSignedReasoning ? " " : part.text
           assistantMessage.parts.push({
@@ -466,6 +480,48 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
   }
 })
 
+/** Same cursor walk as `page` but skips `hydrate`; for callers that read only `info` (F-114). */
+export const pageInfo = Effect.fn("MessageV2.pageInfo")(function* (input: {
+  sessionID: SessionID
+  limit: number
+  before?: string
+}) {
+  const { db } = yield* Database.Service
+  const before = input.before ? cursor.decode(input.before) : undefined
+  const where = before
+    ? and(eq(MessageTable.session_id, input.sessionID), older(before))
+    : eq(MessageTable.session_id, input.sessionID)
+  const rows = yield* db
+    .select()
+    .from(MessageTable)
+    .where(where)
+    .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+    .limit(input.limit + 1)
+    .all()
+    .pipe(Effect.orDie)
+  if (rows.length === 0) {
+    const row = yield* db
+      .select({ id: SessionTable.id })
+      .from(SessionTable)
+      .where(eq(SessionTable.id, input.sessionID))
+      .get()
+      .pipe(Effect.orDie)
+    if (!row) return yield* new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+    return { items: [] as Info[], more: false, cursor: undefined }
+  }
+
+  const more = rows.length > input.limit
+  const slice = more ? rows.slice(0, input.limit) : rows
+  const items = slice.map(info)
+  items.reverse()
+  const tail = slice.at(-1)
+  return {
+    items,
+    more,
+    cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
+  }
+})
+
 export function stream(sessionID: SessionID) {
   const size = 50
   return Effect.gen(function* () {
@@ -503,6 +559,38 @@ export function parts(messageID: MessageID) {
   })
 }
 
+export function partsTail(messageID: MessageID, limit: number) {
+  return Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    const rows = yield* db
+      .select()
+      .from(PartTable)
+      .where(eq(PartTable.message_id, messageID))
+      .orderBy(desc(PartTable.id))
+      .limit(limit)
+      .all()
+      .pipe(Effect.orDie)
+    return rows.reverse().map(part)
+  })
+}
+
+// Doom-loop detection must count the last N *tool* parts: a fixed mixed window lets a
+// caller interleave enough text/reasoning parts to push tool parts out of it.
+export function toolPartsTail(messageID: MessageID, limit: number) {
+  return Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    const rows = yield* db
+      .select()
+      .from(PartTable)
+      .where(and(eq(PartTable.message_id, messageID), sql`json_extract(${PartTable.data}, '$.type') = ${"tool"}`))
+      .orderBy(desc(PartTable.id))
+      .limit(limit)
+      .all()
+      .pipe(Effect.orDie)
+    return rows.reverse().map(part)
+  })
+}
+
 export const get = Effect.fn("MessageV2.get")(function* (input: { sessionID: SessionID; messageID: MessageID }) {
   const { db } = yield* Database.Service
   const row = yield* db
@@ -512,35 +600,80 @@ export const get = Effect.fn("MessageV2.get")(function* (input: { sessionID: Ses
     .get()
     .pipe(Effect.orDie)
   if (!row) return yield* new NotFoundError({ message: `Message not found: ${input.messageID}` })
-  return {
-    info: info(row),
-    parts: yield* parts(input.messageID),
-  }
+  return (yield* hydrate(db, [row]))[0]!
 })
 
-export function filterCompacted(msgs: Iterable<WithParts>) {
-  const result = [] as WithParts[]
-  const completed = new Set<string>()
-  let retain: MessageID | undefined
-  for (const msg of msgs) {
-    result.push(msg)
-    if (retain) {
-      if (msg.info.id === retain) break
-      continue
+export const getInfo = Effect.fn("MessageV2.getInfo")(function* (input: {
+  sessionID: SessionID
+  messageID: MessageID
+}) {
+  const { db } = yield* Database.Service
+  const row = yield* db
+    .select()
+    .from(MessageTable)
+    .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+    .get()
+    .pipe(Effect.orDie)
+  if (!row) return yield* new NotFoundError({ message: `Message not found: ${input.messageID}` })
+  return info(row)
+})
+
+export const findInfo = Effect.fn("MessageV2.findInfo")(function* (
+  sessionID: SessionID,
+  predicate: (item: Info) => boolean,
+) {
+  const size = 50
+  let before: string | undefined
+  while (true) {
+    const page = yield* pageInfo({ sessionID, limit: size, before })
+    if (page.items.length === 0) break
+    for (let i = page.items.length - 1; i >= 0; i--) {
+      const item = page.items[i]
+      if (item && predicate(item)) return Option.some(item)
     }
-    if (msg.info.role === "user" && completed.has(msg.info.id)) {
-      const part = msg.parts.find((item): item is CompactionPart => item.type === "compaction")
-      if (!part) continue
-      if (!part.tail_start_id) break
-      retain = part.tail_start_id
-      if (msg.info.id === retain) break
-      continue
-    }
-    if (msg.info.role === "user" && completed.has(msg.info.id) && msg.parts.some((part) => part.type === "compaction"))
-      break
-    if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
-      completed.add(msg.info.parentID)
+    if (!page.more || !page.cursor) break
+    before = page.cursor
   }
+  return Option.none<Info>()
+})
+
+// Hard ceiling on the newest-first page walk. Compacted sessions stop far earlier
+// at the compaction boundary; this only bounds a session with no compaction marker,
+// which would otherwise rehydrate its entire transcript on every provider turn (O-25).
+const MAX_COMPACTED_PAGES = 100
+
+type CompactedState = {
+  result: WithParts[]
+  completed: Set<string>
+  retain: MessageID | undefined
+  stop: boolean
+}
+
+// One pass of the filterCompacted scan, fed messages newest-first. Shared by the
+// eager (array) and streamed (early-exit) readers so the compaction semantics
+// cannot drift between them.
+function compactedStep(state: CompactedState, msg: WithParts) {
+  state.result.push(msg)
+  if (state.retain) {
+    if (msg.info.id === state.retain) state.stop = true
+    return
+  }
+  if (msg.info.role === "user" && state.completed.has(msg.info.id)) {
+    const part = msg.parts.find((item): item is CompactionPart => item.type === "compaction")
+    if (!part) return
+    if (!part.tail_start_id) {
+      state.stop = true
+      return
+    }
+    state.retain = part.tail_start_id
+    if (msg.info.id === state.retain) state.stop = true
+    return
+  }
+  if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
+    state.completed.add(msg.info.parentID)
+}
+
+function reorderCompacted(result: WithParts[]) {
   result.reverse()
   const compactionIndex = result.findLastIndex(
     (msg) =>
@@ -571,8 +704,51 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
   return result
 }
 
+export function filterCompacted(msgs: Iterable<WithParts>) {
+  const state: CompactedState = { result: [], completed: new Set(), retain: undefined, stop: false }
+  for (const msg of msgs) {
+    compactedStep(state, msg)
+    if (state.stop) break
+  }
+  return reorderCompacted(state.result)
+}
+
+// Stops fetching pages at the break compactedStep would take on the full
+// transcript, so the result matches filterCompacted(stream(sessionID)) while
+// skipping the older pages filterCompacted discards (F-005).
 export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: SessionID) {
-  return filterCompacted(yield* stream(sessionID))
+  const size = 50
+  const state: CompactedState = { result: [], completed: new Set(), retain: undefined, stop: false }
+  let before: string | undefined
+  let pages = 0
+  let exhausted = false
+  while (!state.stop && pages < MAX_COMPACTED_PAGES) {
+    pages++
+    const next = yield* page({ sessionID, limit: size, before }).pipe(
+      Effect.catchIf(NotFoundError.isInstance, () =>
+        Effect.succeed({ items: [] as WithParts[], more: false, cursor: undefined }),
+      ),
+    )
+    if (next.items.length === 0) {
+      exhausted = true
+      break
+    }
+    for (let i = next.items.length - 1; i >= 0; i--) {
+      const item = next.items[i]
+      if (item) compactedStep(state, item)
+      if (state.stop) break
+    }
+    if (state.stop) break
+    if (!next.more || !next.cursor) {
+      exhausted = true
+      break
+    }
+    before = next.cursor
+  }
+  // The caller must not treat a cap-hit walk as the complete transcript (O2-16).
+  const truncated = !state.stop && !exhausted
+  if (truncated) yield* Effect.logWarning("compacted page walk hit cap", { sessionID, pages })
+  return { messages: reorderCompacted(state.result), truncated }
 })
 
 // filterCompacted reorders messages for model consumption
@@ -690,6 +866,16 @@ export function fromError(
           { cause: e },
         ).toObject()
       }
+      if (parsed.type === "stale_reasoning") {
+        return new APIError(
+          {
+            message: parsed.message,
+            isRetryable: false,
+            responseBody: parsed.responseBody,
+          },
+          { cause: e },
+        ).toObject()
+      }
 
       return new APIError(
         {
@@ -712,6 +898,16 @@ export function fromError(
             return new ContextOverflowError(
               {
                 message: parsed.message,
+                responseBody: parsed.responseBody,
+              },
+              { cause: e },
+            ).toObject()
+          }
+          if (parsed.type === "stale_reasoning") {
+            return new APIError(
+              {
+                message: parsed.message,
+                isRetryable: false,
                 responseBody: parsed.responseBody,
               },
               { cause: e },

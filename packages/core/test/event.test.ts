@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Event } from "@opencode-ai/schema/event"
@@ -12,7 +12,7 @@ import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
-import { eq } from "drizzle-orm"
+import { asc, eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
@@ -764,6 +764,7 @@ describe("EventV2", () => {
         .select()
         .from(EventTable)
         .where(eq(EventTable.aggregate_id, aggregateID))
+        .orderBy(asc(EventTable.seq))
         .all()
         .pipe(Effect.orDie)
 
@@ -912,6 +913,7 @@ describe("EventV2", () => {
         .select()
         .from(EventTable)
         .where(eq(EventTable.aggregate_id, aggregateID))
+        .orderBy(asc(EventTable.seq))
         .all()
         .pipe(Effect.orDie)
       const sequence = yield* db
@@ -1097,6 +1099,42 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("skips undecodable durable rows instead of dying", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Session.ID.create()
+      yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
+      yield* db
+        .insert(EventTable)
+        .values([{ id: EventV2.ID.create(), aggregate_id: aggregateID, seq: 1, type: "unknown.event.99", data: {} }])
+        .run()
+        .pipe(Effect.orDie)
+
+      const received = Array.from(yield* events.durable({ aggregateID }).pipe(Stream.take(1), Stream.runCollect))
+
+      expect(received.map((event) => event.durable?.seq)).toEqual([0])
+    }),
+  )
+
+  it.effect("ends an open durable stream when the aggregate is removed", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = Session.ID.create()
+      yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
+      const first = yield* Deferred.make<void>()
+      const fiber = yield* events.durable({ aggregateID }).pipe(
+        Stream.tap(() => Deferred.succeed(first, undefined)),
+        Stream.runDrain,
+        Effect.forkScoped,
+      )
+      yield* Deferred.await(first)
+
+      yield* events.remove(aggregateID)
+      yield* Fiber.join(fiber)
+    }),
+  )
+
   it.effect("remove clears durable event sequence", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
@@ -1121,4 +1159,198 @@ describe("EventV2", () => {
       expect(received[0]?.data).toEqual(durableData(aggregateID, "replayed"))
     }),
   )
+
+  it.effect("ends a durable stream created after the aggregate was removed", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = Session.ID.create()
+      yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
+      yield* events.remove(aggregateID)
+
+      const result = yield* events
+        .durable({ aggregateID })
+        .pipe(Stream.runCollect, Effect.timeoutOption("1 second"))
+
+      expect(Option.isSome(result)).toBe(true)
+      if (Option.isSome(result)) expect(Array.from(result.value)).toEqual([])
+    }),
+  )
+
+  it.effect("allows durable streaming after the aggregate is re-created", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = Session.ID.create()
+      yield* events.publish(DurableMessage, durableData(aggregateID, "zero"))
+      yield* events.remove(aggregateID)
+      yield* events.publish(DurableMessage, durableData(aggregateID, "reborn"))
+
+      const result = yield* events
+        .durable({ aggregateID })
+        .pipe(Stream.take(1), Stream.runCollect, Effect.timeoutOption("1 second"))
+
+      expect(Option.isSome(result)).toBe(true)
+      if (!Option.isSome(result)) return
+      const received = Array.from(result.value)
+      expect(received).toHaveLength(1)
+      expect(received[0]?.data).toEqual(durableData(aggregateID, "reborn"))
+    }),
+  )
+
+  it.effect("ends a durable stream for the most recent of many removals", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const removed = Array.from({ length: 4 }, () => Session.ID.create())
+      for (const aggregateID of removed) {
+        yield* events.publish(DurableMessage, durableData(aggregateID, "seed"))
+        yield* events.remove(aggregateID)
+      }
+
+      const result = yield* events
+        .durable({ aggregateID: removed.at(-1)! })
+        .pipe(Stream.runCollect, Effect.timeoutOption("1 second"))
+
+      expect(Option.isSome(result)).toBe(true)
+      if (Option.isSome(result)) expect(Array.from(result.value)).toEqual([])
+    }),
+  )
+
+  it.effect("runs every live-only listener and the pubsub fan-out before re-raising the defect", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const received = new Array<string>()
+      const defect = new Error("listener defect")
+      yield* events.listen(() => Effect.die(defect))
+      yield* events.listen((event) => Effect.sync(() => received.push(event.type)))
+      const typed = yield* events.subscribe(GlobalMessage).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      const result = yield* events.publish(GlobalMessage, { text: "hello" }).pipe(Effect.catchDefect(Effect.succeed))
+
+      expect(result).toBe(defect)
+      expect(received).toEqual([GlobalMessage.type])
+      expect(Array.from(yield* Fiber.join(typed)).map((event) => event.type)).toEqual([GlobalMessage.type])
+    }),
+  )
+
+  it.effect("replays the original payload after a tombstone digest is recorded", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Session.ID.create()
+      const published = yield* events.publish(DurableMessage, durableData(aggregateID, "original"))
+      const row = yield* db.select().from(EventTable).where(eq(EventTable.id, published.id)).get().pipe(Effect.orDie)
+      if (!row) return yield* Effect.die("expected committed event row")
+
+      yield* db
+        .update(EventTable)
+        .set({
+          data: { sessionID: aggregateID, messageID: "msg_tombstone" },
+          tombstone_digest: EventV2.eventDigest(row.data),
+        })
+        .where(eq(EventTable.id, published.id))
+        .run()
+        .pipe(Effect.orDie)
+
+      const replay = (data: (typeof published)["data"]) =>
+        events.replay({
+          id: published.id,
+          type: EventV2.versionedType(DurableMessage.type, 1),
+          seq: published.durable?.seq ?? -1,
+          aggregateID,
+          data,
+        })
+
+      yield* replay(published.data)
+      const exit = yield* replay(durableData(aggregateID, "divergent")).pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Replay diverged")
+    }),
+  )
+
+  it.effect("skips rows the manifest cannot decode instead of failing the read", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const Row = EventV2.define({
+        type: "test.row",
+        durable: { version: 1, aggregate: "id" },
+        schema: { id: Schema.String, text: Schema.String },
+      })
+      const manifest = { definitions: Event.durable([Row]), schema: Row }
+      const aggregateID = EventV2.ID.create()
+      yield* events.publish(Row, { id: aggregateID, text: "good" })
+      const corrupt = yield* events.publish(Row, { id: aggregateID, text: "corrupt" })
+      yield* db
+        .update(EventTable)
+        .set({ data: { id: aggregateID, text: 7 } })
+        .where(eq(EventTable.id, corrupt.id))
+        .run()
+        .pipe(Effect.orDie)
+
+      const result = yield* EventV2.readAggregate(db, { aggregateID, limit: 10, manifest })
+
+      expect(result.events.map((event) => event.data)).toEqual([{ id: aggregateID, text: "good" }])
+      expect(result.hasMore).toBe(false)
+    }),
+  )
+
+  it.effect("fails a strict aggregate read on rows the manifest cannot decode", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const Row = EventV2.define({
+        type: "test.row",
+        durable: { version: 1, aggregate: "id" },
+        schema: { id: Schema.String, text: Schema.String },
+      })
+      const manifest = { definitions: Event.durable([Row]), schema: Row }
+      const aggregateID = EventV2.ID.create()
+      const corrupt = yield* events.publish(Row, { id: aggregateID, text: "corrupt" })
+      yield* db
+        .update(EventTable)
+        .set({ data: { id: aggregateID, text: 7 } })
+        .where(eq(EventTable.id, corrupt.id))
+        .run()
+        .pipe(Effect.orDie)
+
+      const exit = yield* EventV2.readAggregate(db, { aggregateID, limit: 10, manifest, strict: true }).pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  )
+
+  it.effect("pages durable backfill past the per-read limit", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const aggregateID = Session.ID.create()
+      const count = 600
+      for (let index = 0; index < count; index++) {
+        yield* events.publish(DurableMessage, durableData(aggregateID, String(index)))
+      }
+
+      const received = Array.from(yield* events.durable({ aggregateID }).pipe(Stream.take(count), Stream.runCollect))
+
+      expect(received).toHaveLength(count)
+      expect(received[0]?.durable?.seq).toBe(0)
+      expect(received.at(-1)?.durable?.seq).toBe(count - 1)
+    }),
+  )
+})
+
+describe("EventV2.rememberRemoved", () => {
+  test("bounds the tombstone, evicting the oldest removals first", () => {
+    const removed = new Set<string>()
+    for (let index = 0; index < 5; index++) EventV2.rememberRemoved(removed, `ses_${index}`, 3)
+
+    expect([...removed]).toEqual(["ses_2", "ses_3", "ses_4"])
+  })
+
+  test("moves a re-removed aggregate to the newest position", () => {
+    const removed = new Set<string>()
+    EventV2.rememberRemoved(removed, "ses_a", 2)
+    EventV2.rememberRemoved(removed, "ses_b", 2)
+    EventV2.rememberRemoved(removed, "ses_a", 2)
+
+    expect([...removed]).toEqual(["ses_b", "ses_a"])
+  })
 })

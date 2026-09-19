@@ -2,7 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Image } from "@/image/image"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Layer, Context, Scope, Schema, Semaphore } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
@@ -24,9 +24,16 @@ import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
-import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { Usage, isStaleReasoningFailure, type LLMEvent } from "@opencode-ai/llm"
+import { SessionStaleReasoning } from "./stale-reasoning"
 
 const DOOM_LOOP_THRESHOLD = 3
+// Bounded tail of the newest *tool* parts to test for consecutive repeats (F-104). Counting
+// tool parts directly (not a mixed window) prevents interleaved text from evading detection.
+const DOOM_LOOP_TOOL_WINDOW = 24
+// A retry re-issues the whole request and re-dispatches tools, so only a side-effecting
+// call makes the turn non-idempotent; read-only tools are safe to run again.
+const READ_ONLY_TOOLS = new Set(["read", "glob", "grep", "list", "lsp", "webfetch", "websearch"])
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
@@ -44,6 +51,9 @@ export interface Handle {
       attachments?: SessionV1.FilePart[]
     },
   ) => Effect.Effect<void>
+  // Terminal writer for a tool whose execution returned output but whose provider
+  // request was aborted. Persists the aborted state instead of a false success (O2-04).
+  readonly abortToolCall: (toolCallID: string) => Effect.Effect<void>
   readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
 }
 
@@ -58,20 +68,33 @@ export interface Interface {
 }
 
 type ToolCall = {
-  partID: SessionV1.ToolPart["id"]
-  messageID: SessionV1.ToolPart["messageID"]
-  sessionID: SessionV1.ToolPart["sessionID"]
+  // Last ToolPart written for this call. The processor is the sole writer of tool
+  // parts during a turn, so reads are served from here rather than SQLite (F-001/F-024).
+  part: SessionV1.ToolPart
   done: Deferred.Deferred<void>
 }
 
 interface ProcessorContext extends Input {
   toolcalls: Record<string, ToolCall>
+  // Tool metadata can arrive before the stream registers the call, so the latest
+  // update per call id is held here until ensureToolCall creates the part.
+  pendingToolUpdates: Map<string, (part: SessionV1.ToolPart) => SessionV1.ToolPart>
   shouldBreak: boolean
   snapshot: string | undefined
+  // Tree hash captured by the previous step-finish. Nothing mutates the worktree
+  // between step-finish and the next step-start, so it can seed the next baseline
+  // without paying another full track() (F-068).
+  lastSnapshot?: string
   blocked: boolean
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
+  // PartIDs abandoned at a retry boundary. The next attempt reuses them so a fresh
+  // generation replaces the failed attempt's row instead of appending a duplicate (O2-06).
+  abandonedTextID?: SessionV1.TextPart["id"]
+  abandonedReasoning: Record<string, SessionV1.ReasoningPart["id"]>
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  lastToolFingerprint?: string
+  recoveredStaleReasoning: boolean
 }
 
 type StreamEvent = LLMEvent
@@ -90,6 +113,10 @@ const layer = Layer.effect(
     const plugin = yield* Plugin.Service
     const summary = yield* SessionSummary.Service
     const scope = yield* Scope.Scope
+    // Streaming deltas are non-durable and fire per token; accumulate them per part field and
+    // flush on a short cadence (or before a part's final update) to cut per-token pipeline work.
+    const DELTA_FLUSH_MS = 40
+    type DeltaInput = Parameters<typeof session.updatePartDelta>[0]
     const status = yield* SessionStatus.Service
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
@@ -110,9 +137,82 @@ const layer = Layer.effect(
         blocked: false,
         needsCompaction: false,
         currentText: undefined,
+        abandonedReasoning: {},
         reasoningMap: {},
+        pendingToolUpdates: new Map(),
+        recoveredStaleReasoning: false,
       }
       let aborted = false
+      // A retry re-issues the whole provider request from the original snapshot and
+      // the AI SDK re-dispatches tools, so once a tool call has been seen the turn
+      // must not retry (non-idempotent side effects would run twice) — F-059.
+      let toolExecuted = false
+      // Delta-flush fibers are processor-scoped so cleanup interrupts any that are
+      // still pending instead of letting them publish after the turn (F-048).
+      const processScope = yield* Scope.make()
+      // Buffers are keyed by partID (unique per part) so flushPart is O(1) with no key
+      // concatenation per token (F-101/F-110). One flush loop per processor drains them on the
+      // DELTA_FLUSH_MS cadence instead of a fiber per (part, field) window (F-102).
+      const pendingDeltas = new Map<string, DeltaInput>()
+      let flushing = false
+      // The 40ms flush loop and a terminal flushPart can both publish for the same
+      // part; serializing the publish keeps subscribers from observing a later delta
+      // before an earlier one (O-21/F-022).
+      const deltaLock = Semaphore.makeUnsafe(1)
+
+      const flushDeltaCore = (partID: string) =>
+        Effect.suspend(() => {
+          const buffer = pendingDeltas.get(partID)
+          if (!buffer) return Effect.void
+          // Deleting before the publish keeps two flushes from publishing one buffer; a failed
+          // publish restores the buffer so the delta survives for a later flush (F-103).
+          pendingDeltas.delete(partID)
+          return session.updatePartDelta(buffer).pipe(
+            Effect.catchCause(() =>
+              Effect.sync(() => {
+                const latest = pendingDeltas.get(partID)
+                pendingDeltas.set(partID, latest ? { ...buffer, delta: buffer.delta + latest.delta } : buffer)
+              }),
+            ),
+          )
+        })
+
+      const flushDelta = (partID: string) => deltaLock.withPermits(1)(flushDeltaCore(partID))
+
+      const flushPart = (partID: string) => flushDelta(partID)
+
+      // Terminal full-part writes take the same permit as the 40 ms flush loop so an
+      // in-flight delta can never land after the full text and resurrect a prefix (DRIFT-5).
+      const writePart = <T extends SessionV1.Part>(part: T) => deltaLock.withPermits(1)(session.updatePart(part))
+
+      const commitPart = <T extends SessionV1.Part>(part: T) =>
+        deltaLock.withPermits(1)(
+          Effect.gen(function* () {
+            yield* flushDeltaCore(part.id)
+            return yield* session.updatePart(part)
+          }),
+        )
+
+      const flushLoop = Effect.gen(function* () {
+        while (pendingDeltas.size > 0) {
+          yield* Effect.sleep(Duration.millis(DELTA_FLUSH_MS))
+          yield* Effect.forEach([...pendingDeltas.keys()], flushDelta, { discard: true })
+        }
+      }).pipe(Effect.ensuring(Effect.sync(() => (flushing = false))), Effect.forkIn(processScope))
+
+      const queueDelta = (input: DeltaInput) =>
+        Effect.gen(function* () {
+          const buffer = pendingDeltas.get(input.partID)
+          if (buffer) {
+            // The buffer is private to this map, so accumulate in place (F-110).
+            buffer.delta += input.delta
+            return
+          }
+          pendingDeltas.set(input.partID, { ...input })
+          if (flushing) return
+          flushing = true
+          yield* flushLoop
+        })
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
@@ -121,24 +221,32 @@ const layer = Layer.effect(
         })
 
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
-        const done = ctx.toolcalls[toolCallID]?.done
+        const call = ctx.toolcalls[toolCallID]
         delete ctx.toolcalls[toolCallID]
-        if (done) yield* Deferred.succeed(done, undefined).pipe(Effect.ignore)
+        // A retry boundary or teardown must not leave a registered tool part pending or
+        // running in SQLite, or replay sees a tool call that never resolved (DRIFT-6).
+        if (call && (call.part.state.status === "pending" || call.part.state.status === "running")) {
+          const end = Date.now()
+          const metadata =
+            "metadata" in call.part.state && isRecord(call.part.state.metadata) ? call.part.state.metadata : {}
+          yield* writePart({
+            ...call.part,
+            state: {
+              status: "error",
+              input: call.part.state.input,
+              error: "Tool execution aborted",
+              metadata: { ...metadata, interrupted: true },
+              time: { start: "time" in call.part.state ? call.part.state.time.start : end, end },
+            },
+          })
+        }
+        if (call) yield* Deferred.succeed(call.done, undefined).pipe(Effect.ignore)
       })
 
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
         const call = ctx.toolcalls[toolCallID]
         if (!call) return undefined
-        const part = yield* session.getPart({
-          partID: call.partID,
-          messageID: call.messageID,
-          sessionID: call.sessionID,
-        })
-        if (!part || part.type !== "tool") {
-          delete ctx.toolcalls[toolCallID]
-          return undefined
-        }
-        return { call, part }
+        return { call, part: call.part }
       })
 
       const updateToolCall = Effect.fn("SessionProcessor.updateToolCall")(function* (
@@ -146,14 +254,12 @@ const layer = Layer.effect(
         update: (part: SessionV1.ToolPart) => SessionV1.ToolPart,
       ) {
         const match = yield* readToolCall(toolCallID)
-        if (!match) return undefined
-        const part = yield* session.updatePart(update(match.part))
-        ctx.toolcalls[toolCallID] = {
-          ...match.call,
-          partID: part.id,
-          messageID: part.messageID,
-          sessionID: part.sessionID,
+        if (!match) {
+          ctx.pendingToolUpdates.set(toolCallID, update)
+          return undefined
         }
+        const part = yield* writePart(update(match.part))
+        ctx.toolcalls[toolCallID] = { ...match.call, part }
         return part
       })
 
@@ -167,8 +273,12 @@ const layer = Layer.effect(
         },
       ) {
         const match = yield* readToolCall(toolCallID)
-        if (!match || match.part.state.status !== "running") return
-        yield* session.updatePart({
+        if (!match || match.part.state.status !== "running") {
+          // Nothing left to complete; settle so teardown does not await a Deferred nobody resolves (F-103).
+          yield* settleToolCall(toolCallID)
+          return
+        }
+        const part = yield* writePart({
           ...match.part,
           state: {
             status: "completed",
@@ -180,13 +290,17 @@ const layer = Layer.effect(
             attachments: output.attachments,
           },
         })
+        ctx.toolcalls[toolCallID] = { ...match.call, part }
         yield* settleToolCall(toolCallID)
       })
 
       const failToolCall = Effect.fn("SessionProcessor.failToolCall")(function* (toolCallID: string, error: unknown) {
         const match = yield* readToolCall(toolCallID)
-        if (!match || match.part.state.status !== "running") return false
-        yield* session.updatePart({
+        if (!match || match.part.state.status !== "running") {
+          yield* settleToolCall(toolCallID)
+          return false
+        }
+        const part = yield* writePart({
           ...match.part,
           state: {
             status: "error",
@@ -197,6 +311,7 @@ const layer = Layer.effect(
             time: { start: match.part.state.time.start, end: Date.now() },
           },
         })
+        ctx.toolcalls[toolCallID] = { ...match.call, part }
         if (error instanceof PermissionV1.RejectedError || error instanceof Question.RejectedError) {
           ctx.blocked = ctx.shouldBreak
         }
@@ -204,12 +319,35 @@ const layer = Layer.effect(
         return true
       })
 
+      const abortToolCall = Effect.fn("SessionProcessor.abortToolCall")(function* (toolCallID: string) {
+        const match = yield* readToolCall(toolCallID)
+        if (!match || match.part.state.status !== "running") {
+          yield* settleToolCall(toolCallID)
+          return
+        }
+        const metadata = isRecord(match.part.state.metadata) ? match.part.state.metadata : {}
+        const part = yield* writePart({
+          ...match.part,
+          state: {
+            status: "error",
+            input: match.part.state.input,
+            error: "Tool execution aborted",
+            metadata: { ...metadata, interrupted: true },
+            time: { start: match.part.state.time.start, end: Date.now() },
+          },
+        })
+        ctx.toolcalls[toolCallID] = { ...match.call, part }
+        yield* settleToolCall(toolCallID)
+      })
+
       const finishReasoning = Effect.fn("SessionProcessor.finishReasoning")(function* (reasoningID: string) {
         if (!(reasoningID in ctx.reasoningMap)) return
+        // commitPart flushes coalesced deltas before the final full-part write so ordering
+        // holds for every caller, including step-finish which has no reasoning-end (F-021).
         // oxlint-disable-next-line no-self-assign -- reactivity trigger
         ctx.reasoningMap[reasoningID].text = ctx.reasoningMap[reasoningID].text
         ctx.reasoningMap[reasoningID].time = { ...ctx.reasoningMap[reasoningID].time, end: Date.now() }
-        yield* session.updatePart(ctx.reasoningMap[reasoningID])
+        yield* commitPart(ctx.reasoningMap[reasoningID])
         delete ctx.reasoningMap[reasoningID]
       })
 
@@ -225,15 +363,10 @@ const layer = Layer.effect(
             ...existing.part,
             metadata: { ...existing.part.metadata, providerExecuted: true },
           })
-          ctx.toolcalls[input.id] = {
-            ...existing.call,
-            partID: part.id,
-            messageID: part.messageID,
-            sessionID: part.sessionID,
-          }
+          ctx.toolcalls[input.id] = { ...existing.call, part }
           return { call: ctx.toolcalls[input.id], part }
         }
-        const part = yield* session.updatePart({
+        const created = yield* session.updatePart({
           id: PartID.ascending(),
           messageID: ctx.assistantMessage.id,
           sessionID: ctx.assistantMessage.sessionID,
@@ -245,11 +378,15 @@ const layer = Layer.effect(
         } satisfies SessionV1.ToolPart)
         ctx.toolcalls[input.id] = {
           done: yield* Deferred.make<void>(),
-          partID: part.id,
-          messageID: part.messageID,
-          sessionID: part.sessionID,
+          part: created,
         }
-        return { call: ctx.toolcalls[input.id], part }
+        const pending = ctx.pendingToolUpdates.get(input.id)
+        if (pending) {
+          ctx.pendingToolUpdates.delete(input.id)
+          const updated = yield* updateToolCall(input.id, pending)
+          if (updated) return { call: ctx.toolcalls[input.id], part: updated }
+        }
+        return { call: ctx.toolcalls[input.id], part: created }
       })
 
       const isFilePart = (value: unknown): value is SessionV1.FilePart => Schema.is(SessionV1.FilePart)(value)
@@ -280,7 +417,7 @@ const layer = Layer.effect(
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
             ctx.reasoningMap[value.id] = {
-              id: PartID.ascending(),
+              id: ctx.abandonedReasoning[value.id] ?? PartID.ascending(),
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.assistantMessage.sessionID,
               type: "reasoning",
@@ -288,6 +425,7 @@ const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            delete ctx.abandonedReasoning[value.id]
             yield* session.updatePart(ctx.reasoningMap[value.id])
             return
 
@@ -296,7 +434,7 @@ const layer = Layer.effect(
             if (!(value.id in ctx.reasoningMap)) return
             ctx.reasoningMap[value.id].text += value.text
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
-            yield* session.updatePartDelta({
+            yield* queueDelta({
               sessionID: ctx.reasoningMap[value.id].sessionID,
               messageID: ctx.reasoningMap[value.id].messageID,
               partID: ctx.reasoningMap[value.id].id,
@@ -320,6 +458,8 @@ const layer = Layer.effect(
             return
 
           case "tool-input-delta":
+            // Deltas never carry providerExecuted, so a tracked call makes ensureToolCall a no-op.
+            if (value.id in ctx.toolcalls) return
             yield* ensureToolCall(value)
             return
 
@@ -332,6 +472,7 @@ const layer = Layer.effect(
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
+            if (!READ_ONLY_TOOLS.has(value.name)) toolExecuted = true
             yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
             yield* updateToolCall(value.id, (match) => ({
@@ -350,19 +491,28 @@ const layer = Layer.effect(
                 : value.providerMetadata,
             }))
 
-            const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
+            const inputNeedle = JSON.stringify(input)
+            // Only a repeated identical call can form a doom loop; skip the full parts read otherwise.
+            const fingerprint = `${value.name}:${inputNeedle}`
+            if (ctx.lastToolFingerprint !== fingerprint) {
+              ctx.lastToolFingerprint = fingerprint
+              return
+            }
+
+            const tail = yield* MessageV2.toolPartsTail(ctx.assistantMessage.id, DOOM_LOOP_TOOL_WINDOW).pipe(
               Effect.provideService(Database.Service, database),
             )
-            const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+            const recentParts = tail
+              .filter((part): part is SessionV1.ToolPart => part.type === "tool")
+              .slice(-DOOM_LOOP_THRESHOLD)
 
             if (
               recentParts.length !== DOOM_LOOP_THRESHOLD ||
               !recentParts.every(
                 (part) =>
-                  part.type === "tool" &&
                   part.tool === value.name &&
                   part.state.status !== "pending" &&
-                  JSON.stringify(part.state.input) === JSON.stringify(input),
+                  JSON.stringify(part.state.input) === inputNeedle,
               )
             ) {
               return
@@ -422,7 +572,7 @@ const layer = Layer.effect(
             throw new Error(value.message)
 
           case "step-start":
-            if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
+            if (!ctx.snapshot) ctx.snapshot = ctx.lastSnapshot ?? (yield* snapshot.track())
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -468,8 +618,17 @@ const layer = Layer.effect(
               cost: usage.cost,
             })
             yield* session.updateMessage(ctx.assistantMessage)
+            const stepUnchanged = ctx.snapshot !== undefined && completedSnapshot === ctx.snapshot
             if (ctx.snapshot) {
-              const patch = yield* snapshot.patch(ctx.snapshot)
+              // track() stages then write-trees, so an unchanged tree proves the
+              // snapshot index already equals ctx.snapshot and patch() would diff
+              // to an empty file list. Skip its redundant stage + diff subprocesses.
+              const patch = stepUnchanged
+                ? { hash: ctx.snapshot, files: [] as string[] }
+                : yield* snapshot.patch(
+                    ctx.snapshot,
+                    completedSnapshot !== undefined ? { to: completedSnapshot } : undefined,
+                  )
               if (patch.files.length) {
                 yield* session.updatePart({
                   id: PartID.ascending(),
@@ -482,12 +641,17 @@ const layer = Layer.effect(
               }
               ctx.snapshot = undefined
             }
-            yield* summary
-              .summarize({
-                sessionID: ctx.sessionID,
-                messageID: ctx.assistantMessage.parentID,
-              })
-              .pipe(Effect.ignore, Effect.forkIn(scope))
+            // Reuse the baseline only when no tool was still running at step-finish; a tool
+            // mutating the worktree after this capture would corrupt the next step's diff.
+            ctx.lastSnapshot = Object.keys(ctx.toolcalls).length === 0 ? completedSnapshot : undefined
+            if (!stepUnchanged) {
+              yield* summary
+                .summarize({
+                  sessionID: ctx.sessionID,
+                  messageID: ctx.assistantMessage.parentID,
+                })
+                .pipe(Effect.ignore, Effect.forkIn(scope))
+            }
             if (
               !ctx.assistantMessage.summary &&
               isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
@@ -499,7 +663,7 @@ const layer = Layer.effect(
 
           case "text-start":
             ctx.currentText = {
-              id: PartID.ascending(),
+              id: ctx.abandonedTextID ?? PartID.ascending(),
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.assistantMessage.sessionID,
               type: "text",
@@ -507,14 +671,15 @@ const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
-            yield* session.updatePart(ctx.currentText)
+            ctx.abandonedTextID = undefined
+            yield* writePart(ctx.currentText)
             return
 
           case "text-delta":
             if (!ctx.currentText) return
             ctx.currentText.text += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
-            yield* session.updatePartDelta({
+            yield* queueDelta({
               sessionID: ctx.currentText.sessionID,
               messageID: ctx.currentText.messageID,
               partID: ctx.currentText.id,
@@ -541,7 +706,7 @@ const layer = Layer.effect(
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
             }
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
-            yield* session.updatePart(ctx.currentText)
+            yield* commitPart(ctx.currentText)
             ctx.currentText = undefined
             return
 
@@ -569,13 +734,13 @@ const layer = Layer.effect(
         if (ctx.currentText) {
           const end = Date.now()
           ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
-          yield* session.updatePart(ctx.currentText)
+          yield* commitPart(ctx.currentText)
           ctx.currentText = undefined
         }
 
         for (const part of Object.values(ctx.reasoningMap)) {
           const end = Date.now()
-          yield* session.updatePart({
+          yield* commitPart({
             ...part,
             time: { start: part.time.start ?? end, end },
           })
@@ -606,8 +771,10 @@ const layer = Layer.effect(
           })
         }
         ctx.toolcalls = {}
+        ctx.pendingToolUpdates.clear()
         ctx.assistantMessage.time.completed = Date.now()
         yield* session.updateMessage(ctx.assistantMessage)
+        yield* Scope.close(processScope, Exit.void)
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
@@ -636,6 +803,48 @@ const layer = Layer.effect(
           error: ctx.assistantMessage.error,
         })
         yield* status.set(ctx.sessionID, { type: "idle" })
+      })
+
+      const outputStarted = () =>
+        ctx.currentText !== undefined || Object.keys(ctx.reasoningMap).length > 0 || Object.keys(ctx.toolcalls).length > 0
+
+      // Strip rejected caller-bound reasoning from request and persisted parts, then replay once.
+      const recoverStaleReasoning = Effect.fn("SessionProcessor.recoverStaleReasoning")(function* (
+        streamInput: LLM.StreamInput,
+      ) {
+        SessionStaleReasoning.stripRequest(streamInput.messages)
+        yield* SessionStaleReasoning.persist(session, ctx.sessionID)
+        yield* Effect.logInfo("recovered stale encrypted reasoning", {
+          "session.id": ctx.sessionID,
+          messageID: ctx.assistantMessage.id,
+        })
+        ctx.currentText = undefined
+        ctx.reasoningMap = {}
+        yield* status.set(ctx.sessionID, { type: "busy" })
+        yield* llm.stream(streamInput).pipe(
+          Stream.tap((event) => handleEvent(event)),
+          Stream.takeUntil(() => ctx.needsCompaction),
+          Stream.runDrain,
+        )
+      })
+
+      // cleanup only runs after the last attempt, so a retry must finalize the aborted
+      // attempt's in-flight parts, buffers and tool calls or they are orphaned (F-023).
+      const finalizeRetryInflight = Effect.fn("SessionProcessor.finalizeRetryInflight")(function* () {
+        if (ctx.currentText) {
+          const end = Date.now()
+          ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
+          yield* commitPart(ctx.currentText)
+          ctx.abandonedTextID = ctx.currentText.id
+          ctx.currentText = undefined
+        }
+        for (const [reasoningID, part] of Object.entries(ctx.reasoningMap)) {
+          const end = Date.now()
+          yield* commitPart({ ...part, time: { start: part.time.start ?? end, end } })
+          ctx.abandonedReasoning[reasoningID] = part.id
+        }
+        ctx.reasoningMap = {}
+        yield* Effect.forEach(Object.keys(ctx.toolcalls), settleToolCall, { discard: true })
       })
 
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
@@ -671,20 +880,31 @@ const layer = Layer.effect(
               (cause) => !Cause.hasInterruptsOnly(cause),
               (cause) => Effect.fail(Cause.squash(cause)),
             ),
-            Effect.retry(
-              SessionRetry.policy({
+            Effect.retry({
+              schedule: SessionRetry.policy({
                 provider: input.model.providerID,
                 parse,
-                set: (info) => {
-                  return status.set(ctx.sessionID, {
-                    type: "retry",
-                    attempt: info.attempt,
-                    message: info.message,
-                    action: info.action,
-                    next: info.next,
-                  })
-                },
+                set: (info) =>
+                  Effect.gen(function* () {
+                    yield* finalizeRetryInflight()
+                    yield* status.set(ctx.sessionID, {
+                      type: "retry",
+                      attempt: info.attempt,
+                      message: info.message,
+                      action: info.action,
+                      next: info.next,
+                    })
+                  }),
               }),
+              while: () => !toolExecuted,
+            }),
+            Effect.catchIf(
+              (error) => !ctx.recoveredStaleReasoning && !outputStarted() && isStaleReasoningFailure(error),
+              () =>
+                Effect.gen(function* () {
+                  ctx.recoveredStaleReasoning = true
+                  yield* recoverStaleReasoning(streamInput)
+                }).pipe(Effect.catch(halt)),
             ),
             Effect.catch(halt),
             Effect.ensuring(cleanup()),
@@ -702,6 +922,7 @@ const layer = Layer.effect(
         },
         updateToolCall,
         completeToolCall,
+        abortToolCall,
         process,
       } satisfies Handle
     })

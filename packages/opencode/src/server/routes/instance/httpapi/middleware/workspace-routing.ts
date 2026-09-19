@@ -66,11 +66,6 @@ function configuredWorkspaceID(): WorkspaceV2.ID | undefined {
   return Flag.OPENCODE_WORKSPACE_ID ? WorkspaceV2.ID.make(Flag.OPENCODE_WORKSPACE_ID) : undefined
 }
 
-function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceV2.ID): WorkspaceV2.ID | undefined {
-  const workspaceParam = url.searchParams.get("workspace")
-  return sessionWorkspaceID ?? (workspaceParam ? WorkspaceV2.ID.make(workspaceParam) : undefined)
-}
-
 function selectedV2WorkspaceID(
   url: URL,
   sessionWorkspaceID?: WorkspaceV2.ID,
@@ -164,9 +159,7 @@ function planRequest(
   return Effect.gen(function* () {
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
-    const workspaceID = url.pathname.startsWith("/api/")
-      ? selectedV2WorkspaceID(url, session?.workspaceID)
-      : selectedWorkspaceID(url, session?.workspaceID)
+    const workspaceID = selectedV2WorkspaceID(url, session?.workspaceID)
     if (workspaceID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
     const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
 

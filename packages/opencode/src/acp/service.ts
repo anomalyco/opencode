@@ -348,6 +348,7 @@ export function make(input: {
     const removed = yield* session.remove(params.sessionId)
     registeredMcp.delete(params.sessionId)
     sessionSnapshots.delete(params.sessionId)
+    events?.clearSession(params.sessionId)
     if (!removed) return {}
 
     yield* abortBackingSession(removed)
@@ -356,6 +357,7 @@ export function make(input: {
 
   const cancel = Effect.fn("ACP.cancel")(function* (params: CancelNotification) {
     const current = yield* session.get(params.sessionId)
+    events?.clearSession(params.sessionId)
     yield* abortBackingSession(current)
   })
 

@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { sql } from "drizzle-orm"
 import * as DatabasePath from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
@@ -12,8 +13,8 @@ import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
 import type { SystemContext } from "../system-context/index"
-import { AgentV2 } from "../agent"
 import type { Revert } from "@opencode-ai/schema/revert"
+import type { FileDiff } from "@opencode-ai/schema/file-diff"
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
@@ -62,6 +63,9 @@ export const SessionTable = sqliteTable(
     index("session_project_idx").on(table.project_id),
     index("session_workspace_idx").on(table.workspace_id),
     index("session_parent_idx").on(table.parent_id),
+    index("session_project_time_updated_idx").on(table.project_id, table.time_updated, table.id),
+    index("session_time_updated_idx").on(table.time_updated, table.id),
+    index("session_directory_time_updated_idx").on(table.directory, table.time_updated, table.id),
   ],
 )
 
@@ -79,6 +83,22 @@ export const MessageTable = sqliteTable(
   (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
 )
 
+export const MessageDiffTable = sqliteTable(
+  "message_diff",
+  {
+    message_id: text()
+      .$type<MessageID>()
+      .primaryKey()
+      .references(() => MessageTable.id, { onDelete: "cascade" }),
+    session_id: text()
+      .$type<SessionSchema.ID>()
+      .notNull()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    diffs: text({ mode: "json" }).$type<FileDiff.Info[]>().notNull(),
+  },
+  (table) => [index("message_diff_session_idx").on(table.session_id)],
+)
+
 export const PartTable = sqliteTable(
   "part",
   {
@@ -91,10 +111,7 @@ export const PartTable = sqliteTable(
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<V1PartData>(),
   },
-  (table) => [
-    index("part_message_id_id_idx").on(table.message_id, table.id),
-    index("part_session_idx").on(table.session_id),
-  ],
+  (table) => [index("part_message_id_id_idx").on(table.message_id, table.id)],
 )
 
 export const TodoTable = sqliteTable(
@@ -133,7 +150,13 @@ export const SessionMessageTable = sqliteTable(
     uniqueIndex("session_message_session_seq_idx").on(table.session_id, table.seq),
     index("session_message_session_type_seq_idx").on(table.session_id, table.type, table.seq),
     index("session_message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id),
-    index("session_message_time_created_idx").on(table.time_created),
+    // Shell projection seeks a single row by callID; without this the predicate JSON-parses
+    // every shell row in the session per `shell.ended`.
+    index("session_message_session_call_id_seq_idx").on(
+      table.session_id,
+      sql`json_extract(${table.data}, '$.callID')`,
+      table.seq,
+    ),
   ],
 )
 

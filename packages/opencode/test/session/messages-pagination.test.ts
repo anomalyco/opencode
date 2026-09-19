@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { Effect, Option } from "effect"
+import { Effect, Exit, Option } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
@@ -1051,6 +1051,93 @@ describe("MessageV2 consistency", () => {
         const all = stream.toReversed()
 
         expect(filtered.map((m) => m.info.id)).toEqual(all.map((m) => m.info.id))
+      }),
+    ),
+  )
+})
+
+describe("MessageV2.partsTail", () => {
+  it.instance("returns the last N parts in ascending order", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const [id] = yield* fill(sessionID, 1)
+        yield* session.updatePart({ id: PartID.ascending(), sessionID, messageID: id, type: "text", text: "second" })
+        yield* session.updatePart({ id: PartID.ascending(), sessionID, messageID: id, type: "text", text: "third" })
+
+        const all = yield* MessageV2.parts(id)
+        const tail = yield* MessageV2.partsTail(id, 2)
+        expect(tail.map((item) => item.id)).toEqual(all.slice(-2).map((item) => item.id))
+      }),
+    ),
+  )
+
+  it.instance("returns all parts when fewer than the limit", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const [id] = yield* fill(sessionID, 1)
+        const all = yield* MessageV2.parts(id)
+        const tail = yield* MessageV2.partsTail(id, 3)
+        expect(tail.map((item) => item.id)).toEqual(all.map((item) => item.id))
+      }),
+    ),
+  )
+})
+
+describe("MessageV2.pageInfo/getInfo/findInfo", () => {
+  it.instance("pageInfo returns the same message ids as page", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 7)
+        const paged = yield* MessageV2.page({ sessionID, limit: 5 })
+        const info = yield* MessageV2.pageInfo({ sessionID, limit: 5 })
+        expect(info.items.map((item) => item.id)).toEqual(paged.items.map((item) => item.info.id))
+        expect(info.more).toBe(paged.more)
+        expect(info.cursor).toBe(paged.cursor)
+        expect(info.items.map((item) => item.role)).toEqual(paged.items.map((item) => item.info.role))
+        expect(ids).toHaveLength(7)
+      }),
+    ),
+  )
+
+  it.instance("getInfo matches get().info without parts", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const [id] = yield* fill(sessionID, 1)
+        const full = yield* MessageV2.get({ sessionID, messageID: id })
+        const info = yield* MessageV2.getInfo({ sessionID, messageID: id })
+        expect(info).toEqual(full.info)
+      }),
+    ),
+  )
+
+  it.instance("getInfo fails NotFound for a missing message", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const exit = yield* MessageV2.getInfo({ sessionID, messageID: MessageID.ascending() }).pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+      }),
+    ),
+  )
+
+  it.instance("findInfo returns the same message as findMessage", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        yield* fill(sessionID, 5)
+        const viaMessages = yield* MessageV2.findInfo(sessionID, () => true)
+        const page = yield* MessageV2.page({ sessionID, limit: 50 })
+        expect(Option.getOrUndefined(viaMessages)?.id).toBe(page.items.at(-1)?.info.id)
+      }),
+    ),
+  )
+
+  it.instance("Session.findMessageInfo matches findMessage for info-only predicates", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 3)
+        const info = yield* session.findMessageInfo(sessionID, (item) => item.role === "user")
+        const full = yield* session.findMessage(sessionID, () => true)
+        expect(Option.getOrUndefined(info)?.id).toBe(Option.getOrUndefined(full)?.info.id)
+        expect(ids).toHaveLength(3)
       }),
     ),
   )

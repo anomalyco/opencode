@@ -7,7 +7,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { trimDiff } from "./edit"
+import { trimDiff, withLocks, assertPathStable } from "./edit"
 import { LSP } from "@/lsp/lsp"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import DESCRIPTION from "./apply_patch.txt"
@@ -68,10 +68,11 @@ export const ApplyPatchTool = Tool.define(
       }> = []
 
       let totalDiff = ""
+      const assertTargets: string[] = []
 
       for (const hunk of hunks) {
         const filePath = path.resolve(instance.directory, hunk.path)
-        yield* assertExternalDirectoryEffect(ctx, filePath)
+        assertTargets.push(filePath)
 
         switch (hunk.type) {
           case "add": {
@@ -140,7 +141,7 @@ export const ApplyPatchTool = Tool.define(
             }
 
             const movePath = hunk.move_path ? path.resolve(instance.directory, hunk.move_path) : undefined
-            yield* assertExternalDirectoryEffect(ctx, movePath)
+            if (movePath) assertTargets.push(movePath)
 
             fileChanges.push({
               filePath,
@@ -202,73 +203,98 @@ export const ApplyPatchTool = Tool.define(
       }))
 
       // Check permissions if needed
-      const relativePaths = fileChanges.map((c) => path.relative(instance.worktree, c.filePath).replaceAll("\\", "/"))
-      yield* ctx.ask({
-        permission: "edit",
-        patterns: relativePaths,
-        always: ["*"],
-        metadata: {
-          filepath: relativePaths.join(", "),
-          diff: totalDiff,
-          files,
-        },
-      })
+      const relativePaths = [
+        ...new Set(
+          fileChanges.flatMap((c) =>
+            [c.filePath, ...(c.movePath ? [c.movePath] : [])].map((file) =>
+              path.relative(instance.worktree, file).replaceAll("\\", "/"),
+            ),
+          ),
+        ),
+      ]
+      const lockTargets = [...new Set(fileChanges.flatMap((c) => [c.filePath, ...(c.movePath ? [c.movePath] : [])]))]
+      yield* withLocks(
+        lockTargets,
+        Effect.gen(function* () {
+          for (const target of assertTargets) yield* assertExternalDirectoryEffect(ctx, target)
+          const guards = new Map(lockTargets.map((target) => [target, FSUtil.resolveExisting(target)]))
+          yield* ctx.ask({
+            permission: "edit",
+            patterns: relativePaths,
+            always: relativePaths,
+            metadata: {
+              filepath: relativePaths.join(", "),
+              diff: totalDiff,
+              files,
+            },
+          })
 
-      // Apply the changes
-      const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
+          // Apply the changes
+          const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
 
-      for (const change of fileChanges) {
-        const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
-        switch (change.type) {
-          case "add":
-            // Create parent directories (recursive: true is safe on existing/root dirs)
+          for (const change of fileChanges) {
+            const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
+            for (const target of [change.filePath, ...(change.movePath ? [change.movePath] : [])])
+              assertPathStable(target, guards.get(target)!)
+            switch (change.type) {
+              case "add":
+                // Create parent directories (recursive: true is safe on existing/root dirs)
 
-            yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
-            updates.push({ file: change.filePath, event: "add" })
-            break
+                yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
+                updates.push({ file: change.filePath, event: "add" })
+                break
 
-          case "update":
-            yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
-            updates.push({ file: change.filePath, event: "change" })
-            break
+              case "update":
+                yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
+                updates.push({ file: change.filePath, event: "change" })
+                break
 
-          case "move":
-            if (change.movePath) {
-              // Create parent directories (recursive: true is safe on existing/root dirs)
+              case "move":
+                if (change.movePath) {
+                  // Create parent directories (recursive: true is safe on existing/root dirs)
 
-              yield* afs.writeWithDirs(change.movePath!, Bom.join(change.newContent, change.bom))
-              yield* afs.remove(change.filePath)
-              updates.push({ file: change.filePath, event: "unlink" })
-              updates.push({ file: change.movePath, event: "add" })
+                  yield* afs.writeWithDirs(change.movePath!, Bom.join(change.newContent, change.bom))
+                  yield* afs.remove(change.filePath)
+                  updates.push({ file: change.filePath, event: "unlink" })
+                  updates.push({ file: change.movePath, event: "add" })
+                }
+                break
+
+              case "delete":
+                yield* afs.remove(change.filePath)
+                updates.push({ file: change.filePath, event: "unlink" })
+                break
             }
-            break
 
-          case "delete":
-            yield* afs.remove(change.filePath)
-            updates.push({ file: change.filePath, event: "unlink" })
-            break
-        }
-
-        if (edited) {
-          if (yield* format.file(edited)) {
-            yield* Bom.syncFile(afs, edited, change.bom)
+            if (edited) {
+              if (yield* format.file(edited)) {
+                yield* Bom.syncFile(afs, edited, change.bom)
+              }
+              yield* events.publish(FileSystem.Event.Edited, { file: edited })
+            }
           }
-          yield* events.publish(FileSystem.Event.Edited, { file: edited })
-        }
-      }
 
-      // Publish file change events
-      for (const update of updates) {
-        yield* events.publish(Watcher.Event.Updated, update)
-      }
+          for (const update of updates) {
+            yield* events.publish(Watcher.Event.Updated, update)
+          }
+        }),
+      )
 
-      // Notify LSP of file changes and collect diagnostics
+      // Notify LSP of file changes and collect diagnostics for the touched files only.
       for (const change of fileChanges) {
         if (change.type === "delete") continue
         const target = change.movePath ?? change.filePath
         yield* lsp.touchFile(target, "document")
       }
-      const diagnostics = yield* lsp.diagnostics()
+      const diagnostics = Object.fromEntries(
+        yield* Effect.forEach(
+          fileChanges.filter((change) => change.type !== "delete"),
+          (change) => {
+            const target = change.movePath ?? change.filePath
+            return Effect.map(lsp.diagnosticsFor(target), (diags) => [FSUtil.normalizePath(target), diags] as const)
+          },
+        ),
+      )
 
       // Generate output summary
       const summaryLines = fileChanges.map((change) => {

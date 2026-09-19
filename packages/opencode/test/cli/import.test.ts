@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test"
 import {
   formatImportFileError,
+  isExportData,
   parseShareUrl,
   shouldAttachShareAuthHeaders,
   transformShareData,
@@ -87,4 +88,12 @@ test("returns null for invalid share data", () => {
   expect(transformShareData([])).toBeNull()
   expect(transformShareData([{ type: "message", data: {} as any }])).toBeNull()
   expect(transformShareData([{ type: "session", data: { id: "s" } as any }])).toBeNull() // no messages
+})
+
+test("rejects malformed export payloads instead of throwing", () => {
+  expect(isExportData({})).toBe(false)
+  expect(isExportData({ messages: null })).toBe(false)
+  expect(isExportData({ messages: "nope" })).toBe(false)
+  expect(isExportData(null)).toBe(false)
+  expect(isExportData({ messages: [] })).toBe(true)
 })

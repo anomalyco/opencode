@@ -1,6 +1,7 @@
-import { Workspace } from "@/control-plane/workspace"
+import { SYNC_HISTORY_LIMIT, Workspace } from "@/control-plane/workspace"
 import * as InstanceState from "@/effect/instance-state"
 import { Session } from "@/session/session"
+import { NotFoundError } from "@/storage/storage"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -14,7 +15,13 @@ import { or } from "drizzle-orm"
 import { Effect, Scope } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
+import { ForbiddenError, SessionNotFoundError } from "../errors"
 import { HistoryPayload, ReplayPayload, SessionPayload } from "../groups/sync"
+
+// A history map with more keys than this builds an equivalently large `OR`
+// chain against the single serialized SQLite writer; the sync client sends one
+// key per session it knows about, so this is far above any legitimate request.
+export const SYNC_HISTORY_MAX_KEYS = 500
 
 export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handlers) =>
   Effect.gen(function* () {
@@ -39,6 +46,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         type: event.type,
         data: { ...event.data },
       }))
+      if (payload.length === 0) return yield* new HttpApiError.BadRequest({})
       const source = payload[0].aggregateID
       yield* Effect.logInfo("sync replay requested", {
         sessionID: source,
@@ -62,6 +70,24 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
       const workspaceID = yield* InstanceState.workspaceID
       if (!workspaceID) return yield* new HttpApiError.BadRequest({})
 
+      const instance = yield* InstanceState.context
+      const info = yield* session.get(ctx.payload.sessionID).pipe(
+        Effect.catchIf(
+          (error): error is NotFoundError => NotFoundError.isInstance(error),
+          () => Effect.succeed(undefined),
+        ),
+        Effect.catchDefect(() => Effect.succeed(undefined)),
+      )
+      if (!info) {
+        return yield* new SessionNotFoundError({
+          sessionID: ctx.payload.sessionID,
+          message: `Session not found: ${ctx.payload.sessionID}`,
+        })
+      }
+      if (info.projectID !== instance.project.id) {
+        return yield* new ForbiddenError({ message: "Session belongs to a different project" })
+      }
+
       yield* session.setWorkspace({ sessionID: ctx.payload.sessionID, workspaceID })
 
       yield* Effect.logInfo("sync session stolen", { sessionID: ctx.payload.sessionID, workspaceID })
@@ -71,15 +97,17 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
 
     const history = Effect.fn("SyncHttpApi.history")(function* (ctx: { payload: typeof HistoryPayload.Type }) {
       const exclude = Object.entries(ctx.payload)
+      if (exclude.length > SYNC_HISTORY_MAX_KEYS) return yield* new HttpApiError.BadRequest({})
+      // An empty map means the client knows no aggregates yet, so there is
+      // nothing to reconcile. Returning the globally oldest events here would
+      // leak every session, directory and project sharing the database.
+      if (exclude.length === 0) return []
       return yield* db
         .select()
         .from(EventTable)
-        .where(
-          exclude.length > 0
-            ? not(or(...exclude.map(([id, seq]) => and(eq(EventTable.aggregate_id, id), lte(EventTable.seq, seq))))!)
-            : undefined,
-        )
+        .where(not(or(...exclude.map(([id, seq]) => and(eq(EventTable.aggregate_id, id), lte(EventTable.seq, seq))))!))
         .orderBy(asc(EventTable.seq))
+        .limit(SYNC_HISTORY_LIMIT)
         .all()
         .pipe(Effect.orDie)
     })

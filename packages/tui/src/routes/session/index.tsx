@@ -210,24 +210,32 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const userCreatedAt = createMemo(
+    () =>
+      new Map(
+        messages()
+          .filter((message) => message.role === "user")
+          .map((message) => [message.id, message.time.created]),
+      ),
+  )
   const messagesBeforeRevert = () => {
     const messageID = session()?.revert?.messageID
     if (!messageID) return messages()
     const index = messages().findIndex((message) => message.id === messageID)
     return index === -1 ? messages() : messages().slice(0, index)
   }
-  const foregroundTasks = createMemo(() =>
-    sync.data.capabilities.experimentalBackgroundSubagents
-      ? messages().flatMap((message) =>
-          (sync.data.part[message.id] ?? []).filter(
-            (part): part is ToolPart =>
-              part.type === "tool" &&
-              part.tool === "task" &&
-              part.state.status === "running" &&
-              part.state.metadata?.background !== true,
-          ),
-        )
-      : [],
+  const hasForegroundTasks = createMemo(
+    () =>
+      sync.data.capabilities.experimentalBackgroundSubagents &&
+      messages().some((message) =>
+        (sync.data.part[message.id] ?? []).some(
+          (part) =>
+            part.type === "tool" &&
+            part.tool === "task" &&
+            part.state.status === "running" &&
+            part.state.metadata?.background !== true,
+        ),
+      ),
   )
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
@@ -288,6 +296,9 @@ export function Session() {
     void (async () => {
       const previousWorkspace = untrack(() => project.workspace.current())
       const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
+      // A fast A->B switch dispatches this effect for the old session; drop every side
+      // effect once the route moved on so B never inherits A's workspace/sync state.
+      if (route.sessionID !== sessionID) return
       if (!result.data) {
         toast.show({
           message: `Session not found: ${sessionID}`,
@@ -324,21 +335,23 @@ export function Session() {
   })
 
   let lastSwitch: string | undefined = undefined
-  event.on("message.part.updated", (evt) => {
-    const part = evt.properties.part
-    if (part.type !== "tool") return
-    if (part.sessionID !== route.sessionID) return
-    if (part.state.status !== "completed") return
-    if (part.id === lastSwitch) return
+  onCleanup(
+    event.on("message.part.updated", (evt) => {
+      const part = evt.properties.part
+      if (part.type !== "tool") return
+      if (part.sessionID !== route.sessionID) return
+      if (part.state.status !== "completed") return
+      if (part.id === lastSwitch) return
 
-    if (part.tool === "plan_exit") {
-      local.agent.set("build")
-      lastSwitch = part.id
-    } else if (part.tool === "plan_enter") {
-      local.agent.set("plan")
-      lastSwitch = part.id
-    }
-  })
+      if (part.tool === "plan_exit") {
+        local.agent.set("build")
+        lastSwitch = part.id
+      } else if (part.tool === "plan_enter") {
+        local.agent.set("plan")
+        lastSwitch = part.id
+      }
+    }),
+  )
 
   let seeded = false
   let scroll: ScrollBoxRenderable
@@ -354,25 +367,27 @@ export function Session() {
   const dialog = useDialog()
   const renderer = useRenderer()
 
-  event.on("session.status", (evt) => {
-    if (evt.properties.sessionID !== route.sessionID) return
-    if (evt.properties.status.type !== "retry") return
-    if (!evt.properties.status.action) return
-    if (dialog.stack.length > 0) return
+  onCleanup(
+    event.on("session.status", (evt) => {
+      if (evt.properties.sessionID !== route.sessionID) return
+      if (evt.properties.status.type !== "retry") return
+      if (!evt.properties.status.action) return
+      if (dialog.stack.length > 0) return
 
-    const keys = goUpsellKeys(evt.properties.status.action)
-    if (!keys) return
+      const keys = goUpsellKeys(evt.properties.status.action)
+      if (!keys) return
 
-    const seen = kv.get(keys.lastSeenAt)
-    if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
+      const seen = kv.get(keys.lastSeenAt)
+      if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
 
-    if (kv.get(keys.dontShow)) return
+      if (kv.get(keys.dontShow)) return
 
-    void DialogRetryAction.show(dialog, evt.properties.status.action).then((dontShowAgain) => {
-      if (dontShowAgain) kv.set(keys.dontShow, true)
-      kv.set(keys.lastSeenAt, Date.now())
-    })
-  })
+      void DialogRetryAction.show(dialog, evt.properties.status.action).then((dontShowAgain) => {
+        if (dontShowAgain) kv.set(keys.dontShow, true)
+        kv.set(keys.lastSeenAt, Date.now())
+      })
+    }),
+  )
 
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
@@ -1023,7 +1038,7 @@ export function Session() {
       value: "session.background",
       category: "Session",
       hidden: true,
-      enabled: foregroundTasks().length > 0,
+      enabled: hasForegroundTasks(),
       run: () => {
         void sdk.client.experimental.session.background({
           sessionID: route.sessionID,
@@ -1114,7 +1129,7 @@ export function Session() {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    enabled: foregroundTasks().length > 0,
+    enabled: hasForegroundTasks(),
     priority: 1,
     bindings: tuiConfig.keybinds.get("session.background"),
   }))
@@ -1287,6 +1302,7 @@ export function Session() {
                           last={lastAssistant()?.id === message.id}
                           message={message as AssistantMessage}
                           parts={sync.data.part[message.id] ?? []}
+                          startedAt={userCreatedAt().get((message as AssistantMessage).parentID ?? "")}
                         />
                       </Match>
                     </Switch>
@@ -1466,12 +1482,11 @@ function UserMessage(props: {
   )
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
+function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean; startedAt?: number }) {
   const ctx = use()
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
-  const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
 
   const final = createMemo(() => {
@@ -1481,13 +1496,22 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const duration = createMemo(() => {
     if (!final()) return 0
     if (!props.message.time.completed) return 0
-    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    if (!user || !user.time) return 0
-    return props.message.time.completed - user.time.created
+    if (props.startedAt === undefined) return 0
+    return props.message.time.completed - props.startedAt
   })
 
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
+  const hasTask = createMemo(() => props.parts.some((part) => part.type === "tool" && part.tool === "task"))
+  const hasRunningBackgroundTask = createMemo(() =>
+    props.parts.some(
+      (part) =>
+        part.type === "tool" &&
+        part.tool === "task" &&
+        part.state.status === "running" &&
+        part.state.metadata?.background !== true,
+    ),
+  )
 
   return (
     <>
@@ -1506,23 +1530,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           )
         }}
       </For>
-      <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
+      <Show when={hasTask()}>
         <box paddingTop={1} paddingLeft={3}>
           <text fg={theme.text}>
             {childShortcut()}
             <span style={{ fg: theme.textMuted }}> view subagents</span>
-            <Show
-              when={
-                sync.data.capabilities.experimentalBackgroundSubagents &&
-                props.parts.some(
-                  (x) =>
-                    x.type === "tool" &&
-                    x.tool === "task" &&
-                    x.state.status === "running" &&
-                    x.state.metadata?.background !== true,
-                )
-              }
-            >
+            <Show when={sync.data.capabilities.experimentalBackgroundSubagents && hasRunningBackgroundTask()}>
               <span style={{ fg: theme.textMuted }}> · </span>
               {backgroundShortcut()}
               <span style={{ fg: theme.textMuted }}> background</span>

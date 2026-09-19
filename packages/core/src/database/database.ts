@@ -2,7 +2,7 @@ export * as Database from "./database"
 
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { layer as sqliteLayer } from "#sqlite"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schedule } from "effect"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
@@ -30,7 +30,13 @@ const layer = Layer.effect(
     yield* db.run("PRAGMA cache_size = -64000")
     yield* db.run("PRAGMA foreign_keys = ON")
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    yield* db.run("PRAGMA wal_autocheckpoint = 4000")
+    yield* db.run("PRAGMA journal_size_limit = 33554432")
     yield* DatabaseMigration.apply(db)
+
+    yield* db
+      .run("PRAGMA wal_checkpoint(PASSIVE)")
+      .pipe(Effect.ignore, Effect.repeat(Schedule.spaced("5 minutes").pipe(Schedule.jittered)), Effect.forkScoped)
 
     return { db }
   }).pipe(Effect.orDie),

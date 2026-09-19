@@ -1,6 +1,7 @@
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Session } from "@/session/session"
+import { SessionID } from "@/session/schema"
 import { MessageV2 } from "../../session/message-v2"
 import { CliError, effectCmd } from "../effect-cmd"
 import { Database } from "@opencode-ai/core/database/database"
@@ -15,6 +16,10 @@ import type { InstanceContext } from "@/project/instance-context"
 
 const decodeMessageInfo = Schema.decodeUnknownSync(SessionV1.Info)
 const decodePart = Schema.decodeUnknownSync(SessionV1.Part)
+
+const IMPORT_MAX_MESSAGES = 10_000
+const IMPORT_BATCH_SIZE = 100
+const IMPORT_MAX_BYTES = 10 * 1024 * 1024
 
 /** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */
 export type ShareData =
@@ -91,23 +96,33 @@ export function transformShareData(shareData: ShareData[]): {
 
 type ExportData = { info: SDKSession; messages: Array<{ info: Message; parts: Part[] }> }
 
+export function isExportData(value: unknown): value is ExportData {
+  return typeof value === "object" && value !== null && Array.isArray((value as { messages?: unknown }).messages)
+}
+
 export const ImportCommand = effectCmd({
   command: "import <file>",
   describe: "import session data from JSON file or URL",
   builder: (yargs) =>
-    yargs.positional("file", {
-      describe: "path to JSON file or share URL",
-      type: "string",
-      demandOption: true,
-    }),
+    yargs
+      .positional("file", {
+        describe: "path to JSON file or share URL",
+        type: "string",
+        demandOption: true,
+      })
+      .option("force", {
+        type: "boolean",
+        default: false,
+        describe: "adopt the file's session id, overwriting an existing local session with that id",
+      }),
   handler: Effect.fn("Cli.import")(function* (args) {
     const ctx = yield* InstanceRef
     if (!ctx) return yield* Effect.die("InstanceRef not provided")
-    return yield* runImport(args.file, ctx)
+    return yield* runImport(args.file, ctx, args.force)
   }),
 })
 
-const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: InstanceContext) {
+const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: InstanceContext, force: boolean) {
   const share = yield* ShareNext.Service
   const fs = yield* FSUtil.Service
   const { db } = yield* Database.Service
@@ -151,11 +166,28 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
       return
     }
 
+    if (Number(response.headers.get("content-length") ?? "0") > IMPORT_MAX_BYTES) {
+      return yield* new CliError({ message: `Refusing to fetch share data larger than ${IMPORT_MAX_BYTES} bytes` })
+    }
+
     const shareData = yield* Effect.tryPromise({
-      try: () => response.json() as Promise<ShareData[]>,
+      try: () => response.json() as Promise<unknown>,
       catch: () => new CliError({ message: "Share data was not valid JSON" }),
     })
-    const transformed = transformShareData(shareData)
+    if (!Array.isArray(shareData)) {
+      return yield* new CliError({ message: "Invalid session data: expected a share data array" })
+    }
+    const shared = shareData as ShareData[]
+    if (shared.filter((item) => item?.type === "message").length > IMPORT_MAX_MESSAGES) {
+      return yield* new CliError({
+        message: `Refusing to import more than ${IMPORT_MAX_MESSAGES} messages`,
+      })
+    }
+    const transformed = yield* Effect.try({
+      try: () => transformShareData(shared),
+      catch: (error) =>
+        new CliError({ message: `Invalid session data: ${error instanceof Error ? error.message : String(error)}` }),
+    })
 
     if (!transformed) {
       process.stdout.write(`Share not found or empty: ${slug}`)
@@ -176,55 +208,95 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     return
   }
 
-  const info = Schema.decodeUnknownSync(Session.Info)({
-    ...exportData.info,
-    projectID: ctx.project.id,
-    directory: ctx.directory,
-    path: path.relative(path.resolve(ctx.worktree), ctx.directory).replaceAll("\\", "/"),
-  }) as Session.Info
-  const row = Session.toRow(info)
-  yield* db
-    .insert(SessionTable)
-    .values(row)
-    .onConflictDoUpdate({
-      target: SessionTable.id,
-      set: { project_id: row.project_id, directory: row.directory, path: row.path },
-    })
-    .run()
-    .pipe(Effect.orDie)
-
-  for (const msg of exportData.messages) {
-    const msgInfo = decodeMessageInfo(msg.info) as SessionV1.Info
-    const { id, sessionID: _, ...msgData } = msgInfo
-    yield* db
-      .insert(MessageTable)
-      .values({
-        id,
-        session_id: row.id,
-        time_created: msgInfo.time?.created ?? Date.now(),
-        data: msgData as never,
-      })
-      .onConflictDoNothing()
-      .run()
-      .pipe(Effect.orDie)
-
-    for (const part of msg.parts) {
-      const partInfo = decodePart(part) as SessionV1.Part
-      const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
-      yield* db
-        .insert(PartTable)
-        .values({
-          id: partId,
-          message_id: messageID,
-          session_id: row.id,
-          data: partData,
-        })
-        .onConflictDoNothing()
-        .run()
-        .pipe(Effect.orDie)
-    }
+  if (!isExportData(exportData)) {
+    return yield* new CliError({ message: "Invalid session data: messages must be an array" })
   }
 
-  process.stdout.write(`Imported session: ${exportData.info.id}`)
+  const data = exportData
+  if (data.messages.length > IMPORT_MAX_MESSAGES) {
+    return yield* new CliError({
+      message: `Refusing to import ${data.messages.length} messages (limit ${IMPORT_MAX_MESSAGES})`,
+    })
+  }
+
+  const decoded = yield* Effect.try({
+    try: () =>
+      data.messages.map((message) => ({
+        info: decodeMessageInfo(message.info) as SessionV1.Info,
+        parts: message.parts.map((part) => decodePart(part) as SessionV1.Part),
+      })),
+    catch: (error) =>
+      new CliError({ message: `Invalid session data: ${error instanceof Error ? error.message : String(error)}` }),
+  })
+
+  const info = yield* Effect.try({
+    try: () =>
+      Schema.decodeUnknownSync(Session.Info)({
+        ...data.info,
+        id: force ? data.info.id : SessionID.descending(),
+        projectID: ctx.project.id,
+        directory: ctx.directory,
+        path: path.relative(path.resolve(ctx.worktree), ctx.directory).replaceAll("\\", "/"),
+      }) as Session.Info,
+    catch: (error) =>
+      new CliError({ message: `Invalid session data: ${error instanceof Error ? error.message : String(error)}` }),
+  })
+  const row = Session.toRow(info)
+
+  const insertSession = db.insert(SessionTable).values(row)
+  yield* db
+    .transaction(() =>
+      (force
+        ? insertSession.onConflictDoUpdate({
+            target: SessionTable.id,
+            set: { project_id: row.project_id, directory: row.directory, path: row.path },
+          })
+        : insertSession.onConflictDoNothing()
+      )
+        .run()
+        .pipe(Effect.orDie),
+    )
+    .pipe(Effect.orDie)
+
+  for (let start = 0; start < decoded.length; start += IMPORT_BATCH_SIZE) {
+    const batch = decoded.slice(start, start + IMPORT_BATCH_SIZE)
+    yield* db
+      .transaction(() =>
+        Effect.gen(function* () {
+          for (const message of batch) {
+            const { id: messageID, sessionID: _, ...msgData } = message.info
+            yield* db
+              .insert(MessageTable)
+              .values({
+                id: messageID,
+                session_id: row.id,
+                time_created: message.info.time?.created ?? Date.now(),
+                data: msgData as never,
+              })
+              .onConflictDoNothing()
+              .run()
+              .pipe(Effect.orDie)
+
+            for (const part of message.parts) {
+              const { id: partId, sessionID: _s, messageID: partMessageID, ...partData } = part
+              yield* db
+                .insert(PartTable)
+                .values({
+                  id: partId,
+                  message_id: partMessageID,
+                  session_id: row.id,
+                  data: partData,
+                })
+                .onConflictDoNothing()
+                .run()
+                .pipe(Effect.orDie)
+            }
+          }
+        }),
+      )
+      .pipe(Effect.orDie)
+  }
+
+  process.stdout.write(`Imported session: ${row.id}`)
   process.stdout.write(EOL)
 })

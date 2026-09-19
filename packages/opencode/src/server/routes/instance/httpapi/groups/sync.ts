@@ -3,6 +3,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { ForbiddenError, SessionNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
@@ -72,7 +73,7 @@ export const SyncApi = HttpApi.make("sync")
           query: WorkspaceRoutingQuery,
           payload: SessionPayload,
           success: described(SessionPayload, "Session stolen into workspace"),
-          error: HttpApiError.BadRequest,
+          error: [HttpApiError.BadRequest, SessionNotFoundError, ForbiddenError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "sync.steal",
@@ -90,7 +91,7 @@ export const SyncApi = HttpApi.make("sync")
             identifier: "sync.history.list",
             summary: "List sync events",
             description:
-              "List sync events for all aggregates. Keys are aggregate IDs the client already knows about, values are the last known sequence ID. Events with seq > value are returned for those aggregates. Aggregates not listed in the input get their full history.",
+              "List sync events for all aggregates. Keys are aggregate IDs the client already knows about, values are the last known sequence ID. Events with seq > value are returned for those aggregates. Aggregates not listed in the input get their full history; an empty map returns no events.",
           }),
         ),
       )

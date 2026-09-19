@@ -105,7 +105,14 @@ describe("v2 location HttpApi", () => {
     }
   })
 
-  test("streams native EventV2 payloads across locations", async () => {
+  test("ignores a malformed location workspace instead of failing", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const response = await request("/api/command?location[workspace]=garbage", tmp.path)
+    expect(response.status).toBe(200)
+  })
+
+  test("scopes native EventV2 payloads to the subscriber location", async () => {
     await using subscriber = await tmpdir({ git: true })
     await using publisher = await tmpdir({ git: true })
     const response = await request("/api/event", subscriber.path)
@@ -114,11 +121,16 @@ describe("v2 location HttpApi", () => {
     expect(connected.type).toBe("server.connected")
     expect(connected.location).toBeUndefined()
 
-    const created = await request("/session", publisher.path, { method: "POST" })
-    expect(created.status).toBe(200)
+    // Publish at a foreign location first; server-side filtering must drop it, so the
+    // first `session.created` this subscriber observes is its own.
+    const foreign = await request("/session", publisher.path, { method: "POST" })
+    expect(foreign.status).toBe(200)
+    const own = await request("/session", subscriber.path, { method: "POST" })
+    expect(own.status).toBe(200)
+
     expect(await readEventType(reader, "session.created")).toMatchObject({
       type: "session.created",
-      location: { directory: publisher.path },
+      location: { directory: subscriber.path },
       data: { sessionID: expect.any(String) },
     })
     await reader.return(undefined)

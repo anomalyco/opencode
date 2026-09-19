@@ -1,6 +1,6 @@
 export * as BackgroundJob from "./background-job"
 
-import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, Scope, SynchronizedRef } from "effect"
+import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, Scope, Schema, SynchronizedRef } from "effect"
 import { Identifier } from "./id/id"
 import { makeGlobalNode } from "./effect/app-node"
 
@@ -20,14 +20,16 @@ export type Info = {
 
 type Active = {
   info: Info
-  done: Deferred.Deferred<Info>
+  // Settled entries drop `promoted`, which for a promoted job pins a full
+  // result snapshot that only a running `waitForPromotion` can still observe.
+  done?: Deferred.Deferred<Info>
   scope: Scope.Closeable
   token: object
   pending: number
   next: number
   output?: { sequence: number; text: string }
   tail: Deferred.Deferred<void>
-  promoted: Deferred.Deferred<Info>
+  promoted?: Deferred.Deferred<Info>
   onPromote?: Effect.Effect<void>
 }
 
@@ -85,13 +87,18 @@ export type WaitResult = {
   timedOut: boolean
 }
 
+/** A promoted-result waiter raced a job that is no longer retained (missing or pruned). */
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("BackgroundJob.NotFound", {
+  id: Schema.String,
+}) {}
+
 export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: string) => Effect.Effect<Info | undefined>
   readonly start: (input: StartInput) => Effect.Effect<Info>
   readonly extend: (input: ExtendInput) => Effect.Effect<boolean>
   readonly wait: (input: WaitInput) => Effect.Effect<WaitResult>
-  readonly waitForPromotion: (id: string) => Effect.Effect<Info>
+  readonly waitForPromotion: (id: string) => Effect.Effect<Info | undefined, NotFoundError>
   readonly promote: (id: string) => Effect.Effect<Info | undefined>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
 }
@@ -110,12 +117,36 @@ function errorText(error: unknown) {
   return String(error)
 }
 
+/** Terminal entries kept for late `get`/`list` observation; running jobs are never pruned. */
+export const RETAINED_TERMINAL_JOBS = 32
+
+/** Retained `Info.output` cap; the full body still reaches `done` exactly once. */
+const MAX_RETAINED_OUTPUT = 30_000
+
+function previewOutput(text: string) {
+  if (text.length <= MAX_RETAINED_OUTPUT) return text
+  return `...\n\n${text.slice(-MAX_RETAINED_OUTPUT)}`
+}
+
+/** Drops the oldest terminal entries once the retained ring is full. Call under the registry lock. */
+function pruneTerminalJobs(jobs: Map<string, Active>) {
+  const terminal = Array.from(jobs.values()).filter((job) => job.info.status !== "running")
+  if (terminal.length <= RETAINED_TERMINAL_JOBS) return
+  terminal
+    .sort((a, b) => (a.info.completed_at ?? a.info.started_at) - (b.info.completed_at ?? b.info.started_at))
+    .slice(0, terminal.length - RETAINED_TERMINAL_JOBS)
+    .forEach((job) => jobs.delete(job.info.id))
+}
+
 /**
  * Makes one scoped, process-local registry. Entries are intentionally not
  * durable: process restart or owner-scope closure loses status and interrupts
  * live work. Persisted observation, restart recovery, and remote workers need a
  * separate durable ownership slice rather than pretending this registry has
- * those semantics.
+ * those semantics. Retention is bounded: running entries live until they settle,
+ * then settled entries are pruned to the most recent `RETAINED_TERMINAL_JOBS`,
+ * and each retained entry keeps only a capped `Info.output` preview while the
+ * lossless body is delivered once through the `done` deferred.
  */
 export const make = Effect.gen(function* () {
   const state: State = {
@@ -141,27 +172,31 @@ export const make = Effect.gen(function* () {
           ? { sequence, text: exit.value }
           : job.output
       if (Exit.isSuccess(exit) && pending > 0) {
-        return [{}, new Map(jobs).set(id, { ...job, pending, output })]
+        jobs.set(id, { ...job, pending, output })
+        return [{}, jobs]
       }
       const status: Exclude<Status, "running"> = Exit.isSuccess(exit)
         ? "completed"
         : Cause.hasInterruptsOnly(exit.cause)
           ? "cancelled"
           : "error"
-      const next = {
+      const info: Info = {
+        ...job.info,
+        status,
+        completed_at,
+        ...(output ? { output: output.text } : {}),
+        ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
+      }
+      jobs.set(id, {
         ...job,
+        promoted: undefined,
         onPromote: undefined,
         pending: 0,
-        output,
-        info: {
-          ...job.info,
-          status,
-          completed_at,
-          ...(output ? { output: output.text } : {}),
-          ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
-        },
-      }
-      return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
+        output: undefined,
+        info: { ...info, ...(output ? { output: previewOutput(output.text) } : {}) },
+      })
+      pruneTerminalJobs(jobs)
+      return [{ info: snapshot({ ...job, info }), done: job.done, scope: job.scope }, jobs]
     })
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
     if (result.scope) {
@@ -234,10 +269,8 @@ export const make = Effect.gen(function* () {
               promoted,
               onPromote: input.onPromote,
             }
-            return [{ info: snapshot(job), scope, token }, new Map(jobs).set(id, job)] as readonly [
-              StartResult,
-              Map<string, Active>,
-            ]
+            jobs.set(id, job)
+            return [{ info: snapshot(job), scope, token }, jobs] as readonly [StartResult, Map<string, Active>]
           }),
         )
         if ("scope" in result)
@@ -262,14 +295,15 @@ export const make = Effect.gen(function* () {
           (jobs): readonly [ExtendResult, Map<string, Active>] => {
             const job = jobs.get(input.id)
             if (!job || job.info.status !== "running") return [{ extended: false }, jobs]
+            jobs.set(input.id, {
+              ...job,
+              pending: job.pending + 1,
+              next: job.next + 1,
+              tail,
+            })
             return [
               { extended: true, previous: job.tail, scope: job.scope, tail, token: job.token, sequence: job.next },
-              new Map(jobs).set(input.id, {
-                ...job,
-                pending: job.pending + 1,
-                next: job.next + 1,
-                tail,
-              }),
+              jobs,
             ]
           },
         )
@@ -292,7 +326,12 @@ export const make = Effect.gen(function* () {
   const wait: Interface["wait"] = Effect.fn("BackgroundJob.wait")(function* (input) {
     const job = (yield* SynchronizedRef.get(state.jobs)).get(input.id)
     if (!job) return { timedOut: false }
-    if (job.info.status !== "running") return { info: snapshot(job), timedOut: false }
+    if (job.info.status !== "running") {
+      // `done` carries the lossless result; the retained snapshot is capped.
+      if (job.done) return { info: yield* Deferred.await(job.done), timedOut: false }
+      return { info: snapshot(job), timedOut: false }
+    }
+    if (!job.done) return { info: snapshot(job), timedOut: false }
     if (input.timeout === undefined) return { info: yield* Deferred.await(job.done), timedOut: false }
     if (input.timeout <= 0) return { info: snapshot(job), timedOut: true }
     const info = yield* Deferred.await(job.done).pipe(Effect.timeoutOption(input.timeout))
@@ -302,8 +341,11 @@ export const make = Effect.gen(function* () {
 
   const waitForPromotion: Interface["waitForPromotion"] = Effect.fn("BackgroundJob.waitForPromotion")(function* (id) {
     const job = (yield* SynchronizedRef.get(state.jobs)).get(id)
-    if (!job || job.info.status !== "running") return yield* Effect.never
+    if (!job) return yield* new NotFoundError({ id })
     if (job.info.metadata?.background === true) return snapshot(job)
+    // A settled job can never be promoted; resolving its terminal snapshot avoids a waiter hang.
+    if (job.info.status !== "running") return snapshot(job)
+    if (!job.promoted) return yield* Effect.never
     return yield* Deferred.await(job.promoted)
   })
 
@@ -323,10 +365,11 @@ export const make = Effect.gen(function* () {
             metadata: { ...job.info.metadata, background: true },
           },
         }
-        return [
-          { info: snapshot(next), onPromote: job.onPromote, promoted: job.promoted },
-          new Map(jobs).set(id, next),
-        ] as readonly [PromoteResult, Map<string, Active>]
+        jobs.set(id, next)
+        return [{ info: snapshot(next), onPromote: job.onPromote, promoted: job.promoted }, jobs] as readonly [
+          PromoteResult,
+          Map<string, Active>,
+        ]
       }),
     )
     if (result.info && result.promoted) yield* Deferred.succeed(result.promoted, result.info).pipe(Effect.ignore)
@@ -340,17 +383,21 @@ export const make = Effect.gen(function* () {
       const job = jobs.get(id)
       if (!job) return [{}, jobs]
       if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
-      const next = {
+      const info: Info = {
+        ...job.info,
+        status: "cancelled" as const,
+        completed_at,
+      }
+      jobs.set(id, {
         ...job,
+        promoted: undefined,
         onPromote: undefined,
         pending: 0,
-        info: {
-          ...job.info,
-          status: "cancelled" as const,
-          completed_at,
-        },
-      }
-      return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
+        output: undefined,
+        info,
+      })
+      pruneTerminalJobs(jobs)
+      return [{ info: snapshot({ ...job, info }), done: job.done, scope: job.scope }, jobs]
     })
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
     if (result.scope) yield* Scope.close(result.scope, Exit.void)

@@ -12,6 +12,9 @@ import { Shell } from "./shell"
 import { lazy } from "./util/lazy"
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
+// Output buffered per subscriber before it calls activate(); drop-oldest so a subscriber that
+// attaches but never activates cannot pin unbounded terminal output.
+const PENDING_LIMIT = 1024 * 1024
 // Exited sessions stay observable (status, exit code, retained output) until removed explicitly.
 // Cap retention so abandoned terminals do not accumulate unbounded buffers.
 const EXITED_LIMIT = 25
@@ -23,6 +26,7 @@ type Subscriber = {
   active: boolean
   detached: boolean
   pending: string[]
+  pendingBytes: number
   end?: { exitCode?: number }
 }
 
@@ -206,6 +210,12 @@ const layer = Layer.effect(
           for (const [token, subscriber] of session.subscribers.entries()) {
             if (!subscriber.active) {
               subscriber.pending.push(chunk)
+              subscriber.pendingBytes += chunk.length
+              while (subscriber.pendingBytes > PENDING_LIMIT && subscriber.pending.length > 0) {
+                const dropped = subscriber.pending.shift()
+                if (dropped === undefined) break
+                subscriber.pendingBytes -= dropped.length
+              }
               continue
             }
             try {
@@ -267,6 +277,7 @@ const layer = Layer.effect(
         active: false,
         detached: false,
         pending: [],
+        pendingBytes: 0,
       }
       session.subscribers.set(token, subscriber)
       const start = session.bufferCursor
@@ -295,6 +306,7 @@ const layer = Layer.effect(
           try {
             for (const chunk of subscriber.pending) subscriber.onData(chunk)
             subscriber.pending.length = 0
+            subscriber.pendingBytes = 0
             if (subscriber.end) subscriber.onEnd(subscriber.end)
           } catch {
             session.subscribers.delete(token)
@@ -303,6 +315,7 @@ const layer = Layer.effect(
         detach: () => {
           subscriber.detached = true
           subscriber.pending.length = 0
+          subscriber.pendingBytes = 0
           subscriber.end = undefined
           session.subscribers.delete(token)
         },

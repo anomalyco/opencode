@@ -144,6 +144,7 @@ const lsp = Layer.succeed(
     hasClients: () => Effect.succeed(false),
     touchFile: () => Effect.void,
     diagnostics: () => Effect.succeed({}),
+    diagnosticsFor: () => Effect.succeed([]),
     hover: () => Effect.succeed(undefined),
     definition: () => Effect.succeed([]),
     references: () => Effect.succeed([]),
@@ -902,7 +903,7 @@ it.instance("glob tool keeps instance context during prompt runs", () =>
     const result = yield* prompt.loop({ sessionID: session.id })
     expect(result.info.role).toBe("assistant")
 
-    const msgs = yield* MessageV2.filterCompactedEffect(session.id)
+    const msgs = (yield* MessageV2.filterCompactedEffect(session.id)).messages
     const tool = msgs
       .flatMap((msg) => msg.parts)
       .find(
@@ -971,7 +972,7 @@ it.instance("failed subtask preserves metadata on error tool state", () =>
     expect(result.info.role).toBe("assistant")
     expect(yield* llm.calls).toBe(2)
 
-    const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+    const msgs = (yield* MessageV2.filterCompactedEffect(chat.id)).messages
     const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
     expect(taskMsg?.info.role).toBe("assistant")
     if (!taskMsg || taskMsg.info.role !== "assistant") return
@@ -1059,7 +1060,7 @@ it.instance(
 
       const tool = yield* pollWithTimeout(
         Effect.gen(function* () {
-          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const msgs = (yield* MessageV2.filterCompactedEffect(chat.id)).messages
           const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
           const tool = taskMsg?.parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
@@ -1101,7 +1102,7 @@ it.instance(
 
       const tool = yield* pollWithTimeout(
         Effect.gen(function* () {
-          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const msgs = (yield* MessageV2.filterCompactedEffect(chat.id)).messages
           const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
           const tool = assistant?.parts.find(
             (part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "task",
@@ -1315,7 +1316,7 @@ noLLMServer.instance(
       expect(Exit.isSuccess(exit)).toBe(true)
       yield* awaitWithTimeout(Deferred.await(aborted), "timed out waiting for task tool abort", "10 seconds")
 
-      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+      const msgs = (yield* MessageV2.filterCompactedEffect(chat.id)).messages
       const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
       expect(taskMsg?.info.role).toBe("assistant")
       if (!taskMsg || taskMsg.info.role !== "assistant") return
@@ -1348,7 +1349,7 @@ it.instance(
       const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       yield* llm.wait(1)
 
-      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+      const msgs = (yield* MessageV2.filterCompactedEffect(chat.id)).messages
       const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
       const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
       const sessionID = tool?.state.status === "running" ? tool.state.metadata?.sessionId : undefined
@@ -1719,7 +1720,7 @@ unixNoLLMServer(
 
         yield* pollWithTimeout(
           Effect.gen(function* () {
-            const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+            const msgs = (yield* MessageV2.filterCompactedEffect(chat.id)).messages
             const taskMsg = msgs.find((item) => item.info.role === "assistant")
             const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
             if (tool?.state.status === "running" && tool.state.metadata?.output.includes("first")) return true
@@ -1729,6 +1730,70 @@ unixNoLLMServer(
 
         const exit = yield* Fiber.await(fiber)
         expect(Exit.isSuccess(exit)).toBe(true)
+      }),
+    ),
+  { config: cfg },
+  30_000,
+)
+
+unixNoLLMServer(
+  "shell bounds running metadata while preserving full output on completion",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+        const command =
+          'i=0; while [ "$i" -lt 400 ]; do printf "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx %05d\\n" "$i"; i=$((i + 1)); done; sleep 2'
+
+        const fiber = yield* prompt.shell({ sessionID: chat.id, agent: "build", command }).pipe(Effect.forkChild)
+
+        yield* pollWithTimeout(
+          Effect.gen(function* () {
+            const msgs = (yield* MessageV2.filterCompactedEffect(chat.id)).messages
+            const taskMsg = msgs.find((item) => item.info.role === "assistant")
+            const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
+            if (tool?.state.status === "running" && tool.state.metadata?.output) return true
+          }),
+          "timed out waiting for running shell metadata",
+        )
+
+        const running = (yield* MessageV2.filterCompactedEffect(chat.id)).messages
+        const runningTool = toolPart(running.find((item) => item.info.role === "assistant")!.parts)
+        expect(runningTool?.state.status).toBe("running")
+        if (runningTool?.state.status === "running") {
+          expect(runningTool.state.metadata?.output.length ?? 0).toBeLessThanOrEqual(30_005)
+        }
+
+        const exit = yield* Fiber.await(fiber)
+        expect(Exit.isSuccess(exit)).toBe(true)
+        if (Exit.isFailure(exit)) return
+        const completed = completedTool(exit.value.parts)
+        expect(completed?.state.output.length).toBeGreaterThan(30_000)
+        expect(completed?.state.output).toContain("00399")
+      }),
+    ),
+  { config: cfg },
+  30_000,
+)
+
+unixNoLLMServer(
+  "shell caps stored output beyond the bound with a truncation marker",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "head -c 250000 /dev/zero | tr '\\0' 'x'",
+        })
+
+        const tool = completedTool(result.parts)
+        expect(tool?.state.status).toBe("completed")
+        if (tool?.state.status !== "completed") return
+        expect(tool.state.output.length).toBeLessThanOrEqual(200_005)
+        expect(tool.state.output.startsWith("...\n\n")).toBe(true)
+        expect(tool.state.metadata.output.length).toBeLessThanOrEqual(30_005)
       }),
     ),
   { config: cfg },
@@ -1873,9 +1938,11 @@ unixNoLLMServer(
         expect(Exit.isSuccess(exit)).toBe(true)
         if (Exit.isSuccess(exit)) {
           expect(exit.value.info.role).toBe("assistant")
-          const tool = completedTool(exit.value.parts)
+          const tool = errorTool(exit.value.parts)
           if (tool) {
-            expect(tool.state.output).toContain("User aborted the command")
+            expect(tool.state.error).toBe("User aborted the command")
+            expect(tool.state.metadata?.interrupted).toBe(true)
+            expect(tool.state.metadata?.output).toContain("User aborted the command")
           }
         }
       }),
@@ -1917,9 +1984,11 @@ unixNoLLMServer(
         expect(Exit.isSuccess(exit)).toBe(true)
         if (Exit.isSuccess(exit)) {
           expect(exit.value.info.role).toBe("assistant")
-          const tool = completedTool(exit.value.parts)
+          const tool = errorTool(exit.value.parts)
           if (tool) {
-            expect(tool.state.output).toContain("User aborted the command")
+            expect(tool.state.error).toBe("User aborted the command")
+            expect(tool.state.metadata?.interrupted).toBe(true)
+            expect(tool.state.metadata?.output).toContain("User aborted the command")
           }
         }
       }),
@@ -1958,7 +2027,7 @@ unix(
       yield* llm.wait(1)
       yield* pollWithTimeout(
         Effect.gen(function* () {
-          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const msgs = (yield* MessageV2.filterCompactedEffect(chat.id)).messages
           const assistant = msgs.findLast((item) => item.info.role === "assistant")
           const tool = assistant ? toolPart(assistant.parts) : undefined
           if (tool?.state.status === "running" && tool.state.metadata?.output.includes("truncation-ready")) return true
@@ -1971,14 +2040,20 @@ unix(
       expect(Exit.isSuccess(exit)).toBe(true)
       if (Exit.isFailure(exit)) return
 
-      const tool = completedTool(exit.value.parts)
-      if (!tool) return
+      const tool = errorTool(exit.value.parts)
+      if (tool) {
+        expect(tool.state.error).toBe("Tool execution aborted")
+        expect(tool.state.metadata?.interrupted).toBe(true)
 
-      expect(tool.state.metadata.truncated).toBe(true)
-      expect(typeof tool.state.metadata.outputPath).toBe("string")
-      expect(tool.state.output).toMatch(/\.\.\.output truncated\.\.\./)
-      expect(tool.state.output).toMatch(/Full output saved to:\s+\S+/)
-      expect(tool.state.output).not.toContain("Tool execution aborted")
+        // The abort path persists only the streamed metadata tail preview, not the
+        // completed part's output. Assert the truncation marker it does retain.
+        const output = tool.state.metadata?.output
+        expect(typeof output).toBe("string")
+        if (typeof output !== "string") return
+        expect(output.startsWith("...\n\n")).toBe(true)
+        expect(output).toContain("truncation-ready")
+        expect(output.length).toBeLessThanOrEqual(30_005)
+      }
     }),
   { git: true },
   30_000,
@@ -2001,8 +2076,10 @@ unixNoLLMServer(
       const exit = yield* Fiber.await(loop)
       expect(Exit.isSuccess(exit)).toBe(true)
       if (Exit.isSuccess(exit)) {
-        const tool = completedTool(exit.value.parts)
-        expect(tool?.state.output).toContain("User aborted the command")
+        const tool = errorTool(exit.value.parts)
+        expect(tool?.state.error).toBe("User aborted the command")
+        expect(tool?.state.metadata?.interrupted).toBe(true)
+        expect(tool?.state.metadata?.output).toContain("User aborted the command")
       }
 
       yield* Fiber.await(sh)

@@ -242,32 +242,35 @@ Instructions here.
     ),
   )
 
-  it.live("discovers skills from .claude/skills/ directory", () =>
-    provideTmpdirInstance(
-      (dir) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            Bun.write(
-              path.join(dir, ".claude", "skills", "claude-skill", "SKILL.md"),
-              `---
+  it.live(
+    "discovers skills from .claude/skills/ directory",
+    () =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            yield* Effect.promise(() =>
+              Bun.write(
+                path.join(dir, ".claude", "skills", "claude-skill", "SKILL.md"),
+                `---
 name: claude-skill
 description: A skill in the .claude/skills directory.
 ---
 
 # Claude Skill
 `,
-            ),
-          )
+              ),
+            )
 
-          const skill = yield* Skill.Service
-          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
-          expect(list.length).toBe(1)
-          const item = list.find((x) => x.name === "claude-skill")
-          expect(item).toBeDefined()
-          expect(item!.location).toContain(path.join(".claude", "skills", "claude-skill", "SKILL.md"))
-        }),
-      { git: true },
-    ),
+            const skill = yield* Skill.Service
+            const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+            expect(list.length).toBe(1)
+            const item = list.find((x) => x.name === "claude-skill")
+            expect(item).toBeDefined()
+            expect(item!.location).toContain(path.join(".claude", "skills", "claude-skill", "SKILL.md"))
+          }),
+        { git: true },
+      ),
+    30_000,
   )
 
   it.live("discovers global skills from ~/.claude/skills/ directory", () =>

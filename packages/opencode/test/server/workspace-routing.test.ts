@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   isLocalWorkspaceRoute,
   getWorkspaceRouteSessionID,
+  redactAuthToken,
   workspaceProxyURL,
 } from "../../src/server/shared/workspace-routing"
 import { SessionID } from "../../src/session/schema"
@@ -60,6 +61,11 @@ describe("getWorkspaceRouteSessionID", () => {
     const url = new URL("http://localhost/session")
     expect(getWorkspaceRouteSessionID(url)).toBeNull()
   })
+
+  test("returns null instead of throwing for a non-session path segment", () => {
+    const url = new URL("http://localhost/session/garbage/message")
+    expect(getWorkspaceRouteSessionID(url)).toBeNull()
+  })
 })
 
 describe("workspaceProxyURL", () => {
@@ -87,6 +93,13 @@ describe("workspaceProxyURL", () => {
     expect(result.searchParams.get("keep")).toBe("yes")
   })
 
+  test("strips the auth_token query credential before forwarding", () => {
+    const url = new URL("http://localhost/session/abc?auth_token=c2VjcmV0&keep=yes")
+    const result = workspaceProxyURL("http://remote:8080/base", url)
+    expect(result.searchParams.get("auth_token")).toBeNull()
+    expect(result.searchParams.get("keep")).toBe("yes")
+  })
+
   test("preserves hash from request", () => {
     const url = new URL("http://localhost/page#section")
     const result = workspaceProxyURL("http://remote:8080", url)
@@ -97,5 +110,21 @@ describe("workspaceProxyURL", () => {
     const target = new URL("http://remote:3000/api")
     const result = workspaceProxyURL(target, new URL("http://localhost/users"))
     expect(result.toString()).toBe("http://remote:3000/api/users")
+  })
+})
+
+describe("redactAuthToken", () => {
+  test("masks an auth_token query credential", () => {
+    expect(redactAuthToken("http://remote:8080/base?auth_token=c2VjcmV0&keep=yes")).toBe(
+      "http://remote:8080/base?auth_token=%5Bredacted%5D&keep=yes",
+    )
+  })
+
+  test("leaves a URL without a credential unchanged", () => {
+    expect(redactAuthToken("http://remote:8080/base?keep=yes")).toBe("http://remote:8080/base?keep=yes")
+  })
+
+  test("returns malformed input unchanged", () => {
+    expect(redactAuthToken("not a url")).toBe("not a url")
   })
 })

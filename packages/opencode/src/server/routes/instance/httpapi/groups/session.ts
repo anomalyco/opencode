@@ -34,7 +34,9 @@ export const ListQuery = Schema.Struct({
   roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
   search: Schema.optional(Schema.String),
-  limit: Schema.optional(Schema.NumberFromString),
+  limit: Schema.optional(
+    Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(200)),
+  ),
 })
 export const DiffQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,

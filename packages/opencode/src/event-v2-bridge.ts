@@ -16,19 +16,37 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const events = yield* EventV2.Service
 
+    const locationCache = new Map<string, Location.Info>()
+
     const publish: EventV2.Interface["publish"] = (definition, data, options) =>
       Effect.gen(function* () {
         if (options?.location) return yield* events.publish(definition, data, options)
         const ctx = yield* InstanceRef
         if (!ctx) return yield* events.publish(definition, data, options)
         const workspaceID = yield* WorkspaceRef
-        return yield* events.publish(definition, data, {
-          ...options,
-          location: new Location.Info({
+        // Location is constant per directory/workspace; building the schema class
+        // and two absolute paths on every event is measurable at delta rates.
+        const key = `${ctx.directory}\0${workspaceID ?? ""}\0${ctx.project.id}\0${ctx.worktree}`
+        let location = locationCache.get(key)
+        if (location) {
+          // Refresh recency so a hot directory is not evicted FIFO by a cold one.
+          locationCache.delete(key)
+        } else {
+          location = new Location.Info({
             directory: AbsolutePath.make(ctx.directory),
             ...(workspaceID ? { workspaceID } : {}),
             project: { id: Project.ID.make(ctx.project.id), directory: AbsolutePath.make(ctx.worktree) },
-          }),
+          })
+          Object.freeze(location)
+          if (locationCache.size >= 64) {
+            const oldest = locationCache.keys().next()
+            if (!oldest.done) locationCache.delete(oldest.value)
+          }
+        }
+        locationCache.set(key, location)
+        return yield* events.publish(definition, data, {
+          ...options,
+          location,
         })
       })
 

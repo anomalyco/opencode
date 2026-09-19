@@ -29,6 +29,10 @@ function validOrigin(request: HttpServerRequest.HttpServerRequest, opts: CorsOpt
   return isAllowedRequestOrigin(request.headers.origin, request.headers.host, opts)
 }
 
+// Bounded outbound frames per websocket; a slow client drops stale terminal output instead of
+// growing the queue without limit. Sliding keeps the newest frames, including the close frame.
+const OUTBOX_LIMIT = 1024
+
 const ticketScope = Effect.gen(function* () {
   const instance = yield* InstanceRef
   const workspaceID = yield* WorkspaceRef
@@ -222,7 +226,7 @@ export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-conne
 
         // Outbound frames flow through one queue drained by a single writer so replay, live
         // output, and the close frame keep their order.
-        const outbox = yield* Queue.unbounded<string | Uint8Array | Socket.CloseEvent>()
+        const outbox = yield* Queue.sliding<string | Uint8Array | Socket.CloseEvent>(OUTBOX_LIMIT)
         const attachment = yield* pty(
           Pty.Service.use((service) =>
             service.attach(ctx.params.ptyID, {

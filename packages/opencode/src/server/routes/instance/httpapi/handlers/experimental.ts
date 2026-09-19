@@ -7,15 +7,31 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MCP } from "@/mcp"
 import { Project } from "@/project/project"
 import { Session } from "@/session/session"
-import type { SessionID } from "@/session/schema"
+import { SessionID } from "@/session/schema"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Worktree } from "@/worktree"
-import { Effect, Option } from "effect"
+import { Effect, Option, Schema } from "effect"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ConsoleSwitchPayload, SessionListQuery, ToolListQuery, WorktreeApiError } from "../groups/experimental"
+
+function parseCursor(input: string | undefined) {
+  if (input === undefined || input.length === 0) return undefined
+  const separator = input.indexOf(":")
+  if (separator === -1) {
+    const time = Number(input)
+    return Number.isFinite(time) ? { time } : undefined
+  }
+  const rawTime = input.slice(0, separator)
+  const time = Number(rawTime)
+  if (rawTime.length === 0 || !Number.isFinite(time)) return undefined
+  // A malformed id must not reach SessionID.make(), which throws on a bad brand
+  // and would turn a junk cursor into a defect 500; fall back to time-only.
+  const decoded = Schema.decodeUnknownOption(SessionID)(input.slice(separator + 1))
+  return Option.isSome(decoded) ? { time, id: decoded.value } : { time }
+}
 
 function mapWorktreeError<A, R>(self: Effect.Effect<A, Worktree.Error, R>) {
   return self.pipe(
@@ -136,23 +152,21 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     })
 
     const session = Effect.fn("ExperimentalHttpApi.session")(function* (ctx: { query: typeof SessionListQuery.Type }) {
-      const limit = ctx.query.limit ?? 100
+      const limit = Math.min(ctx.query.limit ?? 100, 200)
       const directory = ctx.query.directory ? yield* InstanceState.directory : undefined
       const all = yield* sessions.listGlobal({
         directory,
         roots: ctx.query.roots,
         start: ctx.query.start,
-        cursor: ctx.query.cursor,
+        cursor: parseCursor(ctx.query.cursor),
         search: ctx.query.search,
         limit: limit + 1,
         archived: ctx.query.archived,
       })
       const list = all.length > limit ? all.slice(0, limit) : all
+      const last = list[list.length - 1]
       return HttpServerResponse.jsonUnsafe(list, {
-        headers:
-          all.length > limit && list.length > 0
-            ? { "x-next-cursor": String(list[list.length - 1].time.updated) }
-            : undefined,
+        headers: all.length > limit && last ? { "x-next-cursor": `${last.time.updated}:${last.id}` } : undefined,
       })
     })
 
@@ -167,7 +181,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
           job.metadata?.parentSessionId === ctx.params.sessionID &&
           job.metadata.background !== true,
       )
-      const promoted = yield* Effect.forEach(jobs, (job) => background.promote(job.id), { concurrency: "unbounded" })
+      const promoted = yield* Effect.forEach(jobs, (job) => background.promote(job.id), { concurrency: 8 })
       return promoted.some((job) => job !== undefined)
     })
 

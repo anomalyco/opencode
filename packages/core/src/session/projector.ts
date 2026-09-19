@@ -1,9 +1,10 @@
 export * as SessionProjector from "./projector"
 
-import { and, desc, eq, gt, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
-import { EventV2 } from "../event"
+import { EventV2, versionedType } from "../event"
+import { EventTable } from "../event/sql"
 import { makeGlobalNode } from "../effect/app-node"
 import { SessionEvent } from "./event"
 import { SessionV1 } from "../v1/session"
@@ -12,7 +13,7 @@ import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
-import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
+import { MessageDiffTable, MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -86,21 +87,43 @@ function partData(part: (typeof SessionV1.Event.PartUpdated.Type)["data"]["part"
   return rest as DeepMutable<typeof rest>
 }
 
+type UsageDelta = { readonly value: Usage; readonly sign: number }
+
+function combineUsage(deltas: ReadonlyArray<UsageDelta>): Usage | undefined {
+  if (deltas.length === 0) return undefined
+  return deltas.reduce<Usage>(
+    (total, delta) => ({
+      cost: total.cost + delta.value.cost * delta.sign,
+      tokens: {
+        input: total.tokens.input + delta.value.tokens.input * delta.sign,
+        output: total.tokens.output + delta.value.tokens.output * delta.sign,
+        reasoning: total.tokens.reasoning + delta.value.tokens.reasoning * delta.sign,
+        cache: {
+          read: total.tokens.cache.read + delta.value.tokens.cache.read * delta.sign,
+          write: total.tokens.cache.write + delta.value.tokens.cache.write * delta.sign,
+        },
+      },
+    }),
+    { cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } },
+  )
+}
+
 function applyUsage(
   db: DatabaseService,
   sessionID: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["sessionID"],
-  value: Usage,
-  sign = 1,
+  deltas: ReadonlyArray<UsageDelta>,
 ) {
+  const value = combineUsage(deltas)
+  if (!value) return Effect.void
   return db
     .update(SessionTable)
     .set({
-      cost: sql`${SessionTable.cost} + ${value.cost * sign}`,
-      tokens_input: sql`${SessionTable.tokens_input} + ${value.tokens.input * sign}`,
-      tokens_output: sql`${SessionTable.tokens_output} + ${value.tokens.output * sign}`,
-      tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning * sign}`,
-      tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read * sign}`,
-      tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write * sign}`,
+      cost: sql`${SessionTable.cost} + ${value.cost}`,
+      tokens_input: sql`${SessionTable.tokens_input} + ${value.tokens.input}`,
+      tokens_output: sql`${SessionTable.tokens_output} + ${value.tokens.output}`,
+      tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning}`,
+      tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read}`,
+      tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write}`,
       time_updated: sql`${SessionTable.time_updated}`,
     })
     .where(eq(SessionTable.id, sessionID))
@@ -133,11 +156,16 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       getCurrentAssistant() {
         return Effect.gen(function* () {
           // A newer turn supersedes stale incomplete rows; never resume an older assistant projection.
+          // The incomplete filter runs in SQL so a completed row is never decoded (F-072 sibling).
           const row = yield* db
             .select()
             .from(SessionMessageTable)
             .where(
-              and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")),
+              and(
+                eq(SessionMessageTable.session_id, event.data.sessionID),
+                eq(SessionMessageTable.type, "assistant"),
+                sql`json_extract(${SessionMessageTable.data}, '$.time.completed') is null`,
+              ),
             )
             .orderBy(desc(SessionMessageTable.seq))
             .limit(1)
@@ -169,16 +197,24 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       },
       getCurrentShell(callID) {
         return Effect.gen(function* () {
-          const rows = yield* db
+          // Filter and limit in SQL so only the matching shell row is decoded (F-072).
+          const row = yield* db
             .select()
             .from(SessionMessageTable)
-            .where(and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "shell")))
+            .where(
+              and(
+                eq(SessionMessageTable.session_id, event.data.sessionID),
+                eq(SessionMessageTable.type, "shell"),
+                sql`json_extract(${SessionMessageTable.data}, '$.callID') = ${callID}`,
+              ),
+            )
             .orderBy(desc(SessionMessageTable.seq))
-            .all()
+            .limit(1)
+            .get()
             .pipe(Effect.orDie)
-          return rows
-            .map(decodeRow)
-            .find((message): message is SessionMessage.Shell => message.type === "shell" && message.callID === callID)
+          if (!row) return
+          const message = decodeRow(row)
+          return message.type === "shell" && message.callID === callID ? message : undefined
         })
       },
       updateAssistant: updateMessage,
@@ -205,6 +241,61 @@ function insertMessage(db: DatabaseService, event: SessionEvent.Event, message: 
     })
     .run()
     .pipe(Effect.orDie)
+}
+
+function diffEventScope(sessionID: string, messageID: string) {
+  const definition = SessionV1.Event.MessageDiffUpdated
+  const type = definition.durable ? versionedType(definition.type, definition.durable.version) : definition.type
+  return and(
+    eq(EventTable.aggregate_id, sessionID),
+    eq(EventTable.type, type),
+    sql`json_extract(${EventTable.data}, '$.messageID') = ${messageID}`,
+    // Already-tombstoned rows carry an empty diffs array; skipping them keeps each
+    // superseded diff row a single rewrite instead of rescanning/rewriting it per event.
+    sql`json_array_length(json_extract(${EventTable.data}, '$.diffs')) > 0`,
+  )
+}
+
+// Shrinks superseded diff payloads to tombstones. Rows stay so per-aggregate seqs
+// remain contiguous for sync replay; the original payload digest is retained on the row so
+// replaying a pre-tombstone payload still matches instead of dying "Replay diverged".
+// Retention is deliberate and unbounded: there is no TTL/GC, because deleting a tombstone
+// would make a later replay of the original payload fail the digest check. The cost is
+// storage plus empty `{diffs:[]}` rows on history/replay, traded for replay idempotency.
+const TOMBSTONE_BATCH_SIZE = 200
+
+function tombstoneDiffEvents(db: DatabaseService, sessionID: string, messageID: string) {
+  return Effect.gen(function* () {
+    // Page the select so a long diff history is never fully materialized. Updated rows
+    // leave the scope (their diffs array is empty), so each page strictly shrinks the set.
+    while (true) {
+      const rows = yield* db
+        .select({ id: EventTable.id, data: EventTable.data })
+        .from(EventTable)
+        .where(diffEventScope(sessionID, messageID))
+        .orderBy(asc(EventTable.seq))
+        .limit(TOMBSTONE_BATCH_SIZE)
+        .all()
+        .pipe(Effect.orDie)
+      if (rows.length === 0) return
+      const digest = sql`case ${sql.join(
+        rows.map((row) => sql`when ${EventTable.id} = ${row.id} then ${EventV2.eventDigest(row.data)}`),
+        sql` `,
+      )} end`
+      yield* db
+        .update(EventTable)
+        .set({ data: { sessionID, messageID, diffs: [] }, tombstone_digest: digest })
+        .where(
+          inArray(
+            EventTable.id,
+            rows.map((row) => row.id),
+          ),
+        )
+        .run()
+        .pipe(Effect.orDie)
+      if (rows.length < TOMBSTONE_BATCH_SIZE) return
+    }
+  })
 }
 
 const layer = Layer.effectDiscard(
@@ -257,7 +348,7 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionV1.Event.Deleted, (event) =>
       db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
     )
-    yield* events.project(SessionV1.Event.MessageUpdated, (event) =>
+    const projectMessage = (event: { data: { info: (typeof SessionV1.Event.MessageUpdated.Type)["data"]["info"] } }) =>
       Effect.gen(function* () {
         const time_created = event.data.info.time.created
         const id = event.data.info.id
@@ -267,6 +358,58 @@ const layer = Layer.effectDiscard(
           .insert(MessageTable)
           .values({ id, session_id: sessionID, time_created, data })
           .onConflictDoUpdate({ target: MessageTable.id, set: { data } })
+          .run()
+          .pipe(Effect.orDie)
+        if (event.data.info.role !== "user") return
+        const diffs = event.data.info.summary?.diffs
+        if (!diffs) {
+          // A complete V1 user replacement with no diff array retires the obsolete dedicated row so
+          // hydration cannot resurrect a diff the replacement removed.
+          yield* db.delete(MessageDiffTable).where(eq(MessageDiffTable.message_id, id)).run().pipe(Effect.orDie)
+          return
+        }
+        yield* db
+          .insert(MessageDiffTable)
+          .values({ message_id: id, session_id: sessionID, diffs: diffs.map((item) => ({ ...item })) })
+          .onConflictDoUpdate({
+            target: MessageDiffTable.message_id,
+            set: { diffs: diffs.map((item) => ({ ...item })) },
+          })
+          .run()
+          .pipe(Effect.orDie)
+      })
+    yield* events.project(SessionV1.Event.MessageUpdated, projectMessage)
+    yield* events.project(SessionV1.Event.MessageDiffUpdated, (event) =>
+      Effect.gen(function* () {
+        // A diff can outlive its parent when removal races the summarize producer. The foreign key
+        // would otherwise abort the whole projector transaction, so an absent parent is a no-op.
+        const parent = yield* db
+          .select({ id: MessageTable.id })
+          .from(MessageTable)
+          .where(eq(MessageTable.id, event.data.messageID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!parent) return
+        yield* tombstoneDiffEvents(db, event.data.sessionID, event.data.messageID)
+        const current = yield* db
+          .select({ diffs: MessageDiffTable.diffs })
+          .from(MessageDiffTable)
+          .where(eq(MessageDiffTable.message_id, event.data.messageID))
+          .get()
+          .pipe(Effect.orDie)
+        const next = event.data.diffs.map((item) => ({ ...item }))
+        if (current && JSON.stringify(current.diffs) === JSON.stringify(next)) return
+        yield* db
+          .insert(MessageDiffTable)
+          .values({
+            message_id: event.data.messageID,
+            session_id: event.data.sessionID,
+            diffs: next,
+          })
+          .onConflictDoUpdate({
+            target: MessageDiffTable.message_id,
+            set: { diffs: next },
+          })
           .run()
           .pipe(Effect.orDie)
       }),
@@ -279,15 +422,22 @@ const layer = Layer.effectDiscard(
           .where(and(eq(PartTable.message_id, event.data.messageID), eq(PartTable.session_id, event.data.sessionID)))
           .all()
           .pipe(Effect.orDie)
-        for (const row of rows) {
-          const previous = usage(row.data)
-          if (previous) yield* applyUsage(db, event.data.sessionID, previous, -1)
-        }
+        yield* applyUsage(
+          db,
+          event.data.sessionID,
+          rows.flatMap((row) => {
+            const previous = usage(row.data)
+            return previous ? [{ value: previous, sign: -1 }] : []
+          }),
+        )
+        // message_diff is removed by the message FK cascade below.
         yield* db
           .delete(MessageTable)
           .where(and(eq(MessageTable.id, event.data.messageID), eq(MessageTable.session_id, event.data.sessionID)))
           .run()
           .pipe(Effect.orDie)
+        // Orphaned diff payloads shrink to tombstones; rows stay for replay contiguity.
+        yield* tombstoneDiffEvents(db, event.data.sessionID, event.data.messageID)
       }),
     )
     yield* events.project(SessionV1.Event.PartRemoved, (event) =>
@@ -299,7 +449,7 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         const previous = row && usage(row.data)
-        if (previous) yield* applyUsage(db, event.data.sessionID, previous, -1)
+        yield* applyUsage(db, event.data.sessionID, previous ? [{ value: previous, sign: -1 }] : [])
         yield* db
           .delete(PartTable)
           .where(and(eq(PartTable.id, event.data.partID), eq(PartTable.session_id, event.data.sessionID)))
@@ -313,17 +463,32 @@ const layer = Layer.effectDiscard(
         const messageID = event.data.part.messageID
         const sessionID = event.data.part.sessionID
         const data = partData(event.data.part)
-        const row = yield* db.select().from(PartTable).where(eq(PartTable.id, id)).get().pipe(Effect.orDie)
+        // usage() only ever returns a value for step-finish, and a part's type is immutable, so
+        // only a step-finish update can carry a previous usage to reverse (F-026).
+        // Scope the reversal row to this session so a mismatched part can never decrement
+        // usage against a different session's totals.
+        const previousRow =
+          event.data.part.type === "step-finish"
+            ? yield* db
+                .select()
+                .from(PartTable)
+                .where(and(eq(PartTable.id, id), eq(PartTable.session_id, sessionID)))
+                .get()
+                .pipe(Effect.orDie)
+            : undefined
         yield* db
           .insert(PartTable)
           .values({ id, message_id: messageID, session_id: sessionID, time_created: event.data.time, data })
           .onConflictDoUpdate({ target: PartTable.id, set: { data } })
           .run()
           .pipe(Effect.orDie)
-        const previous = row && usage(row.data)
+        const previous = previousRow && usage(previousRow.data)
         const next = usage(event.data.part)
-        if (previous) yield* applyUsage(db, row.session_id, previous, -1)
-        if (next) yield* applyUsage(db, sessionID, next)
+        if (!previous && !next) return
+        yield* applyUsage(db, sessionID, [
+          ...(previous ? [{ value: previous, sign: -1 }] : []),
+          ...(next ? [{ value: next, sign: 1 }] : []),
+        ])
       }),
     )
     yield* events.project(SessionEvent.AgentSwitched, (event) =>

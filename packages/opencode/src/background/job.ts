@@ -5,6 +5,7 @@ import { Effect, Layer } from "effect"
 
 export {
   Service,
+  NotFoundError,
   type ExtendInput,
   type Info,
   type Interface,

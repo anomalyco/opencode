@@ -145,9 +145,13 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
   let completed = false
   let emitted = false
   let idleTimer: ReturnType<typeof setTimeout> | undefined
+  let idleMessage = ""
 
   function cleanup() {
-    if (idleTimer) clearTimeout(idleTimer)
+    if (idleTimer) {
+      clearTimeout(idleTimer)
+      idleTimer = undefined
+    }
     cleanupSocket()
     options.signal?.removeEventListener("abort", onAbort)
   }
@@ -174,8 +178,10 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
   function resetIdleTimeout(message: string) {
     if (completed) return
     if (!options.idleTimeout) return
-    if (idleTimer) clearTimeout(idleTimer)
-    idleTimer = setTimeout(() => invalidate(new ProviderError.ResponseStreamError(message)), options.idleTimeout)
+    idleMessage = message
+    if (idleTimer) idleTimer.refresh()
+    else
+      idleTimer = setTimeout(() => invalidate(new ProviderError.ResponseStreamError(idleMessage)), options.idleTimeout)
   }
 
   async function onMessage(data: WebSocket.RawData, isBinary: boolean) {

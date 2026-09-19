@@ -40,6 +40,7 @@ export class Subscription {
   private readonly abort = new AbortController()
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
+  private readonly toolSessions = new Map<string, string>()
   private readonly connectionWaiters = new Set<() => void>()
   private readonly idleWaiters = new Map<string, Set<ReturnType<typeof signal>>>()
   private readonly permission: ACPPermission.Handler
@@ -67,8 +68,18 @@ export class Subscription {
   stop() {
     this.abort.abort()
     this.disconnected()
+    this.toolStarts.clear()
+    this.shellSnapshots.clear()
+    this.toolSessions.clear()
     for (const resolve of this.connectionWaiters) resolve()
     this.connectionWaiters.clear()
+  }
+
+  clearSession(sessionId: string) {
+    for (const [toolCallId, session] of this.toolSessions) {
+      if (session !== sessionId) continue
+      this.clearTool(toolCallId)
+    }
   }
 
   async runUntilIdle<A>(sessionId: string, request: () => Promise<A>) {
@@ -142,10 +153,16 @@ export class Subscription {
   }
 
   private async run() {
+    let attempt = 0
     while (!this.abort.signal.aborted) {
-      await this.consume().catch(() => {})
+      const sawEvent = await this.consume().catch(() => false)
       this.disconnected()
-      if (!this.abort.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 1000))
+      if (this.abort.signal.aborted) break
+      // Back off exponentially so an accept-then-close server cannot hot-loop the reconnect,
+      // and only reset once a stream actually delivered events.
+      if (sawEvent) attempt = 0
+      await new Promise((resolve) => setTimeout(resolve, Math.min(30_000, 1_000 * 2 ** attempt)))
+      attempt += 1
     }
   }
 
@@ -157,11 +174,14 @@ export class Subscription {
     for (const resolve of this.connectionWaiters) resolve()
     this.connectionWaiters.clear()
 
+    let sawEvent = false
     for await (const event of events.stream) {
-      if (this.abort.signal.aborted) return
+      if (this.abort.signal.aborted) return sawEvent
       if (!event.payload) continue
+      sawEvent = true
       await this.handle(event.payload).catch(() => {})
     }
+    return sawEvent
   }
 
   private async waitUntilConnected() {
@@ -191,21 +211,25 @@ export class Subscription {
   private async handlePartUpdated(event: EventMessagePartUpdated) {
     const part = event.properties.part
     const sessionId = part.sessionID || event.properties.sessionID
-    const session = await Effect.runPromise(this.input.session.tryGet(sessionId))
-    if (!session) return
-
-    await Effect.runPromise(
-      this.input.session.recordPartMetadata({
-        sessionId: session.id,
-        messageId: part.messageID,
-        partId: part.id,
-        partType: part.type,
-        role: part.type === "reasoning" ? "assistant" : undefined,
-        ignored: part.type === "text" ? part.ignored : undefined,
-        toolCallId: part.type === "tool" ? part.callID : undefined,
-        metadata: "metadata" in part ? part.metadata : undefined,
+    const sessionSvc = this.input.session
+    const session = await Effect.runPromise(
+      Effect.gen(function* () {
+        const found = yield* sessionSvc.tryGet(sessionId)
+        if (!found) return undefined
+        yield* sessionSvc.recordPartMetadata({
+          sessionId: found.id,
+          messageId: part.messageID,
+          partId: part.id,
+          partType: part.type,
+          role: part.type === "reasoning" ? "assistant" : undefined,
+          ignored: part.type === "text" ? part.ignored : undefined,
+          toolCallId: part.type === "tool" ? part.callID : undefined,
+          metadata: "metadata" in part ? part.metadata : undefined,
+        })
+        return found
       }),
     )
+    if (!session) return
     if (part.type === "tool") {
       await this.handleToolPart(session.id, part, session.cwd)
     }
@@ -213,24 +237,28 @@ export class Subscription {
 
   private async handlePartDelta(event: EventMessagePartDelta) {
     const props = event.properties
-    const session = await Effect.runPromise(this.input.session.tryGet(props.sessionID))
-    if (!session) return
-
-    const known = await Effect.runPromise(
-      this.input.session.tryGetPartMetadata({
-        sessionId: session.id,
-        messageId: props.messageID,
-        partId: props.partID,
+    const sessionSvc = this.input.session
+    const lookup = await Effect.runPromise(
+      Effect.gen(function* () {
+        const session = yield* sessionSvc.tryGet(props.sessionID)
+        if (!session) return undefined
+        const known = yield* sessionSvc.tryGetPartMetadata({
+          sessionId: session.id,
+          messageId: props.messageID,
+          partId: props.partID,
+        })
+        return { session, known }
       }),
     )
+    if (!lookup) return
     const metadata =
-      known?.role && known.partType
-        ? known
-        : await this.fetchPartMetadata(session.id, session.cwd, props.messageID, props.partID)
+      lookup.known?.role && lookup.known.partType
+        ? lookup.known
+        : await this.fetchPartMetadata(lookup.session.id, lookup.session.cwd, props.messageID, props.partID)
     if (metadata?.role !== "assistant") return
     if (metadata.partType === "text" && props.field === "text" && metadata.ignored !== true) {
       await this.input.connection.sessionUpdate({
-        sessionId: session.id,
+        sessionId: lookup.session.id,
         update: {
           sessionUpdate: "agent_message_chunk",
           messageId: props.messageID,
@@ -245,7 +273,7 @@ export class Subscription {
 
     if (metadata.partType === "reasoning" && props.field === "text") {
       await this.input.connection.sessionUpdate({
-        sessionId: session.id,
+        sessionId: lookup.session.id,
         update: {
           sessionUpdate: "agent_thought_chunk",
           messageId: props.partID,
@@ -379,6 +407,7 @@ export class Subscription {
   private async toolStart(sessionId: string, part: ToolPart, cwd: string) {
     if (this.toolStarts.has(part.callID)) return
     this.toolStarts.add(part.callID)
+    this.toolSessions.set(part.callID, sessionId)
     await this.input.connection.sessionUpdate({
       sessionId,
       update: {
@@ -396,6 +425,7 @@ export class Subscription {
   private clearTool(toolCallId: string) {
     this.toolStarts.delete(toolCallId)
     this.shellSnapshots.delete(toolCallId)
+    this.toolSessions.delete(toolCallId)
   }
 }
 

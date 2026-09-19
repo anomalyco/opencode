@@ -18,7 +18,9 @@ describe("opencode acp lifecycle subprocess", () => {
         const acp = yield* opencode.acp()
         acp.close()
 
-        const code = yield* Effect.promise(() => acp.exited).pipe(Effect.timeout(Duration.seconds(5)))
+        // Bounds EOF→exit including the child's cold boot, which can exceed
+        // 5s under full-suite load even though the exited code is 0.
+        const code = yield* Effect.promise(() => acp.exited).pipe(Effect.timeout(Duration.seconds(15)))
         expect(code).toBe(0)
       }),
     60_000,

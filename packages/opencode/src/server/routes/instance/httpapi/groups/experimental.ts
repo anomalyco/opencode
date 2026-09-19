@@ -81,9 +81,11 @@ export const SessionListQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   roots: Schema.optional(QueryBoolean),
   start: Schema.optional(Schema.NumberFromString),
-  cursor: Schema.optional(Schema.NumberFromString),
+  cursor: Schema.optional(Schema.String),
   search: Schema.optional(Schema.String),
-  limit: Schema.optional(Schema.NumberFromString),
+  limit: Schema.optional(
+    Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(200)),
+  ),
   archived: Schema.optional(QueryBoolean),
 })
 

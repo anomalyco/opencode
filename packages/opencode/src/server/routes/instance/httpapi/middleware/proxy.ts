@@ -1,5 +1,6 @@
 import { ProxyUtil } from "@/server/proxy-util"
-import { Effect, Stream } from "effect"
+import { redactAuthToken } from "@/server/shared/workspace-routing"
+import { Cause, Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { WebSocketTracker } from "../websocket-tracker"
@@ -80,6 +81,22 @@ function statusText(response: unknown) {
   return (response as { source?: Response }).source?.statusText
 }
 
+const MAX_ERROR_BODY_BYTES = 64 * 1024
+
+function readCappedText(stream: Stream.Stream<Uint8Array, unknown>, max: number) {
+  return Stream.runFold(
+    stream,
+    () => ({ chunks: [] as Uint8Array[], bytes: 0, truncated: false }),
+    (acc, chunk) => {
+      const remaining = max - acc.bytes
+      if (remaining > 0) acc.chunks.push(remaining >= chunk.length ? chunk : chunk.slice(0, remaining))
+      acc.bytes += chunk.length
+      acc.truncated = acc.truncated || acc.bytes > max
+      return acc
+    },
+  ).pipe(Effect.map((acc) => ({ text: new TextDecoder().decode(Buffer.concat(acc.chunks)), truncated: acc.truncated })))
+}
+
 export function http(
   client: HttpClient.HttpClient,
   url: string | URL,
@@ -89,7 +106,7 @@ export function http(
   return Effect.gen(function* () {
     const response = yield* client.execute(
       HttpClientRequest.make(request.method as never)(url, {
-        headers: ProxyUtil.headers(request.headers as HeadersInit, extra),
+        headers: ProxyUtil.headers(request.headers as HeadersInit, extra, { stripCredentials: true }),
         body: requestBody(request),
       }),
     )
@@ -103,14 +120,15 @@ export function http(
     // forward it unchanged (preserving content-type so the client can still parse
     // the structured error, e.g. its `ref`).
     if (response.status >= 500) {
-      const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
+      const { text: body, truncated } = yield* readCappedText(response.stream, MAX_ERROR_BODY_BYTES)
       const contentType = response.headers["content-type"] ?? "application/json"
       headers.delete("content-type")
       yield* Effect.logError("workspace proxy upstream error", {
-        url: url.toString(),
+        url: redactAuthToken(url.toString()),
         method: request.method,
         status: response.status,
         body: body.slice(0, 2000),
+        truncated,
       })
       return HttpServerResponse.text(body, {
         status: response.status,
@@ -120,12 +138,44 @@ export function http(
       })
     }
 
-    return HttpServerResponse.stream(response.stream.pipe(Stream.catchCause(() => Stream.empty)), {
-      status: response.status,
-      statusText: statusText(response),
-      headers,
-    })
-  }).pipe(Effect.catch(() => Effect.succeed(HttpServerResponse.empty({ status: 500 }))))
+    // A mid-stream upstream failure after a 200 must not read as a clean EOF:
+    // forward the failure so the consumer sees a broken stream and can refetch.
+    return HttpServerResponse.stream(
+      response.stream.pipe(
+        Stream.catchCause((cause) =>
+          Stream.fromEffect(
+            Effect.logWarning("workspace proxy stream interrupted", {
+              url: redactAuthToken(url.toString()),
+              method: request.method,
+              cause: Cause.pretty(cause),
+            }),
+          ).pipe(Stream.drain, Stream.concat(Stream.failCause(cause))),
+        ),
+      ),
+      {
+        status: response.status,
+        statusText: statusText(response),
+        headers,
+      },
+    )
+  }).pipe(
+    Effect.catchCause((cause) => {
+      const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+      return Effect.logError("workspace proxy request failed", {
+        ref,
+        url: redactAuthToken(url.toString()),
+        method: request.method,
+        cause: Cause.pretty(cause),
+      }).pipe(
+        Effect.as(
+          HttpServerResponse.jsonUnsafe(
+            { _tag: "UpstreamError", message: "Workspace proxy request failed", ref },
+            { status: 502 },
+          ),
+        ),
+      )
+    }),
+  )
 }
 
 export * as HttpApiProxy from "./proxy"

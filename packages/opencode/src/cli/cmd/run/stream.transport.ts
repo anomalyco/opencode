@@ -111,6 +111,8 @@ export type SessionResizeReplayInput = {
   reset: () => Promise<void>
 }
 
+const BUFFERED_EVENT_LIMIT = 500
+
 type State = {
   data: SessionData
   subagent: SubagentData
@@ -121,6 +123,7 @@ type State = {
   blockerTick: number
   selectedSubagent?: string
   blockers: Map<string, number>
+  blockerSessions: Map<string, string>
 }
 
 type TransportService = {
@@ -143,6 +146,10 @@ function sid(event: Event): string | undefined {
 
   if (event.type === "message.part.updated") {
     return event.properties.part.sessionID
+  }
+
+  if (event.type === "session.deleted") {
+    return event.properties.info.id
   }
 
   if (
@@ -450,12 +457,17 @@ function createLayer(input: StreamInput) {
           footerView: { type: "prompt" },
           blockerTick: 0,
           blockers: new Map(),
+          blockerSessions: new Map(),
         }
         let booting = true
         let replaying = false
         let replayDisabled = false
         let replayPending: SessionResizeReplayInput | undefined
         const buffered: Event[] = []
+        const bufferEvent = (event: Event) => {
+          if (buffered.length >= BUFFERED_EVENT_LIMIT) buffered.shift()
+          buffered.push(event)
+        }
         const replayedParts = new Set<string>()
         const recovering = new Set<string>()
         const tracked = (sessionID: string | undefined) =>
@@ -468,13 +480,14 @@ function createLayer(input: StreamInput) {
           return snapshotSelectedSubagentData(state.subagent, state.selectedSubagent)
         }
 
-        const seedBlocker = (id: string) => {
+        const seedBlocker = (id: string, sessionID?: string) => {
           if (state.blockers.has(id)) {
             return
           }
 
           state.blockerTick += 1
           state.blockers.set(id, state.blockerTick)
+          if (sessionID) state.blockerSessions.set(id, sessionID)
         }
 
         const trackBlocker = (event: Event) => {
@@ -486,7 +499,7 @@ function createLayer(input: StreamInput) {
             return
           }
 
-          seedBlocker(event.properties.id)
+          seedBlocker(event.properties.id, event.properties.sessionID)
         }
 
         const releaseBlocker = (event: Event) => {
@@ -499,6 +512,16 @@ function createLayer(input: StreamInput) {
           }
 
           state.blockers.delete(event.properties.requestID)
+          state.blockerSessions.delete(event.properties.requestID)
+        }
+
+        const releaseSessionBlockers = (sessionID: string) => {
+          for (const [id, owner] of state.blockerSessions) {
+            if (owner === sessionID) {
+              state.blockers.delete(id)
+              state.blockerSessions.delete(id)
+            }
+          }
         }
 
         const syncFooter = (commits: StreamCommit[], patch?: FooterPatch, nextSubagent?: FooterSubagentState) => {
@@ -581,7 +604,7 @@ function createLayer(input: StreamInput) {
                   questions,
                 })
                 for (const request of questions) {
-                  seedBlocker(request.id)
+                  seedBlocker(request.id, request.sessionID)
                 }
                 input.trace?.write("question.recover", {
                   sessionID: input.sessionID,
@@ -761,7 +784,7 @@ function createLayer(input: StreamInput) {
             ...state.data.questions,
             ...listSubagentQuestions(state.subagent),
           ].sort((a, b) => a.id.localeCompare(b.id))) {
-            seedBlocker(request.id)
+            seedBlocker(request.id, request.sessionID)
           }
 
           if (replay) {
@@ -865,9 +888,14 @@ function createLayer(input: StreamInput) {
         })
 
         const poll = Effect.fn("RunStreamTransport.poll")(function* (next: Wait, signal: AbortSignal) {
+          // The `session.status` SSE event resolves the turn in the common case; this
+          // loop is the fallback for a missed event. Back off so a long turn does not
+          // issue a status request every 250 ms while it is still busy.
+          let delay = 250
           while (state.wait === next && !signal.aborted && !input.footer.isClosed && !closed) {
-            yield* Effect.sleep("250 millis")
+            yield* Effect.sleep(delay)
             yield* complete(next, false)
+            delay = Math.min(delay * 2, 2000)
           }
         })
 
@@ -894,7 +922,10 @@ function createLayer(input: StreamInput) {
 
           trackBlocker(event)
 
-          const prev = event.type === "message.part.updated" ? listSubagentTabs(state.subagent) : undefined
+          // `prev` is only consumed by `traceTabs`, which is a no-op when tracing is
+          // disabled (the default), so skip the copy+sort entirely in that case.
+          const prev =
+            input.trace && event.type === "message.part.updated" ? listSubagentTabs(state.subagent) : undefined
           const next = reduceSessionData({
             data: state.data,
             event,
@@ -942,7 +973,11 @@ function createLayer(input: StreamInput) {
           if (changed && prev) {
             traceTabs(input.trace, prev, listSubagentTabs(state.subagent))
           }
-          releaseBlocker(event)
+          if (event.type === "session.deleted") {
+            releaseSessionBlockers(event.properties.info.id)
+          } else {
+            releaseBlocker(event)
+          }
 
           syncFooter(next.commits, next.footer?.patch, changed ? currentSubagentState() : undefined)
 
@@ -951,27 +986,24 @@ function createLayer(input: StreamInput) {
         })
 
         const drainBuffered = Effect.fn("RunStreamTransport.drainBuffered")(function* () {
-          let pending = buffered.splice(0)
-          while (pending.length > 0) {
-            const next: Event[] = []
-            let changed = false
-            for (const event of pending) {
+          let progress = true
+          while (progress) {
+            progress = false
+            const deferred: Event[] = []
+            for (const event of buffered.splice(0)) {
               if (!tracked(sid(event))) {
-                next.push(event)
+                deferred.push(event)
                 continue
               }
 
-              changed = true
+              progress = true
               yield* applyEvent(event)
             }
 
-            const arrived = buffered.splice(0)
-            if (!changed && arrived.length === 0) {
-              buffered.push(...next)
-              return
-            }
-
-            pending = [...next, ...arrived]
+            // Re-queue still-untracked events ahead of anything that arrived while
+            // they were processed so the original ordering is preserved.
+            if (deferred.length > 0) buffered.unshift(...deferred)
+            if (!progress) return
           }
         })
 
@@ -1087,7 +1119,7 @@ function createLayer(input: StreamInput) {
 
           state.data = snapshot.value.history.data
           for (const request of [...state.data.permissions, ...state.data.questions]) {
-            seedBlocker(request.id)
+            seedBlocker(request.id, request.sessionID)
           }
 
           for (const commit of replayLocalRows(
@@ -1151,7 +1183,7 @@ function createLayer(input: StreamInput) {
                 if (booting || replaying) {
                   if (sessionID) {
                     input.trace?.write("recv.event", event)
-                    buffered.push(event)
+                    bufferEvent(event)
                   }
                   return
                 }
@@ -1159,7 +1191,7 @@ function createLayer(input: StreamInput) {
                 if (!tracked(sessionID)) {
                   if (sessionID) {
                     input.trace?.write("recv.event", event)
-                    buffered.push(event)
+                    bufferEvent(event)
                   }
                   return
                 }

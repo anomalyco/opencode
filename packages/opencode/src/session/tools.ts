@@ -38,11 +38,54 @@ const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "image/webp",
 ])
 
+// Generic tool `metadata()` publishes deep-clone the whole tool part on every call.
+// Cap oversized strings and throttle publishes like the session-shell path; the
+// completed part is still written once by `completeToolCall`.
+const METADATA_THROTTLE_MS = 200
+const METADATA_MAX_STRING = 30_000
+const METADATA_MAX_DEPTH = 4
+
+const metadataPreview = (text: string) =>
+  text.length <= METADATA_MAX_STRING ? text : "...\n\n" + text.slice(-METADATA_MAX_STRING)
+
+function capMetadataValue(value: unknown, depth: number): unknown {
+  if (typeof value === "string") return metadataPreview(value)
+  if (value === null || typeof value !== "object") return value
+  // At the depth limit, serialize the whole subtree through the same size cap instead
+  // of returning it verbatim, so strings below the limit cannot escape the bound (O2-17).
+  if (depth >= METADATA_MAX_DEPTH) {
+    return metadataPreview(JSON.stringify(value, (_key, item) => (typeof item === "bigint" ? item.toString() : item)))
+  }
+  if (Array.isArray(value)) {
+    let changed = false
+    const next = value.map((item) => {
+      const capped = capMetadataValue(item, depth + 1)
+      if (capped !== item) changed = true
+      return capped
+    })
+    return changed ? next : value
+  }
+  let changed = false
+  const next: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) {
+    const capped = capMetadataValue(item, depth + 1)
+    // `next[key] = capped` would hit the `__proto__` setter and rewrite the clone's
+    // prototype instead of adding an own property, silently dropping the key.
+    Object.defineProperty(next, key, { value: capped, enumerable: true, configurable: true, writable: true })
+    if (capped !== item) changed = true
+  }
+  return changed ? next : value
+}
+
+export function capMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
+  return capMetadataValue(metadata, 0) as Record<string, unknown>
+}
+
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
   session: Session.Info
-  processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+  processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall" | "abortToolCall">
   bypassAgentCheck: boolean
   messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
@@ -55,39 +98,83 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
+  const ruleset = Permission.merge(input.agent.permission, input.session.permission ?? [])
 
-  const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
-    sessionID: input.session.id,
-    abort: options.abortSignal!,
-    messageID: input.processor.message.id,
-    callID: options.toolCallId,
-    extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
-    agent: input.agent.name,
-    messages: input.messages,
-    metadata: (val) =>
+  const context = (
+    args: Record<string, unknown>,
+    options: ToolExecutionOptions,
+  ): Tool.Context & { flushMetadata: () => Effect.Effect<void> } => {
+    let lastMetadataAt = 0
+    let pending: { title?: string; metadata?: Record<string, unknown> } | undefined
+
+    const capped = (val: { title?: string; metadata?: Record<string, unknown> }) => ({
+      title: val.title,
+      metadata: val.metadata ? capMetadata(val.metadata) : val.metadata,
+    })
+
+    // A throttled call can omit a field the previous call supplied; merging keeps the
+    // last value per field instead of clearing it with `undefined` (D2-06).
+    const mergePending = (
+      prev: { title?: string; metadata?: Record<string, unknown> } | undefined,
+      val: { title?: string; metadata?: Record<string, unknown> },
+    ) => ({
+      title: val.title !== undefined ? val.title : prev?.title,
+      metadata: val.metadata !== undefined ? val.metadata : prev?.metadata,
+    })
+
+    const publish = (val: { title?: string; metadata?: Record<string, unknown> }) =>
       input.processor.updateToolCall(options.toolCallId, (match) => {
         if (!["running", "pending"].includes(match.state.status)) return match
+        const existing = match.state.status === "running" ? match.state : undefined
         return {
           ...match,
           state: {
-            title: val.title,
-            metadata: val.metadata,
+            title: val.title !== undefined ? val.title : existing?.title,
+            metadata: val.metadata !== undefined ? val.metadata : existing?.metadata,
             status: "running",
             input: args,
             time: match.state.status === "running" ? match.state.time : { start: Date.now() },
           },
         }
-      }),
-    ask: (req) =>
-      permission
-        .ask({
-          ...req,
-          sessionID: input.session.id,
-          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-        })
-        .pipe(Effect.orDie),
-  })
+      })
+
+    return {
+      sessionID: input.session.id,
+      abort: options.abortSignal!,
+      messageID: input.processor.message.id,
+      callID: options.toolCallId,
+      extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
+      agent: input.agent.name,
+      messages: input.messages,
+      metadata: (val) =>
+        Effect.suspend(() => {
+          const now = Date.now()
+          if (now - lastMetadataAt < METADATA_THROTTLE_MS) {
+            pending = mergePending(pending, val)
+            return Effect.void
+          }
+          lastMetadataAt = now
+          const next = mergePending(pending, val)
+          pending = undefined
+          return publish(capped(next))
+        }),
+      flushMetadata: () =>
+        Effect.suspend(() => {
+          const next = pending
+          pending = undefined
+          return next ? publish(capped(next)).pipe(Effect.asVoid) : Effect.void
+        }),
+      ask: (req) =>
+        permission
+          .ask({
+            ...req,
+            sessionID: input.session.id,
+            tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+            ruleset,
+          })
+          .pipe(Effect.orDie),
+    }
+  }
 
   for (const item of yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),
@@ -108,7 +195,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
               { args },
             )
-            const result = yield* item.execute(args, ctx)
+            const result = yield* item.execute(args, ctx).pipe(Effect.ensuring(ctx.flushMetadata()))
             const output = {
               ...result,
               attachments: result.attachments?.map((attachment) => ({
@@ -124,7 +211,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               output,
             )
             if (options.abortSignal?.aborted) {
-              yield* input.processor.completeToolCall(options.toolCallId, output)
+              yield* input.processor.abortToolCall(options.toolCallId)
             }
             return output
           }),
@@ -211,7 +298,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               output,
             )
             if (opts.abortSignal?.aborted) {
-              yield* input.processor.completeToolCall(opts.toolCallId, output)
+              yield* input.processor.abortToolCall(opts.toolCallId)
             }
             return output
           }),
@@ -294,7 +381,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               output,
             )
             if (opts.abortSignal?.aborted) {
-              yield* input.processor.completeToolCall(opts.toolCallId, output)
+              yield* input.processor.abortToolCall(opts.toolCallId)
             }
             return output
           }),
@@ -376,7 +463,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               output,
             )
             if (opts.abortSignal?.aborted) {
-              yield* input.processor.completeToolCall(opts.toolCallId, output)
+              yield* input.processor.abortToolCall(opts.toolCallId)
             }
             return output
           }),
@@ -388,7 +475,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   if (flags.experimentalCodeMode) return tools
 
   for (const [key, entry] of Object.entries(yield* mcp.tools())) {
-    const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
+    const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout, entry.server)
     const execute = item.execute
     if (!execute) continue
 
@@ -481,7 +568,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             content: result.content,
           }
           if (opts.abortSignal?.aborted) {
-            yield* input.processor.completeToolCall(opts.toolCallId, output)
+            yield* input.processor.abortToolCall(opts.toolCallId)
           }
           return output
         }),

@@ -26,15 +26,26 @@ interface State {
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: PermissionV1.Ruleset[]): PermissionV1.Rule {
-  return (
-    rulesets
-      .flat()
-      .findLast((rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) ?? {
-      action: "ask",
-      permission,
-      pattern: "*",
+  for (let i = rulesets.length - 1; i >= 0; i--) {
+    const rules = rulesets[i]
+    for (let j = rules.length - 1; j >= 0; j--) {
+      const rule = rules[j]
+      if (Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)) return rule
     }
-  )
+  }
+  return { action: "ask", permission, pattern: "*" }
+}
+
+function evaluateApproved(
+  permission: string,
+  pattern: string,
+  approved: PermissionV1.Ruleset,
+): PermissionV1.Rule | undefined {
+  for (let i = approved.length - 1; i >= 0; i--) {
+    const rule = approved[i]
+    if (Wildcard.matchStrict(permission, rule.permission) && Wildcard.matchStrict(pattern, rule.pattern)) return rule
+  }
+  return undefined
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
@@ -53,7 +64,7 @@ const layer = Layer.effect(
 
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
-            for (const item of state.pending.values()) {
+            for (const item of Array.from(state.pending.values())) {
               yield* Deferred.fail(item.deferred, new PermissionV1.RejectedError())
             }
             state.pending.clear()
@@ -70,13 +81,14 @@ const layer = Layer.effect(
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
-        yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
-        if (rule.action === "deny") {
+        const configured = evaluate(request.permission, pattern, ruleset)
+        if (configured.action === "deny") {
           return yield* new PermissionV1.DeniedError({
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
           })
         }
+        const rule = evaluateApproved(request.permission, pattern, approved) ?? configured
+        yield* Effect.logDebug("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "allow") continue
         needsAsk = true
       }
@@ -126,7 +138,7 @@ const layer = Layer.effect(
             : new PermissionV1.RejectedError(),
         )
 
-        for (const [id, item] of pending.entries()) {
+        for (const [id, item] of Array.from(pending.entries())) {
           if (item.info.sessionID !== existing.info.sessionID) continue
           pending.delete(id)
           yield* events.publish(Event.Replied, {
@@ -143,6 +155,7 @@ const layer = Layer.effect(
       if (input.reply === "once") return
 
       for (const pattern of existing.info.always) {
+        if (approved.some((rule) => rule.permission === existing.info.permission && rule.pattern === pattern)) continue
         approved.push({
           permission: existing.info.permission,
           pattern,
@@ -150,10 +163,10 @@ const layer = Layer.effect(
         })
       }
 
-      for (const [id, item] of pending.entries()) {
+      for (const [id, item] of Array.from(pending.entries())) {
         if (item.info.sessionID !== existing.info.sessionID) continue
         const ok = item.info.patterns.every(
-          (pattern) => evaluate(item.info.permission, pattern, approved).action === "allow",
+          (pattern) => evaluateApproved(item.info.permission, pattern, approved)?.action === "allow",
         )
         if (!ok) continue
         pending.delete(id)

@@ -6,6 +6,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
+import * as Arr from "effect/Array"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
 import type { LLMEvent } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
@@ -373,8 +374,17 @@ const live: Layer.Layer<
             return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
               e instanceof Error ? e : new Error(String(e)),
             ).pipe(
-              Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
-              Stream.flatMap((events) => Stream.fromIterable(events)),
+              // Perf: map each chunk in one Effect instead of building an inner
+              // Stream + Channel per LLM event (F-035). The assertion is required
+              // because Stream chunks are typed non-empty while the adapter
+              // legitimately yields no events for some parts (start/raw); empty
+              // chunks are skipped downstream.
+              // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+              Stream.mapArrayEffect((events) =>
+                Effect.forEach(events, (event) => LLMAISDK.toLLMEvents(state, event)).pipe(
+                  Effect.map((items) => items.flat() as unknown as Arr.NonEmptyReadonlyArray<LLMEvent>),
+                ),
+              ),
             )
           }),
         ),

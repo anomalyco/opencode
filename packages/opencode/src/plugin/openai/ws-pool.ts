@@ -1,4 +1,5 @@
 import WebSocket from "ws"
+import { createHash } from "node:crypto"
 import { ProviderError } from "@/provider/error"
 import { isRecord } from "@/util/record"
 import { OpenAIWebSocket } from "./ws"
@@ -10,31 +11,43 @@ export interface CreateWebSocketFetchOptions {
   url?: string
   connectTimeout?: number
   idleTimeout?: number
+  fallbackTimeout?: number
   maxConnectionAge?: number
   streamRetries?: number
+  busyTimeout?: number
 }
 
 interface PoolEntry {
+  sessionID: string
   socket?: WebSocket
   connectedAt?: number
   lastUsedAt: number
+  busyAt: number
   busy: boolean
   fallback: boolean
   streamFailures: number
+  backoff: number
+  nextAttemptAt: number
 }
 
 const DEFAULT_CONNECT_TIMEOUT = 15_000
 const DEFAULT_IDLE_TIMEOUT = 5 * 60 * 1000
+const DEFAULT_FALLBACK_TIMEOUT = 10 * 60 * 1000
 const DEFAULT_MAX_CONNECTION_AGE = 55 * 60 * 1000
 const CONNECTION_LIMIT_REACHED_CODE = "websocket_connection_limit_reached"
+const MAX_POOL_SIZE = 32
+const BACKOFF_BASE_MS = 25
+const BACKOFF_MAX_MS = 5_000
 
 export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
   const httpFetch = options?.httpFetch ?? globalThis.fetch
   const pool = new Map<string, PoolEntry>()
   const connectTimeout = options?.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT
   const idleTimeout = options?.idleTimeout ?? DEFAULT_IDLE_TIMEOUT
+  const fallbackTimeout = options?.fallbackTimeout ?? DEFAULT_FALLBACK_TIMEOUT
   const maxConnectionAge = options?.maxConnectionAge ?? DEFAULT_MAX_CONNECTION_AGE
   const streamRetries = options?.streamRetries ?? 5
+  const busyTimeout = options?.busyTimeout ?? Math.max(idleTimeout, 60_000)
   const pruneTimer = setInterval(() => prune(), Math.min(idleTimeout, 60_000))
   if (typeof pruneTimer === "object" && "unref" in pruneTimer && typeof pruneTimer.unref === "function") {
     pruneTimer.unref()
@@ -67,9 +80,22 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     if (!sessionID) {
       return httpFetch(input, httpInit)
     }
-    const key = `${sessionID}:conversation`
+    const socketURL = options?.url ?? url
+    const authHeaders = OpenAIWebSocket.normalizeHeaders(httpInit?.headers)
+    const key = `${sessionID}:${fingerprint(socketURL, authHeaders)}`
 
-    const entry = pool.get(key) ?? { lastUsedAt: Date.now(), busy: false, fallback: false, streamFailures: 0 }
+    const existing = pool.get(key)
+    if (!existing && !admit()) return httpFetch(input, httpInit)
+    const entry = existing ?? {
+      sessionID,
+      lastUsedAt: Date.now(),
+      busyAt: 0,
+      busy: false,
+      fallback: false,
+      streamFailures: 0,
+      backoff: 0,
+      nextAttemptAt: 0,
+    }
     pool.set(key, entry)
 
     if (entry.fallback) {
@@ -78,18 +104,20 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
     if (entry.busy) {
       return httpFetch(input, httpInit)
     }
-
     entry.busy = true
+    entry.busyAt = Date.now()
     entry.lastUsedAt = Date.now()
     try {
-      entry.socket = await socket(
-        entry,
-        options?.url ?? url,
-        OpenAIWebSocket.normalizeHeaders(httpInit?.headers),
-        connectTimeout,
-        maxConnectionAge,
-        init?.signal,
-      )
+      // Back off after a failed attempt so a struggling endpoint is not hammered with
+      // immediate reconnects (which worsens `websocket_connection_limit_reached`).
+      // Reserve the lane before yielding, or a concurrent caller can admit a second
+      // connection for this key while the delay is pending.
+      await waitForBackoff(entry, init?.signal)
+      if (entry.fallback) {
+        entry.busy = false
+        return httpFetch(input, httpInit)
+      }
+      entry.socket = await socket(entry, socketURL, authHeaders, connectTimeout, maxConnectionAge, init?.signal)
       let resolveFirstEvent: (event: boolean | OpenAIWebSocket.WrappedError) => void = () => {}
       let rejectFirstEvent: (error: Error) => void = () => {}
       const firstEvent = new Promise<boolean | OpenAIWebSocket.WrappedError>((resolve, reject) => {
@@ -106,6 +134,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           entry.busy = false
           entry.lastUsedAt = Date.now()
           entry.streamFailures = 0
+          resetBackoff(entry)
           if (event.type !== "response.completed" && event.type !== "response.done") {
             invalidate(entry)
           }
@@ -122,6 +151,7 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
           entry.busy = false
           entry.lastUsedAt = Date.now()
           entry.streamFailures = 0
+          resetBackoff(entry)
           invalidate(entry)
           rejectFirstEvent(error)
         },
@@ -133,7 +163,8 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       })
       const first = await firstEvent
       if (first !== false) {
-        if (first === true || first.status < 200 || first.status > 599) return response
+        resetBackoff(entry)
+        if (first === true || first.status < 200 || first.status > 599) return withActivity(entry, response)
         return new Response(first.body, {
           status: first.status,
           headers: { "content-type": "application/json", ...first.headers },
@@ -163,16 +194,46 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
 
   function recordStreamFailure(entry: PoolEntry) {
     entry.streamFailures++
+    entry.backoff = entry.backoff === 0 ? BACKOFF_BASE_MS : Math.min(entry.backoff * 2, BACKOFF_MAX_MS)
+    entry.nextAttemptAt = Date.now() + entry.backoff + Math.floor(Math.random() * entry.backoff)
     // Codex counts retries after the initial failed WebSocket attempt.
     if (entry.streamFailures > streamRetries) entry.fallback = true
+  }
+
+  function resetBackoff(entry: PoolEntry) {
+    entry.backoff = 0
+    entry.nextAttemptAt = 0
+  }
+
+  // Bound total entries, not just idle ones: when every slot is busy the caller
+  // falls back to HTTP instead of growing the pool without limit.
+  function admit() {
+    while (pool.size >= MAX_POOL_SIZE) {
+      const candidate = [...pool]
+        .filter(([, entry]) => !entry.busy)
+        .sort((a, b) => a[1].lastUsedAt - b[1].lastUsedAt)[0]
+      if (!candidate) return false
+      invalidate(candidate[1])
+      pool.delete(candidate[0])
+    }
+    return true
   }
 
   function prune() {
     const now = Date.now()
     for (const [key, entry] of pool) {
-      if (entry.busy) continue
-      if (entry.fallback) continue
-      if (now - entry.lastUsedAt < idleTimeout) continue
+      // A caller that drops the response without reading or cancelling never fires
+      // `onTerminal`/`onAbort`, so reclaim a slot that has been busy far longer than
+      // any real stream. Do not reclaim while a backoff is pending or during a
+      // shorter-configured idle window.
+      if (entry.busy && (entry.nextAttemptAt > now || now - entry.busyAt < busyTimeout)) continue
+      if (entry.busy) {
+        entry.busy = false
+        invalidate(entry)
+      }
+      // Keep the retry budget and backoff state while a reconnect is pending.
+      if (entry.nextAttemptAt > now) continue
+      if (now - entry.lastUsedAt < (entry.fallback ? fallbackTimeout : idleTimeout)) continue
       invalidate(entry)
       pool.delete(key)
     }
@@ -185,14 +246,40 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
   }
 
   function remove(sessionID: string) {
-    const key = `${sessionID}:conversation`
-    const entry = pool.get(key)
-    if (!entry) return
-    invalidate(entry)
-    pool.delete(key)
+    for (const [key, entry] of pool) {
+      if (entry.sessionID !== sessionID) continue
+      invalidate(entry)
+      pool.delete(key)
+    }
   }
 
-  return Object.assign(websocketFetch, { close, remove })
+  return Object.assign(websocketFetch, { close, remove, prune })
+}
+
+function waitForBackoff(entry: PoolEntry, signal?: AbortSignal | null) {
+  const remaining = entry.nextAttemptAt - Date.now()
+  if (remaining <= 0) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    if (signal?.aborted) return resolve()
+    const onAbort = () => {
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve()
+    }, remaining)
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
+}
+
+// Key on a 256-bit digest, not a 32-bit FNV-1a: two callers sharing a sessionID
+// with different bearer tokens must never collide and reuse each other's socket.
+function fingerprint(url: string, headers: Record<string, string>) {
+  const hash = createHash("sha256")
+  hash.update(url)
+  for (const key of Object.keys(headers).sort()) hash.update(`\u0000${key}:${headers[key]}`)
+  return hash.digest("hex")
 }
 
 function connectionLimitError(event: Record<string, unknown>) {
@@ -248,6 +335,31 @@ function invalidate(entry: PoolEntry) {
     entry.socket = undefined
   }
   entry.connectedAt = undefined
+}
+
+// Refresh the prune clock as the consumer reads data, so prune only reclaims a lane that
+// has genuinely stalled (the caller stopped reading). Without this a legitimate stream
+// longer than `busyTimeout` is terminated mid-flight (v8 NEW-06).
+function withActivity(entry: PoolEntry, response: Response): Response {
+  if (!response.body) return response
+  const reader = response.body.getReader()
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const { done, value } = await reader.read()
+        if (done) {
+          controller.close()
+          return
+        }
+        entry.busyAt = Date.now()
+        controller.enqueue(value)
+      },
+      cancel(reason) {
+        return reader.cancel(reason)
+      },
+    }),
+    { status: response.status, statusText: response.statusText, headers: response.headers },
+  )
 }
 
 export function withoutInternalHeaders<T extends { headers?: HeadersInit }>(init: T | undefined): T | undefined {

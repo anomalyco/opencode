@@ -8,9 +8,7 @@ export type GlobalEvent = {
   payload: any
 }
 
-class GlobalBusEmitter extends EventEmitter<{
-  event: [GlobalEvent]
-}> {
+class GlobalBusEmitter extends EventEmitter {
   override emit(eventName: "event", event: GlobalEvent): boolean {
     if (event.payload && typeof event.payload === "object" && !("id" in event.payload)) {
       event.payload.id = event.payload.syncEvent?.id ?? Identifier.create("evt", "ascending")
@@ -20,3 +18,6 @@ class GlobalBusEmitter extends EventEmitter<{
 }
 
 export const GlobalBus = new GlobalBusEmitter()
+// Every SSE connection registers a listener; the default cap of 10 would warn
+// once a handful of clients are connected.
+GlobalBus.setMaxListeners(0)

@@ -265,7 +265,30 @@ export async function create(input: {
     })
   }
 
-  const files: Record<string, { version: number; text: string }> = {}
+  // Track only the version and the end position of each open document. The full
+  // text is not retained: `didChange` sends the whole new buffer anyway, so the
+  // only thing needed from the previous revision is where it ended.
+  type OpenDocument = { version: number; end: { line: number; character: number } }
+  const files = new Map<string, OpenDocument>()
+  const MAX_OPEN_DOCUMENTS = 128
+
+  const trackDocument = (filePath: string, document: OpenDocument) => {
+    files.delete(filePath)
+    files.set(filePath, document)
+    while (files.size > MAX_OPEN_DOCUMENTS) {
+      const oldest = files.keys().next().value
+      if (oldest === undefined) break
+      files.delete(oldest)
+      pushDiagnostics.delete(oldest)
+      pullDiagnostics.delete(oldest)
+      published.delete(oldest)
+      Promise.resolve(
+        connection.sendNotification("textDocument/didClose", {
+          textDocument: { uri: pathToFileURL(oldest).href },
+        }),
+      ).catch(() => {})
+    }
+  }
 
   // --- Diagnostic helpers ---
 
@@ -550,6 +573,12 @@ export async function create(input: {
     get connection() {
       return connection
     },
+    // Lifecycle-accounted exit notification instead of exposing the raw child process,
+    // so callers cannot drive the process outside the client's own teardown.
+    onExit(listener: () => void) {
+      input.server.process.once("exit", listener)
+      return () => input.server.process.off("exit", listener)
+    },
     notify: {
       async open(request: { path: string }) {
         request.path = Filesystem.normalizePath(
@@ -559,7 +588,7 @@ export async function create(input: {
         const extension = path.extname(request.path)
         const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
-        const document = files[request.path]
+        const document = files.get(request.path)
         if (document !== undefined) {
           // Do not wipe diagnostics on didChange. Some servers (e.g. clangd) only
           // re-emit diagnostics when the content actually changes, so clearing
@@ -575,7 +604,7 @@ export async function create(input: {
           })
 
           const next = document.version + 1
-          files[request.path] = { version: next, text }
+          trackDocument(request.path, { version: next, end: endPosition(text) })
           await connection.sendNotification("textDocument/didChange", {
             textDocument: {
               uri: pathToFileURL(request.path).href,
@@ -587,7 +616,7 @@ export async function create(input: {
                     {
                       range: {
                         start: { line: 0, character: 0 },
-                        end: endPosition(document.text),
+                        end: document.end,
                       },
                       text,
                     },
@@ -616,7 +645,7 @@ export async function create(input: {
             text,
           },
         })
-        files[request.path] = { version: 0, text }
+        trackDocument(request.path, { version: 0, end: endPosition(text) })
         return 0
       },
     },
@@ -626,6 +655,12 @@ export async function create(input: {
         result.set(key, mergedDiagnostics(key))
       }
       return result
+    },
+    diagnosticsFor(request: { path: string }) {
+      const normalizedPath = Filesystem.normalizePath(
+        path.isAbsolute(request.path) ? request.path : path.resolve(input.directory, request.path),
+      )
+      return mergedDiagnostics(normalizedPath)
     },
     async waitForDiagnostics(request: { path: string; version: number; mode?: "document" | "full"; after?: number }) {
       const normalizedPath = Filesystem.normalizePath(

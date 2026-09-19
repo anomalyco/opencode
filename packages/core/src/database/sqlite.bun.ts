@@ -17,6 +17,9 @@ import { Sqlite } from "./sqlite"
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
 
+// Plain reads run on a second connection so they never queue behind the write semaphore.
+const READS = /^\s*(?:select|explain)\b/i
+
 const TypeId = "~@opencode-ai/core/database/SqliteBun" as const
 type TypeId = typeof TypeId
 
@@ -53,9 +56,21 @@ const make = (options: Config) =>
       ? Statement.defaultTransforms(options.transformResultNames).array
       : undefined
 
-    const run = (query: string, params: ReadonlyArray<unknown> = []) =>
+    const inMemory = options.filename.includes(":memory:") || options.filename.includes("mode=memory")
+    const readNative =
+      inMemory || options.disableWAL
+        ? native
+        : new Database(options.filename, { readonly: options.readonly, readwrite: !options.readonly, create: false })
+    if (readNative !== native) {
+      yield* Effect.addFinalizer(() => Effect.sync(() => readNative.close()))
+      readNative.run("PRAGMA busy_timeout = 5000;")
+      readNative.run("PRAGMA cache_size = -32000;")
+      readNative.run("PRAGMA query_only = ON;")
+    }
+
+    const run = (target: Database, query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
-        const statement = native.query(query)
+        const statement = target.query(query)
         // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
         statement.safeIntegers(Context.get(fiber.context, Client.SafeIntegers))
         try {
@@ -69,9 +84,9 @@ const make = (options: Config) =>
         }
       })
 
-    const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
+    const runValues = (target: Database, query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<unknown[]>, SqlError>((fiber) => {
-        const statement = native.query(query)
+        const statement = target.query(query)
         // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
         statement.safeIntegers(Context.get(fiber.context, Client.SafeIntegers))
         try {
@@ -85,15 +100,18 @@ const make = (options: Config) =>
         }
       })
 
-    const connection = identity<SqliteConnection>({
+    const semaphore = yield* Semaphore.make(1)
+    const gated = <A, E>(effect: Effect.Effect<A, E>) => semaphore.withPermits(1)(effect)
+
+    const writer = identity<SqliteConnection>({
       execute(query, params, transformRows) {
-        return transformRows ? Effect.map(run(query, params), transformRows) : run(query, params)
+        return transformRows ? Effect.map(run(native, query, params), transformRows) : run(native, query, params)
       },
       executeRaw(query, params) {
-        return run(query, params)
+        return run(native, query, params)
       },
       executeValues(query, params) {
-        return runValues(query, params)
+        return runValues(native, query, params)
       },
       executeUnprepared(query, params, transformRows) {
         return this.execute(query, params, transformRows)
@@ -118,14 +136,41 @@ const make = (options: Config) =>
         }),
     })
 
-    const semaphore = yield* Semaphore.make(1)
-    const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
+    const connection = identity<SqliteConnection>({
+      execute(query, params, transformRows) {
+        const effect =
+          READS.test(query) && readNative !== native
+            ? run(readNative, query, params)
+            : gated(run(native, query, params))
+        return transformRows ? Effect.map(effect, transformRows) : effect
+      },
+      executeRaw(query, params) {
+        return READS.test(query) && readNative !== native
+          ? run(readNative, query, params)
+          : gated(run(native, query, params))
+      },
+      executeValues(query, params) {
+        return READS.test(query) && readNative !== native
+          ? runValues(readNative, query, params)
+          : gated(runValues(native, query, params))
+      },
+      executeUnprepared(query, params, transformRows) {
+        return this.execute(query, params, transformRows)
+      },
+      executeStream() {
+        return Stream.die("executeStream not implemented")
+      },
+      export: writer.export,
+      loadExtension: writer.loadExtension,
+    })
+
+    const acquirer = Effect.succeed(connection)
     const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
       const fiber = Fiber.getCurrent()!
       const scope = Context.getUnsafe(fiber.context, Scope.Scope)
       return Effect.as(
         Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-        connection,
+        writer,
       )
     })
 

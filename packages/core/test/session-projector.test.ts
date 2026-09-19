@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Schema } from "effect"
-import { asc, eq, sql } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -20,11 +20,16 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionV1 } from "@opencode-ai/schema/session-v1"
 import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Location } from "@opencode-ai/core/location"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node])))
+const diffType = EventV2.versionedType(
+  SessionV1.Event.MessageDiffUpdated.type,
+  SessionV1.Event.MessageDiffUpdated.durable?.version ?? 1,
+)
 const sessionsLayer = AppNodeBuilder.build(SessionV2.node, [[SessionExecution.node, SessionExecution.noopLayer]])
 const sessionID = SessionV2.ID.make("ses_projector_test")
 const created = DateTime.makeUnsafe(0)
@@ -75,6 +80,47 @@ describe("SessionProjector", () => {
       expect(yield* db.select({ directory: SessionTable.directory }).from(SessionTable).get()).toEqual({
         directory: "/project/subdir",
       })
+    }),
+  )
+
+  it.effect("tombstones every superseded diff event and retains its original digest", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const events = yield* EventV2.Service
+      const aggregateID = SessionV2.ID.create()
+      const messageID = SessionV1.MessageID.ascending("msg_tombstone_batch")
+      const diffs = (index: number) => [
+        { file: `f${index}.ts`, additions: index, deletions: 0, status: "modified" as const },
+      ]
+      for (let index = 0; index < 3; index++) {
+        yield* events.publish(SessionV1.Event.MessageDiffUpdated, {
+          sessionID: aggregateID,
+          messageID,
+          diffs: diffs(index),
+        })
+      }
+      const before = yield* db
+        .select()
+        .from(EventTable)
+        .where(and(eq(EventTable.aggregate_id, aggregateID), eq(EventTable.type, diffType)))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+      const digests = before.map((row) => EventV2.eventDigest(row.data))
+
+      yield* events.publish(SessionV1.Event.MessageRemoved, { sessionID: aggregateID, messageID })
+
+      const after = yield* db
+        .select()
+        .from(EventTable)
+        .where(and(eq(EventTable.aggregate_id, aggregateID), eq(EventTable.type, diffType)))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)
+
+      expect(after).toHaveLength(3)
+      expect(after.map((row) => row.tombstone_digest)).toEqual(digests)
+      for (const row of after) expect(row.data).toEqual({ sessionID: aggregateID, messageID, diffs: [] })
     }),
   )
 

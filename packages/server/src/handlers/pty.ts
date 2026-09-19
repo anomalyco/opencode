@@ -17,6 +17,10 @@ import {
 import { response } from "../location"
 import { PtyEnvironment } from "../pty-environment"
 
+// Mirror the opencode sibling's bound: a chatty PTY plus a slow socket must
+// drop the oldest queued frame instead of growing the outbox without limit.
+const PTY_OUTBOX_LIMIT = 1024
+
 const ticketScope = Effect.gen(function* () {
   const location = yield* Location.Service
   return { directory: location.directory as string, workspaceID: location.workspaceID }
@@ -176,7 +180,7 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
           // Outbound frames flow through one queue drained by a single writer so replay, live
           // output, and the close frame keep their order.
           // TODO: Integrate graceful-shutdown socket tracking before clients migrate to this route.
-          const outbox = yield* Queue.unbounded<string | Uint8Array | Socket.CloseEvent>()
+          const outbox = yield* Queue.sliding<string | Uint8Array | Socket.CloseEvent>(PTY_OUTBOX_LIMIT)
           const attachment = yield* pty
             .attach(ctx.params.ptyID, {
               cursor,

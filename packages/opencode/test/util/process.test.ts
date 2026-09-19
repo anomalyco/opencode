@@ -16,6 +16,15 @@ describe("util.process", () => {
     expect(out.stderr.toString()).toBe("err")
   })
 
+  test("caps oversized stdout with a truncation marker", async () => {
+    const size = Process.MAX_OUTPUT_BYTES + 1024
+    const out = await Process.run(node(`process.stdout.write("x".repeat(${size}))`))
+    expect(out.code).toBe(0)
+    expect(out.stdout.length).toBeGreaterThanOrEqual(Process.MAX_OUTPUT_BYTES)
+    expect(out.stdout.length).toBeLessThanOrEqual(Process.MAX_OUTPUT_BYTES + 64)
+    expect(out.stdout.toString().endsWith("[output truncated]")).toBe(true)
+  }, 10_000)
+
   test("returns code when nothrow is enabled", async () => {
     const out = await Process.run(node("process.exit(7)"), { nothrow: true })
     expect(out.code).toBe(7)
@@ -108,6 +117,27 @@ describe("util.process", () => {
     })
 
     expect(await proc.exited).toBe(0)
+  })
+
+  test("coalesces concurrent stop calls into a single signal", async () => {
+    if (process.platform === "win32") return
+    const proc = Process.spawn(node('process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000)'), {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    })
+    await new Promise<void>((resolve) => proc.once("spawn", () => resolve()))
+
+    let kills = 0
+    const kill = proc.kill.bind(proc)
+    proc.kill = ((signal?: NodeJS.Signals | number) => {
+      kills++
+      return kill(signal)
+    }) as typeof proc.kill
+
+    await Promise.all([Process.stop(proc), Process.stop(proc), Process.stop(proc)])
+
+    expect(kills).toBe(1)
   })
 
   test("rejects missing commands without leaking unhandled errors", async () => {

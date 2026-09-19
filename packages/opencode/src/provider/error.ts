@@ -2,7 +2,7 @@ import { APICallError } from "ai"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 import type { ProviderV2 } from "@opencode-ai/core/provider"
-import { isContextOverflow } from "@opencode-ai/llm"
+import { isContextOverflow, isStaleReasoning } from "@opencode-ai/llm"
 
 export class HeaderTimeoutError extends Error {
   public override readonly name = "ProviderHeaderTimeoutError"
@@ -93,6 +93,11 @@ export type ParsedStreamError =
       responseBody: string
     }
   | {
+      type: "stale_reasoning"
+      message: string
+      responseBody: string
+    }
+  | {
       type: "api_error"
       message: string
       isRetryable: boolean
@@ -112,6 +117,12 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
       return {
         type: "context_overflow",
         message: "Input exceeds context window of this model",
+        responseBody,
+      }
+    case "invalid_encrypted_content":
+      return {
+        type: "stale_reasoning",
+        message: typeof body?.error?.message === "string" ? body.error.message : "Encrypted reasoning is no longer valid",
         responseBody,
       }
     case "insufficient_quota":
@@ -160,6 +171,11 @@ export type ParsedAPICallError =
       responseBody?: string
     }
   | {
+      type: "stale_reasoning"
+      message: string
+      responseBody?: string
+    }
+  | {
       type: "api_error"
       message: string
       statusCode?: number
@@ -175,6 +191,13 @@ export function parseAPICallError(input: { providerID: ProviderV2.ID; error: API
   if (isContextOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
     return {
       type: "context_overflow",
+      message: m,
+      responseBody: input.error.responseBody,
+    }
+  }
+  if (isStaleReasoning(m) || body?.error?.code === "invalid_encrypted_content") {
+    return {
+      type: "stale_reasoning",
       message: m,
       responseBody: input.error.responseBody,
     }

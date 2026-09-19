@@ -267,6 +267,75 @@ describe("experimental HttpApi", () => {
     { git: true, config: { formatter: false, lsp: false } },
   )
 
+  it.instance(
+    "rejects a session list limit over the bound",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        yield* createSession({ title: "limit-bound" })
+
+        const response = yield* request(
+          `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.directory, limit: "201" })}`,
+          tmp.directory,
+        )
+        expect(response.status).toBe(400)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "does not skip sessions sharing an updated timestamp",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const first = yield* createSession({ title: "tie-one" })
+        const second = yield* createSession({ title: "tie-two" })
+        yield* setSessionUpdated(first, 5)
+        yield* setSessionUpdated(second, 5)
+
+        const firstPage = yield* request(
+          `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.directory, limit: "1" })}`,
+          tmp.directory,
+        )
+        expect(firstPage.status).toBe(200)
+        const cursor = firstPage.headers["x-next-cursor"]
+        expect(cursor).toBeTruthy()
+        const firstBody = yield* json<Session.GlobalInfo[]>(firstPage)
+        expect(firstBody).toHaveLength(1)
+
+        const secondPage = yield* request(
+          `${ExperimentalPaths.session}?${new URLSearchParams({
+            directory: tmp.directory,
+            limit: "1",
+            cursor: cursor!,
+          })}`,
+          tmp.directory,
+        )
+        expect(secondPage.status).toBe(200)
+        const secondBody = yield* json<Session.GlobalInfo[]>(secondPage)
+        expect(secondBody).toHaveLength(1)
+
+        expect([firstBody[0].id, secondBody[0].id].sort()).toEqual([first.id, second.id].sort())
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "ignores malformed session cursors instead of failing",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        for (const cursor of ["garbage", "5:not-a-session-id", ":ses_x"]) {
+          const response = yield* request(
+            `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.directory, cursor })}`,
+            tmp.directory,
+          )
+          expect(response.status).toBe(200)
+        }
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
   testWorktreeMutations(
     "serves worktree mutations through the default server app",
     () =>

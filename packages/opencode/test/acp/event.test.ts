@@ -669,6 +669,18 @@ describe("acp event routing", () => {
     ])
   })
 
+  it("forgets a session's tool tracking when the session is cleared", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_clear", cwd: "/workspace" }))
+
+    await harness.subscription.handle(toolUpdated(runningTool("ses_clear", "call_clear", "first")))
+    harness.subscription.clearSession("ses_clear")
+    await harness.subscription.handle(toolUpdated(runningTool("ses_clear", "call_clear", "second")))
+
+    const pending = toolUpdates(harness.updates).filter((item) => item.update.sessionUpdate === "tool_call")
+    expect(pending).toHaveLength(2)
+  })
+
   it("emits completed tool output and rawOutput", async () => {
     const harness = createHarness()
     await Effect.runPromise(harness.session.create({ id: "ses_done", cwd: "/workspace" }))

@@ -42,13 +42,39 @@ export const AcpCommand = effectCmd({
         })
       },
     })
+    let stopReads: () => void = () => {
+      process.stdin.pause()
+    }
     const output = new ReadableStream<Uint8Array>({
       start(controller) {
-        process.stdin.on("data", (chunk: Buffer) => {
+        process.stdin.pause()
+        const onData = (chunk: Buffer) => {
           controller.enqueue(new Uint8Array(chunk))
-        })
-        process.stdin.on("end", () => controller.close())
-        process.stdin.on("error", (err) => controller.error(err))
+          if ((controller.desiredSize ?? 1) <= 0) process.stdin.pause()
+        }
+        const onEnd = () => {
+          stopReads()
+          controller.close()
+        }
+        const onError = (err: Error) => {
+          stopReads()
+          controller.error(err)
+        }
+        stopReads = () => {
+          process.stdin.off("data", onData)
+          process.stdin.off("end", onEnd)
+          process.stdin.off("error", onError)
+          process.stdin.pause()
+        }
+        process.stdin.on("data", onData)
+        process.stdin.on("end", onEnd)
+        process.stdin.on("error", onError)
+      },
+      pull() {
+        process.stdin.resume()
+      },
+      cancel() {
+        stopReads()
       },
     })
 
