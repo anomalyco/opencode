@@ -102,6 +102,8 @@ When opencode starts, it looks for rule files in this order:
 
 The first matching file wins in each category. For example, if you have both `AGENTS.md` and `CLAUDE.md`, only `AGENTS.md` is used. Similarly, `~/.config/opencode/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
 
+Config `customInstructions` are applied after environment-provided config and before `AGENTS.md` files, so repo instructions can refine your global defaults.
+
 ---
 
 ## Custom Instructions

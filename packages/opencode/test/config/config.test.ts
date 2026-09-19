@@ -1274,6 +1274,29 @@ it.effect("deduplicates duplicate instructions from global and local configs", (
   ),
 )
 
+it.effect("merges customInstructions text from global and local configs", () =>
+  withConfigTree(
+    {
+      global: { customInstructions: "global rules" },
+      local: { customInstructions: "local rules" },
+    },
+    Effect.gen(function* () {
+      expect((yield* Config.use.get()).customInstructions).toBe("global rules\n\nlocal rules")
+    }),
+  ),
+)
+
+it.effect("keeps single-sided customInstructions without extra separators", () =>
+  withConfigTree(
+    {
+      global: { customInstructions: "  global only  " },
+    },
+    Effect.gen(function* () {
+      expect((yield* Config.use.get()).customInstructions).toBe("global only")
+    }),
+  ),
+)
+
 it.effect("deduplicates duplicate plugins from global and local configs", () =>
   withConfigTree(
     {

@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, spyOn } from "bun:test"
 import { Effect, Layer } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -7,6 +7,8 @@ import { Location } from "@opencode-ai/core/location"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Config } from "@opencode-ai/core/config"
+import { Shell } from "@opencode-ai/core/shell"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextBuiltIns } from "@opencode-ai/core/system-context/builtins"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
@@ -28,6 +30,13 @@ const locationLayer = Layer.succeed(
   ),
 )
 const builtInsNode = LayerNode.group([SystemContextBuiltIns.node, SystemContextRegistry.node])
+const osName = (platform: string) =>
+  platform === "win32" ? "Windows" : platform === "darwin" ? "macOS" : platform === "linux" ? "Linux" : platform
+const expectedOS = `  OS: ${osName(process.platform)} (${process.arch})`
+const expectedShell = () => {
+  const resolved = Shell.preferred()
+  return `  Shell: ${Shell.name(resolved)} (${resolved})`
+}
 const it = testEffect(
   AppNodeBuilder.build(builtInsNode, [
     [Location.node, locationLayer],
@@ -53,6 +62,11 @@ const itWithInstructions = testEffect(
     [Global.node, Global.layerWith({ config: "/global" })],
   ]),
 )
+const configWithShell = (shell: string) =>
+  Config.Service.of({
+    entries: () =>
+      Effect.succeed([new Config.Document({ type: "document", info: new Config.Info({ shell }) })]),
+  })
 
 describe("SystemContextBuiltIns", () => {
   it.effect("loads location-scoped environment and host-local date context", () =>
@@ -69,6 +83,8 @@ describe("SystemContextBuiltIns", () => {
           `  Workspace root folder: ${projectDirectory}`,
           "  Is directory a git repo: yes",
           `  Platform: ${process.platform}`,
+          expectedOS,
+          expectedShell(),
           "</env>",
           "",
           `Today's date: ${localDate(timestamp)}`,
@@ -117,6 +133,8 @@ describe("SystemContextBuiltIns", () => {
           `  Workspace root folder: ${projectDirectory}`,
           "  Is directory a git repo: yes",
           `  Platform: ${process.platform}`,
+          expectedOS,
+          expectedShell(),
           "</env>",
           "",
           `Today's date: ${localDate(timestamp)}`,
@@ -124,6 +142,53 @@ describe("SystemContextBuiltIns", () => {
           `Instructions from: ${instructionFile}\nBe precise.`,
         ].join("\n"),
       )
+    }),
+  )
+
+  it.effect("uses the configured shell in the env block", () =>
+    Effect.gen(function* () {
+      const preferred = spyOn(Shell, "preferred").mockReturnValue("/mock/custom-shell")
+      try {
+        yield* TestClock.setTime(timestamp)
+        const baseline = yield* Effect.gen(function* () {
+          const context = yield* SystemContextRegistry.Service
+          const loaded = yield* context.load()
+          return (yield* SystemContext.initialize(loaded)).baseline
+        }).pipe(Effect.provideService(Config.Service, configWithShell("configured-shell")))
+        expect(preferred).toHaveBeenCalledWith("configured-shell")
+        expect(baseline).toContain("  Shell: custom-shell (/mock/custom-shell)")
+        expect(baseline).toMatch(/  OS: .+ \(.+\)/)
+      } finally {
+        preferred.mockRestore()
+        Shell.preferred.reset()
+        Shell.acceptable.reset()
+      }
+    }),
+  )
+
+  it.effect("labels the OS per platform", () =>
+    Effect.gen(function* () {
+      const preferred = spyOn(Shell, "preferred").mockReturnValue("/mock/sh")
+      const originalPlatform = process.platform
+      const cases = [
+        ["win32", "Windows"],
+        ["darwin", "macOS"],
+        ["linux", "Linux"],
+      ] as const
+      try {
+        yield* TestClock.setTime(timestamp)
+        for (const [platform, name] of cases) {
+          Object.defineProperty(process, "platform", { value: platform })
+          const context = yield* SystemContextRegistry.Service
+          const baseline = (yield* SystemContext.initialize(yield* context.load())).baseline
+          expect(baseline).toContain(`  OS: ${name} (${process.arch})`)
+        }
+      } finally {
+        Object.defineProperty(process, "platform", { value: originalPlatform })
+        preferred.mockRestore()
+        Shell.preferred.reset()
+        Shell.acceptable.reset()
+      }
     }),
   )
 })

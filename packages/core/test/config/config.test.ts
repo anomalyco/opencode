@@ -143,6 +143,12 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("migrates v1 custom instructions into v2 configuration", () =>
+    Effect.sync(() => {
+      expect(ConfigMigrateV1.migrate({ customInstructions: "Use tabs." }).customInstructions).toBe("Use tabs.")
+    }),
+  )
+
   it.live("returns an empty configuration when directory files do not exist", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

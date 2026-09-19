@@ -12,6 +12,7 @@ import { useSettings } from "@/context/settings"
 import { ExternalLink } from "../external-link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
+import { SettingsCustomInstructionsV2 } from "../settings-custom-instructions"
 import { LayoutRetirementNotice, LayoutTransitionToggle } from "./interface-transition"
 import {
   createAppearanceSettingsController,
@@ -551,6 +552,9 @@ export const SettingsGeneralV2: Component<{
         </Show>
 
         <GeneralSection />
+
+        {/* Custom instructions sits in its own section so general-row changes merge cleanly. */}
+        <SettingsCustomInstructionsV2 />
 
         <AppearanceSection controller={appearance} />
 
