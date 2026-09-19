@@ -28,6 +28,7 @@ import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, 
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
+  Message,
   Part,
   Provider,
   ToolPart,
@@ -2252,12 +2253,7 @@ function Task(props: ToolProps) {
     return value
   })
 
-  const duration = createMemo(() => {
-    const first = messages().find((x) => x.role === "user")?.time.created
-    const assistant = messages().findLast((x) => x.role === "assistant")?.time.completed
-    if (!first || !assistant) return 0
-    return assistant - first
-  })
+  const duration = createMemo(() => subagentDuration(props.part.state, messages()))
 
   const content = createMemo(() => {
     const description = stringValue(props.input.description)
@@ -2325,6 +2321,20 @@ export function formatSubagentRetry(attempt: number, message: string) {
 export function formatCompletedSubagentDetail(toolcalls: number, duration: string) {
   if (toolcalls === 0) return duration
   return `${formatSubagentToolcalls(toolcalls)} · ${duration}`
+}
+
+export function subagentDuration(state: ToolPart["state"], messages: Message[]): number {
+  // The tool part's own time range covers the full subagent run. The message
+  // scan below can only see the latest synced page of the child session, so it
+  // misses the first user message once the session grows beyond the sync
+  // window and would report 0ms for long-running subagents.
+  if (state.status === "completed" && Number.isFinite(state.time?.start) && Number.isFinite(state.time?.end)) {
+    return Math.max(0, state.time.end - state.time.start)
+  }
+  const first = messages.find((x) => x.role === "user")?.time.created
+  const assistant = messages.findLast((x) => x.role === "assistant")?.time.completed
+  if (!first || !assistant) return 0
+  return assistant - first
 }
 
 type ExecuteCall = { tool: string; status: "running" | "completed" | "error"; input?: Record<string, unknown> }
