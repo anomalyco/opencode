@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionV2Info } from "@opencode-ai/sdk/v2/client"
+import { QueryClient } from "@tanstack/solid-query"
+import type { Session, SessionV2Info } from "@opencode-ai/sdk/v2/client"
 import {
   applyHomeSessionEvent,
   appendHomeSessionEvent,
+  createHomeSessionIndexCache,
   HOME_V2_SESSION_PAGE_LIMIT,
   loadHomeSessionIndex,
   homeSessionIndexSessions,
@@ -150,5 +152,34 @@ describe("Home V2 session index", () => {
     expect(homeSessionIndexRefresh("server.connected", true)).toEqual({ connected: true, refetch: true })
     expect(homeSessionIndexRefresh("global.disposed", true).refetch).toBe(true)
     expect(homeSessionIndexRefresh("session.next.moved", true).refetch).toBe(true)
+  })
+
+  test("removes a session from the loaded Home index", () => {
+    const queryClient = new QueryClient()
+    const cache = createHomeSessionIndexCache(queryClient, "server")
+    const sessions = [
+      { id: "a", time: { created: 1, updated: 1 } },
+      { id: "b", time: { created: 1, updated: 1 } },
+    ] as Session[]
+    queryClient.setQueryData(cache.indexKey, { sessions, eventSequence: 0 })
+
+    cache.remove("a")
+
+    const index = queryClient.getQueryData<{ sessions: Session[] }>(cache.indexKey)
+    expect(index?.sessions.map((item) => item.id)).toEqual(["b"])
+  })
+
+  test("keeps the session out of the Home list when the index is not mounted", () => {
+    const queryClient = new QueryClient()
+    const cache = createHomeSessionIndexCache(queryClient, "server")
+    const sessions = [
+      { id: "a", time: { created: 1, updated: 1 } },
+      { id: "b", time: { created: 1, updated: 1 } },
+    ] as Session[]
+
+    cache.remove("a")
+
+    expect(queryClient.getQueryData(cache.indexKey)).toBeUndefined()
+    expect(cache.sessions({ sessions, eventSequence: 0 }, undefined).map((item) => item.id)).toEqual(["b"])
   })
 })

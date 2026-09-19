@@ -1,4 +1,5 @@
 import type { APIEvent } from "@solidjs/start"
+import { waitUntil } from "@opencode-ai/console-resource"
 import type { DownloadPlatform } from "../types"
 
 const prodAssetNames: Record<string, string> = {
@@ -30,14 +31,45 @@ export async function GET({ params: { platform, channel } }: APIEvent) {
   const assetName = channel === "stable" ? prodAssetNames[platform] : betaAssetNames[platform]
   if (!assetName) return new Response(null, { status: 404 })
 
-  const resp = await fetch(
-    `https://github.com/anomalyco/${channel === "stable" ? "opencode" : "opencode-beta"}/releases/latest/download/${assetName}`,
+  const release = await fetch(
+    `https://opencode.ai/update/api/${channel === "stable" ? "latest" : "beta"}/desktop/opencode`,
   )
+  if (!release.ok) return new Response(null, { status: release.status })
+  const location = getAssetUrl(await release.json(), assetName)
+  if (!location) return new Response(null, { status: 502 })
 
-  const downloadName = downloadNames[platform]
+  const key = new Request(location)
+  const cache = (caches as CacheStorage & { default: Cache }).default
+  const cached = await cache.match(key)
+  if (cached) return download(cached, platform, "HIT")
+
+  const resp = await fetch(location)
+  if (!resp.ok) return resp
 
   const headers = new Headers(resp.headers)
+  headers.set("cache-control", "public, max-age=31536000, immutable")
+  headers.delete("set-cookie")
+  const result = new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers })
+  waitUntil(cache.put(key, result.clone()))
+  return download(result, platform, "MISS")
+}
+
+function download(resp: Response, platform: string, cache: "HIT" | "MISS") {
+  const downloadName = downloadNames[platform]
+  const headers = new Headers(resp.headers)
   if (downloadName) headers.set("content-disposition", `attachment; filename="${downloadName}"`)
+  headers.set("x-opencode-cache", cache)
 
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers })
+}
+
+function getAssetUrl(input: unknown, assetName: string) {
+  if (!isRecord(input) || !isRecord(input.metadata) || !isRecord(input.metadata.files)) return
+  const asset = input.metadata.files[assetName]
+  if (!isRecord(asset) || typeof asset.url !== "string") return
+  return asset.url
+}
+
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
 }
