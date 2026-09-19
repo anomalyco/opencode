@@ -95,6 +95,9 @@ export type ElectronAPI = {
   revealPath: (path: string) => Promise<boolean>
   readClipboardImage: () => Promise<{ buffer: ArrayBuffer; width: number; height: number } | null>
   getWindowFocused: () => Promise<boolean>
+  setTaskbarAttention: (sessions: readonly string[]) => Promise<void>
+  markTaskbarSessionViewed: (session: string) => Promise<void>
+  onTaskbarSessionViewed: (cb: (session: string) => void) => () => void
   getWindowFullscreen: () => Promise<boolean>
   onWindowFullscreenChanged: (cb: (fullscreen: boolean) => void) => () => void
   setWindowFocus: () => Promise<void>

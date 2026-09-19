@@ -267,6 +267,14 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       }
     },
 
+    ...(os === "windows"
+      ? {
+          setTaskbarAttention: (sessions) => window.api.setTaskbarAttention(sessions),
+          markTaskbarSessionViewed: (session) => window.api.markTaskbarSessionViewed(session),
+          onTaskbarSessionViewed: (cb) => window.api.onTaskbarSessionViewed(cb),
+        }
+      : {}),
+
     fetch: (input, init) => {
       if (input instanceof Request) return fetch(input)
       return fetch(input, init)
