@@ -53,7 +53,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import { McpCatalog } from "@/mcp/catalog"
+import { McpTool } from "@/tool/mcp"
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return (
@@ -96,7 +96,7 @@ const layer = Layer.effect(
     const agents = yield* Agent.Service
     const truncate = yield* Truncate.Service
     const flags = yield* RuntimeFlags.Service
-    const mcp = yield* MCP.Service
+    const mcpTool = yield* McpTool.Service
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
@@ -283,9 +283,9 @@ const layer = Layer.effect(
     }) {
       if (!codeMode) return
       const ruleset = Permission.merge(input.agent.permission, input.permission ?? [])
-      const tools = Permission.visibleTools(yield* mcp.tools(), ruleset)
+      const tools = Permission.visibleTools(yield* mcpTool.tools(), ruleset)
       if (Object.keys(tools).length === 0) return
-      return codeMode.describeCatalog(tools, Object.keys(yield* mcp.clients()).map(McpCatalog.sanitize))
+      return codeMode.describeCatalog(tools, yield* mcpTool.servers())
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
@@ -447,6 +447,7 @@ export const node = LayerNode.make({
     Truncate.node,
     RuntimeFlags.node,
     MCP.node,
+    McpTool.node,
     Database.node,
     Ripgrep.node,
   ],

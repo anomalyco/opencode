@@ -632,10 +632,13 @@ const layer = Layer.effect(
       if (!result.mcpClient) {
         yield* closeClient(s, name)
         delete s.clients[name]
+        yield* events.publish(ToolsChanged, { server: name })
         return result.status
       }
 
-      return yield* storeClient(s, name, result.mcpClient, result.defs!, result.instructions, mcp.timeout)
+      const status = yield* storeClient(s, name, result.mcpClient, result.defs!, result.instructions, mcp.timeout)
+      yield* events.publish(ToolsChanged, { server: name })
+      return status
     })
 
     const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info) {
@@ -656,6 +659,7 @@ const layer = Layer.effect(
       yield* closeClient(s, name)
       delete s.clients[name]
       s.status[name] = { status: "disabled" }
+      yield* events.publish(ToolsChanged, { server: name })
     })
 
     function requestTimeout(s: State, name: string, configured: McpEntry | undefined, fallback?: number) {
