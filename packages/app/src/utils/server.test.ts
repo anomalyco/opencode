@@ -20,4 +20,15 @@ describe("authTokenFromCredentials", () => {
   test("encodes credentials with the default username", () => {
     expect(authTokenFromCredentials({ password: "secret" })).toBe(btoa("opencode:secret"))
   })
+
+  test("encodes unicode credentials as UTF-8", () => {
+    expect(authTokenFromCredentials({ password: "päss" })).toBe(
+      Buffer.from("opencode:päss", "utf8").toString("base64"),
+    )
+  })
+
+  test("round trips multibyte credentials", () => {
+    const token = authTokenFromCredentials({ username: "用户", password: "秘密🔐" })
+    expect(authFromToken(token)).toEqual({ username: "用户", password: "秘密🔐" })
+  })
 })
