@@ -1384,6 +1384,26 @@ export type SessionViewInput = { readonly sessionID: Session.ID; readonly idle: 
 export type SessionViewOutput = void
 export type SessionViewOperation<E = never> = (input: SessionViewInput) => Effect.Effect<SessionViewOutput, E>
 
+export type SessionActivateInput = { readonly sessionID: Session.ID }
+export type SessionActivateOutput = {
+  readonly outcome: "activated" | "none"
+  readonly client?:
+    | {
+        readonly id: string & Brand.Brand<"Client.ID">
+        readonly kind: "tui" | "desktop" | "web" | "other"
+        readonly name?: string | undefined
+        readonly sessions: ReadonlyArray<Session.ID>
+        readonly focused: boolean
+        readonly focusedAt: number
+        readonly updatedAt: number
+        readonly pid?: number | undefined
+      }
+    | undefined
+}
+export type SessionActivateOperation<E = never> = (
+  input: SessionActivateInput,
+) => Effect.Effect<SessionActivateOutput, E>
+
 export interface SessionApi<E = never> {
   readonly list: SessionListOperation<E>
   readonly stats: SessionStatsOperation<E>
@@ -1438,6 +1458,7 @@ export interface SessionApi<E = never> {
   }
   readonly environment: SessionEnvironmentOperation<E>
   readonly view: SessionViewOperation<E>
+  readonly activate: SessionActivateOperation<E>
 }
 
 export type MessageListInput = {
@@ -1716,6 +1737,81 @@ export interface CredentialApi<E = never> {
   readonly update: CredentialUpdateOperation<E>
   readonly activate: CredentialActivateOperation<E>
   readonly remove: CredentialRemoveOperation<E>
+}
+
+export type ClientListOutput = ReadonlyArray<{
+  readonly id: string & Brand.Brand<"Client.ID">
+  readonly kind: "tui" | "desktop" | "web" | "other"
+  readonly name?: string | undefined
+  readonly sessions: ReadonlyArray<Session.ID>
+  readonly focused: boolean
+  readonly focusedAt: number
+  readonly updatedAt: number
+  readonly pid?: number | undefined
+}>
+export type ClientListOperation<E = never> = () => Effect.Effect<ClientListOutput, E>
+
+export type ClientRegisterInput = {
+  readonly kind: "tui" | "desktop" | "web" | "other"
+  readonly name?: string | undefined
+  readonly sessions?: ReadonlyArray<Session.ID> | undefined
+  readonly focused?: boolean | undefined
+  readonly pid?: number | undefined
+}
+export type ClientRegisterOutput = {
+  readonly id: string & Brand.Brand<"Client.ID">
+  readonly kind: "tui" | "desktop" | "web" | "other"
+  readonly name?: string | undefined
+  readonly sessions: ReadonlyArray<Session.ID>
+  readonly focused: boolean
+  readonly focusedAt: number
+  readonly updatedAt: number
+  readonly pid?: number | undefined
+}
+export type ClientRegisterOperation<E = never> = (input: ClientRegisterInput) => Effect.Effect<ClientRegisterOutput, E>
+
+export type ClientGetInput = { readonly clientID: string & Brand.Brand<"Client.ID"> }
+export type ClientGetOutput = {
+  readonly id: string & Brand.Brand<"Client.ID">
+  readonly kind: "tui" | "desktop" | "web" | "other"
+  readonly name?: string | undefined
+  readonly sessions: ReadonlyArray<Session.ID>
+  readonly focused: boolean
+  readonly focusedAt: number
+  readonly updatedAt: number
+  readonly pid?: number | undefined
+}
+export type ClientGetOperation<E = never> = (input: ClientGetInput) => Effect.Effect<ClientGetOutput, E>
+
+export type ClientUpdateInput = {
+  readonly clientID: string & Brand.Brand<"Client.ID">
+  readonly name?: string | undefined
+  readonly sessions?: ReadonlyArray<Session.ID> | undefined
+  readonly focused?: boolean | undefined
+  readonly pid?: number | undefined
+}
+export type ClientUpdateOutput = {
+  readonly id: string & Brand.Brand<"Client.ID">
+  readonly kind: "tui" | "desktop" | "web" | "other"
+  readonly name?: string | undefined
+  readonly sessions: ReadonlyArray<Session.ID>
+  readonly focused: boolean
+  readonly focusedAt: number
+  readonly updatedAt: number
+  readonly pid?: number | undefined
+}
+export type ClientUpdateOperation<E = never> = (input: ClientUpdateInput) => Effect.Effect<ClientUpdateOutput, E>
+
+export type ClientRemoveInput = { readonly clientID: string & Brand.Brand<"Client.ID"> }
+export type ClientRemoveOutput = void
+export type ClientRemoveOperation<E = never> = (input: ClientRemoveInput) => Effect.Effect<ClientRemoveOutput, E>
+
+export interface ClientApi<E = never> {
+  readonly list: ClientListOperation<E>
+  readonly register: ClientRegisterOperation<E>
+  readonly get: ClientGetOperation<E>
+  readonly update: ClientUpdateOperation<E>
+  readonly remove: ClientRemoveOperation<E>
 }
 
 export type ProjectListOutput = ReadonlyArray<Project.Info>
@@ -2322,6 +2418,7 @@ export interface AppApi<E = never> {
   readonly integration: IntegrationApi<E>
   readonly mcp: McpApi<E>
   readonly credential: CredentialApi<E>
+  readonly client: ClientApi<E>
   readonly project: ProjectApi<E>
   readonly form: FormApi<E>
   readonly permission: PermissionApi<E>

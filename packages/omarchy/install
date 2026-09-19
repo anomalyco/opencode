@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+src=$(cd "$(dirname "$0")" && pwd)
+dest="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/simon.opencode"
+
+mkdir -p "$dest"
+rsync -a --delete \
+  --exclude install \
+  --exclude '__pycache__/' \
+  --exclude '*.pyc' \
+  "$src/" "$dest/"
+
+echo "Installed $src -> $dest"

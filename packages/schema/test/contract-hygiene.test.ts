@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { DateTime, Schema } from "effect"
 import { Agent } from "../src/agent.js"
+import { Client } from "../src/client.js"
 import { ConfigAgent } from "../src/config/agent.js"
 import { ConfigProvider } from "../src/config/provider.js"
 import { FileSystem } from "../src/filesystem.js"
@@ -160,6 +161,7 @@ describe("contract hygiene", () => {
   test("current ID constructors expose create", () => {
     expect(Form.ID.create()).toStartWith("frm_")
     expect(Pty.ID.create()).toStartWith("pty_")
+    expect(Client.ID.create()).toStartWith("client_")
   })
 
   test("VCS info omits unavailable branch names", () => {
@@ -169,6 +171,10 @@ describe("contract hygiene", () => {
   test("reusable public identifiers are stable and unique", () => {
     const identifiers = [
       Agent.Color,
+      Client.Info,
+      Client.CreateInput,
+      Client.UpdateInput,
+      Client.Activate,
       ConfigProvider.ModelSettings,
       ConfigProvider.Settings,
       FileSystem.Submatch,

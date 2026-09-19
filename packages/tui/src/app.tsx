@@ -48,6 +48,7 @@ import { PluginRouteMissing } from "./component/plugin-route-missing"
 import { EditorContextProvider } from "./context/editor"
 import { useEvent } from "./context/event"
 import { ClientProvider, useClient } from "./context/client"
+import { useClientPresence } from "./context/presence"
 import { StartupLoading } from "./component/startup-loading"
 import { DevToolsBar } from "./component/devtools-bar"
 import { Reconnecting } from "./component/reconnecting"
@@ -481,6 +482,7 @@ function App(props: { pair?: DialogPairCredentials }) {
   const keymap = Keymap.use()
   const event = useEvent()
   const client = useClient()
+  useClientPresence()
   const toast = useToast()
   const updater = useUpdateNotification()
   const theme = useTheme()

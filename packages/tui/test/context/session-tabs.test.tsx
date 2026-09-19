@@ -481,12 +481,14 @@ test("views a selected unread session only while focused", async () => {
   })
   try {
     setup.blur()
+    expect(setup.tabs.focused()).toBe(false)
     setup.route.navigate({ type: "session", sessionID: "first" })
     await wait(() => setup.tabs.current() === "first" && setup.tabs.status("first").unread === "activity")
     await Bun.sleep(20)
     expect(setup.views).toEqual([])
 
     setup.focus()
+    expect(setup.tabs.focused()).toBe(true)
     await wait(() => setup.views.includes("first"))
     setup.emit({
       id: "evt_viewed_first",

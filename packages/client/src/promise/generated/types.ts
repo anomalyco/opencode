@@ -216,6 +216,8 @@ export type FormExternalField = { key: string; type: "external"; url: string; ti
 
 export type FormValue = string | number | "Infinity" | "-Infinity" | "NaN" | boolean | Array<string>
 
+export type ClientKind = "tui" | "desktop" | "web" | "other"
+
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
 export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
@@ -1164,6 +1166,15 @@ export type TuiSessionSelect = {
   data: { sessionID: string }
 }
 
+export type ClientActivate = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "client.activate"
+  location?: LocationRef
+  data: { clientID: string; sessionID: string }
+}
+
 export type InstallationUpdated = {
   id: string
   created: number
@@ -1436,6 +1447,17 @@ export type FormMultiselectField = {
 }
 
 export type FormAnswer = { [x: string]: FormValue }
+
+export type ClientInfo = {
+  id: string
+  kind: ClientKind
+  name?: string
+  sessions: Array<string>
+  focused: boolean
+  focusedAt: number
+  updatedAt: number
+  pid?: number
+}
 
 export type ModelCompatibility = {
   reasoningField?: ModelReasoningField
@@ -1867,6 +1889,12 @@ export type FormField =
   | FormExternalField
 
 export type FormState = { status: "pending" } | { status: "answered"; answer: FormAnswer } | { status: "cancelled" }
+
+export type ClientActivate2 = { outcome: "activated" | "none"; client?: ClientInfo }
+
+export type ClientListResponse = { data: Array<ClientInfo> }
+
+export type ClientResponse = { data: ClientInfo }
 
 export type FormField1 =
   | FormStringField1
@@ -2443,6 +2471,7 @@ export type V2Event =
   | TuiCommandExecute
   | TuiToastShow
   | TuiSessionSelect
+  | ClientActivate
   | InstallationUpdated
   | InstallationUpdateAvailable
   | VcsBranchUpdated
@@ -2624,6 +2653,14 @@ export type McpServerNotFoundError = {
 }
 export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
+
+export type ClientNotFoundError = {
+  readonly _tag: "ClientNotFoundError"
+  readonly clientID: string
+  readonly message: string
+}
+export const isClientNotFoundError = (value: unknown): value is ClientNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ClientNotFoundError"
 
 export type ProjectNotFoundError = {
   readonly _tag: "ProjectNotFoundError"
@@ -5351,6 +5388,10 @@ export type SessionViewInput = {
 
 export type SessionViewOutput = void
 
+export type SessionActivateInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionActivateOutput = ClientActivate2
+
 export type MessageListInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly limit?: {
@@ -5663,6 +5704,86 @@ export type CredentialActivateOutput = void
 export type CredentialRemoveInput = { readonly credentialID: { readonly credentialID: string }["credentialID"] }
 
 export type CredentialRemoveOutput = void
+
+export type ClientListOutput = ClientListResponse["data"]
+
+export type ClientRegisterInput = {
+  readonly kind: {
+    readonly kind: "tui" | "desktop" | "web" | "other"
+    readonly name?: string
+    readonly sessions?: ReadonlyArray<string>
+    readonly focused?: boolean
+    readonly pid?: number
+  }["kind"]
+  readonly name?: {
+    readonly kind: "tui" | "desktop" | "web" | "other"
+    readonly name?: string
+    readonly sessions?: ReadonlyArray<string>
+    readonly focused?: boolean
+    readonly pid?: number
+  }["name"]
+  readonly sessions?: {
+    readonly kind: "tui" | "desktop" | "web" | "other"
+    readonly name?: string
+    readonly sessions?: ReadonlyArray<string>
+    readonly focused?: boolean
+    readonly pid?: number
+  }["sessions"]
+  readonly focused?: {
+    readonly kind: "tui" | "desktop" | "web" | "other"
+    readonly name?: string
+    readonly sessions?: ReadonlyArray<string>
+    readonly focused?: boolean
+    readonly pid?: number
+  }["focused"]
+  readonly pid?: {
+    readonly kind: "tui" | "desktop" | "web" | "other"
+    readonly name?: string
+    readonly sessions?: ReadonlyArray<string>
+    readonly focused?: boolean
+    readonly pid?: number
+  }["pid"]
+}
+
+export type ClientRegisterOutput = ClientResponse["data"]
+
+export type ClientGetInput = { readonly clientID: { readonly clientID: string }["clientID"] }
+
+export type ClientGetOutput = ClientResponse["data"]
+
+export type ClientUpdateInput = {
+  readonly clientID: { readonly clientID: string }["clientID"]
+  readonly name?: {
+    readonly name?: string
+    readonly sessions?: ReadonlyArray<string>
+    readonly focused?: boolean
+    readonly pid?: number
+  }["name"]
+  readonly sessions?: {
+    readonly name?: string
+    readonly sessions?: ReadonlyArray<string>
+    readonly focused?: boolean
+    readonly pid?: number
+  }["sessions"]
+  readonly focused?: {
+    readonly name?: string
+    readonly sessions?: ReadonlyArray<string>
+    readonly focused?: boolean
+    readonly pid?: number
+  }["focused"]
+  readonly pid?: {
+    readonly name?: string
+    readonly sessions?: ReadonlyArray<string>
+    readonly focused?: boolean
+    readonly pid?: number
+  }["pid"]
+}
+
+export type ClientUpdateOutput = ClientResponse["data"]
+
+export type ClientRemoveInput = { readonly clientID: { readonly clientID: string }["clientID"] }
+
+export type ClientRemoveOutput = void
 
 export type ProjectListOutput = Array<Project>
 

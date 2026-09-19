@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import {
   Agent,
+  Client,
   Config,
   Credential,
   FileSystem,
@@ -39,6 +40,7 @@ describe("public event manifest", () => {
     expect(EventManifest.Latest.get("agent.updated")).toBe(Agent.Event.Updated)
     expect(EventManifest.Server.get("mcp.status.changed")).toBe(McpEvent.StatusChanged)
     expect(EventManifest.Server.get("mcp.resources.changed")).toBe(McpEvent.ResourcesChanged)
+    expect(EventManifest.Server.get("client.activate")).toBe(Client.Event.Activate)
     expect(EventManifest.Server.get("session.created")).toBe(SessionEvent.Created)
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
     expect(EventManifest.Server.get("project.updated")).toBe(Project.Event.Updated)

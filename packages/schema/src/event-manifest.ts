@@ -2,6 +2,7 @@ export * as EventManifest from "./event-manifest.js"
 
 import { Schema } from "effect"
 import { Agent } from "./agent.js"
+import { Client } from "./client.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
 import { Credential } from "./credential.js"
@@ -74,6 +75,7 @@ export const ServerDefinitions = Event.inventory(
   // Current events the TUI consumes from the public stream.
   ...SessionStatusEvent.Definitions,
   ...TuiEvent.Definitions,
+  ...Client.Event.Definitions,
   ...InstallationEvent.Definitions,
   ...VcsEvent.Definitions,
   McpEvent.StatusChanged,
@@ -89,6 +91,7 @@ export const Definitions = Event.inventory(
   ...featureDefinitions,
   ...LspEvent.Definitions,
   ...TuiEvent.Definitions,
+  ...Client.Event.Definitions,
   ...McpEvent.Definitions,
   ...LegacyEventV1.Definitions,
   ...FileSystemV1.Event.Definitions,

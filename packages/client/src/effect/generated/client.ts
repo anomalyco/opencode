@@ -104,6 +104,8 @@ import type {
   SessionEnvironmentOutput,
   SessionViewInput,
   SessionViewOutput,
+  SessionActivateInput,
+  SessionActivateOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -156,6 +158,15 @@ import type {
   CredentialActivateOutput,
   CredentialRemoveInput,
   CredentialRemoveOutput,
+  ClientListOutput,
+  ClientRegisterInput,
+  ClientRegisterOutput,
+  ClientGetInput,
+  ClientGetOutput,
+  ClientUpdateInput,
+  ClientUpdateOutput,
+  ClientRemoveInput,
+  ClientRemoveOutput,
   ProjectListOutput,
   ProjectUpdateInput,
   ProjectUpdateOutput,
@@ -737,6 +748,11 @@ const EndpointSessionView = (raw: RawClient["server.session"]) => (input: Sessio
     ),
   )
 
+const EndpointSessionActivate = (raw: RawClient["server.session"]) => (input: SessionActivateInput) =>
+  preserveEffect<SessionActivateOutput>()(
+    raw["session.activate"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   list: EndpointSessionList(raw),
   stats: EndpointSessionStats(raw),
@@ -791,6 +807,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   },
   environment: EndpointSessionEnvironment(raw),
   view: EndpointSessionView(raw),
+  activate: EndpointSessionActivate(raw),
 })
 
 const EndpointMessageList = (raw: RawClient["server.message"]) => (input: MessageListInput) =>
@@ -1030,6 +1047,62 @@ const adaptGroupCredential = (raw: RawClient["server.credential"]) => ({
   update: EndpointCredentialUpdate(raw),
   activate: EndpointCredentialActivate(raw),
   remove: EndpointCredentialRemove(raw),
+})
+
+const EndpointClientList = (raw: RawClient["server.client"]) => () =>
+  preserveEffect<ClientListOutput>()(
+    raw["client.list"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointClientRegister = (raw: RawClient["server.client"]) => (input: ClientRegisterInput) =>
+  preserveEffect<ClientRegisterOutput>()(
+    raw["client.register"]({
+      payload: {
+        kind: input["kind"],
+        name: input["name"],
+        sessions: input["sessions"],
+        focused: input["focused"],
+        pid: input["pid"],
+      },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointClientGet = (raw: RawClient["server.client"]) => (input: ClientGetInput) =>
+  preserveEffect<ClientGetOutput>()(
+    raw["client.get"]({ params: { clientID: input["clientID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointClientUpdate = (raw: RawClient["server.client"]) => (input: ClientUpdateInput) =>
+  preserveEffect<ClientUpdateOutput>()(
+    raw["client.update"]({
+      params: { clientID: input["clientID"] },
+      payload: { name: input["name"], sessions: input["sessions"], focused: input["focused"], pid: input["pid"] },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointClientRemove = (raw: RawClient["server.client"]) => (input: ClientRemoveInput) =>
+  preserveEffect<ClientRemoveOutput>()(
+    raw["client.remove"]({ params: { clientID: input["clientID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupClient = (raw: RawClient["server.client"]) => ({
+  list: EndpointClientList(raw),
+  register: EndpointClientRegister(raw),
+  get: EndpointClientGet(raw),
+  update: EndpointClientUpdate(raw),
+  remove: EndpointClientRemove(raw),
 })
 
 const EndpointProjectList = (raw: RawClient["server.project"]) => () =>
@@ -1539,6 +1612,7 @@ const adaptClient = (raw: RawClient) => ({
   integration: adaptGroupIntegration(raw["server.integration"]),
   mcp: adaptGroupMcp(raw["server.mcp"]),
   credential: adaptGroupCredential(raw["server.credential"]),
+  client: adaptGroupClient(raw["server.client"]),
   project: adaptGroupProject(raw["server.project"]),
   form: adaptGroupForm(raw["server.form"]),
   permission: adaptGroupPermission(raw["server.permission"]),

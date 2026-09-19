@@ -98,6 +98,8 @@ import type {
   SessionEnvironmentOutput,
   SessionViewInput,
   SessionViewOutput,
+  SessionActivateInput,
+  SessionActivateOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -150,6 +152,15 @@ import type {
   CredentialActivateOutput,
   CredentialRemoveInput,
   CredentialRemoveOutput,
+  ClientListOutput,
+  ClientRegisterInput,
+  ClientRegisterOutput,
+  ClientGetInput,
+  ClientGetOutput,
+  ClientUpdateInput,
+  ClientUpdateOutput,
+  ClientRemoveInput,
+  ClientRemoveOutput,
   ProjectListOutput,
   ProjectUpdateInput,
   ProjectUpdateOutput,
@@ -1063,6 +1074,17 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      activate: (input: SessionActivateInput, requestOptions?: RequestOptions) =>
+        request<SessionActivateOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/activate`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
     },
     message: {
       list: (input: MessageListInput, requestOptions?: RequestOptions) =>
@@ -1399,6 +1421,65 @@ export function make(options: ClientOptions) {
             path: `/api/credential/${encodeURIComponent(input.credentialID)}`,
             successStatus: 204,
             declaredStatuses: [400, 401],
+            empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    client: {
+      list: (requestOptions?: RequestOptions) =>
+        request<{ readonly data: ClientListOutput }>(
+          { method: "GET", path: `/api/client`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ).then((value) => value.data),
+      register: (input: ClientRegisterInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ClientRegisterOutput }>(
+          {
+            method: "POST",
+            path: `/api/client`,
+            body: {
+              kind: input["kind"],
+              name: input["name"],
+              sessions: input["sessions"],
+              focused: input["focused"],
+              pid: input["pid"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 409],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      get: (input: ClientGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ClientGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/client/${encodeURIComponent(input.clientID)}`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      update: (input: ClientUpdateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ClientUpdateOutput }>(
+          {
+            method: "PUT",
+            path: `/api/client/${encodeURIComponent(input.clientID)}`,
+            body: { name: input["name"], sessions: input["sessions"], focused: input["focused"], pid: input["pid"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      remove: (input: ClientRemoveInput, requestOptions?: RequestOptions) =>
+        request<ClientRemoveOutput>(
+          {
+            method: "DELETE",
+            path: `/api/client/${encodeURIComponent(input.clientID)}`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
             empty: true,
           },
           requestOptions,

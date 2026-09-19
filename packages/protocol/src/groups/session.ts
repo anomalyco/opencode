@@ -1,6 +1,7 @@
 import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { PromptInput } from "@opencode/schema/prompt-input"
+import { Client } from "@opencode/schema/client"
 import { Session } from "@opencode/schema/session"
 import { SessionStats } from "@opencode/schema/session-stats"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
@@ -891,6 +892,20 @@ export const makeSessionGroup = <
           identifier: "session.view",
           summary: "View session",
           description: "Mark the idle transition observed by the viewer as viewed.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.activate", "/api/session/:sessionID/activate", {
+        params: { sessionID: Session.ID },
+        success: Client.Activate,
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.activate",
+          summary: "Activate session",
+          description:
+            "Ask the best live UI client to show this session. Returns outcome none when no client can take it, so the caller may launch a fallback.",
         }),
       ),
     )

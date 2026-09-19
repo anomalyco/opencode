@@ -8,6 +8,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
 import { EventLogger } from "@opencode/core/event-logger"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
+import { Client } from "@opencode/core/client"
 import { Credential } from "@opencode/core/credential"
 import { Config } from "@opencode/core/config"
 import { PermissionSaved } from "@opencode/core/permission/saved"
@@ -66,6 +67,7 @@ const applicationServiceNodes = [
   PtyTicket.node,
   PersistentPty.node,
   Credential.node,
+  Client.node,
   WellKnown.node,
   PtyEnvironment.node,
   LocationServiceMap.node,

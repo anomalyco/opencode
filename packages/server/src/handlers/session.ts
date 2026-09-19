@@ -1,3 +1,4 @@
+import { Client } from "@opencode/core/client"
 import { Session } from "@opencode/core/session"
 import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
@@ -34,6 +35,7 @@ function missingForm(id: Form.ID) {
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
+    const client = yield* Client.Service
     const transfer = yield* SessionTransfer.Service
     const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
       const form = yield* Form.Service
@@ -201,6 +203,13 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             .view({ sessionID: ctx.params.sessionID, idle: DateTime.toEpochMillis(ctx.payload.idle) })
             .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.activate",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          return yield* client.activate(ctx.params.sessionID)
         }),
       )
       .handle(

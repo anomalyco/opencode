@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "simon.opencode",
+  "name": "OpenCode",
+  "version": "0.1.0",
+  "author": "simon",
+  "license": "MIT",
+  "description": "OpenCode sessions from the shared background service: running work, recent threads, and a terminal attach fallback.",
+  "kinds": ["bar-widget"],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "OpenCode",
+    "description": "Live OpenCode sessions from the shared server, with latest or project grouping and recent usage.",
+    "category": "AI",
+    "aliases": ["opencode", "sessions"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 4,
+      "sessionLimit": 20
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 2,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 4
+      },
+      {
+        "key": "sessionLimit",
+        "type": "integer",
+        "label": "Recent session limit",
+        "min": 5,
+        "max": 50,
+        "step": 5,
+        "defaultValue": 20
+      }
+    ]
+  }
+}

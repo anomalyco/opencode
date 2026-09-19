@@ -4807,6 +4807,68 @@
         }
       }
     },
+    "/api/session/{sessionID}/activate": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.activate",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Client.Activate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Client.Activate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Ask the best live UI client to show this session. Returns outcome none when no client can take it, so the caller may launch a fallback.",
+        "summary": "Activate session"
+      }
+    },
     "/api/session/{sessionID}/message": {
       "get": {
         "tags": ["session"],
@@ -7317,6 +7379,293 @@
         },
         "description": "Activate a stored integration credential.",
         "summary": "Activate credential"
+      }
+    },
+    "/api/client": {
+      "get": {
+        "tags": ["client"],
+        "operationId": "client.list",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ClientListResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List UI clients currently advertising presence on this server.",
+        "summary": "List clients"
+      },
+      "post": {
+        "tags": ["client"],
+        "operationId": "client.register",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ClientResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Register an ephemeral UI client so session activation can target it.",
+        "summary": "Register client",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Client.CreateInput"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/client/{clientID}": {
+      "get": {
+        "tags": ["client"],
+        "operationId": "client.get",
+        "parameters": [
+          {
+            "name": "clientID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^client_"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ClientResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ClientNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Get one registered UI client.",
+        "summary": "Get client"
+      },
+      "put": {
+        "tags": ["client"],
+        "operationId": "client.update",
+        "parameters": [
+          {
+            "name": "clientID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^client_"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "ClientResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ClientNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update the sessions and focus state advertised by one UI client.",
+        "summary": "Update client",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Client.UpdateInput"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["client"],
+        "operationId": "client.remove",
+        "parameters": [
+          {
+            "name": "clientID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^client_"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ClientNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Unregister a UI client.",
+        "summary": "Remove client"
       }
     },
     "/api/project": {
@@ -12600,6 +12949,151 @@
           }
         },
         "required": ["_tag", "agentID", "message"],
+        "additionalProperties": false
+      },
+      "Client.Activate": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": ["activated", "none"]
+          },
+          "client": {
+            "$ref": "#/components/schemas/Client.Info"
+          }
+        },
+        "required": ["outcome"],
+        "additionalProperties": false
+      },
+      "Client.CreateInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/Client.Kind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^ses"
+            }
+          },
+          "focused": {
+            "type": "boolean"
+          },
+          "pid": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["kind"],
+        "additionalProperties": false
+      },
+      "Client.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^client_"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Client.Kind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^ses"
+            }
+          },
+          "focused": {
+            "type": "boolean"
+          },
+          "focusedAt": {
+            "type": "number"
+          },
+          "updatedAt": {
+            "type": "number"
+          },
+          "pid": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["id", "kind", "sessions", "focused", "focusedAt", "updatedAt"],
+        "additionalProperties": false
+      },
+      "Client.Kind": {
+        "type": "string",
+        "enum": ["tui", "desktop", "web", "other"]
+      },
+      "Client.UpdateInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^ses"
+            }
+          },
+          "focused": {
+            "type": "boolean"
+          },
+          "pid": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "ClientListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Client.Info"
+            }
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
+      "ClientNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ClientNotFoundError"]
+          },
+          "clientID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "clientID", "message"],
+        "additionalProperties": false
+      },
+      "ClientResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Client.Info"
+          }
+        },
+        "required": ["data"],
         "additionalProperties": false
       },
       "Command.Info": {
@@ -19093,6 +19587,10 @@
     },
     {
       "name": "credential"
+    },
+    {
+      "name": "client",
+      "description": "Ephemeral UI client presence for session activation."
     },
     {
       "name": "project",
