@@ -104,6 +104,41 @@ describe("Go usage breakdown", () => {
     expect(sources).toEqual(original)
   })
 
+  test("merges renamed model aliases at the same rate", () => {
+    const result = buildLiteUsageBreakdown({
+      usage: 300,
+      limit: 1_000,
+      sources: [
+        {
+          model: "deepseek-flash",
+          name: "DeepSeek V4.1 Flash",
+          cost: 100,
+          quotaCost: 100,
+          multiplier: 1,
+          estimated: false,
+        },
+        {
+          model: "deepseek-v4.1-flash",
+          name: "DeepSeek V4.1 Flash",
+          cost: 200,
+          quotaCost: 200,
+          multiplier: 1,
+          estimated: false,
+        },
+      ],
+    })
+
+    expect(result.rows).toHaveLength(1)
+    expect(result.rows[0]).toMatchObject({
+      model: "deepseek-v4.1-flash",
+      name: "DeepSeek V4.1 Flash",
+      cost: 300,
+      quotaCost: 300,
+      multiplier: 1,
+      contributionPercent: 30,
+    })
+  })
+
   test("keeps distinct model IDs with the same display name separate", () => {
     const result = buildLiteUsageBreakdown({
       usage: 300,
