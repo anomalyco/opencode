@@ -27,6 +27,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
+const DOOM_LOOP_MAX_BLOCK = 4
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
@@ -254,6 +255,36 @@ const layer = Layer.effect(
 
       const isFilePart = (value: unknown): value is SessionV1.FilePart => Schema.is(SessionV1.FilePart)(value)
 
+      // Doom-loop detection covers periodic cycles, not just consecutive identical
+      // calls: a model repeating the block [lookup, search] three times never
+      // satisfies a last-three-parts comparison. Check whether the trailing run
+      // of settled tool calls ends with DOOM_LOOP_THRESHOLD repetitions of any
+      // block of length 1..DOOM_LOOP_MAX_BLOCK.
+      const isDoomLoop = Effect.fn("SessionProcessor.isDoomLoop")(function* (
+        messageID: SessionV1.Assistant["id"],
+      ) {
+        const parts = yield* MessageV2.parts(messageID).pipe(Effect.provideService(Database.Service, database))
+        const keys = parts.map((part) =>
+          part.type === "tool" && part.state.status !== "pending"
+            ? `${part.tool}:${JSON.stringify(part.state.input)}`
+            : undefined,
+        )
+        for (let block = 1; block <= DOOM_LOOP_MAX_BLOCK; block++) {
+          const window = keys.slice(-(block * DOOM_LOOP_THRESHOLD))
+          if (window.length !== block * DOOM_LOOP_THRESHOLD) continue
+          if (window.some((key) => key === undefined)) continue
+          let repeats = true
+          for (let i = block; i < window.length; i++) {
+            if (window[i] !== window[i - block]) {
+              repeats = false
+              break
+            }
+          }
+          if (repeats) return true
+        }
+        return false
+      })
+
       const toolResultOutput = (
         value: Extract<StreamEvent, { type: "tool-result" }>,
       ): { title: string; metadata: Record<string, any>; output: string; attachments?: SessionV1.FilePart[] } => {
@@ -350,23 +381,7 @@ const layer = Layer.effect(
                 : value.providerMetadata,
             }))
 
-            const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
-              Effect.provideService(Database.Service, database),
-            )
-            const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
-
-            if (
-              recentParts.length !== DOOM_LOOP_THRESHOLD ||
-              !recentParts.every(
-                (part) =>
-                  part.type === "tool" &&
-                  part.tool === value.name &&
-                  part.state.status !== "pending" &&
-                  JSON.stringify(part.state.input) === JSON.stringify(input),
-              )
-            ) {
-              return
-            }
+            if (!(yield* isDoomLoop(ctx.assistantMessage.id))) return
 
             const agent = yield* agents.get(ctx.assistantMessage.agent)
             yield* permission.ask({
