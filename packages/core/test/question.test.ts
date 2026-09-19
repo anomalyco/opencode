@@ -20,16 +20,18 @@ const question: QuestionV2.Info = {
 const waitForAsk = Effect.fn("QuestionV2Test.waitForAsk")(function* (
   service: QuestionV2.Interface,
   input: QuestionV2.AskInput,
+  scope?: Scope.Scope,
 ) {
   const events = yield* EventV2.Service
+  const testScope = scope ?? (yield* Scope.Scope)
   const asked = yield* Deferred.make<QuestionV2.Request>()
   const unsubscribe = yield* events.listen((event) =>
-    event.type === QuestionV2.Event.Asked.type
+    event.type === QuestionV2.Event.Asked.type && (event.data as QuestionV2.Request).sessionID === input.sessionID
       ? Deferred.succeed(asked, event.data as QuestionV2.Request).pipe(Effect.asVoid)
       : Effect.void,
   )
   yield* Effect.addFinalizer(() => unsubscribe)
-  const fiber = yield* service.ask(input).pipe(Effect.forkScoped)
+  const fiber = yield* service.ask(input).pipe(Effect.forkIn(testScope))
   return { fiber, request: yield* Deferred.await(asked) }
 })
 
@@ -109,6 +111,61 @@ describe("QuestionV2", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(exit.cause.toString()).toContain("QuestionV2.RejectedError")
       yield* Scope.close(secondScope, Exit.void)
+    }),
+  )
+
+  it.effect("publishes rejection and cleans up pending on fiber interrupt", () =>
+    Effect.gen(function* () {
+      const service = yield* QuestionV2.Service
+      const events = yield* EventV2.Service
+      const published: EventV2.Payload[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === QuestionV2.Event.Rejected.type) published.push(event)
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const { fiber, request } = yield* waitForAsk(service, { sessionID, questions: [question] })
+
+      yield* Fiber.interrupt(fiber)
+      expect(yield* service.list()).toEqual([])
+      expect(published.map((event) => event.data)).toEqual([{ sessionID, requestID: request.id }])
+    }),
+  )
+
+  it.effect("cancels pending requests for a specific session and publishes rejection", () =>
+    Effect.gen(function* () {
+      const service = yield* QuestionV2.Service
+      const events = yield* EventV2.Service
+      const published: EventV2.Payload[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === QuestionV2.Event.Rejected.type) published.push(event)
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      const scope = yield* Scope.Scope
+      const targetSession = SessionV2.ID.make("ses_target")
+      const otherSession = SessionV2.ID.make("ses_other")
+
+      const target = yield* waitForAsk(service, { sessionID: targetSession, questions: [question] }, scope)
+      const other = yield* waitForAsk(service, { sessionID: otherSession, questions: [question] }, scope)
+
+      expect(yield* service.list()).toHaveLength(2)
+
+      yield* service.cancel(targetSession)
+
+      const exit = yield* Fiber.await(target.fiber)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(exit.cause.toString()).toContain("QuestionV2.RejectedError")
+
+      expect(published.map((event) => event.data)).toEqual([{ sessionID: targetSession, requestID: target.request.id }])
+
+      const remaining = yield* service.list()
+      expect(remaining).toEqual([other.request])
+
+      yield* service.reject(other.request.id)
     }),
   )
 })
