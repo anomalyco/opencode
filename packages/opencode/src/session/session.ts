@@ -377,13 +377,20 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   }
 
   const contextTokens = inputTokens
+  // `experimentalOver200K` is the legacy spelling of the *lowest* context tier, from
+  // when 200k was the only threshold in the catalog. It is only a fallback for data
+  // that has no `tiers` at all — if `tiers` is present, a request that matches no tier
+  // is genuinely below every threshold and must bill at the base price. Consulting the
+  // hardcoded 200_000 there would charge the high rate for every request between 200k
+  // and the model's real threshold (272k for the GPT-5.6 family, 256k, 512k, ...).
+  const contextTiers = input.model.cost?.tiers?.filter((item) => item.tier.type === "context") ?? []
   const costInfo =
-    input.model.cost?.tiers
-      ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
-      .sort((a, b) => b.tier.size - a.tier.size)[0] ??
-    (input.model.cost?.experimentalOver200K && contextTokens > 200_000
-      ? input.model.cost.experimentalOver200K
-      : input.model.cost)
+    contextTiers.length > 0
+      ? (contextTiers.filter((item) => contextTokens > item.tier.size).sort((a, b) => b.tier.size - a.tier.size)[0] ??
+        input.model.cost)
+      : input.model.cost?.experimentalOver200K && contextTokens > 200_000
+        ? input.model.cost.experimentalOver200K
+        : input.model.cost
   const totalNanoAiu = input.metadata?.["copilot"]?.["totalNanoAiu"]
   return {
     cost:
