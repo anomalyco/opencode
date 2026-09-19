@@ -42,6 +42,7 @@ export type StreamInput = {
   system: string[]
   messages: ModelMessage[]
   small?: boolean
+  purpose?: "foreground" | "final" | "helper"
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
@@ -223,7 +224,7 @@ const live: Layer.Layer<
 
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
-      if (flags.experimentalNativeLlm) {
+      if (flags.experimentalNativeLlm && !prepared.requiresSdk) {
         const native = LLMNativeRuntime.stream({
           model: input.model,
           provider: item,

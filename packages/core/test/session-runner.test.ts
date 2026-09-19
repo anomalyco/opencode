@@ -555,6 +555,24 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  it.effect("rejects native advisor before inference on the V2 runner", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agents = yield* AgentV2.Service
+      const session = yield* SessionV2.Service
+      yield* agents.transform((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.advisor = { model: "claude-opus-4-6", maxUses: 3 }
+        }),
+      )
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Consult advisor" }), resume: false })
+      const exit = yield* session.resume(sessionID).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("V1 SDK-backed")
+      expect(requests).toHaveLength(0)
+    }),
+  )
+
   it.effect("advertises and executes a globally attached application tool", () =>
     Effect.gen(function* () {
       yield* setup

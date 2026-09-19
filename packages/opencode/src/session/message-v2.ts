@@ -18,6 +18,7 @@ import {
 
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
+import { SessionAdvisor } from "./advisor"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { NotFoundError } from "@/storage/storage"
@@ -124,14 +125,16 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
 
 function providerMeta(metadata: Record<string, any> | undefined) {
   if (!metadata) return undefined
-  const { providerExecuted: _, ...rest } = metadata
+  const { providerExecuted: _, opencodeAdvisor: __, ...rest } = metadata
   return Object.keys(rest).length > 0 ? rest : undefined
 }
 
-export const toModelMessagesEffect = Effect.fnUntraced(function* (
+type ModelMessageOptions = { stripMedia?: boolean; toolOutputMaxChars?: number; advisorPending?: ReadonlySet<string> }
+
+const toOrdinaryModelMessagesEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: ModelMessageOptions,
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
@@ -414,10 +417,225 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   )
 })
 
+export const toModelMessagesEffect = Effect.fnUntraced(function* (
+  input: WithParts[],
+  model: Provider.Model,
+  options?: ModelMessageOptions,
+) {
+  const hasAdvisor = (part: SessionV1.Part) =>
+    (part.type === "tool" || part.type === "step-finish") && part.metadata?.opencodeAdvisor !== undefined
+  if (!input.some((message) => message.parts.some(hasAdvisor))) {
+    return yield* toOrdinaryModelMessagesEffect(input, model, options)
+  }
+
+  const key = (sessionID: string, id: string) => `${sessionID}\0${id}`
+  // Decode each advisor part once; every later pass reads from these maps.
+  const calls = new Map<string, { part: SessionV1.ToolPart; call: SessionAdvisor.Call }>()
+  const decoded = new Map<string, SessionAdvisor.Call | undefined>()
+  const receipts = new Set<string>()
+  const callPositions = new Set<string>()
+  const ledgers = new Map<string, SessionAdvisor.Response[]>()
+  for (const message of input) {
+    for (const part of message.parts) {
+      if (part.type !== "tool" || !hasAdvisor(part)) continue
+      const call = SessionAdvisor.call(part)
+      decoded.set(part.id, call)
+      if (call && part.metadata?.providerExecuted) calls.set(key(part.sessionID, part.callID), { part, call })
+    }
+    const byID = new Map(message.parts.map((part) => [part.id, part]))
+    const responses = message.parts.flatMap((part) => {
+      if (part.type !== "step-finish") return []
+      const response = SessionAdvisor.response(part)
+      return response && !response.interrupted ? [response] : []
+    })
+    ledgers.set(message.info.id, responses)
+    for (const response of responses) {
+      for (const entry of response.entries) {
+        if (entry.type === "advisor-result") receipts.add(key(message.info.sessionID, entry.callID))
+        if (entry.type === "part") {
+          const part = byID.get(entry.partID)
+          if (part?.type === "tool" && part.metadata?.providerExecuted && decoded.get(part.id)) {
+            callPositions.add(key(part.sessionID, part.callID))
+          }
+        }
+      }
+    }
+  }
+  const compatible = (origin: SessionAdvisor.Response | SessionAdvisor.Call) =>
+    origin.providerID === model.providerID &&
+    origin.executorModelID === model.api.id &&
+    model.api.npm === "@ai-sdk/anthropic" &&
+    origin.endpoint.replace(/\/+$/, "") === model.api.url.replace(/\/+$/, "")
+
+  // A completed consultation whose native pair cannot be replayed still carries its advice.
+  const marker = (call: SessionAdvisor.Call | undefined) => {
+    if (call?.state === "pending" || call?.state === "abandoned") return SessionAdvisor.interrupted
+    if (call?.state === "completed") return SessionAdvisor.display(call.result)
+    return SessionAdvisor.unavailable
+  }
+  const projected = (message: WithParts): WithParts => ({
+    ...message,
+    parts: message.parts.map((part) => {
+      if (part.type !== "tool" || !hasAdvisor(part)) return part
+      return {
+        id: part.id,
+        sessionID: part.sessionID,
+        messageID: part.messageID,
+        type: "text" as const,
+        text: marker(decoded.get(part.id)),
+      }
+    }),
+  })
+  const skipped = (message: WithParts) =>
+    message.info.role === "assistant" &&
+    message.info.error !== undefined &&
+    !(
+      AbortedError.isInstance(message.info.error) &&
+      message.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+    )
+
+  const output: ModelMessage[] = []
+  // Calls actually replayed as native tool-calls; a receipt may only pair with one of these.
+  const emitted = new Set<string>()
+  let ordinary: WithParts[] = []
+  for (const message of input) {
+    const responses = ledgers.get(message.info.id) ?? []
+    const parts = new Map(message.parts.map((part) => [part.id, part]))
+    const resolvable = responses.every((response) =>
+      response.entries.every((entry) => entry.type !== "part" || parts.has(entry.partID)),
+    )
+    if (message.info.role !== "assistant" || responses.length === 0 || !resolvable) {
+      ordinary.push(projected(message))
+      continue
+    }
+    if (skipped(message)) continue
+    if (ordinary.length) {
+      output.push(...(yield* toOrdinaryModelMessagesEffect(ordinary, model, options)))
+      ordinary = []
+    }
+    const signed = message.parts.some(
+      (part) => part.type === "reasoning" && part.metadata?.anthropic?.signature != null,
+    )
+    for (const response of responses) {
+      const content: Exclude<Extract<ModelMessage, { role: "assistant" }>["content"], string> = []
+      const tools: ModelMessage[] = []
+      const tail: ModelMessage[] = []
+      let batch: SessionV1.Part[] = []
+      const flush = function* () {
+        if (!batch.length) return
+        const converted = yield* toOrdinaryModelMessagesEffect(
+          [
+            {
+              info: message.info,
+              parts: batch.map((part) =>
+                part.type === "text" && part.text === "" && signed ? { ...part, text: " " } : part,
+              ),
+            },
+          ],
+          model,
+          options,
+        )
+        batch = []
+        for (const item of converted) {
+          if (item.role === "assistant") {
+            content.push(
+              ...(typeof item.content === "string" ? [{ type: "text" as const, text: item.content }] : item.content),
+            )
+            continue
+          }
+          // Tool results must directly follow the assistant turn; injected user media comes after all of them.
+          if (item.role === "tool") tools.push(item)
+          else tail.push(item)
+        }
+      }
+      for (const entry of response.entries) {
+        if (entry.type === "advisor-result") {
+          yield* flush()
+          const id = key(message.info.sessionID, entry.callID)
+          const found = calls.get(id)
+          if (!found) {
+            content.push({ type: "text", text: SessionAdvisor.unavailable })
+            continue
+          }
+          const { part, call } = found
+          if (!emitted.has(id)) {
+            // The call sits in an ordinary message, where its marker already rendered the advice.
+            if (!callPositions.has(id) && (ledgers.get(part.messageID)?.length ?? 0) === 0) continue
+            content.push({ type: "text", text: marker(call) })
+            continue
+          }
+          if (call.state !== "completed" || !compatible(response)) {
+            content.push({ type: "text", text: marker(call) })
+            continue
+          }
+          content.push({
+            type: "tool-result",
+            toolCallId: entry.callID,
+            toolName: "advisor",
+            output: {
+              type: call.result.type === "advisor_tool_result_error" ? "error-json" : "json",
+              value: call.result,
+            },
+          })
+          continue
+        }
+        const part = parts.get(entry.partID)!
+        if (part.type === "tool" && hasAdvisor(part)) {
+          yield* flush()
+          const call = decoded.get(part.id)
+          const id = key(part.sessionID, part.callID)
+          if (call?.state === "completed") {
+            if (!receipts.has(id)) {
+              // No receipt survived (crash before step-finish, compaction, revert): keep the advice as text.
+              content.push({ type: "text", text: SessionAdvisor.display(call.result) })
+              continue
+            }
+            if (compatible(response) && compatible(call)) {
+              emitted.add(id)
+              content.push({
+                type: "tool-call",
+                toolCallId: part.callID,
+                toolName: "advisor",
+                input: part.state.input,
+                providerExecuted: true,
+              })
+            }
+            continue
+          }
+          if (
+            call?.state === "pending" &&
+            options?.advisorPending?.has(part.callID) &&
+            compatible(response) &&
+            compatible(call)
+          ) {
+            emitted.add(id)
+            content.push({
+              type: "tool-call",
+              toolCallId: part.callID,
+              toolName: "advisor",
+              input: part.state.input,
+              providerExecuted: true,
+            })
+            continue
+          }
+          content.push({ type: "text", text: marker(call) })
+          continue
+        }
+        batch.push(part)
+      }
+      yield* flush()
+      if (content.length) output.push({ role: "assistant", content })
+      output.push(...tools, ...tail)
+    }
+  }
+  if (ordinary.length) output.push(...(yield* toOrdinaryModelMessagesEffect(ordinary, model, options)))
+  return output
+})
+
 export function toModelMessages(
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: ModelMessageOptions,
 ): Promise<ModelMessage[]> {
   return Effect.runPromise(toModelMessagesEffect(input, model, options))
 }

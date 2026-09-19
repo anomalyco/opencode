@@ -20,6 +20,34 @@ const it = testEffect(AppNodeBuilder.build(LayerNode.group([AgentV2.node, FSUtil
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigAgentPlugin.Plugin", () => {
+  it.effect("merges advisor document layers and preserves explicit disablement", () =>
+    Effect.gen(function* () {
+      const agents = yield* AgentV2.Service
+      const documents = [
+        {
+          agents: {
+            build: { advisor: { model: "claude-opus-4-6" } },
+            reviewer: { advisor: { model: "claude-opus-4-6", maxUses: 3 } },
+          },
+        },
+        { agents: { build: { advisor: { maxUses: 2 } }, reviewer: { advisor: false } } },
+      ]
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provideService(
+          Config.Service,
+          Config.Service.of({
+            entries: () =>
+              Effect.succeed(documents.map((info) => new Config.Document({ type: "document", info: decode(info) }))),
+          }),
+        ),
+      )
+      expect(yield* agents.get(AgentV2.ID.make("build"))).toMatchObject({
+        advisor: { model: "claude-opus-4-6", maxUses: 2 },
+      })
+      expect(yield* agents.get(AgentV2.ID.make("reviewer"))).toMatchObject({ advisor: false })
+    }),
+  )
+
   it.effect("matches POSIX paths against home-relative permissions", () =>
     Effect.gen(function* () {
       const permissions = yield* loadHomePermissions("/home/test")

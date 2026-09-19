@@ -3,6 +3,7 @@ export * as ConfigAgentV1 from "./agent"
 import { Schema, SchemaGetter } from "effect"
 import { PositiveInt } from "../../schema"
 import { ConfigPermissionV1 } from "./permission"
+import { Advisor } from "@opencode-ai/schema/advisor"
 
 const Color = Schema.Union([
   Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/)),
@@ -12,6 +13,7 @@ const Color = Schema.Union([
 const AgentSchema = Schema.StructWithRest(
   Schema.Struct({
     model: Schema.optional(Schema.String),
+    advisor: Schema.optional(Advisor.Input),
     variant: Schema.optional(Schema.String).annotate({
       description: "Default model variant for this agent (applies only when using the agent's configured model).",
     }),
@@ -43,6 +45,7 @@ const AgentSchema = Schema.StructWithRest(
 const KNOWN_KEYS = new Set([
   "name",
   "model",
+  "advisor",
   "variant",
   "prompt",
   "description",
