@@ -48,6 +48,14 @@ export function recentModels(
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
 }
 
+export function visiblePrimaryAgents<T extends { mode: string; hidden?: boolean }>(agents: T[]) {
+  return agents.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
+}
+
+export function resolvePrimaryAgent<T extends { name: string; mode: string }>(agents: T[], name: string) {
+  return agents.find((agent) => agent.mode !== "subagent" && agent.name === name)
+}
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
@@ -75,7 +83,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     function createAgent() {
-      const agents = createMemo(() => sync.data.agent.filter((agent) => agent.mode !== "subagent" && !agent.hidden))
+      const primaryAgents = createMemo(() => sync.data.agent.filter((agent) => agent.mode !== "subagent"))
+      const agents = createMemo(() => visiblePrimaryAgents(sync.data.agent))
       const visibleAgents = createMemo(() => sync.data.agent.filter((agent) => !agent.hidden))
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
@@ -94,10 +103,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
+          return resolvePrimaryAgent(primaryAgents(), agentStore.current ?? "") ?? agents().at(0)
         },
         set(name: string) {
-          if (!agents().some((x) => x.name === name))
+          if (!resolvePrimaryAgent(primaryAgents(), name))
             return toast.show({
               variant: "warning",
               message: `Agent not found: ${name}`,
