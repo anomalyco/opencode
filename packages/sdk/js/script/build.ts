@@ -112,6 +112,20 @@ if (sseTypesPatched === sseTypesSource) {
 }
 await Bun.write(sseTypesPath, sseTypesPatched)
 
+// Abort handlers cannot await ReadableStreamDefaultReader.cancel(), but the
+// returned promise can reject after the body stream has already errored.
+const sseClientPath = "./src/v2/gen/core/serverSentEvents.gen.ts"
+const sseClientFile = Bun.file(sseClientPath)
+const sseClientSource = await sseClientFile.text()
+const sseClientPatched = sseClientSource.replace(
+  "            reader.cancel()",
+  "            void reader.cancel().catch(() => {})",
+)
+if (sseClientPatched === sseClientSource) {
+  throw new Error(`SSE cancel patch did not apply; @hey-api/openapi-ts output may have changed (${sseClientPath})`)
+}
+await Bun.write(sseClientPath, sseClientPatched)
+
 await $`bun prettier --write src/gen`
 await $`bun prettier --write src/v2`
 await $`rm -rf dist`
