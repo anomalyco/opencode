@@ -108,6 +108,15 @@ function applyUsage(
     .pipe(Effect.orDie)
 }
 
+function touch(db: DatabaseService, event: SessionEvent.Event) {
+  return db
+    .update(SessionTable)
+    .set({ time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+    .where(eq(SessionTable.id, event.data.sessionID))
+    .run()
+    .pipe(Effect.orDie, Effect.asVoid)
+}
+
 function run(db: DatabaseService, event: SessionEvent.Event) {
   return Effect.gen(function* () {
     const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -376,9 +385,9 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
-    yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
-    yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Started, (event) => run(db, event).pipe(Effect.andThen(touch(db, event))))
+    yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event).pipe(Effect.andThen(touch(db, event))))
+    yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event).pipe(Effect.andThen(touch(db, event))))
     yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
