@@ -2,7 +2,6 @@ import { createEffect, createMemo, on, type Accessor } from "solid-js"
 import type { ComposerControls } from "@/composer/adapter"
 import { setCursorPosition } from "@/composer/editor/dom"
 import { createComposerModel } from "@/composer/model"
-import { useAttachmentDestination } from "@/composer/attachments/deliver"
 import { useSettings } from "@/settings/model"
 import { createActiveComposerAdapter } from "./adapter"
 import { createSessionQueue } from "./queue"
@@ -30,7 +29,6 @@ export function createSessionComposerController(input: {
     draft: adapter.state,
     working: adapter.working,
     behavior: settings.general.followUpBehavior,
-    destination: useAttachmentDestination(input.controls),
     restoreFocus: (cursor) => {
       const target = editor
       if (!target) return

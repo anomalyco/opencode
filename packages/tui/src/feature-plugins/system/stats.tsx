@@ -5,7 +5,7 @@ import { TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { Logo } from "../../component/logo"
-import { useTheme, useThemes } from "../../context/theme"
+import { useTheme } from "../../context/theme"
 import { tint } from "../../theme/color"
 import { statsMetrics, statsNumber } from "./stats-data"
 
@@ -30,7 +30,6 @@ const digits: Record<string, string[]> = {
 export function StatsPoster(props: { stats: SessionStatsInfo }) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
-  const themes = useThemes()
   const width = () => Math.max(12, Math.min(110, dimensions().width - 8))
   const compact = () => dimensions().height < 38
   const metrics = createMemo(() => statsMetrics(props.stats))
@@ -53,19 +52,19 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
     }),
   )
   const shades = createMemo(() => [
-    theme.text.subdued,
+    theme.text.muted,
     ...[0.3, 0.5, 0.75, 1].map((alpha) =>
-      tint(theme.background.default, theme.categorical[0][themes.mode() === "light" ? 800 : 200], alpha),
+      tint(theme.background.base, theme.categorical[0][200], alpha),
     ),
   ])
 
   return (
     <box width={width()} flexDirection="column" alignItems="center" flexShrink={0} gap={compact() ? 1 : 2}>
       <box width="100%" flexDirection={width() < 44 ? "column" : "row"} justifyContent="space-between">
-        <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
           opencode / stats
         </text>
-        <text fg={theme.text.subdued}>{dates()}</text>
+        <text fg={theme.text.muted}>{dates()}</text>
       </box>
       <Show when={!compact()}>
         <Logo />
@@ -74,7 +73,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
         <Show
           when={large()}
           fallback={
-            <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+            <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
               {number()}
             </text>
           }
@@ -82,7 +81,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
           <box>
             <For each={[0, 1, 2, 3, 4]}>
               {(row) => (
-                <text fg={theme.text.default} selectable={false}>
+                <text fg={theme.text.base} selectable={false}>
                   {letters()
                     .map((char) => char[row].replaceAll("1", "\u2588\u2588").replaceAll("0", "  "))
                     .join("  ")}
@@ -91,10 +90,10 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
             </For>
           </box>
         </Show>
-        <text fg={theme.text.subdued}>TOKENS</text>
+        <text fg={theme.text.muted}>TOKENS</text>
       </box>
       <box alignItems="center">
-        <text fg={theme.text.subdued}>
+        <text fg={theme.text.muted}>
           {"    " +
             calendar()
               .months.map((month) => (month.label.length <= month.span * 2 ? month.label : "").padEnd(month.span * 2))
@@ -103,7 +102,7 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
         <For each={["M", "T", "W", "T", "F", "S", "S"]}>
           {(day, index) => (
             <box flexDirection="row" height={1}>
-              <text fg={theme.text.subdued}>{day + "   "}</text>
+              <text fg={theme.text.muted}>{day + "   "}</text>
               <For each={calendar().weeks}>
                 {(week) => (
                   <text fg={shades()[Math.max(0, week[index()].level)]} selectable={false}>
@@ -115,24 +114,24 @@ export function StatsPoster(props: { stats: SessionStatsInfo }) {
           )}
         </For>
         <Show when={calendar().clipped}>
-          <text fg={theme.text.subdued}>Your last {calendar().weeks.length} weeks</text>
+          <text fg={theme.text.muted}>Your last {calendar().weeks.length} weeks</text>
         </Show>
       </box>
       <box width="100%" flexDirection="row" justifyContent="space-around">
         <For each={metrics().slice(1)}>
           {(metric) => (
             <box alignItems="center">
-              <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+              <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
                 {statsNumber(metric.value)}
                 {metric.label === "best streak" ? " days" : ""}
               </text>
-              <text fg={theme.text.subdued}>{metric.label}</text>
+              <text fg={theme.text.muted}>{metric.label}</text>
             </box>
           )}
         </For>
       </box>
       <box width="100%" flexDirection="row" justifyContent="flex-end">
-        <text fg={theme.text.default}>opencode.ai</text>
+        <text fg={theme.text.base}>opencode.ai</text>
       </box>
     </box>
   )
@@ -154,7 +153,7 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
   }))
 
   return (
-    <box width="100%" height="100%" backgroundColor={theme.background.default}>
+    <box width="100%" height="100%" backgroundColor={theme.background.base}>
       <scrollbox
         flexGrow={1}
         contentOptions={{
@@ -168,10 +167,10 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
         <Show
           when={!result.error}
           fallback={
-            <text fg={theme.text.feedback.error.default}>Could not load stats. Reopen /stats to try again.</text>
+            <text fg={theme.text.feedback.error.base}>Could not load stats. Reopen /stats to try again.</text>
           }
         >
-          <Show when={result()} fallback={<text fg={theme.text.subdued}>Gathering your stats…</text>}>
+          <Show when={result()} fallback={<text fg={theme.text.muted}>Gathering your stats…</text>}>
             {(value) => <StatsPoster stats={value()} />}
           </Show>
         </Show>

@@ -462,6 +462,10 @@ export function fromPromise(plugin: Plugin) {
           },
           tool: {
             reload: () => run(host.tool.reload()),
+            list: () =>
+              run(host.tool.list()).then((tools) =>
+                tools.map((tool) => ({ ...tool, execute: promiseExecutor(tool.execute) })),
+              ),
             transform: (callback) =>
               register(
                 host.tool.transform((editor) =>

@@ -5,11 +5,11 @@ import type { SessionInboxInfo } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
-import type { ImageAttachmentPart, Prompt } from "@/composer/state"
-import { clonePrompt, promptLength } from "@/composer/prompt-parts"
+import type { ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
+import { clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
-import { deliverAttachments, type AttachmentDestination } from "@/composer/attachments/deliver"
-import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
+import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
+import { readPromptPresentation } from "@/composer/comment-note"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -30,7 +30,6 @@ export function createSessionQueue(input: {
   draft: ComposerStateTarget
   working: Accessor<boolean>
   behavior: Accessor<ComposerDelivery>
-  destination: () => AttachmentDestination
   restoreFocus: (cursor: number) => void
 }) {
   const data = useData()
@@ -61,7 +60,6 @@ export function createSessionQueue(input: {
         change.item,
         change.prompt,
         change.text,
-        input.destination(),
       )
       // Admit before cancelling so a failed replacement never discards the original.
       const admitted = await data.session.prompt({
@@ -187,15 +185,15 @@ export function createSessionQueue(input: {
     if (!editing || mutation.isPending) return
     const prompt = clonePrompt(input.draft.current())
     const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
-    const images = prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
-    if (!text.trim() && !images.length) return cancelEdit()
+    const attachments = prompt.filter(isAttachment)
+    if (!text.trim() && !attachments.length) return cancelEdit()
     const item = queued().find((entry) => entry.id === editing.id)
     const original = item ? queuedPromptAttachments(item) : []
     const pristine =
       item &&
       text.trim() === queuedPromptText(item) &&
-      images.length === original.length &&
-      images.every((image, index) => image.id === original[index].id)
+      attachments.length === original.length &&
+      attachments.every((attachment, index) => attachment.id === original[index].id)
     if (pristine && delivery === "queue") return cancelEdit()
     mutation.mutate({
       type: "edit",
@@ -251,7 +249,7 @@ export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original
     .map((item) => ({
       id: item.id,
       text: queuedPromptText(item),
-      attachments: item.payload.files?.length ?? 0,
+      attachments: (item.payload.files?.length ?? 0) + (readPromptPresentation(item.payload.metadata)?.attachments.length ?? 0),
     }))
 }
 
@@ -261,18 +259,32 @@ export function queuedPromptText(item: QueuedPrompt) {
 }
 
 // Inline attachments are the files the composer added itself, so they return
-// to it as image parts that an edit can remove or extend. Mentions and
-// `file://` context stay in the payload; see editedPromptInput.
-export function queuedPromptAttachments(item: QueuedPrompt): ImageAttachmentPart[] {
-  return (item.payload.files ?? [])
-    .filter((file) => isComposerAttachment(file))
-    .map((file, index) => ({
-      type: "image",
-      id: `${item.id}:file:${index}`,
-      filename: file.name ?? "attachment",
-      mime: file.mime,
-      blob: createLegacyBlobReference(`data:${file.mime};base64,${file.data}`),
-    }))
+// to it as image parts that an edit can remove or extend, and path references
+// return as path parts. Mentions and `file://` context stay in the payload; see
+// editedPromptInput.
+export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPart | PathAttachmentPart)[] {
+  return [
+    ...(item.payload.files ?? [])
+      .filter((file) => isComposerAttachment(file))
+      .map(
+        (file, index): ImageAttachmentPart => ({
+          type: "image",
+          id: `${item.id}:file:${index}`,
+          filename: file.name ?? "attachment",
+          mime: file.mime,
+          blob: createLegacyBlobReference(`data:${file.mime};base64,${file.data}`),
+        }),
+      ),
+    ...(readPromptPresentation(item.payload.metadata)?.attachments ?? []).map(
+      (file, index): PathAttachmentPart => ({
+        type: "path",
+        id: `${item.id}:path:${index}`,
+        filename: file.name,
+        mime: file.mime,
+        path: file.path,
+      }),
+    ),
+  ]
 }
 
 function isComposerAttachment(file: NonNullable<QueuedPrompt["payload"]["files"]>[number]) {
@@ -292,13 +304,13 @@ async function editedPromptInput(
   item: QueuedPrompt | undefined,
   prompt: Prompt,
   text: string,
-  destination: AttachmentDestination,
 ) {
-  const attachments = await deliverAttachments(
-    prompt.filter((part): part is ImageAttachmentPart => part.type === "image"),
-    destination,
+  const images = await Promise.all(
+    prompt
+      .filter((part): part is ImageAttachmentPart => part.type === "image")
+      .map(async (part) => ({ ...part, dataUrl: await blobDataUrl(part.blob, part.mime) })),
   )
-  const request = buildPromptRequest({ prompt, context: [], attachments, text, sessionDirectory: directory })
+  const request = buildPromptRequest({ prompt, context: [], images, text, sessionDirectory: directory })
   const payload = item?.payload
   const display = item ? queuedPromptText(item) : ""
   const notes = payload && display && payload.text.startsWith(display) ? payload.text.slice(display.length) : ""

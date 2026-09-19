@@ -14,8 +14,8 @@ type Recorded = {
   readonly body: unknown
 }
 
-const opencodeSpec = async (): Promise<Document> => {
-  return Bun.file(new URL("../../protocol/openapi.json", import.meta.url)).json() as Promise<Document>
+const transportSpec = async (): Promise<Document> => {
+  return Bun.file(new URL("./fixtures/openapi-transports.json", import.meta.url)).json() as Promise<Document>
 }
 
 const happyPathSpec = async (): Promise<Document> => {
@@ -219,48 +219,42 @@ describe("OpenAPI.fromSpec", () => {
     expect(client.requests[3]!.headers.authorization).toBe("Bearer bearer-secret")
   })
 
-  test("converts representative opencode operations into the expected tool shape", async () => {
-    const spec = await opencodeSpec()
+  test("generates supported operations and reports unsupported transports", async () => {
+    const spec = await transportSpec()
     const result = OpenAPI.fromSpec({ spec, baseUrl })
 
-    expect(result.skipped).toHaveLength(5)
-    expect(result.skipped).toContainEqual({
-      method: "GET",
-      path: "/api/pty/{ptyID}/connect",
-      reason: "WebSocket operations are not supported",
-    })
-    expect(result.skipped.filter((item) => item.reason === "SSE operations are not supported")).toHaveLength(2)
-    expect(result.skipped).toContainEqual({
-      method: "GET",
-      path: "/api/fs/read/*",
-      reason: "binary responses are not supported",
-    })
-    expect(toolAt(result.tools, "server.info")).not.toBeUndefined()
-    expect(toolAt(result.tools, "session.get")).not.toBeUndefined()
-    expect(toolAt(result.tools, "session.create")).not.toBeUndefined()
+    expect(result.skipped).toEqual([
+      {
+        method: "GET",
+        path: "/events",
+        reason: "SSE operations are not supported",
+      },
+      {
+        method: "GET",
+        path: "/files/{path}",
+        reason: "binary responses are not supported",
+      },
+      {
+        method: "PUT",
+        path: "/files/{path}",
+        reason: "request body has no JSON content (declared: application/octet-stream)",
+      },
+      {
+        method: "GET",
+        path: "/terminals/{terminalID}/connect",
+        reason: "WebSocket operations are not supported",
+      },
+    ])
 
-    const sessionGet = toolAt(result.tools, "session.get")
-    expect(Tool.isTool(sessionGet)).toBe(true)
-    if (!Tool.isTool(sessionGet)) throw new Error("session.get was not generated")
-    expect(inputTypeScript(sessionGet)).toBe("{ sessionID: string }")
-    expect(outputTypeScript(sessionGet)).toContain("id: string")
-    expect(outputTypeScript(sessionGet)).toContain("additions: number")
-
-    const switchAgent = toolAt(result.tools, "session.switchAgent")
-    expect(Tool.isTool(switchAgent)).toBe(true)
-    if (!Tool.isTool(switchAgent)) throw new Error("session.switchAgent was not generated")
-    expect(inputTypeScript(switchAgent)).toBe("{ sessionID: string; agent: string }")
-
-    const instructionPut = toolAt(result.tools, "experimental.session.instructions.entry.put")
-    expect(Tool.isTool(instructionPut)).toBe(true)
-    if (!Tool.isTool(instructionPut)) throw new Error("experimental.session.instructions.entry.put was not generated")
-    expect(inputTypeScript(instructionPut)).toBe("{ sessionID: string; key: string; value: unknown }")
-    expect(toolAt(result.tools, "experimental_session_instructions_entry_put_2")).toBeUndefined()
-    expect(Tool.isTool(toolAt(result.tools, "pty.connect"))).toBe(false)
-    expect(toolAt(result.tools, "session.log")).toBeUndefined()
-    expect(toolAt(result.tools, "event.subscribe")).toBeUndefined()
-    expect(toolAt(result.tools, "fs.read")).toBeUndefined()
-    expect(toolAt(result.tools, "pty.connect.token")).not.toBeUndefined()
+    const get = toolAt(result.tools, "records.get")
+    expect(Tool.isTool(get)).toBe(true)
+    if (!Tool.isTool(get)) throw new Error("records.get was not generated")
+    expect(inputTypeScript(get)).toBe("{ recordID: string }")
+    expect(outputTypeScript(get)).toBe("{ id: string; value: string }")
+    expect(toolAt(result.tools, "events.subscribe")).toBeUndefined()
+    expect(toolAt(result.tools, "files.read")).toBeUndefined()
+    expect(toolAt(result.tools, "files.write")).toBeUndefined()
+    expect(toolAt(result.tools, "terminals.connect")).toBeUndefined()
   })
 
   test("preserves operation path sanitization and collision handling", () => {
@@ -971,30 +965,16 @@ describe("OpenAPI.fromSpec", () => {
     expect(result).toMatchObject({ password: "returned-by-server", profile: { secret: "returned-secret" } })
   })
 
-  test("documents that the opencode fixture is unauthenticated", async () => {
-    const spec = await opencodeSpec()
-    const components = isRecord(spec.components) ? spec.components : {}
-    const result = OpenAPI.fromSpec({ spec, baseUrl })
-
-    expect(spec.security).toStrictEqual([])
-    expect(isRecord(components.securitySchemes) ? Object.keys(components.securitySchemes) : []).toStrictEqual([])
-    const info = toolAt(result.tools, "server.info")
-    const infoInput = Tool.isTool(info) && isRecord(info.input) ? info.input : undefined
-    expect(infoInput).toMatchObject({ type: "object", properties: {} })
-    const input = isRecord(infoInput) ? infoInput : {}
-    expect(Object.keys(isRecord(input.properties) ? input.properties : {})).toStrictEqual([])
-  })
-
-  test("exposes real opencode operations through CodeMode discovery", async () => {
+  test("exposes generated operations through CodeMode discovery", async () => {
     const { layer } = recordingClient(() => json({}))
     const runtime = CodeMode.make({
-      tools: { opencode: OpenAPI.fromSpec({ spec: await opencodeSpec(), baseUrl }).tools },
+      tools: { api: OpenAPI.fromSpec({ spec: await happyPathSpec(), baseUrl }).tools },
     })
     const result = await Effect.runPromise(
       runtime
         .execute(
           `
-        return search({ query: "server info", namespace: "opencode", limit: 1 })
+        return search({ query: "get a user", namespace: "api", limit: 1 })
       `,
         )
         .pipe(Effect.provide(layer)),
@@ -1005,55 +985,12 @@ describe("OpenAPI.fromSpec", () => {
     expect(result.value).toMatchObject({
       items: [
         {
-          path: "tools.opencode.server.info",
-          description: "Return the server identity, connection URLs, paths, and readiness status.",
+          path: "tools.api.users.get",
+          description: "Get a user",
         },
       ],
     })
-    expect(JSON.stringify(result.value)).toContain("version: string")
-  })
-
-  test("invokes real opencode path parameters and JSON request bodies", async () => {
-    const { requests, layer } = recordingClient((request) => {
-      if (request.method === "GET") return json({ id: "ses_123" })
-      return json({ id: "ses_456" })
-    })
-    const runtime = CodeMode.make({
-      tools: { opencode: OpenAPI.fromSpec({ spec: await opencodeSpec(), baseUrl }).tools },
-    })
-
-    const result = await Effect.runPromise(
-      runtime
-        .execute(
-          `
-          const existing = await tools.opencode.session.get({ sessionID: "ses_123" })
-          const created = await tools.opencode.session.create({ id: "ses_456" })
-          return { existing, created }
-        `,
-        )
-        .pipe(Effect.provide(layer)),
-    )
-
-    expect(result).toMatchObject({ ok: true })
-    expect(requests).toHaveLength(2)
-    expect(requests[0]).toMatchObject({ method: "GET", body: undefined })
-    expect(new URL(requests[0]!.url).pathname).toBe("/api/session/ses_123")
-    expect(requests[1]).toMatchObject({
-      method: "POST",
-      url: "http://localhost:4096/api/session",
-      body: { id: "ses_456" },
-    })
-  })
-
-  test("serializes deep-object query parameters from the opencode fixture", async () => {
-    const client = recordingClient(() => json({ directory: "/tmp" }))
-    const location = toolAt(OpenAPI.fromSpec({ spec: await opencodeSpec(), baseUrl }).tools, "location.get")
-    if (!Tool.isTool(location)) throw new Error("location.get was not generated")
-
-    await Effect.runPromise(location.execute({ location: { directory: "/tmp" } }).pipe(Effect.provide(client.layer)))
-
-    const url = new URL(client.requests[0]!.url)
-    expect(url.searchParams.get("location[directory]")).toBe("/tmp")
+    expect(JSON.stringify(result.value)).toContain("userId: string")
   })
 
   test("serializes supported simple and form parameter shapes", async () => {
@@ -1461,15 +1398,15 @@ describe("OpenAPI.fromSpec", () => {
   test("fails missing required parameters before auth and network", async () => {
     const { requests, layer } = recordingClient(() => json({}))
     const runtime = CodeMode.make({
-      tools: { opencode: OpenAPI.fromSpec({ spec: await opencodeSpec(), baseUrl }).tools },
+      tools: { api: OpenAPI.fromSpec({ spec: await transportSpec(), baseUrl }).tools },
     })
 
     const result = await Effect.runPromise(
-      runtime.execute("return await tools.opencode.session.get({})").pipe(Effect.provide(layer)),
+      runtime.execute("return await tools.api.records.get({})").pipe(Effect.provide(layer)),
     )
 
     expect(result).toMatchObject({ ok: false })
-    expect(JSON.stringify(result)).toContain("Missing required path parameter 'sessionID'")
+    expect(JSON.stringify(result)).toContain("Missing required path parameter 'recordID'")
     expect(requests).toHaveLength(0)
   })
 

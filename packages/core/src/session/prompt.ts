@@ -93,9 +93,10 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
 const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(function* (
   input: PromptInput.FileAttachment,
 ) {
+  const label = attachmentLabel(input)
   const resolved = input.uri.startsWith("data:")
     ? {
-        bytes: yield* decodeDataURL(input.uri),
+        bytes: yield* decodeDataURL(input.uri, label),
         source: { type: "inline" as const },
         start: undefined,
         end: undefined,
@@ -105,8 +106,8 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
     : yield* readFileAttachment(input.uri)
   if (resolved.bytes.byteLength > MAX_ATTACHMENT_BYTES)
     return yield* new AttachmentError({
-      uri: input.uri,
-      message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${input.uri}`,
+      uri: label,
+      message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${label}`,
     })
 
   const mime = resolved.mime ?? Mime.detect(resolved.bytes)
@@ -138,7 +139,7 @@ const normalizeImageAttachment = Effect.fn("SessionPrompt.normalizeImageAttachme
 ) {
   if (!mime.startsWith("image/")) return { data: Base64.make(data), mime }
   const image = yield* Image.Service
-  const label = input.name ?? (input.uri.startsWith("data:") ? "inline attachment" : input.uri)
+  const label = attachmentLabel(input)
   const content = { uri: label, content: data, encoding: "base64" as const, mime }
   const normalized = yield* image.normalize(label, content).pipe(
     Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)),
@@ -201,7 +202,12 @@ const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(functio
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
-function decodeDataURL(uri: string) {
+// A data URL is the whole file; errors and logs must name the attachment, not echo its bytes.
+function attachmentLabel(input: PromptInput.FileAttachment) {
+  return input.name ?? (input.uri.startsWith("data:") ? "inline attachment" : input.uri)
+}
+
+function decodeDataURL(uri: string, label: string) {
   return Effect.try({
     try: () => {
       const comma = uri.indexOf(",")
@@ -214,7 +220,7 @@ function decodeDataURL(uri: string) {
       if (bytes.toString("base64") !== payload) throw new Error("Non-canonical base64")
       return bytes
     },
-    catch: () => new AttachmentError({ uri, message: "Invalid attachment data URL" }),
+    catch: () => new AttachmentError({ uri: label, message: `Invalid attachment data URL: ${label}` }),
   })
 }
 

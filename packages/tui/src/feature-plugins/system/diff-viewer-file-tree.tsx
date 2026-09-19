@@ -27,7 +27,7 @@ export type DiffViewerFileTreeProps = {
 }
 
 export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const [sourceHovered, setSourceHovered] = createSignal(false)
   const list = () => props.layout === "list"
   const tree = createMemo(() => buildFileTree(props.files))
@@ -36,10 +36,10 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
       ? flattenFileTree(tree()).filter((row) => row.fileIndex !== undefined)
       : flattenFileTree(tree(), props.expandedNodes),
   )
-  // Quieter than subdued text: markers are affordances, not content.
-  const faint = createMemo(() => tint(theme.text.subdued, theme.background.default, 0.45))
+  // Quieter than muted text: markers are affordances, not content.
+  const faint = createMemo(() => tint(theme.text.muted, theme.background.raised.base, 0.45))
   // Rails are pure texture; keep them barely above the surface.
-  const rail = createMemo(() => tint(theme.text.subdued, theme.background.default, 0.7))
+  const rail = createMemo(() => tint(theme.text.muted, theme.background.raised.base, 0.7))
   const reviewedCount = createMemo(() => props.files.filter((file) => props.reviewedFileNames?.has(file.file)).length)
   const contentWidth = () => Math.max(0, props.width - 4 - FILE_TREE_STATUS_WIDTH - 1)
   let scroll: ScrollBoxRenderable | undefined
@@ -56,7 +56,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
 
   return (
     <box width={props.width} height="100%" minWidth={0} minHeight={0} flexShrink={0} flexDirection="column">
-      <box id="diff-tree-top-edge" height={1} flexShrink={0} backgroundColor={theme.background.default} />
+      <box id="diff-tree-top-edge" height={1} flexShrink={0} backgroundColor={theme.background.raised.base} />
       <box
         flexGrow={1}
         minWidth={0}
@@ -64,7 +64,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={2}
-        backgroundColor={theme.background.default}
+        backgroundColor={theme.background.raised.base}
       >
         <box id="diff-source-header" height={1} flexShrink={0} flexDirection="row" marginBottom={1} gap={1}>
           <box
@@ -85,8 +85,8 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                 props.onSwitchSource
                   ? sourceHovered()
                     ? theme.text.action.secondary.hovered
-                    : theme.text.action.secondary.default
-                  : theme.text.default
+                    : theme.text.action.secondary.base
+                  : theme.text.base
               }
               attributes={TextAttributes.BOLD}
               flexShrink={0}
@@ -96,12 +96,12 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
               {props.source ?? "Files"}
             </text>
             <Show when={props.sourceDetail}>
-              <text fg={theme.text.subdued} selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate>
+              <text fg={theme.text.muted} selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate>
                 {` · ${props.sourceDetail}`}
               </text>
             </Show>
           </box>
-          <text id="diff-review-count" fg={theme.text.subdued} wrapMode="none" flexShrink={0}>
+          <text id="diff-review-count" fg={theme.text.muted} wrapMode="none" flexShrink={0}>
             {reviewedCount()}/{props.files.length}
             {props.source ? "" : " reviewed"}
           </text>
@@ -119,7 +119,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
               <text />
             </Match>
             <Match when={props.files.length === 0}>
-              <text fg={theme.text.subdued}>No files</text>
+              <text fg={theme.text.muted}>No files</text>
             </Match>
             <Match when={props.files.length > 0}>
               <box flexShrink={0} gap={list() ? 1 : 0}>
@@ -132,13 +132,13 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                       return file !== undefined && (props.reviewedFileNames?.has(file) ?? false)
                     }
                     const foreground = () => {
-                      if (row.kind === "directory") return theme.text.subdued
-                      return reviewed() ? theme.text.subdued : theme.text.default
+                      if (row.kind === "directory") return theme.text.muted
+                      return reviewed() ? theme.text.muted : theme.text.base
                     }
                     const background = () => {
                       // Elevated context maps this to a quiet neutral surface step, not the loud accent.
-                      if (hovered()) return theme.background.action.primary.hovered
-                      return theme.background.default
+                      if (hovered()) return theme.background.raised.high
+                      return theme.background.raised.base
                     }
                     const marker = () => {
                       if (row.kind !== "directory") return "≡ "
@@ -151,11 +151,11 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                     })
                     const status = () => fileTreeRowStatus(row, props.files, reviewed())
                     const statusColor = () => {
-                      if (reviewed()) return theme.text.subdued
+                      if (reviewed()) return theme.text.muted
                       const status = row.fileIndex === undefined ? undefined : props.files[row.fileIndex]?.status
                       if (status === "added") return theme.diff.text.added
                       if (status === "deleted") return theme.diff.text.removed
-                      return theme.text.subdued
+                      return theme.text.muted
                     }
                     const name = () => {
                       const width = contentWidth() - stringWidth(indent()) - stringWidth(marker())

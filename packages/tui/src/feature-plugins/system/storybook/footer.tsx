@@ -14,21 +14,21 @@ export function StoryFooter(props: {
   message?: string
   controls: readonly StoryFooterControl[]
 }) {
-  const theme = props.context.theme.contextual.elevated
+  const theme = props.context.theme
 
   return (
-    <box flexShrink={0} flexDirection="column" backgroundColor={theme.background.default}>
+    <box flexShrink={0} flexDirection="column" backgroundColor={theme.background.raised.base}>
       <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row">
-        <text fg={theme.text.default}>{props.title}</text>
+        <text fg={theme.text.base}>{props.title}</text>
         <Show when={props.details?.length}>
-          <text fg={theme.text.subdued}> · {props.details?.join(" · ")}</text>
+          <text fg={theme.text.muted}> · {props.details?.join(" · ")}</text>
         </Show>
       </box>
       <Show when={props.status || props.message}>
         <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row">
-          <text fg={theme.text.default} wrapMode="none">
+          <text fg={theme.text.base} wrapMode="none">
             {props.status ?? ""}
-            <span style={{ fg: theme.text.subdued }}>
+            <span style={{ fg: theme.text.muted }}>
               {props.status && props.message ? " · " : ""}
               {props.message ?? ""}
             </span>
@@ -38,8 +38,8 @@ export function StoryFooter(props: {
       <box paddingLeft={1} paddingRight={1} flexDirection="row" flexWrap="wrap" columnGap={1}>
         <For each={props.controls}>
           {(control) => (
-            <text fg={theme.text.default} wrapMode="none" flexShrink={0}>
-              {control.shortcut} <span style={{ fg: theme.text.subdued }}>{control.label}</span>
+            <text fg={theme.text.base} wrapMode="none" flexShrink={0}>
+              {control.shortcut} <span style={{ fg: theme.text.muted }}>{control.label}</span>
             </text>
           )}
         </For>

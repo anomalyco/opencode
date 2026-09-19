@@ -15,6 +15,12 @@ const error = async (code: string) => {
   return result.error
 }
 
+describe("source syntax", () => {
+  test("rejects TypeScript-only syntax", async () => {
+    expect((await error(`const value: number = 1; return value`)).kind).toBe("ParseError")
+  })
+})
+
 describe("error identity", () => {
   test("awaiting the same rejected promise twice yields the same error object", async () => {
     expect(
@@ -101,7 +107,7 @@ describe("host errors escaping built-ins", () => {
   test("report the location of the call that raised them", async () => {
     const failure = await error(`return [1].map((n) => n.toFixed(200))`)
     expect(failure.kind).toBe("ExecutionFailure")
-    expect(failure.message).toBe("RangeError: toFixed() argument must be between 0 and 100 (line 1, col 23)")
+    expect(failure.message).toBe("RangeError: toFixed() argument must be between 0 and 100 (line 1, col 19)")
   })
 
   test("a built-in that rejects its arguments before doing any work is located at the call", async () => {
@@ -109,13 +115,13 @@ describe("host errors escaping built-ins", () => {
   })
 
   test("a rejection born inside a promise the built-in created is located at the creating call", async () => {
-    expect((await error(`return await Promise.all(1)`)).message).toEndWith("(line 1, col 14)")
-    expect((await error(`return await Promise.race([])`)).message).toEndWith("(line 1, col 14)")
+    expect((await error(`return await Promise.all(1)`)).message).toEndWith("(line 1, col 10)")
+    expect((await error(`return await Promise.race([])`)).message).toEndWith("(line 1, col 10)")
     expect((await error(`return await Promise.all({ [Symbol.iterator]: () => ({ next: 1 }) })`)).message).toEndWith(
-      "(line 1, col 14)",
+      "(line 1, col 10)",
     )
     expect((await error(`let p; p = Promise.resolve().then(() => p); return await p`)).message).toEndWith(
-      "(line 2, col 5)",
+      "(line 1, col 8)",
     )
   })
 
@@ -128,7 +134,7 @@ describe("host errors escaping built-ins", () => {
 
   test("a failure inside a built-in called by another built-in is located at the outer call", async () => {
     const failure = await error(`return Array.from({ [Symbol.iterator]: () => ({ next: 1 }) })`)
-    expect(failure.message).toBe("TypeError: Iterator next must be a function. (line 1, col 8)")
+    expect(failure.message).toBe("TypeError: Iterator next must be a function. (line 1, col 4)")
   })
 })
 
@@ -147,7 +153,7 @@ describe("call depth", () => {
   test("uncaught overflow reports the call that overflowed", async () => {
     const failure = await error(`const f = (n) => f(n + 1); return f(0)`)
     expect(failure.kind).toBe("ExecutionFailure")
-    expect(failure.message).toBe("RangeError: Maximum call stack size exceeded (line 1, col 18)")
+    expect(failure.message).toBe("RangeError: Maximum call stack size exceeded (line 1, col 14)")
   })
 
   test("the limit is 10000 nested calls", async () => {

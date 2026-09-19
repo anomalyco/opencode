@@ -1517,6 +1517,12 @@
   color: var(--v2-state-fg-danger);
 }
 
+.settings-server-dialog-hint {
+  font-size: 13px;
+  line-height: var(--line-height-base);
+  color: var(--v2-text-text-muted);
+}
+
 .settings-extensions-tabs[data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"] {
   width: min(280px, 100%);
 }

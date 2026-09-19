@@ -1,5 +1,5 @@
 import type { ComposerState, ContextItem, Prompt } from "./state"
-import { appendPrompt, clonePrompt } from "./prompt-parts"
+import { appendPrompt, clonePrompt, isAttachment } from "./prompt-parts"
 
 export type ComposerStateTarget = ReturnType<ComposerState["capture"]>
 
@@ -22,7 +22,7 @@ export function createComposerSubmission(input: {
       if (initial !== target) {
         initial.reset()
         // A preparing session may already have an unsent follow-up in its promoted composer.
-        if (preserveDraft && target.current().some((part) => part.type === "image" || part.content.length > 0))
+        if (preserveDraft && target.current().some((part) => isAttachment(part) || part.content.length > 0))
           following = clonePrompt(target.current())
       }
       if (!following) target.reset()

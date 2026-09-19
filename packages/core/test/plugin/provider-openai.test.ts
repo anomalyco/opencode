@@ -205,7 +205,8 @@ describe("OpenAIPlugin", () => {
       expect(model.package).toBe("@opencode/ai/providers/openai")
       expect(model.enabled).toBe(true)
       expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
-      expect(model.transport).toBe("websocket")
+      expect(provider.settings?.transport).toBe("websocket")
+      expect(model.settings?.transport).toBeUndefined()
       expect(direct.headers).not.toHaveProperty("originator")
       expect(direct.baseURL).toBe("https://api.openai.com/v1")
       expect(provider.headers).not.toHaveProperty("x-codex-beta-features")
@@ -236,7 +237,7 @@ describe("OpenAIPlugin", () => {
         id: "deployment-responses",
         provider: Provider.ID.azure,
       })
-      const prepare = (preference?: Model.Info["transport"]) =>
+      const prepare = (preference?: Provider.Transport) =>
         Effect.gen(function* () {
           const model = SessionRunnerModel.resolved(route.model({ id: "gpt-5.5" }), {
             capabilities: { tools: true, input: ["text"], output: ["text"] },

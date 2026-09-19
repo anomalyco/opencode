@@ -56,7 +56,7 @@ describe("upgrade command", () => {
   })
 
   test("rejects unsupported methods before attempting an upgrade", async () => {
-    const result = await cli(["--method", "brew"])
+    const result = await cli(["--method", "apt"])
     expect(result.exitCode).not.toBe(0)
     expect(result.events).toEqual([])
   })

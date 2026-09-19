@@ -12,7 +12,7 @@ import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const data = useData()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const config = useConfig().data
   const session = createMemo(() => data.session.get(props.sessionID))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -20,7 +20,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   return (
     <Show when={session()}>
       <box
-        backgroundColor={theme.background.default}
+        backgroundColor={theme.background.raised.base}
         width={SESSION_SIDEBAR_WIDTH}
         height="100%"
         paddingTop={1}
@@ -31,13 +31,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       >
         <box flexShrink={0} paddingRight={2} paddingBottom={1}>
           <title_shimmer
-            fg={theme.text.default}
+            fg={theme.text.base}
             rename={{
               pending: data.session.title.pending(props.sessionID),
               title: withTimestampedFallback(session()),
             }}
             enabled={config.animations ?? true}
-            backdrop={theme.background.default}
+            backdrop={theme.background.raised.base}
             attributes={
               data.session.title.pending(props.sessionID) && config.animations === false
                 ? TextAttributes.DIM
@@ -61,8 +61,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             width: 1,
             height: "100%",
             trackOptions: {
-              backgroundColor: theme.background.default,
-              foregroundColor: theme.scrollbar.default,
+              backgroundColor: theme.background.raised.base,
+              foregroundColor: theme.scrollbar.base,
             },
           }}
         >

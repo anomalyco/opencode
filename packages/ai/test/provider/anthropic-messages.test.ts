@@ -166,7 +166,89 @@ describe("Anthropic Messages route", () => {
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("Anthropic thinking provider option requires budgetTokens")
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("budgetTokens")
+    }),
+  )
+
+  it.effect("lowers passthrough provider options and accepts either key spelling", () =>
+    Effect.gen(function* () {
+      const snake = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: {
+            service_tier: "auto",
+            metadata: { user_id: "user_1" },
+            container: { id: "container_1" },
+            inference_geo: "us",
+            cache_control: { type: "ephemeral", ttl: "1h" },
+            output_config: { format: { type: "json_schema", schema: { type: "object" } } },
+          },
+        }),
+      )
+      const camel = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: {
+            serviceTier: "standard_only",
+            container: "container_2",
+            inferenceGeo: "eu",
+            cacheControl: { type: "ephemeral" },
+            outputConfig: { effort: "low" },
+          },
+        }),
+      )
+
+      expect(snake.body).toMatchObject({
+        service_tier: "auto",
+        metadata: { user_id: "user_1" },
+        container: { id: "container_1" },
+        inference_geo: "us",
+        cache_control: { type: "ephemeral", ttl: "1h" },
+        output_config: { format: { type: "json_schema", schema: { type: "object" } } },
+      })
+      expect(camel.body).toMatchObject({
+        service_tier: "standard_only",
+        container: "container_2",
+        inference_geo: "eu",
+        cache_control: { type: "ephemeral" },
+        output_config: { effort: "low" },
+      })
+    }),
+  )
+
+  it.effect("forwards unknown values for pass-through string enums", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: {
+            service_tier: "future-tier",
+            thinking: { type: "adaptive", display: "future-display" },
+          },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        service_tier: "future-tier",
+        thinking: { type: "adaptive", display: "future-display" },
+      })
+    }),
+  )
+
+  it.effect("ignores unknown provider options and rejects malformed known ones", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(LLMRequest.update(request, { providerOptions: { unknownOption: true } }))
+      const malformed = [
+        { service_tier: 1 },
+        { metadata: { user_id: 42 } },
+        { cache_control: { type: "ephemeral", ttl: "future-ttl" } },
+        { output_config: { format: { type: "text" } } },
+        { thinking: { type: "automatic" } },
+      ]
+      const errors = yield* Effect.forEach(malformed, (providerOptions) =>
+        compileRequest(LLMRequest.update(request, { providerOptions })).pipe(Effect.flip),
+      )
+
+      expect(prepared.body).not.toHaveProperty("unknownOption")
+      expect(errors.map((error) => error.reason._tag)).toEqual(malformed.map(() => "InvalidRequest"))
     }),
   )
 

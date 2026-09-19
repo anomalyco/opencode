@@ -156,14 +156,14 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
       width={dimensions().width}
       height={dimensions().height}
       flexDirection="column"
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.base}
     >
       <Show when={rendered()} keyed>
         {(item) => (
           <scrollbox flexGrow={1} minHeight={0} viewportOptions={{ paddingRight: 1 }}>
             <box paddingLeft={2} paddingRight={2} paddingTop={1} flexDirection="column">
-              <text fg={theme.text.default}>{item.fixture.title}</text>
-              <text fg={theme.text.subdued}>{item.fixture.id}</text>
+              <text fg={theme.text.base}>{item.fixture.title}</text>
+              <text fg={theme.text.muted}>{item.fixture.id}</text>
               <box height={1} />
               <markdown
                 width="100%"
@@ -173,7 +173,7 @@ function MermanLayoutsStory(props: { context: Plugin.Context }) {
                 tableOptions={{ style: "grid", cellPaddingX: 1 }}
                 conceal={true}
                 fg={theme.markdown.text}
-                bg={theme.background.default}
+                bg={theme.background.base}
                 renderNode={plugins.markdown()}
               />
             </box>

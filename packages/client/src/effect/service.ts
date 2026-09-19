@@ -131,7 +131,9 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   }).pipe(
     Effect.repeat({
       until: Option.isSome,
-      schedule: Schedule.max([Schedule.spaced(timing.pollInterval), Schedule.recurs(timing.attempts)]),
+      // Probes run sequentially, so a slow probe stretches each iteration; bound the loop by wall clock
+      // like the Promise variant rather than by attempt count.
+      schedule: Schedule.spaced(timing.pollInterval).pipe(Schedule.upTo({ duration: timing.promiseTimeout })),
     }),
     Effect.ensuring(Effect.sync(() => contenders.forEach((contender) => contender.release()))),
   )

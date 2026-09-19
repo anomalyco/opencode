@@ -132,11 +132,16 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
-/** opencode transport settings consumed in aisdk.ts; native packages never receive them. */
-const TRANSPORT_KEYS = ["chunkTimeout", "fetch", "timeout"] as const
+/** opencode settings consumed in Core; native packages never receive them. */
+const CORE_KEYS = ["chunkTimeout", "compaction", "fetch", "timeout", "transport"] as const
+const PROVIDER_ONLY_KEYS = ["chunkTimeout", "timeout", "transport"] as const
 
 export function nativeSettings(settings: Settings): Settings {
-  return Struct.omit(settings, TRANSPORT_KEYS)
+  return Struct.omit(settings, CORE_KEYS)
+}
+
+export function modelSettings(settings: Settings | undefined) {
+  return settings && Struct.omit(settings, PROVIDER_ONLY_KEYS)
 }
 
 export function mergeOverlay(
@@ -176,6 +181,12 @@ export function mergeHeaders(
 
 export const Request = Provider.Request
 export type Request = Provider.Request
+
+export const Compaction = Provider.Compaction
+export type Compaction = Provider.Compaction
+
+export const Transport = Provider.Transport
+export type Transport = Provider.Transport
 
 export const Settings = Provider.Settings
 export type Settings = Provider.Settings

@@ -9,7 +9,6 @@ import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
 import { getLastFocusedWindow, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
-import { acquireApplicationLock, configureApplication } from "./environment"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
 
@@ -145,7 +144,7 @@ const runtime = Layer.effect(
   }),
 )
 
-// Storage opens after configureApplication has set userData and before windows exist, so window
+// Storage opens after the entry module has set userData and before the renderer loads, so window
 // teardown can clear a window's persisted state and every renderer request finds it ready.
 const platform = Layer.mergeAll(
   DesktopLogging.layer,
@@ -155,9 +154,6 @@ const platform = Layer.mergeAll(
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
-    // Electron scopes the single-instance lock to userData.
-    yield* configureApplication()
-    if (!acquireApplicationLock()) return yield* Effect.interrupt
     // Decide first-launch state before the storage layer creates drafts.sqlite, which would
     // otherwise read as evidence of an earlier launch on a fresh install.
     yield* initializeFirstLaunchOnboarding(app.getPath("userData"))

@@ -3,7 +3,6 @@ import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { Skill } from "@opencode/schema/skill"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
-import type { AttachmentDestination } from "./attachments/deliver"
 import { createMemoryComposerState } from "./state"
 import { createComposerSubmit } from "./submit"
 
@@ -49,19 +48,12 @@ function controls(): ComposerControls {
   }
 }
 
-const destination: AttachmentDestination = {
-  input: { image: true, pdf: true },
-  local: false,
-  upload: async () => {
-    throw new Error("native attachments must not upload")
-  },
-}
-
 function submitInput(
   adapter: ActiveComposerAdapter | NewSessionComposerAdapter,
   notify = { missingSelection() {}, failed(_kind: "shell" | "command" | "prompt", _error: unknown) {} },
   mode: "normal" | "shell" = "normal",
   commands: () => readonly { name: string }[] | undefined = () => [],
+  history: string[] = [],
 ) {
   return createComposerSubmit({
     adapter,
@@ -69,11 +61,12 @@ function submitInput(
     commands,
     editor: () => undefined,
     queueScroll() {},
-    addToHistory() {},
+    addToHistory: (prompt) => history.push(`add:${prompt.map((part) => ("content" in part ? part.content : part.type)).join("")}`),
+    removeFromHistory: (prompt) =>
+      history.push(`remove:${prompt.map((part) => ("content" in part ? part.content : part.type)).join("")}`),
     resetHistory() {},
     setMode() {},
     closePopover() {},
-    destination: () => destination,
     notify,
     comments: { capture: () => [], clear() {}, restore() {} },
   })
@@ -543,12 +536,8 @@ describe("Composer submission", () => {
       missingSelection() {},
       failed: () => (attempts.length === 2 ? first.resolve() : second.resolve()),
     }
-    const submission = submitInput(
-      adapter,
-      notify,
-      "normal",
-      () => [],
-    )
+    const history: string[] = []
+    const submission = submitInput(adapter, notify, "normal", () => [], history)
 
     await submission.submit(new Event("submit"))
     await first.promise
@@ -559,6 +548,8 @@ describe("Composer submission", () => {
     expect(new Set(attempts).size).toBe(1)
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toMatchObject([{ type: "text", content: text }])
+    // The restored prompt is the draft again, so history does not also keep it (and its attachments).
+    expect(history).toEqual([`add:${text}`, `remove:${text}`, `add:${text}`, `remove:${text}`])
   })
 
   test("forwards structured mentions to custom commands", async () => {

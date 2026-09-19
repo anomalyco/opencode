@@ -74,6 +74,7 @@ export const dict = {
   "command.category.workspace": "Worktree",
   "command.category.settings": "Settings",
   "command.logs.export": "Export logs",
+  "command.debugBar.toggle": "Toggle debug bar",
 
   "theme.scheme.system": "System",
   "theme.scheme.light": "Light",
@@ -366,6 +367,9 @@ export const dict = {
   "prompt.action.stop": "Stop",
 
   "prompt.toast.attachmentDuplicate.title": "This file has already been uploaded",
+  "prompt.toast.uploading.percent": "{{percent}}%",
+  "prompt.toast.uploading.cancel": "Cancel upload",
+  "prompt.toast.uploadFailed.title": "Upload failed",
   "prompt.toast.modelAgentRequired.title": "Select an agent and model",
   "prompt.toast.modelAgentRequired.description": "Choose an agent and model before sending a prompt.",
   "prompt.toast.worktreeCreateFailed.title": "Failed to create worktree",
@@ -963,7 +967,16 @@ export const dict = {
   "sidebar.empty.description": "Open a project to get started",
 
   "debugBar.ariaLabel": "Development performance diagnostics",
+  "debugBar.providerAriaLabel": "Provider performance diagnostics",
   "debugBar.na": "n/a",
+  "debugBar.ttft.label": "TTFT",
+  "debugBar.ttft.tip": "Time from provider request dispatch to the first model output.",
+  "debugBar.ttfa.label": "TTFA",
+  "debugBar.ttfa.tip": "Time from provider request dispatch to the first answer text.",
+  "debugBar.tps.label": "TPS",
+  "debugBar.tps.tip": "Output tokens per second after the first model output.",
+  "debugBar.e2e.label": "E2E",
+  "debugBar.e2e.tip": "Time from provider request dispatch until its response stream ended.",
   "debugBar.nav.label": "NAV",
   "debugBar.nav.tip":
     "Last completed route transition touching a session page, measured from router start until the first paint after it settles.",

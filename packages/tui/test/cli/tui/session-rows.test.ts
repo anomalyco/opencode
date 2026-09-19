@@ -25,12 +25,13 @@ test("measures turn duration from the user prompt across assistant steps", () =>
   expect(turnDuration(final, messages)).toBe(29_000)
 })
 
-test("measures turn output throughput across model steps without tool time", () => {
+test("measures request throughput including reasoning across model changes without tool time", () => {
   const first = assistant("assistant-1", [])
-  first.time = { created: 8_000, streamed: 10_000, completed: 20_000 }
+  first.time = { created: 6_000, streamed: 10_000, completed: 20_000 }
   first.tokens = { input: 10, output: 20, reasoning: 5, cache: { read: 0, write: 0 } }
   const final = assistant("assistant-2", [])
-  final.time = { created: 27_000, streamed: 30_000, completed: 31_000 }
+  final.model = { id: "other-model", providerID: "other-provider", variant: "other-variant" }
+  final.time = { created: 24_000, streamed: 30_000, completed: 31_000 }
   final.tokens = { input: 20, output: 30, reasoning: 10, cache: { read: 0, write: 0 } }
   const messages: SessionMessageInfo[] = [
     { type: "user", id: "user-1", text: "Question", time: { created: 1_000 } },
@@ -38,7 +39,9 @@ test("measures turn output throughput across model steps without tool time", () 
     final,
   ]
 
-  expect(turnTokensPerSecond(final, messages)).toBe(10)
+  expect(turnTokensPerSecond(final, messages)).toBe(6.5)
+  first.time.streamed = undefined
+  expect(turnTokensPerSecond(final, messages)).toBeUndefined()
 })
 
 test("omits turn throughput when a stream boundary is unavailable", () => {
@@ -79,10 +82,10 @@ test.each([false, true])(
           : [],
       ),
     ).toEqual([
-      [2_000, 5],
-      [3_000, 10],
-      [6_000, 15],
-      [4_000, 6],
+      [2_000, 7],
+      [3_000, 12],
+      [6_000, 17],
+      [4_000, 7],
       [0, undefined],
     ])
   },

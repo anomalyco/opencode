@@ -1,6 +1,7 @@
 import path from "node:path"
 
 const root = path.resolve(import.meta.dir, "../dist/client")
+const externalRoutes = new Set(["/docs"])
 const files = await Array.fromAsync(new Bun.Glob("**/*.html").scan({ cwd: root, absolute: true }))
 const failures = (
   await Promise.all(
@@ -11,6 +12,7 @@ const failures = (
         Array.from(html.matchAll(/href="([^"]+)"/g), async (match) => {
           const url = new URL(match[1], page)
           if (url.origin !== "https://opencode.local") return
+          if (externalRoutes.has(url.pathname)) return
 
           const targetPath = path.join(root, decodeURIComponent(url.pathname))
           const target = (
