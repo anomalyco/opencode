@@ -4,7 +4,7 @@ import { EventRpcs } from "../../shared/ipc-rpc"
 import { ipcEventStream } from "../ipc-events"
 import { IpcPortHandoff } from "../ipc-transport"
 import { Shutdown } from "../lifecycle/shutdown"
-import { isRendererUrl } from "../windows/protocol"
+import { isRendererUrl } from "../windows/scheme"
 import { DesktopStorage } from "../storage"
 import { sender } from "./context"
 

@@ -9,10 +9,6 @@ import { getStore } from "../storage/store"
 // full window setup in appearance.ts, so both draw the same frame.
 
 const oc2Theme = oc2ThemeJson as DesktopTheme
-const oc2Background = {
-  light: resolveThemeVariant(oc2Theme.light, false)["background-base"],
-  dark: resolveThemeVariant(oc2Theme.dark, true)["background-base"],
-}
 // Match the renderer's 36px titlebar plus its former 8px content inset.
 export const titlebarHeight = 44
 
@@ -21,10 +17,13 @@ export function tone() {
 }
 
 // The colour the renderer reported on its last run, or the default theme's for the system tone, so
-// a window shown before the renderer paints already has the right background.
+// a window shown before the renderer paints already has the right background. Resolving a palette
+// costs tens of milliseconds before the first window, so it only happens when nothing is stored.
 export function storedBackgroundColor() {
   const stored = getStore().get(BACKGROUND_COLOR_KEY)
-  return typeof stored === "string" ? stored : oc2Background[tone()]
+  if (typeof stored === "string") return stored
+  const dark = tone() === "dark"
+  return resolveThemeVariant(dark ? oc2Theme.dark : oc2Theme.light, dark)["background-base"]
 }
 
 export function titlebarOverlay(mode: "light" | "dark" = tone(), zoom = 1) {

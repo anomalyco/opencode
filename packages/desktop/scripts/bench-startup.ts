@@ -191,8 +191,14 @@ const phaseOrder = [
   ["electron js init → entry", "nodeBootstrapped", "entryStart"],
   ["entry → chromium ready", "entryStart", "electronReady"],
   ["ready → window shown", "electronReady", "windowVisible"],
-  ["main bundle load + evaluate", "windowVisible", "bundleEvaluated"],
-  ["layers → first log line", "bundleEvaluated", "appStarting"],
+  ["window → renderer assets served", "windowVisible", "rendererAssetsServed"],
+  ["main bundle load + evaluate", "rendererAssetsServed", "bundleEvaluated"],
+  ["bundle → onboarding decided", "bundleEvaluated", "onboardingDecided"],
+  ["onboarding → logging ready", "onboardingDecided", "loggingReady"],
+  ["logging → first log line", "loggingReady", "appStarting"],
+  ["first log line → storage open", "appStarting", "storageOpen"],
+  ["storage → initialization done", "storageOpen", "initializationDone"],
+  ["initialization → layers ready", "initializationDone", "layersReady"],
   ["layers → renderer process", "appStarting", "rendererProcess"],
   ["renderer boot → first paint", "rendererProcess", "firstPaint"],
   ["first paint → shell", "firstPaint", "shellVisible"],
@@ -397,8 +403,15 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
       nodeBootstrapped: boot && Math.round(boot.origin + boot.bootstrapComplete - spawnAt),
       entryStart: main.marks.entry && main.marks.entry - spawnAt,
       electronReady: main.marks.ready && main.marks.ready - spawnAt,
+      rendererAssetsServed: main.marks.served && main.marks.served - spawnAt,
       bundleEvaluated: main.marks.bundle && main.marks.bundle - spawnAt,
+      onboardingDecided: main.marks.onboarding && main.marks.onboarding - spawnAt,
+      loggingReady: main.marks.logging && main.marks.logging - spawnAt,
+      crashReporterStarted: main.marks.crash && main.marks.crash - spawnAt,
       appStarting: main.appStarting && main.appStarting - spawnAt,
+      storageOpen: main.marks.storage && main.marks.storage - spawnAt,
+      initializationDone: main.marks.init && main.marks.init - spawnAt,
+      layersReady: main.marks.layers && main.marks.layers - spawnAt,
       cliVersionStart: main.versionStart && main.versionStart - spawnAt,
       cliVersionDone: main.versionDone && main.versionDone - spawnAt,
       serviceStarting: main.serviceStarting && main.serviceStarting - spawnAt,
@@ -593,8 +606,8 @@ function mainLog() {
       // A window shown before the logger existed reports when it was shown; the line itself is later.
       const shown = /main window visible/.test(message) ? entry.match(/shownAt: (\d+)/)?.[1] : undefined
       if (shown) windowShownAt = Number(shown)
-      if (/app starting/.test(message))
-        for (const [, key, value] of entry.matchAll(/\b(entry|ready|window|bundle): (\d{10,})/g)) marks[key] = Number(value)
+      if (/app starting|layers ready/.test(message))
+        for (const [, key, value] of entry.matchAll(/\b(\w+): (\d{10,})/g)) marks[key] = Number(value)
       timeline.push([new Date(m[1].replace(" ", "T")).getTime(), name.replace(/\.log$/, ""), message])
     }
   }

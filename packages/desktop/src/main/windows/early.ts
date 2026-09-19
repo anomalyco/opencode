@@ -1,14 +1,25 @@
 import { randomUUID } from "node:crypto"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { app, BrowserWindow, screen } from "electron"
-import { windowIDArgument } from "../../shared/window-bootstrap"
+import { app, BrowserWindow, screen, shell } from "electron"
+import { resolveExternalURL } from "../files/external-url"
+import { windowArguments } from "./bootstrap"
 import { WINDOW_IDS_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 import { storedBackgroundColor, titlebarOverlay } from "./defaults"
+import { registerRendererProtocol } from "./protocol"
+import { loadWindow } from "./scheme"
+import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile, type WindowState } from "./window-state"
 
-export type EarlyWindow = { id: string; win: BrowserWindow; state: WindowState; shownAt: number }
+export type EarlyWindow = {
+  id: string
+  win: BrowserWindow
+  state: WindowState
+  shownAt: number
+  // Navigation policy is wired before the layers exist; the adopter swaps in the logged version.
+  openExternal: (url: string) => void
+}
 
 let pending: EarlyWindow | undefined
 
@@ -46,7 +57,7 @@ export function createEarlyWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: [windowIDArgument(id)],
+      additionalArguments: windowArguments(id),
     },
   })
   manageWindowState(win, file, state, displays)
@@ -56,7 +67,24 @@ export function createEarlyWindow() {
     pending = undefined
     app.quit()
   })
-  pending = { id, win, state, shownAt: Date.now() }
+  const record: EarlyWindow = {
+    id,
+    win,
+    state,
+    shownAt: Date.now(),
+    openExternal: (url) => {
+      const target = resolveExternalURL(url)
+      if (target) void shell.openExternal(target)
+    },
+  }
+  pending = record
+  // The renderer boots while the main bundle and layers load, instead of after them. Everything the
+  // page needs before its first request is wired here; the IPC port arrives once the layers are up.
+  registerRendererProtocol(path.join(root, "../renderer"))
+  allowRendererPermissions(win)
+  wireNavigationPolicy(win, (url) => record.openExternal(url))
+  wireRendererHeaders(win)
+  loadWindow(win, "index.html")
 }
 
 export function takeEarlyWindow() {
