@@ -209,7 +209,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("defaults custom model metadata", () => {
+  it.effect("defaults custom model metadata", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service
       const providerID = Provider.ID.make("custom")

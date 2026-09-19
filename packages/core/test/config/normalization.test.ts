@@ -249,9 +249,9 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.commands).toEqual({ fallback: { template: "legacy" }, valid: { template: "native" } })
     expect(result.encoded.providers).toEqual({ valid: { name: "Valid" } })
     expect(result.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toEqual([
-      ["commands", "fallback"],
-      ["commands", "invalid"],
-      ["providers", "invalid"],
+      ["commands", "fallback", "template"],
+      ["commands", "invalid", "template"],
+      ["providers", "invalid", "env", "0"],
     ])
   })
 
@@ -266,6 +266,8 @@ describe("ConfigNormalize", () => {
     expect(result.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toContainEqual([
       "provider",
       "azure",
+      "env",
+      "0",
     ])
   })
 
@@ -344,8 +346,8 @@ describe("ConfigNormalize", () => {
     expect(invalid.encoded).not.toHaveProperty("formatter")
     expect(invalid.encoded).not.toHaveProperty("lsp")
     expect(invalid.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toEqual([
-      ["formatter", "prettier"],
-      ["lsp", "typescript"],
+      ["formatter", "prettier", "command", "0"],
+      ["lsp", "typescript", "command", "0"],
     ])
 
     expect(normalized({ formatter: {}, lsp: {} }).encoded).toMatchObject({ formatter: {}, lsp: {} })
@@ -380,7 +382,7 @@ describe("ConfigNormalize", () => {
       result.diagnostics.some((item) => item.kind === "conflict" && item.path.join(".") === "mcp.timeout.catalog"),
     ).toBe(true)
     expect(
-      result.diagnostics.some((item) => item.kind === "invalid" && item.path.join(".") === "mcp.servers.invalid"),
+      result.diagnostics.some((item) => item.kind === "invalid" && item.path.join(".") === "mcp.servers.invalid.command.0"),
     ).toBe(true)
   })
 
