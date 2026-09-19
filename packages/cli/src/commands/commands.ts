@@ -49,9 +49,9 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       Flag.withDescription("Continue the last session"),
       Flag.withDefault(false),
     ),
-    session: Flag.string("session").pipe(
+    session: Flag.string("session", { defaultMissingValue: "" }).pipe(
       Flag.withAlias("s"),
-      Flag.withDescription("Session ID to continue"),
+      Flag.withDescription("Resume a session by ID, or open the session list when omitted"),
       Flag.optional,
     ),
     prompt: Flag.string("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
