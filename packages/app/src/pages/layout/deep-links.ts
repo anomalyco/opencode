@@ -1,10 +1,11 @@
 export const deepLinkEvent = "opencode:deep-link"
 
 const parseUrl = (input: string) => {
-  if (!input.startsWith("opencode://")) return
   if (typeof URL.canParse === "function" && !URL.canParse(input)) return
   try {
-    return new URL(input)
+    const url = new URL(input)
+    if (url.protocol.toLowerCase() !== "opencode:") return
+    return url
   } catch {
     return
   }
