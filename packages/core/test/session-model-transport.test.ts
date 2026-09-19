@@ -593,7 +593,7 @@ describe("SessionModelTransport", () => {
           Effect.forkChild({ startImmediately: true }),
         )
         yield* Effect.yieldNow
-        yield* TestClock.adjust("10 seconds")
+        yield* TestClock.adjust("15 seconds")
         expect(yield* Fiber.join(running)).toEqual(["fallback:slow"])
       }),
     )
@@ -727,6 +727,40 @@ describe("SessionModelTransport", () => {
         // One failed upgrade per Session, not one per step.
         expect(attempts).toBe(1)
         expect(fallbacks).toBe(2)
+      }),
+    )
+  })
+
+  test("keeps the Session on HTTP after repeated mid-stream socket losses", async () => {
+    let opens = 0
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.gen(function* () {
+          opens++
+          const messages = yield* Queue.unbounded<string | Uint8Array, AIError>()
+          return {
+            sendText: () =>
+              Effect.sync(() => {
+                Queue.failCauseUnsafe(messages, Cause.fail(error("socket dropped")))
+              }),
+            messages: Stream.fromQueue(messages),
+            close: Queue.shutdown(messages).pipe(Effect.asVoid),
+          }
+        }),
+    }
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const result = yield* Effect.result(collect(executor, exchange(`attempt-${attempt}`)))
+          expect(result._tag).toBe("Failure")
+        }
+        expect(opens).toBe(5)
+        expect(yield* collect(executor, exchange("sixth"))).toEqual(["fallback:sixth"])
+        expect(opens).toBe(5)
       }),
     )
   })

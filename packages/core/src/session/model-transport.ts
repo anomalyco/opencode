@@ -20,8 +20,10 @@ import { SessionSchema } from "./schema.js"
 import { webSocketConstructor } from "../effect/app-node-platform.js"
 
 const ROTATE_AFTER_MS = 55 * 60 * 1000
-const CONNECT_TIMEOUT = "10 seconds"
+const CONNECT_TIMEOUT = "15 seconds"
 const IDLE_TIMEOUT = "5 minutes"
+/** Consecutive exchanges lost to the socket before the Session stays on HTTP. */
+const MAX_STREAM_FAILURES = 5
 const events = Metric.counter("opencode_session_websocket_events_total", {
   description: "Session WebSocket lifecycle events",
   incremental: true,
@@ -49,6 +51,7 @@ interface State {
   readonly lock: Semaphore.Semaphore
   closed: boolean
   httpFallback: boolean
+  streamFailures: number
   channel?: Channel
 }
 
@@ -125,7 +128,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
       const state = (sessionID: SessionSchema.ID) => {
         const current = states.get(sessionID)
         if (current) return current
-        const created = { lock: Semaphore.makeUnsafe(1), closed: false, httpFallback: false }
+        const created = { lock: Semaphore.makeUnsafe(1), closed: false, httpFallback: false, streamFailures: 0 }
         states.set(sessionID, created)
         return created
       }
@@ -167,9 +170,25 @@ export const makeLayer = (connector: WebSocketConnector) =>
           code: error.reason._tag === "Transport" ? error.reason.code : error.reason._tag,
           active: channel.active !== undefined,
         })
-        if (channel.active) Queue.failCauseUnsafe(channel.active.queue, Cause.fail(error))
+        if (channel.active) {
+          Queue.failCauseUnsafe(channel.active.queue, Cause.fail(error))
+          yield* streamFailure(owner)
+        }
         yield* metric("protocol_failure")
         yield* channel.connection.close
+      })
+
+      // A socket that keeps dying mid-exchange costs a retry every step; after enough consecutive
+      // losses the Session stays on HTTP.
+      const streamFailure = Effect.fn("SessionModelTransport.streamFailure")(function* (owner: State) {
+        owner.streamFailures++
+        if (owner.streamFailures < MAX_STREAM_FAILURES) return
+        owner.httpFallback = true
+        yield* Effect.logWarning("session websocket failed repeatedly; using http", {
+          sessionTransport: "websocket",
+          failures: owner.streamFailures,
+        })
+        yield* metric("fallback", { reason: "stream_failures" })
       })
 
       const open = Effect.fn("SessionModelTransport.open")(function* (
@@ -381,6 +400,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
             return fallback(exchange)
           }
           yield* metric("ambiguous_delivery")
+          yield* streamFailure(owner)
           return yield* annotate(failure, { phase: "send", delivery: "ambiguous" })
         }
         yield* metric("send")
@@ -421,6 +441,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
               const pending = yield* Queue.size(active.queue)
               yield* Queue.shutdown(active.queue)
               if (terminal && pending === 0) {
+                owner.streamFailures = 0
                 yield* metric("terminal", { type: terminal.type })
                 if (terminal.type === "rejected") yield* metric("rejection", { recovery: terminal.recovery })
                 // The Codex backend stops serving a connection after any error frame: the next request is
