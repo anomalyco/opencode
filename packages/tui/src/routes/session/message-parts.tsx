@@ -5,6 +5,7 @@ import type {
   SessionMessageAssistant,
   SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
+  SessionMessageAssistantTool,
 } from "@opencode/client"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, useTheme, useThemes } from "../../context/theme"
@@ -12,6 +13,7 @@ import { reasoningSummary } from "../../context/thinking"
 import { usePlugin } from "../../plugin/context"
 import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
+import { canonicalToolName } from "../../util/tool-display"
 import { use } from "./render-context"
 import { generateThinkingSyntax } from "./thinking-syntax"
 
@@ -41,6 +43,15 @@ export function ReasoningPart(props: {
     return end === undefined ? 0 : Math.max(0, end - start)
   })
   const summary = createMemo(() => reasoningSummary(content()))
+  // A running patch is absorbed into this header while both are active, so the
+  // timeline shows one merged progress line instead of two spinners.
+  const mergedPatch = createMemo(() => {
+    if (isDone()) return ""
+    const part = pendingPatch(props.message)
+    if (!part) return ""
+    const target = patchTarget(part)
+    return target ? ` · Patch ${target}` : " · Patch"
+  })
   const toggle = () => {
     if (!inMinimal()) return
     setExpanded((prev) => !prev)
@@ -62,6 +73,7 @@ export function ReasoningPart(props: {
               done={isDone()}
               title={inMinimal() && !expanded() ? summary().title : null}
               duration={isDone() ? Locale.duration(duration()) : undefined}
+              pendingPatch={mergedPatch()}
             />
           </box>
         </box>
@@ -95,12 +107,42 @@ export function reasoningContent(part: SessionMessageAssistantReasoning) {
   return part.text.replace("[REDACTED]", "").trim()
 }
 
+function patchText(input: unknown) {
+  if (!input || typeof input !== "object" || !("patchText" in input)) return
+  return typeof input.patchText === "string" ? input.patchText : undefined
+}
+
+/** The running patch tool in a message, if any. Thinking absorbs it into one progress line. */
+export function pendingPatch(message: SessionMessageAssistant) {
+  return message.content.find(
+    (part): part is SessionMessageAssistantTool =>
+      part.type === "tool" &&
+      canonicalToolName(part.name) === "patch" &&
+      (part.state.status === "streaming" || part.state.status === "running"),
+  )
+}
+
+export function patchTarget(part: SessionMessageAssistantTool) {
+  const patch = patchText(part.state.input)
+  if (!patch) return ""
+  return patch.match(/\*\*\* (?:Add|Update|Delete) File: ([^\r\n]+)/)?.[1]?.trim() ?? ""
+}
+
+/** Whether a message still shows a thinking spinner that a concurrent patch would duplicate. */
+export function reasoningPending(message: SessionMessageAssistant) {
+  if (message.time.completed !== undefined) return false
+  return message.content.some(
+    (part) => part.type === "reasoning" && part.time?.completed === undefined && reasoningContent(part) !== "",
+  )
+}
+
 function ReasoningHeader(props: {
   toggleable: boolean
   open: boolean
   done: boolean
   title: string | null
   duration?: string
+  pendingPatch?: string
 }) {
   const theme = useTheme()
   const fg = () =>
@@ -117,7 +159,9 @@ function ReasoningHeader(props: {
     <Switch>
       <Match when={!props.done}>
         <box flexDirection="row">
-          <Spinner color={fg()}>{props.title ? "Thinking: " + props.title : "Thinking"}</Spinner>
+          <Spinner color={fg()}>
+            {(props.title ? "Thinking: " + props.title : "Thinking") + (props.pendingPatch ?? "")}
+          </Spinner>
         </box>
       </Match>
       <Match when={true}>
