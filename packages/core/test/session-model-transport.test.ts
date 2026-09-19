@@ -915,24 +915,22 @@ describe("SessionModelTransport", () => {
     )
   })
 
-  test("poisons instead of dropping data when the inbound queue overflows", async () => {
+  test("buffers a synchronous burst of frames larger than any fixed capacity", async () => {
+    // Bun dispatches every frame in a read buffer in one tick; a large tool call streams thousands
+    // of small argument deltas, so the exchange must absorb the whole burst before it can consume.
+    const burst = 1500
     const messages = queue<string | Uint8Array, AIError>()
-    const poisoned = Deferred.makeUnsafe<void>()
     let closed = 0
     const connector: WebSocketConnector = {
       open: () =>
         Effect.succeed({
           sendText: () =>
-            // Hold consumption at the send boundary until the reader fills and poisons the inbound queue.
             Effect.sync(() => {
-              for (let index = 0; index <= 129; index++) Queue.offerUnsafe(messages, `frame:${index}`)
-            }).pipe(Effect.andThen(Deferred.await(poisoned))),
-          messages: Stream.fromQueue(messages).pipe(Stream.tap(() => Effect.yieldNow)),
-          close: Effect.sync(() => closed++).pipe(
-            Effect.andThen(Deferred.succeed(poisoned, undefined)),
-            Effect.andThen(Queue.shutdown(messages)),
-            Effect.asVoid,
-          ),
+              for (let index = 0; index < burst; index++) Queue.offerUnsafe(messages, `frame:${index}`)
+              Queue.offerUnsafe(messages, "completed")
+            }),
+          messages: Stream.fromQueue(messages),
+          close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
         }),
     }
 
@@ -941,20 +939,21 @@ describe("SessionModelTransport", () => {
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
         const item = exchange("first")
-        const result = yield* Effect.result(
-          collect(transport.bind(session), {
-            ...item,
-            driver: {
-              create: item.driver.create,
-              observe: (_create, frame) => Effect.succeed({ type: "frame" as const, frame }),
-            },
-          }),
-        )
-        expect(result).toMatchObject({
-          _tag: "Failure",
-          failure: { reason: { _tag: "Transport", code: "queue-overflow", delivery: "accepted" } },
+        const frames = yield* collect(transport.bind(session), {
+          ...item,
+          driver: {
+            create: item.driver.create,
+            observe: (_create, frame) =>
+              Effect.succeed(
+                frame === "completed" ? { type: "completed" as const, frame } : { type: "frame" as const, frame },
+              ),
+          },
         })
-        expect(closed).toBe(1)
+        expect(frames).toHaveLength(burst + 1)
+        expect(frames.slice(0, 3)).toEqual(["frame:0", "frame:1", "frame:2"])
+        expect(frames.at(-2)).toBe(`frame:${burst - 1}`)
+        expect(frames.at(-1)).toBe("completed")
+        expect(closed).toBe(0)
       }),
     )
   })

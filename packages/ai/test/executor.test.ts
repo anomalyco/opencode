@@ -605,6 +605,33 @@ describe("WebSocket channel execution", () => {
     }),
   )
 
+  it.effect("buffers a synchronous burst of frames before the consumer runs", () =>
+    Effect.gen(function* () {
+      class TestSocket extends EventTarget {
+        readyState = globalThis.WebSocket.OPEN
+        send() {}
+        close() {}
+      }
+      const socket = new TestSocket()
+      const connection = yield* WebSocketTransport.fromWebSocket(
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        socket as unknown as globalThis.WebSocket,
+        { url: "wss://provider.test/responses", headers: Headers.empty },
+      )
+      // Bun dispatches every frame in a read buffer within one tick, so nothing consumes in between.
+      const burst = 1500
+      for (let index = 0; index < burst; index++) {
+        socket.dispatchEvent(new MessageEvent("message", { data: `frame:${index}` }))
+      }
+      const received = yield* connection.messages.pipe(Stream.take(burst), Stream.runCollect)
+
+      expect(received).toHaveLength(burst)
+      expect(received[0]).toBe("frame:0")
+      expect(received[burst - 1]).toBe(`frame:${burst - 1}`)
+      yield* connection.close
+    }),
+  )
+
   it.effect("preserves opening event errors and native send exceptions", () =>
     Effect.gen(function* () {
       const cause = new Error("native send failed")

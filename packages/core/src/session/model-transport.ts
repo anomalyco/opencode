@@ -20,7 +20,6 @@ import { SessionSchema } from "./schema.js"
 import { webSocketConstructor } from "../effect/app-node-platform.js"
 
 const ROTATE_AFTER_MS = 55 * 60 * 1000
-const INBOUND_CAPACITY = 128
 const CONNECT_TIMEOUT = "10 seconds"
 const IDLE_TIMEOUT = "5 minutes"
 const events = Metric.counter("opencode_session_websocket_events_total", {
@@ -169,11 +168,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
           active: channel.active !== undefined,
         })
         if (channel.active) Queue.failCauseUnsafe(channel.active.queue, Cause.fail(error))
-        yield* metric(
-          error.reason._tag === "Transport" && error.reason.code === "queue-overflow"
-            ? "queue_overflow"
-            : "protocol_failure",
-        )
+        yield* metric("protocol_failure")
         yield* channel.connection.close
       })
 
@@ -235,14 +230,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                       code: "message",
                       phase: "receive",
                     })
-                  if (Queue.offerUnsafe(active.queue, message)) return undefined
-                  return yield* transportError("Session WebSocket inbound queue overflow", {
-                    url: exchange.connect.url,
-                    operation: "read",
-                    code: "queue-overflow",
-                    phase: "receive",
-                    delivery: "accepted",
-                  })
+                  Queue.offerUnsafe(active.queue, message)
                 }),
               ),
               Effect.catch((error) =>
@@ -255,9 +243,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                         phase:
                           error.reason._tag === "Transport" && error.reason.phase === "close" ? "close" : "receive",
                         delivery:
-                          channel.active?.delivery === "provider-observed" ||
-                          channel.active?.delivery === "terminal" ||
-                          (error.reason._tag === "Transport" && error.reason.code === "queue-overflow")
+                          channel.active?.delivery === "provider-observed" || channel.active?.delivery === "terminal"
                             ? "accepted"
                             : error.reason._tag === "Transport" && error.reason.code === "1009"
                               ? "rejected"
@@ -370,7 +356,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
           mode: create.mode,
         })
         const active: Active = {
-          queue: yield* Queue.bounded<string, AIError>(INBOUND_CAPACITY),
+          queue: yield* Queue.unbounded<string, AIError>(),
           delivery: "send-attempted",
         }
         channel.active = active
