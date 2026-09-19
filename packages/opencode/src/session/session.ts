@@ -38,7 +38,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
 import { Global } from "@opencode-ai/core/global"
-import { Effect, Layer, Option, Context, Schema, Types } from "effect"
+import { Effect, Layer, Option, Context, Duration, Schedule, Schema, Scope, Types } from "effect"
 import { NonNegativeInt, optional } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -47,6 +47,7 @@ import { SessionMessage } from "@opencode-ai/schema/session-message"
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
+const ephemeralSweepAge = 24 * 60 * 60 * 1000
 
 export function isDefaultTitle(title: string) {
   return new RegExp(
@@ -106,6 +107,7 @@ export function fromRow(row: SessionRow): Info {
     },
     share,
     metadata: row.metadata ?? undefined,
+    ephemeral: row.ephemeral || undefined,
     revert,
     permission: row.permission ? [...row.permission] : undefined,
     time: {
@@ -136,6 +138,7 @@ export function toRow(info: Info) {
     summary_files: info.summary?.files,
     summary_diffs: info.summary?.diffs,
     metadata: info.metadata,
+    ephemeral: info.ephemeral ?? false,
     cost: info.cost ?? 0,
     tokens_input: (info.tokens ?? EmptyTokens).input,
     tokens_output: (info.tokens ?? EmptyTokens).output,
@@ -238,6 +241,7 @@ export const Info = Schema.Struct({
   model: optional(Model),
   version: Schema.String,
   metadata: optional(Metadata),
+  ephemeral: optional(Schema.Boolean),
   time: Time,
   permission: optional(PermissionV1.Ruleset),
   revert: optional(Revert),
@@ -266,6 +270,7 @@ export const CreateInput = Schema.optional(
     metadata: Schema.optional(Metadata),
     permission: Schema.optional(PermissionV1.Ruleset),
     workspaceID: Schema.optional(WorkspaceV2.ID),
+    ephemeral: Schema.optional(Schema.Boolean),
   }),
 )
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
@@ -421,6 +426,7 @@ export interface Interface {
     metadata?: typeof Metadata.Type
     permission?: PermissionV1.Ruleset
     workspaceID?: WorkspaceV2.ID
+    ephemeral?: boolean
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
@@ -496,6 +502,13 @@ const layer: Layer.Layer<
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
 
+    // Ephemeral sessions created by this process. While the owner lives it
+    // heartbeats them past the staleness sweep, covering runs that produce no
+    // usage for long stretches (pending permission asks, humans stepping away
+    // from an open ephemeral TUI). Beats stop with the process, which is what
+    // lets the sweep judge abandonment by staleness at all.
+    const ephemeralOwned = new Set<SessionID>()
+
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
       title?: string
@@ -507,6 +520,7 @@ const layer: Layer.Layer<
       path?: string
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
+      ephemeral?: boolean
     }) {
       const ctx = yield* InstanceState.context
       const result: Info = {
@@ -522,6 +536,7 @@ const layer: Layer.Layer<
         agent: input.agent,
         model: input.model,
         metadata: input.metadata,
+        ephemeral: input.ephemeral || undefined,
         permission: input.permission ? [...input.permission] : undefined,
         cost: 0,
         tokens: EmptyTokens,
@@ -534,6 +549,7 @@ const layer: Layer.Layer<
 
       yield* events.publish(SessionV1.Event.Created, { sessionID: result.id, info: result })
 
+      if (result.ephemeral) ephemeralOwned.add(result.id)
       return result
     })
 
@@ -560,6 +576,8 @@ const layer: Layer.Layer<
       if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
       if (input?.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
       if (!input?.archived) conditions.push(isNull(SessionTable.time_archived))
+      // Ephemeral sessions are fire-and-forget: they never appear in history.
+      conditions.push(eq(SessionTable.ephemeral, false))
 
       const query =
         conditions.length > 0
@@ -605,6 +623,7 @@ const layer: Layer.Layer<
 
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
       const session = yield* get(sessionID)
+      ephemeralOwned.delete(sessionID)
       try {
         // `remove` needs to work in all cases, such as broken sessions that
         // run cleanup without instance state.
@@ -672,9 +691,15 @@ const layer: Layer.Layer<
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
       workspaceID?: WorkspaceV2.ID
+      ephemeral?: boolean
     }) {
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
+      // Children inherit ephemerality so subagent sessions of an ephemeral
+      // run stay out of history and die with their parent.
+      const parent = input?.parentID
+        ? yield* get(input.parentID).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+        : undefined
       return yield* createNext({
         parentID: input?.parentID,
         directory: ctx.directory,
@@ -685,6 +710,7 @@ const layer: Layer.Layer<
         metadata: input?.metadata,
         permission: input?.permission,
         workspaceID: input?.workspaceID ?? workspace,
+        ephemeral: input?.ephemeral ?? parent?.ephemeral,
       })
     })
 
@@ -903,7 +929,11 @@ const layer: Layer.Layer<
       return Option.none<SessionV1.WithParts>()
     })
 
-    return Service.of({
+    // Ephemeral sessions are deleted by their creating client on completion.
+    // When that process crashed or was killed nothing comes back for them, so
+    // sweep stale ones on startup.
+    const scope = yield* Scope.Scope
+    const service = Service.of({
       list,
       listGlobal,
       create,
@@ -932,8 +962,74 @@ const layer: Layer.Layer<
       updatePartDelta,
       findMessage,
     })
+
+    yield* sweepEphemeral(db, service).pipe(Effect.forkIn(scope))
+    yield* Effect.suspend(() => heartbeatEphemeral(db, ephemeralOwned)).pipe(
+      Effect.repeat(Schedule.spaced(Duration.minutes(10))),
+      Effect.forkIn(scope),
+    )
+
+    return service
   }),
 )
+
+/**
+ * Deletes abandoned ephemeral root sessions. Their creating client removes
+ * them on completion, but nothing comes back for them after a crash or kill.
+ * The staleness window keeps concurrent processes from deleting each other's
+ * live ephemeral sessions: active runs heartbeat time_updated through usage
+ * projection, so only truly abandoned sessions go stale. Liveness is judged
+ * per family since a parent waiting on a long subagent only heartbeats
+ * through its children.
+ */
+export const sweepEphemeral = (
+  db: Database.Interface["db"],
+  session: Pick<Interface, "children" | "remove">,
+  cutoff = Date.now() - ephemeralSweepAge,
+) => {
+  const familyUpdated = (rootID: SessionID): Effect.Effect<number> =>
+    Effect.gen(function* () {
+      const kids = yield* session.children(rootID)
+      const nested = yield* Effect.forEach(kids, (kid) => familyUpdated(kid.id))
+      return Math.max(0, ...kids.map((kid) => kid.time.updated), ...nested)
+    })
+  return Effect.gen(function* () {
+    const rows = yield* db
+      .select({ id: SessionTable.id })
+      .from(SessionTable)
+      .where(
+        and(eq(SessionTable.ephemeral, true), isNull(SessionTable.parent_id), lt(SessionTable.time_updated, cutoff)),
+      )
+      .all()
+      .pipe(Effect.orDie)
+    yield* Effect.forEach(
+      rows,
+      (row) =>
+        Effect.gen(function* () {
+          if ((yield* familyUpdated(row.id)) >= cutoff) return
+          yield* session.remove(row.id).pipe(Effect.ignore)
+        }),
+      { discard: true },
+    )
+  }).pipe(Effect.withSpan("Session.sweepEphemeral"))
+}
+
+/**
+ * Bumps time_updated for the ephemeral sessions this process owns so the
+ * startup sweep never reaps a session whose owner is alive but quiet. This is
+ * a direct projection-table write on purpose: liveness is process state, not
+ * domain history, and routing beats through the event journal would grow it
+ * unboundedly for long-lived instances.
+ */
+export const heartbeatEphemeral = (db: Database.Interface["db"], owned: ReadonlySet<SessionID>) => {
+  if (owned.size === 0) return Effect.void
+  return db
+    .update(SessionTable)
+    .set({ time_updated: Date.now() })
+    .where(and(eq(SessionTable.ephemeral, true), inArray(SessionTable.id, [...owned])))
+    .run()
+    .pipe(Effect.orDie, Effect.asVoid, Effect.withSpan("Session.heartbeatEphemeral"))
+}
 
 const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function* (
   background: BackgroundJob.Interface,
@@ -959,7 +1055,7 @@ function listByProject(
     experimentalWorkspaces: boolean
   },
 ) {
-  const conditions = [eq(SessionTable.project_id, input.projectID)]
+  const conditions = [eq(SessionTable.project_id, input.projectID), eq(SessionTable.ephemeral, false)]
 
   if (input.workspaceID) {
     conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
