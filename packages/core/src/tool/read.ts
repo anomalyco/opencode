@@ -18,7 +18,8 @@ const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "
 const LocationInput = Schema.Struct({
   path: Schema.String,
   reason: Schema.String.pipe(Schema.optional).annotate({
-    description: "Optional brief explanation of why this read is needed for the user's task",
+    description:
+      "Optional brief explanation of why this read is needed for the user's task. Provide it when permission may be requested.",
   }),
   offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
     description: "The 1-based directory entry or text line offset to start reading from",
