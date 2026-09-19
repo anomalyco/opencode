@@ -1457,10 +1457,11 @@ const layer = Layer.effect(
           : yield* currentModel(input.sessionID)
         : taskModel
 
+      const hookOutput = { parts, noReply: false }
       yield* plugin.trigger(
         "command.execute.before",
         { command: input.command, sessionID: input.sessionID, arguments: input.arguments },
-        { parts },
+        hookOutput,
       )
 
       const result = yield* prompt({
@@ -1468,8 +1469,9 @@ const layer = Layer.effect(
         messageID: input.messageID,
         model: userModel,
         agent: userAgent,
-        parts,
+        parts: hookOutput.parts,
         variant: input.variant,
+        noReply: input.noReply === true || hookOutput.noReply === true,
       })
       yield* events.publish(Command.Event.Executed, {
         name: input.command,
@@ -1541,6 +1543,7 @@ export const CommandInput = Schema.Struct({
   arguments: Schema.String,
   command: Schema.String,
   variant: Schema.optional(Schema.String),
+  noReply: Schema.optional(Schema.Boolean),
   // Inlined (no identifier annotation) to keep the original SDK output — the
   // PromptInput call site below references FilePartInput by ref via the
   // Schema export in message-v2.ts.

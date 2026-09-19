@@ -4163,6 +4163,7 @@ export class Session2 extends HeyApiClient {
       arguments?: string
       command?: string
       variant?: string
+      noReply?: boolean
       parts?: Array<{
         id?: string
         type: "file"
@@ -4188,6 +4189,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "arguments" },
             { in: "body", key: "command" },
             { in: "body", key: "variant" },
+            { in: "body", key: "noReply" },
             { in: "body", key: "parts" },
           ],
         },
