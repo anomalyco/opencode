@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ServerConnection } from "@/context/server"
-import { checkServerHealth } from "./server-health"
+import { checkServerHealth, waitForServerReady } from "./server-health"
 
 const server: ServerConnection.HttpBase = {
   url: "http://localhost:4096",
@@ -122,22 +122,26 @@ describe("checkServerHealth", () => {
     expect(result).toEqual({ healthy: false })
   })
 
-  test("uses provided abort signal", async () => {
+  test("aborts the in-flight request when the provided signal fires", async () => {
     let signal: AbortSignal | undefined
+    // Hangs until its signal fires, like a request against a dead server.
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       signal = abortFromInput(input, init)
-      return new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true })
       })
     }) as unknown as typeof globalThis.fetch
 
     const abort = new AbortController()
+    setTimeout(() => abort.abort(), 20)
     await checkServerHealth(server, fetch, {
       signal: abort.signal,
+      retryCount: 0,
     })
 
-    expect(signal).toBe(abort.signal)
+    // The request sees a derived signal that also covers the per-attempt
+    // timeout; firing the caller's signal must still abort the request.
+    expect(signal?.aborted).toBe(true)
   })
 
   test("retries transient failures and eventually succeeds", async () => {
@@ -174,5 +178,124 @@ describe("checkServerHealth", () => {
 
     expect(count).toBe(6)
     expect(result).toEqual({ healthy: false })
+  })
+})
+
+describe("waitForServerReady", () => {
+  test("resolves immediately when the server is already healthy", async () => {
+    const fetch = (async () =>
+      new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof globalThis.fetch
+
+    const ready = await waitForServerReady(server, fetch, { timeoutMs: 1000, pollMs: 50 })
+
+    expect(ready).toBe(true)
+  })
+
+  test("waits and resolves once the server becomes reachable", async () => {
+    let count = 0
+    const fetch = (async () => {
+      count += 1
+      if (count < 3) throw new TypeError("Failed to fetch")
+      return new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    }) as unknown as typeof globalThis.fetch
+
+    const ready = await waitForServerReady(server, fetch, { timeoutMs: 5000, pollMs: 20 })
+
+    expect(ready).toBe(true)
+    expect(count).toBeGreaterThanOrEqual(3)
+  })
+
+  test("returns false when the server never becomes reachable", async () => {
+    const fetch = (async () => {
+      throw new TypeError("Failed to fetch")
+    }) as unknown as typeof globalThis.fetch
+
+    const ready = await waitForServerReady(server, fetch, { timeoutMs: 200, pollMs: 20 })
+
+    expect(ready).toBe(false)
+  })
+
+  test("aborts early when the signal fires", async () => {
+    const fetch = (async () => {
+      throw new TypeError("Failed to fetch")
+    }) as unknown as typeof globalThis.fetch
+    const abort = new AbortController()
+    abort.abort()
+
+    const ready = await waitForServerReady(server, fetch, { timeoutMs: 5000, pollMs: 20, signal: abort.signal })
+
+    expect(ready).toBe(false)
+  })
+
+  test("aborts the in-flight health request when the caller signal fires mid-poll", async () => {
+    let requestAborted = false
+    // A fetch that hangs until its abort signal fires, like the platform fetch.
+    const fetch = ((_url: unknown, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => {
+            requestAborted = true
+            reject(new DOMException("Aborted", "AbortError"))
+          },
+          { once: true },
+        )
+      })) as unknown as typeof globalThis.fetch
+    const controller = new AbortController()
+
+    const pending = waitForServerReady(server, fetch, { timeoutMs: 10_000, pollMs: 20, signal: controller.signal })
+    setTimeout(() => controller.abort(), 50)
+
+    const started = Date.now()
+    const ready = await pending
+
+    expect(ready).toBe(false)
+    expect(requestAborted).toBe(true)
+    // The in-flight attempt is cut off instead of waiting for its own timeout.
+    expect(Date.now() - started).toBeLessThan(5000)
+  })
+
+  test("cuts off a hung attempt so the total wall clock stays near timeoutMs", async () => {
+    const started = Date.now()
+    // A request that never settles must be abandoned by the per-attempt
+    // timeout, and each attempt is bounded by the time left before the overall
+    // deadline — otherwise the poll overshoots `timeoutMs` by up to a poll
+    // budget per iteration.
+    const fetch = ((_url: unknown, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true })
+      })) as unknown as typeof globalThis.fetch
+
+    const ready = await waitForServerReady(server, fetch, { timeoutMs: 200, pollMs: 150 })
+
+    const elapsed = Date.now() - started
+    expect(ready).toBe(false)
+    // Without the remaining-time clamp this poll overshoots to ~timeoutMs +
+    // (pollMs * 4) + pollMs.
+    expect(elapsed).toBeLessThan(600)
+  })
+
+  test("readiness gate blocks the fan-out and fails fast when the server never becomes ready", async () => {
+    // Pins the wiring contract used by both gates in server-sync.tsx (global
+    // bootstrap + per-directory fan-out): when readiness fails, no data
+    // requests are fired into the dead server and the caller gets an error.
+    const fetch = (async () => {
+      throw new TypeError("Failed to fetch")
+    }) as unknown as typeof globalThis.fetch
+    let fanOutCalls = 0
+    const gatedFanOut = async () => {
+      const ready = await waitForServerReady(server, fetch, { timeoutMs: 200, pollMs: 20 })
+      if (!ready) throw new Error("Could not reach http://localhost:4096")
+      fanOutCalls += 1
+    }
+
+    await expect(gatedFanOut()).rejects.toThrow("Could not reach")
+    expect(fanOutCalls).toBe(0)
   })
 })

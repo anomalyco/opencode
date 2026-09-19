@@ -110,7 +110,7 @@ export const loadGlobalConfigQuery = (scope: ServerScope, sdk: OpencodeClient, p
     queryKey: [scope, "config"],
     queryFn: async () => {
       if ((await protocol) !== "v1") return {}
-      return retry(() => sdk.global.config.get().then((x) => x.data!))
+      return retry(() => sdk.global.config.get().then((x) => x.data!), { retryOnTypeError: true })
     },
   })
 
@@ -128,15 +128,17 @@ export const loadProjectsQuery = (scope: ServerScope, api: ProjectApi) =>
   queryOptions({
     queryKey: [scope, "project"],
     queryFn: () =>
-      retry(() =>
-        api.list().then((projects) => {
-          return projects
-            .filter((p) => !!p?.id)
-            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
-            .map(normalizeProjectInfo)
-            .slice()
-            .sort((a, b) => cmp(a.id, b.id))
-        }),
+      retry(
+        () =>
+          api.list().then((projects) => {
+            return projects
+              .filter((p) => !!p?.id)
+              .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
+              .map(normalizeProjectInfo)
+              .slice()
+              .sort((a, b) => cmp(a.id, b.id))
+          }),
+        { retryOnTypeError: true },
       ),
   })
 
@@ -211,7 +213,7 @@ function warmSessions(input: {
   if (ids.length === 0) return Promise.resolve()
   return Promise.all(
     ids.map((sessionID) =>
-      retry(() => input.api.get({ sessionID })).then((session) =>
+      retry(() => input.api.get({ sessionID }), { retryOnTypeError: true }).then((session) =>
         mergeSession(input.setStore, normalizeSessionInfo(session)),
       ),
     ),
@@ -228,19 +230,22 @@ export const loadProvidersQuery = (
   queryOptions({
     queryKey: [scope, directory, "providers"],
     queryFn: () =>
-      retry(async () => {
-        if ((await protocol) === "v1" && legacy) {
-          const result = await legacy.provider.list()
-          return normalizeProviderList(result.data!)
-        }
-        const location = directory ? { location: { directory } } : undefined
-        const [providers, models, defaultModel] = await Promise.all([
-          sdk.provider.list(location),
-          sdk.model.list(location),
-          sdk.model.default(location),
-        ])
-        return normalizeProviderList(providers.data, models.data, defaultModel.data)
-      }),
+      retry(
+        async () => {
+          if ((await protocol) === "v1" && legacy) {
+            const result = await legacy.provider.list()
+            return normalizeProviderList(result.data!)
+          }
+          const location = directory ? { location: { directory } } : undefined
+          const [providers, models, defaultModel] = await Promise.all([
+            sdk.provider.list(location),
+            sdk.model.list(location),
+            sdk.model.default(location),
+          ])
+          return normalizeProviderList(providers.data, models.data, defaultModel.data)
+        },
+        { retryOnTypeError: true },
+      ),
   })
 
 type AgentListApi = {
@@ -265,10 +270,13 @@ export const loadAgentsQuery = (
   queryOptions({
     queryKey: [scope, directory, "agents"],
     queryFn: () =>
-      retry(async () => {
-        if ((await protocol) === "v1" && legacy) return normalizeAgentList((await legacy.app.agents()).data ?? [])
-        return sdk.list({ location: { directory } }).then((result) => normalizeAgentList(result.data))
-      }),
+      retry(
+        async () => {
+          if ((await protocol) === "v1" && legacy) return normalizeAgentList((await legacy.app.agents()).data ?? [])
+          return sdk.list({ location: { directory } }).then((result) => normalizeAgentList(result.data))
+        },
+        { retryOnTypeError: true },
+      ),
   })
 
 export const loadCommands = (
@@ -277,23 +285,26 @@ export const loadCommands = (
   legacy?: OpencodeClient,
   protocol?: Promise<ServerProtocol>,
 ): Promise<CommandInfo[]> =>
-  retry(async () => {
-    if ((await protocol) === "v1" && legacy) {
-      return ((await legacy.command.list()).data ?? []).map((command) => {
-        const [providerID, id] = command.model?.split("/") ?? []
-        return {
-          name: command.name,
-          template: command.template,
-          description: command.description,
-          agent: command.agent,
-          model: providerID && id ? { providerID, id } : undefined,
-          subtask: command.subtask,
-          // source: command.source === "skill" ? undefined : command.source,
-        }
-      })
-    }
-    return api.list({ location: { directory } }).then((result) => result.data)
-  })
+  retry(
+    async () => {
+      if ((await protocol) === "v1" && legacy) {
+        return ((await legacy.command.list()).data ?? []).map((command) => {
+          const [providerID, id] = command.model?.split("/") ?? []
+          return {
+            name: command.name,
+            template: command.template,
+            description: command.description,
+            agent: command.agent,
+            model: providerID && id ? { providerID, id } : undefined,
+            subtask: command.subtask,
+            // source: command.source === "skill" ? undefined : command.source,
+          }
+        })
+      }
+      return api.list({ location: { directory } }).then((result) => result.data)
+    },
+    { retryOnTypeError: true },
+  )
 
 export const loadPathQuery = (
   scope: ServerScope,
@@ -306,7 +317,9 @@ export const loadPathQuery = (
     queryFn: async () => {
       if ((await protocol) !== "v1")
         return { state: "", config: "", worktree: "", directory: directory ?? "", home: "" }
-      return retry(() => sdk.path.get({ directory: directory ?? undefined }).then((result) => result.data!))
+      return retry(() => sdk.path.get({ directory: directory ?? undefined }).then((result) => result.data!), {
+        retryOnTypeError: true,
+      })
     },
   })
 
@@ -320,10 +333,13 @@ export const loadReferencesQuery = (
   queryOptions<ReferenceInfo[]>({
     queryKey: [scope, directory, "references"] as const,
     queryFn: () =>
-      retry(async () => {
-        if ((await protocol) === "v1" && legacy) return (await legacy.v2.reference.list()).data?.data ?? []
-        return api.list({ location: { directory } }).then((result) => result.data)
-      }).catch(() => []),
+      retry(
+        async () => {
+          if ((await protocol) === "v1" && legacy) return (await legacy.v2.reference.list()).data?.data ?? []
+          return api.list({ location: { directory } }).then((result) => result.data)
+        },
+        { retryOnTypeError: true },
+      ).catch(() => []),
     placeholderData: [],
   })
 
@@ -379,42 +395,47 @@ export async function bootstrapDirectory(input: {
           .ensureQueryData(loadAgentsQuery(input.scope, input.directory, input.api.agent, input.sdk, input.protocol))
           .then((data) => input.setStore("agent", data)),
       () =>
-        retry(async () => {
-          if ((await input.protocol) !== "v1") return
-          return input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))
-        }),
-      () =>
-        retry(() =>
-          (async () => {
+        retry(
+          async () => {
             if ((await input.protocol) !== "v1") return
-            const x = await input.sdk.session.status()
-            if (!input.session) {
-              input.setStore("session_status", x.data!)
-              return
-            }
-            const statuses = x.data ?? {}
-            input.session.set(
-              "session_status",
-              produce((draft) => {
-                for (const sessionID of Object.keys(draft)) {
-                  if (statuses[sessionID]) continue
-                  if (input.session?.get(sessionID)?.directory === input.directory) delete draft[sessionID]
-                }
-              }),
-            )
-            for (const [sessionID, status] of Object.entries(statuses)) {
-              input.session.set("session_status", sessionID, reconcile(status))
-            }
-            await Promise.all(
-              Object.keys(statuses).map((sessionID) => input.session!.resolve(sessionID).catch(() => undefined)),
-            )
-          })(),
+            return input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))
+          },
+          { retryOnTypeError: true },
+        ),
+      () =>
+        retry(
+          () =>
+            (async () => {
+              if ((await input.protocol) !== "v1") return
+              const x = await input.sdk.session.status()
+              if (!input.session) {
+                input.setStore("session_status", x.data!)
+                return
+              }
+              const statuses = x.data ?? {}
+              input.session.set(
+                "session_status",
+                produce((draft) => {
+                  for (const sessionID of Object.keys(draft)) {
+                    if (statuses[sessionID]) continue
+                    if (input.session?.get(sessionID)?.directory === input.directory) delete draft[sessionID]
+                  }
+                }),
+              )
+              for (const [sessionID, status] of Object.entries(statuses)) {
+                input.session.set("session_status", sessionID, reconcile(status))
+              }
+              await Promise.all(
+                Object.keys(statuses).map((sessionID) => input.session!.resolve(sessionID).catch(() => undefined)),
+              )
+            })(),
+          { retryOnTypeError: true },
         ),
       !seededProject &&
         (() =>
-          retry(() => input.api.project.current({ location: { directory: input.directory } })).then((project) =>
-            input.setStore("project", project.id),
-          )),
+          retry(() => input.api.project.current({ location: { directory: input.directory } }), {
+            retryOnTypeError: true,
+          }).then((project) => input.setStore("project", project.id))),
       !seededPath &&
         (() =>
           input.queryClient
@@ -424,14 +445,17 @@ export async function bootstrapDirectory(input: {
               if (next) input.setStore("project", next)
             })),
       () =>
-        retry(async () => {
-          if ((await input.protocol) !== "v1") return
-          return input.sdk.vcs.get().then((result) => {
-            const next = { branch: result.data?.branch, default_branch: result.data?.default_branch }
-            input.setStore("vcs", next)
-            if (next) input.vcsCache.setStore("value", next)
-          })
-        }),
+        retry(
+          async () => {
+            if ((await input.protocol) !== "v1") return
+            return input.sdk.vcs.get().then((result) => {
+              const next = { branch: result.data?.branch, default_branch: result.data?.default_branch }
+              input.setStore("vcs", next)
+              if (next) input.vcsCache.setStore("value", next)
+            })
+          },
+          { retryOnTypeError: true },
+        ),
       input.mcp &&
         (() =>
           loadCommands(input.directory, input.api.command, input.sdk, input.protocol).then((commands) =>
@@ -442,76 +466,80 @@ export async function bootstrapDirectory(input: {
           loadReferencesQuery(input.scope, input.directory, input.api.reference, input.sdk, input.protocol),
         ),
       () =>
-        retry(() =>
-          (async () => {
-            if ((await input.protocol) === "v1") return (await input.sdk.permission.list()).data ?? []
-            return input.api.permission.request
-              .list({ location: { directory: input.directory } })
-              .then((result) => result.data.map(normalizePermissionRequest))
-          })().then((permissions) => {
-            const ids = permissions.map((permission) => permission.sessionID)
-            const grouped = groupBySession(
-              permissions.filter((permission) => !!permission.id && !!permission.sessionID),
-            )
-            const warm = input.session
-              ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
-              : warmSessions({ ids, store: input.store, setStore: input.setStore, api: input.api.session })
-            return warm.then(() =>
-              batch(() => {
-                const current = input.session?.data.permission ?? input.store.permission
-                for (const sessionID of Object.keys(current)) {
-                  if (grouped[sessionID]) continue
-                  if (input.session?.get(sessionID)?.directory !== input.directory) continue
-                  if (input.session) input.session.set("permission", sessionID, [])
-                  if (!input.session) input.setStore("permission", sessionID, [])
-                }
-                for (const [sessionID, permissions] of Object.entries(grouped)) {
-                  const value = reconcile(
-                    permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
-                    { key: "id" },
-                  )
-                  if (input.session) input.session.set("permission", sessionID, value)
-                  if (!input.session) input.setStore("permission", sessionID, value)
-                }
-              }),
-            )
-          }),
+        retry(
+          () =>
+            (async () => {
+              if ((await input.protocol) === "v1") return (await input.sdk.permission.list()).data ?? []
+              return input.api.permission.request
+                .list({ location: { directory: input.directory } })
+                .then((result) => result.data.map(normalizePermissionRequest))
+            })().then((permissions) => {
+              const ids = permissions.map((permission) => permission.sessionID)
+              const grouped = groupBySession(
+                permissions.filter((permission) => !!permission.id && !!permission.sessionID),
+              )
+              const warm = input.session
+                ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
+                : warmSessions({ ids, store: input.store, setStore: input.setStore, api: input.api.session })
+              return warm.then(() =>
+                batch(() => {
+                  const current = input.session?.data.permission ?? input.store.permission
+                  for (const sessionID of Object.keys(current)) {
+                    if (grouped[sessionID]) continue
+                    if (input.session?.get(sessionID)?.directory !== input.directory) continue
+                    if (input.session) input.session.set("permission", sessionID, [])
+                    if (!input.session) input.setStore("permission", sessionID, [])
+                  }
+                  for (const [sessionID, permissions] of Object.entries(grouped)) {
+                    const value = reconcile(
+                      permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
+                      { key: "id" },
+                    )
+                    if (input.session) input.session.set("permission", sessionID, value)
+                    if (!input.session) input.setStore("permission", sessionID, value)
+                  }
+                }),
+              )
+            }),
+          { retryOnTypeError: true },
         ),
       () =>
-        retry(() =>
-          (async () => {
-            if ((await input.protocol) === "v1") return (await input.sdk.question.list()).data ?? []
-            return input.api.question.request
-              .list({ location: { directory: input.directory } })
-              .then((result) => result.data)
-          })().then((questions) => {
-            const ids = questions.map((question) => question.sessionID)
-            const grouped = groupBySession(
-              questions.filter((question) => !!question.id && !!question.sessionID) as QuestionRequest[],
-            )
-            const warm = input.session
-              ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
-              : warmSessions({ ids, store: input.store, setStore: input.setStore, api: input.api.session })
-            return warm.then(() =>
-              batch(() => {
-                const current = input.session?.data.question ?? input.store.question
-                for (const sessionID of Object.keys(current)) {
-                  if (grouped[sessionID]) continue
-                  if (input.session?.get(sessionID)?.directory !== input.directory) continue
-                  if (input.session) input.session.set("question", sessionID, [])
-                  if (!input.session) input.setStore("question", sessionID, [])
-                }
-                for (const [sessionID, questions] of Object.entries(grouped)) {
-                  const value = reconcile(
-                    questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
-                    { key: "id" },
-                  )
-                  if (input.session) input.session.set("question", sessionID, value)
-                  if (!input.session) input.setStore("question", sessionID, value)
-                }
-              }),
-            )
-          }),
+        retry(
+          () =>
+            (async () => {
+              if ((await input.protocol) === "v1") return (await input.sdk.question.list()).data ?? []
+              return input.api.question.request
+                .list({ location: { directory: input.directory } })
+                .then((result) => result.data)
+            })().then((questions) => {
+              const ids = questions.map((question) => question.sessionID)
+              const grouped = groupBySession(
+                questions.filter((question) => !!question.id && !!question.sessionID) as QuestionRequest[],
+              )
+              const warm = input.session
+                ? Promise.all(ids.map((sessionID) => input.session!.resolve(sessionID))).then(() => undefined)
+                : warmSessions({ ids, store: input.store, setStore: input.setStore, api: input.api.session })
+              return warm.then(() =>
+                batch(() => {
+                  const current = input.session?.data.question ?? input.store.question
+                  for (const sessionID of Object.keys(current)) {
+                    if (grouped[sessionID]) continue
+                    if (input.session?.get(sessionID)?.directory !== input.directory) continue
+                    if (input.session) input.session.set("question", sessionID, [])
+                    if (!input.session) input.setStore("question", sessionID, [])
+                  }
+                  for (const [sessionID, questions] of Object.entries(grouped)) {
+                    const value = reconcile(
+                      questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
+                      { key: "id" },
+                    )
+                    if (input.session) input.session.set("question", sessionID, value)
+                    if (!input.session) input.setStore("question", sessionID, value)
+                  }
+                }),
+              )
+            }),
+          { retryOnTypeError: true },
         ),
       () => Promise.resolve(input.loadSessions(input.directory)),
       input.mcp &&
