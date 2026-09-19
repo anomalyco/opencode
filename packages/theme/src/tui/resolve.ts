@@ -5,6 +5,7 @@ import {
   ActionState,
   ActionVariant,
   BaseHue,
+  FeedbackKind,
   HueAlias,
   HueStep,
   SurfaceName,
@@ -130,8 +131,15 @@ function resolveView(
     categorical,
     text: {
       ...resolved.text,
+      subdued: resolved.text.muted,
       action: statefulActions(resolved.text.action),
       formfield: statefulColor(resolved.text.formfield),
+      feedback: Object.fromEntries(
+        FeedbackKind.literals.map((kind) => {
+          const feedback = resolved.text.feedback[kind]
+          return [kind, { ...feedback, default: feedback.base }]
+        }),
+      ) as ResolvedThemeTokens["text"]["feedback"],
     },
     background: {
       ...resolved.background,
