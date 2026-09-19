@@ -67,7 +67,14 @@ export const Reply = Schema.Struct({
 }).annotate({ identifier: "QuestionV2.Reply" })
 export interface Reply extends Schema.Schema.Type<typeof Reply> {}
 
-const Asked = define({ type: "question.v2.asked", schema: Request.fields })
+const Asked = define({
+  type: "question.v2.asked",
+  durable: {
+    aggregate: "sessionID",
+    version: 1,
+  },
+  schema: Request.fields,
+})
 const Replied = define({
   type: "question.v2.replied",
   schema: {

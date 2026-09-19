@@ -2319,6 +2319,78 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("does not revive an unrelated failed local tool with a late success", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Keep failed tool failed" }), resume: false })
+      yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID, Number.MAX_SAFE_INTEGER)
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* events.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        timestamp: yield* DateTime.now,
+        agent: "build",
+        model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
+      })
+      yield* events.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        assistantMessageID,
+        callID: "call-late-success",
+        name: "echo",
+      })
+      yield* events.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        assistantMessageID,
+        callID: "call-late-success",
+        text: '{"text":"failed"}',
+      })
+      yield* events.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        assistantMessageID,
+        callID: "call-late-success",
+        tool: "echo",
+        input: { text: "failed" },
+        provider: { executed: false },
+      })
+      yield* events.publish(SessionEvent.Tool.Failed, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        assistantMessageID,
+        callID: "call-late-success",
+        error: { type: "unknown", message: "failed" },
+        provider: { executed: false },
+      })
+      yield* events.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        assistantMessageID,
+        callID: "call-late-success",
+        structured: { text: "late" },
+        content: [{ type: "text", text: "late" }],
+        provider: { executed: false },
+      })
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Keep failed tool failed" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-late-success",
+              state: { status: "error", error: { type: "unknown", message: "failed" } },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("durably fails hosted tools left running by a prior process before continuing inline", () =>
     Effect.gen(function* () {
       yield* setup

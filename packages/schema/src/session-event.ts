@@ -348,6 +348,10 @@ export namespace Tool {
       content: Schema.Array(ToolContent),
       outputPaths: Schema.Array(Schema.String).pipe(optional),
       result: Schema.Unknown.pipe(optional),
+      recovery: Schema.Struct({
+        type: Schema.Literal("question"),
+        requestID: Schema.String,
+      }).pipe(optional),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: ProviderMetadata.pipe(optional),

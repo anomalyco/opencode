@@ -3,11 +3,26 @@ import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Location } from "@opencode-ai/core/location"
+import { Project } from "@opencode-ai/core/project"
 import { QuestionV2 } from "@opencode-ai/core/question"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { testEffect } from "./lib/effect"
 
-const questions = AppNodeBuilder.build(LayerNode.group([EventV2.node, QuestionV2.node]))
+const directory = AbsolutePath.make(process.cwd())
+const questions = AppNodeBuilder.build(LayerNode.group([EventV2.node, QuestionV2.node]), [
+  [
+    Location.node,
+    Layer.succeed(
+      Location.Service,
+      Location.Service.of({
+        directory,
+        project: { id: Project.ID.global, directory },
+      }),
+    ),
+  ],
+])
 const it = testEffect(questions)
 
 const sessionID = SessionV2.ID.make("ses_question_test")
