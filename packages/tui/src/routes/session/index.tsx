@@ -2502,6 +2502,9 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
       <Match when={display() === "websearch"}>
         <WebSearch {...toolprops} />
       </Match>
+      <Match when={display() === "devsearch"}>
+        <DevSearch {...toolprops} />
+      </Match>
       <Match when={display() === "write"}>
         <Write {...toolprops} />
       </Match>
@@ -3170,6 +3173,19 @@ function WebSearch(props: ToolProps) {
   )
 }
 
+function DevSearch(props: ToolProps) {
+  return (
+    <InlineTool
+      icon="◈"
+      pending="Searching developer sources…"
+      complete={stringValue(props.input.query)}
+      part={props.part}
+    >
+      Developer Search "{stringValue(props.input.query)}"
+    </InlineTool>
+  )
+}
+
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
   const data = useData()
@@ -3587,6 +3603,7 @@ const toolDisplays = new Set([
   "grep",
   "webfetch",
   "websearch",
+  "devsearch",
   "write",
   "edit",
   "subagent",

@@ -52,6 +52,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       subagent: "ui.tool.agent.default",
       webfetch: "ui.tool.webfetch",
       websearch: "ui.tool.websearch",
+      devsearch: "ui.tool.devsearch",
       shell: "ui.tool.shell",
       execute: "ui.tool.execute",
       patch: "ui.tool.patch",

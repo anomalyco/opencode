@@ -101,6 +101,15 @@ export function permissionPresentation(
     }
   }
 
+  if (action === "devsearch") {
+    const query = text(input.query) || text(metadata.query)
+    return {
+      icon: "◈",
+      title: query ? `Developer Search "${query}"` : "Developer Search",
+      lines: query ? [`Query: ${query}`] : [],
+    }
+  }
+
   if (action === "lsp") {
     const file = text(input.path)
     const operation = text(input.operation) || "request"
