@@ -577,7 +577,7 @@ The `mode` option can be set to `primary`, `subagent`, or `all`. If no `mode` is
 
 ### Hidden
 
-Hide a subagent from the `@` autocomplete menu with `hidden: true`. Useful for internal subagents that should only be invoked programmatically by other agents via the Task tool.
+Set `hidden: true` to remove an agent from interactive selectors. For `subagent` and `all` agents, this hides the agent from the `@` autocomplete menu. For `primary` and `all` agents, it removes the agent from the primary-agent selector and Tab cycle.
 
 ```json title="opencode.json"
 {
@@ -590,11 +590,7 @@ Hide a subagent from the `@` autocomplete menu with `hidden: true`. Useful for i
 }
 ```
 
-This only affects user visibility in the autocomplete menu. Hidden agents can still be invoked by the model via the Task tool if permissions allow.
-
-:::note
-Only applies to `mode: subagent` agents.
-:::
+Hidden agents cannot be used as the `default_agent`, but they remain available for explicit programmatic use. Hidden subagents can still be invoked through the Task tool when permissions allow, and hidden primary-capable agents can still be selected explicitly with `opencode run --agent <name>`.
 
 ---
 
