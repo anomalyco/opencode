@@ -15,6 +15,12 @@ import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
 
+// Packages that speak the OpenAI-compatible chat wire protocol and route
+// through OpenAICompatibleChat. Includes first-party SDKs built on it, such as
+// the GitHub Copilot SDK used for Copilot API routing.
+const isOpenAiCompatiblePackage = (pkg: string) =>
+  pkg === "@ai-sdk/openai-compatible" || pkg === "@ai-sdk/github-copilot"
+
 export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelectedError>()(
   "SessionRunnerModel.ModelNotSelectedError",
   {
@@ -153,7 +159,11 @@ export const fromCatalogModel = (
         .model({ id: resolved.api.id }),
     )
   }
-  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai-compatible" && resolved.api.url) {
+  if (
+    resolved.api.type === "aisdk" &&
+    isOpenAiCompatiblePackage(resolved.api.package) &&
+    resolved.api.url
+  ) {
     return Effect.succeed(
       withDefaults(resolved, OpenAICompatibleChat.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
@@ -176,7 +186,7 @@ export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
   (model.api.package === "@ai-sdk/openai" ||
     model.api.package === "@ai-sdk/anthropic" ||
-    (model.api.package === "@ai-sdk/openai-compatible" && model.api.url !== undefined))
+    (isOpenAiCompatiblePackage(model.api.package) && model.api.url !== undefined))
 
 /** Resolves models from the catalog belonging to the current Location runtime. */
 export const locationLayer = Layer.effect(
