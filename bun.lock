@@ -393,6 +393,7 @@
         "electron-store": "11.0.2",
         "electron-updater": "6.8.9",
         "electron-window-state": "^5.0.3",
+        "jsonc-parser": "3.3.1",
       },
       "devDependencies": {
         "@actions/artifact": "4.0.0",

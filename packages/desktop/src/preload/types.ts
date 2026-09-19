@@ -2,6 +2,11 @@ import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import type { DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
+import type {
+  CatalogResult,
+  PluginConfigsPayload,
+  PluginEntry,
+} from "@opencode-ai/app/components/settings-v2/plugins-types"
 export type {
   WslDistroProbe,
   WslInstalledDistro,
@@ -69,6 +74,17 @@ export type ElectronAPI = {
   draftDelete: (key: string) => Promise<void>
   draftBlobPut: (data: ArrayBuffer) => Promise<string>
   draftBlobGet: (id: string) => Promise<ArrayBuffer | null>
+  plugins: {
+    fetchCatalog: () => Promise<CatalogResult>
+    readConfigs: (projectDir?: string) => Promise<PluginConfigsPayload>
+    install: (
+      name: string,
+      entry?: PluginEntry,
+      scope?: "global" | "project",
+      projectDir?: string,
+    ) => Promise<{ ok: true }>
+    remove: (name: string, scope: "global" | "project", remember: boolean, projectDir?: string) => Promise<{ ok: true }>
+  }
 
   getWindowID: () => Promise<string>
   onMenuCommand: (cb: (id: string) => void) => () => void
