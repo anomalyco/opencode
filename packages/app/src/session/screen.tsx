@@ -325,7 +325,7 @@ export function SessionScreen(props: { session: SessionModel }) {
       </div>
 
       <Show when={composer.active()} keyed>
-        {(model) => <ActiveSessionComposerRegion model={model} />}
+        {(model) => <ActiveSessionComposerRegion model={model} suggestionBoundary={timeline.scroller} />}
       </Show>
     </>
   )

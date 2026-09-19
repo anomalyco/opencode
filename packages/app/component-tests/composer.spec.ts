@@ -122,6 +122,35 @@ story("does not mask or pad controls when they fit", async ({ mount }) => {
   await expect(controls).toHaveCSS("padding-inline-end", "0px")
 })
 
+story("grows suggestions while preserving visible timeline context", async ({ mount }) => {
+  const component = await mount("opencode-composer-flow--constrained-command-suggestions")
+  const boundary = component.locator('[data-slot="composer-suggestion-boundary-story"]')
+  const suggestions = component.locator('[data-component="composer-suggestions"]')
+
+  await expect(suggestions).toHaveCSS("max-height", "166px")
+  await expect(suggestions).toHaveCSS("scroll-padding-bottom", "18px")
+  await expect.poll(() => suggestions.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expect
+    .poll(async () => {
+      const menu = await suggestions.boundingBox()
+      const items = await suggestions.locator("[data-suggestion-id]").evaluateAll((elements) =>
+        elements.map((element) => {
+          const rect = element.getBoundingClientRect()
+          return { top: rect.top, bottom: rect.bottom }
+        }),
+      )
+      if (!menu) return false
+      const bottom = menu.y + menu.height
+      return items.some((item) => item.top < bottom && item.bottom > bottom)
+    })
+    .toBe(true)
+
+  await boundary.evaluate((element) => {
+    element.style.height = "400px"
+  })
+  await expect(suggestions).toHaveCSS("max-height", "306px")
+})
+
 // ThemeProvider writes resolved token values into a <style> block, so toggling data-color-scheme by hand
 // leaves every --v2-* variable at its previous value. Switch themes through the Storybook global instead.
 for (const [theme, background] of [

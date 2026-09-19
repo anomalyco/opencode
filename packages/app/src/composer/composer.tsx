@@ -12,7 +12,12 @@ import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerModel } from "./model"
 
-export function Composer(props: { class?: string; model: ComposerModel; borderUnderlay?: boolean }) {
+export function Composer(props: {
+  class?: string
+  model: ComposerModel
+  borderUnderlay?: boolean
+  suggestionBoundary?: () => HTMLElement | undefined
+}) {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
@@ -28,6 +33,7 @@ export function Composer(props: { class?: string; model: ComposerModel; borderUn
         attachShortcut={command.keybind("file.attach")}
         alternateKeybind={[formatKeybind("mod", language.t), "↵"]}
         exitShellKeybind={[formatKeybind("esc", language.t)]}
+        suggestionBoundary={props.suggestionBoundary}
         modelControl={
           <ComposerModelControl
             loading={props.model.model.loading}
