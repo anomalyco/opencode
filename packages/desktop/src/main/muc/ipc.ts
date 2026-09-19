@@ -24,8 +24,8 @@ export function registerMucIpcHandlers(userDataDir: string, deps: MucDeps): MucC
       return { ok: false, error: "invalid_code" as const }
     }
     try {
-      const state = await controller.connect(code)
-      return { ok: true, state }
+      const { state, modelCount } = await controller.connect(code)
+      return { ok: true, state, modelCount }
     } catch (error) {
       if (isMucExchangeError(error)) {
         return { ok: false, error: error.reason }

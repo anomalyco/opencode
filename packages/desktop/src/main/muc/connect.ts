@@ -33,6 +33,8 @@ export async function exchangeMucCode(gateway: string, code: string, deviceName:
   }
 
   const body = (await res.json().catch(() => null)) as any
+  // 服务端（sub2api）以 {code,message,data} 包装响应；裸字段为兼容不带包装的网关。
+  const payload = body?.data ?? body
 
   if (res.status === 404 || body?.error === "code_not_found") {
     throw new MucExchangeError("invalid", "authorization code not found")
@@ -46,15 +48,15 @@ export async function exchangeMucCode(gateway: string, code: string, deviceName:
   if (res.status === 401 || res.status === 403) {
     throw new MucExchangeError("invalid", "authorization rejected by server")
   }
-  if (!res.ok || !body?.api_key || !body?.gateway) {
+  if (!res.ok || !payload?.api_key || !payload?.gateway) {
     throw new MucExchangeError("bad_response", "unexpected response from authorization server")
   }
 
   return {
-    gateway: String(body.gateway).replace(/\/+$/, ""),
-    apiKey: String(body.api_key),
-    keyName: String(body.key_name ?? "MUC"),
-    user: String(body.user ?? ""),
+    gateway: String(payload.gateway).replace(/\/+$/, ""),
+    apiKey: String(payload.api_key),
+    keyName: String(payload.key_name ?? "MUC"),
+    user: String(payload.user ?? ""),
   }
 }
 

@@ -26,7 +26,26 @@ export function createMucGate(): { ready: Accessor<boolean>; MucGate: (props: { 
   const [ready, setReady] = createSignal(false)
   const [phase, setPhase] = createSignal<Phase>({ kind: "not-connected" })
 
+  // 冷启动时 onMount 的 mucPendingCode() 与 renderer/index.tsx 的深链事件会各自
+  // 触发一次同码连接（服务端一次性 code 只允许成功一次）；用防重入 + 已消费
+  // 去重保证每个 code 只兑换一次，后到的重复触发直接忽略。
+  let connectInFlight = false
+  const consumedCodes = new Set<string>()
+
   async function runConnect(code: string): Promise<void> {
+    if (connectInFlight || consumedCodes.has(code)) return
+    consumedCodes.add(code)
+    connectInFlight = true
+    // 已连接状态下被深链替换凭据属敏感操作：需用户确认；且 sidecar 的 env 是
+    // fork 时快照，替换后必须重启进程才一致，成功后走 relaunch。
+    const hotReconnect = ready()
+    if (hotReconnect) {
+      const ok = window.confirm("检测到新的连接请求。\n是否替换当前已连接的账户凭据？（替换后应用将自动重启）")
+      if (!ok) {
+        connectInFlight = false
+        return
+      }
+    }
     setPhase({ kind: "connecting", step: "exchange" })
     try {
       setPhase({ kind: "connecting", step: "verify" })
@@ -48,8 +67,14 @@ export function createMucGate(): { ready: Accessor<boolean>; MucGate: (props: { 
       // 模型计数随 connect 响应返回；稍作停留让用户看到"正在同步"
       await new Promise((r) => setTimeout(r, 400))
       setPhase({ kind: "success", modelCount: result.modelCount })
+      if (hotReconnect) {
+        // 主进程/磁盘已更新，重启让 sidecar（env 快照）拿到新凭据
+        window.api.relaunch()
+      }
     } catch {
       setPhase({ kind: "error", error: "连接失败，请重试" })
+    } finally {
+      connectInFlight = false
     }
   }
 

@@ -151,7 +151,10 @@ function getConfig() {
         productName: "mucode",
         icon: "resources/muc/icon.icns",
         protocols: { name: "MUC Connect", schemes: ["muc", "opencode"] },
-        mac: { ...base.mac, icon: "resources/muc/icon.icns", identity: null },
+        // muc 走自有校园分发渠道，无 Apple Developer 证书体系：
+        // identity:null 跳过正式签名，afterSign 钩子做 ad-hoc 签名（避免 macOS 报"已损坏"），
+        // 显式关闭公证，避免构建机存在 APPLE_ID 环境变量时 electron-builder 直接报错。
+        mac: { ...base.mac, icon: "resources/muc/icon.icns", identity: null, notarize: false },
         afterSign: "scripts/after-sign-mac.js",
         dmg: { ...base.dmg, icon: "resources/muc/icon.icns" },
         // MUC Harness: 跨平台构建免 wine（exe 不内嵌图标/版本信息，v1 可接受）

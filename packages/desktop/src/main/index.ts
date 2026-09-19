@@ -235,6 +235,17 @@ const main = Effect.gen(function* () {
     emitDeepLinks([url])
   })
 
+  // MUC Harness / Windows 冷启动：应用未运行时点击 muc:// 链接，协议 URL 通过
+  // 首实例 argv 传入（macOS 走 open-url 事件不受影响）。窗口尚未创建时
+  // emitDeepLinks 只入 pendingDeepLinks 队列，由渲染层 consumeInitialDeepLinks 统一消费。
+  {
+    const startupUrls = process.argv.filter((arg) => arg.startsWith("opencode://") || arg.startsWith("muc://"))
+    if (startupUrls.length) {
+      logger.log("deep link received via startup argv", { count: startupUrls.length, kinds: startupUrls.map((u) => u.split("?")[0]) })
+      emitDeepLinks(startupUrls)
+    }
+  }
+
   app.on("before-quit", () => {
     setAppQuitting()
     void stopSidecars()
