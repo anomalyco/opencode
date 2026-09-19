@@ -133,15 +133,43 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
       return [Message.make({ id: message.id, role: "user", content: message.text, metadata: message.metadata })]
     case "system":
       return [Message.system(message.text)]
-    case "shell":
+    case "shell": {
+      const MAX_SHELL_BYTES = 50 * 1024
+      const output = message.output ?? ""
+      const bytes = Buffer.byteLength(output, "utf-8")
+      let preview = output
+      if (bytes > MAX_SHELL_BYTES) {
+        // Keep head and tail preview, similar to ToolOutputStore boundedPreview
+        const headBytes = Math.ceil(MAX_SHELL_BYTES / 2)
+        const tailBytes = Math.floor(MAX_SHELL_BYTES / 2)
+        let head = ""
+        let headLen = 0
+        for (const ch of output) {
+          const sz = Buffer.byteLength(ch, "utf-8")
+          if (headLen + sz > headBytes) break
+          head += ch
+          headLen += sz
+        }
+        let tail = ""
+        let tailLen = 0
+        for (const ch of Array.from(output).toReversed()) {
+          const sz = Buffer.byteLength(ch, "utf-8")
+          if (tailLen + sz > tailBytes) break
+          tail = ch + tail
+          tailLen += sz
+        }
+        const marker = `\n\n[Preview: shell output truncated from ${bytes} bytes to ${MAX_SHELL_BYTES} bytes — full output retained separately]`
+        preview = tail ? `${head}\n\n${marker}\n\n${tail}` : `${head}\n\n${marker}`
+      }
       return [
         Message.make({
           id: message.id,
           role: "user",
-          content: `Shell command: ${message.command}\n\n${message.output}`,
+          content: `Shell command: ${message.command}\n\n${preview}`,
           metadata: message.metadata,
         }),
       ]
+    }
     case "assistant":
       return assistant(message, model)
     case "compaction":
