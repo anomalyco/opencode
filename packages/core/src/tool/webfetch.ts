@@ -109,7 +109,7 @@ const isTextualMime = (mime: string) =>
   mime === "application/javascript" ||
   mime === "application/x-javascript"
 const convert = (content: string, contentType: string, format: Format) => {
-  if (!contentType.includes("text/html")) return content
+  if (!contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) return content
   if (format === "markdown") return convertHTMLToMarkdown(content)
   if (format === "text") return extractTextFromHTML(content)
   return content
