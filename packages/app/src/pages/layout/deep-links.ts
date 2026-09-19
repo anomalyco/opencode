@@ -36,6 +36,25 @@ export const collectOpenProjectDeepLinks = (urls: string[]) =>
 export const collectNewSessionDeepLinks = (urls: string[]) =>
   urls.map(parseNewSessionDeepLink).filter((link): link is { directory: string; prompt?: string } => !!link)
 
+export function handleDeepLinks(
+  urls: string[],
+  handlers: {
+    canHandle: () => boolean
+    openProject: (directory: string) => void
+    openNewSession: (link: { directory: string; prompt?: string }) => void
+  },
+) {
+  if (!handlers.canHandle()) return
+
+  for (const directory of collectOpenProjectDeepLinks(urls)) {
+    handlers.openProject(directory)
+  }
+
+  for (const link of collectNewSessionDeepLinks(urls)) {
+    handlers.openNewSession(link)
+  }
+}
+
 type OpenCodeWindow = Window & {
   __OPENCODE__?: {
     deepLinks?: string[]
