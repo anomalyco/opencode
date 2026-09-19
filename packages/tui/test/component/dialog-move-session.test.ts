@@ -103,6 +103,19 @@ describe("mergeProjectDirectories", () => {
     expect(merged).toEqual([path.join(home, "other")])
   })
 
+  test("normalizes forward slashes and backslashes in existing list", () => {
+    const activeForward = path.join(home, "work").replaceAll("\\", "/")
+    const candidateBack = path.join(home, "work").replaceAll("/", "\\")
+    const merged = mergeProjectDirectories({
+      candidates: [candidateBack, path.join(home, "other")],
+      existing: [activeForward],
+      home,
+      exists: always,
+    })
+
+    expect(merged).toEqual([path.join(home, "other")])
+  })
+
   test("de-duplicates case-insensitively", () => {
     const dir = path.join(home, "work")
     const merged = mergeProjectDirectories({

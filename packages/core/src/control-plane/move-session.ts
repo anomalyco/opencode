@@ -97,23 +97,15 @@ const layer = Layer.effect(
       }
 
       if (isCrossProject) {
-        const now = Date.now()
         yield* db
           .insert(ProjectTable)
           .values({
             id: destination.id,
             worktree: destination.directory,
+            vcs: destination.vcs?.type,
             sandboxes: [],
-            time_created: now,
-            time_updated: now,
           })
-          .onConflictDoUpdate({
-            target: ProjectTable.id,
-            set: {
-              worktree: destination.directory,
-              time_updated: now,
-            },
-          })
+          .onConflictDoNothing()
           .run()
           .pipe(Effect.orDie)
       }

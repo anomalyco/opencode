@@ -35,10 +35,7 @@ export function expandHome(input: string, home: string) {
 export function canonicalDirectory(input: string, home: string): string {
   const expanded = expandHome(input, home)
   try {
-    if (typeof (fs.realpathSync as any)?.native === "function") {
-      return (fs.realpathSync as any).native(expanded)
-    }
-    return fs.realpathSync(expanded)
+    return fs.realpathSync.native(expanded)
   } catch {
     return path.resolve(expanded)
   }
@@ -94,7 +91,9 @@ export function mergeProjectDirectories(input: {
   limit?: number
   exists?: (directory: string) => boolean
 }): string[] {
-  const existing = new Set(input.existing.map((directory) => directory.toLowerCase()))
+  const existing = new Set(
+    input.existing.map((directory) => path.normalize(expandHome(directory, input.home)).toLowerCase()),
+  )
   const exists = input.exists ?? ((directory: string) => fs.existsSync(directory))
   const seen = new Set<string>()
   const merged: string[] = []
@@ -102,7 +101,7 @@ export function mergeProjectDirectories(input: {
   for (const candidate of input.candidates) {
     if (!candidate || !candidate.trim()) continue
     const canonical = canonicalDirectory(candidate, input.home)
-    const key = canonical.toLowerCase()
+    const key = path.normalize(canonical).toLowerCase()
     if (existing.has(key) || seen.has(key)) continue
     if (!exists(canonical)) continue
     seen.add(key)
@@ -206,7 +205,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   // scoped to the active project), plus the registered `project_directory`
   // rows for each. Without this the picker can never reach a nested or sibling
   // project — the sync-backed list is scoped to the active project's directory.
-  const [otherProjectDirectories] = createResource(async (): Promise<string[]> => {
+  const [otherProjectDirectories, { refetch: refetchOtherProjects }] = createResource(async (): Promise<string[]> => {
     const listed = await sdk.client.project.list({}, { throwOnError: true }).catch(() => undefined)
     const projects = listed?.data ?? []
     if (projects.length === 0) return []
@@ -461,7 +460,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       })
       return
     }
-    await refetch()
+    await Promise.all([refetch(), refetchOtherProjects()])
     setRemoving(undefined)
     setWorking(false)
     if (await removedCurrent(deletingCurrent)) return
@@ -584,7 +583,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
                 {
                   command: "dialog.move_session.refresh",
                   title: "refresh",
-                  onTrigger: () => void refetch(),
+                  onTrigger: () => {
+                    void refetch()
+                    void refetchOtherProjects()
+                  },
                 },
               ]
         }
