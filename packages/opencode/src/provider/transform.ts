@@ -991,8 +991,13 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "@ai-sdk/azure":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
       if (id === "o1-mini") return {}
+      const azureEfforts = [...openaiReasoningEfforts(id, model.release_date)]
+      // Only deepseek-v4 deployments expose a max effort; the adapter
+      // selection in the azure loaders gates on any "deepseek" deployment,
+      // which is deliberately broader.
+      if (model.api.id.toLowerCase().includes("deepseek-v4") && !azureEfforts.includes("max")) azureEfforts.push("max")
       return Object.fromEntries(
-        openaiReasoningEfforts(id, model.release_date).map((effort) => [
+        azureEfforts.map((effort) => [
           effort,
           {
             reasoningEffort: effort,
