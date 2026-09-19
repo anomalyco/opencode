@@ -25,9 +25,50 @@ import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import type { ModelMessage } from "ai"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
+
+function containsInvalidEncryptedContent(value: unknown) {
+  return typeof value === "string" && value.toLowerCase().includes("invalid_encrypted_content")
+}
+
+class InvalidEncryptedContentError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "InvalidEncryptedContentError"
+  }
+}
+
+function clearReasoningState(messages: ModelMessage[]): ModelMessage[] {
+  return messages.map((message) => {
+    if (message.role !== "assistant" || !Array.isArray(message.content)) return message
+
+    return {
+      ...message,
+      content: message.content.map((part) => {
+        if (part.type !== "reasoning") return part
+
+        const clear = (value: typeof part.providerOptions) => {
+          if (!isRecord(value) || !isRecord(value.openai)) return value
+          if (!("itemId" in value.openai) && !("reasoningEncryptedContent" in value.openai)) return value
+
+          const openai = { ...value.openai }
+          delete openai.itemId
+          delete openai.reasoningEncryptedContent
+          return { ...value, openai }
+        }
+
+        const providerOptions = clear(part.providerOptions)
+        return {
+          ...part,
+          ...(providerOptions === part.providerOptions ? {} : { providerOptions }),
+        }
+      }),
+    }
+  })
+}
 
 export interface Handle {
   readonly message: SessionV1.Assistant
@@ -119,6 +160,40 @@ const layer = Layer.effect(
           providerID: input.model.providerID,
           aborted,
         })
+
+      const isInvalidEncryptedContent = (error: unknown) => {
+        if (error instanceof InvalidEncryptedContentError) return true
+
+        const parsed = parse(error)
+        if (SessionV1.APIError.isInstance(parsed)) {
+          return (
+            containsInvalidEncryptedContent(parsed.data.message) ||
+            containsInvalidEncryptedContent(parsed.data.responseBody)
+          )
+        }
+        if (isRecord(parsed.data)) return containsInvalidEncryptedContent(parsed.data.message)
+        return false
+      }
+
+      const clearStoredReasoningState = Effect.fn("SessionProcessor.clearStoredReasoningState")(function* () {
+        const messages = yield* session.messages({ sessionID: ctx.sessionID })
+        for (const message of messages) {
+          if (message.info.id === ctx.assistantMessage.id) continue
+
+          for (const part of message.parts) {
+            if (part.type !== "reasoning" || !isRecord(part.metadata) || !isRecord(part.metadata.openai)) continue
+            if (!("itemId" in part.metadata.openai) && !("reasoningEncryptedContent" in part.metadata.openai)) continue
+
+            const openai = { ...part.metadata.openai }
+            delete openai.itemId
+            delete openai.reasoningEncryptedContent
+            yield* session.updatePart({
+              ...part,
+              metadata: { ...part.metadata, openai },
+            })
+          }
+        }
+      })
 
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
         const done = ctx.toolcalls[toolCallID]?.done
@@ -418,8 +493,12 @@ const layer = Layer.effect(
             return
           }
 
-          case "provider-error":
+          case "provider-error": {
+            if (containsInvalidEncryptedContent(value.message)) {
+              throw new InvalidEncryptedContentError(value.message)
+            }
             throw new Error(value.message)
+          }
 
           case "step-start":
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
@@ -645,16 +724,29 @@ const layer = Layer.effect(
         })
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        let current = streamInput
+        let recoveredReasoning = false
+        let emitted = false
 
         return yield* Effect.gen(function* () {
-          yield* Effect.gen(function* () {
+          const runAttempt = Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
-            const stream = llm.stream(streamInput)
+            const stream = llm.stream(current)
 
             yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
+              Stream.tap((event) => {
+                if (
+                  event.type === "text-start" ||
+                  event.type === "reasoning-start" ||
+                  event.type === "tool-call" ||
+                  event.type === "tool-input-start"
+                ) {
+                  emitted = true
+                }
+                return handleEvent(event)
+              }),
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
@@ -670,6 +762,19 @@ const layer = Layer.effect(
             Effect.catchCauseIf(
               (cause) => !Cause.hasInterruptsOnly(cause),
               (cause) => Effect.fail(Cause.squash(cause)),
+            ),
+          )
+
+          yield* runAttempt.pipe(
+            Effect.catchIf(
+              (error) => isInvalidEncryptedContent(error) && !emitted && !recoveredReasoning,
+              () =>
+                Effect.gen(function* () {
+                  recoveredReasoning = true
+                  yield* clearStoredReasoningState()
+                  current = { ...current, messages: clearReasoningState(current.messages) }
+                  yield* runAttempt
+                }),
             ),
             Effect.retry(
               SessionRetry.policy({
