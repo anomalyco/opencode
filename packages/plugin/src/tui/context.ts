@@ -273,11 +273,7 @@ export interface ToastOptions {
   readonly message: string
   readonly variant?: ToastVariant
   readonly duration?: number
-  /**
-   * Scopes the toast to a session. When that session (or another member of its family) is
-   * open, the toast shows as-is. Otherwise the title defaults to the session title and the
-   * toast gains an action that navigates to the session.
-   */
+  /** When this session's family is not open, the title defaults to the session title and the toast offers to open it. */
   readonly sessionID?: string
 }
 

@@ -107,7 +107,6 @@ export function createPluginContext(input: {
         return
       }
       const route = host.route.data
-      // Family-scoped so a subagent's toast reads as local while its parent is open, and vice versa.
       if (route.type === "session" && host.data.session.root(route.sessionID) === host.data.session.root(sessionID)) {
         host.toast.show(toast)
         return
