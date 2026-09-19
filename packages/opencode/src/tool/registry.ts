@@ -16,6 +16,13 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import {
+  InteractiveCancelTool,
+  InteractiveStartTool,
+  InteractiveWaitTool,
+  InteractiveWriteTool,
+  locationServiceMapNode,
+} from "./interactive"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -114,6 +121,10 @@ const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const interactiveStart = yield* InteractiveStartTool
+    const interactiveWrite = yield* InteractiveWriteTool
+    const interactiveWait = yield* InteractiveWaitTool
+    const interactiveCancel = yield* InteractiveCancelTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -209,6 +220,10 @@ const layer = Layer.effect(
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
           shell: Tool.init(shell),
+          interactiveStart: Tool.init(interactiveStart),
+          interactiveWrite: Tool.init(interactiveWrite),
+          interactiveWait: Tool.init(interactiveWait),
+          interactiveCancel: Tool.init(interactiveCancel),
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
@@ -232,6 +247,10 @@ const layer = Layer.effect(
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
             tool.shell,
+            tool.interactiveStart,
+            tool.interactiveWrite,
+            tool.interactiveWait,
+            tool.interactiveCancel,
             tool.read,
             tool.glob,
             tool.grep,
@@ -449,6 +468,8 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
+    // bridges the interactive tool family to the Location-scoped V2 job store
+    locationServiceMapNode,
   ],
 })
 
