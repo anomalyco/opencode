@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createRoot, getOwner, onCleanup } from "solid-js"
 import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
+import { recentKeyPointsAtSession, tabHref, tabKey } from "./tabs"
 import type { SessionTab, Tab } from "./tabs"
 import { migrateTabs } from "./tab-migration"
 import type { ServerConnection } from "./server"
@@ -26,6 +27,35 @@ describe("tab migration", () => {
   test("replaces invalid top-level persisted data", () => {
     expect(migrateTabs(null, server)).toEqual([])
     expect(migrateTabs({}, server)).toEqual([])
+  })
+})
+
+describe("session tab removal", () => {
+  test("addresses a session tab without a directory", () => {
+    // The href is built from server and session id alone. Requiring a directory alongside it
+    // meant the current tab was never recognised on `/server/:serverKey/session/:id`, where no
+    // directory exists - the deleted session then stayed in the address bar.
+    expect(tabHref(sessionTab("a"))).toBe(tabHref({ type: "session", server, sessionId: "a" }))
+    expect(tabHref(sessionTab("a"))).toContain("/session/a")
+  })
+
+  test("spots a recent pointer aimed at a deleted session", () => {
+    const key = tabKey(sessionTab("a"))
+
+    expect(recentKeyPointsAtSession(key, ["a"])).toBe(true)
+    expect(recentKeyPointsAtSession(key, ["b", "a"])).toBe(true)
+    expect(recentKeyPointsAtSession(key, ["b"])).toBe(false)
+  })
+
+  test("leaves pointers it cannot read alone", () => {
+    expect(recentKeyPointsAtSession(undefined, ["a"])).toBe(false)
+    expect(recentKeyPointsAtSession("", ["a"])).toBe(false)
+    expect(recentKeyPointsAtSession("draft:d1", ["a"])).toBe(false)
+    expect(recentKeyPointsAtSession(tabKey(sessionTab("a")), [])).toBe(false)
+  })
+
+  test("does not mistake a session whose id merely ends the same way", () => {
+    expect(recentKeyPointsAtSession(tabKey(sessionTab("ses_abc")), ["abc"])).toBe(false)
   })
 })
 

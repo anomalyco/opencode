@@ -3,6 +3,7 @@ import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } fr
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
 import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
@@ -427,6 +428,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       makeEventListener(window, "pagehide", flush)
       makeEventListener(document, "visibilitychange", handleVisibility)
+
+      // A deleted session must not leave anything pointing at it. The handoff carries a session
+      // id across a layout switch and is persisted; without this it survived the deletion and
+      // every later start tried to restore a session that no longer exists.
+      makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
+        const detail = readSessionTabsRemovedDetail(event)
+        const pending = store.handoff?.tabs
+        if (!detail || !pending) return
+        if (!detail.sessionIDs.includes(pending.id)) return
+        setStore("handoff", "tabs", undefined)
+      })
 
       onCleanup(() => {
         scroll.dispose()
