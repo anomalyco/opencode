@@ -25,10 +25,26 @@ const limit = 2 * 1024 * 1024
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
+const retryDelay = Duration.millis(500)
+const circuitThreshold = 3
 interface GitResult {
   readonly code: ChildProcessSpawner.ExitCode
   readonly text: string
   readonly stderr: string
+}
+
+const transientPatterns: readonly string[] = [
+  "paging file",
+  "out of memory",
+  "malloc failed",
+  "resource temporarily unavailable",
+  "spawn enomem",
+  "cannot allocate memory",
+]
+
+export function isTransientGitError(stderr: string): boolean {
+  const lower = stderr.toLowerCase()
+  return transientPatterns.some((pattern) => lower.includes(pattern))
 }
 
 type State = Omit<Interface, "init">
@@ -70,33 +86,69 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           worktree: ctx.worktree,
           gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree)),
           vcs: ctx.project.vcs,
+          consecutiveFailures: 0,
+          tripped: false,
         }
 
         const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
+
+        const recordFailure = Effect.fnUntraced(function* () {
+          state.consecutiveFailures += 1
+          if (state.consecutiveFailures >= circuitThreshold && !state.tripped) {
+            state.tripped = true
+            yield* Effect.logError("snapshot circuit breaker tripped — snapshots disabled until next success", {
+              consecutiveFailures: state.consecutiveFailures,
+              gitdir: state.gitdir,
+            })
+          }
+        })
+
+        const recordSuccess = Effect.fnUntraced(function* () {
+          if (state.tripped) {
+            state.tripped = false
+            yield* Effect.logInfo("snapshot circuit breaker reset — snapshots re-enabled", {
+              gitdir: state.gitdir,
+            })
+          }
+          state.consecutiveFailures = 0
+        })
 
         const encodeNulTerminatedPaths = (files: string[]) => files.join("\0") + "\0"
         const encodeTopLevelLiteralPathspecs = (files: string[]) =>
           encodeNulTerminatedPaths(files.map((file) => `:(top,literal)${file}`))
 
+        const execGit = (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) =>
+          appProcess
+            .run(ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: opts?.env, extendEnv: true }), {
+              stdin: opts?.stdin,
+            })
+            .pipe(
+              Effect.map((result) => ({
+                code: ChildProcessSpawner.ExitCode(result.exitCode),
+                text: result.stdout.toString("utf8"),
+                stderr: result.stderr.toString("utf8"),
+              })),
+              Effect.catch((err) =>
+                Effect.succeed({
+                  code: ChildProcessSpawner.ExitCode(1),
+                  text: "",
+                  stderr: err instanceof Error ? err.message : String(err),
+                }),
+              ),
+            )
+
         const git = Effect.fnUntraced(
           function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
-            const result = yield* appProcess.run(
-              ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: opts?.env, extendEnv: true }),
-              { stdin: opts?.stdin },
-            )
-            return {
-              code: ChildProcessSpawner.ExitCode(result.exitCode),
-              text: result.stdout.toString("utf8"),
-              stderr: result.stderr.toString("utf8"),
-            } satisfies GitResult
+            const first = yield* execGit(cmd, opts)
+            if (first.code !== 0 && isTransientGitError(first.stderr)) {
+              yield* Effect.logWarning("snapshot git transient error, retrying", {
+                stderr: first.stderr,
+              })
+              yield* Effect.sleep(retryDelay)
+              return yield* execGit(cmd, opts)
+            }
+            return first
           },
-          Effect.catch((err) =>
-            Effect.succeed({
-              code: ChildProcessSpawner.ExitCode(1),
-              text: "",
-              stderr: err instanceof Error ? err.message : String(err),
-            }),
-          ),
         )
 
         const ignore = Effect.fnUntraced(function* (files: string[]) {
@@ -153,6 +205,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             },
           )
           if (result.code === 0) return
+          yield* recordFailure()
           yield* Effect.logWarning("failed to add snapshot files", {
             exitCode: result.code,
             stderr: result.stderr,
@@ -233,6 +286,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         })
 
         const add = Effect.fnUntraced(function* () {
+          if (state.tripped) return false
           yield* sync()
           const [diff, other] = yield* Effect.all(
             [
@@ -246,13 +300,14 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             { concurrency: 2 },
           )
           if (diff.code !== 0 || other.code !== 0) {
+            yield* recordFailure()
             yield* Effect.logWarning("failed to list snapshot files", {
               diffCode: diff.code,
               diffStderr: diff.stderr,
               otherCode: other.code,
               otherStderr: other.stderr,
             })
-            return
+            return false
           }
 
           const tracked = diff.text.split("\0").filter(Boolean)
@@ -293,8 +348,9 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           )
           const block = new Set(untracked.filter((item) => large.has(item)))
           yield* sync(Array.from(block))
-          // Stage only the allowed candidate paths so snapshot updates stay scoped.
           yield* stage(allow.filter((item) => !block.has(item)))
+          yield* recordSuccess()
+          return true
         })
 
         const cleanup = Effect.fnUntraced(function* () {
@@ -319,6 +375,12 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           return yield* locked(
             Effect.gen(function* () {
               if (!(yield* enabled())) return
+              if (state.tripped) {
+                yield* Effect.logWarning("snapshot skipped — circuit breaker tripped", {
+                  consecutiveFailures: state.consecutiveFailures,
+                })
+                return
+              }
               const existed = yield* exists(state.gitdir)
               yield* fs.ensureDir(state.gitdir).pipe(Effect.orDie)
               if (!existed) {
@@ -337,8 +399,18 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 yield* seed()
                 yield* Effect.logInfo("initialized")
               }
-              yield* add()
+              const ok = yield* add()
+              if (!ok) return
               const result = yield* git(args(["write-tree"]), { cwd: state.directory })
+              if (result.code !== 0) {
+                yield* recordFailure()
+                yield* Effect.logWarning("failed to write snapshot tree", {
+                  exitCode: result.code,
+                  stderr: result.stderr,
+                })
+                return
+              }
+              yield* recordSuccess()
               const hash = result.text.trim()
               yield* Effect.logInfo("tracking", { hash, cwd: state.directory, git: state.gitdir })
               return hash
@@ -349,6 +421,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         const patch = Effect.fnUntraced(function* (hash: string) {
           return yield* locked(
             Effect.gen(function* () {
+              if (state.tripped) return { hash, files: [] }
               yield* add()
               const result = yield* git(
                 [...quote, ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", "."])],
@@ -526,6 +599,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         const diff = Effect.fnUntraced(function* (hash: string) {
           return yield* locked(
             Effect.gen(function* () {
+              if (state.tripped) return ""
               yield* add()
               const result = yield* git([...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])], {
                 cwd: state.worktree,
@@ -546,6 +620,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
           return yield* locked(
             Effect.gen(function* () {
+              if (state.tripped) return []
               type Row = {
                 file: string
                 status: "added" | "deleted" | "modified"
