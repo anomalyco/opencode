@@ -4,7 +4,8 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Effect, Schedule, Schema } from "effect"
+import { Clock, Duration, Effect, Fiber, Schedule, Schema } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -18,12 +19,17 @@ const providerID = ProviderV2.ID.make("test")
 const retryProvider = "test"
 const it = testEffect(LayerNode.compile(LayerNode.group([SessionStatus.node, CrossSpawnSpawner.node])))
 
-function apiError(headers?: Record<string, string>): SessionV1.APIError {
+function apiError(
+  headers?: Record<string, string>,
+  message = "boom",
+  metadata?: Record<string, string>,
+): SessionV1.APIError {
   return Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
     new SessionV1.APIError({
-      message: "boom",
+      message,
       isRetryable: true,
       responseHeaders: headers,
+      metadata,
     }).toObject(),
   )
 }
@@ -146,6 +152,62 @@ describe("session.retry.delay", () => {
       expect(attempts).toStrictEqual([1, 2, 3, 4, 5])
     }),
   )
+
+  // A transport-classified error never carries responseHeaders, so the policy
+  // falls back to exponential backoff. Drive that real path rather than
+  // short-circuiting it with retry-after-ms, so the cap is exercised against the
+  // delays it will actually see.
+  for (const code of ["ECONNRESET", "ConnectionRefused", "TimeoutError", "NETWORK_ERROR"]) {
+    it.effect(`policy bounds transient transport retries for ${code}`, () =>
+      Effect.gen(function* () {
+        const attempts: number[] = []
+        const delays: number[] = []
+        const failures: SessionV1.APIError[] = []
+
+        const fiber = yield* Effect.gen(function* () {
+          const current = apiError(undefined, `boom ${failures.length + 1}`, { code })
+          failures.push(current)
+          return yield* Effect.fail(current)
+        }).pipe(
+          Effect.retry(
+            SessionRetry.policy({
+              provider: "test",
+              parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+              set: (info) =>
+                Effect.gen(function* () {
+                  attempts.push(info.attempt)
+                  delays.push(info.next - (yield* Clock.currentTimeMillis))
+                }),
+            }),
+          ),
+          Effect.flip,
+          Effect.forkScoped,
+        )
+
+        // Walk the real backoff ladder rather than collapsing it, so the cap is
+        // exercised against the delays production will actually see.
+        for (let step = 0; step <= SessionRetry.RETRY_MAX_RETRIES; step++) {
+          yield* TestClock.adjust(Duration.seconds(30))
+          yield* Effect.yieldNow
+        }
+        const failure = yield* Fiber.join(fiber)
+
+        const terminal = failures.at(-1)
+        if (!terminal) throw new Error("expected retry failures")
+        expect(failure).toBe(terminal)
+        expect(failure.data.message).toBe(`boom ${SessionRetry.RETRY_MAX_RETRIES + 1}`)
+        expect(attempts).toEqual(Array.from({ length: SessionRetry.RETRY_MAX_RETRIES }, (_, index) => index + 1))
+        expect(failures).toHaveLength(SessionRetry.RETRY_MAX_RETRIES + 1)
+        // 2s, 4s, 8s, 16s with 25% jitter, then clamped at 30s.
+        expect(delays).toHaveLength(SessionRetry.RETRY_MAX_RETRIES)
+        for (const [index, base] of [2_000, 4_000, 8_000, 16_000].entries()) {
+          expect(delays[index]).toBeGreaterThanOrEqual(base)
+          expect(delays[index]).toBeLessThanOrEqual(base * (1 + SessionRetry.RETRY_JITTER_FACTOR))
+        }
+        expect(delays.at(-1)).toBe(30_000)
+      }),
+    )
+  }
 })
 
 describe("session.retry.retryable", () => {
@@ -320,6 +382,22 @@ describe("session.retry.retryable", () => {
 
     expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
   })
+
+  test.each(["ENOTFOUND", "ECONNREFUSED"])(
+    "does not retry permanent transport code %s even when the API error is retryable",
+    (code) => {
+      const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+        new SessionV1.APIError({
+          message: "Connection failed",
+          isRetryable: true,
+          statusCode: 503,
+          metadata: { code },
+        }).toObject(),
+      )
+
+      expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+    },
+  )
 
   test("retries ZlibError decompression failures", () => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
