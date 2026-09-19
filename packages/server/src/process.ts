@@ -54,8 +54,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   lifecycle?: Lifecycle<E, R>,
   transform?: Transform,
 ) {
-  const password = options.password
-  if (!password) return yield* Effect.fail(new Error("Missing server password"))
+  const password = options.password || undefined
   const hostname = options.hostname ?? "127.0.0.1"
   const port = Option.fromNullishOr(options.port)
   const shutdown = yield* Latch.make()
@@ -178,14 +177,17 @@ function addressInUse(error: unknown) {
 }
 
 function dispatch(
-  password: string,
+  password: string | undefined,
   status: Status.Interface,
   application: Ref.Ref<Option.Option<App>>,
   version: string,
   urls: () => ReadonlyArray<string>,
   tmp: string,
 ): App {
-  const auth = ServerAuth.Config.of({ password: Option.some(password), username: "opencode" })
+  const auth = ServerAuth.Config.of({
+    password: password ? Option.some(password) : Option.none(),
+    username: "opencode",
+  })
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(request.url, "http://localhost")
@@ -193,10 +195,11 @@ function dispatch(
     const app = yield* Ref.get(application)
     const ready = state.type === "ready" && Option.isSome(app)
     if (request.method === "GET" && url.pathname === "/api/info" && !ready) {
-      if (!(yield* authorizedRequest(request, auth))) return unauthorized()
+      if (ServerAuth.required(auth) && !(yield* authorizedRequest(request, auth))) return unauthorized()
       return yield* infoResponse(status, version, urls, tmp)
     }
     if (
+      ServerAuth.required(auth) &&
       (!ready || (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url))) &&
       !(yield* authorizedRequest(request, auth))
     )
