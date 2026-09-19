@@ -1,5 +1,6 @@
 import type { Event, Session, SessionV2Info, V2SessionListResponse } from "@opencode-ai/sdk/v2/client"
 import type { QueryClient } from "@tanstack/solid-query"
+import { createStore, reconcile } from "solid-js/store"
 import { trimSessions } from "./session-trim"
 import { pathKey } from "@/utils/path-key"
 
@@ -7,7 +8,7 @@ export const HOME_V2_SESSION_PAGE_LIMIT = 5_000
 
 export type HomeSessionEvent = {
   type: "session.created" | "session.updated" | "session.deleted"
-  properties: { sessionID: string; info: Session }
+  properties: { sessionID: string; info?: Session }
 }
 export type HomeSessionEvents = {
   sequence: number
@@ -85,11 +86,18 @@ export function createHomeSessionIndexCache(queryClient: QueryClient, server: st
   const indexKey = homeSessionIndexKey(server)
   const eventsKey = homeSessionEventsKey(server)
   let connected = false
-  const removed = new Set<string>()
+
+  const [state, setState] = createStore({
+    sessions: [] as Session[],
+    ready: false,
+  })
 
   return {
     indexKey,
     eventsKey,
+    get state() {
+      return state
+    },
     eventSequence() {
       return queryClient.getQueryData<HomeSessionEvents>(eventsKey)?.sequence ?? 0
     },
@@ -98,17 +106,21 @@ export function createHomeSessionIndexCache(queryClient: QueryClient, server: st
       queryClient.setQueryData<HomeSessionEvents>(eventsKey, (current) => trimHomeSessionEvents(current, sequence))
     },
     sessions(index: HomeSessionIndex | undefined, events: HomeSessionEvents | undefined) {
-      const sessions = homeSessionIndexSessions(index, events)
-      return removed.size === 0 ? sessions : sessions.filter((session) => !removed.has(session.id))
+      return state.ready ? state.sessions : homeSessionIndexSessions(index, events)
+    },
+    setInitial(sessions: Session[]) {
+      const currentEvents = queryClient.getQueryData<HomeSessionEvents>(eventsKey)
+      const merged = homeSessionIndexSessions({ sessions, eventSequence: 0 }, currentEvents)
+      setState({ sessions: merged, ready: true })
+      queryClient.setQueryData<HomeSessionIndex>(indexKey, { sessions: merged, eventSequence: currentEvents?.sequence ?? 0 })
     },
     apply(event: HomeSessionEvent) {
-      if (!queryClient.getQueryState(indexKey)) return
       const next = appendHomeSessionEvent(queryClient.getQueryData<HomeSessionEvents>(eventsKey), event)
-      if (queryClient.isFetching({ queryKey: indexKey, exact: true }) > 0) {
-        queryClient.setQueryData(eventsKey, next)
-        return
+      queryClient.setQueryData(eventsKey, next)
+      if (state.ready) {
+        const updated = applyHomeSessionEvent(state.sessions, event)
+        setState("sessions", reconcile(updated, { key: "id" }))
       }
-
       const index = queryClient.getQueryData<HomeSessionIndex>(indexKey)
       if (index) {
         queryClient.setQueryData<HomeSessionIndex>(indexKey, {
@@ -116,17 +128,9 @@ export function createHomeSessionIndexCache(queryClient: QueryClient, server: st
           eventSequence: next.sequence,
         })
       }
-      queryClient.setQueryData<HomeSessionEvents>(eventsKey, { sequence: next.sequence, entries: [] })
     },
     remove(sessionID: string) {
-      removed.add(sessionID)
-      if (!queryClient.getQueryState(indexKey)) return
-      queryClient.setQueryData<HomeSessionIndex>(indexKey, (index) => {
-        if (!index) return index
-        const at = index.sessions.findIndex((session) => session.id === sessionID)
-        if (at === -1) return index
-        return { ...index, sessions: index.sessions.toSpliced(at, 1) }
-      })
+      this.apply({ type: "session.deleted", properties: { sessionID } })
     },
     refresh(event: Event["type"]) {
       const result = homeSessionIndexRefresh(event, connected)
@@ -156,8 +160,13 @@ export function retainHomeSessions(sessions: Session[], limit: number, now: numb
 
 export function applyHomeSessionEvent(sessions: Session[], event: HomeSessionEvent) {
   const info = event.properties.info
-  const index = sessions.findIndex((session) => session.id === info.id)
-  if (event.type === "session.deleted" || info.parentID || typeof info.time.archived === "number") {
+  const sessionID = info?.id ?? event.properties.sessionID
+  const index = sessions.findIndex((session) => session.id === sessionID)
+  if (event.type === "session.deleted") {
+    if (index === -1) return sessions
+    return sessions.toSpliced(index, 1)
+  }
+  if (!info || info.parentID || typeof info.time.archived === "number") {
     if (index === -1) return sessions
     return sessions.toSpliced(index, 1)
   }
