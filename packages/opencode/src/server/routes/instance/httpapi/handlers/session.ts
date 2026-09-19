@@ -33,6 +33,7 @@ import {
   PromptPayload,
   RevertPayload,
   ShellPayload,
+  SideQuestionPayload,
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
@@ -328,6 +329,17 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return HttpApiSchema.NoContent.make()
     })
 
+    const sideQuestion = Effect.fn("SessionHttpApi.sideQuestion")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof SideQuestionPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      if (!ctx.payload.question.trim()) return yield* new HttpApiError.BadRequest({})
+      return yield* promptSvc
+        .sideQuestion({ ...ctx.payload, sessionID: ctx.params.sessionID })
+        .pipe(Effect.mapError(() => new HttpApiError.InternalServerError({})))
+    })
+
     const command = Effect.fn("SessionHttpApi.command")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof CommandPayload.Type
@@ -428,6 +440,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("share", share)
       .handle("unshare", unshare)
       .handle("summarize", summarize)
+      .handle("sideQuestion", sideQuestion)
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)
       .handle("command", command)
