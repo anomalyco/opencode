@@ -39,6 +39,65 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
+  const raceProcesses = async (dir: string, filename: string, count: number) => {
+    const barrier = path.join(dir, "barrier")
+    const child = fileURLToPath(new URL("./fixture/db-race-child.ts", import.meta.url))
+    const procs = Array.from({ length: count }, (_, i) =>
+      Bun.spawn(["bun", "run", child, filename, barrier, path.join(dir, `ready.${i}`)], {
+        cwd: path.join(path.dirname(child), "..", ".."),
+        stdout: "ignore",
+        stderr: "inherit",
+      }),
+    )
+    try {
+      const { existsSync, rmSync } = await import("fs")
+      const ready = Array.from({ length: count }, (_, i) => path.join(dir, `ready.${i}`))
+      while (!ready.every((f) => existsSync(f))) {
+        // fail fast if a child dies before the barrier
+        for (const proc of procs)
+          if (proc.exitCode !== null && proc.exitCode !== 0)
+            throw new Error(`child exited ${proc.exitCode} before barrier`)
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      await Bun.write(barrier, "go")
+      const exits = await Promise.all(procs.map((proc) => proc.exited))
+      rmSync(barrier)
+      for (let i = 0; i < count; i++) rmSync(path.join(dir, `ready.${i}`))
+      return exits
+    } finally {
+      for (const proc of procs) proc.kill()
+    }
+  }
+
+  // a double-run violates the migration table's primary key
+  test("serializes concurrent process initialization for one database path", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "raced.sqlite")
+    expect(await raceProcesses(tmp.path, filename, 4)).toEqual([0, 0, 0, 0])
+  }, 30_000)
+
+  test("serializes a pending migration across processes", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "pending.sqlite")
+    expect(await raceProcesses(tmp.path, filename, 1)).toEqual([0])
+    // rewind one migration so the children contend for it
+    const last = migrations[migrations.length - 1]!
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`DELETE FROM ${sql.identifier("migration")} WHERE id = ${last.id}`)
+      }).pipe(Effect.provide(SqliteClient.layer({ filename, disableWAL: true })), Effect.scoped),
+    )
+    expect(await raceProcesses(tmp.path, filename, 4)).toEqual([0, 0, 0, 0])
+    const rows = await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        return yield* db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")} WHERE id = ${last.id}`)
+      }).pipe(Effect.provide(SqliteClient.layer({ filename, disableWAL: true })), Effect.scoped),
+    )
+    expect(rows.length).toBe(1)
+  }, 30_000)
+
   test("defaults missing workspace names while preserving legacy workspace data", async () => {
     await run(
       Effect.gen(function* () {
