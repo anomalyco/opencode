@@ -28,3 +28,33 @@ export const collectBoundedResponseBody = (
     })
     return body.subarray(0, size)
   })
+
+export const collectTruncatedResponseBody = (
+  response: HttpClientResponse.HttpClientResponse,
+  maximumBytes: number,
+) =>
+  Effect.gen(function* () {
+    let body = Buffer.allocUnsafe(Math.min(maximumBytes, 64 * 1024))
+    let size = 0
+    let truncated = false
+    yield* Stream.runForEach(response.stream, (chunk) => {
+      if (chunk.byteLength === 0) return Effect.void
+      if (truncated) return Effect.void
+      const remaining = maximumBytes - size
+      if (remaining <= 0) {
+        truncated = true
+        return Effect.void
+      }
+      const toCopy = Math.min(chunk.byteLength, remaining)
+      if (size + toCopy > body.byteLength) {
+        const grown = Buffer.allocUnsafe(Math.min(maximumBytes, Math.max(size + toCopy, body.byteLength * 2)))
+        body.copy(grown, 0, 0, size)
+        body = grown
+      }
+      body.set(chunk.subarray(0, toCopy), size)
+      size += toCopy
+      if (chunk.byteLength > toCopy) truncated = true
+      return Effect.void
+    })
+    return { body: body.subarray(0, size), truncated, bytesRead: size }
+  })

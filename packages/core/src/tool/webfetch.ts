@@ -8,7 +8,7 @@ import TurndownService from "turndown"
 import { makeLocationNode } from "../effect/app-node"
 import { LayerNodePlatform } from "../effect/app-node-platform"
 import { PermissionV2 } from "../permission"
-import { collectBoundedResponseBody } from "./http-body"
+import { collectBoundedResponseBody, collectTruncatedResponseBody } from "./http-body"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -90,11 +90,7 @@ const execute = (http: HttpClient.HttpClient, url: string, format: Format, userA
   http.execute(request(url, format, userAgent)).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
 
 const collectBody = (response: HttpClientResponse.HttpClientResponse) =>
-  collectBoundedResponseBody(
-    response,
-    MAX_RESPONSE_BYTES,
-    () => new Error(`Response too large (exceeds ${MAX_RESPONSE_BYTES} byte limit)`),
-  )
+  collectTruncatedResponseBody(response, MAX_RESPONSE_BYTES)
 
 const mimeFrom = (contentType: string) => contentType.split(";", 1)[0]?.trim().toLowerCase() ?? ""
 const isImageAttachment = (mime: string) =>
@@ -145,7 +141,7 @@ const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
 
-              const { body, contentType } = yield* Effect.gen(function* () {
+              const { body, contentType, truncated } = yield* Effect.gen(function* () {
                 const response = yield* execute(http, input.url, input.format).pipe(
                   Effect.catchIf(isCloudflareChallenge, () => execute(http, input.url, input.format, "opencode")),
                 )
@@ -155,25 +151,36 @@ const layer = Layer.effectDiscard(
                   return yield* Effect.fail(new Error(`Unsupported fetched image content type: ${mime}`))
                 if (!isTextualMime(mime))
                   return yield* Effect.fail(new Error(`Unsupported fetched file content type: ${mime}`))
-                return { body: yield* collectBody(response), contentType }
+                const collected = yield* collectBody(response)
+                return { body: collected.body, truncated: collected.truncated, contentType }
               }).pipe(
                 Effect.timeoutOrElse({
                   duration: Duration.seconds(input.timeout ?? DEFAULT_TIMEOUT_SECONDS),
-                  orElse: () => Effect.fail(new Error("Request timed out")),
+                  orElse: () => Effect.fail(new Error(`Request timed out`)),
                 }),
               )
               const content = new TextDecoder().decode(body)
-              const output = yield* Effect.try({
+              const converted = yield* Effect.try({
                 try: () => convert(content, contentType, input.format),
                 catch: (error) => error,
               })
+              const output = truncated
+                ? `${converted}\n\n[Preview: response truncated to ${MAX_RESPONSE_BYTES} bytes (exceeds 5 MB limit) — preview shown per tool description]`
+                : converted
               return {
                 url: input.url,
                 contentType,
                 format: input.format,
                 output,
               }
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to fetch ${input.url}` }))),
+            }).pipe(
+              Effect.mapError((error) =>
+                new ToolFailure({
+                  message: `Unable to fetch ${input.url}: ${error instanceof Error ? error.message : String(error)}`,
+                  error,
+                }),
+              ),
+            ),
         }),
       })
       .pipe(Effect.orDie)
