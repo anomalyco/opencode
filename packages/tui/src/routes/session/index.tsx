@@ -72,7 +72,14 @@ import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
-import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
+import {
+  nextThinkingMode,
+  reasoningSummary,
+  thinkingModeActionTitle,
+  ThinkingVisibility,
+  useThinkingMode,
+  type ThinkingMode,
+} from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
@@ -705,11 +712,7 @@ export function Session() {
       },
     },
     {
-      title: (() => {
-        const next = nextThinkingMode(thinkingMode())
-        if (next === "hide") return "Collapse thinking"
-        return "Expand thinking"
-      })(),
+      title: thinkingModeActionTitle(thinkingMode()),
       value: "session.toggle.thinking",
       category: "Session",
       slash: {
@@ -1612,39 +1615,41 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   }
 
   return (
-    <Show when={content() || opaque()}>
-      <box
-        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
-        paddingLeft={3}
-        marginTop={1}
-        flexDirection="column"
-        flexShrink={0}
-      >
-        <box onMouseUp={toggle}>
-          <ReasoningHeader
-            toggleable={inMinimal() && !opaque()}
-            open={!inMinimal() || expanded()}
-            done={isDone()}
-            title={summary().title}
-            duration={isDone() ? Locale.duration(duration()) : undefined}
-            encrypted={opaque()}
-          />
-        </box>
-        <Show when={!opaque() && (!inMinimal() || expanded()) && summary().body}>
-          <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
-            <code
-              filetype="markdown"
-              drawUnstyledText={false}
-              streaming={true}
-              syntaxStyle={syntax()}
-              content={summary().body}
-              conceal={ctx.conceal()}
-              fg={theme.textMuted}
+    <ThinkingVisibility mode={ctx.thinkingMode}>
+      <Show when={content() || opaque()}>
+        <box
+          ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+          paddingLeft={3}
+          marginTop={1}
+          flexDirection="column"
+          flexShrink={0}
+        >
+          <box onMouseUp={toggle}>
+            <ReasoningHeader
+              toggleable={inMinimal() && !opaque()}
+              open={!inMinimal() || expanded()}
+              done={isDone()}
+              title={summary().title}
+              duration={isDone() ? Locale.duration(duration()) : undefined}
+              encrypted={opaque()}
             />
           </box>
-        </Show>
-      </box>
-    </Show>
+          <Show when={!opaque() && (!inMinimal() || expanded()) && summary().body}>
+            <box paddingLeft={inMinimal() ? 2 : 0} marginTop={1}>
+              <code
+                filetype="markdown"
+                drawUnstyledText={false}
+                streaming={true}
+                syntaxStyle={syntax()}
+                content={summary().body}
+                conceal={ctx.conceal()}
+                fg={theme.textMuted}
+              />
+            </box>
+          </Show>
+        </box>
+      </Show>
+    </ThinkingVisibility>
   )
 }
 
