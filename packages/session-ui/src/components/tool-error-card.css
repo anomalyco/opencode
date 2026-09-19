@@ -10,8 +10,7 @@
     color: var(--v2-text-text-muted);
   }
 
-  [data-slot="collapsible-arrow"],
-  [data-slot="collapsible-arrow-icon"] {
+  [data-slot="collapsible-arrow"], [data-slot="collapsible-arrow-icon"] {
     color: var(--v2-text-text-faint);
   }
 
@@ -35,6 +34,32 @@
     user-select: text;
   }
 
+  [data-slot="tool-error-card-context"] {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  [data-slot="tool-error-card-context-label"] {
+    color: var(--v2-text-text-muted);
+    flex-shrink: 0;
+    font-weight: 500;
+  }
+
+  [data-slot="tool-error-card-context-value"] {
+    color: var(--v2-text-text-base);
+    font-family: var(--v2-font-family-mono);
+    font-size: 11px;
+    word-break: break-all;
+    white-space: pre-wrap;
+    max-height: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   > [data-component="collapsible"].tool-collapsible[data-open="true"] [data-slot="tool-error-card-content"] {
     padding-right: 40px;
   }
@@ -49,8 +74,7 @@
     will-change: opacity;
   }
 
-  &:hover [data-slot="tool-error-card-copy"],
-  &:focus-within [data-slot="tool-error-card-copy"] {
+  &:hover [data-slot="tool-error-card-copy"], &:focus-within [data-slot="tool-error-card-copy"] {
     opacity: 1;
     pointer-events: auto;
   }
@@ -81,6 +105,18 @@ body:not([data-new-layout]) [data-component="card"][data-kind="tool-error-card"]
 
   [data-slot="collapsible-arrow-icon"] {
     color: var(--icon-weaker);
+  }
+
+  [data-slot="tool-error-card-context"] {
+    color: var(--text-base);
+  }
+
+  [data-slot="tool-error-card-context-label"] {
+    color: var(--text-weak);
+  }
+
+  [data-slot="tool-error-card-context-value"] {
+    color: var(--text-base);
   }
 
   [data-slot="tool-error-card-content"] :where(*)::selection,
