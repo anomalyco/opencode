@@ -28,6 +28,17 @@ export function shouldShowFileTree(input: { visible: boolean; opened: boolean })
   return input.opened && input.visible
 }
 
+// Whether switching to a session should pull focus into the composer.
+// Skip when a dialog owns focus, the composer is blocked (e.g. a pending
+// question dock), or focus sits in an opt-out region (e.g. the terminal).
+export function shouldRefocusComposerOnSwitch(input: {
+  dialogActive: boolean
+  composerBlocked: boolean
+  protectedFocus: boolean
+}) {
+  return !input.dialogActive && !input.composerBlocked && !input.protectedFocus
+}
+
 export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)

@@ -8,6 +8,7 @@ import {
   createSessionTabs,
   focusTerminalById,
   getTabReorderIndex,
+  shouldRefocusComposerOnSwitch,
   shouldShowFileTree,
 } from "./helpers"
 
@@ -15,6 +16,26 @@ describe("shouldShowFileTree", () => {
   test("does not reserve space for a disabled file tree", () => {
     expect(shouldShowFileTree({ visible: false, opened: true })).toBe(false)
     expect(shouldShowFileTree({ visible: true, opened: true })).toBe(true)
+  })
+})
+
+describe("shouldRefocusComposerOnSwitch", () => {
+  const base = { dialogActive: false, composerBlocked: false, protectedFocus: false }
+
+  test("refocuses composer on a plain tab switch", () => {
+    expect(shouldRefocusComposerOnSwitch(base)).toBe(true)
+  })
+
+  test("skips while a dialog is open", () => {
+    expect(shouldRefocusComposerOnSwitch({ ...base, dialogActive: true })).toBe(false)
+  })
+
+  test("skips while the composer is blocked (pending question dock)", () => {
+    expect(shouldRefocusComposerOnSwitch({ ...base, composerBlocked: true })).toBe(false)
+  })
+
+  test("skips when focus sits in an opt-out region (terminal)", () => {
+    expect(shouldRefocusComposerOnSwitch({ ...base, protectedFocus: true })).toBe(false)
   })
 })
 
