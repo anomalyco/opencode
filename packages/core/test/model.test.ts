@@ -21,3 +21,17 @@ describe("ModelV2.Ref", () => {
     })
   })
 })
+
+describe("ModelV2.parse", () => {
+  test("parses provider/model string", () => {
+    const result = ModelV2.parse("anthropic/claude-sonnet-4")
+    expect(String(result.providerID)).toBe("anthropic")
+    expect(String(result.modelID)).toBe("claude-sonnet-4")
+  })
+
+  test("strips trailing slash", () => {
+    const result = ModelV2.parse("anthropic/claude-sonnet-4/")
+    expect(String(result.providerID)).toBe("anthropic")
+    expect(String(result.modelID)).toBe("claude-sonnet-4")
+  })
+})
