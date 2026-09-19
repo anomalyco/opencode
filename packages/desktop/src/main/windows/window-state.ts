@@ -44,6 +44,10 @@ export function resolveWindowState(saved: unknown, defaults: { width: number; he
   } satisfies WindowState
 }
 
+export function windowStateFile(id: string) {
+  return `window-state-${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
+}
+
 export function readWindowState(file: string): unknown {
   if (!existsSync(file)) return undefined
   try {

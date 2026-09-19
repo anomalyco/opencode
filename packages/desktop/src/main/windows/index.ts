@@ -24,7 +24,8 @@ import {
 import { loadWindow, registerRendererProtocol } from "./protocol"
 import { createWindowRegistry } from "./registry"
 import { makeWindowRecovery } from "./recovery"
-import { manageWindowState, readWindowState, resolveWindowState } from "./window-state"
+import { takeEarlyWindow, type EarlyWindow } from "./early"
+import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
 const themeReady = new WeakMap<BrowserWindow, () => void>()
@@ -88,48 +89,62 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
   const wireWindowRecovery = yield* makeWindowRecovery
 
   const restore = () => {
+    // The entry module created and showed the first restored window on ready; it is adopted here,
+    // before any renderer loads, so the user never waited for the layers to see a window.
+    const early = takeEarlyWindow()
+    const usable = early && !early.win.isDestroyed() ? early : undefined
     const ids = registry.persisted()
-    return (ids.length ? ids : [randomUUID()]).map((id) => create(id))
+    const list = ids.length ? ids : [usable?.id ?? randomUUID()]
+    if (usable && !list.includes(usable.id)) usable.win.destroy()
+    return list.map((id) => create(id, usable?.id === id ? usable : undefined))
   }
 
-  const create = (id: string = randomUUID()) => {
+  const create = (id: string = randomUUID(), early?: EarlyWindow) => {
     const stateFile = path.join(app.getPath("userData"), windowStateFile(id))
-    const state = resolveWindowState(readWindowState(stateFile), { width: 1280, height: 800 }, displays)
+    const state = early?.state ?? resolveWindowState(readWindowState(stateFile), { width: 1280, height: 800 }, displays)
     const appearance = windowAppearance(path, paths)
-    const win = new BrowserWindow({
-      x: state.x,
-      y: state.y,
-      width: state.width,
-      height: state.height,
-      show: false,
-      autoHideMenuBar: true,
-      ...appearance,
-      webPreferences: {
-        ...appearance.webPreferences,
-        additionalArguments: [windowIDArgument(id)],
-      },
-    })
+    const win =
+      early?.win ??
+      new BrowserWindow({
+        x: state.x,
+        y: state.y,
+        width: state.width,
+        height: state.height,
+        show: false,
+        autoHideMenuBar: true,
+        ...appearance,
+        webPreferences: {
+          ...appearance.webPreferences,
+          additionalArguments: [windowIDArgument(id)],
+        },
+      })
 
     allowRendererPermissions(win)
     wireWindowRecovery(win, id, () => relaunchHandler())
     wireNavigationPolicy(win, (url) => runFork(openExternalURL(url)))
     wireRendererHeaders(win)
-    manageWindowState(win, stateFile, state, displays)
+    if (!early) manageWindowState(win, stateFile, state, displays)
     register(win, id)
     wireFullscreen(win)
     loadWindow(win, "index.html")
     wireZoom(win)
     let contentReady = false
     let appliedTheme = false
-    let revealed = false
+    let revealed = !!early
+    const focusForTests = () => {
+      if (app.isPackaged || process.env.OPENCODE_TEST_ONBOARDING !== "1") return
+      if (process.platform === "darwin") app.focus({ steal: true })
+      win.focus()
+    }
+    if (early) {
+      focusForTests()
+      runFork(Effect.logInfo("main window visible", { window: id, shownAt: early.shownAt }))
+    }
     const reveal = () => {
       if (!contentReady || !appliedTheme || revealed || win.isDestroyed()) return
       revealed = true
       win.show()
-      if (!app.isPackaged && process.env.OPENCODE_TEST_ONBOARDING === "1") {
-        if (process.platform === "darwin") app.focus({ steal: true })
-        win.focus()
-      }
+      focusForTests()
       runFork(Effect.logInfo("main window visible", { window: id }))
     }
     const ready = () => {
@@ -166,10 +181,6 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
 
   return { create, restore }
 })
-
-function windowStateFile(id: string) {
-  return `window-state-${safeWindowID(id)}.json`
-}
 
 // Mirrors windowStorage() in packages/app/src/runtime/persistence/storage.ts; it is the state
 // namespace the renderer persists this window's tabs under.
