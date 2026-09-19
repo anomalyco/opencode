@@ -996,7 +996,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
     else messages.push({ role: "user", content })
   }
 
-  return messages
+  return ProviderShared.trimAssistantPrefill(messages)
 })
 
 // Accept gateway namespaces and Vertex suffixes without treating a snapshot date as a minor version.

@@ -132,6 +132,41 @@ export const parseJson = (route: string, input: string, message: string) =>
  */
 export const joinText = (parts: ReadonlyArray<{ readonly text: string }>) => parts.map((part) => part.text).join("\n")
 
+// Anthropic and Converse reject trailing whitespace in assistant prefills.
+// Work on lowered copies so filtering and cache markers cannot hide the final text.
+export const trimAssistantPrefill = <
+  T extends {
+    readonly role: string
+    readonly content: ReadonlyArray<{ readonly text?: string; readonly [key: string]: unknown }>
+  },
+>(
+  messages: ReadonlyArray<T>,
+): T[] => {
+  const result = [...messages]
+  while (result.at(-1)?.role === "assistant") {
+    const message = result[result.length - 1]
+    const content = [...message.content]
+    while (content.length > 0) {
+      const index = content.findLastIndex((part) => !("cachePoint" in part))
+      const part = content[index]
+      if (part?.text === undefined) break
+      const text = part.text.trimEnd()
+      if (text.length > 0) {
+        content[index] = { ...part, text }
+        break
+      }
+      // Remove the blank suffix and any cache marker belonging to it.
+      content.splice(index)
+    }
+    if (content.length > 0) {
+      result[result.length - 1] = { ...message, content }
+      break
+    }
+    result.pop()
+  }
+  return result
+}
+
 const escapeSystemUpdateText = (text: string) =>
   text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
 
