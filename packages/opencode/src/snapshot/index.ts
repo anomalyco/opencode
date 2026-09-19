@@ -257,7 +257,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
           const tracked = diff.text.split("\0").filter(Boolean)
           const untracked = other.text.split("\0").filter(Boolean)
-          const all = Array.from(new Set([...tracked, ...untracked]))
+          const all = Array.from(new Set([...tracked, ...untracked])).filter((item) => !item.endsWith("/"))
           if (!all.length) return
 
           // Resolve source-repo ignore rules against the exact candidate set.
