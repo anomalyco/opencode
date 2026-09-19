@@ -22,6 +22,9 @@ export const MAX_CAPTURE_BYTES = 1024 * 1024
 
 export const Input = Schema.Struct({
   command: Schema.String.annotate({ description: "Shell command string to execute" }),
+  reason: Schema.String.pipe(Schema.optional).annotate({
+    description: "Optional brief explanation of why this command is needed for the user's task",
+  }),
   workdir: Schema.String.pipe(Schema.optional).annotate({
     description: "Working directory. Defaults to the active Location; relative paths resolve from that Location.",
   }),
@@ -134,6 +137,7 @@ const layer = Layer.effectDiscard(
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source,
+                  reason: input.reason,
                 })
               const warnings = (yield* externalCommandDirectories(fs, input.command, target.canonical)).map(
                 (directory) =>
@@ -146,6 +150,7 @@ const layer = Layer.effectDiscard(
                 sessionID: context.sessionID,
                 agent: context.agent,
                 source,
+                reason: input.reason,
               })
 
               if ((yield* fs.stat(target.canonical)).type !== "Directory")
