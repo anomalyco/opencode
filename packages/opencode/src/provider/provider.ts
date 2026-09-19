@@ -26,6 +26,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
 import { optional } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
+import { ProviderDiscover } from "./discover"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
@@ -1577,6 +1578,74 @@ const layer = Layer.effect(
             parsed.models[modelID] = parsedModel
           }
           database[providerID] = parsed
+        }
+
+        // Discover models for openai-compatible config providers so the list
+        // reflects what the endpoint actually serves. Stale catalog/config
+        // entries for endpoints the server no longer serves are dropped;
+        // on discovery failure the configured list is kept.
+        const discoveryEnvs = yield* env.all()
+        for (const [providerID, provider] of configProviders) {
+          if (provider.npm !== "@ai-sdk/openai-compatible") continue
+          if (modelsDev[providerID]?.api === provider.options?.baseURL) continue
+          const id = ProviderV2.ID.make(providerID)
+          if (!isProviderAllowed(id)) continue
+          const rawURL = iife(() => {
+            if (typeof provider.options?.baseURL === "string" && provider.options.baseURL !== "")
+              return provider.options.baseURL
+            if (typeof provider.api === "string" && provider.api !== "") return provider.api
+            return undefined
+          })
+          if (!rawURL) continue
+          const baseURL = rawURL.replace(/\$\{([^}]+)\}/g, (item, key) => discoveryEnvs[String(key)] ?? item)
+          if (!/^https?:\/\//.test(baseURL)) continue
+          const target = database[id]
+          if (!target) continue
+          const storedAuth = yield* auth.get(id).pipe(Effect.orDie)
+          yield* Effect.promise(async () => {
+            try {
+              const key =
+                typeof provider.options?.apiKey === "string"
+                  ? provider.options.apiKey
+                  : (storedAuth?.type === "api" ? storedAuth.key : undefined)
+              const found = await ProviderDiscover.discover(baseURL, key)
+              if (!found.length) return
+              const next: Record<string, Model> = {}
+              for (const item of found) {
+                const template = target.models[item.id]
+                next[item.id] = template ?? {
+                  id: ModelV2.ID.make(item.id),
+                  providerID: id,
+                  name: item.name ?? item.id,
+                  family: "",
+                  api: {
+                    id: item.id,
+                    url: baseURL,
+                    npm: "@ai-sdk/openai-compatible",
+                  },
+                  status: "active",
+                  headers: {},
+                  options: {},
+                  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                  limit: { context: item.context ?? 0, input: undefined, output: item.output ?? 0 },
+                  capabilities: {
+                    temperature: false,
+                    reasoning: false,
+                    attachment: false,
+                    toolcall: true,
+                    input: { text: true, audio: false, image: false, video: false, pdf: false },
+                    output: { text: true, audio: false, image: false, video: false, pdf: false },
+                    interleaved: false,
+                  },
+                  release_date: item.created ? new Date(item.created * 1000).toISOString().slice(0, 10) : "",
+                  variants: {},
+                }
+              }
+              target.models = next
+            } catch {
+              // Endpoint unreachable or unsupported; keep configured models.
+            }
+          })
         }
 
         // load env
