@@ -82,4 +82,27 @@ describe("Ripgrep", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+  it.live("strips trailing newlines from line previews", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "lf.txt"), "needle\n"))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "crlf.txt"), "needle\r\n"))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "no-newline.txt"), "needle"))
+
+          const matches = yield* (yield* Ripgrep.Service).grep({
+            cwd: tmp.path,
+            pattern: "needle",
+            limit: 10,
+          })
+          const textByPath = new Map(matches.map((match) => [String(match.entry.path), match.text]))
+
+          expect(textByPath.get("lf.txt")).toBe("needle")
+          expect(textByPath.get("crlf.txt")).toBe("needle")
+          expect(textByPath.get("no-newline.txt")).toBe("needle")
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })

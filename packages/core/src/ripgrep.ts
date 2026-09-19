@@ -19,6 +19,12 @@ const ERROR_BYTES = 8 * 1024
 const MAX_RECORD_BYTES = 64 * 1024
 const MAX_SUBMATCHES = 100
 
+/** Strip the trailing newline ripgrep includes in line previews, then bound the preview length. */
+const previewLine = (raw: string) => {
+  const line = raw.replace(/\r?\n$/, "")
+  return line.length > 2_000 ? line.slice(0, 2_000).replace(/[\uD800-\uDBFF]$/, "") + "..." : line
+}
+
 const RawMatch = Schema.Struct({
   type: Schema.Literal("match"),
   data: Schema.Struct({
@@ -264,10 +270,7 @@ const layer = Layer.effect(
                 }),
                 line: match.line_number,
                 offset: match.absolute_offset,
-                text:
-                  match.lines.text.length > 2_000
-                    ? match.lines.text.slice(0, 2_000).replace(/[\uD800-\uDBFF]$/, "") + "..."
-                    : match.lines.text,
+                text: previewLine(match.lines.text),
                 submatches: match.submatches.map((submatch) => ({
                   text: submatch.match.text,
                   start: submatch.start,
