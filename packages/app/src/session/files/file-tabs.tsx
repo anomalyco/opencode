@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -12,7 +12,31 @@ import { Menu } from "@opencode/ui/menu"
 import { Tabs } from "@opencode/ui/tabs"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { showToast } from "@/shell/notifications/toast"
-import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
+import {
+  selectionFromLines,
+  useFile,
+  type FileSelection,
+  type FileState,
+  type SelectedLineRange,
+} from "@/workspaces/files/model"
+import { artifactKind, contentBytes, previewableKinds, type ArtifactKind } from "@/workspaces/files/artifact"
+import {
+  ArtifactAudio,
+  ArtifactBinary,
+  ArtifactFont,
+  ArtifactFrame,
+  ArtifactImage,
+  ArtifactMarkdown,
+  ArtifactMermaid,
+  ArtifactTable,
+  ArtifactToolbar,
+  ArtifactVideo,
+  OpenInBrowserButton,
+  formatBytes,
+  formatDuration,
+  type ArtifactInfo,
+  type ArtifactMode,
+} from "@/session/files/artifact-view"
 import { useComments } from "@/composer/comments"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useComposerState } from "@/composer/persistence"
@@ -205,6 +229,46 @@ export function SessionFileView(props: SessionFileViewProps) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
+  // Media the browser could not decode falls back to the binary placeholder.
+  const [decode, setDecode] = createStore({ failed: false })
+  const kind = createMemo<ArtifactKind | "binary">(() => {
+    const content = state()?.content
+    if (content?.type === "binary" && !content.mimeType) return "binary"
+    if (decode.failed) return "binary"
+    return artifactKind(path() ?? "")
+  })
+  const previewable = createMemo(() => {
+    const value = kind()
+    return value !== "binary" && previewableKinds.has(value)
+  })
+  // Rendered previews are the default for documents; the toggle is per view and not persisted.
+  const [artifact, setArtifact] = createStore({ mode: "preview" as ArtifactMode, info: {} as ArtifactInfo })
+  createEffect(
+    on(
+      () => state()?.content,
+      () => {
+        setArtifact({ mode: "preview", info: {} })
+        setDecode("failed", false)
+      },
+      { defer: true },
+    ),
+  )
+  const previewing = createMemo(() => previewable() && artifact.mode === "preview")
+  // Text files keep the plain code view; everything else has a dedicated viewer unless showing source.
+  const viewer = createMemo(() => kind() !== "text" && (previewing() || !previewable()))
+  const meta = createMemo(() => {
+    const content = state()?.content
+    if (!content) return []
+    const info = artifact.info
+    const locale = language.intl()
+    return [
+      info.width && info.height ? `${info.width} × ${info.height}` : undefined,
+      info.duration ? formatDuration(info.duration) : undefined,
+      info.rows !== undefined ? language.plural("file.view.table.rows", Math.max(0, info.rows - 1)) : undefined,
+      info.columns !== undefined ? language.plural("file.view.table.columns", info.columns) : undefined,
+      formatBytes(locale, contentBytes(content)),
+    ].filter((item): item is string => !!item)
+  })
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -433,39 +497,97 @@ export function SessionFileView(props: SessionFileViewProps) {
         }}
         search={search}
         class="select-text"
-        media={{
-          mode: "auto",
-          path: path(),
-          current: state()?.content,
-          onLoad: scrollSync.queueRestore,
-          onError: (args: { kind: "image" | "audio" | "svg" }) => {
-            if (args.kind !== "svg") return
-            showToast({
-              variant: "error",
-              title: language.t("toast.file.loadFailed.title"),
-            })
-          },
-        }}
+        // Media and previews have their own viewers below; the code view only ever shows text.
+        media={{ mode: "off" }}
       />
     </div>
   )
 
+  const setInfo = (info: ArtifactInfo) => setArtifact("info", info)
+  const fail = () => setDecode("failed", true)
+
+  // Viewers own their size and scrolling; the code view scrolls inside ScrollView so line state persists.
+  const renderViewer = (value: NonNullable<FileState["content"]>) => (
+    <Switch>
+      <Match when={kind() === "image" || kind() === "svg"}>
+        <ArtifactImage path={path() ?? ""} content={value} onInfo={setInfo} onError={fail} />
+      </Match>
+      <Match when={kind() === "video"}>
+        <ArtifactVideo path={path() ?? ""} content={value} onInfo={setInfo} onError={fail} />
+      </Match>
+      <Match when={kind() === "audio"}>
+        <ArtifactAudio path={path() ?? ""} content={value} onInfo={setInfo} onError={fail} />
+      </Match>
+      <Match when={kind() === "pdf" || kind() === "html"}>
+        <ArtifactFrame path={path() ?? ""} content={value} kind={kind() === "pdf" ? "pdf" : "html"} />
+      </Match>
+      <Match when={kind() === "font"}>
+        <ArtifactFont path={path() ?? ""} content={value} />
+      </Match>
+      <Match when={kind() === "binary"}>
+        <ArtifactBinary path={path() ?? ""} size={formatBytes(language.intl(), contentBytes(value))} />
+      </Match>
+      <Match when={kind() === "table"}>
+        <ArtifactTable path={path() ?? ""} text={value.content} onInfo={setInfo} />
+      </Match>
+      <Match when={kind() === "markdown" || kind() === "mermaid"}>
+        <ScrollView class="min-h-0 flex-1">
+          <Show
+            when={kind() === "markdown"}
+            fallback={<ArtifactMermaid path={path() ?? ""} text={value.content} cacheKey={cacheKey()} />}
+          >
+            <ArtifactMarkdown path={path() ?? ""} text={value.content} cacheKey={cacheKey()} />
+          </Show>
+        </ScrollView>
+      </Match>
+    </Switch>
+  )
+
+  const toolbar = () => (
+    <Show when={kind() !== "text"}>
+      <ArtifactToolbar
+        mode={artifact.mode}
+        onModeChange={previewable() ? (mode) => setArtifact("mode", mode) : undefined}
+        meta={meta()}
+        actions={
+          <Show when={kind() === "html"}>
+            <OpenInBrowserButton path={path() ?? ""} />
+          </Show>
+        }
+      />
+    </Show>
+  )
+
   const content = () => (
-    <div class="mt-3 relative h-full min-h-0">
-      <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll}>
-        <Switch>
-          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
-          <Match when={state()?.loading}>
-            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}…</div>
-          </Match>
-          <Match when={state()?.notFound ? state()?.name : undefined}>
-            {(name) => (
-              <div class="px-6 py-4 text-text-weak">{language.t("file.error.notFound", { name: name() })}</div>
-            )}
-          </Match>
-          <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
-        </Switch>
-      </ScrollView>
+    <div class="mt-3 relative h-full min-h-0 flex flex-col">
+      {toolbar()}
+      <Switch>
+        <Match when={state()?.loaded ? state()?.content : undefined}>
+          {(value) => (
+            <Show
+              when={viewer()}
+              fallback={
+                <ScrollView
+                  class="min-h-0 flex-1"
+                  viewportRef={scrollSync.setViewport}
+                  onScroll={scrollSync.handleScroll}
+                >
+                  {renderFile(value().content)}
+                </ScrollView>
+              }
+            >
+              {renderViewer(value())}
+            </Show>
+          )}
+        </Match>
+        <Match when={state()?.loading}>
+          <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}…</div>
+        </Match>
+        <Match when={state()?.notFound ? state()?.name : undefined}>
+          {(name) => <div class="px-6 py-4 text-text-weak">{language.t("file.error.notFound", { name: name() })}</div>}
+        </Match>
+        <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
+      </Switch>
     </div>
   )
 

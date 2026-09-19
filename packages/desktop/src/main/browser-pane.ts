@@ -31,6 +31,11 @@ type Entry = {
   lastState?: string
   network?: BrowserNetwork
   storageKey: string
+  /**
+   * Workspace directories whose files may load as file:// documents. Set only for the desktop's
+   * own sidecar: a forwarded or explicit loopback server does not share this machine's disk.
+   */
+  fileRoots: string[]
 }
 
 export function createBrowserPane(storage: StateStore) {
@@ -78,7 +83,11 @@ export function createBrowserPane(storage: StateStore) {
         focusedTabID: previous.focusedTabID,
         partition: `opencode-browser-${crypto.randomUUID()}`,
         storageKey,
+        fileRoots: [],
       }
+      const sidecar = SidecarCredentials.get()
+      const sameMachine =
+        !!sidecar && URL.canParse(target.endpoint.url) && new URL(target.endpoint.url).origin === sidecar.url
       // "unsupported" means the server has no browser plugin; the renderer stops retrying.
       let reason: "browser.pane.unsupported" | "browser.pane.replaced" | "browser.pane.suspended" | undefined
       let attached = false
@@ -112,6 +121,8 @@ export function createBrowserPane(storage: StateStore) {
               ),
             )
             const session = yield* client.session.get({ sessionID })
+            // The agent can already read this workspace, so showing its files adds no access.
+            if (sameMachine) entry.fileRoots = [session.location.directory]
             const options = {
               location: { directory: session.location.directory, workspace: session.location.workspaceID },
             }
@@ -393,6 +404,7 @@ export function createBrowserPane(storage: StateStore) {
       initialize,
       restore,
       popupOptions,
+      fileRoots: () => entry.fileRoots,
       fail,
       publish: (error) => {
         if (entry.pages.has(id)) publishState(entry, error)
@@ -420,6 +432,11 @@ export function createBrowserPane(storage: StateStore) {
         "Browser request was cancelled. Do not repeat a mutating action until you have inspected its outcome.",
       )
     if (action.type === "tabs.list") return { value: inventory(entry), files: [] }
+    if (action.type === "preview") {
+      // The renderer owns file tabs; it resolves the path against the session's workspace.
+      report(entry, { type: "preview", path: action.path })
+      return { value: { path: action.path }, files: [] }
+    }
     if (action.type === "tabs.open") {
       const page = create(entry)
       if (action.focus !== false) focus(entry, page.state().id)

@@ -42,7 +42,21 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
     const [unsupported, setUnsupported] = createStore<Record<string, true | undefined>>({})
     const live = new Map<string, Live>()
     const focus = new Map<string, Set<(tabID: Browser.TabID) => void>>()
+    const preview = new Map<string, Set<(path: string) => void>>()
     const key = (server: Server, sessionID: string) => `${server.key}\n${sessionID}`
+    const subscribe = <T>(
+      listeners: Map<string, Set<(value: T) => void>>,
+      id: string,
+      listener: (value: T) => void,
+    ) => {
+      const set = listeners.get(id) ?? new Set()
+      set.add(listener)
+      listeners.set(id, set)
+      return () => {
+        set.delete(listener)
+        if (!set.size) listeners.delete(id)
+      }
+    }
     const enabled = createMemo(
       () => !!platform.browserPane && settings.ready() && settings.general.experimentalBrowser(),
     )
@@ -101,6 +115,7 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
             endpoint: { ...server.conn.http, url: server.ctx.sdk.url },
           }),
           focus: (tabID) => focus.get(id)?.forEach((listener) => listener(tabID)),
+          preview: (path) => preview.get(id)?.forEach((listener) => listener(path)),
           change: (state) => {
             if (state.error === "browser.pane.unsupported") {
               setUnsupported(server.key, true)
@@ -142,14 +157,11 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
       },
       /** Desktop focus requests for a mounted session route; nothing is replayed to routes mounted later. */
       onFocus(server: Server, sessionID: string, listener: (tabID: Browser.TabID) => void) {
-        const id = key(server, sessionID)
-        const listeners = focus.get(id) ?? new Set()
-        listeners.add(listener)
-        focus.set(id, listeners)
-        return () => {
-          listeners.delete(listener)
-          if (!listeners.size) focus.delete(id)
-        }
+        return subscribe(focus, key(server, sessionID), listener)
+      },
+      /** Agent requests to show a file in this session's Review pane. */
+      onPreview(server: Server, sessionID: string, listener: (path: string) => void) {
+        return subscribe(preview, key(server, sessionID), listener)
       },
       command(server: Server, sessionID: string, command: BrowserPaneCommand) {
         const connection = live.get(key(server, sessionID))?.connection
