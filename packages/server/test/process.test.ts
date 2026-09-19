@@ -163,6 +163,20 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
   }),
 )
 
+it.live("allows unauthenticated requests when no server password is configured", () =>
+  Effect.gen(function* () {
+    const server = yield* ServerProcess.start<never, never>({
+      hostname: "127.0.0.1",
+      port: 0,
+      app: { version: "test-version" },
+      database: { path: ":memory:" },
+    })
+    const response = yield* Effect.promise(() => fetch(new URL("/api/info", HttpServer.formatAddress(server.address))))
+    expect(response.status).toBe(200)
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({ version: "test-version" })
+  }),
+)
+
 async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, expected: string) {
   while (true) {
     const next = await reader.read()
