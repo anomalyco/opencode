@@ -95,16 +95,23 @@ function emitDeepLinks(urls: string[]) {
     }
   }
   pendingDeepLinks.push(...urls)
-  const win = getLastFocusedWindow()
+  const win = getDeliveryWindow()
   if (win) sendDeepLinks(win, urls)
 }
 
-// MUC Harness: 后台启动（窗口从未聚焦）时 getLastFocusedWindow() 为 null，
-// 深链只进了 pendingDeepLinks，渲染层仅在启动时消费一次 → 一次性授权码会丢。
-// 任意窗口聚焦后补发；渲染层尚未加载完成时短暂重试。
+// MUC Harness: 深链投递目标——优先最近聚焦窗口；应用在后台未聚焦时
+// （浏览器唤起 muc:// 但窗口从未获得过焦点）回退到任意存活窗口，
+// 否则一次性授权码会滞留 pendingDeepLinks 无人消费。
+const getDeliveryWindow = () => {
+  const focused = getLastFocusedWindow()
+  if (focused) return focused
+  return BrowserWindow.getAllWindows().find((win) => !win.isDestroyed()) ?? null
+}
+
+// MUC Harness: 若投递时窗口尚未创建/渲染层未就绪，稍后重试直至成功。
 const flushPendingDeepLinks = (attempts: number) => {
   if (pendingDeepLinks.length === 0) return
-  const win = getLastFocusedWindow()
+  const win = getDeliveryWindow()
   if (win && !win.isDestroyed() && !win.webContents.isLoadingMainFrame()) {
     logger.log("flushing pending deep links", { count: pendingDeepLinks.length })
     sendDeepLinks(win, pendingDeepLinks.splice(0))
