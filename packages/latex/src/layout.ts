@@ -88,12 +88,33 @@ function layoutNode(node: MathNode, context: LayoutContext): Box {
     case "text":
     case "operator":
       return textBox(applyVariant(node.value, context.variant), context.style)
+    case "raw": {
+      const lines = node.value.split(/\r\n?|\n/).map((line) => textBox(line.replace(/\t/g, "    "), context.style))
+      const result = blank(Math.max(...lines.map((line) => line.width)), lines.length, 0)
+      lines.forEach((line, y) => overlay(result, line, 0, y))
+      return result
+    }
     case "space":
       return blank(node.width, 1, 0)
     case "fraction":
       return layoutFraction(node, context)
     case "root":
       return layoutRoot(node.body, node.index, context)
+    case "boxed": {
+      const body = layoutNode(node.body, context)
+      const result = blank(body.width + 4, body.height + 2, body.baseline + 1)
+      overlay(result, body, 2, 1)
+      for (const y of [0, result.height - 1]) {
+        drawHorizontal(result, y, 1, result.width - 2, "─", context.style)
+        setCell(result, 0, y, y === 0 ? "┌" : "└", context.style)
+        setCell(result, result.width - 1, y, y === 0 ? "┐" : "┘", context.style)
+      }
+      for (let y = 1; y < result.height - 1; y++) {
+        setCell(result, 0, y, "│", context.style)
+        setCell(result, result.width - 1, y, "│", context.style)
+      }
+      return result
+    }
     case "scripts":
       return layoutScripts(node, context)
     case "delimited":
@@ -453,6 +474,8 @@ function textBox(text: string, style?: MathStyle): Box {
 }
 
 function blank(width: number, height: number, baseline: number): Box {
+  // Short source can still produce a huge rectangle, especially with uneven raw lines.
+  if (width * height > 1_000_000) throw new RangeError("LaTeX layout exceeds the 1000000-cell limit")
   return {
     width: Math.max(0, width),
     height: Math.max(1, height),
