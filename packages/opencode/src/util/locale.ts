@@ -59,19 +59,24 @@ export namespace Locale {
     return `${days}d ${hours}h`
   }
 
+  const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+  function graphemeSegments(str: string): string[] {
+    return [...graphemes.segment(str)].map(s => s.segment)
+  }
+
   export function truncate(str: string, len: number): string {
-    if (str.length <= len) return str
-    return str.slice(0, len - 1) + "…"
+    const segs = graphemeSegments(str)
+    if (segs.length <= len) return str
+    return segs.slice(0, len - 1).join("") + "…"
   }
 
   export function truncateMiddle(str: string, maxLength: number = 35): string {
-    if (str.length <= maxLength) return str
-
+    const segs = graphemeSegments(str)
+    if (segs.length <= maxLength) return str
     const ellipsis = "…"
     const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
     const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
-
-    return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+    return segs.slice(0, keepStart).join("") + ellipsis + segs.slice(-keepEnd).join("")
   }
 
   export function pluralize(count: number, singular: string, plural: string): string {
