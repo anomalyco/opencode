@@ -18,4 +18,8 @@ export const migrations = [
     id: "20260907031611_blob-touched",
     statements: ["ALTER TABLE `blob` ADD `touched_at` integer DEFAULT 0 NOT NULL;"],
   },
+  {
+    id: "20260915071310_pairing-state",
+    statements: ["CREATE TABLE `pairing` (\n\t`key` text PRIMARY KEY,\n\t`value` text NOT NULL\n);"],
+  },
 ]

@@ -10,6 +10,10 @@ test("settings has its own layout route", () => {
   expect(currentRoute("/settings", "")).toEqual({ type: "settings" })
 })
 
+test("connect has its own layout route", () => {
+  expect(currentRoute("/connect", "")).toEqual({ type: "connect" })
+})
+
 describe("layout persistence", () => {
   const schema = Persistence.withInitial(layoutPersistence, initialLayout(ServerConnection.Key.make("local")))
   const decode = Schema.decodeUnknownSync(schema)

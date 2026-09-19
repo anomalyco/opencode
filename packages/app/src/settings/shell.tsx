@@ -3,6 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { createEffect, createMemo, on, onCleanup, onMount, Show, Switch, Match, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { displayName } from "@/shell/layout/helpers"
@@ -18,6 +19,7 @@ import { SettingsAppearance } from "./appearance/appearance"
 import { SettingsExperimental } from "./experimental/experimental"
 import { SettingsKeybinds } from "./keybinds/keybinds"
 import { SettingsNotifications } from "./notifications/notifications"
+import { SettingsPairing } from "./pairing/pairing"
 import { SettingsProviders } from "./providers/providers"
 import { SettingsModels } from "./models/models"
 import { SettingsServerGeneral } from "./servers/servers"
@@ -41,6 +43,7 @@ const rootClientTabs = [
   { value: "appearance", icon: pageIcons.appearance, label: "settings.general.section.appearance" },
   { value: "notifications", icon: pageIcons.notifications, label: "settings.tab.notifications" },
   { value: "shortcuts", icon: pageIcons.shortcuts, label: "settings.tab.shortcuts" },
+  { value: "pairing", icon: pageIcons.pairing, label: "settings.pairing.title" },
 ] as const
 
 const serverTabs = [
@@ -187,6 +190,7 @@ function RootSettings() {
   const tabs = useTabs()
   const servers = useServerCollectionController()
   const inventory = useSettingsServers()
+  const platform = usePlatform()
   const [state, setState] = createStore({ worktreeFilterReset: 0 })
   const list = servers.collection.items
   const singleEntry = createMemo(() => (inventory().length === 1 ? inventory()[0] : undefined))
@@ -216,7 +220,11 @@ function RootSettings() {
       <DialogServer mode="add" onSave={(server) => surface.openServer(ServerConnection.key(server))} />
     ))
   const groups = createMemo<SettingsNavGroup[]>(() => [
-    { items: rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })) },
+    {
+      items: rootClientTabs
+        .filter((item) => item.value !== "pairing" || !!platform.pair)
+        .map((item) => ({ ...item, label: language.t(item.label) })),
+    },
     ...(multiple()
       ? [
           {
@@ -281,6 +289,9 @@ function RootSettings() {
       </Tabs.Content>
       <Tabs.Content value="shortcuts" class="settings-panel">
         <SettingsKeybinds active={surface.view().tab === "shortcuts"} autofocus={!surface.search.state.selected} />
+      </Tabs.Content>
+      <Tabs.Content value="pairing" class="settings-panel">
+        <SettingsPairing />
       </Tabs.Content>
       <Tabs.Content value="experimental" class="settings-panel">
         <SettingsExperimental />

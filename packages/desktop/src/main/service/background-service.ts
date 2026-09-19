@@ -43,7 +43,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
           ? path.join(app.getPath("userData"), "opencode", "service-local.json")
           : undefined,
       version,
-      command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
+      command: [...cli.command, "serve", "--service", ...(isolated ? ["--hostname", "0.0.0.0", "--port", "0"] : [])],
       onStart: (reason, previousVersion) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
     }),

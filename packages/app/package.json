@@ -91,6 +91,7 @@
     "remeda": "catalog:",
     "solid-js": "catalog:",
     "solid-presence": "0.2.0",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.3",
+    "uqr": "0.1.3"
   }
 }

@@ -67,6 +67,7 @@ export type TabPanes = {
 export type LayoutRoute =
   | { type: "home" }
   | { type: "settings" }
+  | { type: "connect" }
   | { type: "draft"; draftID: string }
   | { type: "session"; sessionId: string; server: ServerConnection.Key }
 
@@ -106,6 +107,7 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
   if (parts.length === 0) return { type: "home" }
   if (parts[0] === "settings") return { type: "settings" }
+  if (parts[0] === "connect") return { type: "connect" }
 
   if (parts[0] === "new-session") {
     const draftID = new URLSearchParams(search).get("draftId")

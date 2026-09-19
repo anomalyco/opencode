@@ -27,3 +27,10 @@ export const state = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.name, table.key] })],
 )
+
+// Main-process pairing integration state. Tailscale Serve persists its configuration, and this
+// remembers which HTTPS port belongs to OpenCode so it can be recovered without touching other routes.
+export const pairing = sqliteTable("pairing", {
+  key: text().primaryKey(),
+  value: text().notNull(),
+})

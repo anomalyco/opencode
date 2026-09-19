@@ -15,6 +15,7 @@ import type {
   ServerReadyData,
   TitlebarTheme,
 } from "../shared/ipc-contract"
+import type { PairingInfo } from "../shared/ipc-rpc/app"
 
 export type WslServersAPI = WslServersPlatform
 export type UpdaterAPI = {
@@ -87,4 +88,11 @@ export type ElectronAPI = {
   setForceFocus(enabled: boolean): Promise<void>
   recordFatalRendererError(error: FatalRendererError): Promise<void>
   setNativeTranslations(bundle: DesktopNativeBundle): Promise<void>
+  pairInfo(): Promise<typeof PairingInfo.Type>
+  getKeepScreenActive(): Promise<boolean>
+  setKeepScreenActive(enabled: boolean): Promise<void>
+  pairTailscaleAvailable(): Promise<boolean>
+  pairTailscaleStatus(): Promise<typeof PairingInfo.Type | null>
+  pairOpenTailscale(): Promise<typeof PairingInfo.Type>
+  pairDisableTailscale(): Promise<void>
 }
