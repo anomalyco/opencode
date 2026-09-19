@@ -9,7 +9,7 @@ Use with form controls or confirmation buttons in the footer.
 
 ### API
 - Required: \`kind\` (question | permission), \`header\`, \`children\`, \`footer\`.
-- Optional: \`ref\` for measuring or focus management.
+- Optional: \`ref\` for measuring or focus management and \`footerInside\` to keep actions in the shell.
 
 ### Variants and states
 - Question and permission layouts (data attributes).
@@ -55,6 +55,7 @@ export const Basic = story.Basic
 export const Permission = {
   args: {
     kind: "permission",
+    footerInside: true,
     header: "Allow access?",
     children: "This action needs permission to proceed.",
     footer: "Approve or deny",

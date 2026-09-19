@@ -1,4 +1,4 @@
-import type { JSX } from "solid-js"
+import { Show, type JSX } from "solid-js"
 import { DockShell, DockTray } from "@opencode-ai/ui/dock-surface"
 
 export function DockPrompt(props: {
@@ -6,6 +6,7 @@ export function DockPrompt(props: {
   header: JSX.Element
   children: JSX.Element
   footer: JSX.Element
+  footerInside?: boolean
   ref?: (el: HTMLDivElement) => void
   onKeyDown?: JSX.EventHandlerUnion<HTMLDivElement, KeyboardEvent>
 }) {
@@ -16,8 +17,13 @@ export function DockPrompt(props: {
       <DockShell data-slot={slot("body")}>
         <div data-slot={slot("header")}>{props.header}</div>
         <div data-slot={slot("content")}>{props.children}</div>
+        <Show when={props.footerInside}>
+          <div data-slot={slot("footer")}>{props.footer}</div>
+        </Show>
       </DockShell>
-      <DockTray data-slot={slot("footer")}>{props.footer}</DockTray>
+      <Show when={!props.footerInside}>
+        <DockTray data-slot={slot("footer")}>{props.footer}</DockTray>
+      </Show>
     </div>
   )
 }
