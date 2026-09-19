@@ -56,6 +56,21 @@ describe("SessionExecution lifecycle", () => {
     })
   })
 
+  test("settles a cause mixing an interruption with a real failure as failed", () => {
+    const failure = new AIError({
+      reason: new TransportError({ message: "Disconnected", transport: "http", operation: "request" }),
+    })
+    const mixed = Exit.failCause(Cause.combine(Cause.interrupt())(Cause.fail(failure)))
+    expect(SessionExecution.terminal(mixed)).toEqual({
+      type: "failed",
+      error: { type: "provider.transport", message: "Disconnected" },
+    })
+    expect(SessionExecution.terminal(mixed, "user")).toEqual({
+      type: "failed",
+      error: { type: "provider.transport", message: "Disconnected" },
+    })
+  })
+
   it.effect("the sweep only lists claimed top-level Sessions", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -142,6 +157,35 @@ describe("SessionExecution lifecycle", () => {
 
       expect(yield* execution.interrupt(sessionID)).toBeTrue()
       yield* execution.awaitIdle(sessionID)
+      expect((yield* claims(database))[sessionID]).toBe(false)
+    }),
+  )
+
+  it.effect("a failing drain settles a durable Execution.Failed and releases the claim", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_drain_failed")
+      yield* seedSessions(database, [sessionID])
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () =>
+        Effect.fail(
+          new AIError({
+            reason: new TransportError({ message: "Disconnected", transport: "http", operation: "request" }),
+          }),
+        ),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      const failed: SessionEvent.Execution.Failed[] = []
+      yield* bus.project(SessionEvent.Execution.Failed, (event) => Effect.sync(() => void failed.push(event)))
+
+      const exit = yield* execution.resume(sessionID).pipe(Effect.exit)
+      expect(Exit.isSuccess(exit)).toBe(false)
+      yield* execution.awaitIdle(sessionID)
+      expect(failed).toHaveLength(1)
+      expect(failed[0].data.error).toEqual({ type: "provider.transport", message: "Disconnected" })
       expect((yield* claims(database))[sessionID]).toBe(false)
     }),
   )
