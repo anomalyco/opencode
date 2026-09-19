@@ -33,7 +33,7 @@ describe("SkillPlugin.Plugin", () => {
         }),
       ).pipe(Effect.provide(config()))
       const skills = yield* skill.list()
-      const report = skills.find((item) => item.id === "report")
+      const report = yield* skill.get(Skill.ID.make("report"))
 
       expect(skills).toContainEqual(
         expect.objectContaining({
@@ -66,16 +66,11 @@ describe("SkillPlugin.Plugin", () => {
           },
         }),
       )
-      const report = (yield* skill.list()).find((item) => item.id === "report")
+      const report = yield* skill.get(Skill.ID.make("report"))
       expect(report?.content).toContain("- Active plugins: -disabled, local.ts, package-plugin, package-plugin")
     }).pipe(
       Effect.provide(
-        config([
-          "package-plugin",
-          "-disabled",
-          "local.ts",
-          { package: "package-plugin", options: { enabled: true } },
-        ]),
+        config(["package-plugin", "-disabled", "local.ts", { package: "package-plugin", options: { enabled: true } }]),
       ),
     ),
   )

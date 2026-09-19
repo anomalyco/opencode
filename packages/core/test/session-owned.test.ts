@@ -59,13 +59,13 @@ const it = testEffect(
 const sessionID = SessionSchema.ID.make("ses_owned")
 const otherID = SessionSchema.ID.make("ses_owned_other")
 const source = Location.Ref.make({ directory: AbsolutePath.make("/project") })
-const skillInfo = Skill.Info.make({
+const skillInfo: Skill.Loaded = {
   id: Skill.ID.make("guide"),
   name: Skill.Name.make("Guide"),
   description: "Session guidance",
   path: AbsolutePath.make("/skills/guide/SKILL.md"),
   content: "  Raw guidance\n",
-})
+}
 
 const setup = Effect.fnUntraced(function* (options?: {
   execution?: SessionExecution.Interface

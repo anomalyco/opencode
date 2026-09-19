@@ -43,7 +43,7 @@ describe("SkillTool", () => {
             Promise.all([fs.writeFile(location, "unused"), fs.writeFile(reference, "reference")]),
           )
 
-          const info: Skill.Info = {
+          const info: Skill.Loaded = {
             id: Skill.ID.make("effect"),
             name: Skill.Name.make("Effect"),
             description: "Use Effect",
@@ -134,13 +134,13 @@ describe("SkillTool", () => {
               error: { type: "permission.rejected", message: "Permission denied: skill" },
             })
             deny = false
-            const flat = Skill.Info.make({
+            const flat: Skill.Loaded = {
               id: Skill.ID.make("public"),
               name: Skill.Name.make("Public"),
               description: "Public guidance",
               path: AbsolutePath.make(path.join(tmp.path, "public.md")),
               content: "Public",
-            })
+            }
             yield* Effect.promise(() =>
               Promise.all([
                 fs.writeFile(flat.path, "public"),

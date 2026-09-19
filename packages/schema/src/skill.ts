@@ -30,7 +30,6 @@ export const Info = Schema.Struct({
   description: Schema.String.pipe(optional),
   autoinvoke: Schema.Boolean.pipe(optional),
   path: AbsolutePath,
-  content: Schema.String,
 }).annotate({ identifier: "Skill.Info" })
 
 const Updated = ephemeral({ type: "skill.updated", schema: {} })

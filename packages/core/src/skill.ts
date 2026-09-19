@@ -31,10 +31,17 @@ export type Name = Skill.Name
 
 export { Event } from "@opencode/schema/skill"
 
+/** Produces the skill body (SKILL.md without frontmatter) when the skill is used, so the registry holds only metadata. */
+export type Load = () => Effect.Effect<string>
+
+export interface Loaded extends Info {
+  readonly content: string
+}
+
 export const available = (skills: ReadonlyArray<Info>, agent: Agent.Info) =>
   skills.filter((skill) => Permission.evaluate("skill", skill.id, agent.permissions).effect !== "deny")
 
-export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
+export const toModelOutput = (skill: Loaded, files: ReadonlyArray<string>) => {
   const directory = path.dirname(skill.path)
   return [
     `<skill_content name="${skill.name}">`,
@@ -53,7 +60,7 @@ export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
   ].join("\n")
 }
 
-export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interface, skill: Info) {
+export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interface, skill: Loaded) {
   const directory = path.dirname(skill.path)
   const files =
     path.basename(skill.path) === "SKILL.md"
@@ -70,18 +77,20 @@ export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interfac
 
 export type Data = {
   skills: Map<ID, Types.DeepMutable<Info>>
+  loaders: Map<ID, Load>
 }
 
 export type Editor = {
   list: () => readonly Types.DeepMutable<Info>[]
   get: (id: string) => Types.DeepMutable<Info> | undefined
-  add: (skill: Info) => void
+  /** Pass `content` inline, or a `load` that produces it when the skill is used. */
+  add: (skill: Info & { readonly content?: string }, load?: Load) => void
   update: (id: string, update: (skill: Types.DeepMutable<Info>) => void) => void
   remove: (id: string) => void
 }
 
 export interface Interface extends State.Transformable<Editor> {
-  readonly get: (id: ID) => Effect.Effect<Info | undefined>
+  readonly get: (id: ID) => Effect.Effect<Loaded | undefined>
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -94,12 +103,14 @@ const layer = Layer.effect(
 
     const state = State.create<Data, Editor>({
       name: "skill",
-      initial: () => ({ skills: new Map() }),
+      initial: () => ({ skills: new Map(), loaders: new Map() }),
       editor: (editor) => ({
         list: () => Array.from(editor.skills.values()),
         get: (id) => editor.skills.get(ID.make(id)),
-        add: (skill) => {
-          editor.skills.set(skill.id, { ...skill } as Types.DeepMutable<Info>)
+        add: (skill, load) => {
+          const { content, ...info } = skill
+          editor.skills.set(info.id, info as Types.DeepMutable<Info>)
+          editor.loaders.set(info.id, load ?? (() => Effect.succeed(content ?? "")))
         },
         update: (id, update) => {
           const current = editor.skills.get(ID.make(id))
@@ -109,6 +120,7 @@ const layer = Layer.effect(
         },
         remove: (id) => {
           editor.skills.delete(ID.make(id))
+          editor.loaders.delete(ID.make(id))
         },
       }),
       notify: () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
@@ -118,7 +130,11 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       get: Effect.fn("Skill.get")(function* (id) {
-        return state.get().skills.get(id)
+        const data = state.get()
+        const skill = data.skills.get(id)
+        const load = data.loaders.get(id)
+        if (!skill || !load) return undefined
+        return { ...skill, content: yield* load() }
       }),
       list: Effect.fn("Skill.list")(function* () {
         return Array.from(state.get().skills.values())

@@ -1,7 +1,8 @@
 export * as SkillFile from "./skill-file.js"
 
 import path from "path"
-import { Result, Schema, type SchemaIssue, SchemaParser } from "effect"
+import { Effect, Result, Schema, type SchemaIssue, SchemaParser } from "effect"
+import type { FSUtil } from "@opencode/util/fs-util"
 import { ConfigMarkdown } from "../markdown.js"
 import { AbsolutePath } from "../../schema.js"
 import { Skill } from "../../skill.js"
@@ -50,7 +51,12 @@ export function parse(directory: string, filepath: string, content: string): Par
       ...(frontmatter.description === undefined ? {} : { description: frontmatter.description }),
       ...(autoinvoke === undefined ? {} : { autoinvoke }),
       path: AbsolutePath.make(filepath),
-      content: markdown.content,
     },
   }
 }
+
+export const read = (fs: FSUtil.Interface, filepath: string): Skill.Load =>
+  Effect.fn("SkillFile.read")(function* () {
+    const text = yield* fs.readFileString(filepath).pipe(Effect.orDie)
+    return ConfigMarkdown.parseOption(text)?.content ?? text
+  })
