@@ -277,7 +277,7 @@ export async function installWslOpencode(version: string, distro: string, opts?:
 }
 
 export async function probeWslDistro(name: string, opts?: RunWslOptions): Promise<WslDistroProbe> {
-  const executable = await runWslInDistro(["/bin/true"], name, opts).catch((error) => ({
+  const executable = await runWslInDistro(["true"], name, opts).catch((error) => ({
     code: 1,
     signal: null,
     stdout: "",
