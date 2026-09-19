@@ -109,6 +109,13 @@ describe("session.system", () => {
     }
   })
 
+  test("default prompt prioritizes execution when work remains", () => {
+    const prompt = SystemPrompt.provider({ api: { id: "glm-5.3" } } as Provider.Model)[0]
+    expect(prompt).toContain("execution takes priority over brainstorming")
+    expect(prompt).toContain("complete the next unfinished item")
+    expect(prompt).toContain("Only stop when the task is complete")
+  })
+
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
