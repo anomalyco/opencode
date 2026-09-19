@@ -102,20 +102,17 @@ export function createHomeSessionIndexCache(queryClient: QueryClient, server: st
       return removed.size === 0 ? sessions : sessions.filter((session) => !removed.has(session.id))
     },
     apply(event: HomeSessionEvent) {
-      if (!queryClient.getQueryState(indexKey)) return
       const next = appendHomeSessionEvent(queryClient.getQueryData<HomeSessionEvents>(eventsKey), event)
-      if (queryClient.isFetching({ queryKey: indexKey, exact: true }) > 0) {
+      const index = queryClient.getQueryData<HomeSessionIndex>(indexKey)
+      if (queryClient.isFetching({ queryKey: indexKey, exact: true }) > 0 || !index) {
         queryClient.setQueryData(eventsKey, next)
         return
       }
 
-      const index = queryClient.getQueryData<HomeSessionIndex>(indexKey)
-      if (index) {
-        queryClient.setQueryData<HomeSessionIndex>(indexKey, {
-          sessions: homeSessionIndexSessions(index, next),
-          eventSequence: next.sequence,
-        })
-      }
+      queryClient.setQueryData<HomeSessionIndex>(indexKey, {
+        sessions: homeSessionIndexSessions(index, next),
+        eventSequence: next.sequence,
+      })
       queryClient.setQueryData<HomeSessionEvents>(eventsKey, { sequence: next.sequence, entries: [] })
     },
     remove(sessionID: string) {

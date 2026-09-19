@@ -1606,6 +1606,15 @@ describe("server session", () => {
     expect(ctx.get).toEqual([])
   })
 
+  test("resyncs pinned sessions after reconnecting", async () => {
+    const ctx = setup({ child: session("child") })
+    ctx.store.pin("child")
+
+    await ctx.store.resync()
+
+    expect(ctx.messages).toEqual([{ sessionID: "child", limit: 20, before: undefined }])
+  })
+
   test("preserves pinned session content under server-wide cache pressure", () => {
     const ctx = setup({})
     ctx.store.pin("active")
