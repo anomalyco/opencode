@@ -26,7 +26,7 @@ import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
-import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
@@ -448,7 +448,7 @@ export interface Interface {
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
-  readonly updateMessage: <T extends SessionV1.Info>(msg: T) => Effect.Effect<T>
+  readonly updateMessage: <T extends SessionV1.Info>(msg: T, opts?: { stripSummaryDiffs?: boolean }) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
   readonly removePart: (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) => Effect.Effect<PartID>
   readonly getPart: (input: {
@@ -626,9 +626,33 @@ const layer: Layer.Layer<
       }
     })
 
-    const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
+    const updateMessage = <T extends SessionV1.Info>(
+      msg: T,
+      opts?: { stripSummaryDiffs?: boolean },
+    ): Effect.Effect<T> =>
       Effect.gen(function* () {
-        yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg })
+        if (!opts?.stripSummaryDiffs || msg.role !== "user" || msg.summary?.diffs === undefined) {
+          yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg })
+          return msg
+        }
+        const user: SessionV1.User = msg
+        const { summary, ...info } = user
+        // The commit hook runs after projection, in the same transaction as the event.
+        // V1 requires diffs whenever summary is present, so omit the entire summary
+        // from the event and retain its title/body/patches in the read model.
+        yield* events.publish(
+          SessionV1.Event.MessageUpdated,
+          { sessionID: msg.sessionID, info },
+          {
+            commit: () =>
+              db
+                .update(MessageTable)
+                .set({ data: sql`json_set(${MessageTable.data}, '$.summary', json(${JSON.stringify(summary)}))` })
+                .where(and(eq(MessageTable.id, msg.id), eq(MessageTable.session_id, msg.sessionID)))
+                .run()
+                .pipe(Effect.orDie, Effect.asVoid),
+          },
+        )
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 
