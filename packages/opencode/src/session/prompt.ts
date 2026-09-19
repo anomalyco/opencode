@@ -190,6 +190,39 @@ const layer = Layer.effect(
       return parts
     })
 
+    const generateTitle = Effect.fn("SessionPrompt.generateTitle")(function* (input: {
+      agent: Agent.Info
+      user: SessionV1.User
+      context: SessionV1.WithParts[]
+      subtasks: SessionV1.SubtaskPart[]
+      onlySubtasks: boolean
+      model: Provider.Model
+      small: boolean
+      sessionID: SessionID
+    }) {
+      const msgs = input.onlySubtasks
+        ? [{ role: "user" as const, content: input.subtasks.map((p) => p.prompt).join("\n") }]
+        : yield* MessageV2.toModelMessagesEffect(input.context, input.model)
+      return yield* llm
+        .stream({
+          agent: input.agent,
+          user: input.user,
+          system: [],
+          small: input.small,
+          tools: {},
+          model: input.model,
+          sessionID: input.sessionID,
+          retries: 2,
+          messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
+        })
+        .pipe(
+          Stream.filter(LLMEvent.is.textDelta),
+          Stream.map((e) => e.text),
+          Stream.mkString,
+          Effect.orDie,
+        )
+    })
+
     const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
       session: Session.Info
       history: SessionV1.WithParts[]
@@ -203,7 +236,6 @@ const layer = Layer.effect(
         m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
       const idx = input.history.findIndex(real)
       if (idx === -1) return
-      if (input.history.filter(real).length !== 1) return
 
       const context = input.history.slice(0, idx + 1)
       const firstUser = context[idx]
@@ -219,27 +251,31 @@ const layer = Layer.effect(
         ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
         : ((yield* provider.getSmallModel(input.providerID)) ??
           (yield* provider.getModel(input.providerID, input.modelID)))
-      const msgs = onlySubtasks
-        ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
-        : yield* MessageV2.toModelMessagesEffect(context, mdl)
-      const text = yield* llm
-        .stream({
-          agent: ag,
-          user: firstInfo,
-          system: [],
-          small: true,
-          tools: {},
-          model: mdl,
-          sessionID: input.session.id,
-          retries: 2,
-          messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
-        })
-        .pipe(
-          Stream.filter(LLMEvent.is.textDelta),
-          Stream.map((e) => e.text),
-          Stream.mkString,
-          Effect.orDie,
-        )
+      const base = {
+        agent: ag,
+        user: firstInfo,
+        context,
+        subtasks,
+        onlySubtasks,
+        sessionID: input.session.id,
+      }
+      const text = yield* generateTitle({ ...base, model: mdl, small: true }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            yield* Effect.logWarning(
+              "session title generation with small model failed; falling back to session model",
+              {
+                "session.id": input.session.id,
+                providerID: mdl.providerID,
+                modelID: mdl.id,
+                error: Cause.squash(cause),
+              },
+            )
+            const fallback = yield* provider.getModel(input.providerID, input.modelID)
+            return yield* generateTitle({ ...base, model: fallback, small: false })
+          }),
+        ),
+      )
       const cleaned = text
         .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
         .split("\n")
