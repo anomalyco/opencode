@@ -45,14 +45,20 @@ export function handleDocumentSearchKeydown(
     if (start !== end)
       return updateValue(input, inputValue.slice(0, start) + inputValue.slice(end), start, setInputValue)
     if (start === 0) return true
-    return updateValue(input, inputValue.slice(0, start - 1) + inputValue.slice(end), start - 1, setInputValue)
+    const caret = moveByCodePoint(inputValue, start, -1)
+    return updateValue(input, inputValue.slice(0, caret) + inputValue.slice(end), caret, setInputValue)
   }
 
   if (action.type === "deleteForward") {
     if (start !== end)
       return updateValue(input, inputValue.slice(0, start) + inputValue.slice(end), start, setInputValue)
     if (end === inputValue.length) return true
-    return updateValue(input, inputValue.slice(0, start) + inputValue.slice(end + 1), start, setInputValue)
+    return updateValue(
+      input,
+      inputValue.slice(0, start) + inputValue.slice(moveByCodePoint(inputValue, end, 1)),
+      start,
+      setInputValue,
+    )
   }
 
   return updateValue(
@@ -88,7 +94,7 @@ function moveSelection(input: HTMLInputElement, inputValue: string, delta: -1 | 
   }
 
   if (!extend) {
-    const caret = Math.max(0, Math.min(inputValue.length, start + delta))
+    const caret = moveByCodePoint(inputValue, start, delta)
     input.setSelectionRange(caret, caret)
     return
   }
@@ -96,8 +102,17 @@ function moveSelection(input: HTMLInputElement, inputValue: string, delta: -1 | 
   const backward = input.selectionDirection === "backward"
   const anchor = backward ? end : start
   const focus = backward ? start : end
-  const next = Math.max(0, Math.min(inputValue.length, focus + delta))
+  const next = moveByCodePoint(inputValue, focus, delta)
   input.setSelectionRange(Math.min(anchor, next), Math.max(anchor, next), next < anchor ? "backward" : "forward")
+}
+
+function moveByCodePoint(value: string, position: number, delta: -1 | 1) {
+  if (delta < 0) {
+    const character = Array.from(value.slice(0, position)).at(-1)
+    return Math.max(0, position - (character?.length ?? 0))
+  }
+  const character = Array.from(value.slice(position))[0]
+  return Math.min(value.length, position + (character?.length ?? 0))
 }
 
 function setBoundarySelection(input: HTMLInputElement, anchor: number, focus: number, extend: boolean) {
