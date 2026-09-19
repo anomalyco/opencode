@@ -11,8 +11,10 @@ if (process.argv.includes("--hang")) {
 
 const server = new Server({ name: "mcp-lifecycle-stdio", version: "1.0.0" }, { capabilities: { tools: {} } })
 
-server.setRequestHandler(ListToolsRequestSchema, () =>
-  Promise.resolve({
+server.setRequestHandler(ListToolsRequestSchema, () => {
+  if (process.argv.includes("--tools-error")) throw new Error("fixture tool catalog unavailable")
+  if (process.argv.includes("--empty-tools")) return Promise.resolve({ tools: [] })
+  return Promise.resolve({
     tools: [
       {
         name: "current_directory",
@@ -20,7 +22,7 @@ server.setRequestHandler(ListToolsRequestSchema, () =>
         inputSchema: { type: "object", properties: {} },
       },
     ],
-  }),
-)
+  })
+})
 
 await server.connect(new StdioServerTransport())

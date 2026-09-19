@@ -1,11 +1,12 @@
 import { expect } from "bun:test"
+import path from "node:path"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import { ListResourcesRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect } from "effect"
+import { Deferred, Effect, Fiber } from "effect"
 import { Config } from "../../src/config/config"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { McpAuth } from "../../src/mcp/auth"
@@ -22,6 +23,8 @@ const mcpTest = testEffect(
 
 interface OAuthMcpOptions {
   capabilities?: "tools" | "resources"
+  listToolsError?: string
+  beforeListTools?: () => Promise<void>
 }
 
 function serveOAuthMcp(options: OAuthMcpOptions = {}) {
@@ -40,8 +43,10 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
       let requiresAuth = true
 
       if (capabilities === "tools") {
-        protocol.setRequestHandler(ListToolsRequestSchema, () => {
+        protocol.setRequestHandler(ListToolsRequestSchema, async () => {
           listToolsCalls++
+          await options.beforeListTools?.()
+          if (options.listToolsError) throw new Error(options.listToolsError)
           return Promise.resolve({ tools: [{ name: "test_tool", inputSchema: { type: "object" } }] })
         })
       }
@@ -296,5 +301,57 @@ mcpTest.instance("authenticate() connects a resource-only server without listing
     expect((yield* mcp.authenticate(name)).status).toBe("connected")
     expect(server.listToolsCalls()).toBe(0)
     expect(Object.keys(yield* mcp.resources())).toEqual([`${name}:docs://readme`])
+  }),
+)
+
+mcpTest.instance("authenticate() preserves tool discovery failures after connecting", () =>
+  Effect.gen(function* () {
+    yield* stopOAuthCallback
+    const server = yield* serveOAuthMcp({ listToolsError: "tool catalog unavailable after authentication" })
+    const mcp = yield* MCP.Service
+    const name = "test-oauth-tool-error"
+    yield* mcp.add(name, remote(server.url))
+    server.allowAnonymous()
+
+    const status = yield* mcp.authenticate(name)
+    expect(status).toEqual({
+      status: "failed",
+      error: expect.stringContaining("tool catalog unavailable after authentication"),
+    })
+    expect((yield* mcp.status())[name]).toEqual(status)
+    expect(Object.keys(yield* mcp.tools())).toEqual([])
+  }),
+)
+
+mcpTest.instance("late authentication failure does not overwrite a newer connection", () =>
+  Effect.gen(function* () {
+    yield* stopOAuthCallback
+    const started = yield* Deferred.make<void>()
+    const released = yield* Deferred.make<void>()
+    const server = yield* serveOAuthMcp({
+      listToolsError: "old authentication catalog failed",
+      beforeListTools: () =>
+        Effect.runPromise(Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(released)))),
+    })
+    yield* Effect.addFinalizer(() => Deferred.succeed(released, undefined))
+    const mcp = yield* MCP.Service
+    const name = "test-auth-replaced"
+    yield* mcp.add(name, remote(server.url))
+    server.allowAnonymous()
+    const attempt = yield* mcp.authenticate(name).pipe(Effect.forkScoped)
+    yield* Deferred.await(started)
+
+    yield* mcp.add(name, {
+      type: "local",
+      command: [process.execPath, path.join(import.meta.dir, "../fixture/mcp-lifecycle-stdio.ts")],
+    })
+    expect((yield* mcp.status())[name]?.status).toBe("connected")
+    yield* Deferred.succeed(released, undefined)
+    expect(yield* Fiber.join(attempt)).toEqual({
+      status: "failed",
+      error: expect.stringContaining("old authentication catalog failed"),
+    })
+    expect((yield* mcp.status())[name]?.status).toBe("connected")
+    expect(Object.keys(yield* mcp.tools())).toEqual([`${name}_current_directory`])
   }),
 )
