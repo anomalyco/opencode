@@ -1186,6 +1186,8 @@ export const dict = {
   "session.header.reveal.finder": "Prikaži u Finderu",
   "session.header.reveal.fileExplorer": "Prikaži u File Exploreru",
   "session.header.reveal.containingFolder": "Otvori fasciklu koja sadrži ovu stavku",
+  "session.file.openInApp": "Otvori u {{app}}",
+
   "session.header.open.fileManager": "File Manager",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",

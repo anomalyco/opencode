@@ -1120,6 +1120,8 @@ export const dict = {
   "session.header.reveal.finder": "Afficher dans le Finder",
   "session.header.reveal.fileExplorer": "Afficher dans l’Explorateur de fichiers",
   "session.header.reveal.containingFolder": "Ouvrir le dossier contenant",
+  "session.file.openInApp": "Ouvrir dans {{app}}",
+
   "session.header.open.fileManager": "Gestionnaire de fichiers",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",

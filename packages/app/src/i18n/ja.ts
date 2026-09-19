@@ -1092,6 +1092,8 @@ export const dict = {
   "session.header.reveal.finder": "Finderで表示",
   "session.header.reveal.fileExplorer": "エクスプローラーで表示",
   "session.header.reveal.containingFolder": "親フォルダーを開く",
+  "session.file.openInApp": "{{app}}で開く",
+
   "session.header.open.fileManager": "ファイルマネージャー",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",

@@ -767,6 +767,8 @@ export const dict = {
   "session.header.reveal.finder": "መገለጥ በFinder",
   "session.header.reveal.fileExplorer": "ፋይል ኤክስፕሎረር ውስጥ ይገለጣል",
   "session.header.reveal.containingFolder": "አቃፊን የያዘ ክፈት",
+  "session.file.openInApp": "በ{{app}} ውስጥ ክፈት",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

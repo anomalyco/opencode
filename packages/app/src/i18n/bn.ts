@@ -780,6 +780,8 @@ export const dict: Record<string, string> = {
   "session.header.reveal.finder": "Finder-এ প্রকাশ করুন",
   "session.header.reveal.fileExplorer": "File Explorer-এ প্রকাশ করুন",
   "session.header.reveal.containingFolder": "ফোল্ডার ধারণকারী খুলুন",
+  "session.file.openInApp": "{{app}}-এ খুলুন",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

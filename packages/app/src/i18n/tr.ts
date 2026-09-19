@@ -827,6 +827,8 @@ export const dict = {
   "session.header.reveal.finder": "Finder'da göster",
   "session.header.reveal.fileExplorer": "Dosya Gezgini'nde göster",
   "session.header.reveal.containingFolder": "İçeren klasörü aç",
+  "session.file.openInApp": "{{app}} ile aç",
+
 
   "status.popover.trigger": "Durum",
   "status.popover.ariaLabel": "Sunucu yapılandırmaları",

@@ -785,6 +785,8 @@ export const dict = {
   "session.header.reveal.finder": "Parādīt Finder",
   "session.header.reveal.fileExplorer": "Parādīt failu pārlūkā",
   "session.header.reveal.containingFolder": "Atvērt saturējošo mapi",
+  "session.file.openInApp": "Atvērt ar {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

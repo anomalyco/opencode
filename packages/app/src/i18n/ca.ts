@@ -789,6 +789,8 @@ export const dict = {
   "session.header.reveal.finder": "Revela a Finder",
   "session.header.reveal.fileExplorer": "Revela a File Explorer",
   "session.header.reveal.containingFolder": "Obre la carpeta que conté",
+  "session.file.openInApp": "Obert a {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

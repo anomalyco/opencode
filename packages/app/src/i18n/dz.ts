@@ -793,6 +793,8 @@ export const dict: Record<string, string> = {
   "session.header.reveal.finder": "Finderནང་གསལ་སྟོན་འབད།",
   "session.header.reveal.fileExplorer": "File Explorerནང་གསལ་སྟོན་འབད།",
   "session.header.reveal.containingFolder": "སྣོད་འཛིན་ཡོད་པའི་ཁ་ཕྱེ།",
+  "session.file.openInApp": "{{app}}ནང་ཁ་ཕྱེ།",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor།",
   "session.header.open.app.zed": "Zed།",
