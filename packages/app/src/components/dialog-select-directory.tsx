@@ -8,7 +8,15 @@ import { createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useGlobal } from "@/context/global"
-import { cleanPickerInput, createDirectorySearch, displayPickerPath } from "./directory-picker-domain"
+import {
+  cleanPickerInput,
+  createDirectorySearch,
+  displayPickerPath,
+  pickerAbsoluteInput,
+  pickerTabCompletions,
+  pickerTabTargetDirectory,
+  trimPickerPath,
+} from "./directory-picker-domain"
 import type { Path } from "@opencode-ai/sdk/v2/client"
 
 interface DialogSelectDirectoryProps {
@@ -58,6 +66,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   const [filter, setFilter] = createSignal("")
   let list: ListRef | undefined
+  let cycle: { items: string[]; index: number } | undefined
 
   const missingHome = createMemo(() => !sync.data.path.home)
   const [fallbackPath] = createResource(
@@ -147,17 +156,110 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           group.category === "recent" ? language.t("home.recentProjects") : language.t("command.project.open")
         }
         ref={(r) => (list = r)}
-        onFilter={(value) => setFilter(cleanPickerInput(value))}
-        onKeyEvent={(e, item) => {
-          if (e.key !== "Tab") return
-          if (e.shiftKey) return
-          if (!item) return
+        onFilter={(value) => {
+          const cleaned = cleanPickerInput(value)
+          if (cycle && cleaned !== cycle.items[cycle.index]) {
+            cycle = undefined
+          }
+          setFilter(cleaned)
+        }}
+        onKeyEvent={async (e, item) => {
+          if (e.key === "Tab" && !e.shiftKey) {
+            e.preventDefault()
+            e.stopPropagation()
 
-          e.preventDefault()
-          e.stopPropagation()
+            const current = filter()
+            if (cycle && cycle.items.length > 0 && current === cycle.items[cycle.index]) {
+              cycle.index = (cycle.index + 1) % cycle.items.length
+              list?.setFilter(cycle.items[cycle.index])
+              return
+            }
 
-          const value = displayPickerPath(item.absolute, filter(), home())
-          list?.setFilter(value.endsWith("/") ? value : value + "/")
+            let target = pickerTabTargetDirectory({
+              input: current,
+              home: home(),
+              base: start(),
+            })
+
+            let entries = await sdk.api.file
+              .list({ location: { directory: target } })
+              .then((result) =>
+                result.data
+                  .filter((entry) => entry.type === "directory")
+                  .map((entry) => getFilename(entry.path.replace(/[\\/]+$/, ""))),
+              )
+              .catch(() => [])
+
+            // Bail if the user typed while the async list was in flight.
+            if (filter() !== current) return
+
+            let completions = pickerTabCompletions({
+              input: current,
+              home: home(),
+              base: start(),
+              directories: entries,
+            })
+
+            // When pressing tab on an exact single directory without trailing slash,
+            // shift into that directory to complete its subdirectories.
+            const isWindows =
+              /^[A-Za-z]:\//.test(trimPickerPath(home())) ||
+              (start() ? /^[A-Za-z]:\//.test(trimPickerPath(start()!)) : false) ||
+              current.includes("\\")
+            const sep = current.includes("\\") || (isWindows && !current.includes("/")) ? "\\" : "/"
+
+            if (
+              completions.length === 1 &&
+              completions[0] === current &&
+              !current.endsWith("/") &&
+              !current.endsWith("\\")
+            ) {
+              target = pickerTabTargetDirectory({
+                input: `${current}${sep}`,
+                home: home(),
+                base: start(),
+              })
+
+              entries = await sdk.api.file
+                .list({ location: { directory: target } })
+                .then((result) =>
+                  result.data
+                    .filter((entry) => entry.type === "directory")
+                    .map((entry) => getFilename(entry.path.replace(/[\\/]+$/, ""))),
+                )
+                .catch(() => [])
+
+              if (filter() !== current) return
+
+              completions = pickerTabCompletions({
+                input: `${current}${sep}`,
+                home: home(),
+                base: start(),
+                directories: entries,
+              })
+            }
+
+            if (completions.length === 0) return
+
+            if (completions.length > 1) {
+              cycle = {
+                items: completions,
+                index: 0,
+              }
+            } else {
+              cycle = undefined
+            }
+            list?.setFilter(completions[0])
+            return
+          }
+
+          if (e.key === "Enter" && !e.isComposing && !item) {
+            const current = filter()
+            if (!current) return
+            e.preventDefault()
+            const absolute = pickerAbsoluteInput(current, home(), start() ?? home())
+            resolve(absolute)
+          }
         }}
         onSelect={(path) => {
           if (!path) return
