@@ -1083,6 +1083,7 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let lengthNudges = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1107,6 +1108,8 @@ const layer = Layer.effect(
             lastAssistantMsg?.parts.some(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
+          const hasVisibleText =
+            lastAssistantMsg?.parts.some((part) => part.type === "text" && part.text.trim().length > 0) ?? false
 
           if (
             lastAssistant?.finish &&
@@ -1123,6 +1126,46 @@ const layer = Layer.effect(
                 messageID: lastAssistant.id,
                 tool: orphan.tool,
                 callID: orphan.callID,
+              })
+            }
+
+            if (
+              flags.experimentalLengthNudge &&
+              lastAssistant.finish === "length" &&
+              !hasVisibleText &&
+              lengthNudges < (flags.lengthNudgeMax ?? 3)
+            ) {
+              lengthNudges++
+              yield* Effect.logWarning("nudging length-truncated turn", {
+                "session.id": sessionID,
+                messageID: lastAssistant.id,
+                attempt: lengthNudges,
+                max: flags.lengthNudgeMax ?? 3,
+              })
+              const nudge: SessionV1.User = {
+                id: MessageID.ascending(),
+                role: "user",
+                sessionID,
+                time: { created: Date.now() },
+                agent: lastUser.agent,
+                model: lastUser.model,
+              }
+              yield* sessions.updateMessage(nudge)
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: nudge.id,
+                sessionID,
+                type: "text",
+                text: flags.lengthNudgePrompt,
+                synthetic: true,
+              })
+              continue
+            }
+            if (lastAssistant.finish === "length" && flags.experimentalLengthNudge && lengthNudges >= (flags.lengthNudgeMax ?? 3)) {
+              yield* Effect.logWarning("exiting loop after max length nudges", {
+                "session.id": sessionID,
+                messageID: lastAssistant.id,
+                nudges: lengthNudges,
               })
             }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })

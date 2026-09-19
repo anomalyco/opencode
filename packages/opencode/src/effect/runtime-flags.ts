@@ -49,6 +49,13 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalEventSystem: enabledByExperimental("OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"),
   experimentalWorkspaces: enabledByExperimental("OPENCODE_EXPERIMENTAL_WORKSPACES"),
   experimentalIconDiscovery: enabledByExperimental("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY"),
+  experimentalLengthNudge: enabledByExperimental("OPENCODE_EXPERIMENTAL_LENGTH_NUDGE"),
+  lengthNudgeMax: positiveInteger("OPENCODE_EXPERIMENTAL_LENGTH_NUDGE_MAX"),
+  lengthNudgePrompt: Config.string("OPENCODE_EXPERIMENTAL_LENGTH_NUDGE_PROMPT").pipe(
+    Config.withDefault(
+      "Your previous response was cut off by the output token limit before it finished. Continue the task from where you stopped. Do not repeat work that is already complete.",
+    ),
+  ),
   outputTokenMax: positiveInteger("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX"),
   bashDefaultTimeoutMs: positiveInteger("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"),
   experimentalNativeLlm: bool("OPENCODE_EXPERIMENTAL_NATIVE_LLM"),
