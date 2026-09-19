@@ -48,6 +48,18 @@ describe("McpCatalog.convertTool", () => {
       content: [{ type: "text", text: JSON.stringify(structuredContent) }],
     })
   })
+
+  test("preserves MCP error text when isError is true", async () => {
+    const converted = McpCatalog.convertTool(
+      mcpTool(),
+      clientReturning({
+        isError: true,
+        content: [{ type: "text", text: "invalid id: path separators are not allowed" }],
+      }),
+    )
+
+    await expect(converted.execute?.({}, options)).rejects.toThrow("invalid id: path separators are not allowed")
+  })
 })
 
 test("preserves output schema validation across paginated tool discovery", async () => {
