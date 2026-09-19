@@ -2,6 +2,8 @@ export * as ServerProcess from "./process"
 
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
+import { LocationServiceMap } from "@opencode/core/location-services"
+import { Plugin } from "@opencode/core/plugin"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
@@ -22,6 +24,7 @@ import { isAllowedCorsOrigin } from "./cors"
 import { authorizedRequest } from "./middleware/authorization"
 import { withoutParentSpan } from "./request-tracing"
 import { createRoutes } from "./routes"
+import { defaultRef } from "./location"
 import { ServerInfo } from "./server-info"
 import { Status } from "./service-status"
 import type { ServerOptions } from "./options"
@@ -105,6 +108,55 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices)),
       applicationScope,
     )
+
+    // Eagerly build the default location (see `defaultRef` in `./location.ts`)
+    // so its plugins activate at boot rather than on the first
+    // location-scoped request. This is what lets always-on in-process plugins
+    // (e.g. the Telegram bot) come up immediately and keeps the instance alive
+    // for the server's whole lifetime. Any project can still be targeted
+    // per-request via the `x-opencode-directory` header, which bootstraps that
+    // location's instance on demand.
+    //
+    // The boot runs in the background and never blocks server readiness: a
+    // valid-but-slow project must not delay `ready`, so the 10s activation cap
+    // below only bounds how long the background task waits for plugins, not
+    // startup. A `/` cwd (systemd/cron accident) is skipped outright — the
+    // filesystem root is never a meaningful project location, and lazy
+    // per-request boot covers real projects.
+    yield* Effect.gen(function* () {
+      if (process.cwd() === "/") {
+        yield* Effect.logWarning(
+          "Skipping eager default-location boot: process cwd is /, waiting for the first location-scoped request instead",
+        )
+        return yield* Effect.void
+      }
+      const locations = yield* LocationServiceMap.Service
+      const services = locations.get(defaultRef())
+      const instance = yield* Layer.build(services).pipe(
+        Effect.provideService(Scope.Scope, applicationScope),
+      )
+      // Wait (tolerantly) for the initial plugin generation to settle so the
+      // bot's long-poll loop comes up promptly in the background.
+      yield* Context.get(instance, Plugin.Service).awaitActivation.pipe(
+        Effect.timeoutOrElse({
+          duration: "10 seconds",
+          orElse: () => Effect.void,
+        }),
+      )
+    }).pipe(
+      Effect.provideService(
+        LocationServiceMap.Service,
+        Context.get(context, LocationServiceMap.Service),
+      ),
+      // The default location is best-effort: a plugin init defect here must not
+      // take down the whole server when lazy per-request boot would only fail
+      // one request.
+      Effect.catchCause((cause) =>
+        Effect.logWarning("Failed to eagerly boot default location, continuing without it", { cause }),
+      ),
+      Effect.forkIn(applicationScope),
+    )
+
     if (lifecycle) {
       yield* installRestartContinuity(Context.get(context, SessionRestart.Service)).pipe(
         Effect.provideService(Scope.Scope, applicationScope),
