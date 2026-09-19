@@ -1,7 +1,14 @@
 import { readFile, rm } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
+import {
+  loopbackURL,
+  type DiscoverOptions,
+  type Endpoint,
+  type Info,
+  type EnsureOptions,
+  type StopOptions,
+} from "../service.js"
 import {
   contenderFailure,
   contenderFinished,
@@ -156,14 +163,14 @@ type LocalService = {
 
 async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
-    url: info.url,
+    url: loopbackURL(info.url),
     auth:
       info.password === undefined
         ? undefined
         : { type: "basic" as const, username: "opencode", password: info.password },
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
-  const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
+  const result = await fetch(new URL("/api/info", endpoint.url), { headers: headers(endpoint), signal })
     .then(async (response) => ({
       response,
       body: response.status === 404 ? undefined : ((await response.json()) as unknown),

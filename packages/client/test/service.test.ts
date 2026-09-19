@@ -37,6 +37,21 @@ test("a concurrent same-version start cannot invalidate a resolved endpoint", as
   expect(await status(resolved.url)).toMatchObject({ version: "test", pid: original.pid })
 })
 
+test("discovers a wildcard registration through loopback", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  fixture.spawn("graceful")
+  await fixture.waitForFile()
+  const info = await Bun.file(registration).json()
+  const wildcard = new URL(info.url)
+  wildcard.hostname = "0.0.0.0"
+  await Bun.write(registration, JSON.stringify({ ...info, url: wildcard.origin }))
+
+  expect(await run(Service.discover({ file: registration, version: "test" }))).toEqual(
+    expect.objectContaining({ url: `http://127.0.0.1:${wildcard.port}` }),
+  )
+})
+
 test("reuses a compatible registered service", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration

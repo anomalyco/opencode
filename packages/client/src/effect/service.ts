@@ -1,7 +1,13 @@
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type { DiscoverOptions, Endpoint, EnsureOptions, StopOptions } from "../service.js"
+import {
+  loopbackURL,
+  type DiscoverOptions,
+  type Endpoint,
+  type EnsureOptions,
+  type StopOptions,
+} from "../service.js"
 import {
   contenderFailure,
   contenderFinished,
@@ -207,7 +213,7 @@ const probeResult = Effect.fnUntraced(function* (
   timeout = defaultEnsureTiming.requestTimeout,
 ) {
   const endpoint = {
-    url: info.url,
+    url: loopbackURL(info.url),
     auth:
       info.password === undefined
         ? undefined
@@ -215,7 +221,7 @@ const probeResult = Effect.fnUntraced(function* (
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
   const result = yield* Effect.promise(() =>
-    fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
+    fetch(new URL("/api/info", endpoint.url), { headers: headers(endpoint), signal })
       .then(async (response) => ({
         response,
         body: response.status === 404 ? undefined : ((await response.json()) as unknown),
