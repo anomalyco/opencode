@@ -4,6 +4,7 @@ import { ShellSelect } from "@opencode/core/shell/select"
 import { FSUtil } from "@opencode/util/fs-util"
 import { which } from "@opencode/core/util/which"
 import fs from "node:fs/promises"
+import { spawnSync } from "node:child_process"
 import { tmpdir } from "./fixture/tmpdir"
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
@@ -118,6 +119,43 @@ describe("shell", () => {
       await withShell(path.win32.basename(shell), async () => {
         expect(ShellSelect.resolve({ priority: "config" })).toBe(shell)
       })
+    })
+
+    test("does not resolve known shells that are not installed", async () => {
+      // The app-execution-alias fallback may only resolve a shell where.exe can actually
+      // find; a known-but-absent shell must still fall back.
+      for (const name of ["zsh", "ksh"]) {
+        if (which(name)) continue
+        if (spawnSync("where.exe", [name], { stdio: "ignore", windowsHide: true }).status === 0) continue
+        expect(ShellSelect.resolve({ priority: "config" }, name)).not.toBe(name)
+      }
+    })
+
+    test("finds app-execution aliases that which cannot see", async () => {
+      // winget ships as an alias on stock Windows 11 and is not a shell, so it exercises
+      // the detection without depending on which shells happen to be installed.
+      if (which("winget")) return
+      const found = ShellSelect.aliased("winget")
+      if (!found) return
+      expect(path.win32.isAbsolute(found)).toBe(true)
+      expect(path.win32.basename(found).toLowerCase()).toBe("winget.exe")
+    })
+
+    test("returns undefined for names where.exe cannot find", async () => {
+      expect(ShellSelect.aliased("opencode-not-a-real-binary")).toBeUndefined()
+    })
+
+    test("memoizes alias lookups including misses", async () => {
+      ShellSelect.aliased.reset()
+      const name = "opencode-not-a-real-binary"
+      const cold = Date.now()
+      ShellSelect.aliased(name)
+      const coldMs = Date.now() - cold
+      const warm = Date.now()
+      ShellSelect.aliased(name)
+      const warmMs = Date.now() - warm
+      // A where.exe launch costs ~300ms here; a cached miss must not spawn again.
+      expect(warmMs).toBeLessThan(Math.max(coldMs, 10))
     })
   }
 })

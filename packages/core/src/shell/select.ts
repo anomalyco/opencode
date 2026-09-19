@@ -3,6 +3,7 @@ export * as ShellSelect from "./select.js"
 import path from "path"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
+import { spawnSync } from "child_process"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -89,8 +90,37 @@ function executable(file: string, options?: Options, bin?: string) {
     if (stat(shell)?.isFile()) return shell
     return
   }
-  return findExecutable(shell, bin) ?? undefined
+  const found = findExecutable(shell, bin)
+  if (found) return found
+  // Store/MSIX installs expose their executable as a Windows app-execution alias, an
+  // AppExecLink reparse point that stat and which cannot see even though CreateProcess
+  // resolves it by name. where.exe does see it, so it separates "installed as an alias"
+  // from "not installed" and keeps a configured shell like pwsh from silently falling back.
+  // Restricted to the known shell families so an arbitrary configured name cannot resolve
+  // to some unrelated Store app that happens to share it.
+  if (process.platform === "win32" && meta(shell)) return aliased(shell)
+  return undefined
 }
+
+const aliases = new Map<string, string | undefined>()
+
+function line(out?: string) {
+  // trim() drops the trailing CR, so splitting on the LF alone is enough
+  return out?.split("\n")[0]?.trim() || undefined
+}
+
+// Spawning where.exe costs ~300ms, and resolve() skips its own cache whenever a shell is
+// configured, so memoize both hits and misses per name.
+export function aliased(file: string) {
+  if (aliases.has(file)) return aliases.get(file)
+  const result = spawnSync("where.exe", [file], { encoding: "utf8", windowsHide: true })
+  // spawnSync reports a failed launch on .error rather than throwing, so a missing or
+  // blocked where.exe lands here as a miss.
+  const path = result.status === 0 ? line(result.stdout) : undefined
+  aliases.set(file, path)
+  return path
+}
+aliased.reset = () => aliases.clear()
 
 function win(options?: Options, bin?: string) {
   return Array.from(
