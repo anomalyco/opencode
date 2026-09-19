@@ -1240,7 +1240,12 @@ const layer = Layer.effect(
               Effect.provideService(RuntimeFlags.Service, flags),
             )
 
-            if (lastUser.format?.type === "json_schema") {
+            // Native structured output (e.g. Anthropic `output_format`) coexists
+            // with thinking, so prefer it. Only inject the forced `StructuredOutput`
+            // tool for providers without native support.
+            const useNativeStructuredOutput =
+              lastUser.format?.type === "json_schema" && LLM.supportsNativeStructuredOutput(model)
+            if (lastUser.format?.type === "json_schema" && !useNativeStructuredOutput) {
               tools["StructuredOutput"] = createStructuredOutputTool({
                 schema: lastUser.format.schema,
                 onSuccess(output) {
@@ -1268,7 +1273,10 @@ const layer = Layer.effect(
               ...(skills ? [skills] : []),
             ]
             const format = lastUser.format ?? { type: "text" as const }
-            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            // The forced-tool path needs the system prompt to coerce the model
+            // into calling StructuredOutput. The native path drives the schema
+            // through the provider's structured-output mode instead.
+            if (format.type === "json_schema" && !useNativeStructuredOutput) system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
               user: lastUser,
               agent,
@@ -1282,8 +1290,29 @@ const layer = Layer.effect(
               ],
               tools,
               model,
-              toolChoice: format.type === "json_schema" ? "required" : undefined,
+              // Native structured output must not force tool choice — reasoning
+              // providers reject `tool_choice: "required"` alongside thinking.
+              toolChoice: format.type === "json_schema" && !useNativeStructuredOutput ? "required" : undefined,
+              structuredOutput:
+                useNativeStructuredOutput && lastUser.format?.type === "json_schema"
+                  ? { schema: lastUser.format.schema as JSONSchema7 }
+                  : undefined,
             })
+
+            // Native path: the model returns the structured object as its text
+            // content. Parse it here so it flows into `message.structured`. On
+            // parse failure we fall through to the StructuredOutputError below,
+            // matching the forced-tool path's graceful degradation.
+            if (useNativeStructuredOutput && structured === undefined && !handle.message.error) {
+              const withParts = yield* sessions.messages({ sessionID }).pipe(Effect.orElseSucceed(() => []))
+              const assistant = withParts.find((m) => m.info.id === handle.message.id)
+              const text = (assistant?.parts ?? [])
+                .filter((p): p is SessionV1.TextPart => p.type === "text" && !p.synthetic)
+                .map((p) => p.text)
+                .join("")
+              const parsed = parseStructuredOutput(text)
+              if (parsed !== undefined) structured = parsed
+            }
 
             if (structured !== undefined) {
               handle.message.structured = structured
@@ -1560,6 +1589,22 @@ export const CommandInput = Schema.Struct({
   ),
 })
 export type CommandInput = Schema.Schema.Type<typeof CommandInput>
+
+// With native structured output the model returns the object as its text
+// content. Anthropic returns bare JSON, but tolerate a stray markdown fence in
+// case a provider wraps it. Returns undefined when the text isn't parseable so
+// the caller can degrade to StructuredOutputError, matching the tool path.
+function parseStructuredOutput(text: string): unknown {
+  const trimmed = text.trim()
+  if (!trimmed) return undefined
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)
+  const candidate = fenced ? fenced[1] : trimmed
+  try {
+    return JSON.parse(candidate)
+  } catch {
+    return undefined
+  }
+}
 
 /** @internal Exported for testing */
 export function createStructuredOutputTool(input: {
