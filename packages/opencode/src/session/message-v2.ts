@@ -690,6 +690,16 @@ export function fromError(
           { cause: e },
         ).toObject()
       }
+      if (parsed.type === "stale_reasoning") {
+        return new APIError(
+          {
+            message: parsed.message,
+            isRetryable: false,
+            responseBody: parsed.responseBody,
+          },
+          { cause: e },
+        ).toObject()
+      }
 
       return new APIError(
         {
@@ -712,6 +722,16 @@ export function fromError(
             return new ContextOverflowError(
               {
                 message: parsed.message,
+                responseBody: parsed.responseBody,
+              },
+              { cause: e },
+            ).toObject()
+          }
+          if (parsed.type === "stale_reasoning") {
+            return new APIError(
+              {
+                message: parsed.message,
+                isRetryable: false,
                 responseBody: parsed.responseBody,
               },
               { cause: e },

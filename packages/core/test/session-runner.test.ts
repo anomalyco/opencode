@@ -1289,6 +1289,112 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("strips stale encrypted reasoning and retries once", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Think first" }), resume: false })
+      requests.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.reasoningStart({
+          id: "reasoning-openai",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        }),
+        LLMEvent.reasoningDelta({ id: "reasoning-openai", text: "Encrypted thought" }),
+        LLMEvent.reasoningEnd({
+          id: "reasoning-openai",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+      yield* session.resume(sessionID)
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.providerError({
+            message: "reasoning `encrypted_content` was not issued to this caller",
+            classification: "stale-reasoning",
+          }),
+        ],
+        fragmentFixture("text", "text-recovered", ["Recovered"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[0]?.messages[1]?.content).toEqual([
+        {
+          type: "reasoning",
+          text: "Encrypted thought",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
+      ])
+      expect(requests[1]?.messages[1]?.content).toEqual([{ type: "reasoning", text: "Encrypted thought" }])
+      const stored = yield* session.context(sessionID)
+      const firstAssistant = stored.find((message) => message.type === "assistant")
+      expect(firstAssistant).toMatchObject({
+        type: "assistant",
+        content: [{ type: "reasoning", text: "Encrypted thought" }],
+      })
+      if (firstAssistant?.type === "assistant") {
+        const reasoning = firstAssistant.content.find((item) => item.type === "reasoning")
+        expect(reasoning && "providerMetadata" in reasoning ? reasoning.providerMetadata?.openai : undefined).toBeUndefined()
+      }
+      expect(stored.slice(-1)).toMatchObject([{ type: "assistant", finish: "stop" }])
+    }),
+  )
+
+  it.effect("recovers once from a raw stale encrypted reasoning failure", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Think first" }), resume: false })
+      requests.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.reasoningStart({
+          id: "reasoning-openai",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        }),
+        LLMEvent.reasoningDelta({ id: "reasoning-openai", text: "Encrypted thought" }),
+        LLMEvent.reasoningEnd({
+          id: "reasoning-openai",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+      yield* session.resume(sessionID)
+
+      requests.length = 0
+      responseStream = Stream.fail(
+        new LLMError({
+          module: "test",
+          method: "stream",
+          reason: new InvalidRequestReason({
+            message:
+              "Error from provider (Console): Upstream request failed: [invalid_request_error] reasoning `encrypted_content` was not issued to this caller",
+          }),
+        }),
+      )
+      responses = [fragmentFixture("text", "text-recovered", ["Recovered"]).completeEvents]
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.messages[1]?.content).toEqual([{ type: "reasoning", text: "Encrypted thought" }])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Think first" },
+        { type: "assistant" },
+        { type: "user", text: "Continue" },
+        { type: "assistant", finish: "stop" },
+      ])
+    }),
+  )
+
   it.effect("publishes the original overflow when recovery summarization fails", () =>
     Effect.gen(function* () {
       const session = yield* setupOverflowRecovery
@@ -3189,6 +3295,38 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail before step" },
         { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider unavailable" } },
+      ])
+    }),
+  )
+
+  it.effect("does not recover stale encrypted reasoning after durable assistant output", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Fail after output" }), resume: false })
+
+      requests.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-partial" }),
+        LLMEvent.textDelta({ id: "text-partial", text: "Partial" }),
+        LLMEvent.textEnd({ id: "text-partial" }),
+        LLMEvent.providerError({
+          message: "reasoning `encrypted_content` was not issued to this caller",
+          classification: "stale-reasoning",
+        }),
+      ]
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Fail after output" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { message: "reasoning `encrypted_content` was not issued to this caller" },
+          content: [{ type: "text", text: "Partial" }],
+        },
       ])
     }),
   )

@@ -33,11 +33,40 @@ const patterns = [
 
 const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]
 
+const staleReasoningPatterns = [
+  /reasoning.*encrypted_content.*not issued to this caller/i,
+  /encrypted_content.*was not issued to this caller/i,
+  /invalid_encrypted_content/i,
+  /encrypted content could not be (verified|decrypted|parsed)/i,
+  /referenced reasoning item .* (was not found|has expired)/i,
+  /item .* of type ['"]reasoning['"] was provided without its required following item/i,
+]
+
 export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
   (patterns.some((pattern) => pattern.test(message)) || /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message))
+
+export const isStaleReasoning = (message: string) => staleReasoningPatterns.some((pattern) => pattern.test(message))
 
 export const isContextOverflowFailure = (failure: unknown) =>
   failure instanceof LLMError
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
+
+const failureText = (failure: unknown) => {
+  if (failure instanceof LLMError) return `${failure.message}\n${failure.reason.message}`
+  if (Schema.is(ProviderErrorEvent)(failure)) return failure.message
+  if (failure instanceof Error) return failure.message
+  return ""
+}
+
+export const isStaleReasoningFailure = (failure: unknown) => {
+  if (
+    failure instanceof LLMError &&
+    failure.reason._tag === "InvalidRequest" &&
+    failure.reason.classification === "stale-reasoning"
+  )
+    return true
+  if (Schema.is(ProviderErrorEvent)(failure) && failure.classification === "stale-reasoning") return true
+  return isStaleReasoning(failureText(failure))
+}

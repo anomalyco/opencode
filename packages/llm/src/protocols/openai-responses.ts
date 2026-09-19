@@ -19,7 +19,7 @@ import {
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
-import { isContextOverflow } from "../provider-error"
+import { isContextOverflow, isStaleReasoning } from "../provider-error"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
@@ -906,7 +906,12 @@ const providerError = (event: OpenAIResponsesEvent, fallback: string) => {
   const message = providerErrorMessage(event, fallback)
   return LLMEvent.providerError({
     message,
-    classification: code === "context_length_exceeded" || isContextOverflow(message) ? "context-overflow" : undefined,
+    classification:
+      code === "invalid_encrypted_content" || isStaleReasoning(message)
+        ? "stale-reasoning"
+        : code === "context_length_exceeded" || isContextOverflow(message)
+          ? "context-overflow"
+          : undefined,
   })
 }
 
