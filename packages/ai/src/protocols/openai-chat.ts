@@ -26,7 +26,7 @@ import {
   type ToolDefinition,
 } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
-import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { isRecord, JsonObject, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIOptions } from "./utils/openai-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
@@ -333,18 +333,20 @@ const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart
 const openAICompatibleReasoningContent = (native: unknown) =>
   isRecord(native) && typeof native.reasoning_content === "string" ? native.reasoning_content : undefined
 
-const reasoningField = (part: ReasoningPart, providerMetadataKey: string) => {
-  const field = part.providerMetadata?.[providerMetadataKey]?.reasoningField
-  return typeof field === "string" ? field : undefined
-}
+const OpenAIChatProviderMetadata = ProviderShared.providerMetadata(
+  Schema.Struct({
+    reasoningField: lenient(Schema.String),
+    // OpenRouter-defined passthrough; its element shape is not modelled.
+    reasoningDetails: lenient(Schema.Array(Schema.Unknown)),
+  }),
+)
 
-const reasoningDetails = (parts: ReadonlyArray<ReasoningPart>, native: unknown, providerMetadataKey: string) => {
-  const observed = parts.flatMap((part) => {
-    const details = part.providerMetadata?.[providerMetadataKey]?.reasoningDetails
-    return Array.isArray(details) ? details : []
-  })
-  if (parts.some((part) => Array.isArray(part.providerMetadata?.[providerMetadataKey]?.reasoningDetails)))
-    return observed
+const reasoningDetails = (
+  observed: ReadonlyArray<ReturnType<typeof OpenAIChatProviderMetadata.read>>,
+  native: unknown,
+) => {
+  if (observed.some((metadata) => metadata?.reasoningDetails !== undefined))
+    return observed.flatMap((metadata) => metadata?.reasoningDetails ?? [])
   if (isRecord(native) && Array.isArray(native.reasoning_details)) return native.reasoning_details
 }
 
@@ -398,14 +400,13 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     }
   }
   const text = reasoning.map((part) => part.text).join("")
-  const details = reasoningDetails(reasoning, message.native?.openaiCompatible, options.providerMetadataKey)
-  const observedField = reasoning
-    .map((part) => reasoningField(part, options.providerMetadataKey))
-    .find((value) => value !== undefined)
-  const nativeReasoning = openAICompatibleReasoningContent(message.native?.openaiCompatible)
-  const fullyStructured = reasoning.every((part) =>
-    Array.isArray(part.providerMetadata?.[options.providerMetadataKey]?.reasoningDetails),
+  const observed = reasoning.map((part) =>
+    OpenAIChatProviderMetadata.read(part.providerMetadata, options.providerMetadataKey),
   )
+  const details = reasoningDetails(observed, message.native?.openaiCompatible)
+  const observedField = observed.map((metadata) => metadata?.reasoningField).find((value) => value !== undefined)
+  const nativeReasoning = openAICompatibleReasoningContent(message.native?.openaiCompatible)
+  const fullyStructured = observed.every((metadata) => metadata?.reasoningDetails !== undefined)
   const field = (() => {
     if (configuredField !== undefined && (requireReasoning || reasoning.length > 0 || nativeReasoning !== undefined))
       return configuredField
@@ -937,12 +938,11 @@ const reasoningMetadata = (
   providerMetadataKey: string,
   field: ParserState["reasoningField"],
   details?: ReadonlyArray<unknown>,
-) => ({
-  [providerMetadataKey]: {
+) =>
+  OpenAIChatProviderMetadata.write(providerMetadataKey, {
     ...(field ? { reasoningField: field } : {}),
     ...(details ? { reasoningDetails: details } : {}),
-  },
-})
+  })
 
 const step = (state: ParserState, event: OpenAIChatEvent) =>
   Effect.gen(function* () {

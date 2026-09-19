@@ -26,7 +26,7 @@ import {
   type ToolDefinition,
   type ToolResultPart,
 } from "../schema/index.js"
-import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { JsonObject, knownString, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import * as Cache from "./utils/cache.js"
@@ -510,19 +510,15 @@ const cacheControl = (breakpoints: Cache.Breakpoints, cache: CacheHint | undefin
   return Cache.ttlBucket(cache.ttlSeconds) === "1h" ? EPHEMERAL_1H : EPHEMERAL_5M
 }
 
-const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
-
-const signatureFromMetadata = (metadata: ProviderMetadata | undefined, key: string): string | undefined => {
-  const provider = metadata?.[key]
-  if (!ProviderShared.isRecord(provider)) return undefined
-  return typeof provider.signature === "string" ? provider.signature : undefined
-}
-
-const redactedDataFromMetadata = (metadata: ProviderMetadata | undefined, key: string): string | undefined => {
-  const provider = metadata?.[key]
-  if (!ProviderShared.isRecord(provider)) return undefined
-  return typeof provider.redactedData === "string" ? provider.redactedData : undefined
-}
+const AnthropicProviderMetadata = ProviderShared.providerMetadata(
+  Schema.Struct({
+    signature: lenient(Schema.String),
+    redactedData: lenient(Schema.String),
+    blockType: lenient(Schema.String),
+    result: lenient(Schema.Unknown),
+    stopSequence: lenient(Schema.String),
+  }),
+)
 
 const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition, inputSchema: JsonSchema): AnthropicTool => ({
   name: tool.name,
@@ -590,7 +586,8 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
     return yield* invalid(`Anthropic Messages does not know how to round-trip server tool result for ${part.name}`)
   // Prefer the provider-owned replay payload; fall back to the result value for
   // histories constructed directly from provider events.
-  const payload = part.providerMetadata?.[providerMetadataKey]?.["result"] ?? part.result.value
+  const payload =
+    AnthropicProviderMetadata.read(part.providerMetadata, providerMetadataKey)?.result ?? part.result.value
   return {
     type: wireType,
     tool_use_id: scrubToolCallID(part.id),
@@ -937,8 +934,9 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         if (part.type === "reasoning") {
           // A signature marks visible thinking; only signature-less parts carrying
           // redactedData round-trip as opaque redacted_thinking blocks.
-          const signature = part.encrypted ?? signatureFromMetadata(part.providerMetadata, providerMetadataKey)
-          const redactedData = redactedDataFromMetadata(part.providerMetadata, providerMetadataKey)
+          const metadata = AnthropicProviderMetadata.read(part.providerMetadata, providerMetadataKey)
+          const signature = part.encrypted ?? metadata?.signature
+          const redactedData = metadata?.redactedData
           if (signature === undefined && redactedData !== undefined) {
             content.push({ type: "redacted_thinking", data: redactedData })
             continue
@@ -1220,7 +1218,10 @@ const serverToolResultEvent = (block: AnthropicStreamBlock, providerMetadataKey:
     providerExecuted: true,
     // The complete payload is irreducible provider replay state: subsequent
     // stateless requests must round-trip the typed result block verbatim.
-    providerMetadata: providerMetadata(providerMetadataKey, { blockType: block.type, result: block.content }),
+    providerMetadata: AnthropicProviderMetadata.write(providerMetadataKey, {
+      blockType: block.type,
+      result: block.content,
+    }),
   })
 }
 
@@ -1284,7 +1285,7 @@ const onContentBlockStart = (
     const metadata =
       block.signature === undefined
         ? undefined
-        : providerMetadata(state.providerMetadataKey, { signature: block.signature })
+        : AnthropicProviderMetadata.write(state.providerMetadataKey, { signature: block.signature })
     const lifecycle = Lifecycle.reasoningStart(state.lifecycle, events, id, metadata)
     return [
       {
@@ -1313,7 +1314,7 @@ const onContentBlockStart = (
           state.lifecycle,
           events,
           `reasoning-${event.index ?? 0}`,
-          providerMetadata(state.providerMetadataKey, { redactedData: block.data }),
+          AnthropicProviderMetadata.write(state.providerMetadataKey, { redactedData: block.data }),
         ),
       },
       events,
@@ -1421,7 +1422,7 @@ const onContentBlockStop = Effect.fn("AnthropicMessages.onContentBlockStop")(fun
         Lifecycle.textEnd(state.lifecycle, events, `text-${event.index}`),
         events,
         `reasoning-${event.index}`,
-        signature === undefined ? undefined : providerMetadata(state.providerMetadataKey, { signature }),
+        signature === undefined ? undefined : AnthropicProviderMetadata.write(state.providerMetadataKey, { signature }),
       )
   events.push(...resultEvents)
   const reasoningSignatures = { ...state.reasoningSignatures }
@@ -1442,7 +1443,7 @@ const onMessageDelta = (
     const finishMetadata =
       stopSequence === null || stopSequence === undefined
         ? state.pendingFinish?.providerMetadata
-        : providerMetadata(state.providerMetadataKey, { stopSequence })
+        : AnthropicProviderMetadata.write(state.providerMetadataKey, { stopSequence })
     return {
       reason: {
         normalized: mapFinishReason(stopReason),
@@ -1474,7 +1475,7 @@ const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (st
         current,
         events,
         `reasoning-${index}`,
-        providerMetadata(state.providerMetadataKey, { signature }),
+        AnthropicProviderMetadata.write(state.providerMetadataKey, { signature }),
       ),
     lifecycle,
   )

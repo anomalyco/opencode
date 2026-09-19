@@ -11,14 +11,13 @@ import {
   type JsonSchema,
   type LLMRequest,
   type MediaPart,
-  type ProviderMetadata,
   type ReasoningPart,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
 } from "../schema/index.js"
-import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { JsonObject, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate } from "../effort-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
@@ -467,17 +466,27 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
     tool: (toolName) => ({ type: "function" as const, name: toolName }),
   })
 
+export const providerMetadata = ProviderShared.providerMetadata(
+  Schema.Struct({
+    itemId: lenient(Schema.String),
+    phase: lenient(MessagePhase),
+    reasoningEncryptedContent: lenient(Schema.NullOr(Schema.String)),
+    responseId: lenient(Schema.String),
+    serviceTier: lenient(Schema.NullOr(Schema.String)),
+  }),
+)
+
 // Server-issued item ids need a nonempty prefix and suffix, but the prefix is
 // provider-defined and does not necessarily identify the item's semantic type.
-const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
-  const metadata = providerMetadata?.[providerMetadataKey]
-  if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string") return undefined
-  const separator = metadata.itemId.indexOf("_")
-  return separator > 0 && separator < metadata.itemId.length - 1 ? metadata.itemId : undefined
+const itemID = (metadata: ReturnType<typeof providerMetadata.read>) => {
+  const itemId = metadata?.itemId
+  if (itemId === undefined) return undefined
+  const separator = itemId.indexOf("_")
+  return separator > 0 && separator < itemId.length - 1 ? itemId : undefined
 }
 
 const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {
-  const id = itemID(part.providerMetadata, providerMetadataKey)
+  const id = itemID(providerMetadata.read(part.providerMetadata, providerMetadataKey))
   return {
     type: "function_call",
     ...(id === undefined ? {} : { id }),
@@ -489,18 +498,14 @@ const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenRes
 }
 
 const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
-  const metadata = part.providerMetadata?.[providerMetadataKey]
-  if (!ProviderShared.isRecord(metadata)) return undefined
-  const id = itemID(part.providerMetadata, providerMetadataKey)
-  const encryptedContent =
-    typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
-      ? metadata.reasoningEncryptedContent
-      : undefined
+  const metadata = providerMetadata.read(part.providerMetadata, providerMetadataKey)
+  if (!metadata) return undefined
+  const id = itemID(metadata)
   return {
     type: "reasoning",
     ...(id === undefined ? {} : { id }),
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
-    encrypted_content: encryptedContent,
+    encrypted_content: metadata.reasoningEncryptedContent,
   }
 }
 
@@ -642,10 +647,9 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
         const groups = content.reduce<
           Array<{ id: string | undefined; phase: MessagePhase | null | undefined; parts: TextPart[] }>
         >((groups, part) => {
-          const partMetadata = part.providerMetadata?.[providerMetadataKey]
-          const id = itemID(part.providerMetadata, providerMetadataKey) ?? metadata?.itemId
-          const partPhase = messagePhase(partMetadata?.phase)
-          const phase = partPhase === undefined ? metadata?.phase : partPhase
+          const partMetadata = providerMetadata.read(part.providerMetadata, providerMetadataKey)
+          const id = itemID(partMetadata) ?? metadata?.itemId
+          const phase = partMetadata?.phase === undefined ? metadata?.phase : partMetadata.phase
           const group = groups.at(-1)
           if (group && group.id === id && group.phase === phase) group.parts.push(part)
           else groups.push({ id, phase, parts: [part] })
@@ -701,7 +705,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
           flushText()
-          const id = itemID(part.providerMetadata, providerMetadataKey)
+          const id = itemID(providerMetadata.read(part.providerMetadata, providerMetadataKey))
           const hosted =
             part.result.type !== "json"
               ? undefined
@@ -883,10 +887,6 @@ const mapFinishReason = (event: Event, hasFunctionCall: boolean): FinishReason =
 
 export const metadataKey = (model: LLMRequest["model"]) => model.route.providerMetadataKey ?? "openresponses"
 
-export const providerMetadata = (state: ParserState, metadata: Record<string, unknown>): ProviderMetadata => ({
-  [state.providerMetadataKey]: metadata,
-})
-
 export type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 
 const NO_EVENTS: StepResult["1"] = []
@@ -901,7 +901,10 @@ const onOutputTextDelta = (state: ParserState, event: Event, id: string): StepRe
   if (!event.delta || state.message?.id !== id) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   const phase = state.message.phase
-  const metadata = providerMetadata(state, { itemId: id, ...(phase === undefined ? {} : { phase }) })
+  const metadata = providerMetadata.write(state.providerMetadataKey, {
+    itemId: id,
+    ...(phase === undefined ? {} : { phase }),
+  })
   const lifecycle = Lifecycle.textStart(state.lifecycle, events, id, metadata)
   return [{ ...state, lifecycle: Lifecycle.textDelta(lifecycle, events, id, event.delta) }, events]
 }
@@ -971,7 +974,12 @@ const startReasoningSummaryPart = (state: ParserState, itemID: string, index: nu
     .filter((entry) => entry[1] !== "concluded")
     .reduce(
       (lifecycle, entry) =>
-        Lifecycle.reasoningEnd(lifecycle, events, `${itemID}:${entry[0]}`, providerMetadata(state, { itemId: itemID })),
+        Lifecycle.reasoningEnd(
+          lifecycle,
+          events,
+          `${itemID}:${entry[0]}`,
+          providerMetadata.write(state.providerMetadataKey, { itemId: itemID }),
+        ),
       state.lifecycle,
     )
   return [
@@ -981,7 +989,10 @@ const startReasoningSummaryPart = (state: ParserState, itemID: string, index: nu
         lifecycle,
         events,
         `${itemID}:${index}`,
-        providerMetadata(state, { itemId: itemID, reasoningEncryptedContent: item.encryptedContent ?? null }),
+        providerMetadata.write(state.providerMetadataKey, {
+          itemId: itemID,
+          reasoningEncryptedContent: item.encryptedContent ?? null,
+        }),
       ),
       reasoningItems: {
         ...state.reasoningItems,
@@ -1036,7 +1047,10 @@ export const onReasoningDone = (state: ParserState, event: Event, itemID: string
 }
 
 const reasoningMetadata = (state: ParserState, item: OutputItem) =>
-  providerMetadata(state, { itemId: item.id, reasoningEncryptedContent: item.encrypted_content ?? null })
+  providerMetadata.write(state.providerMetadataKey, {
+    itemId: item.id,
+    reasoningEncryptedContent: item.encrypted_content ?? null,
+  })
 
 // Responses APIs normally stream reasoning items in this order:
 //   `output_item.added` (reasoning) →
@@ -1063,7 +1077,10 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
           lifecycle,
           events,
           id,
-          providerMetadata(state, { itemId: id, ...(openPhase === undefined ? {} : { phase: openPhase }) }),
+          providerMetadata.write(state.providerMetadataKey, {
+            itemId: id,
+            ...(openPhase === undefined ? {} : { phase: openPhase }),
+          }),
         )
       }, state.lifecycle)
     return [
@@ -1099,7 +1116,7 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
   }
   if (item.type !== "function_call" || !item.call_id) return [state, NO_EVENTS]
   if (state.tools[item.id] !== undefined) return [state, NO_EVENTS]
-  const metadata = providerMetadata(state, { itemId: item.id })
+  const metadata = providerMetadata.write(state.providerMetadataKey, { itemId: item.id })
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   return [
@@ -1222,7 +1239,10 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
       content.push(decoded.type === "output_text" ? decoded.text : decoded.refusal)
     }
     const text = content.length > 0 ? content.join("") : undefined
-    const metadata = providerMetadata(state, { itemId: item.id, ...(phase === undefined ? {} : { phase }) })
+    const metadata = providerMetadata.write(state.providerMetadataKey, {
+      itemId: item.id,
+      ...(phase === undefined ? {} : { phase }),
+    })
     const events: LLMEvent[] = []
     const lifecycle = text ? Lifecycle.textStart(state.lifecycle, events, item.id, metadata) : state.lifecycle
     return [
@@ -1237,7 +1257,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
 
   if (item.type === "function_call") {
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
-    const metadata = providerMetadata(state, { itemId: item.id })
+    const metadata = providerMetadata.write(state.providerMetadataKey, { itemId: item.id })
     const registered = state.tools[item.id] !== undefined
     const tools = registered
       ? state.tools
@@ -1359,7 +1379,7 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
     usage: mapUsage(event.response?.usage, current.providerMetadataKey),
     providerMetadata:
       event.response?.id || event.response?.service_tier
-        ? providerMetadata(current, {
+        ? providerMetadata.write(current.providerMetadataKey, {
             responseId: event.response.id,
             serviceTier: event.response.service_tier,
           })

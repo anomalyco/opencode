@@ -15,6 +15,7 @@ import {
   type ContentPart,
   type MediaPart,
   type ProviderID,
+  type ProviderMetadata,
   type TextPart,
   type ToolEntry,
   type ToolResultPart,
@@ -34,6 +35,17 @@ export const lenient = <const S extends Schema.Top>(schema: S) =>
   Schema.optionalKey(
     Schema.UndefinedOr(schema).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(undefined)))),
   )
+/**
+ * Typed slice of `ProviderMetadata` a protocol publishes under the route's `providerMetadataKey`.
+ * Declare fields with `lenient` so `read` drops a malformed field without discarding its siblings.
+ */
+export const providerMetadata = <const S extends Schema.ConstraintDecoder<Record<string, unknown>>>(schema: S) => {
+  const decode = Schema.decodeUnknownOption(schema)
+  return {
+    write: (key: string, value: S["Type"]) => ({ [key]: value }),
+    read: (metadata: ProviderMetadata | undefined, key: string) => Option.getOrUndefined(decode(metadata?.[key])),
+  }
+}
 /** Provider-defined string enum: known values for autocomplete, any string accepted at runtime. */
 export const knownString = <Known extends string>() =>
   Schema.declare<Known | (string & {})>((value): value is Known | (string & {}) => typeof value === "string", {

@@ -12,15 +12,13 @@ import {
   type JsonSchema,
   type LLMRequest,
   type LanguageModelToolSchemaCompatibility,
-  type ProviderMetadata,
-  type ReasoningPart,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
 } from "../schema/index.js"
 import { BedrockEventStream } from "./bedrock-event-stream.js"
 import { classifyProviderFailure } from "../provider-error.js"
-import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
+import { JsonObject, lenient, optionalArray, ProviderShared } from "./shared.js"
 import { BedrockAuth } from "./utils/bedrock-auth.js"
 import { BedrockCache } from "./utils/bedrock-cache.js"
 import { BedrockMedia } from "./utils/bedrock-media.js"
@@ -259,18 +257,12 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ tool: { name } }) as const,
   })
 
-const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
-
-const reasoningSignature = (part: ReasoningPart, providerMetadataKey: string) => {
-  const metadata = part.providerMetadata?.[providerMetadataKey]
-  if (part.encrypted !== undefined) return part.encrypted
-  if (ProviderShared.isRecord(metadata) && typeof metadata.signature === "string") return metadata.signature
-}
-
-const reasoningRedactedData = (part: ReasoningPart, providerMetadataKey: string) => {
-  const metadata = part.providerMetadata?.[providerMetadataKey]
-  if (ProviderShared.isRecord(metadata) && typeof metadata.redactedData === "string") return metadata.redactedData
-}
+const BedrockProviderMetadata = ProviderShared.providerMetadata(
+  Schema.Struct({
+    signature: lenient(Schema.String),
+    redactedData: lenient(Schema.String),
+  }),
+)
 
 const removeEmptyToolInputKeys = (input: unknown): unknown => {
   if (Array.isArray(input)) return input.map(removeEmptyToolInputKeys)
@@ -387,8 +379,9 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
           continue
         }
         if (part.type === "reasoning") {
-          const signature = reasoningSignature(part, providerMetadataKey)
-          const redactedData = reasoningRedactedData(part, providerMetadataKey)
+          const metadata = BedrockProviderMetadata.read(part.providerMetadata, providerMetadataKey)
+          const signature = part.encrypted ?? metadata?.signature
+          const redactedData = metadata?.redactedData
           if (signature === undefined && redactedData !== undefined) {
             content.push({ reasoningContent: { redactedContent: redactedData } })
             continue
@@ -602,8 +595,10 @@ const step = (state: ParserState, event: BedrockEvent) =>
       })()
       const redactedData = redactedChunks === undefined ? reasoning.data : encodeRedactedContent(redactedChunks)
       const metadata = (() => {
-        if (reasoning.signature) return providerMetadata(state.providerMetadataKey, { signature: reasoning.signature })
-        if (redactedData !== undefined) return providerMetadata(state.providerMetadataKey, { redactedData })
+        if (reasoning.signature)
+          return BedrockProviderMetadata.write(state.providerMetadataKey, { signature: reasoning.signature })
+        if (redactedData !== undefined)
+          return BedrockProviderMetadata.write(state.providerMetadataKey, { redactedData })
       })()
       const lifecycle = (() => {
         if (reasoning.text === undefined && metadata === undefined) return state.lifecycle
@@ -655,10 +650,10 @@ const step = (state: ParserState, event: BedrockEvent) =>
         if (resultEvents.length) return Lifecycle.stepStart(state.lifecycle, events)
         const metadata = (() => {
           const signature = state.reasoningSignatures[index]
-          if (signature) return providerMetadata(state.providerMetadataKey, { signature })
+          if (signature) return BedrockProviderMetadata.write(state.providerMetadataKey, { signature })
           const redactedContent = state.reasoningRedactedContent[index]
           if (redactedContent)
-            return providerMetadata(state.providerMetadataKey, {
+            return BedrockProviderMetadata.write(state.providerMetadataKey, {
               redactedData: encodeRedactedContent(redactedContent),
             })
         })()
