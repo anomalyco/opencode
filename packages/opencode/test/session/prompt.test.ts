@@ -1496,6 +1496,73 @@ it.instance("prompt submitted during an active run is included in the next LLM i
   }),
 )
 
+it.instance("prompt submitted while question tool is pending resumes the loop", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const question = yield* Question.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const secondID = MessageID.ascending()
+
+    yield* llm.tool("question", {
+      questions: [
+        {
+          question: "Should I continue?",
+          header: "Continue",
+          options: [
+            { label: "Yes", description: "Continue working" },
+            { label: "No", description: "Stop working" },
+          ],
+        },
+      ],
+    })
+    yield* llm.text("continued")
+
+    const first = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "start" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* pollWithTimeout(
+      question.list().pipe(Effect.map((items) => (items.some((item) => item.sessionID === chat.id) ? true : undefined))),
+      "timed out waiting for question",
+    )
+
+    const second = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        messageID: secondID,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "So?" }],
+      })
+      .pipe(Effect.forkChild)
+
+    yield* awaitWithTimeout(llm.wait(2), "timed out waiting for loop to resume", "2 seconds")
+    const [firstExit, secondExit] = yield* Effect.all([Fiber.await(first), Fiber.await(second)])
+    expect(Exit.isSuccess(firstExit)).toBe(true)
+    expect(Exit.isSuccess(secondExit)).toBe(true)
+
+    const msgs = yield* sessions.messages({ sessionID: chat.id })
+    const last = msgs.findLast((msg) => msg.info.role === "assistant")
+    expect(last?.info.role).toBe("assistant")
+    if (!last || last.info.role !== "assistant") throw new Error("expected resumed assistant")
+    expect(last.info.parentID).toBe(secondID)
+    expect(last.parts.some((part) => part.type === "text" && part.text === "continued")).toBe(true)
+    const questionTool = msgs
+      .flatMap((msg) => msg.parts)
+      .find((part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "question")
+    expect(questionTool?.state.status).toBe("error")
+    expect(JSON.stringify((yield* llm.inputs).at(-1)?.messages)).toContain("So?")
+    expect(yield* question.list()).toEqual([])
+  }),
+)
+
 it.instance("assertNotBusy fails with BusyError when loop running", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

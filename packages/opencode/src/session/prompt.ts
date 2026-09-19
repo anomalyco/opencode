@@ -56,6 +56,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { Question } from "@/question"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -140,6 +141,7 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const question = yield* Question.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
@@ -1057,6 +1059,12 @@ const layer = Layer.effect(
       const message = yield* createUserMessage(input)
       yield* sessions.touch(input.sessionID)
 
+      yield* Effect.forEach(
+        (yield* question.list()).filter((item) => item.sessionID === input.sessionID),
+        (item) => question.reject(item.id).pipe(Effect.ignore),
+        { concurrency: "unbounded", discard: true },
+      )
+
       const permissions: PermissionV1.Rule[] = []
       for (const [t, enabled] of Object.entries(input.tools ?? {})) {
         permissions.push({ permission: t, action: enabled ? "allow" : "deny", pattern: "*" })
@@ -1625,6 +1633,7 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
+    Question.node,
   ],
 })
 
