@@ -262,6 +262,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     started = true
     const active = ++generation
     const previous = run
+    let consecutiveErrors = 0
     const current = (async () => {
       if (previous) await previous
       // oxlint-disable-next-line no-unmodified-loop-condition -- `started` is set to false by stop() which also aborts; both flags are checked to allow graceful exit
@@ -279,6 +280,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
               : eventApi.event.subscribe({ signal: attempt.signal })
           let yielded = Date.now()
           for await (const event of events) {
+            consecutiveErrors = 0
             streamErrorLogged = false
             const legacy = "payload" in event
             if (legacy && event.payload.type === "sync") continue
@@ -291,6 +293,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
             await wait(0)
           }
         } catch (error) {
+          consecutiveErrors++
           if (!isStreamClosed(error, attempt?.signal) && !streamErrorLogged) {
             streamErrorLogged = true
             console.error("[global-sdk] event stream failed", {
@@ -305,7 +308,8 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
         }
 
         if (abort.signal.aborted || !started || generation !== active) return
-        await wait(RECONNECT_DELAY_MS)
+        const backoff = Math.min(5000, RECONNECT_DELAY_MS * Math.pow(1.5, Math.min(consecutiveErrors, 8)))
+        await wait(backoff)
       }
     })().finally(() => {
       if (run !== current) return
