@@ -32,7 +32,7 @@ export default Plugin.define({
         return (
           <Show when={pending() > 0}>
             <box flexShrink={0}>
-              <Spinner color={theme.hue.accent[800]}>/btw</Spinner>
+              <Spinner color={theme.hue.accent[200]}>/btw</Spinner>
             </box>
           </Show>
         )
