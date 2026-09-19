@@ -3,6 +3,7 @@ import { marks } from "./lifecycle/marks"
 import { app } from "electron"
 import { acquireApplicationLock, configureApplication } from "./lifecycle/configure"
 import { startSidecarProbe } from "./service/sidecar-probe"
+import { registerStorageSnapshotHandler } from "./storage/snapshot"
 import { createEarlyWindow } from "./windows/early"
 import { rendererAssetsServed } from "./windows/protocol"
 import { registerRendererScheme } from "./windows/scheme"
@@ -18,6 +19,7 @@ if (acquireApplicationLock()) {
   // module graph evaluates on the same thread Chromium needs to finish initialising.
   void app.whenReady().then(async () => {
     marks.ready = Date.now()
+    registerStorageSnapshotHandler()
     createEarlyWindow()
     marks.window = Date.now()
     startSidecarProbe()
