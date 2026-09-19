@@ -87,6 +87,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         model: input.model,
         sessionID: input.sessionID,
         providerOptions: input.provider.options,
+        allowExplicitCache: !isOpenaiOauth,
       })
   const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
   if (
