@@ -10,6 +10,7 @@ import { resolveDefaultModel } from "@/hooks/provider-catalog"
 import { Persist, persisted } from "@/utils/persist"
 import { hasCustomAgent, resolveAgent } from "./local-agent"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
+import { cycleSessionMode, resolveSessionMode, type SessionMode } from "./session-mode"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useServerSDK } from "./server-sdk"
@@ -17,10 +18,13 @@ import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 
 export type ModelKey = { providerID: string; modelID: string; variant?: string }
 
+export type { SessionMode }
+
 type State = {
   agent?: string
   model?: ModelKey
   variant?: string | null
+  mode?: SessionMode | null
 }
 
 type Saved = {
@@ -87,10 +91,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       draft?: State
       promoting?: State
       last?: {
-        type: "agent" | "model" | "variant"
+        type: "agent" | "model" | "variant" | "mode"
         agent?: string
         model?: ModelKey | null
         variant?: string | null
+        mode?: SessionMode | null
       }
     }>({
       current: list()[0]?.name,
@@ -199,12 +204,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             agent: item.name,
             model: item.model,
             variant: item.variant ?? null,
+            mode: selectedMode(),
           })
           const prev = scope()
           const next = {
             agent: item.name,
             model: item.model ?? prev?.model,
             variant: item.variant ?? prev?.variant,
+            mode: prev?.mode,
           } satisfies State
           const session = id()
           if (session) {
@@ -252,12 +259,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const selected = () => scope()?.variant
 
+    const selectedMode = () => scope()?.mode
+
     const snapshot = () => {
       const model = current()
       return {
         agent: agent.current()?.name,
         model: model ? { providerID: model.provider.id, modelID: model.id } : undefined,
         variant: selected(),
+        mode: selectedMode(),
       } satisfies State
     }
 
@@ -306,6 +316,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               agent: agent.current()?.name,
               model: item ?? null,
               variant: selected(),
+              mode: selectedMode(),
             })
             write({ model: item })
             if (!item) return
@@ -350,6 +361,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 agent: agent.current()?.name,
                 model: model ? { providerID: model.provider.id, modelID: model.id } : null,
                 variant: value ?? null,
+                mode: selectedMode(),
               })
               write({ variant: value ?? null })
               if (model) {
@@ -372,10 +384,36 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
+    const mode = {
+      selected: selectedMode,
+      current(): SessionMode {
+        return resolveSessionMode(selectedMode())
+      },
+      set(value: SessionMode | undefined) {
+        startTransition(() =>
+          batch(() => {
+            const item = current()
+            setStore("last", {
+              type: "mode",
+              agent: agent.current()?.name,
+              model: item ? { providerID: item.provider.id, modelID: item.id } : null,
+              variant: selected(),
+              mode: value ?? null,
+            })
+            write({ mode: value ?? null })
+          }),
+        )
+      },
+      cycle() {
+        mode.set(cycleSessionMode(mode.current()))
+      },
+    }
+
     const result = {
       slug: createMemo(() => base64Encode(sdk().directory)),
       model,
       agent,
+      mode,
       session: {
         ready: savedReady,
         reset() {
