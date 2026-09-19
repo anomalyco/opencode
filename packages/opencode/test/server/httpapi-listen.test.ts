@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import Http from "node:http"
 import net from "node:net"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -436,6 +437,145 @@ describe("HttpApi Server.listen", () => {
       await stop(listener, "timed out cleaning up plugin HTTP listener").catch(() => undefined)
     }
   })
+
+  test("streams plugin request bodies before the client finishes sending", async () => {
+    await using tmp = await tmpdir({
+      init: async (directory) => {
+        const plugin = path.join(directory, "plugin.ts")
+        const firstChunk = path.join(directory, "first-chunk")
+        await Bun.write(
+          plugin,
+          [
+            "export default {",
+            '  id: "stream-probe",',
+            "  server: async () => ({",
+            "    http: {",
+            "      fetch: async (request) => {",
+            "        const reader = request.body.getReader()",
+            "        const decoder = new TextDecoder()",
+            "        const first = await reader.read()",
+            `        await Bun.write(${JSON.stringify(firstChunk)}, decoder.decode(first.value))`,
+            "        let body = decoder.decode(first.value)",
+            "        while (true) {",
+            "          const next = await reader.read()",
+            "          if (next.done) break",
+            "          body += decoder.decode(next.value)",
+            "        }",
+            "        return Response.json({ body })",
+            "      },",
+            "    },",
+            "  }),",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(
+          path.join(directory, "opencode.json"),
+          JSON.stringify({ formatter: false, lsp: false, plugin: [pathToFileURL(plugin).href] }),
+        )
+        return { firstChunk }
+      },
+    })
+    const listener = await startListener()
+    try {
+      const response = new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const request = Http.request(new URL("/api/plugins/stream-probe", listener.url), {
+          method: "POST",
+          headers: {
+            authorization: authorization(),
+            "content-type": "text/plain",
+            "x-opencode-directory": tmp.path,
+          },
+        })
+        request.on("error", reject)
+        request.on("response", (incoming) => {
+          let body = ""
+          incoming.setEncoding("utf8")
+          incoming.on("data", (chunk) => (body += chunk))
+          incoming.on("end", () => resolve({ status: incoming.statusCode ?? 0, body }))
+        })
+        request.write("first")
+
+        void withTimeout(
+          (async () => {
+            while (!(await Bun.file(tmp.extra.firstChunk).exists())) await Bun.sleep(10)
+          })(),
+          5_000,
+          "plugin did not receive the first request chunk",
+        ).then(() => request.end("second"), reject)
+      })
+
+      const result = await withTimeout(response, 10_000, "plugin request stream did not complete")
+      expect(result.status).toBe(200)
+      expect(JSON.parse(result.body)).toEqual({ body: "firstsecond" })
+      expect(await Bun.file(tmp.extra.firstChunk).text()).toBe("first")
+    } finally {
+      await stop(listener, "timed out cleaning up request streaming listener").catch(() => undefined)
+    }
+  }, 30_000)
+
+  test("aborts plugin requests when the client disconnects", async () => {
+    await using tmp = await tmpdir({
+      init: async (directory) => {
+        const plugin = path.join(directory, "plugin.ts")
+        const started = path.join(directory, "request-started")
+        const aborted = path.join(directory, "request-aborted")
+        await Bun.write(
+          plugin,
+          [
+            "export default {",
+            '  id: "abort-probe",',
+            "  server: async () => ({",
+            "    http: {",
+            "      fetch: async (request) => {",
+            `        await Bun.write(${JSON.stringify(started)}, "started")`,
+            "        await new Promise((resolve) => {",
+            "          if (request.signal.aborted) return resolve()",
+            '          request.signal.addEventListener("abort", resolve, { once: true })',
+            "        })",
+            `        await Bun.write(${JSON.stringify(aborted)}, "aborted")`,
+            '        return new Response("aborted")',
+            "      },",
+            "    },",
+            "  }),",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(
+          path.join(directory, "opencode.json"),
+          JSON.stringify({ formatter: false, lsp: false, plugin: [pathToFileURL(plugin).href] }),
+        )
+        return { started, aborted }
+      },
+    })
+    const listener = await startListener()
+    try {
+      const request = Http.request(new URL("/api/plugins/abort-probe", listener.url), {
+        headers: { authorization: authorization(), "x-opencode-directory": tmp.path },
+      })
+      request.on("error", () => {})
+      request.end()
+
+      await withTimeout(
+        (async () => {
+          while (!(await Bun.file(tmp.extra.started).exists())) await Bun.sleep(10)
+        })(),
+        5_000,
+        "plugin request did not start",
+      )
+      request.destroy()
+      await withTimeout(
+        (async () => {
+          while (!(await Bun.file(tmp.extra.aborted).exists())) await Bun.sleep(10)
+        })(),
+        5_000,
+        "plugin request signal did not abort",
+      )
+    } finally {
+      await stop(listener, "timed out cleaning up abort listener").catch(() => undefined)
+    }
+  }, 30_000)
 
   test("port 0 prefers 4096 when free", async () => {
     if (!(await isPortFree(4096))) return

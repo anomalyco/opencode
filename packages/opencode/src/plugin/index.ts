@@ -2,6 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type {
   Hooks,
   PluginInput,
+  PluginHttpHandler,
   Plugin as PluginInstance,
   PluginModule,
   WorkspaceAdapter as PluginWorkspaceAdapter,
@@ -37,6 +38,7 @@ import { InstallationChannel } from "@opencode-ai/core/installation/version"
 type State = {
   hooks: Hooks[]
   registered: Map<string, Hooks>
+  duplicates: Set<string>
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -55,7 +57,7 @@ export interface Interface {
     output: Output,
   ) => Effect.Effect<Output>
   readonly list: () => Effect.Effect<Hooks[]>
-  readonly http: (id: string) => Effect.Effect<Hooks["http"]>
+  readonly http: (id: string) => Effect.Effect<PluginHttpHandler | undefined>
   readonly init: () => Effect.Effect<void>
 }
 
@@ -117,7 +119,12 @@ async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, state:
   const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
   if (plugin) {
     const id = await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
-    if (state.registered.has(id)) throw new TypeError(`Plugin id ${id} is already registered`)
+    if (state.duplicates.has(id)) throw new TypeError(`Plugin id ${id} is duplicated`)
+    if (state.registered.has(id)) {
+      state.registered.delete(id)
+      state.duplicates.add(id)
+      throw new TypeError(`Plugin id ${id} is duplicated`)
+    }
     const hooks = await (plugin as PluginModule).server(input, load.options)
     state.registered.set(id, hooks)
     state.hooks.push(hooks)
@@ -140,6 +147,7 @@ const layer = Layer.effect(
       Effect.fn("Plugin.state")(function* (ctx) {
         const hooks: Hooks[] = []
         const registered = new Map<string, Hooks>()
+        const duplicates = new Set<string>()
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
@@ -228,7 +236,7 @@ const layer = Layer.effect(
           // Keep plugin execution sequential so hook registration and execution
           // order remains deterministic across plugin runs.
           yield* Effect.tryPromise({
-            try: () => applyPlugin(load, input, { hooks, registered }),
+            try: () => applyPlugin(load, input, { hooks, registered, duplicates }),
             catch: (err) => {
               const message = errorMessage(err)
               return message
@@ -283,7 +291,7 @@ const layer = Layer.effect(
           ),
         )
 
-        return { hooks, registered }
+        return { hooks, registered, duplicates }
       }),
     )
 

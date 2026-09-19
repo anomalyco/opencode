@@ -36,7 +36,7 @@ function withTmp<T, A, E, R>(
   })
 }
 
-function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
+function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0], httpID?: string) {
   const source = path.join(dir, "opencode.json")
   return Effect.gen(function* () {
     const config = yield* Effect.promise(
@@ -46,6 +46,8 @@ function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
     return yield* Effect.gen(function* () {
       const plugin = yield* Plugin.Service
       yield* plugin.list()
+      if (!httpID) return undefined
+      return yield* plugin.http(httpID)
     }).pipe(
       Effect.provide(
         LayerNode.compile(Plugin.node, [
@@ -187,7 +189,7 @@ describe("plugin.loader.shared", () => {
             '  id: "demo.duplicate",',
             "  server: async () => {",
             `    await Bun.write(${JSON.stringify(firstMark)}, "first")`,
-            "    return {}",
+            '    return { http: { fetch: async () => new Response("first") } }',
             "  },",
             "}",
             "",
@@ -214,9 +216,10 @@ describe("plugin.loader.shared", () => {
       },
       (tmp) =>
         Effect.gen(function* () {
-          yield* load(tmp.path)
+          const http = yield* load(tmp.path, undefined, "demo.duplicate")
           expect(yield* Effect.promise(() => Bun.file(tmp.extra.firstMark).text())).toBe("first")
           expect(yield* Effect.promise(() => Bun.file(tmp.extra.secondMark).exists())).toBe(false)
+          expect(http).toBeUndefined()
         }),
     ),
   )

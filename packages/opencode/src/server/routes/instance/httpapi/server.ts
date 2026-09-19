@@ -154,10 +154,10 @@ const pluginContextRouterLayer = HttpRouter.middleware()(
       )
   }),
 )
-const pluginContextRouterLive = pluginContextRouterLayer.layer.pipe(
-  Layer.provide(Socket.layerWebSocketConstructorGlobal),
-)
-const pluginHttpRoutes = pluginRoutes.pipe(Layer.provide(authOnlyRouterLayer), Layer.provide(pluginContextRouterLive))
+const pluginHttpMiddlewareLive = pluginContextRouterLayer
+  .combine(authorizationRouterMiddleware)
+  .layer.pipe(Layer.provide([ServerAuth.Config.layer, Socket.layerWebSocketConstructorGlobal]))
+const pluginHttpRoutes = pluginRoutes.pipe(Layer.provide(pluginHttpMiddlewareLive))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide([controlHandlers, controlPlaneHandlers, globalHandlers]),
   Layer.provide(schemaErrorLayer),
