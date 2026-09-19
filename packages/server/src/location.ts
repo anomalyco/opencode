@@ -29,9 +29,12 @@ export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   const workspaceID = query.get("location[workspace]") || request.headers["x-opencode-workspace"]
-  const directory =
+  const requested =
     query.get("location[directory]") ||
     (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : process.cwd())
+  // A directory that decoded to U+FFFD is mojibake from an invalid base64 segment, so use the server's own directory
+  // instead of failing every path lookup against a directory that cannot exist.
+  const directory = requested.includes("\uFFFD") ? process.cwd() : requested
   return Location.Ref.make({
     directory: AbsolutePath.make(directory),
     workspaceID: workspaceID ? WorkspaceV2.ID.make(workspaceID) : undefined,
