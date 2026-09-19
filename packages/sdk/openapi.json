@@ -13038,6 +13038,9 @@
                   "metadata": {
                     "type": "object"
                   },
+                  "reason": {
+                    "type": "string"
+                  },
                   "source": {
                     "$ref": "#/components/schemas/PermissionV2Source"
                   },
@@ -19277,6 +19280,9 @@
                       "metadata": {
                         "type": "object"
                       },
+                      "reason": {
+                        "type": "string"
+                      },
                       "source": {
                         "$ref": "#/components/schemas/PermissionV2Source"
                       }
@@ -19696,6 +19702,9 @@
                       },
                       "metadata": {
                         "type": "object"
+                      },
+                      "reason": {
+                        "type": "string"
                       },
                       "always": {
                         "type": "array",
@@ -22869,6 +22878,9 @@
           },
           "metadata": {
             "type": "object"
+          },
+          "reason": {
+            "type": "string"
           },
           "always": {
             "type": "array",
@@ -30619,6 +30631,9 @@
           "metadata": {
             "type": "object"
           },
+          "reason": {
+            "type": "string"
+          },
           "source": {
             "$ref": "#/components/schemas/PermissionV2Source"
           }
@@ -31918,6 +31933,9 @@
               "metadata": {
                 "type": "object"
               },
+              "reason": {
+                "type": "string"
+              },
               "source": {
                 "$ref": "#/components/schemas/PermissionV2Source"
               }
@@ -32645,6 +32663,9 @@
               },
               "metadata": {
                 "type": "object"
+              },
+              "reason": {
+                "type": "string"
               },
               "always": {
                 "type": "array",
@@ -35689,6 +35710,9 @@
               "metadata": {
                 "type": "object"
               },
+              "reason": {
+                "type": "string"
+              },
               "source": {
                 "$ref": "#/components/schemas/PermissionV2Source"
               }
@@ -36108,6 +36132,9 @@
               },
               "metadata": {
                 "type": "object"
+              },
+              "reason": {
+                "type": "string"
               },
               "always": {
                 "type": "array",
