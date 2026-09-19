@@ -284,10 +284,10 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       { text: "", color: theme.text.base },
     )
     if (status.attention === "question")
-      lines.push({ text: "? Which approach should I take?", color: theme.hue.interactive[200] })
+      lines.push({ text: "? Which approach should I take?", color: theme.hue.accent[200] })
     else if (status.attention === "permission")
-      lines.push({ text: "! Waiting for permission to run the command", color: theme.hue.interactive[200] })
-    else if (status.busy) lines.push({ text: "● Working…", color: theme.hue.accent[200] })
+      lines.push({ text: "! Waiting for permission to run the command", color: theme.hue.accent[200] })
+    else if (status.busy) lines.push({ text: "● Working…", color: theme.hue.interactive[200] })
     else if (outcome === "failed")
       lines.push({
         text: `✗ bun run test failed — 3 tests failing in ${file}`,

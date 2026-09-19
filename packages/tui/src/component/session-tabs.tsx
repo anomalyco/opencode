@@ -120,7 +120,7 @@ const glowTextColor = (base: RGBA, glow: RGBA, index: number, width: number, lev
   tint(base, glow, 0.12 * unreadGlowIntensity(index, width) * level)
 
 function tabFeedbackColor(status: SessionTabsStatus, theme: ReturnType<typeof useTheme>) {
-  if (status.attention) return theme.hue.interactive[200]
+  if (status.attention) return theme.hue.accent[200]
   if (status.unread === "error") return theme.text.feedback.error.base
   return undefined
 }
@@ -528,8 +528,8 @@ function VerticalSessionTabs(props: {
   const compact = createMemo(() => width() < SESSION_TABS_COMPACT_BREAKPOINT)
   const tooltipWidth = () => Math.min(54, dimensions().width - width())
   const stride = () => (compact() ? 2 : 3)
-  const unreadColor = () => theme.hue.interactive[200]
-  const activeNumber = () => theme.hue.accent[200]
+  const unreadColor = () => theme.hue.accent[200]
+  const activeNumber = () => theme.hue.interactive[200]
   const idleNumber = () => tint(theme.text.formfield.base, background(), 0.55)
   const separatorUpperPulseColor = createMemo(() => tint(background(), theme.text.base, 0.04))
   const separatorLowerPulseColor = createMemo(() => tint(background(), theme.text.base, 0.05))
@@ -1291,8 +1291,8 @@ function HorizontalSessionTabs(props: {
   onCleanup(clearCloseHold)
   // A captured drag ends with a synthetic up on its drop target; do not turn that into a click.
   let suppressClick = false
-  const unreadColor = () => theme.hue.interactive[200]
-  const activeNumber = () => theme.hue.accent[200]
+  const unreadColor = () => theme.hue.accent[200]
+  const activeNumber = () => theme.hue.interactive[200]
   const idleNumber = () => tint(theme.text.formfield.base, theme.background.base, 0.55)
   const newTab = () => tabs.newTab?.() ?? false
   const activeID = createMemo(() => (newTab() ? NEW_SESSION_TAB.sessionID : tabs.current()))

@@ -142,9 +142,9 @@ function map(
       formfieldFocusedBg: exact(theme.background.formfield.focused),
       formfieldFocusedText: exact(theme.text.formfield.focused),
       selection: exact(theme.text.formfield.selected),
-      running: exact(theme.hue.accent[200]),
-      question: exact(theme.hue.interactive[200]),
-      permission: exact(theme.hue.interactive[200]),
+      running: exact(theme.hue.interactive[200]),
+      question: exact(theme.hue.accent[200]),
+      permission: exact(theme.hue.accent[200]),
       success: exact(theme.text.feedback.success.base),
       link: exact(theme.markdown.link),
       categorical: dedupeWith(
