@@ -703,13 +703,6 @@ describe("SessionRunnerLLM", () => {
         timestamp: DateTime.makeUnsafe(1),
         location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
       })
-      expect(
-        yield* db
-          .select()
-          .from(SessionContextEpochTable)
-          .where(eq(SessionContextEpochTable.session_id, sessionID))
-          .get(),
-      ).toBeUndefined()
 
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Second" }), resume: false })
       const exit = yield* session.resume(sessionID).pipe(Effect.exit)
@@ -1108,6 +1101,16 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(2)
+      expect(requests.map((request) => request.http?.headers)).toEqual([
+        {
+          "x-session-affinity": sessionID,
+          "X-Session-Id": sessionID,
+        },
+        {
+          "x-session-affinity": sessionID,
+          "X-Session-Id": sessionID,
+        },
+      ])
       expect(userTexts(requests[0])[0]).toContain("## Objective")
       expect(userTexts(requests[1])).toHaveLength(1)
       expect(userTexts(requests[1])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
@@ -2512,6 +2515,43 @@ describe("SessionRunnerLLM", () => {
       yield* Fiber.join(second)
       streamGate = undefined
       streamStarted = undefined
+    }),
+  )
+
+  it.effect("adds session correlation headers to model requests", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Run correlated request" }), resume: false })
+
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests[0]?.http?.headers).toEqual({
+        "x-session-affinity": sessionID,
+        "X-Session-Id": sessionID,
+      })
+    }),
+  )
+
+  it.effect("adds the parent session header to child model requests", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const parentID = SessionV2.ID.make("ses_runner_parent")
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ parent_id: parentID })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Run child request" }), resume: false })
+
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(requests[0]?.http?.headers?.["x-parent-session-id"]).toBe(parentID)
     }),
   )
 

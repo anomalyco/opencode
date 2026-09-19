@@ -25,12 +25,15 @@ Aşağıda ACP'yi destekleyen popüler düzenleyicilere ilişkin örnekler veril
 
 ### Zed
 
-[Zed](https://zed.dev) yapılandırmanıza (`~/.config/zed/settings.json`) ekleyin:
+Komut Paleti’nde `zed: acp registry` komutunu çalıştırarak OpenCode’u [Zed ACP Kayıt Defteri](https://zed.dev/docs/ai/external-agents#registry) üzerinden yükleyin.
+
+Bunun yerine özel bir OpenCode çalıştırılabilir dosyası kullanmak için [Zed](https://zed.dev) yapılandırmanıza (`~/.config/zed/settings.json`) ekleyin:
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }

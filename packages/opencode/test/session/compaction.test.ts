@@ -1782,6 +1782,22 @@ describe("SessionNs.getUsage", () => {
     expect(Number.isNaN(result.cost)).toBe(false)
   })
 
+  test("ignores malformed cost fields", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      cost: { input: 3, output: 15, cache: { read: 0.3, write: 3.75 } },
+    })
+    Object.assign(model.cost, { input: {} })
+
+    const result = SessionNs.getUsage({
+      model,
+      usage: usage({ inputTokens: 1_000_000, outputTokens: 100_000, totalTokens: 1_100_000 }),
+    })
+
+    expect(result.cost).toBe(1.5)
+  })
+
   test("calculates cost correctly", () => {
     const model = createModel({
       context: 100_000,

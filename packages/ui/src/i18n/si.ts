@@ -69,7 +69,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "ණය එකතු කරන්න",
   "dialog.usageExceeded.freeTier.title": "නිදහස් සීමාව ළඟා විය",
   "dialog.usageExceeded.freeTier.description":
-    "OpenCode වෙත දායක වන්න, හොඳම විවෘත මූලාශ්‍ර ආකෘති වෙත විශ්වාසනීය ප්‍රවේශය සඳහා යන්න, මසකට $5 සිට.",
+    "හොඳම විවෘත මූලාශ්‍ර ආකෘති වෙත විශ්වාසනීය ප්‍රවේශය සඳහා මසකට $10 බැගින් OpenCode Go වෙත දායක වන්න.",
   "dialog.usageExceeded.freeTier.actionLabel": "දායක වන්න",
   "dialog.usageExceeded.accountRateLimit.title": "යන සීමාවට ළඟා විය",
   "dialog.usageExceeded.accountRateLimit.description":
