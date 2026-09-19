@@ -1125,6 +1125,22 @@ const layer = Layer.effect(
                 callID: orphan.callID,
               })
             }
+            // A clean "stop" with zero visible output is indistinguishable from
+            // a normal completion on the wire: providers can terminate a stream
+            // prematurely (e.g. a spurious EOS) without any error. Surface it
+            // so silently truncated turns are diagnosable.
+            if (
+              !orphan &&
+              lastAssistant.finish === "stop" &&
+              !lastAssistant.error &&
+              !lastAssistantMsg?.parts.some((part) => part.type === "text" && part.text.trim().length > 0)
+            ) {
+              yield* Effect.logWarning("turn ended with no model output", {
+                "session.id": sessionID,
+                messageID: lastAssistant.id,
+                tokens: lastAssistant.tokens,
+              })
+            }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
             break
           }
