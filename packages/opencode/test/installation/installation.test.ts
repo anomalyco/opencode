@@ -18,12 +18,15 @@ function mockHttpClient(handler: (request: HttpClientRequest.HttpClientRequest) 
 }
 
 function mockSpawner(
-  handler: (cmd: string, args: readonly string[]) => string | { code: number; stdout?: string; stderr?: string } = () =>
-    "",
+  handler: (
+    cmd: string,
+    args: readonly string[],
+    options: ChildProcess.CommandOptions,
+  ) => string | { code: number; stdout?: string; stderr?: string } = () => "",
 ) {
   const spawner = ChildProcessSpawner.make((command) => {
     const std = ChildProcess.isStandardCommand(command) ? command : undefined
-    const result = handler(std?.command ?? "", std?.args ?? [])
+    const result = handler(std?.command ?? "", std?.args ?? [], std?.options ?? {})
     const output = typeof result === "string" ? { code: 0, stdout: result, stderr: "" } : result
     return Effect.succeed(
       ChildProcessSpawner.makeHandle({
@@ -53,7 +56,11 @@ function jsonResponse(body: unknown) {
 
 function testLayer(
   httpHandler: (request: HttpClientRequest.HttpClientRequest) => Response,
-  spawnHandler?: (cmd: string, args: readonly string[]) => string | { code: number; stdout?: string; stderr?: string },
+  spawnHandler?: (
+    cmd: string,
+    args: readonly string[],
+    options: ChildProcess.CommandOptions,
+  ) => string | { code: number; stdout?: string; stderr?: string },
 ) {
   const spawnerNode = makeGlobalNode({
     service: ChildProcessSpawner.ChildProcessSpawner,
@@ -161,22 +168,64 @@ describe("installation", () => {
       }),
     )
 
-    const brewInfoJson = JSON.stringify({
-      formulae: [{ versions: { stable: "2.1.0" } }],
-    })
+    let tapRefreshed = false
+    let tapRefreshCwd: string | undefined
+    let tapCommandAutoUpdate: string | undefined
+    let tapRefreshAutoUpdate: string | undefined
+    let tapRefreshFastForward = false
     testEffect(
       testLayer(
         () => jsonResponse({}), // HTTP not used for tap formula
-        (cmd, args) => {
+        (cmd, args, options) => {
           if (cmd === "brew" && args.includes("anomalyco/tap/opencode") && args.includes("--formula")) return "opencode"
-          if (cmd === "brew" && args.includes("--json=v2")) return brewInfoJson
+          if (cmd === "brew" && args[0] === "tap") {
+            tapCommandAutoUpdate = options.env?.HOMEBREW_NO_AUTO_UPDATE
+            return ""
+          }
+          if (cmd === "brew" && args.includes("--repo")) return "/tmp/anomalyco-tap\n"
+          if (cmd === "git" && args.includes("pull")) {
+            tapRefreshed = true
+            tapRefreshCwd = options.cwd
+            tapRefreshAutoUpdate = options.env?.HOMEBREW_NO_AUTO_UPDATE
+            tapRefreshFastForward = args.includes("--ff-only")
+            return ""
+          }
+          if (cmd === "brew" && args.includes("--json=v2")) {
+            return JSON.stringify({
+              formulae: [{ versions: { stable: tapRefreshed ? "2.1.0" : "2.0.0" } }],
+            })
+          }
           return ""
         },
       ),
-    ).effect("reads brew tap info JSON via CLI", () =>
+    ).effect("refreshes the brew tap before reading its info JSON", () =>
       Effect.gen(function* () {
         const result = yield* Installation.use.latest("brew")
         expect(result).toBe("2.1.0")
+        expect(tapRefreshed).toBe(true)
+        expect(tapRefreshCwd).toBe("/tmp/anomalyco-tap")
+        expect(tapCommandAutoUpdate).toBe("1")
+        expect(tapRefreshAutoUpdate).toBe("1")
+        expect(tapRefreshFastForward).toBe(true)
+      }),
+    )
+
+    let readStaleInfo = false
+    testEffect(
+      testLayer(
+        () => jsonResponse({ tag_name: "v2.2.0" }),
+        (cmd, args) => {
+          if (cmd === "brew" && args.includes("anomalyco/tap/opencode") && args.includes("--formula")) return "opencode"
+          if (cmd === "brew" && args[0] === "tap") return { code: 1, stderr: "offline" }
+          if (cmd === "brew" && args.includes("--json=v2")) readStaleInfo = true
+          return ""
+        },
+      ),
+    ).effect("falls back to GitHub instead of reading stale tap info when refresh fails", () =>
+      Effect.gen(function* () {
+        const result = yield* Installation.use.latest("brew")
+        expect(result).toBe("2.2.0")
+        expect(readStaleInfo).toBe(false)
       }),
     )
   })

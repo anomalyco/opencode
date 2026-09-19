@@ -130,6 +130,25 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
       return "opencode"
     })
 
+    const brewEnv = { HOMEBREW_NO_AUTO_UPDATE: "1" }
+    const refreshBrewTap = Effect.fnUntraced(function* () {
+      const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env: brewEnv })
+      if (tap.code !== 0) return tap
+      const dir = (yield* text(["brew", "--repo", "anomalyco/tap"])).trim()
+      if (!dir) return { code: 1, stdout: "", stderr: "Tap repository not found." }
+      return yield* run(["git", "pull", "--ff-only"], { cwd: dir, env: brewEnv })
+    })
+
+    const latestGitHub = Effect.fnUntraced(function* () {
+      const response = yield* httpOk.execute(
+        HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
+          HttpClientRequest.acceptJson,
+        ),
+      )
+      const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
+      return data.tag_name.replace(/^v/, "")
+    })
+
     const upgradeFailure = (method: Method, result?: { code: number; stdout: string; stderr: string }) => {
       if (method === "choco") return "not running from an elevated command shell"
       if (result) return `Upgrade failed for ${method} (exit code ${result.code}).`
@@ -211,6 +230,8 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
         if (detectedMethod === "brew") {
           const formula = yield* getBrewFormula()
           if (formula.includes("/")) {
+            const refreshed = yield* refreshBrewTap()
+            if (refreshed.code !== 0) return yield* latestGitHub()
             const infoJson = yield* text(["brew", "info", "--json=v2", formula])
             const info = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(BrewInfoV2))(infoJson)
             return info.formulae[0].versions.stable
@@ -254,13 +275,7 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
           return data.version
         }
 
-        const response = yield* httpOk.execute(
-          HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
-            HttpClientRequest.acceptJson,
-          ),
-        )
-        const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
-        return data.tag_name.replace(/^v/, "")
+        return yield* latestGitHub()
       }, Effect.orDie),
       upgrade: Effect.fn("Installation.upgrade")(function* (m: Method, target: string) {
         let upgradeResult: { code: number; stdout: string; stderr: string } | undefined
@@ -279,24 +294,14 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
             break
           case "brew": {
             const formula = yield* getBrewFormula()
-            const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
             if (formula.includes("/")) {
-              const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
-              if (tap.code !== 0) {
-                upgradeResult = tap
+              const refreshed = yield* refreshBrewTap()
+              if (refreshed.code !== 0) {
+                upgradeResult = refreshed
                 break
               }
-              const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
-              const dir = repo.trim()
-              if (dir) {
-                const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
-                if (pull.code !== 0) {
-                  upgradeResult = pull
-                  break
-                }
-              }
             }
-            upgradeResult = yield* run(["brew", "upgrade", formula], { env })
+            upgradeResult = yield* run(["brew", "upgrade", formula], { env: brewEnv })
             break
           }
           case "choco":
