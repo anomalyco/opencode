@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { AIError, HttpContext, InvalidRequestError, TransportError } from "@opencode/ai"
+import { WebSocketTransport } from "@opencode/ai/route"
 import type {
   ChannelObservation,
   WebSocketChannelExchange,
@@ -915,24 +916,95 @@ describe("SessionModelTransport", () => {
     )
   })
 
-  test("poisons instead of dropping data when the inbound queue overflows", async () => {
+  test("drains a real socket burst through a paused exchange and reuses the connection", async () => {
+    const frames = Array.from({ length: 1_024 }, (_, index) => `frame:${index}`)
+    const arrived = Deferred.makeUnsafe<void>()
+    const paused = Deferred.makeUnsafe<void>()
+    const resume = Deferred.makeUnsafe<void>()
+    const sockets: WebSocket[] = []
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request, server) {
+        if (server.upgrade(request)) return
+        return new Response("WebSocket required", { status: 400 })
+      },
+      websocket: {
+        message(socket, message) {
+          if (message === "first") return void socket.send("paused")
+          if (message === "burst") frames.forEach((frame) => socket.send(frame))
+          socket.send(`completed:${message}`)
+        },
+      },
+    })
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.suspend(() => {
+          const socket = new WebSocket(`ws://127.0.0.1:${server.port}`)
+          sockets.push(socket)
+          socket.addEventListener("message", (event) => {
+            if (event.data === "completed:burst") Effect.runSync(Deferred.succeed(arrived, undefined))
+          })
+          return WebSocketTransport.fromWebSocket(socket, { url: socket.url, headers: Headers.empty })
+        }),
+    }
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        const item = exchange("first")
+        const consumer = yield* collectComplete(executor, {
+          ...item,
+          driver: {
+            create: item.driver.create,
+            observe: (_create, frame) =>
+              frame === "paused"
+                ? Deferred.succeed(paused, undefined).pipe(
+                    Effect.andThen(Deferred.await(resume)),
+                    Effect.as({ type: "frame" as const, frame }),
+                  )
+                : Effect.succeed({ type: frame.startsWith("completed:") ? "completed" : "frame", frame }),
+          },
+        }).pipe(Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(paused)
+        sockets[0].send("burst")
+        yield* Deferred.await(arrived)
+        yield* Deferred.succeed(resume, undefined)
+        expect(yield* Fiber.join(consumer)).toEqual(["paused", ...frames, "completed:burst"])
+        expect(yield* collect(executor, exchange("second"))).toEqual(["completed:second"])
+        expect(sockets).toHaveLength(1)
+      }).pipe(Effect.ensuring(Effect.promise(() => server.stop(true)))),
+    )
+  })
+
+  test("poisons when the socket buffer overflows", async () => {
     const messages = queue<string | Uint8Array, AIError>()
-    const poisoned = Deferred.makeUnsafe<void>()
     let closed = 0
     const connector: WebSocketConnector = {
       open: () =>
         Effect.succeed({
           sendText: () =>
-            // Hold consumption at the send boundary until the reader fills and poisons the inbound queue.
             Effect.sync(() => {
-              for (let index = 0; index <= 129; index++) Queue.offerUnsafe(messages, `frame:${index}`)
-            }).pipe(Effect.andThen(Deferred.await(poisoned))),
+              Queue.offerUnsafe(messages, "first")
+              Queue.failCauseUnsafe(
+                messages,
+                Cause.fail(
+                  new AIError({
+                    reason: new TransportError({
+                      message: "WebSocket inbound queue overflow",
+                      transport: "websocket",
+                      operation: "read",
+                      code: "queue-overflow",
+                      phase: "receive",
+                    }),
+                  }),
+                ),
+              )
+            }),
           messages: Stream.fromQueue(messages).pipe(Stream.tap(() => Effect.yieldNow)),
-          close: Effect.sync(() => closed++).pipe(
-            Effect.andThen(Deferred.succeed(poisoned, undefined)),
-            Effect.andThen(Queue.shutdown(messages)),
-            Effect.asVoid,
-          ),
+          close: Effect.sync(() => closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
         }),
     }
 
@@ -955,6 +1027,90 @@ describe("SessionModelTransport", () => {
           failure: { reason: { _tag: "Transport", code: "queue-overflow", delivery: "accepted" } },
         })
         expect(closed).toBe(1)
+      }),
+    )
+  })
+
+  test("cancels a backpressured reader and reconnects for the next exchange", async () => {
+    const paused = Deferred.makeUnsafe<void>()
+    const pending = Deferred.makeUnsafe<void>()
+    const resume = Deferred.makeUnsafe<void>()
+    const connections: Array<{ closed: number }> = []
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.sync(() => {
+          const messages = queue<string | Uint8Array, AIError>()
+          const record = { closed: 0 }
+          connections.push(record)
+          return {
+            sendText: (message) =>
+              Effect.sync(() => {
+                Queue.offerAllUnsafe(messages, message === "first" ? ["first", "second", "third"] : ["completed"])
+              }),
+            messages: Stream.fromQueue(messages).pipe(
+              Stream.tap((message) => (message === "third" ? Deferred.succeed(pending, undefined) : Effect.void)),
+            ),
+            close: Effect.sync(() => record.closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+          }
+        }),
+    }
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        const item = exchange("first")
+        const consumer = yield* collect(executor, {
+          ...item,
+          driver: {
+            create: item.driver.create,
+            observe: (_create, frame) =>
+              Deferred.succeed(paused, undefined).pipe(
+                Effect.andThen(Deferred.await(resume)),
+                Effect.as({ type: "frame" as const, frame }),
+              ),
+          },
+        }).pipe(Effect.forkChild({ startImmediately: true }))
+        yield* Deferred.await(paused)
+        yield* Deferred.await(pending)
+        yield* Effect.yieldNow
+        yield* Fiber.interrupt(consumer)
+        expect(connections[0].closed).toBe(1)
+        expect(yield* collect(executor, exchange("second"))).toEqual(["completed"])
+        expect(connections).toHaveLength(2)
+      }),
+    )
+  })
+
+  test("poisons a terminal event followed by data in the same burst", async () => {
+    const connections: Array<{ closed: number }> = []
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.sync(() => {
+          const messages = queue<string | Uint8Array, AIError>()
+          const record = { closed: 0 }
+          connections.push(record)
+          return {
+            sendText: (message) =>
+              Effect.sync(() => {
+                Queue.offerAllUnsafe(messages, message === "first" ? ["completed", "late"] : ["completed"])
+              }).pipe(Effect.andThen(Effect.yieldNow)),
+            messages: Stream.fromQueue(messages),
+            close: Effect.sync(() => record.closed++).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+          }
+        }),
+    }
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        expect(yield* collect(executor, exchange("first"))).toEqual(["completed"])
+        expect(connections[0].closed).toBe(1)
+        expect(yield* collect(executor, exchange("second"))).toEqual(["completed"])
+        expect(connections).toHaveLength(2)
       }),
     )
   })

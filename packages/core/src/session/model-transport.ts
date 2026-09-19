@@ -20,7 +20,7 @@ import { SessionSchema } from "./schema.js"
 import { webSocketConstructor } from "../effect/app-node-platform.js"
 
 const ROTATE_AFTER_MS = 55 * 60 * 1000
-const INBOUND_CAPACITY = 128
+const INBOUND_CAPACITY = 1
 const CONNECT_TIMEOUT = "10 seconds"
 const IDLE_TIMEOUT = "5 minutes"
 const events = Metric.counter("opencode_session_websocket_events_total", {
@@ -235,11 +235,12 @@ export const makeLayer = (connector: WebSocketConnector) =>
                       code: "message",
                       phase: "receive",
                     })
-                  if (Queue.offerUnsafe(active.queue, message)) return undefined
-                  return yield* transportError("Session WebSocket inbound queue overflow", {
+                  // This reader can suspend; the socket adapter owns bounded burst buffering.
+                  if (yield* Queue.offer(active.queue, message)) return undefined
+                  return yield* transportError("WebSocket data arrived after the exchange stopped", {
                     url: exchange.connect.url,
                     operation: "read",
-                    code: "queue-overflow",
+                    code: "idle-data",
                     phase: "receive",
                     delivery: "accepted",
                   })
@@ -401,7 +402,8 @@ export const makeLayer = (connector: WebSocketConnector) =>
 
         let terminal: ChannelObservation | undefined
         const token = {}
-        const frames = Stream.fromQueue(active.queue).pipe(
+        // Keep frames after a terminal event in the queue so the finalizer can reject them.
+        const frames = Stream.fromEffectRepeat(Queue.take(active.queue)).pipe(
           Stream.timeoutOrElse({
             duration: IDLE_TIMEOUT,
             orElse: () =>
