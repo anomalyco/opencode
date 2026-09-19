@@ -10,6 +10,7 @@ import {
   parseDiagnostics,
   parseQuestionAnswers,
   parseQuestions,
+  subagentModelLabel,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -235,6 +236,14 @@ describe("TUI inline tool wrapping", () => {
     expect(isBackgroundSubagent({ status: "running" }, "completed")).toBeTrue()
     expect(isBackgroundSubagent({ status: "running" }, "error")).toBeFalse()
     expect(isBackgroundSubagent({ status: "completed" }, "completed")).toBeFalse()
+  })
+
+  test("labels only explicit subagent model overrides", () => {
+    const models = [{ providerID: "anthropic", id: "claude-opus-4-1", name: "Claude Opus 4.1" }]
+    expect(subagentModelLabel(undefined, models)).toBeUndefined()
+    expect(subagentModelLabel("anthropic/claude-opus-4-1", models)).toBe("Claude Opus 4.1")
+    expect(subagentModelLabel("anthropic/claude-opus-4-1#max", models)).toBe("Claude Opus 4.1 (max)")
+    expect(subagentModelLabel("custom/reviewer", models)).toBe("custom/reviewer")
   })
 
   test("snapshots consecutive grep, glob, and read rows at a narrow width", async () => {

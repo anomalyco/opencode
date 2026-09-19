@@ -19,6 +19,7 @@ function fixture(
   } = () => ({}),
   name = "@opencode/cli",
   failCleanup = false,
+  releasePackage = name,
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -34,7 +35,7 @@ function fixture(
     yield* Effect.acquireRelease(
       Effect.sync(() =>
         spyOn(globalThis, "fetch").mockImplementation(
-          Object.assign(async () => Response.json({ version: "2.3.4", metadata: { package: name } }), {
+          Object.assign(async () => Response.json({ version: "2.3.4", metadata: { package: releasePackage } }), {
             preconnect: fetch.preconnect,
           }),
         ),
@@ -106,6 +107,7 @@ const installs = [
     command: ["pnpm", "add", "--global", "--allow-build=@opencode/cli", "@opencode/cli@2.3.4-beta.1"],
   },
   { method: "yarn", command: ["yarn", "global", "add", "@opencode/cli@2.3.4-beta.1"] },
+  { method: "vp", command: ["vp", "update", "-g", "@opencode/cli@2.3.4-beta.1"] },
 ] as const
 
 installs.forEach(({ method, command }) => {
@@ -117,6 +119,25 @@ installs.forEach(({ method, command }) => {
     }),
   )
 })
+
+it.live("vp force-installs a renamed V2 package that replaces the existing binary owner", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "@opencode/cli-node")
+    yield* test.updater.upgrade("vp", "v2.3.4-beta.1")
+    expect(test.commands).toEqual([["vp", "install", "-g", "--force", "@opencode/cli-node@2.3.4-beta.1"]])
+  }),
+)
+
+it.live("vp removes the package from its managed global store", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture()
+    const removal = test.updater.removal("vp")
+    if (!removal) return yield* Effect.die("Expected vp removal command")
+    expect(removal.command).toEqual(["vp", "uninstall", "-g", "@opencode/cli"])
+    yield* removal.run
+    expect(test.commands).toEqual([["vp", "uninstall", "-g", "@opencode/cli"]])
+  }),
+)
 ;[0, 1].forEach((exitCode) => {
   it.live(`bun isolates and removes its install cache after exit ${exitCode}`, () =>
     Effect.gen(function* () {
@@ -200,11 +221,19 @@ it.live("install failures expose stderr and process errors do not report success
     expect(missing.commands).toHaveLength(1)
   }),
 )
-;(["npm", "pnpm", "bun", "yarn", undefined] as const).forEach((method) => {
+;(["npm", "pnpm", "bun", "yarn", "vp", undefined] as const).forEach((method) => {
   it.live(`method detection identifies ${method ?? "an unknown installation"} using the V2 package`, () =>
     Effect.gen(function* () {
       const test = yield* fixture((command) => ({
-        stdout: Buffer.from(command.command === method ? "@opencode/cli@2.3.4" : "opencode-ai@1.0.0"),
+        stdout: Buffer.from(
+          command.command === method
+            ? method === "vp"
+              ? JSON.stringify([{ name: "@opencode/cli", version: "2.3.4" }])
+              : "@opencode/cli@2.3.4"
+            : command.command === "vp"
+              ? "[]"
+              : "opencode-ai@1.0.0",
+        ),
       }))
       expect(yield* test.updater.method()).toBe(method)
       expect(test.commands).toEqual([
@@ -212,6 +241,7 @@ it.live("install failures expose stderr and process errors do not report success
         ["pnpm", "list", "-g", "--depth=0", "@opencode/cli"],
         ["bun", "pm", "ls", "-g"],
         ["yarn", "global", "list"],
+        ["vp", "list", "-g", "--json", "@opencode/cli"],
       ])
     }),
   )
@@ -225,7 +255,16 @@ it.live("method detection tolerates unavailable package managers", () =>
         : { error: new AppProcess.AppProcessError({ command: command.command }) },
     )
     expect(yield* test.updater.method()).toBe("yarn")
-    expect(test.commands).toHaveLength(4)
+    expect(test.commands).toHaveLength(5)
+  }),
+)
+
+it.live("vp detection ignores no-match output that repeats the package name", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture((command) => ({
+      stdout: Buffer.from(command.command === "vp" ? "No global packages matching '@opencode/cli'." : ""),
+    }))
+    expect(yield* test.updater.method()).toBeUndefined()
   }),
 )
 
@@ -265,13 +304,16 @@ if (typeof OPENCODE_CLI_NAME === "string" && OPENCODE_CLI_NAME === "opencode2-no
       expect(yield* test.updater.method()).toBe("npm")
       yield* test.updater.upgrade("npm", "v2.3.4")
       yield* test.updater.upgrade("pnpm", "v2.3.4")
+      yield* test.updater.upgrade("vp", "v2.3.4")
       expect(test.commands).toEqual([
         ["npm", "list", "-g", "--depth=0", "@opencode/cli-node"],
         ["pnpm", "list", "-g", "--depth=0", "@opencode/cli-node"],
         ["bun", "pm", "ls", "-g"],
         ["yarn", "global", "list"],
+        ["vp", "list", "-g", "--json", "@opencode/cli-node"],
         ["npm", "install", "--global", "@opencode/cli-node@2.3.4"],
         ["pnpm", "add", "--global", "--allow-build=@opencode/cli-node", "@opencode/cli-node@2.3.4"],
+        ["vp", "update", "-g", "@opencode/cli-node@2.3.4"],
       ])
     }),
   )

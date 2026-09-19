@@ -847,6 +847,7 @@ export function createData(config: CreateDataInput) {
             existing.finish = undefined
             existing.rawFinish = undefined
             existing.providerState = undefined
+            existing.time.created = event.data.started
             existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
@@ -865,7 +866,7 @@ export function createData(config: CreateDataInput) {
             metadata: event.metadata,
             content: [],
             snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
-            time: { created: event.created },
+            time: { created: event.data.started },
           })
         })
         return
@@ -1042,6 +1043,18 @@ export function createData(config: CreateDataInput) {
                 : "interrupted",
           time: { created: event.created },
         })
+        if (
+          store.session.message[event.data.sessionID]?.some(
+            (item) =>
+              item.type === "assistant" &&
+              item.content.some(
+                (part) => part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
+              ),
+          )
+        ) {
+          sync.invalidate(`session.message:${event.data.sessionID}`)
+          refresh(() => result.session.message.sync(event.data.sessionID))
+        }
         // An event can overtake the first read; queue a revalidation when that read is still active.
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)

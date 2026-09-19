@@ -17,11 +17,16 @@ const transientMessages = [
   "socket hang up",
 ]
 
-function isTransientError(error: unknown) {
+// Generated clients wrap fetch failures as ClientError("Transport", { cause }) and Bun/Node put the
+// network detail in `code`, so the transient signal may sit anywhere along the cause chain.
+function isTransientError(error: unknown, depth = 0): boolean {
   if (!error) return false
+  const code = error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : ""
   // oxlint-disable-next-line no-base-to-string -- Error input is intentionally normalized for message matching.
-  const message = String(error instanceof Error ? error.message : error).toLowerCase()
-  return transientMessages.some((item) => message.includes(item))
+  const message = `${String(error instanceof Error ? error.message : error)} ${code}`.toLowerCase()
+  if (transientMessages.some((item) => message.includes(item))) return true
+  if (!(error instanceof Error) || depth >= 5) return false
+  return isTransientError(error.cause, depth + 1)
 }
 
 export async function retry<T>(operation: () => Promise<T>, options: RetryOptions = {}): Promise<T> {

@@ -42,6 +42,18 @@ const refs = new Map<string, Set<string>>()
 // Image ids that were restored under a different id (a store without WebCrypto assigns fresh
 // ones); live references still carry the original.
 const aliases = new Map<string, string>()
+// Fetches image bytes from the store created last. Documents load without their bytes; a consumer
+// that renders or sends an image resolves its URL through here, so a history full of large
+// attachments costs nothing at startup.
+let loader: ((id: string) => Promise<string | undefined>) | undefined
+
+/** The object URL for an image reference, loading its bytes from the draft store on first use. */
+export function resolveBlobUrl(blob: { id: string; url?: string }) {
+  if (blob.url) return Promise.resolve(blob.url)
+  const existing = retained.get(aliases.get(blob.id) ?? blob.id)
+  if (existing) return Promise.resolve(existing.url)
+  return loader?.(blob.id) ?? Promise.resolve(undefined)
+}
 
 function blobUrl(id: string, blob: Blob, grace?: number) {
   const existing = retained.get(id)
@@ -120,7 +132,7 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
   const loading = new Map<string, Promise<string | undefined>>()
   const loadBlobUrl = (id: string) => {
     const existing = retained.get(id)
-    if (existing) return existing.url
+    if (existing) return Promise.resolve(existing.url)
     const pending = loading.get(id)
     if (pending) return pending
     const next = driver
@@ -130,6 +142,7 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
     loading.set(id, next)
     return next
   }
+  loader = loadBlobUrl
   const putBlob = async (blob: Blob) => {
     const id = await driver.putBlob(blob)
     return { id, url: blobUrl(id, blob, grace) }
@@ -221,9 +234,11 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
       if (ref.kind === "text" && Array.isArray(ref.ids)) {
         return (await Promise.all(ref.ids.map((id) => loadChunk(String(id))))).join("")
       }
+      // Bytes stay in the store until something renders or sends the image (see resolveBlobUrl);
+      // only an image already pinned in this page gets its URL back immediately.
       if (typeof ref.id === "string") {
-        const url = await loadBlobUrl(ref.id)
-        if (url) return { ...item, blob: { id: ref.id, url } }
+        const url = retained.get(aliases.get(ref.id) ?? ref.id)?.url
+        return { ...item, blob: url ? { id: ref.id, url } : { id: ref.id } }
       }
     }
     return Object.fromEntries(
@@ -423,7 +438,9 @@ function referenced(json: string) {
 
 export async function blobDataUrl(blob: BlobReference, mime: string) {
   const kept = retained.get(aliases.get(blob.id) ?? blob.id)
-  const data = kept ? kept.blob : await fetch(blob.url).then((response) => response.blob())
+  const url = kept ? undefined : await resolveBlobUrl(blob)
+  if (!kept && !url) throw new Error(`Attachment ${blob.id} has no stored bytes`)
+  const data = kept ? kept.blob : await fetch(url!).then((response) => response.blob())
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.addEventListener("error", () => reject(reader.error))

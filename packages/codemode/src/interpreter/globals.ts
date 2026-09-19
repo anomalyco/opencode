@@ -11,6 +11,7 @@ import { objectGlobal } from "../stdlib/object.js"
 import { regexpGlobal } from "../stdlib/regexp.js"
 import { stringGlobal } from "../stdlib/string.js"
 import { uriGlobal, urlGlobal, urlSearchParamsGlobal } from "../stdlib/url.js"
+import { headersGlobal } from "../stdlib/headers.js"
 import { coercion } from "../stdlib/value.js"
 import { base64Global, cryptoGlobal } from "../stdlib/web.js"
 import { ToolReference } from "../tool-runtime.js"
@@ -80,6 +81,7 @@ const table: Record<string, Factory> = {
   Set: (ctx) => setGlobal(ctx),
   URL: (ctx) => urlGlobal(ctx),
   URLSearchParams: (ctx) => urlSearchParamsGlobal(ctx),
+  Headers: (ctx) => headersGlobal(ctx),
   Uint8Array: (ctx) => uint8ArrayGlobal(ctx),
   TextEncoder: (ctx) => textEncoderGlobal(ctx),
   TextDecoder: (ctx) => textDecoderGlobal(ctx),

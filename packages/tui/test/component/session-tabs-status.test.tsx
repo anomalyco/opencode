@@ -38,7 +38,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     let theme!: ReturnType<typeof useTheme>
     function Colors() {
       config = useConfig()
-      theme = orientation === "vertical" ? useTheme("elevated") : useTheme()
+      theme = orientation === "vertical" ? useTheme() : useTheme()
       return null
     }
     const controller = {
@@ -139,7 +139,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
             .captureSpans()
             .lines.flatMap((line) => line.spans)
             .find((span) => span.text.trim() === (attention === "question" ? "?" : "!"))?.fg
-        expect(indicatorColor()?.toInts()).toEqual(theme.text.status[attention].toInts())
+        expect(indicatorColor()?.toInts()).toEqual(theme.hue.accent[200].toInts())
         const glow = () => {
           const colors = app
             .captureSpans()
@@ -156,7 +156,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         expect(full).toBeGreaterThan(0)
         setActive("first")
         await app.renderOnce()
-        expect(indicatorColor()?.toInts()).toEqual(theme.text.status[attention].toInts())
+        expect(indicatorColor()?.toInts()).toEqual(theme.hue.accent[200].toInts())
         const dim = glow()
         expect(dim).toBeGreaterThan(0)
         expect(dim).toBeLessThan(full)
@@ -172,7 +172,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
           .lines.flatMap((line) => line.spans)
           .find((span) => span.text.trim() === glyph)?.fg
         expect(color?.toInts()).toEqual(
-          (unread === "error" ? theme.text.feedback.error.default : theme.text.status.unread).toInts(),
+          (unread === "error" ? theme.text.feedback.error.base : theme.hue.accent[200]).toInts(),
         )
         await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
         await app.renderOnce()

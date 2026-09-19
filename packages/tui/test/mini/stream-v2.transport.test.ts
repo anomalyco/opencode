@@ -591,6 +591,7 @@ describe("V2 mini transport", () => {
       type: "session.step.started",
       durable: durable("ses_1", 1),
       data: {
+        started: 1,
         sessionID: "ses_1",
         assistantMessageID: "msg_assistant",
         agent: "build",
@@ -3930,6 +3931,7 @@ describe("V2 mini transport", () => {
       type: "session.step.started",
       durable: durable("ses_child"),
       data: {
+        started: 0,
         sessionID: "ses_child",
         assistantMessageID: "msg_child_a",
         agent: "explore",
@@ -4454,6 +4456,7 @@ describe("V2 mini transport", () => {
       type: "session.step.started",
       durable: durable("ses_child"),
       data: {
+        started: 0,
         sessionID: "ses_child",
         assistantMessageID: "msg_child_a",
         agent: "explore",
@@ -4511,6 +4514,7 @@ describe("V2 mini transport", () => {
       type: "session.step.started",
       durable: durable("ses_child"),
       data: {
+        started: 0,
         sessionID: "ses_child",
         assistantMessageID: "msg_child_a",
         agent: "explore",

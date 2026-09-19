@@ -98,7 +98,7 @@ export class OpenCodeDO {
 
   async fetch() {
     const opencode = await this.opencode
-    return Response.json(await opencode.server.status())
+    return Response.json(await opencode.server.info())
   }
 }
 ```

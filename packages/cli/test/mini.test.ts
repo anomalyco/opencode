@@ -31,14 +31,24 @@ describe("mini command", () => {
     const initial = Bun.serve({
       port: 0,
       fetch() {
-        return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
+        return Response.json({
+          version: OPENCODE_VERSION,
+          pid: process.pid,
+          urls: [],
+          paths: { tmp: "/tmp/opencode" },
+        })
       },
     })
     const replacement = Bun.serve({
       port: 0,
       fetch(request) {
         authorization.push(request.headers.get("authorization"))
-        return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
+        return Response.json({
+          version: OPENCODE_VERSION,
+          pid: process.pid,
+          urls: [],
+          paths: { tmp: "/tmp/opencode" },
+        })
       },
     })
     const controller = new AbortController()
@@ -57,7 +67,7 @@ describe("mini command", () => {
       })
       const client = await connection.reconnect?.(controller.signal)
       if (!client) throw new Error("Expected a replacement client")
-      await client.server.status()
+      await client.server.info()
 
       expect(client).not.toBe(connection.sdk)
       expect(signal).toBe(controller.signal)
@@ -147,8 +157,13 @@ describe("mini command", () => {
       async fetch(request) {
         const url = new URL(request.url)
         requests.push(url.pathname)
-        if (url.pathname === "/api/status")
-          return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
+        if (url.pathname === "/api/info")
+          return Response.json({
+            version: OPENCODE_VERSION,
+            pid: process.pid,
+            urls: [],
+            paths: { tmp: "/tmp/opencode" },
+          })
         if (url.pathname === "/api/location")
           return Response.json({ directory: process.cwd(), project: { id: "global", directory: process.cwd() } })
         if (url.pathname === "/api/session") {
@@ -190,7 +205,12 @@ describe("mini command", () => {
       port: 0,
       fetch(request) {
         if (new URL(request.url).pathname === "/api/session") return new Response("boom", { status: 500 })
-        return Response.json({ version: "incompatible", pid: process.pid, urls: [] })
+        return Response.json({
+          version: "incompatible",
+          pid: process.pid,
+          urls: [],
+          paths: { tmp: "/tmp/opencode" },
+        })
       },
     })
 

@@ -55,6 +55,7 @@ const Handlers = Runtime.handlers(Commands, {
   mini: () => import("./commands/handlers/mini"),
   run: () => import("./commands/handlers/run"),
   pair: () => import("./commands/handlers/pair"),
+  reload: () => import("./commands/handlers/reload"),
   session: {
     list: () => import("./commands/handlers/session/list"),
     delete: () => import("./commands/handlers/session/delete"),

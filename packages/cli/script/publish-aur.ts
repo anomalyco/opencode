@@ -6,10 +6,16 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { UpdateArtifact } from "../../../script/update-artifact"
 
-if (Script.channel !== "beta") throw new Error("AUR publishing requires the beta channel")
+if (Script.channel !== "beta" && Script.channel !== "latest") {
+  throw new Error("AUR publishing requires the beta or latest channel")
+}
 const name = "opencode-beta"
 const command = "opencode"
-if (!/^\d+\.\d+\.\d+-beta[.-]\d+(?:\.\d+)?$/.test(Script.version)) throw new Error("Expected a beta release version")
+const valid =
+  Script.channel === "beta"
+    ? /^\d+\.\d+\.\d+-beta[.-]\d+(?:\.\d+)?$/.test(Script.version)
+    : /^\d+\.\d+\.\d+$/.test(Script.version)
+if (!valid) throw new Error(`Expected a ${Script.channel} release version`)
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 const root = path.resolve(process.env.OPENCODE_CLI_DIST ?? path.join(dir, "dist"))

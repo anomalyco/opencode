@@ -15,6 +15,31 @@ test.each(["build", "serve"] as const)("configures minification for %s", async (
   expect(result?.config.renderer?.build?.sourcemap).toBe(true)
 })
 
+test("onboarding preview is enabled only by the development test flag", async () => {
+  const previous = process.env.OPENCODE_TEST_ONBOARDING
+  try {
+    process.env.OPENCODE_TEST_ONBOARDING = "1"
+    for (const command of ["build", "serve"] as const) {
+      const result = await loadConfigFromFile(
+        { command, mode: command === "build" ? "production" : "development" },
+        `${import.meta.dirname}/electron.vite.config.ts`,
+      )
+      expect(result?.config.renderer?.define?.["import.meta.env.OPENCODE_TEST_ONBOARDING"]).toBe(
+        JSON.stringify(command === "serve"),
+      )
+    }
+    delete process.env.OPENCODE_TEST_ONBOARDING
+    const result = await loadConfigFromFile(
+      { command: "serve", mode: "development" },
+      `${import.meta.dirname}/electron.vite.config.ts`,
+    )
+    expect(result?.config.renderer?.define?.["import.meta.env.OPENCODE_TEST_ONBOARDING"]).toBe("false")
+  } finally {
+    delete process.env.OPENCODE_TEST_ONBOARDING
+    if (previous !== undefined) process.env.OPENCODE_TEST_ONBOARDING = previous
+  }
+})
+
 test("does not package external copies of bundled dependencies", () => {
   for (const name of ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"]) {
     expect(Object.keys(pkg.dependencies)).not.toContain(name)
@@ -23,7 +48,8 @@ test("does not package external copies of bundled dependencies", () => {
   expect(pkg.devDependencies.effect).toBe("catalog:")
   expect(pkg.devDependencies["@effect/platform-node"]).toBe("catalog:")
   expect(pkg.devDependencies["drizzle-orm"]).toBe("catalog:")
-  expect(pkg.optionalDependencies["msgpackr-extract"]).toBe("3.0.4")
+  // IPC crosses the port by structured clone; no MessagePack runtime or native accelerator ships.
+  expect(Object.keys(pkg.optionalDependencies)).not.toContain("msgpackr-extract")
 })
 
 test("keeps PTY binaries without stale native packaging", () => {
@@ -76,6 +102,6 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
   expect(imports).toContain("node:sqlite")
   expect(chunks.some((chunk) => chunk.dynamicImports.includes("@zip.js/zip.js"))).toBe(true)
   expect(imports).toContain(`@lydell/node-pty-${process.platform}-${process.arch}`)
-  expect(modules.some((id) => id.includes("/node_modules/msgpackr-extract/"))).toBe(false)
-  expect(chunks.some((chunk) => chunk.code.includes("msgpackr-extract"))).toBe(true)
+  expect(modules.some((id) => id.includes("/node_modules/msgpackr"))).toBe(false)
+  expect(chunks.some((chunk) => chunk.code.includes("msgpackr"))).toBe(false)
 }, 30_000)

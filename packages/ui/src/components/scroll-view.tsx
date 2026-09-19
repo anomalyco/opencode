@@ -1,4 +1,4 @@
-import { createEffect, mergeProps, onCleanup, onMount, Show, splitProps, type ComponentProps } from "solid-js"
+import { createEffect, mergeProps, on, onCleanup, onMount, Show, splitProps, type ComponentProps } from "solid-js"
 import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
@@ -236,18 +236,22 @@ export function ScrollView(props: ScrollViewProps) {
       local.viewportRef(viewportRef)
     }
 
+    // The observer reports every target once when it starts observing (including a thumb mount that
+    // appears later), after layout. Measuring here as well would force a synchronous layout per
+    // ScrollView while the page is still rendering.
     createResizeObserver(
       () => [viewportRef, viewportRef.firstElementChild, thumbMount()].filter(Boolean) as HTMLElement[],
       updateThumb,
     )
-
-    updateThumb()
   })
 
-  createEffect(() => {
-    thumbMount()
-    updateThumb()
-  })
+  // Inputs that change the thumb without resizing anything: re-measure on change, but leave the
+  // first measurement to the observer.
+  createEffect(
+    on([() => local.verticalScrollAdjustment, vertical, horizontal, thumbMount], () => updateThumb(), {
+      defer: true,
+    }),
+  )
 
   createEffect(() => {
     if (!horizontal() || !viewportRef) return

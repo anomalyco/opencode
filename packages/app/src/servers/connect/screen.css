@@ -41,8 +41,7 @@
     color: var(--v2-text-text-muted);
   }
 
-  form,
-  .server-connect-scanner {
+  form {
     display: flex;
     flex-direction: column;
     gap: 20px;
@@ -94,26 +93,5 @@
     line-height: var(--line-height-base);
     background: var(--v2-background-bg-layer-01);
     user-select: all;
-  }
-
-  .server-connect-video {
-    position: relative;
-    aspect-ratio: 1;
-    overflow: hidden;
-    border-radius: 12px;
-    background: var(--v2-background-bg-deep);
-  }
-
-  video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .server-connect-video [role="status"] {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
   }
 }

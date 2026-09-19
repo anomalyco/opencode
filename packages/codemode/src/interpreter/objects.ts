@@ -156,6 +156,15 @@ export class URLSearchParamsObj extends Obj {
   }
 }
 
+export class HeadersObj extends Obj {
+  constructor(
+    proto: Obj,
+    readonly headers: Headers,
+  ) {
+    super(proto)
+  }
+}
+
 export class URLObj extends Obj {
   readonly searchParams: URLSearchParamsObj
   constructor(
@@ -181,13 +190,14 @@ export class Bytes extends Obj {
 /** Built-in objects that wrap a host value; data-like, but never plain data. */
 export const isWrapper = (
   value: unknown,
-): value is DateObj | RegExpObj | MapObj | SetObj | URLObj | URLSearchParamsObj | Bytes =>
+): value is DateObj | RegExpObj | MapObj | SetObj | URLObj | URLSearchParamsObj | HeadersObj | Bytes =>
   value instanceof DateObj ||
   value instanceof RegExpObj ||
   value instanceof MapObj ||
   value instanceof SetObj ||
   value instanceof URLObj ||
   value instanceof URLSearchParamsObj ||
+  value instanceof HeadersObj ||
   value instanceof Bytes
 
 const MAX_ARRAY_INDEX = 4_294_967_295

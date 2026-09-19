@@ -81,6 +81,8 @@ type ServerEntry = {
 // persisted session row, so their forms are owned by this opaque sentinel session identifier.
 const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
+// Connections remain Location-scoped, but shared remote endpoints should not receive concurrent startup bursts.
+const endpointLoads = KeyedMutex.makeUnsafe<string>()
 
 type Data = {
   servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
@@ -387,7 +389,7 @@ export const layer = (options?: Options) =>
           const { McpClient } = yield* Effect.promise(() => import("./client.js"))
           // List tools as part of connect so a failure here marks the server failed rather than
           // leaving it connected with a silently empty tool list and no path to recover.
-          const result = yield* McpClient.connect(
+          const load = McpClient.connect(
             name,
             entry.config,
             location.directory,
@@ -399,8 +401,10 @@ export const layer = (options?: Options) =>
             // A stdio server is spawned on this location's execution plane, not the host's.
             Effect.provideService(Environment.Service, environment),
             Scope.provide(scope),
-            Effect.exit,
           )
+          const result = yield* (
+            entry.config.type === "remote" ? endpointLoads.withLock(entry.config.url)(load) : load
+          ).pipe(Effect.exit)
           if (Exit.isSuccess(result)) {
             entry.client = result.value.connection
             entry.tools = result.value.tools.map((tool) => toTool(name, entry, tool))

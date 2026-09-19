@@ -27,14 +27,15 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
 
-const model = (packageName: string, settings: Record<string, unknown> = {}) =>
-  Model.Info.make({
+const model = (packageName: string, settings: Provider.Settings = {}): Model.RuntimeInfo => ({
+  ...Model.Info.make({
     ...Model.Info.default(Provider.ID.make("test-provider"), Model.ID.make("catalog-model")),
     modelID: Model.ID.make("api-model"),
     package: Provider.aisdk(packageName),
-    settings,
     limit: { context: 100, output: 20 },
-  })
+  }),
+  settings,
+})
 
 const streamModel = (events: ReadonlyArray<LanguageModelV3StreamPart>): LanguageModelV3 => ({
   specificationVersion: "v3",
@@ -155,14 +156,18 @@ it.effect("projects request settings, headers, and body overlays", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
     let body: unknown
+    let options: Record<string, unknown> | undefined
     yield* aisdk.hook.sdk((event) => {
       body = event.options.body
+      options = event.options
       event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
     })
 
     const input = model("@ai-sdk/google", {
       apiKey: "secret",
       thinkingConfig: { thinkingBudget: 1024 },
+      compaction: { type: "native" },
+      transport: "websocket",
     })
     const resolved = yield* aisdk.model({
       ...input,
@@ -185,6 +190,8 @@ it.effect("projects request settings, headers, and body overlays", () =>
     })
     expect(prepared.body.headers).toEqual({ "x-test": "header" })
     expect(body).toEqual({ safety_setting: "strict" })
+    expect(options).not.toHaveProperty("compaction")
+    expect(options).not.toHaveProperty("transport")
   }),
 )
 
@@ -804,12 +811,12 @@ it.effect("classifies retryable AI SDK failures with retry-after details", () =>
 it.effect("classifies data-only AI SDK provider codes", () =>
   Effect.gen(function* () {
     const data = {
-      error: { code: "api_error", metadata: { requestId: "data-request", retryable: true } },
+      error: { code: "rate_limit_error", metadata: { requestId: "data-request", retryable: true } },
       trace: { region: "test-region" },
     }
     const cause = apiCallError({ statusCode: 400, data })
     const error = yield* streamFailure(cause)
-    expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
+    expect(error.reason).toMatchObject({ _tag: "RateLimit" })
     expect(error.reason.http?.status).toBe(400)
     expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
     expect(error.reason.body).toBe(JSON.stringify(data))

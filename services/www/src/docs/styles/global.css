@@ -1,22 +1,38 @@
 @font-face {
-  font-family: "IBM Plex Mono";
-  src: url("../assets/fonts/IBMPlexMonoVariable-Roman.woff2") format("woff2");
-  font-weight: 100 700;
+  font-family: "OpenTUI Mono";
+  src: url("../assets/fonts/OpenTUIMono-Regular.woff2") format("woff2");
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "IBM Plex Mono";
-  src: url("../assets/fonts/IBMPlexMonoVariable-Italic.woff2") format("woff2");
-  font-weight: 100 700;
+  font-family: "OpenTUI Mono";
+  src: url("../assets/fonts/OpenTUIMono-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "OpenTUI Mono";
+  src: url("../assets/fonts/OpenTUIMono-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "OpenTUI Mono";
+  src: url("../assets/fonts/OpenTUIMono-BoldItalic.woff2") format("woff2");
+  font-weight: 700;
   font-style: italic;
   font-display: swap;
 }
 
 :root {
   color-scheme: dark;
-  --background: #000000;
+  --background: #090909;
   --foreground: #efefef;
   --muted: #929292;
   --border: #303030;
@@ -60,11 +76,9 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "OpenTUI Mono", monospace;
   font-size: 0.875rem;
-  font-weight: 400;
   line-height: 1.8em;
-  letter-spacing: 0.02em;
 }
 
 button,
@@ -782,14 +796,12 @@ main {
   gap: 1rem;
   font-size: 1.875rem;
   line-height: 1.2;
-  letter-spacing: .04em;
 }
 
 .prose h2 {
   margin: 3rem 0 0.75rem;
   font-size: 1.25rem;
   line-height: 1.5;
-  letter-spacing: .03em;
 }
 
 .prose h3 {
@@ -988,6 +1000,48 @@ main {
   background: var(--surface);
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.docs-code-tabs {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.docs-code-tabs-list {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.docs-code-tabs-list button {
+  margin-bottom: -1px;
+  padding: 0.5rem 0.875rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.docs-code-tabs-list button:hover,
+.docs-code-tabs-list button[aria-selected="true"] {
+  color: var(--foreground);
+}
+
+.docs-code-tabs-list button[aria-selected="true"] {
+  border-bottom-color: var(--foreground);
+}
+
+.docs-code-tabs-list button:focus-visible {
+  outline: 1px solid var(--foreground);
+  outline-offset: -3px;
+}
+
+.docs-code-tabs .docs-code-block pre {
+  margin: 0;
+  border: 0;
 }
 
 .prose h1 button {

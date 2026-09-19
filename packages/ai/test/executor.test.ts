@@ -309,7 +309,7 @@ describe("RequestExecutor", () => {
     }),
   )
 
-  it.effect("classifies provider overloads hidden behind HTTP 400", () =>
+  it.effect("does not let server codes override a 4xx rejection", () =>
     Effect.gen(function* () {
       const classify = (body: string) =>
         Effect.gen(function* () {
@@ -317,11 +317,11 @@ describe("RequestExecutor", () => {
           const error = yield* executor.execute(request).pipe(Effect.flip)
 
           expectAIError(error)
-          expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
+          expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
         }).pipe(Effect.provide(fixedResponse(body, { status: 400 })))
 
       yield* classify('{"code":"resource_exhausted"}')
-      yield* classify('{"code":"service_unavailable"}')
+      yield* classify('{"error":{"type":"server_error","message":"Upstream request failed: Model is unavailable."}}')
     }),
   )
 

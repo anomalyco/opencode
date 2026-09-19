@@ -2,7 +2,7 @@
 
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service } from "@opencode/client/effect/service"
-import { ServerStatus } from "@opencode/protocol/groups/server"
+import { ServerInfo } from "@opencode/protocol/groups/server"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -42,12 +42,12 @@ try {
   const credential = btoa(`opencode:${info.password}`)
   const headers = { authorization: "Basic " + credential }
   const token = encodeURIComponent(credential)
-  const status = await waitForReady(info.url, headers)
-  if (status.pid !== info.pid) throw new Error("Status process does not match registration")
-  const tokenStatus = await fetch(new URL(`/api/status?auth_token=${token}`, info.url), {
+  const serverInfo = await waitForReady(info.url, headers)
+  if (serverInfo.pid !== info.pid) throw new Error("Server info does not match registration")
+  const tokenInfo = await fetch(new URL(`/api/info?auth_token=${token}`, info.url), {
     signal: AbortSignal.timeout(5_000),
   })
-  if (tokenStatus.status !== 200) throw new Error("Compiled service rejected query authentication")
+  if (tokenInfo.status !== 200) throw new Error("Compiled service rejected query authentication")
   const tokenOpenApi = await fetch(new URL(`/openapi.json?auth_token=${token}`, info.url), {
     signal: AbortSignal.timeout(5_000),
   })
@@ -57,10 +57,10 @@ try {
   await fs.writeFile(plugin, pluginSource())
   await waitForPlugin(info.url, headers)
 
-  const unauthorizedStatus = await fetch(new URL("/api/status", info.url), {
+  const unauthorizedInfo = await fetch(new URL("/api/info", info.url), {
     signal: AbortSignal.timeout(5_000),
   })
-  if (unauthorizedStatus.status !== 401) throw new Error("Compiled service exposed status without authentication")
+  if (unauthorizedInfo.status !== 401) throw new Error("Compiled service exposed info without authentication")
   const unauthorizedOpenApi = await fetch(new URL("/openapi.json", info.url), {
     signal: AbortSignal.timeout(5_000),
   })
@@ -128,11 +128,11 @@ async function waitForRegistration() {
 async function waitForReady(url: string, headers: HeadersInit) {
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
-    const response = await fetch(new URL("/api/status", url), {
+    const response = await fetch(new URL("/api/info", url), {
       headers,
       signal: AbortSignal.timeout(1_000),
     }).catch(() => undefined)
-    if (response?.ok) return Schema.decodeUnknownPromise(ServerStatus)(await response.json())
+    if (response?.ok) return Schema.decodeUnknownPromise(ServerInfo)(await response.json())
     await Bun.sleep(25)
   }
   throw new Error("Compiled service did not become ready")

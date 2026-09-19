@@ -208,7 +208,6 @@ export const dict = {
   "dialog.provider.opencode.note": "Model pilihan, termasuk Claude, GPT, Gemini, dan lainnya",
   "dialog.provider.opencode.tagline": "Model andal yang dioptimalkan",
   "dialog.provider.opencodeGo.tagline": "Langganan terjangkau untuk semua orang",
-  "dialog.provider.anthropic.note": "Akses langsung ke model Claude, termasuk Pro dan Max",
   "dialog.provider.copilot.note": "Model AI untuk bantuan pengodean melalui GitHub Copilot",
   "dialog.provider.openai.note": "Model GPT untuk tugas AI umum yang cepat dan mumpuni",
   "dialog.provider.google.note": "Model Gemini untuk respons cepat dan terstruktur",
@@ -229,7 +228,6 @@ export const dict = {
   "dialog.provider.viewAll": "Tampilkan lebih banyak penyedia",
 
   "provider.connect.title": "Hubungkan {{provider}}",
-  "provider.connect.title.anthropicProMax": "Masuk dengan Claude Pro/Max",
   "provider.connect.selectMethod": "Pilih metode masuk untuk {{provider}}.",
   "provider.connect.method.apiKey": "Kunci API",
   "provider.connect.method.browser": "Peramban",
@@ -403,8 +401,6 @@ export const dict = {
   "prompt.action.send": "Kirim",
   "prompt.action.stop": "Hentikan",
 
-  "prompt.toast.pasteUnsupported.title": "Lampiran tidak didukung",
-  "prompt.toast.pasteUnsupported.description": "Hanya gambar, PDF, atau berkas teks yang dapat dilampirkan di sini.",
   "prompt.toast.attachmentDuplicate.title": "Berkas ini sudah diunggah",
   "prompt.toast.modelAgentRequired.title": "Pilih agen dan model",
   "prompt.toast.modelAgentRequired.description": "Pilih agen dan model sebelum mengirim prompt.",

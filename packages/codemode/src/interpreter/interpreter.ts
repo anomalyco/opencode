@@ -84,6 +84,7 @@ import {
   PromiseObj,
   SetObj,
   URLSearchParamsObj,
+  HeadersObj,
   record,
   remove,
   set,
@@ -653,7 +654,7 @@ class Frame<R> {
       const cursor = iterator === undefined ? yield* self.iterate(right, node) : undefined
       if (iterator === undefined && cursor === undefined) {
         throw invalidData(
-          `${awaiting ? "for await...of" : "for...of"} requires an array, string, Map, Set, or URLSearchParams, or custom iterator value.`,
+          `${awaiting ? "for await...of" : "for...of"} requires an array, string, Map, Set, URLSearchParams, or Headers, or custom iterator value.`,
           node,
         )
       }
@@ -756,9 +757,11 @@ class Frame<R> {
               ? value.set.values()
               : value instanceof URLSearchParamsObj
                 ? value.params.entries()
-                : value instanceof Bytes
-                  ? value.bytes.values()
-                  : undefined
+                : value instanceof HeadersObj
+                  ? value.headers.entries()
+                  : value instanceof Bytes
+                    ? value.bytes.values()
+                    : undefined
     if (iterator !== undefined) {
       const proto = this.ctx.builtins.Array
       return Effect.succeed({
@@ -1848,6 +1851,7 @@ class Frame<R> {
         value instanceof MapObj ||
         value instanceof SetObj ||
         value instanceof URLSearchParamsObj ||
+        value instanceof HeadersObj ||
         value instanceof Bytes
       ) {
         const cursor = yield* self.iterate(value, node)

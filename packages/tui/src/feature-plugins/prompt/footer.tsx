@@ -72,11 +72,11 @@ export function PromptFooter(props: {
                   onMouseUp={() => props.context.keymap.dispatch("session.child.first")}
                 >
                   <text
-                    fg={liveHovered() ? props.context.theme.text.default : props.context.theme.text.subdued}
+                    fg={liveHovered() ? props.context.theme.text.base : props.context.theme.text.muted}
                     wrapMode="none"
                   >
                     <Show when={shortcut("session.child.first")}>
-                      {(value) => <span style={{ fg: props.context.theme.text.default }}>{value()} </span>}
+                      {(value) => <span style={{ fg: props.context.theme.text.base }}>{value()} </span>}
                     </Show>
                     <Show when={subagents()}>{(value) => <>{value()}</>}</Show>
                     <Show when={subagents() && shells()}> · </Show>
@@ -85,7 +85,7 @@ export function PromptFooter(props: {
                 </box>
               </Show>
               <Show when={props.showDetails && layout().usage && status().length > 0}>
-                <text fg={props.context.theme.text.subdued} wrapMode="none" flexShrink={0}>
+                <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
                   <Show when={live()}> · </Show>
                   {status().join(" · ")}
                 </text>
@@ -93,21 +93,21 @@ export function PromptFooter(props: {
             </box>
           </Match>
           <Match when={props.showDetails && layout().shortcuts}>
-            <text fg={props.context.theme.text.default} flexShrink={0}>
-              {shortcut("agent.cycle")} <span style={{ fg: props.context.theme.text.subdued }}>agents</span>
+            <text fg={props.context.theme.text.base} flexShrink={0}>
+              {shortcut("agent.cycle")} <span style={{ fg: props.context.theme.text.muted }}>agents</span>
             </text>
           </Match>
         </Switch>
         <Show when={props.showDetails && layout().shortcuts}>
-          <text fg={props.context.theme.text.default} wrapMode="none" flexShrink={0}>
-            {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.subdued }}>commands</span>
+          <text fg={props.context.theme.text.base} wrapMode="none" flexShrink={0}>
+            {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.muted }}>commands</span>
           </text>
         </Show>
       </Match>
       <Match when={props.mode === "shell"}>
-        <text fg={props.context.theme.text.default} flexShrink={0}>
+        <text fg={props.context.theme.text.base} flexShrink={0}>
           esc{" "}
-          <span style={{ fg: props.context.theme.text.subdued }}>
+          <span style={{ fg: props.context.theme.text.muted }}>
             {dimensions().width < 44 ? "shell" : "exit shell mode"}
           </span>
         </text>

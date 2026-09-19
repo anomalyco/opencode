@@ -1,7 +1,8 @@
 import type {
-  ServerStatusOutput,
+  ServerInfoOutput,
   LocationGetInput,
   LocationGetOutput,
+  LocationReloadOutput,
   AgentListInput,
   AgentListOutput,
   AgentGetInput,
@@ -174,6 +175,8 @@ import type {
   FileListOutput,
   FileFindInput,
   FileFindOutput,
+  FileWriteInput,
+  FileWriteOutput,
   CommandListInput,
   CommandListOutput,
   SkillListInput,
@@ -276,6 +279,7 @@ interface RequestDescriptor {
   readonly query?: Record<string, unknown>
   readonly headers?: Record<string, unknown>
   readonly body?: unknown
+  readonly binaryBody?: true
   readonly successStatus: number
   readonly declaredStatuses: ReadonlyArray<number>
   readonly empty: boolean
@@ -295,14 +299,20 @@ export function make(options: ClientOptions) {
       if (value !== undefined && value !== null) headers.set(key, String(value))
     }
     for (const [key, value] of new Headers(requestOptions?.headers)) headers.set(key, value)
-    if (descriptor.body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")
+    if (descriptor.body !== undefined && !headers.has("content-type"))
+      headers.set("content-type", descriptor.binaryBody ? "application/octet-stream" : "application/json")
     return {
       url,
       init: {
         method: descriptor.method,
         signal: requestOptions?.signal,
         headers,
-        body: descriptor.body === undefined ? undefined : JSON.stringify(descriptor.body),
+        body:
+          descriptor.body === undefined
+            ? undefined
+            : descriptor.binaryBody
+              ? (descriptor.body as RequestInit["body"])
+              : JSON.stringify(descriptor.body),
       } satisfies RequestInit,
     }
   }
@@ -397,9 +407,9 @@ export function make(options: ClientOptions) {
 
   return {
     server: {
-      status: (requestOptions?: RequestOptions) =>
-        request<ServerStatusOutput>(
-          { method: "GET", path: `/api/status`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+      info: (requestOptions?: RequestOptions) =>
+        request<ServerInfoOutput>(
+          { method: "GET", path: `/api/info`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
           requestOptions,
         ),
     },
@@ -413,6 +423,17 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,
+          },
+          requestOptions,
+        ),
+      reload: (requestOptions?: RequestOptions) =>
+        request<LocationReloadOutput>(
+          {
+            method: "POST",
+            path: `/api/location/reload`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 503],
+            empty: true,
           },
           requestOptions,
         ),
@@ -1551,6 +1572,20 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,
+          },
+          requestOptions,
+        ),
+      write: (input: FileWriteInput, requestOptions?: RequestOptions) =>
+        request<FileWriteOutput>(
+          {
+            method: "POST",
+            path: `/api/experimental/fs/write`,
+            query: { location: input["location"], path: input["path"] },
+            body: input["payload"],
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+            binaryBody: true,
           },
           requestOptions,
         ),

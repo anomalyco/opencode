@@ -6,6 +6,7 @@ import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
+import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import {
   HttpMiddleware,
@@ -70,7 +71,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
-      dispatch(password, status, application, options.app?.version ?? "unknown", urls).pipe(
+      dispatch(password, status, application, options.app?.version ?? "unknown", urls, Global.Path.tmp).pipe(
         HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       ),
       errorResponseLogger,
@@ -182,18 +183,19 @@ function dispatch(
   application: Ref.Ref<Option.Option<App>>,
   version: string,
   urls: () => ReadonlyArray<string>,
+  tmp: string,
 ): App {
   const auth = ServerAuth.Config.of({ password: Option.some(password), username: "opencode" })
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(request.url, "http://localhost")
-    if (request.method === "GET" && url.pathname === "/api/status") {
-      if (!(yield* authorizedRequest(request, auth))) return unauthorized()
-      return yield* statusResponse(status, version, urls)
-    }
     const state = yield* status.current
     const app = yield* Ref.get(application)
     const ready = state.type === "ready" && Option.isSome(app)
+    if (request.method === "GET" && url.pathname === "/api/info" && !ready) {
+      if (!(yield* authorizedRequest(request, auth))) return unauthorized()
+      return yield* infoResponse(status, version, urls, tmp)
+    }
     if (
       (!ready || (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url))) &&
       !(yield* authorizedRequest(request, auth))
@@ -211,14 +213,15 @@ function unauthorized() {
   })
 }
 
-const statusResponse = Effect.fnUntraced(function* (
+const infoResponse = Effect.fnUntraced(function* (
   status: Status.Interface,
   version: string,
   urls: () => ReadonlyArray<string>,
+  tmp: string,
 ) {
   const state = yield* status.current
   return HttpServerResponse.jsonUnsafe(
-    { version, pid: process.pid, urls: urls() },
+    { version, pid: process.pid, urls: urls(), paths: { tmp } },
     {
       status: state.type === "ready" ? 200 : state.type === "failed" ? 500 : 503,
       headers: state.type === "starting" || state.type === "stopping" ? { "retry-after": "1" } : undefined,

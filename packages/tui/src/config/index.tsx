@@ -158,7 +158,7 @@ export const Info = Schema.Struct({
         description: "Show user attachment and tool-result images in the session transcript",
       }),
       tps: Schema.optional(Schema.Boolean).annotate({
-        description: "Show output tokens per second in assistant footers",
+        description: "Show average tokens per second",
       }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",

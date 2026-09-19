@@ -18,6 +18,18 @@ const channels = [
 ] as const
 
 for (const channel of channels) {
+  test(`disables security code AutoFill by default for ${channel.channel}`, async () => {
+    const previous = process.env.OPENCODE_CHANNEL
+    process.env.OPENCODE_CHANNEL = channel.channel
+    try {
+      const config = (await import(`./electron-builder.config.ts?autofill=${channel.channel}`)).default as Configuration
+      expect(config.mac?.extendInfo?.NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac).toBe(true)
+    } finally {
+      if (previous === undefined) delete process.env.OPENCODE_CHANNEL
+      else process.env.OPENCODE_CHANNEL = previous
+    }
+  })
+
   test(`includes the Windows sandbox permission hook for ${channel.channel}`, async () => {
     const previous = process.env.OPENCODE_CHANNEL
     process.env.OPENCODE_CHANNEL = channel.channel
@@ -79,6 +91,11 @@ for (const channel of channels) {
         "js-yaml/dist/js-yaml.min.js",
         "js-yaml/dist/js-yaml.mjs.map",
         "js-yaml/bin/js-yaml.js",
+        "unrelated/dist/index.js.map",
+        "unrelated/dist/index.cjs.map",
+        "unrelated/dist/index.d.ts",
+        "unrelated/dist/index.d.cts",
+        "unrelated/dist/index.d.ts.map",
       ]) {
         expect(filter(path.join(import.meta.dirname, prefix, file), statSync(import.meta.filename))).toBe(false)
       }
@@ -100,7 +117,10 @@ for (const channel of channels) {
         "js-yaml/lib/loader.js",
         "js-yaml/dist/js-yaml.mjs",
         "debug/src/index.js",
-        "unrelated/dist/index.js.map",
+        "unrelated/dist/index.js",
+        "unrelated/dist/index.cjs",
+        "unrelated/dist/data.json",
+        "unrelated/src/index.ts",
         ...["@zip.js/zip.js", "electron-updater", "builder-util-runtime", "ajv", "ajv-formats", "js-yaml"].flatMap(
           (name) => [`${name}/package.json`, `${name}/LICENSE`],
         ),
@@ -190,7 +210,7 @@ for (const channel of ["dev", "beta"] as const) {
       {
         from: "resources/",
         to: "",
-        filter: ["opencode-cli", "opencode-cli.exe"],
+        filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
       },
     ])
   })

@@ -635,6 +635,154 @@ describe("URL and URI helpers", () => {
   })
 })
 
+describe("Headers", () => {
+  test("constructs from records, pairs, Maps, and Headers; names fold to lowercase and values combine", async () => {
+    expect(
+      await value(`
+        const headers = new Headers({ "Content-Type": "text/plain", "X-Count": 1, "X-Null": null })
+        headers.append("Accept", "text/html")
+        headers.append("accept", "application/json")
+        headers.set("x-count", "2")
+        headers.delete("x-null")
+        const copy = new Headers(headers)
+        copy.set("content-type", "text/html")
+        return {
+          get: headers.get("content-type"),
+          missing: headers.get("x-missing"),
+          combined: headers.get("ACCEPT"),
+          has: [headers.has("Accept"), headers.has("x-null")],
+          count: headers.get("x-count"),
+          copied: [headers.get("content-type"), copy.get("content-type")],
+          pairs: [...new Headers([["b", "2"], ["A", "1"]])],
+          map: [...new Headers(new Map([["k", "v"]]))],
+          keys: headers.keys(),
+          values: headers.values(),
+          entries: headers.entries(),
+        }
+      `),
+    ).toEqual({
+      get: "text/plain",
+      missing: null,
+      combined: "text/html, application/json",
+      has: [true, false],
+      count: "2",
+      copied: ["text/plain", "text/html"],
+      pairs: [
+        ["a", "1"],
+        ["b", "2"],
+      ],
+      map: [["k", "v"]],
+      keys: ["accept", "content-type", "x-count"],
+      values: ["text/html, application/json", "text/plain", "2"],
+      entries: [
+        ["accept", "text/html, application/json"],
+        ["content-type", "text/plain"],
+        ["x-count", "2"],
+      ],
+    })
+  })
+
+  test("iterates in sorted order everywhere iteration is allowed, and getSetCookie keeps cookies apart", async () => {
+    expect(
+      await value(`
+        const headers = new Headers({ b: "2", a: "1" })
+        headers.append("Set-Cookie", "x=1")
+        headers.append("set-cookie", "y=2")
+        const seen = []
+        headers.forEach((value, name, self) => seen.push(name + "=" + value + ":" + (self === headers)))
+        const [first] = headers
+        function* pairs() { yield* headers }
+        return {
+          seen,
+          first,
+          spread: [...headers],
+          from: Array.from(headers).length,
+          generator: [...pairs()].length,
+          object: Object.fromEntries(headers),
+          cookies: headers.getSetCookie(),
+        }
+      `),
+    ).toEqual({
+      seen: ["a=1:true", "b=2:true", "set-cookie=x=1:true", "set-cookie=y=2:true"],
+      first: ["a", "1"],
+      spread: [
+        ["a", "1"],
+        ["b", "2"],
+        ["set-cookie", "x=1"],
+        ["set-cookie", "y=2"],
+      ],
+      from: 4,
+      generator: 4,
+      object: { a: "1", b: "2", "set-cookie": "y=2" },
+      cookies: ["x=1", "y=2"],
+    })
+  })
+
+  test("serializes as a name-to-value object at the boundary and in JSON; prints for console", async () => {
+    const result = await run(`
+      const headers = new Headers({ "X-A": "1", b: "2" })
+      console.log(headers)
+      return { headers, json: JSON.stringify({ headers }), text: String(headers), type: typeof headers, is: headers instanceof Headers }
+    `)
+    expect(result.ok && result.value).toEqual({
+      headers: { b: "2", "x-a": "1" },
+      json: '{"headers":{"b":"2","x-a":"1"}}',
+      text: "[object Headers]",
+      type: "object",
+      is: true,
+    })
+    expect(result.ok && result.logs?.[0]).toBe('Headers {"b":"2","x-a":"1"}')
+  })
+
+  test("rejects what it cannot build from, and invalid names and values, with TypeErrors the program can catch", async () => {
+    expect(
+      await value(`
+        function message(run) {
+          try { run(); return null } catch (error) { return error instanceof TypeError ? error.message : error }
+        }
+        const headers = new Headers()
+        return [
+          message(() => Headers()),
+          message(() => new Headers(null)),
+          message(() => new Headers(1)),
+          message(() => new Headers("a=1")),
+          message(() => new Headers(new Date())),
+          message(() => new Headers(() => 1)),
+          message(() => new Headers([["name"]])),
+          message(() => new Headers([["a", "b", "c"]])),
+          message(() => new Headers({ "bad name": "x" })),
+          message(() => new Headers({ name: "bad\u0000value" })),
+          message(() => headers.get("invalid\u0100")),
+          message(() => headers.has({})),
+          message(() => headers.set("a", "invalid\u0100")),
+          message(() => headers.append("a")),
+          message(() => headers.forEach()),
+          message(() => headers.forEach(1)),
+          message(() => { const get = headers.get; return get("a") }),
+        ]
+      `),
+    ).toEqual([
+      "Constructor Headers requires 'new'.",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
+      "new Headers(...) expects iterable [name, value] pairs.",
+      "new Headers(...) expects iterable [name, value] pairs.",
+      expect.stringContaining("bad name"),
+      expect.stringContaining("invalid value"),
+      expect.stringContaining("Invalid header name"),
+      expect.stringContaining("[object Object]"),
+      expect.stringContaining("invalid value"),
+      "Headers.append requires 2 arguments.",
+      "Headers.forEach requires 1 argument.",
+      "Headers.forEach expects a function callback.",
+      "Headers.prototype.get called on incompatible receiver undefined.",
+    ])
+  })
+})
+
 describe("Map", () => {
   test("get/set/has/size with chaining", async () => {
     expect(

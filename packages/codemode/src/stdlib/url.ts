@@ -107,12 +107,10 @@ export const urlGlobal = <R>(ctx: Interpreter<R>) => {
   return url
 }
 
-const readPair = <R>(ctx: Interpreter<R>, value: unknown): Effect.Effect<Array<string>, unknown, R> =>
+const readPair = <R>(ctx: Interpreter<R>, value: unknown, label: string): Effect.Effect<Array<string>, unknown, R> =>
   Effect.gen(function* () {
     const cursor = yield* ctx.iterate(value)
-    if (cursor === undefined) {
-      throw typeError("new URLSearchParams(...) expects iterable [name, value] pairs.")
-    }
+    if (cursor === undefined) throw typeError(`${label} expects iterable [name, value] pairs.`)
     const items: Array<string> = []
     while (true) {
       const step = yield* cursor.next
@@ -123,6 +121,29 @@ const readPair = <R>(ctx: Interpreter<R>, value: unknown): Effect.Effect<Array<s
           Effect.sync(() => coerceToString(step.value)),
         ),
       )
+    }
+  })
+
+/**
+ * Reads a synchronous iterable of `[name, value]` pairs as strings; `undefined` when `init` is not iterable. As in
+ * WebIDL, the whole sequence is converted before any pair's length is checked.
+ */
+export const readPairs = <R>(
+  ctx: Interpreter<R>,
+  init: unknown,
+  label: string,
+): Effect.Effect<Array<[string, string]> | undefined, unknown, R> =>
+  Effect.gen(function* () {
+    const cursor = yield* ctx.iterate(init)
+    if (cursor === undefined) return undefined
+    const pairs: Array<Array<string>> = []
+    while (true) {
+      const step = yield* cursor.next
+      if (step.done) {
+        if (pairs.some((entry) => entry.length !== 2)) throw typeError(`${label} expects iterable [name, value] pairs.`)
+        return pairs as Array<[string, string]>
+      }
+      pairs.push(yield* preserveConsumerError(cursor, readPair(ctx, step.value, label)))
     }
   })
 
@@ -139,20 +160,8 @@ const constructURLSearchParams = <R>(
     return Effect.succeed(wrap(new URLSearchParams(coerceToString(init))))
   }
   return Effect.gen(function* () {
-    const cursor = yield* ctx.iterate(init)
-    if (cursor !== undefined) {
-      const pairs: Array<Array<string>> = []
-      while (true) {
-        const step = yield* cursor.next
-        if (step.done) {
-          if (pairs.some((entry) => entry.length !== 2)) {
-            throw typeError("new URLSearchParams(...) expects iterable [name, value] pairs.")
-          }
-          return wrap(new URLSearchParams(pairs.map((entry): [string, string] => [entry[0] ?? "", entry[1] ?? ""])))
-        }
-        pairs.push(yield* preserveConsumerError(cursor, readPair(ctx, step.value)))
-      }
-    }
+    const pairs = yield* readPairs(ctx, init, "new URLSearchParams(...)")
+    if (pairs !== undefined) return wrap(new URLSearchParams(pairs))
     if (isRuntimeReference(init)) {
       throw typeError("new URLSearchParams(...) expects a query string, data object, or synchronous iterable pairs.")
     }

@@ -33,6 +33,7 @@ export default Runtime.handler(
     login({
       target: Option.getOrUndefined(input.target),
       method: Option.getOrUndefined(input.method),
+      answer: input.answer,
       server: Option.getOrUndefined(input.server),
       standalone: input.standalone,
     }).pipe(handlePromptErrors),
@@ -42,6 +43,7 @@ export default Runtime.handler(
 const login = Effect.fn("cli.auth.login.run")(function* (input: {
   target?: string
   method?: string
+  answer?: ReadonlyArray<string>
   server?: string
   standalone: boolean
 }) {
@@ -53,7 +55,7 @@ const login = Effect.fn("cli.auth.login.run")(function* (input: {
   const methods = connectMethods(integration)
   if (methods.length === 0) yield* Effect.fail(new Error(`${integration.name} has no interactive login methods`))
   const method = yield* chooseMethod(methods, input.method)
-  const answer = method.type === "command" ? undefined : yield* answerForm(method.form)
+  const answer = yield* answerForm(method.type === "command" ? undefined : method.form, input.answer)
   yield* authenticate(client, integration, method, answer)
   outro("Done")
 })

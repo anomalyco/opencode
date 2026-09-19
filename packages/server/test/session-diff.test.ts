@@ -37,6 +37,7 @@ it.live("serves turn diffs by user message with range validation", () =>
                 assistantMessageID: ids.assistant,
                 agent: Agent.defaultID,
                 model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+                started: 0,
               })
               yield* bus.publish(SessionEvent.Step.Ended, {
                 sessionID,

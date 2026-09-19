@@ -60,6 +60,7 @@ const capture = (
         providerID: Provider.ID.opencode,
       },
       providerMetadataKey,
+      started: 0,
       assistantMessageID: SessionMessage.ID.create(),
     }),
   }
@@ -163,6 +164,7 @@ testEffect(
         agent: Agent.defaultID,
         model: { id: Model.ID.make("test-model"), providerID: Provider.ID.opencode },
         providerMetadataKey: "openai",
+        started: 0,
       },
     )
     yield* publisher.publish(LLMEvent.toolCall({ ...call, providerExecuted: true }))

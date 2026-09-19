@@ -83,15 +83,15 @@ describe("OpenCode diagram palette", () => {
     }
     const theme = {
       text: {
-        default: rgb([230, 232, 240]),
-        subdued: rgb([114, 120, 138]),
+        base: rgb([230, 232, 240]),
+        muted: rgb([114, 120, 138]),
         feedback: {
-          info: { default: rgb([40, 120, 220]) },
-          success: { default: rgb([80, 180, 120]) },
-          warning: { default: rgb([220, 160, 80]) },
+          info: { base: rgb([40, 120, 220]) },
+          success: { base: rgb([80, 180, 120]) },
+          warning: { base: rgb([220, 160, 80]) },
         },
       },
-      background: { default: rgb([250, 250, 250]) },
+      background: { base: rgb([250, 250, 250]) },
       categorical: [accent],
     }
     const palette = resolveOpenCodeDiagramPalette(theme, mode)

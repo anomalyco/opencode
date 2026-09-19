@@ -1,0 +1,41 @@
+.server-connect-scanner {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+
+  p {
+    font-size: 13px;
+    line-height: var(--line-height-base);
+    color: var(--v2-text-text-muted);
+  }
+
+  button {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .server-connect-error {
+    color: var(--v2-state-fg-danger);
+  }
+
+  .server-connect-video {
+    position: relative;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 12px;
+    background: var(--v2-background-bg-deep);
+  }
+
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .server-connect-video [role="status"] {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+  }
+}

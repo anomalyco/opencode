@@ -300,5 +300,5 @@ function run<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
 }
 
 async function status(url: string) {
-  return fetch(new URL("/api/status", url), { signal: AbortSignal.timeout(1_000) }).then((response) => response.json())
+  return fetch(new URL("/api/info", url), { signal: AbortSignal.timeout(1_000) }).then((response) => response.json())
 }

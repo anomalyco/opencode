@@ -5,9 +5,10 @@ import { HttpClientError } from "effect/unstable/http"
 import { HttpApiClient } from "effect/unstable/httpapi"
 import { ClientApi } from "../../contract"
 import type {
-  ServerStatusOutput,
+  ServerInfoOutput,
   LocationGetInput,
   LocationGetOutput,
+  LocationReloadOutput,
   AgentListInput,
   AgentListOutput,
   AgentGetInput,
@@ -277,17 +278,23 @@ const preserveStream =
   <E, R>(stream: Stream.Stream<A, E, R>) =>
     stream
 
-const EndpointServerStatus = (raw: RawClient["server.server"]) => () =>
-  preserveEffect<ServerStatusOutput>()(raw["server.status"]({}).pipe(Effect.mapError(mapClientError)))
+const EndpointServerInfo = (raw: RawClient["server.server"]) => () =>
+  preserveEffect<ServerInfoOutput>()(raw["server.info"]({}).pipe(Effect.mapError(mapClientError)))
 
-const adaptGroupServer = (raw: RawClient["server.server"]) => ({ status: EndpointServerStatus(raw) })
+const adaptGroupServer = (raw: RawClient["server.server"]) => ({ info: EndpointServerInfo(raw) })
 
 const EndpointLocationGet = (raw: RawClient["server.location"]) => (input?: LocationGetInput) =>
   preserveEffect<LocationGetOutput>()(
     raw["location.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
-const adaptGroupLocation = (raw: RawClient["server.location"]) => ({ get: EndpointLocationGet(raw) })
+const EndpointLocationReload = (raw: RawClient["server.location"]) => () =>
+  preserveEffect<LocationReloadOutput>()(raw["location.reload"]({}).pipe(Effect.mapError(mapClientError)))
+
+const adaptGroupLocation = (raw: RawClient["server.location"]) => ({
+  get: EndpointLocationGet(raw),
+  reload: EndpointLocationReload(raw),
+})
 
 const EndpointAgentList = (raw: RawClient["server.agent"]) => (input?: AgentListInput) =>
   preserveEffect<AgentListOutput>()(

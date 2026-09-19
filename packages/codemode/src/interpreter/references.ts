@@ -16,6 +16,7 @@ import {
   SetObj,
   URLObj,
   URLSearchParamsObj,
+  HeadersObj,
 } from "./objects.js"
 
 /** Values that cannot cross the data boundary. */
@@ -85,6 +86,7 @@ export const describeValue = (value: unknown): string => {
   if (value instanceof SetObj) return "a Set"
   if (value instanceof URLObj) return "a URL"
   if (value instanceof URLSearchParamsObj) return "a URLSearchParams"
+  if (value instanceof HeadersObj) return "a Headers"
   if (value instanceof Bytes) return "a Uint8Array"
   if (value instanceof GeneratorObj) return "a generator"
   if (isRuntimeReference(value)) return "a function"

@@ -15,7 +15,7 @@ export default Runtime.handler(
     const urls = Option.isSome(input.url)
       ? [input.url.value]
       : (yield* Effect.tryPromise(() =>
-          OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) }).server.status(),
+          OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) }).server.info(),
         )).urls
     const info = { urls, username: "opencode", password }
     process.stdout.write(

@@ -92,6 +92,7 @@ describe("Session.diff", () => {
               agent: Agent.defaultID,
               model: { id: Model.ID.make("test-model"), providerID: Provider.ID.make("test-provider") },
               snapshot: before,
+              started: 0,
             })
             yield* Effect.promise(edit)
             if (end === "running") return assistantMessageID

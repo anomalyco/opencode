@@ -4,6 +4,7 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import {
   clonePromptHistoryComments,
   prependHistoryEntry,
+  removeHistoryEntry,
   type PromptHistoryComment,
   type PromptHistoryStoredEntry,
 } from "./entry"
@@ -13,6 +14,7 @@ import { PromptHistoryState } from "../schema"
 export type ComposerHistoryStore = {
   entries: (mode: "normal" | "shell") => PromptHistoryStoredEntry[]
   add: (prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) => void
+  remove: (prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) => void
 }
 
 type PromptHistoryState = typeof PromptHistoryState.Type
@@ -29,6 +31,13 @@ function createComposerHistoryStore(
       const current = mode === "shell" ? shell : normal
       const setCurrent = mode === "shell" ? setShell : setNormal
       const next = prependHistoryEntry(current.entries, prompt, comments)
+      if (next === current.entries) return
+      setCurrent("entries", next)
+    },
+    remove(prompt, mode, comments) {
+      const current = mode === "shell" ? shell : normal
+      const setCurrent = mode === "shell" ? setShell : setNormal
+      const next = removeHistoryEntry(current.entries, prompt, comments)
       if (next === current.entries) return
       setCurrent("entries", next)
     },
@@ -55,6 +64,13 @@ export function createComposerHistory() {
       const saved = clonePrompt(prompt)
       const metadata = clonePromptHistoryComments(comments)
       void ready.then(() => history.add(saved, mode, metadata))
+    },
+    remove(prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) {
+      const ready = mode === "shell" ? shellInit : normalInit
+      if (!(ready instanceof Promise)) return history.remove(prompt, mode, comments)
+      const saved = clonePrompt(prompt)
+      const metadata = clonePromptHistoryComments(comments)
+      void ready.then(() => history.remove(saved, mode, metadata))
     },
   }
 }

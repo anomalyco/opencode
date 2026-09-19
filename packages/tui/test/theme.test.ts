@@ -2,31 +2,43 @@ import { expect, test } from "bun:test"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TerminalColors } from "@opentui/core"
-import { DEFAULT_THEMES, hasTheme, parseTheme, resolveTheme } from "../src/theme"
+import { allThemes, hasTheme, getOpenCodeTheme, parseTheme, resolveTheme } from "../src/theme"
 import { discoverThemes } from "../src/theme/discovery"
 import { configDirectories } from "../src/util/config-directories"
 import { terminalMode } from "../src/theme/system"
+import opencodeSource from "../src/theme/assets/opencode.json" with { type: "json" }
+import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 import { tmpdir } from "./fixture/fixture"
 
-test("parseTheme delegates malformed V1 sources and rejects unknown versions", () => {
+const opencodeV1 = opencodeSource as ThemeV1Json
+
+test("rejects unrecognized theme structures", () => {
   expect(() => parseTheme({})).toThrow()
-  expect(() => parseTheme({ version: 3 })).toThrow("Unsupported theme version: 3")
+  expect(() => parseTheme({ version: 3 })).toThrow("Invalid theme")
 })
 
-test("parses unversioned and explicit V1 themes lazily once", () => {
-  const unversioned = structuredClone(DEFAULT_THEMES.opencode)
-  const explicit = { ...structuredClone(DEFAULT_THEMES.opencode), version: 1 }
+test("registers opencode as a native V2 theme", () => {
+  expect(allThemes().opencode).toBe(getOpenCodeTheme())
+  expect(parseTheme(getOpenCodeTheme()).base).toBeDefined()
+})
+
+test("detects V1 themes from their theme field and caches migrations", () => {
+  const unversioned = structuredClone(opencodeV1)
+  const explicit = { ...structuredClone(opencodeV1), version: 1 }
   const first = parseTheme(unversioned, "unversioned")
   const second = parseTheme(explicit, "explicit")
 
-  expect(first.version).toBe(2)
-  expect(second.version).toBe(2)
+  expect(first.base).toBeDefined()
+  expect(second.base).toBeDefined()
   expect(parseTheme(unversioned, "unversioned")).toBe(first)
   expect(parseTheme(explicit, "explicit")).toBe(second)
 })
 
 test("decodes native V2 themes lazily once", () => {
-  const source = { version: 2, light: { categorical: ["red"] } } as const
+  const source = {
+    base: getOpenCodeTheme().base,
+    light: { ...getOpenCodeTheme().light, categorical: ["red"] },
+  } as const
 
   const document = parseTheme(source)
   expect(document.light?.categorical).toEqual(["red"])
@@ -34,13 +46,13 @@ test("decodes native V2 themes lazily once", () => {
 })
 
 test("rejects invalid V2 themes when parsing", () => {
-  expect(() => parseTheme({ version: 2, light: { categorical: [] } }, "invalid-v2")).toThrow(
+  expect(() => parseTheme({ light: { categorical: [] } }, "invalid-v2")).toThrow(
     "Invalid theme: invalid-v2",
   )
 })
 
 test("rejects invalid V1 themes when parsing", () => {
-  const source = structuredClone(DEFAULT_THEMES.opencode)
+  const source = structuredClone(opencodeV1)
   source.defs = { ...source.defs, one: "two", two: "one" }
   source.theme.primary = "one"
 
@@ -48,8 +60,8 @@ test("rejects invalid V1 themes when parsing", () => {
 })
 
 test("replacement sources receive independent parse caches", () => {
-  const first = structuredClone(DEFAULT_THEMES.opencode)
-  const second = structuredClone(DEFAULT_THEMES.opencode)
+  const first = structuredClone(opencodeV1)
+  const second = structuredClone(opencodeV1)
   second.theme.primary = "#123456"
 
   const previous = parseTheme(first)
@@ -64,14 +76,14 @@ test("hasTheme checks theme presence", () => {
 })
 
 test("resolveTheme rejects circular color refs", () => {
-  const item = structuredClone(DEFAULT_THEMES.opencode)
+  const item = structuredClone(opencodeV1)
   item.defs = { ...item.defs, one: "two", two: "one" }
   item.theme.primary = "one"
   expect(() => resolveTheme(item, "dark")).toThrow("Circular color reference")
 })
 
 test("resolveTheme preserves full theme numeric color and marker semantics", () => {
-  const item = structuredClone(DEFAULT_THEMES.opencode)
+  const item = structuredClone(opencodeV1)
   item.theme.primary = 6
   delete item.theme.selectedListItemText
 

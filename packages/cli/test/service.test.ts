@@ -256,13 +256,15 @@ test("concurrent service processes elect one server", async () => {
     expect((await Bun.file(config).json()).password).toBe(info.password)
     expect(await Bun.file(registration + ".lock").exists()).toBe(false)
     expect(
-      await fetch(new URL("/api/status", info.url), {
+      await fetch(new URL("/api/info", info.url), {
         headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
       }).then((response) => response.json()),
     ).toEqual({
       version: info.version,
       pid: info.pid,
       urls: [info.url],
+      // The server reports the canonical tmp directory; Windows os.tmpdir() can be an 8.3 short name.
+      paths: { tmp: await fs.realpath(path.join(os.tmpdir(), "opencode")) },
     })
     const contender = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
     try {
@@ -337,7 +339,7 @@ test.each([
       const info = await waitForInfo(registration)
       await Promise.all(
         [...new Set([...cors, ...origins, "https://unlisted.example.com"])].map(async (origin) => {
-          const response = await fetch(new URL("/api/status", info.url), {
+          const response = await fetch(new URL("/api/info", info.url), {
             method: "OPTIONS",
             headers: { Origin: origin, "Access-Control-Request-Method": "GET" },
           })
@@ -440,7 +442,10 @@ test("port contender recognizes an incumbent registered during the bind race", a
     fetch() {
       requests.count += 1
       if (requests.count === 2) recognizing.resolve()
-      return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] }, { status: 503 })
+      return Response.json(
+        { version: OPENCODE_VERSION, pid: process.pid, urls: [], paths: { tmp: "/tmp/opencode" } },
+        { status: 503 },
+      )
     },
   })
   const registration = path.join(root, "state", "opencode", "service-local.json")
@@ -575,7 +580,7 @@ async function waitForInfo(file: string, accept: (info: Info) => boolean = () =>
 
 async function waitForFailed(info: Info) {
   for (let attempt = 0; attempt < 400; attempt++) {
-    const status = await fetch(new URL("/api/status", info.url), {
+    const status = await fetch(new URL("/api/info", info.url), {
       headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
     })
       .then((response) => response.status)

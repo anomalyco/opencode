@@ -1,4 +1,5 @@
 import type { ComposerHistoryEntry, ComposerPersistedState, ComposerSuggestion } from "../types"
+import { isAttachment } from "../prompt-parts"
 
 export type ComposerInteractionState = {
   mode: "normal" | "shell"
@@ -236,7 +237,7 @@ function populated(persisted: ComposerPersistedState) {
   return (
     !!promptText(persisted).trim() ||
     persisted.context.items.length > 0 ||
-    persisted.prompt.some((part) => part.type === "file" || part.type === "image")
+    persisted.prompt.some((part) => part.type === "file" || isAttachment(part))
   )
 }
 
