@@ -14,6 +14,10 @@ const prefixes = {
 } as const
 
 const LENGTH = 26
+// See packages/schema/src/identifier.ts: a 6-byte time field truncates
+// Date.now() * 0x1000 and wraps every ~795 days. 7 bytes hold it until 2527.
+const TIME_BYTES = 7
+const TIME_CHARS = TIME_BYTES * 2
 
 // State for monotonic ID generation
 let lastTimestamp = 0
@@ -61,18 +65,18 @@ export function create(prefix: string, direction: "descending" | "ascending", ti
 
   now = direction === "descending" ? ~now : now
 
-  const timeBytes = Buffer.alloc(6)
-  for (let i = 0; i < 6; i++) {
-    timeBytes[i] = Number((now >> BigInt(40 - 8 * i)) & BigInt(0xff))
+  const timeBytes = Buffer.alloc(TIME_BYTES)
+  for (let i = 0; i < TIME_BYTES; i++) {
+    timeBytes[i] = Number((now >> BigInt(8 * (TIME_BYTES - 1 - i))) & BigInt(0xff))
   }
 
-  return prefix + "_" + timeBytes.toString("hex") + randomBase62(LENGTH - 12)
+  return prefix + "_" + timeBytes.toString("hex") + randomBase62(LENGTH - TIME_CHARS)
 }
 
 /** Extract timestamp from an ascending ID. Does not work with descending IDs. */
 export function timestamp(id: string): number {
   const prefix = id.split("_")[0]
-  const hex = id.slice(prefix.length + 1, prefix.length + 13)
+  const hex = id.slice(prefix.length + 1, prefix.length + 1 + TIME_CHARS)
   const encoded = BigInt("0x" + hex)
   return Number(encoded / BigInt(0x1000))
 }
