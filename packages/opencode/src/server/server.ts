@@ -11,6 +11,7 @@ import { HttpApiApp } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
 import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
 import { PublicApi } from "./routes/instance/httpapi/public"
+import { resolveBindAddresses } from "@opencode-ai/server/bind-address"
 import type { CorsOptions } from "@opencode-ai/server/cors"
 import { lazy } from "@/util/lazy"
 
@@ -35,11 +36,14 @@ type ListenOptions = CorsOptions & {
   mdns?: boolean
   mdnsDomain?: string
 }
-type ListenerState = {
-  scope: Scope.Scope
-  server: Context.Service.Shape<typeof HttpServer.HttpServer>
+type ListenerEntry = {
   http: ListenerServer
   websockets: WebSocketTracker.Interface
+}
+type ListenerState = {
+  scope: Scope.Scope
+  port: number
+  listeners: readonly ListenerEntry[]
 }
 type EffectListener = Omit<Listener, "stop"> & {
   stop: (close?: boolean) => Effect.Effect<void>
@@ -82,67 +86,69 @@ export async function listen(opts: ListenOptions): Promise<Listener> {
 
 const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unknown> = Effect.fn("Server.listen")(
   function* (opts: ListenOptions) {
-    const state = yield* startWithPortFallback(opts)
-    const address = yield* tcpAddress(state)
-    const listenerUrl = makeURL(opts.hostname, address.port)
-    const unpublishMdns = yield* setupMdns(opts, address.port, state.scope)
+    const addresses = yield* resolveBindAddresses(opts.hostname)
+    const state = yield* startWithPortFallback(opts, addresses)
+    const listenerUrl = makeURL(opts.hostname, state.port)
+    const unpublishMdns = yield* setupMdns(opts, state.port, state.scope)
     url = listenerUrl
 
     return {
       hostname: opts.hostname,
-      port: address.port,
+      port: state.port,
       url: listenerUrl,
       stop: yield* makeStop(state, unpublishMdns, listenerUrl),
     }
   },
 )
 
-function listenerLayer(opts: ListenOptions, port: number) {
-  return HttpRouter.serve(HttpApiApp.createRoutes(opts), {
-    middleware: disposeMiddleware,
-    disableLogger: true,
-    disableListenLog: true,
-  }).pipe(
-    Layer.provideMerge(AppNodeBuilder.build(WebSocketTracker.node)),
-    Layer.provideMerge(serverLayer({ port, hostname: opts.hostname })),
-    // Install a fresh `ConfigProvider` per listener so `Config.string(...)`
-    // reads reflect the current `process.env`. Effect's default
-    // `ConfigProvider` snapshots `process.env` on first read and caches the
-    // result on a module-singleton Reference; without overriding it here,
-    // every later `Server.listen()` keeps observing that initial snapshot.
-    Layer.provide(ConfigProvider.layer(ConfigProvider.fromEnv())),
-  )
-}
-
-function startWithPortFallback(opts: ListenOptions) {
-  if (opts.port !== 0) return startListener(opts, opts.port)
+function startWithPortFallback(opts: ListenOptions, addresses: readonly string[]) {
+  if (opts.port !== 0) return startListener(opts, opts.port, addresses)
   // Match the legacy listener port-resolution behavior: explicit `0` prefers
   // 4096 first, then any free port.
-  return startListener(opts, 4096).pipe(Effect.catch(() => startListener(opts, 0)))
+  return startListener(opts, 4096, addresses).pipe(Effect.catch(() => startListener(opts, 0, addresses)))
 }
 
-function startListener(opts: ListenOptions, port: number) {
+function startListener(opts: ListenOptions, port: number, addresses: readonly string[]) {
   const scope = Scope.makeUnsafe()
-  return Layer.buildWithMemoMap(listenerLayer(opts, port), Layer.makeMemoMapUnsafe(), scope).pipe(
-    Effect.provide(HttpApiApp.context),
-    Effect.onError(() => Scope.close(scope, Exit.void).pipe(Effect.ignore)),
-    Effect.map(
-      (ctx): ListenerState => ({
-        scope,
-        server: Context.get(ctx, HttpServer.HttpServer),
+  const memoMap = Layer.makeMemoMapUnsafe()
+  const routes = HttpApiApp.createRoutes(opts)
+  const websockets = AppNodeBuilder.build(WebSocketTracker.node)
+  const bind = (port: number, hostname: string) =>
+    Layer.buildWithMemoMap(
+      HttpRouter.serve(routes, {
+        middleware: disposeMiddleware,
+        disableLogger: true,
+        disableListenLog: true,
+      }).pipe(
+        Layer.provideMerge(websockets),
+        Layer.provideMerge(serverLayer({ port, hostname })),
+        // Install a fresh `ConfigProvider` per listener so `Config.string(...)`
+        // reads reflect the current `process.env`. Effect's default
+        // `ConfigProvider` snapshots `process.env` on first read and caches the
+        // result on a module-singleton Reference; without overriding it here,
+        // every later `Server.listen()` keeps observing that initial snapshot.
+        Layer.provide(ConfigProvider.layer(ConfigProvider.fromEnv())),
+      ),
+      memoMap,
+      scope,
+    ).pipe(
+      Effect.provide(HttpApiApp.context),
+      Effect.map((ctx) => ({
+        address: Context.get(ctx, HttpServer.HttpServer).address,
         http: Context.get(ctx, ListenerServerService),
         websockets: Context.get(ctx, WebSocketTracker.Service),
-      }),
-    ),
-  )
-}
-
-function tcpAddress(state: ListenerState) {
+      })),
+    )
   return Effect.gen(function* () {
-    if (state.server.address._tag === "TcpAddress") return state.server.address
-    yield* Scope.close(state.scope, Exit.void).pipe(Effect.ignore)
-    return yield* Effect.die(new Error(`Unexpected HttpServer address tag: ${state.server.address._tag}`))
-  })
+    const first = yield* bind(port, addresses[0])
+    if (first.address._tag !== "TcpAddress")
+      return yield* Effect.die(new Error(`Unexpected HttpServer address tag: ${first.address._tag}`))
+    // An ephemeral port resolves per socket, so the remaining addresses bind
+    // the concrete port the first one was given.
+    const bound = first.address.port
+    const rest = yield* Effect.forEach(addresses.slice(1), (hostname) => bind(bound, hostname))
+    return { scope, port: bound, listeners: [first, ...rest] } satisfies ListenerState
+  }).pipe(Effect.onError(() => Scope.close(scope, Exit.void).pipe(Effect.ignore)))
 }
 
 function makeURL(hostname: string, port: number) {
@@ -193,7 +199,10 @@ function makeStop(state: ListenerState, unpublishMdns: Effect.Effect<void>, list
 }
 
 function forceClose(state: ListenerState) {
-  return Effect.all([state.http.closeAll, state.websockets.closeAll], { concurrency: "unbounded", discard: true })
+  return Effect.all(
+    state.listeners.flatMap((listener) => [listener.http.closeAll, listener.websockets.closeAll]),
+    { concurrency: "unbounded", discard: true },
+  )
 }
 
 function serverLayer(opts: { port: number; hostname: string }) {
