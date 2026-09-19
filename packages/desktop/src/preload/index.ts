@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
-import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
+import { DragCancelEvent, IpcTransportPort, IpcTransportPortRequest } from "../shared/ipc-transport"
 import { windowIDFromArguments } from "../shared/window-bootstrap"
 
 ipcRenderer.on(IpcTransportPort, (event) => {
@@ -11,5 +11,6 @@ ipcRenderer.on(DragCancelEvent, () => window.dispatchEvent(new Event(DragCancelE
 
 contextBridge.exposeInMainWorld("electron", {
   windowID: windowIDFromArguments(process.argv),
+  requestRpcPort: () => ipcRenderer.send(IpcTransportPortRequest),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
 })

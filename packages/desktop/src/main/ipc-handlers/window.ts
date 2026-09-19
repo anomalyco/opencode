@@ -2,7 +2,14 @@ import { BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { WindowRpcs } from "../../shared/ipc-rpc"
 import { IpcPortHandoff } from "../ipc-transport"
-import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, setWindowThemeReady, updateTitlebar } from "../windows"
+import {
+  getPinchZoomEnabled,
+  saveWindowPrepaint,
+  setPinchZoomEnabled,
+  setTitlebar,
+  setWindowThemeReady,
+  updateTitlebar,
+} from "../windows"
 import { sender } from "./context"
 
 export const windowHandlers = WindowRpcs.toLayer(
@@ -37,6 +44,11 @@ export const windowHandlers = WindowRpcs.toLayer(
         Effect.sync(() => {
           const win = BrowserWindow.fromWebContents(sender(handoff, context))
           if (win) setTitlebar(win, theme)
+        }),
+      WindowSavePrepaint: ({ html }, context) =>
+        Effect.promise(() => {
+          const win = BrowserWindow.fromWebContents(sender(handoff, context))
+          return win ? saveWindowPrepaint(win, html) : Promise.resolve()
         }),
     })
   }),

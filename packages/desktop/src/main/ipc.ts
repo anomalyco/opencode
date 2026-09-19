@@ -1,10 +1,10 @@
 export * as Ipc from "./ipc"
 
-import { app, BrowserWindow, MessageChannelMain } from "electron"
+import { app, BrowserWindow, ipcMain, MessageChannelMain } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
-import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
+import { DragCancelEvent, IpcTransportPort, IpcTransportPortRequest } from "../shared/ipc-transport"
 import { DesktopFiles, openExternalURL } from "./files"
 import { appHandlers } from "./ipc-handlers/app"
 import { eventHandlers } from "./ipc-handlers/events"
@@ -23,6 +23,7 @@ import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
 import { Updater } from "./updater"
 import { getLastFocusedWindow } from "./windows"
+import { isRendererUrl } from "./windows/protocol"
 import { Wsl } from "./wsl/start"
 
 const services = Layer.mergeAll(DesktopFiles.layer, Wsl.layer, Ssh.layer)
@@ -65,18 +66,27 @@ export const registerIpcHandlers = Effect.gen(function* () {
       if (input.type !== "keyDown" || input.key !== "Escape") return
       win.webContents.send(DragCancelEvent)
     })
-    win.webContents.on("did-finish-load", () => {
-      if (win.isDestroyed() || win.webContents.isDestroyed()) return
-      const channel = new MessageChannelMain()
-      handoff.bind(win.webContents, channel.port1)
-      win.webContents.postMessage(IpcTransportPort, null, [channel.port2])
-    })
+  }
+  // Each renderer document asks for its own port once its client is listening; see ipc-client.ts.
+  const handPort = (event: Electron.IpcMainEvent) => {
+    const contents = event.sender
+    if (contents.isDestroyed() || !isRendererUrl(contents.getURL())) return
+    const channel = new MessageChannelMain()
+    handoff.bind(contents, channel.port1)
+    contents.postMessage(IpcTransportPort, null, [channel.port2])
   }
   yield* Effect.sync(() => {
     app.on("browser-window-created", wire)
     BrowserWindow.getAllWindows().forEach((win) => wire({} as Electron.Event, win))
+    ipcMain.on(IpcTransportPortRequest, handPort)
   })
-  yield* Effect.addFinalizer(() => Effect.sync(() => app.off("browser-window-created", wire)))
+  yield* Effect.addFinalizer(
+    () =>
+      Effect.sync(() => {
+        app.off("browser-window-created", wire)
+        ipcMain.off(IpcTransportPortRequest, handPort)
+      }),
+  )
   return {
     installMenu: () => createMenu(menu),
   }

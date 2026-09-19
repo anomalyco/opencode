@@ -1,54 +1,19 @@
-import { net, protocol } from "electron"
 import type { BrowserWindow } from "electron"
-import { pathToFileURL } from "node:url"
-import { Effect, Path } from "effect"
+import { Effect } from "effect"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
-import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
 import { rendererHost, rendererProtocol } from "./scheme"
+import { serveRenderer, setRendererProtocolLogger } from "./serve"
 
+// The entry module normally registers the handler before the bundle loads; this only wires its
+// logging, and registers it when the entry module did not (development, or a window created later).
 export const registerRendererProtocol = Effect.fn("Window.registerRendererProtocol")(function* () {
-  const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
   const runFork = Effect.runForkWith(yield* Effect.context<never>())
-  if (protocol.isProtocolHandled(rendererProtocol)) return
-
-  protocol.handle(rendererProtocol, async (request) => {
-    const url = new URL(request.url)
-    if (url.host !== rendererHost) {
-      runFork(scoped("protocol", Effect.logWarning("rejected host", { url: request.url })))
-      return new Response("Not found", { status: 404 })
-    }
-
-    const file = path.resolve(paths.rendererRoot, `.${decodeURIComponent(url.pathname)}`)
-    const rel = path.relative(paths.rendererRoot, file)
-    if (rel.startsWith("..") || path.isAbsolute(rel)) {
-      runFork(scoped("protocol", Effect.logWarning("rejected path", { url: request.url, file })))
-      return new Response("Not found", { status: 404 })
-    }
-
-    try {
-      const range = request.headers.get("range")
-      const response = await net.fetch(pathToFileURL(file).toString(), { headers: range ? { range } : undefined })
-      if (response.status >= 400) {
-        runFork(
-          scoped(
-            "protocol",
-            Effect.logError("fetch failed", {
-              url: request.url,
-              file,
-              status: response.status,
-              statusText: response.statusText,
-            }),
-          ),
-        )
-      }
-      return addDocumentPolicy(response, file)
-    } catch (error) {
-      runFork(scoped("protocol", Effect.logError("fetch error", { url: request.url, file, error })))
-      return new Response("Not found", { status: 404 })
-    }
-  })
+  setRendererProtocolLogger((level, message, data) =>
+    runFork(scoped("protocol", level === "error" ? Effect.logError(message, data) : Effect.logWarning(message, data))),
+  )
+  serveRenderer(paths.rendererRoot)
 })
 
 export function loadWindow(win: BrowserWindow, html: string) {
@@ -68,11 +33,4 @@ export function isRendererUrl(value?: string, html = false) {
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (!devUrl || !URL.canParse(devUrl)) return false
   return url.origin === new URL(devUrl).origin
-}
-
-function addDocumentPolicy(response: Response, file: string) {
-  if (!file.toLowerCase().endsWith(".html")) return response
-  const headers = new Headers(response.headers)
-  headers.set(documentPolicyHeader, jsCallStacksDocumentPolicy)
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }

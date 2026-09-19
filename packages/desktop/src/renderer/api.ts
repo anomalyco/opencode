@@ -112,6 +112,7 @@ export const api: ElectronAPI = {
 
   getWindowID: () => window.electron.windowID,
   themeReady: () => invoke("WindowThemeReady"),
+  savePrepaint: (html) => invoke("WindowSavePrepaint", { html }),
   onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
   onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb(mutable(event.urls))),
 

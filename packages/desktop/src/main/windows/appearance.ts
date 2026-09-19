@@ -99,7 +99,9 @@ export function setZoomFactor(win: BrowserWindow, factor: number) {
 
 export function wireZoom(win: BrowserWindow) {
   pinchZoomEnabled.set(win, getPinchZoomEnabled())
-  win.webContents.setZoomFactor(1)
+  // Setting the factor forces a visual-properties round trip with the renderer, so leave it alone
+  // when it is already 1: the first window has a document on screen by now.
+  if (win.webContents.getZoomFactor() !== 1) win.webContents.setZoomFactor(1)
   win.webContents.on("zoom-changed", (event, direction) => {
     event.preventDefault()
     if (pinchZoomEnabled.get(win)) {

@@ -24,6 +24,9 @@ export const WindowSetTitlebar = Rpc.make("WindowSetTitlebar", {
     }),
   },
 })
+export const WindowSavePrepaint = Rpc.make("WindowSavePrepaint", {
+  payload: { html: Schema.String },
+})
 export const WindowRpcs = RpcGroup.make(
   WindowThemeReady,
   WindowGetFocused,
@@ -35,4 +38,5 @@ export const WindowRpcs = RpcGroup.make(
   WindowGetPinchZoomEnabled,
   WindowSetPinchZoomEnabled,
   WindowSetTitlebar,
+  WindowSavePrepaint,
 )

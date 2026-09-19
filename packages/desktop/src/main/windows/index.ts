@@ -22,6 +22,8 @@ import {
   wireZoom,
 } from "./appearance"
 import { loadWindow, registerRendererProtocol } from "./protocol"
+import { removePrepaint, writePrepaint } from "./prepaint"
+import { releaseRenderer } from "./serve"
 import { createWindowRegistry } from "./registry"
 import { makeWindowRecovery } from "./recovery"
 import { takeEarlyWindow, type EarlyWindow } from "./early"
@@ -29,6 +31,7 @@ import { manageWindowState, readWindowState, resolveWindowState, windowStateFile
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
 const themeReady = new WeakMap<BrowserWindow, () => void>()
+const windowIDs = new WeakMap<BrowserWindow, string>()
 const displays = {
   all: () => screen.getAllDisplays().map((display) => display.bounds),
   primary: () => screen.getPrimaryDisplay().bounds,
@@ -80,6 +83,12 @@ export function setWindowThemeReady(win: BrowserWindow) {
   themeReady.get(win)?.()
 }
 
+export function saveWindowPrepaint(win: BrowserWindow, html: string) {
+  const id = windowIDs.get(win)
+  if (!id) return Promise.resolve()
+  return writePrepaint(id, html)
+}
+
 export const makeMainWindows = Effect.fn("Window.make")(function* () {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -126,7 +135,13 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
     if (!early) manageWindowState(win, stateFile, state, displays)
     register(win, id)
     wireFullscreen(win)
-    loadWindow(win, "index.html")
+    if (early?.loaded) {
+      runFork(
+        Effect.tryPromise(() => releaseRenderer(win, paths.rendererRoot)).pipe(
+          Effect.catch((error) => scoped("window", Effect.logError("failed to release early renderer", { id, error }))),
+        ),
+      )
+    } else loadWindow(win, "index.html")
     wireZoom(win)
     let contentReady = false
     let appliedTheme = false
@@ -163,6 +178,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
 
   const register = (win: BrowserWindow, id: string) => {
     registry.register(id, win)
+    windowIDs.set(win, id)
     win.on("focus", () => registry.focused(id))
     // Windows emits session-end, but not before-quit, during shutdown and logoff.
     win.on("session-end", () => registry.setQuitting())
@@ -172,6 +188,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
         Effect.gen(function* () {
           yield* Effect.try(() => storage.state.clear(windowDataFile(id)))
           yield* fs.remove(path.join(app.getPath("userData"), windowStateFile(id)), { force: true })
+          yield* Effect.promise(() => removePrepaint(id))
         }).pipe(
           Effect.catch((error) => scoped("window", Effect.logError("failed to clean window state", { id, error }))),
         ),

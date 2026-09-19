@@ -54,6 +54,8 @@ export type ElectronAPI = {
   draftBlobGet(id: string): Promise<ArrayBuffer | null>
   getWindowID(): string
   themeReady(): Promise<void>
+  // Persists the sanitized shell markup the next launch shows before the renderer boots.
+  savePrepaint(html: string): Promise<void>
   onMenuCommand(cb: (id: string) => void): () => void
   onDeepLink(cb: (urls: string[]) => void): () => void
   openDirectoryPicker(opts?: DirectoryPickerOptions): Promise<string | string[] | null>

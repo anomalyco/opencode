@@ -6,9 +6,11 @@ import { windowIDArgument } from "../../shared/window-bootstrap"
 import { WINDOW_IDS_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 import { storedBackgroundColor, titlebarOverlay } from "./defaults"
+import { rendererHost, rendererProtocol } from "./scheme"
+import { earlyQuery, serveRenderer } from "./serve"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile, type WindowState } from "./window-state"
 
-export type EarlyWindow = { id: string; win: BrowserWindow; state: WindowState; shownAt: number }
+export type EarlyWindow = { id: string; win: BrowserWindow; state: WindowState; shownAt: number; loaded: boolean }
 
 let pending: EarlyWindow | undefined
 
@@ -56,7 +58,16 @@ export function createEarlyWindow() {
     pending = undefined
     app.quit()
   })
-  pending = { id, win, state, shownAt: Date.now() }
+  // In production the window starts its document now - the same index.html without its scripts,
+  // carrying the shell snapshot from the previous run - so the renderer process and the stylesheet
+  // are ready, and the user sees their UI, while the bundle and the layers load. The scripts are
+  // added when restoreWindows() adopts the window. Development keeps loading from the dev server.
+  const loaded = !process.env.ELECTRON_RENDERER_URL
+  if (loaded) {
+    serveRenderer(path.join(root, "../renderer"))
+    void win.loadURL(`${rendererProtocol}://${rendererHost}/index.html?${earlyQuery}=${encodeURIComponent(id)}`)
+  }
+  pending = { id, win, state, shownAt: Date.now(), loaded }
 }
 
 export function takeEarlyWindow() {

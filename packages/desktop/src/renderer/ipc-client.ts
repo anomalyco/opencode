@@ -13,6 +13,8 @@ type InvokeResult<Tag extends InvokeTag> =
   ReturnType<DesktopRpcClient[Tag]> extends Effect.Effect<infer Value, unknown> ? Value : never
 type EventValue<Tag extends EventTag> = Extract<DesktopEvent, { readonly _tag: Tag }>
 
+// The renderer asks for its port rather than receiving one on load: the first window's document
+// is on screen before its scripts, and before the main process has its IPC layer, exist.
 const port = new Promise<MessagePort>((resolve) => {
   const onMessage = (event: MessageEvent) => {
     if (event.source !== window || event.data !== IpcTransportPort) return
@@ -22,6 +24,7 @@ const port = new Promise<MessagePort>((resolve) => {
     resolve(value)
   }
   window.addEventListener("message", onMessage)
+  window.electron.requestRpcPort()
 })
 
 const ClientProtocolLive = Layer.unwrap(Effect.promise(() => port).pipe(Effect.map((value) => clientProtocol(value))))

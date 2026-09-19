@@ -19,7 +19,7 @@ import {
 } from "@opencode/app/desktop"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
-import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
+import { createEffect, createMemo, createResource, lazy, on, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ElectronAPI } from "./api-types"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
@@ -27,6 +27,7 @@ import { createDesktopPlatform } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
 import { createSidecarResolver, initializationData, sidecarHttp } from "./startup/initialization"
 import { preloadStoredLocale } from "./startup/locale"
+import { hasPrepaint, removePrepaint, schedulePrepaintCapture } from "./startup/prepaint"
 import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
@@ -40,9 +41,12 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
   const initialUrl = getLastActiveUrl(windowState.id)
   const url = new URL(initialUrl, "http://localhost")
   const route = currentRoute(url.pathname, url.search)
+  // With a shell snapshot on screen the splash is not needed; the snapshot is removed when the
+  // interface would otherwise be revealed.
+  const prepaint = hasPrepaint()
   const [startup, setStartup] = createStore({
     ready: false,
-    visible: true,
+    visible: !prepaint,
     themeReady: false,
     onboardingReady: false,
     drawingReady: false,
@@ -72,6 +76,25 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
     if (!startup.themeReady || firstLaunch.loading) return
     void props.api.themeReady()
   })
+  createEffect(() => {
+    if (!prepaint || firstLaunch() !== true) return
+    removePrepaint()
+    setStartup("visible", true)
+  })
+  createEffect(() => {
+    if (!readyToReveal()) return
+    removePrepaint()
+    schedulePrepaintCapture(props.api.savePrepaint)
+  })
+  createEffect(
+    on(
+      () => startup.route,
+      () => {
+        if (startup.ready) schedulePrepaintCapture(props.api.savePrepaint, 3000)
+      },
+      { defer: true },
+    ),
+  )
 
   function ReadyApp() {
     const wslServers = useWslServers()
