@@ -4,7 +4,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, on, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, on, onMount, type Accessor, type JSX } from "solid-js"
 import { Composer } from "@/composer/composer"
 import { useComposerState } from "@/composer/persistence"
 import { createComposerControls } from "@/composer/selection"
@@ -213,15 +213,16 @@ export function createActiveSessionRegion(input: {
 
 export type ActiveSessionRegionModel = ReturnType<typeof createActiveSessionRegion>
 
-export function ActiveSessionComposerRegion(props: { model: SessionComposerController }) {
+export function ActiveSessionComposerRegion(props: { model: SessionComposerController; footer?: JSX.Element }) {
   return (
     <SessionComposerRegion
       controller={props.model.region}
       composer={
         <div class="relative">
           <SessionQueuePanel queue={props.model.queue} />
-          <div class="relative z-10">
+          <div class="relative z-10 rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep">
             <Composer model={props.model.composer} borderUnderlay />
+            {props.footer}
           </div>
         </div>
       }

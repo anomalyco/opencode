@@ -7,6 +7,7 @@ import { Icon } from "@opencode/ui/icon"
 import { getFilename } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
 import { sameDirectory } from "@/workspaces/paths"
+import { WorkspaceSubmenu } from "@/workspaces/submenu"
 
 export function PromptWorkspaceSelector(props: {
   value: string
@@ -27,20 +28,11 @@ export function PromptWorkspaceSelector(props: {
   const placement = createMemo(() =>
     summary() ? (language.direction() === "rtl" ? "right-start" : "left-start") : "bottom",
   )
-  const [search, setSearch] = createStore({ workspaces: "", branches: "" })
-  let searchInput: HTMLInputElement | undefined
+  const [search, setSearch] = createStore({ branches: "" })
   let branchSearchInput: HTMLInputElement | undefined
-  let focusSearch = false
   const branchTruncation = createTruncatedText()
-  const focusWorktreeSearch = () =>
-    requestAnimationFrame(() => requestAnimationFrame(() => searchInput?.focus({ preventScroll: true })))
   let pending: { type: "select"; value: string } | { type: "create"; branch: string } | { type: "viewAll" } | undefined
   const selected = () => (sameDirectory(props.value, props.projectRoot) ? "main" : props.value)
-  const workspaces = createMemo(() => {
-    const query = search.workspaces.trim().toLowerCase()
-    if (!query) return props.workspaces
-    return props.workspaces.filter((workspace) => getFilename(workspace).toLowerCase().includes(query))
-  })
   const icon = () => {
     if (selected() === "main") return "monitor"
     if (selected() === "create") return "plus"
@@ -51,7 +43,7 @@ export function PromptWorkspaceSelector(props: {
   }
   const onOpenChange = (open: boolean) => {
     if (open) {
-      setSearch({ workspaces: "", branches: "" })
+      setSearch({ branches: "" })
       props.onSearch("")
       return
     }
@@ -167,87 +159,12 @@ export function PromptWorkspaceSelector(props: {
               </Menu.Group>
               <Show when={props.workspaces.length > 0}>
                 <Menu.Separator class="h-[0.5px]" />
-                <Menu.Sub
-                  gutter={0}
-                  overlap
-                  overflowPadding={24}
-                  onOpenChange={(open) => {
-                    if (!open) {
-                      focusSearch = false
-                      return
-                    }
-                    if (!focusSearch || props.workspaces.length < 10) return
-                    focusSearch = false
-                    focusWorktreeSearch()
-                  }}
-                >
-                  <Menu.SubTrigger
-                    onClick={focusWorktreeSearch}
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "ArrowRight" ||
-                        event.key === "ArrowLeft" ||
-                        event.key === "Enter" ||
-                        event.key === " "
-                      )
-                        focusSearch = true
-                    }}
-                  >
-                    <Icon name="outline-worktree" />
-                    <span class="min-w-0 flex-1 truncate">
-                      {language.t("session.new.workspace.existing").replace(/(…|\.{3})$/, "")}
-                    </span>
-                  </Menu.SubTrigger>
-                  <Menu.Portal>
-                    <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-y-auto !pb-0 [&>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">
-                      <Show when={props.workspaces.length >= 10}>
-                        <div class="flex h-7 items-center gap-2 rounded-sm ps-3 pe-2 text-v2-icon-icon-muted">
-                          <Icon name="magnifying-glass" size="small" class="shrink-0" />
-                          <input
-                            ref={(element) => {
-                              searchInput = element
-                            }}
-                            value={search.workspaces}
-                            placeholder={language.t("session.new.workspace.search.placeholder")}
-                            aria-label={language.t("session.new.workspace.search.placeholder")}
-                            class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
-                            onInput={(event) => setSearch("workspaces", event.currentTarget.value)}
-                            onKeyDown={(event) => {
-                              if (
-                                event.key === "Escape" ||
-                                event.key === "ArrowDown" ||
-                                event.key === "ArrowUp" ||
-                                event.key === "Enter"
-                              )
-                                return
-                              event.stopPropagation()
-                            }}
-                          />
-                        </div>
-                      </Show>
-                      <For each={workspaces()}>
-                        {(workspace) => (
-                          <Menu.Item onSelect={() => select(workspace)}>
-                            <Icon name="outline-worktree" />
-                            <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
-                            <Show when={selected() === workspace}>
-                              <Icon name="check" size="small" class="shrink-0" />
-                            </Show>
-                          </Menu.Item>
-                        )}
-                      </For>
-                      <Show when={search.workspaces.trim() && workspaces().length === 0}>
-                        <div class="px-3 py-4 text-center text-[13px] font-[440] leading-5 text-v2-text-text-muted">
-                          {language.t("session.new.workspace.search.empty")}
-                        </div>
-                      </Show>
-                      <Menu.Separator class="h-[0.5px]" />
-                      <Menu.Item onSelect={() => (pending = { type: "viewAll" })}>
-                        <span class="min-w-0 flex-1 truncate">{language.t("common.viewAll")}</span>
-                      </Menu.Item>
-                    </Menu.SubContent>
-                  </Menu.Portal>
-                </Menu.Sub>
+                <WorkspaceSubmenu
+                  directories={props.workspaces}
+                  selected={selected()}
+                  onSelect={select}
+                  onViewAll={() => (pending = { type: "viewAll" })}
+                />
               </Show>
             </Menu.Content>
           </Menu.Portal>

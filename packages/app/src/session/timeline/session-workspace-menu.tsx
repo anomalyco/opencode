@@ -1,8 +1,7 @@
 import { Menu } from "@opencode/ui/menu"
 import { Icon } from "@opencode/ui/icon"
-import { getFilename } from "@opencode/util/path"
 import { createStore } from "solid-js/store"
-import { createSignal, For, onCleanup, Show, type ComponentProps, type JSX } from "solid-js"
+import { createSignal, onCleanup, Show, type ComponentProps, type JSX } from "solid-js"
 import type { Project } from "@/runtime/server/types"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
@@ -11,6 +10,7 @@ import { pathKey } from "@/workspaces/path-key"
 import { showToast } from "@/shell/notifications/toast"
 import { containsDirectory, sameDirectory, workspaceDirectories } from "@/workspaces/paths"
 import { createWorktree } from "@/workspaces/create"
+import { WorkspaceSubmenu } from "@/workspaces/submenu"
 
 export function SessionWorkspaceMenu(props: {
   eligible?: boolean
@@ -112,24 +112,11 @@ export function SessionWorkspaceMenu(props: {
               {language.t("workspace.new")}
             </Menu.Item>
             <Show when={workspaces().length > 0}>
-              <Menu.Sub gutter={0} overlap overflowPadding={24}>
-                <Menu.SubTrigger>
-                  <Icon name="outline-worktree" />
-                  {language.t("session.new.workspace.existing").replace(/(…|\.{3})$/, "")}
-                </Menu.SubTrigger>
-                <Menu.Portal>
-                  <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-y-auto !pb-0 [&>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">
-                    <For each={workspaces()}>
-                      {(workspace) => (
-                        <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(workspace)}>
-                          <Icon name="outline-worktree" />
-                          <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
-                        </Menu.Item>
-                      )}
-                    </For>
-                  </Menu.SubContent>
-                </Menu.Portal>
-              </Menu.Sub>
+              <WorkspaceSubmenu
+                directories={workspaces()}
+                disabled={!!store.selected || blocked()}
+                onSelect={(directory) => void move(directory)}
+              />
             </Show>
           </Menu.Group>
         </Menu.Content>
