@@ -3,6 +3,7 @@ import type {
   Event,
   EventMessagePartDelta,
   EventMessagePartUpdated,
+  EventSessionUpdated,
   OpencodeClient,
   Part,
   SessionMessageResponse,
@@ -40,6 +41,7 @@ export class Subscription {
   private readonly abort = new AbortController()
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
+  private readonly titles = new Map<string, string>()
   private readonly connectionWaiters = new Set<() => void>()
   private readonly idleWaiters = new Map<string, Set<ReturnType<typeof signal>>>()
   private readonly permission: ACPPermission.Handler
@@ -95,6 +97,8 @@ export class Subscription {
       case "session.status":
         if (event.properties.status.type === "idle") this.idle(event.properties.sessionID)
         return
+      case "session.updated":
+        return this.handleSessionUpdated(event)
       case "permission.asked":
         this.permission.handle(event)
         return
@@ -186,6 +190,23 @@ export class Subscription {
     if (!waiters) return
     this.idleWaiters.delete(sessionId)
     for (const waiter of waiters) waiter.resolve()
+  }
+
+  private async handleSessionUpdated(event: EventSessionUpdated) {
+    const title = event.properties.info.title
+    if (!title) return
+    const sessionId = event.properties.sessionID
+    const session = await Effect.runPromise(this.input.session.tryGet(sessionId))
+    if (!session) return
+    if (this.titles.get(session.id) === title) return
+    this.titles.set(session.id, title)
+    await this.input.connection.sessionUpdate({
+      sessionId: session.id,
+      update: {
+        sessionUpdate: "session_info_update",
+        title,
+      },
+    })
   }
 
   private async handlePartUpdated(event: EventMessagePartUpdated) {
