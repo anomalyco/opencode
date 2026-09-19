@@ -37,6 +37,7 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
         enableJsonResponse: true,
       })
       let listToolsCalls = 0
+      let registerCalls = 0
       let requiresAuth = true
 
       if (capabilities === "tools") {
@@ -87,6 +88,7 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
             })
           }
           if (url.pathname === "/register") {
+            registerCalls++
             const metadata = (await request.json()) as Record<string, unknown>
             return Response.json({ ...metadata, client_id: "replacement-client" }, { status: 201 })
           }
@@ -121,6 +123,7 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
           requiresAuth = false
         },
         listToolsCalls: () => listToolsCalls,
+        registerCalls: () => registerCalls,
         close: async () => {
           await http.stop(true)
           await protocol.close()
@@ -184,7 +187,7 @@ mcpTest.instance("state() returns existing state when one is saved", () =>
   }),
 )
 
-mcpTest.instance("pending provider does not expose or overwrite existing credentials before commit", () =>
+mcpTest.instance("pending provider reuses existing credentials before commit", () =>
   Effect.gen(function* () {
     const auth = yield* McpAuth.Service
     const name = "test-pending-credentials"
@@ -194,10 +197,54 @@ mcpTest.instance("pending provider does not expose or overwrite existing credent
     yield* auth.updateClientInfo(name, { clientId: "old-client" }, url)
     yield* auth.updateTokens(name, { accessToken: "old-token" }, url)
 
-    expect(yield* Effect.promise(() => provider.clientInformation())).toBeUndefined()
-    expect(yield* Effect.promise(() => provider.tokens())).toBeUndefined()
+    expect(yield* Effect.promise(() => provider.clientInformation())).toMatchObject({ client_id: "old-client" })
+    expect(yield* Effect.promise(() => provider.tokens())).toMatchObject({ access_token: "old-token" })
     expect((yield* auth.get(name))?.tokens?.accessToken).toBe("old-token")
     expect((yield* auth.get(name))?.clientInfo?.clientId).toBe("old-client")
+  }),
+)
+
+mcpTest.instance("pending provider keeps client registration when committing refreshed tokens", () =>
+  Effect.gen(function* () {
+    const auth = yield* McpAuth.Service
+    const name = "test-pending-refresh"
+    const url = "https://example.com/mcp"
+    const provider = new McpOAuthPendingProvider(name, url, {}, { onRedirect: async () => {} }, auth)
+
+    yield* auth.updateClientInfo(name, { clientId: "old-client", clientSecret: "old-secret" }, url)
+    yield* Effect.promise(() =>
+      provider.saveTokens({
+        access_token: "new-token",
+        refresh_token: "new-refresh",
+        token_type: "Bearer",
+      }),
+    )
+    yield* Effect.promise(() => provider.commit())
+
+    const entry = yield* auth.get(name)
+    expect(entry?.tokens?.accessToken).toBe("new-token")
+    expect(entry?.tokens?.refreshToken).toBe("new-refresh")
+    expect(entry?.clientInfo).toMatchObject({ clientId: "old-client", clientSecret: "old-secret" })
+    expect(entry?.serverUrl).toBe(url)
+  }),
+)
+
+mcpTest.instance("startAuth reuses stored dynamic client registration", () =>
+  Effect.gen(function* () {
+    yield* stopOAuthCallback
+    const server = yield* serveOAuthMcp()
+    const mcp = yield* MCP.Service
+    const auth = yield* McpAuth.Service
+    const name = "test-stored-client-reuse"
+
+    yield* auth.updateClientInfo(name, { clientId: "stored-client" }, server.url)
+    yield* mcp.add(name, remote(server.url))
+
+    const result = yield* mcp.startAuth(name)
+    const authorizationUrl = new URL(result.authorizationUrl)
+    expect(authorizationUrl.pathname).toBe("/authorize")
+    expect(authorizationUrl.searchParams.get("client_id")).toBe("stored-client")
+    expect(server.registerCalls()).toBe(0)
   }),
 )
 
@@ -226,7 +273,7 @@ mcpTest.instance("failed reauthentication preserves existing credentials", () =>
   }),
 )
 
-mcpTest.instance("successful reauthentication commits replacement credentials", () =>
+mcpTest.instance("successful reauthentication commits replacement tokens", () =>
   Effect.gen(function* () {
     yield* stopOAuthCallback
     const server = yield* serveOAuthMcp()
@@ -243,7 +290,7 @@ mcpTest.instance("successful reauthentication commits replacement credentials", 
     expect((yield* mcp.finishAuth(name, "valid-code")).status).toBe("connected")
     const entry = yield* auth.get(name)
     expect(entry?.tokens?.accessToken).toBe("replacement-token")
-    expect(entry?.clientInfo?.clientId).toBe("replacement-client")
+    expect(entry?.clientInfo?.clientId).toBe("old-client")
     expect(entry?.serverUrl).toBe(server.url)
   }),
 )
