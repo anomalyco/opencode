@@ -300,6 +300,15 @@ function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv
     })
   }
 
+  if (process.platform === "linux") {
+    return ChildProcess.make("nice", ["-n", "19", "ionice", "-c", "2", "-n", "7", shell, "-c", command], {
+      cwd,
+      env,
+      stdin: "ignore",
+      detached: true,
+    })
+  }
+
   return ChildProcess.make(command, [], {
     shell,
     cwd,

@@ -88,6 +88,14 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 The username defaults to `opencode` but can be changed with `OPENCODE_SERVER_USERNAME`.
 
+### Window Title
+
+To change the browser tab title, set the `OPENCODE_WEB_UI_TITLE` environment variable. This is useful when running multiple instances, since every tab would otherwise be titled `OpenCode`:
+
+```bash
+OPENCODE_WEB_UI_TITLE="work: frontend" opencode web
+```
+
 ---
 
 ## Using the Web Interface
