@@ -337,6 +337,13 @@ function reply(
   }
 }
 
+function userPrompt(input: LLM.StreamInput) {
+  const message = input.messages.at(-1)
+  if (message?.role !== "user") return ""
+  if (typeof message.content === "string") return message.content
+  return message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+}
+
 function plugin(ready: Deferred.Deferred<void>) {
   return Layer.mock(Plugin.Service)({
     trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
@@ -1055,8 +1062,8 @@ describe("session.compaction.process", () => {
     "retains a split turn suffix when a later message fits the preserve token budget",
     () => {
       const stub = llm()
-      let captured = ""
-      stub.push(reply("summary", (input) => (captured = JSON.stringify(input.messages))))
+      let prompt = ""
+      stub.push(reply("summary", (input) => (prompt = userPrompt(input))))
       return Effect.gen(function* () {
         const test = yield* TestInstance
         const ssn = yield* SessionNs.Service
@@ -1089,8 +1096,10 @@ describe("session.compaction.process", () => {
         const part = yield* readCompactionPart(session.id)
         expect(part?.type).toBe("compaction")
         expect(part?.tail_start_id).toBe(keep.id)
-        expect(captured).toContain("zzzz")
-        expect(captured).not.toContain("keep tail")
+        const auditStart = prompt.indexOf("<recent-preserved-tail-audit>")
+        expect(auditStart).toBeGreaterThan(0)
+        expect(prompt.slice(0, auditStart)).toContain("zzzz")
+        expect(prompt.slice(auditStart)).toContain("keep tail")
 
         const filtered = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
         expect(filtered.map((msg) => msg.info.id).slice(0, 3)).toEqual([parent!, expect.any(String), keep.id])
@@ -1373,13 +1382,15 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
-    "summarizes only the head while keeping recent tail out of summary input",
+    "serializes the head separately from the preserved tail audit",
     () => {
       const stub = llm()
       let messages: LLM.StreamInput["messages"] = []
+      let prompt = ""
       stub.push(
         reply("summary", (input) => {
           messages = input.messages
+          prompt = userPrompt(input)
         }),
       )
       return Effect.gen(function* () {
@@ -1408,9 +1419,14 @@ describe("session.compaction.process", () => {
         expect(captured.indexOf("[User]: older context")).toBeLessThan(
           captured.indexOf("Create a new anchored summary"),
         )
-        expect(captured).toContain("[User]: older context")
-        expect(captured).not.toContain("keep this turn")
-        expect(captured).not.toContain("and this one too")
+        const conversation = prompt.match(/<conversation>\n([\s\S]*?)\n<\/conversation>/)?.[1] ?? ""
+        const audit = prompt.match(/<recent-preserved-tail-audit>[\s\S]*?<\/recent-preserved-tail-audit>/)?.[0] ?? ""
+        const history = conversation.slice(0, conversation.indexOf("<recent-preserved-tail-audit>"))
+        expect(history).toContain("[User]: older context")
+        expect(history).not.toContain("keep this turn")
+        expect(history).not.toContain("and this one too")
+        expect(audit).toContain("keep this turn")
+        expect(audit).toContain("and this one too")
         expect(captured).not.toContain("What did we do so far?")
       }).pipe(
         withCompaction({
@@ -1418,6 +1434,106 @@ describe("session.compaction.process", () => {
           config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }),
         }),
       )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "audits only transformed visible tail text",
+    () => {
+      const stub = llm()
+      let prompt = ""
+      let transforms = 0
+      const redactingPlugin = Layer.succeed(
+        Plugin.Service,
+        Plugin.Service.of({
+          trigger: (<Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
+            if (name === "experimental.chat.messages.transform") {
+              transforms++
+              const transformed = output as { messages: Array<{ parts: SessionV1.Part[] }> }
+              transformed.messages = transformed.messages.map((message) => ({
+                ...message,
+                parts: message.parts.map((part) =>
+                  part.type === "text" ? { ...part, text: part.text.replaceAll("raw secret", "[redacted]") } : part,
+                ),
+              }))
+            }
+            return Effect.succeed(output)
+          }) as Plugin.Interface["trigger"],
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        }),
+      )
+      stub.push(reply("summary", (input) => (prompt = userPrompt(input))))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "older context")
+        const recent = yield* createUserMessage(session.id, "raw secret")
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: recent.id,
+          sessionID: session.id,
+          type: "text",
+          text: "ignored tail text",
+          ignored: true,
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: recent.id,
+          sessionID: session.id,
+          type: "text",
+          text: "synthetic tail text",
+          synthetic: true,
+        })
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        expect(transforms).toBe(1)
+        expect(prompt).toContain("[redacted]")
+        expect(prompt).not.toContain("raw secret")
+        expect(prompt).not.toContain("ignored tail text")
+        expect(prompt).not.toContain("synthetic tail text")
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          plugin: redactingPlugin,
+          config: cfg({ tail_turns: 1, preserve_recent_tokens: 10_000 }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "retains the newest completion evidence when the tail audit is truncated",
+    () => {
+      const stub = llm()
+      let prompt = ""
+      const completion = "COMPLETION_MARKER"
+      stub.push(reply("summary", (input) => (prompt = userPrompt(input))))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "older context")
+        for (let index = 0; index < 5; index++) {
+          yield* createUserMessage(session.id, `${"x".repeat(1_200)}${index === 4 ? completion : `old-${index}`}`)
+        }
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        const audit = prompt.match(/<recent-preserved-tail-audit>[\s\S]*?<\/recent-preserved-tail-audit>/)?.[0] ?? ""
+        expect(audit).toContain(completion)
+        expect(audit.length).toBeLessThanOrEqual(4_000)
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 5, preserve_recent_tokens: 10_000 }) }))
     },
     { git: true },
   )
