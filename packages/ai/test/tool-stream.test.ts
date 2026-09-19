@@ -23,11 +23,9 @@ describe("ToolStream", () => {
 
       expect(first.events).toEqual([
         { type: "tool-input-start", id: "call_1", name: "lookup" },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"', input: {} },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
       ])
-      expect(second.events).toEqual([
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}', input: { query: "weather" } },
-      ])
+      expect(second.events).toEqual([{ type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' }])
       expect(finished).toEqual({
         tools: {},
         events: [
@@ -38,7 +36,7 @@ describe("ToolStream", () => {
     }),
   )
 
-  test("exposes cumulative partial string values", () => {
+  test("streams raw deltas without reparsing cumulative input", () => {
     const result = ToolStream.appendOrStart(
       ADAPTER,
       ToolStream.empty<number>(),
@@ -53,24 +51,7 @@ describe("ToolStream", () => {
       id: "call_1",
       name: "lookup",
       text: '{"query":"wea',
-      input: { query: "wea" },
     })
-  })
-
-  test("defaults partial input to an empty object when the accumulated value cannot be parsed", () => {
-    const result = ToolStream.appendOrStart(
-      ADAPTER,
-      ToolStream.empty<number>(),
-      0,
-      { id: "call_1", name: "lookup", text: "x" },
-      "missing tool",
-    )
-    if (ToolStream.isError(result)) throw result
-
-    expect(result.events).toEqual([
-      { type: "tool-input-start", id: "call_1", name: "lookup" },
-      { type: "tool-input-delta", id: "call_1", name: "lookup", text: "x", input: {} },
-    ])
   })
 
   it.effect("keeps accumulated identity when later deltas contain empty strings", () =>

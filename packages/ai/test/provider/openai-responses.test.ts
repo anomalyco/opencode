@@ -4038,14 +4038,12 @@ describe("OpenAI Responses route", () => {
           id: "call_1",
           name: "lookup",
           text: '{"query"',
-          input: {},
         },
         {
           type: "tool-input-delta",
           id: "call_1",
           name: "lookup",
           text: ':"weather"}',
-          input: { query: "weather" },
         },
         {
           type: "tool-input-end",
@@ -4117,8 +4115,8 @@ describe("OpenAI Responses route", () => {
       const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.events.filter((event) => event.type === "tool-input-delta")).toEqual([
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"', input: {} },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}', input: { query: "weather" } },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
       ])
       expect(response.events.filter(LLMEvent.is.toolInputEnd)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
@@ -4156,7 +4154,6 @@ describe("OpenAI Responses route", () => {
           id: "call_1",
           name: "lookup",
           text: '{"query":"weather"}',
-          input: { query: "weather" },
         },
       ])
       expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({ input: { query: "weather" } })
@@ -4217,7 +4214,6 @@ describe("OpenAI Responses route", () => {
           id: "call_1",
           name: "lookup",
           text: '{"query":"streamed"}',
-          input: { query: "streamed" },
         },
       ])
       expect(response.events.find(LLMEvent.is.toolCall)).toMatchObject({ input: { query: "final" } })

@@ -313,7 +313,6 @@ describe("Open Responses basic-item lifecycles", () => {
           id: "call_bc1eb4b42e70ee53",
           name: "get_weather",
           text: '{\n  "city": "Paris"\n}',
-          input: { city: "Paris" },
         },
         { type: "tool-input-end", id: "call_bc1eb4b42e70ee53", name: "get_weather", providerMetadata },
         {
