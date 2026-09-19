@@ -6,6 +6,7 @@
   "license": "MIT",
   "exports": {
     "./*": "./src/components/*.tsx",
+    "./message-part-groups": "./src/components/message-part-groups.ts",
     "./session-diff": "./src/components/session-diff.ts",
     "./message-file": "./src/components/message-file.ts",
     "./message-part-text": "./src/components/message-part-text.ts",
