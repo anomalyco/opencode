@@ -169,6 +169,14 @@ function draw(
   }
 }
 
+// Bun compiled binaries put an internal bunfs path in argv[1]; argv0 is the
+// invoked name. npm symlinks keep it; pnpm shims may rewrite it to node.
+export function resumeBinName(argv0 = process.argv0) {
+  const name = (argv0.split(/[/\\]/).at(-1) ?? "").replace(/\.exe$/i, "")
+  if (name === "opencode" || name === "opencode2") return name
+  return "opencode"
+}
+
 function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): ScrollbackSnapshot {
   const width = Math.max(1, ctx.width)
   const meta = splashMeta(input)
@@ -181,7 +189,7 @@ function buildExit(input: SplashWriterInput, ctx: ScrollbackRenderContext): Scro
   const body_left = (mark[0]?.length ?? 0) + 2
   const session = "Session  "
   const label = "Continue "
-  const command = `opencode mini -s ${meta.session_id}`
+  const command = `${resumeBinName()} mini -s ${meta.session_id}`
   const wide = body_left + stringWidth(label + command) <= width
   const commandHeight = wide ? 1 : Math.ceil(stringWidth(command) / width)
 

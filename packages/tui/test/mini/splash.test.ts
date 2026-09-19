@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { RGBA, TextAttributes, type ScrollbackWriter } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
-import { entrySplash, entrySplashLayout, exitSplash } from "../../src/mini/splash"
+import { entrySplash, entrySplashLayout, exitSplash, resumeBinName } from "../../src/mini/splash"
 import { stringWidth } from "../../src/util/string-width"
 
 const preview = "1.18.4-preview.abcd1234567890"
@@ -175,7 +175,7 @@ test.each(
     exitSplash({ ...input, title: "Review mini layout", session_id: sessionID, theme }),
     input.width,
   )
-  const command = `opencode mini -s ${sessionID}`
+  const command = `${resumeBinName()} mini -s ${sessionID}`
   const commandRows =
     input.width >= 80 ? [result.rows[2].slice(result.rows[2].indexOf("opencode"))] : result.rows.slice(1)
   const reconstructed = commandRows
@@ -194,3 +194,23 @@ test.each(
   expect(result.spans.find((span) => span.text.includes("opencode"))?.fg.intent).toBe("default")
   expect(result.spans.find((span) => span.text.includes("opencode"))?.fg.toInts()).toEqual(theme.right.toInts())
 })
+
+test.each([
+  ["opencode", "opencode"],
+  ["opencode2", "opencode2"],
+  ["/usr/local/bin/opencode", "opencode"],
+  ["/usr/local/bin/opencode2", "opencode2"],
+  ["./opencode2", "opencode2"],
+  ["opencode.exe", "opencode"],
+  ["opencode2.exe", "opencode2"],
+  ["C:\\Program Files\\opencode2.exe", "opencode2"],
+])("resume command uses invoked bin %s", (argv0, bin) => {
+  expect(resumeBinName(argv0)).toBe(bin)
+})
+
+test.each(["", "bun", "node", "/usr/bin/node", "opencode2-node", "/$bunfs/root/src/index.ts", "pnpm.cjs"])(
+  "resume command falls back to opencode for unrecognized argv0 %s",
+  (argv0) => {
+    expect(resumeBinName(argv0)).toBe("opencode")
+  },
+)
