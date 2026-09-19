@@ -6209,3 +6209,93 @@ describe("ProviderTransform.options - kimi family adaptive thinking", () => {
     expect(result.thinking).toBeUndefined()
   })
 })
+
+describe("ProviderTransform reasoning effort boundaries - issue 47975", () => {
+  const reasoningModel = (reasoning_options: ModelsDev.Model["reasoning_options"]) =>
+    ({ reasoning_options }) as ModelsDev.Model
+  const openaiTarget = (id = "muse-spark") =>
+    ({
+      id,
+      providerID: "meta",
+      api: { id, npm: "@ai-sdk/openai", url: "https://api.ai.meta.com/v1" },
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+    }) as any
+  const compatibleTarget = (id = "muse-spark-1.3-contributor") =>
+    ({
+      id,
+      providerID: "opencode-go",
+      api: { id, npm: "@ai-sdk/openai-compatible", url: "https://opencode.ai/zen/go/v1" },
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+    }) as any
+
+  test("does not expose max variant for OpenAI-family models", () => {
+    const result = ProviderTransform.reasoningVariants(
+      reasoningModel([{ type: "effort", values: ["low", "max"] }]),
+      openaiTarget(),
+    )
+    expect(result?.max).toBeUndefined()
+    expect(result?.low).toEqual({
+      reasoningEffort: "low",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    })
+  })
+
+  test("drops stale max effort when model variants do not include it", () => {
+    const model = {
+      ...openaiTarget("muse-spark"),
+      variants: {
+        low: { reasoningEffort: "low" },
+        medium: { reasoningEffort: "medium" },
+        high: { reasoningEffort: "high" },
+        xhigh: { reasoningEffort: "xhigh" },
+      },
+    } as any
+    const cleaned = ProviderTransform.providerOptions(model, { reasoningEffort: "max" }) as any
+    expect(cleaned.openai.reasoningEffort).toBeUndefined()
+    expect(cleaned.openai.forceReasoning).toBe(true)
+  })
+
+  test("drops max even when advertised for OpenAI-family Muse Spark", () => {
+    const model = {
+      ...openaiTarget("muse-spark-1.3-contributor"),
+      variants: {
+        minimal: { reasoningEffort: "minimal" },
+        low: { reasoningEffort: "low" },
+        medium: { reasoningEffort: "medium" },
+        high: { reasoningEffort: "high" },
+        xhigh: { reasoningEffort: "xhigh" },
+        max: { reasoningEffort: "max" },
+      },
+    } as any
+    const cleaned = ProviderTransform.providerOptions(model, { reasoningEffort: "max" }) as any
+    expect(cleaned.openai.reasoningEffort).toBeUndefined()
+  })
+
+  test("preserves advertised max for openai-compatible models like DeepSeek and GLM", () => {
+    const model = {
+      ...compatibleTarget("deepseek-v4"),
+      variants: {
+        low: { reasoningEffort: "low" },
+        max: { reasoningEffort: "max" },
+      },
+    } as any
+    const cleaned = ProviderTransform.providerOptions(model, { reasoningEffort: "max" }) as any
+    expect(cleaned["opencode-go"].reasoningEffort).toBe("max")
+  })
+
+  test("preserves supported xhigh effort for Muse Spark style models", () => {
+    const model = {
+      ...openaiTarget("muse-spark"),
+      variants: {
+        low: { reasoningEffort: "low" },
+        xhigh: { reasoningEffort: "xhigh" },
+      },
+    } as any
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "xhigh" })).toEqual({
+      openai: { reasoningEffort: "xhigh", forceReasoning: true },
+    })
+  })
+})

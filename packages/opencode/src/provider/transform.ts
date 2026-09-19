@@ -1406,15 +1406,16 @@ const SLUG_OVERRIDES: Record<string, string> = {
 }
 
 export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+  const cleaned = sanitizeUnsupportedEffort(model, options)
   const usesOpenAIReasoningGate =
     model.api.npm === "@ai-sdk/openai" ||
     model.api.npm === "@ai-sdk/azure" ||
     model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
   const normalized =
     usesOpenAIReasoningGate &&
-    (model.capabilities.reasoning || options.reasoningEffort !== undefined || options.reasoningSummary !== undefined)
-      ? { ...options, forceReasoning: true }
-      : anthropicBlockBinding(model, options)
+    (model.capabilities.reasoning || cleaned.reasoningEffort !== undefined || cleaned.reasoningSummary !== undefined)
+      ? { ...cleaned, forceReasoning: true }
+      : anthropicBlockBinding(model, cleaned)
 
   if (model.api.npm === "@ai-sdk/gateway") {
     // Gateway providerOptions are split across two namespaces:
@@ -1463,6 +1464,32 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     return { openai: normalized, azure: normalized }
   }
   return { [key]: normalized }
+}
+
+function sanitizeUnsupportedEffort(model: Provider.Model, options: { [x: string]: any }) {
+  const effort = options.reasoningEffort
+  if (typeof effort !== "string") return options
+  // OpenAI-family wire never accepts "max" (see OpenAIOptions.OpenAIReasoningEfforts
+  // and native protocol rejection). Gateways may still advertise it, e.g. Muse Spark
+  // via Go/Zen lists max yet 400s with invalid_request_error, so drop unconditionally.
+  if (
+    effort === "max" &&
+    (model.api.npm === "@ai-sdk/openai" ||
+      model.api.npm === "@ai-sdk/azure" ||
+      model.api.npm === "@ai-sdk/amazon-bedrock/mantle")
+  ) {
+    const result = { ...options }
+    delete result.reasoningEffort
+    return result
+  }
+  if (!model.variants || Object.keys(model.variants).length === 0) return options
+  if (Object.hasOwn(model.variants, effort)) return options
+  // Drop stale or foreign reasoning efforts (e.g. ACP/agent "max" persisted
+  // from another model) so strict upstreams do not 400 with
+  // invalid_request_error. "default" is the no-override sentinel, never wire.
+  const result = { ...options }
+  delete result.reasoningEffort
+  return result
 }
 
 export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {
@@ -1806,8 +1833,13 @@ function reasoningEffort(model: Provider.Model, effort: string) {
       return { reasoningEffort: effort, reasoningSummary: "auto", include: INCLUDE_ENCRYPTED_REASONING }
     case "@ai-sdk/openai":
     case "@ai-sdk/amazon-bedrock/mantle":
+      // OpenAI Responses/Chat only accepts none/minimal/low/medium/high/xhigh.
+      // "max" is an Anthropic/Bedrock budget concept; exposing it here lets a
+      // stale ACP/agent variant reach the wire and 400 with invalid_request_error.
+      if (effort === "max") return
       return { reasoningEffort: effort, reasoningSummary: "auto", include: INCLUDE_ENCRYPTED_REASONING }
     case "@ai-sdk/azure":
+      if (effort === "max") return
       return { reasoningEffort: effort, reasoningSummary: "auto", include: INCLUDE_ENCRYPTED_REASONING }
     case "@jerome-benoit/sap-ai-provider-v2":
       if (model.id.includes("anthropic"))
