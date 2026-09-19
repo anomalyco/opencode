@@ -172,6 +172,16 @@ test("Models and Shortcuts autofocus their filters on normal navigation", async 
   await expect(result).toBeFocused()
 })
 
+test("Shortcuts filter keeps focus and value while typing", async ({ page }) => {
+  const view = ui(page)
+  await view.settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
+  const filter = view.settings.getByRole("searchbox", { name: "Search shortcuts", exact: true })
+  await expect(filter).toBeFocused()
+  await filter.pressSequentially("close")
+  await expect(filter).toBeFocused()
+  await expect(filter).toHaveValue("close")
+})
+
 test("all indexed client controls resolve to visible production controls", async ({ page }) => {
   const view = ui(page)
   for (const entry of clientSettings.filter((entry) => entry.target && !entry.available)) {
