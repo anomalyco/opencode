@@ -390,6 +390,20 @@ function ApiMethod(props: ApiMethodProps) {
               </text>
             </box>
           ),
+          maple: (
+            <box gap={1}>
+              <text fg={theme.textMuted}>
+                Maple AI is a TEE-based private AI provider. Start the Maple Proxy (desktop app or Docker) and generate
+                an API key in the Maple app.
+              </text>
+              <text fg={theme.text}>
+                Default proxy URL: <span style={{ fg: theme.primary }}>http://127.0.0.1:8080/v1</span>
+              </text>
+              <text fg={theme.textMuted}>
+                To use a different URL, add to opencode.json: provider.maple.options.baseURL
+              </text>
+            </box>
+          ),
         })[props.providerID] ?? undefined
       }
       onConfirm={async (value) => {
