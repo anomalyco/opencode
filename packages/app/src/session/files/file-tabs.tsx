@@ -1,9 +1,12 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileSearchHandle } from "@opencode/session-ui/file"
+import { Markdown } from "@opencode/session-ui/markdown"
+import { Button } from "@opencode/ui/button"
 import { useFileComponent } from "@opencode/ui/context/file"
+import { FileIcon } from "@opencode/ui/file-icon"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
 import { createLineCommentControllerV2 } from "@opencode/session-ui/v2/line-comment-annotations-v2"
 import { sampledChecksum } from "@opencode/util/encode"
@@ -12,13 +15,22 @@ import { Menu } from "@opencode/ui/menu"
 import { Tabs } from "@opencode/ui/tabs"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { showToast } from "@/shell/notifications/toast"
-import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
+import {
+  selectionFromLines,
+  useFile,
+  type FileSelection,
+  type FileState,
+  type SelectedLineRange,
+} from "@/workspaces/files/model"
 import { useComments } from "@/composer/comments"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useComposerState } from "@/composer/persistence"
 import { getSessionHandoff } from "@/session/handoff"
 import { useSessionLayout } from "@/session/session-layout"
 import { createSessionTabs } from "@/session/helpers"
+import { OpenInAppButton } from "@/session/files/open-in-app-button"
+import { resolveOpenInAppPath } from "@/session/files/open-in-app-path"
+import { useWorkspaceLocation } from "@/workspaces/location"
 
 type SessionFileViewProps = {
   tab: string
@@ -182,6 +194,7 @@ export function SessionFileView(props: SessionFileViewProps) {
   const language = useLanguage()
   const prompt = useComposerState()
   const fileComponent = useFileComponent()
+  const location = useWorkspaceLocation()
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
     tabs,
@@ -198,6 +211,21 @@ export function SessionFileView(props: SessionFileViewProps) {
   }
 
   const path = createMemo(() => file.pathFromTab(props.tab))
+  const markdown = createMemo(() => path()?.toLowerCase().endsWith(".md") ?? false)
+  const imageBase = (value: string) => value.replaceAll("\\", "/").split("/").slice(0, -1).join("/")
+  const absolutePath = createMemo(() => resolveOpenInAppPath(location().directory, path() ?? ""))
+  const [display, setDisplay] = createStore({
+    markdown: "rendered" as "rendered" | "source",
+    file: undefined as
+      | {
+          path: string
+          contents: string
+          cacheKey: string | undefined
+          markdown: boolean
+          content: NonNullable<FileState["content"]>
+        }
+      | undefined,
+  })
   const state = createMemo(() => {
     const p = path()
     if (!p) return
@@ -205,6 +233,18 @@ export function SessionFileView(props: SessionFileViewProps) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
+  createEffect(() => {
+    const value = state()
+    const p = path()
+    if (!p || !value?.loaded || !value.content) return
+    setDisplay("file", {
+      path: p,
+      contents: value.content.content,
+      cacheKey: sampledChecksum(value.content.content),
+      markdown: p.toLowerCase().endsWith(".md"),
+      content: value.content,
+    })
+  })
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -397,26 +437,29 @@ export function SessionFileView(props: SessionFileViewProps) {
     scrollSync.queueRestore()
   })
 
-  const renderFile = (source: string) => (
+  const renderFile = (
+    value: { path: string; contents: string; cacheKey: string | undefined; content: NonNullable<FileState["content"]> },
+    interactive = true,
+  ) => (
     <div class="relative overflow-hidden pb-40">
       <Dynamic
         component={fileComponent}
         mode="text"
         file={{
-          name: path() ?? "",
-          contents: source,
-          cacheKey: cacheKey(),
+          name: value.path,
+          contents: value.contents,
+          cacheKey: value.cacheKey,
         }}
-        enableLineSelection
-        enableGutterUtility
-        selectedLines={activeSelection()}
-        commentedLines={commentedLines()}
+        enableLineSelection={interactive}
+        enableGutterUtility={interactive}
+        selectedLines={interactive ? activeSelection() : null}
+        commentedLines={interactive ? commentedLines() : []}
         onRendered={() => {
           scrollSync.queueRestore()
         }}
-        annotations={commentsUi.annotations()}
-        renderAnnotation={commentsUi.renderAnnotation}
-        renderGutterUtility={commentsUi.renderGutterUtility}
+        annotations={interactive ? commentsUi.annotations() : []}
+        renderAnnotation={interactive ? commentsUi.renderAnnotation : undefined}
+        renderGutterUtility={interactive ? commentsUi.renderGutterUtility : undefined}
         onLineSelected={(range: SelectedLineRange | null) => {
           commentsUi.onLineSelected(range)
         }}
@@ -431,12 +474,12 @@ export function SessionFileView(props: SessionFileViewProps) {
         onLineNumberSelectionEnd={(range: SelectedLineRange | null) => {
           commentsUi.onLineNumberSelectionEnd(range)
         }}
-        search={search}
+        search={interactive ? search : undefined}
         class="select-text"
         media={{
           mode: "auto",
-          path: path(),
-          current: state()?.content,
+          path: value.path,
+          current: value.content,
           onLoad: scrollSync.queueRestore,
           onError: (args: { kind: "image" | "audio" | "svg" }) => {
             if (args.kind !== "svg") return
@@ -451,10 +494,65 @@ export function SessionFileView(props: SessionFileViewProps) {
   )
 
   const content = () => (
-    <div class="mt-3 relative h-full min-h-0">
-      <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll}>
+    <div class="relative h-full min-h-0 flex flex-col">
+      <Show when={path()}>
+        {(value) => (
+          <div data-slot="session-review-v2-file-header">
+            <div data-slot="session-review-v2-file-title">
+              <FileIcon node={{ path: value(), type: "file" }} class="size-4 shrink-0" />
+              <span class="min-w-0 flex-1 truncate text-13-regular text-text-muted" title={value()}>
+                {value()}
+              </span>
+            </div>
+            <div class="ms-auto shrink-0 flex items-center gap-3">
+              <Show when={markdown()}>
+                <Button
+                  size="small"
+                  variant="ghost"
+                  class="min-w-[112px]"
+                  onClick={() => setDisplay("markdown", display.markdown === "rendered" ? "source" : "rendered")}
+                >
+                  {language.t(
+                    display.markdown === "rendered"
+                      ? "session.files.markdown.viewSource"
+                      : "session.files.markdown.viewRendered",
+                  )}
+                </Button>
+              </Show>
+              <OpenInAppButton path={absolutePath} reveal />
+            </div>
+          </div>
+        )}
+      </Show>
+      <ScrollView class="flex-1 min-h-0" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll}>
         <Switch>
-          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
+          <Match when={state()?.loading && display.file ? display.file : undefined}>
+            {(value) => (
+              <div data-slot="session-file-loading-preview" aria-busy="true" class="opacity-50 pointer-events-none">
+                {value().markdown && display.markdown === "rendered" ? (
+                  <div class="px-6 py-4 pb-40">
+                    <Markdown
+                      text={value().contents}
+                      cacheKey={value().cacheKey}
+                      imageBase={imageBase(value().path)}
+                      deferUntilReady
+                    />
+                  </div>
+                ) : (
+                  renderFile(value(), false)
+                )}
+              </div>
+            )}
+          </Match>
+          <Match when={state()?.loaded}>
+            {markdown() && display.markdown === "rendered" ? (
+              <div class="px-6 py-4 pb-40">
+                <Markdown text={contents()} cacheKey={cacheKey()} imageBase={imageBase(path() ?? "")} deferUntilReady />
+              </div>
+            ) : (
+              renderFile({ path: path() ?? "", contents: contents(), cacheKey: cacheKey(), content: state()!.content! })
+            )}
+          </Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}…</div>
           </Match>

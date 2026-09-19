@@ -8,12 +8,12 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import { type OpenApp, useOpenInApp } from "@/session/files/open-in-app"
 
-export function OpenInAppButton(props: { directory: () => string }) {
+export function OpenInAppButton(props: { path: () => string; reveal?: boolean }) {
   const language = useLanguage()
-  const state = useOpenInApp({ path: props.directory })
+  const state = useOpenInApp({ path: props.path })
 
   return (
-    <Show when={props.directory() && state.canOpen()}>
+    <Show when={props.path() && state.canOpen()}>
       <SplitButton class="session-review-v2-open-in-app" onPointerDown={(event) => event.stopPropagation()}>
         <Tooltip
           placement="bottom"
@@ -25,7 +25,7 @@ export function OpenInAppButton(props: { directory: () => string }) {
             onClick={(event) => {
               event.stopPropagation()
               if (state.opening()) return
-              state.openPath(state.current().id)
+              state.openPath(state.current().id, undefined, props.reveal)
             }}
             disabled={state.opening()}
             aria-label={language.t("session.header.open.ariaLabel", { app: state.current().label })}
@@ -52,7 +52,7 @@ export function OpenInAppButton(props: { directory: () => string }) {
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="open-in-app-v2-menu">
-              <OpenInAppMenuItemsV2 state={state} close={() => state.setMenu("open", false)} />
+              <OpenInAppMenuItemsV2 state={state} reveal={props.reveal} close={() => state.setMenu("open", false)} />
             </Menu.Content>
           </Menu.Portal>
         </Menu>

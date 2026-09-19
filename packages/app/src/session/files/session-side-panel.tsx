@@ -542,7 +542,9 @@ export function SessionSidePanel(props: {
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <OpenInAppButton directory={projectDirectory} />
+                          <Show when={!file.pathFromTab(activeTab())}>
+                            <OpenInAppButton path={projectDirectory} />
+                          </Show>
                           <Show when={reviewVisible()}>
                             <div class="size-7 shrink-0" aria-hidden />
                           </Show>

@@ -55,7 +55,10 @@ test("opens and searches project files inline", async ({ page }) => {
         { name: "src", path: "src", absolute: `${directory}/src`, type: "directory", ignored: false },
       ]
     },
-    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    fileContent: (path) => ({
+      type: "text",
+      content: path === "README.md" ? "# Rendered README\n\ncontents:README.md" : `contents:${path}`,
+    }),
     findFiles: (input) => {
       searches.push(input)
       return input.query === "nested" ? ["src/nested.ts"] : []
@@ -126,7 +129,19 @@ test("opens and searches project files inline", async ({ page }) => {
   await expect(panel.getByRole("tab", { name: "README.md" }).locator("..")).toHaveCSS("padding-inline-end", "4px")
   await expect(panel.getByRole("tab", { name: "README.md" }).locator("..")).toHaveCSS("gap", "8px")
   await expect(sidebarToggle).toBeEnabled()
+  await expect(panel.getByRole("heading", { name: "Rendered README" })).toBeVisible()
   await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
+  await expect(panel.getByTitle("README.md")).toBeVisible()
+  const viewSource = panel.getByRole("button", { name: "View Source" })
+  await expect(viewSource).toBeVisible()
+  await expect.poll(() => viewSource.evaluate((button) => button.scrollWidth <= button.clientWidth)).toBe(true)
+  await viewSource.click()
+  await expect(panel.getByRole("heading", { name: "Rendered README" })).toHaveCount(0)
+  await expect(panel.getByText("# Rendered README", { exact: true })).toBeVisible()
+  const viewRendered = panel.getByRole("button", { name: "View Rendered" })
+  await expect.poll(() => viewRendered.evaluate((button) => button.scrollWidth <= button.clientWidth)).toBe(true)
+  await viewRendered.click()
+  await expect(panel.getByRole("heading", { name: "Rendered README" })).toBeVisible()
   await expect(sidebar).toHaveCount(0)
 
   const missingReadPattern = "**/api/fs/read/README.md*"
@@ -167,12 +182,21 @@ test("opens and searches project files inline", async ({ page }) => {
   const resultID = await result.getAttribute("id")
   expect(resultID).toBeTruthy()
   await expect(filter).toHaveAttribute("aria-activedescendant", resultID!)
+  const nestedRead = Promise.withResolvers<Route>()
+  await page.route(/\/api\/fs\/read\/src\/nested\.ts(?:\?|$)/, (route) => nestedRead.resolve(route), { times: 1 })
   await filter.press("Enter")
+  const pendingRead = await nestedRead.promise
+  const loadingPreview = panel.locator('[data-slot="session-file-loading-preview"]')
+  await expect(loadingPreview).toContainText("Rendered README")
+  await expect(loadingPreview).toHaveCSS("opacity", "0.5")
+  await pendingRead.fallback()
   await expect(panel.getByRole("tab", { name: "nested.ts", selected: true })).toBeVisible()
   await expect(panel.getByRole("tab", { name: "nested.ts" }).locator("..")).toHaveCSS("padding-inline-end", "4px")
   await expect(panel.getByRole("tab", { name: "nested.ts" }).locator("..")).toHaveCSS("gap", "8px")
   await expect(sidebarToggle).toBeEnabled()
   await expect(panel.getByText("contents:src/nested.ts", { exact: true })).toBeVisible()
+  await expect(panel.getByTitle("src/nested.ts")).toBeVisible()
+  await expect(panel.getByRole("button", { name: /View (Source|Rendered)/ })).toHaveCount(0)
   expect(searches).toContainEqual({ query: "nested", dirs: "file", limit: 200 })
 
   await panel.getByRole("button", { name: "Open file" }).click()

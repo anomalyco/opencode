@@ -49,6 +49,7 @@ export function SessionFileBrowserTab(props: {
   const setFilter = (value: string) => setStore("filter", value)
   const setExplicitHighlight = (value: string) => setStore("explicitHighlight", value)
   const sidebarOpened = () => props.placeholder || props.state.sidebarOpened()
+  const visibleTab = createMemo<string | undefined>((previous) => (props.placeholder ? previous : props.tab))
   const query = createMemo(() => filter().trim())
   const search = createQuery(() => {
     const value = query()
@@ -167,24 +168,24 @@ export function SessionFileBrowserTab(props: {
         </SessionReviewV2Sidebar>
       }
     >
-      <Show
-        when={!props.placeholder}
-        fallback={
-          <SessionFilePanelV2Empty>
-            <div class="flex flex-col items-center gap-2 text-center text-text-weak">
-              <Icon name="file-tree" size="large" class="mb-2" />
-              <div class="text-[13px] font-medium leading-[13px] text-text-strong">{language.t("command.file.open")}</div>
-              <div class="h-5 text-13-regular leading-5">{language.t("session.files.selectToOpen")}</div>
-            </div>
-          </SessionFilePanelV2Empty>
-        }
-      >
-        <div class="min-h-0 flex-1">
-          <Show when={props.tab} keyed>
-            {(tab) => <SessionFileView tab={tab} />}
-          </Show>
-        </div>
+      <Show when={props.placeholder}>
+        <SessionFilePanelV2Empty>
+          <div class="flex flex-col items-center gap-2 text-center text-text-weak">
+            <Icon name="file-tree" size="large" class="mb-2" />
+            <div class="text-[13px] font-medium leading-[13px] text-text-strong">{language.t("command.file.open")}</div>
+            <div class="h-5 text-13-regular leading-5">{language.t("session.files.selectToOpen")}</div>
+          </div>
+        </SessionFilePanelV2Empty>
       </Show>
+      <div
+        class="min-h-0 flex-1"
+        classList={{ hidden: props.placeholder }}
+        inert={props.placeholder || undefined}
+      >
+        <Show when={visibleTab()}>
+          {(tab) => <SessionFileView tab={tab()} />}
+        </Show>
+      </div>
     </SessionFilePanelV2>
   )
 }

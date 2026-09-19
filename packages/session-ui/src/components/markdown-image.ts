@@ -13,6 +13,11 @@ export function localImagePath(source: string) {
   return decodePath(value)
 }
 
+export function resolveMarkdownImagePath(path: string, base: string | undefined) {
+  if (!base || path.startsWith("/") || /^[a-z]:\//i.test(path)) return path
+  return `${base.replaceAll("\\", "/").replace(/\/+$/, "")}/${path}`
+}
+
 function decodePath(value: string) {
   try {
     const path = decodeURIComponent(value)

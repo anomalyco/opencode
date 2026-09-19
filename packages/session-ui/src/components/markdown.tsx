@@ -38,7 +38,7 @@ import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
 import { useMarkdown, type ReadMarkdownImage } from "../context/markdown"
-import { createMarkdownImages } from "./markdown-image"
+import { createMarkdownImages, resolveMarkdownImagePath } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
 
 type RenderedBlock =
@@ -388,11 +388,20 @@ export function Markdown(
     cacheKey?: string
     streaming?: boolean
     deferUntilReady?: boolean
+    imageBase?: string
     class?: string
     classList?: Record<string, boolean>
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "deferUntilReady", "class", "classList"])
+  const [local, others] = splitProps(props, [
+    "text",
+    "cacheKey",
+    "streaming",
+    "deferUntilReady",
+    "imageBase",
+    "class",
+    "classList",
+  ])
   const i18n = useI18n()
   const markdown = useMarkdown()
   const previewImages = createImagePreview()
@@ -516,6 +525,7 @@ export function Markdown(
 
   let copyCleanup: (() => void) | undefined
   let readImage: ReadMarkdownImage | undefined
+  let imageBase: string | undefined
   let images: ReturnType<typeof createMarkdownImages> | undefined
 
   createEffect(() => {
@@ -525,10 +535,15 @@ export function Markdown(
     const content = local.text ? pendingBlocks(result, projected, local.cacheKey, owner, local.deferUntilReady) : []
     if (!container) return
     if (isServer) return
-    if (readImage !== markdown?.readImage) {
+    const reader = markdown?.readImage
+    const base = local.imageBase
+    if (readImage !== reader || imageBase !== base) {
       images?.dispose()
-      readImage = markdown?.readImage
-      images = readImage ? createMarkdownImages(readImage) : undefined
+      readImage = reader
+      imageBase = base
+      images = reader
+        ? createMarkdownImages((path, signal) => reader(resolveMarkdownImagePath(path, base), signal))
+        : undefined
     }
     delete container.dataset.markdownReady
     if (content.length === 0) {

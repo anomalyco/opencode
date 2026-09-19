@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { localImagePath } from "./markdown-image"
+import { localImagePath, resolveMarkdownImagePath } from "./markdown-image"
 
 test.each([
   ["C:/tmp/chart.png", "C:/tmp/chart.png"],
@@ -34,4 +34,14 @@ test.each([
   "",
 ])("does not read non-local or invalid source %s", (source) => {
   expect(localImagePath(source)).toBeUndefined()
+})
+
+test.each([
+  ["image.png", "docs", "docs/image.png"],
+  ["../image.png", "docs/guides/", "docs/guides/../image.png"],
+  ["image.png", "", "image.png"],
+  ["/tmp/image.png", "docs", "/tmp/image.png"],
+  ["C:/tmp/image.png", "docs", "C:/tmp/image.png"],
+])("resolves image %s from %s", (path, base, expected) => {
+  expect(resolveMarkdownImagePath(path, base)).toBe(expected)
 })
