@@ -217,6 +217,72 @@ jobs:
             packages/opencode/dist/opencode-windows-x64
             packages/opencode/dist/opencode-windows-x64-baseline
 
+  sign-cli-macos:
+    needs:
+      - build-cli
+      - version
+    runs-on: macos-26
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-cli
+          path: packages/opencode/dist
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      # The darwin binaries are cross-compiled on linux, which injects the JS
+      # payload into bun's pre-signed executable and leaves the embedded
+      # signature invalid. Re-sign so codesign verification passes and macOS
+      # can cache validation instead of re-hashing every page on each exec.
+      - name: Sign macOS CLI binaries
+        working-directory: packages/opencode/dist
+        run: |
+          for name in opencode-darwin-arm64 opencode-darwin-x64 opencode-darwin-x64-baseline; do
+            chmod +x "$name/bin/opencode"
+            codesign --force --sign - "$name/bin/opencode"
+            codesign --verify --strict --verbose=2 "$name/bin/opencode"
+          done
+
+      - name: Smoke test signed binary
+        run: ./packages/opencode/dist/opencode-darwin-arm64/bin/opencode --version
+
+      - name: Repack macOS CLI archives
+        working-directory: packages/opencode/dist
+        run: |
+          for name in opencode-darwin-arm64 opencode-darwin-x64 opencode-darwin-x64-baseline; do
+            rm -f "$name.zip"
+            (cd "$name/bin" && zip -r "../../$name.zip" ./*)
+          done
+
+      - name: Upload signed macOS CLI release assets
+        if: needs.version.outputs.release != ''
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+        run: |
+          gh release upload "v${{ needs.version.outputs.version }}" \
+            packages/opencode/dist/opencode-darwin-arm64.zip \
+            packages/opencode/dist/opencode-darwin-x64.zip \
+            packages/opencode/dist/opencode-darwin-x64-baseline.zip \
+            --clobber \
+            --repo "${{ needs.version.outputs.repo }}"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-cli-signed-macos
+          path: |
+            packages/opencode/dist/opencode-darwin-arm64
+            packages/opencode/dist/opencode-darwin-x64
+            packages/opencode/dist/opencode-darwin-x64-baseline
+            packages/opencode/dist/opencode-darwin-*.zip
+
   build-electron:
     needs:
       - version
@@ -406,6 +472,7 @@ jobs:
       - version
       - build-cli
       - sign-cli-windows
+      - sign-cli-macos
       - build-electron
     if: always() && !failure() && !cancelled()
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -435,6 +502,17 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: opencode-cli
+          path: packages/opencode/dist
+
+      # The signed darwin binaries and zips replace the unsigned output of
+      # build-cli so npm packages and the Homebrew sha256 match the release
+      # assets uploaded by sign-cli-macos.
+      - name: Remove unsigned macOS CLI binaries
+        run: rm -rf packages/opencode/dist/opencode-darwin*
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-cli-signed-macos
           path: packages/opencode/dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
