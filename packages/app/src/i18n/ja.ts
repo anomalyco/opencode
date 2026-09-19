@@ -849,6 +849,10 @@ export const dict = {
   "settings.general.row.terminalFont.description": "ターミナルで使用するフォントをカスタマイズ",
   "settings.general.row.uiFont.title": "UIフォント",
   "settings.general.row.uiFont.description": "インターフェース全体で使用するフォントをカスタマイズします",
+  "settings.general.row.fontSize.title": "フォントサイズ",
+  "settings.general.row.fontSize.description": "アプリ全体で使用する基本フォントサイズをカスタマイズします",
+  "settings.general.row.lineHeight.title": "行の高さ",
+  "settings.general.row.lineHeight.description": "読みやすいテキストとコードの行の高さをカスタマイズします",
   "settings.general.row.followup.title": "フォローアップの動作",
   "settings.general.row.followup.description":
     "フォローアッププロンプトを即座に実行するか、キューで待機させるかを選択します",

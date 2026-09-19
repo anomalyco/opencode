@@ -40,6 +40,7 @@
   --font-mono: var(--font-family-mono);
   --font-mono--font-feature-settings: var(--font-family-mono--font-feature-settings);
 
+  --text-xs: var(--font-size-x-small);
   --text-sm: var(--font-size-small);
   --text-base: var(--font-size-base);
   --text-lg: var(--font-size-large);
