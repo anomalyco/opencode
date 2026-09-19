@@ -1,5 +1,6 @@
 import type { NotFoundError as StorageNotFoundError } from "@/storage/storage"
 import type { Session } from "@/session/session"
+import { ModelNotFoundError } from "@/provider/provider"
 import { Effect } from "effect"
 import * as ApiError from "../errors"
 
@@ -17,5 +18,11 @@ export function mapBusy<A, R>(self: Effect.Effect<A, Session.BusyError, R>) {
         }),
       ),
     ),
+  )
+}
+
+export function mapModelNotFound<A, E, R>(self: Effect.Effect<A, E | ModelNotFoundError, R>) {
+  return self.pipe(
+    Effect.catchIf(ModelNotFoundError.isInstance, (error) => Effect.fail(ApiError.notFound(error.message))),
   )
 }
