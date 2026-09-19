@@ -73,6 +73,7 @@ import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
+import { StickyPrompt } from "./sticky-prompt"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
@@ -81,6 +82,9 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+
+const SESSION_CONTENT_PADDING = 2
+const SCROLLBAR_VIEWPORT_PADDING = 1
 
 addDefaultParsers(parsers.parsers)
 
@@ -342,6 +346,7 @@ export function Session() {
 
   let seeded = false
   let scroll: ScrollBoxRenderable
+  let sessionContent: BoxRenderable | undefined
   let prompt: PromptRef | undefined
   const bind = (r: PromptRef | undefined) => {
     prompt = r
@@ -1175,12 +1180,20 @@ export function Session() {
         }}
       >
         <box flexDirection="row" flexGrow={1} minHeight={0}>
-          <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+          <box
+            ref={(box) => (sessionContent = box)}
+            flexGrow={1}
+            minHeight={0}
+            paddingBottom={1}
+            paddingLeft={SESSION_CONTENT_PADDING}
+            paddingRight={SESSION_CONTENT_PADDING}
+            gap={1}
+          >
             <Show when={session()}>
               <scrollbox
                 ref={(r) => (scroll = r)}
                 viewportOptions={{
-                  paddingRight: showScrollbar() ? 1 : 0,
+                  paddingRight: showScrollbar() ? SCROLLBAR_VIEWPORT_PADDING : 0,
                 }}
                 verticalScrollbarOptions={{
                   paddingLeft: 1,
@@ -1293,6 +1306,12 @@ export function Session() {
                   )}
                 </For>
               </scrollbox>
+              <StickyPrompt
+                scroll={() => scroll}
+                showTimestamps={showTimestamps}
+                scrollbarPadding={() => (showScrollbar() ? SCROLLBAR_VIEWPORT_PADDING : 0)}
+                container={() => sessionContent}
+              />
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
                   <PermissionPrompt
