@@ -528,6 +528,28 @@ it.instance("local stdio timeout terminates the real server process", () =>
   }),
 )
 
+it.instance("local stdio drains server stderr", () =>
+  Effect.gen(function* () {
+    const mcp = yield* MCP.Service
+    const result = yield* mcp.add("stderr-flood", {
+      type: "local",
+      command: [process.execPath, stdioFixture, "--stderr-flood"],
+      timeout: 2_000,
+    })
+
+    expect(statusName(result.status, "stderr-flood")).toBe("connected")
+    expect((yield* mcp.tools())["stderr-flood_current_directory"]).toBeDefined()
+    const client = (yield* mcp.clients())["stderr-flood"]
+    expect(client).toBeDefined()
+    for (let i = 0; i < 3; i++) {
+      const response = yield* Effect.promise(() =>
+        client.callTool({ name: "stderr_flood", arguments: {} }, undefined, { timeout: 2_000 }),
+      )
+      expect(response.content).toEqual([{ type: "text", text: "ok" }])
+    }
+  }),
+)
+
 it.instance("remote timeout aborts both real HTTP transport attempts", () =>
   Effect.gen(function* () {
     const server = yield* hangingLifecycleServer()
