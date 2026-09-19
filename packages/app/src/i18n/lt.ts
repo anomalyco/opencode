@@ -731,6 +731,7 @@ export const dict = {
   "session.review.noChanges": "Jokių pakeitimų",
   "session.review.noUncommittedChanges": "Dar nėra nepadarytų pakeitimų",
   "session.review.noBranchChanges": "Šakoje pakeitimų dar nėra",
+  "session.files.refresh": "Atnaujinti",
   "session.files.selectToOpen": "Pasirinkite failą, kurį norite atidaryti",
   "session.files.all": "Visi failai",
   "session.files.empty": "Failų nėra",

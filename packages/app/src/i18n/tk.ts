@@ -724,6 +724,7 @@ export const dict = {
   "session.review.noChanges": "Üýtgeşme ýok",
   "session.review.noUncommittedChanges": "Entek rugsat berilmedik üýtgeşmeler ýok",
   "session.review.noBranchChanges": "Entek hiç hili şahamça üýtgemeýär",
+  "session.files.refresh": "Täzele",
   "session.files.selectToOpen": "Açmak üçin bir faýl saýlaň",
   "session.files.all": "Fileshli faýllar",
   "session.files.empty": "Faýl ýok",

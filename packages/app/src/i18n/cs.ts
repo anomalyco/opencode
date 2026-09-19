@@ -724,6 +724,7 @@ export const dict = {
   "session.review.noChanges": "Žádné změny",
   "session.review.noUncommittedChanges": "Zatím žádné neprovedené změny",
   "session.review.noBranchChanges": "Zatím žádné změny ve větvi",
+  "session.files.refresh": "Obnovit",
   "session.files.selectToOpen": "Vyberte soubor, který chcete otevřít",
   "session.files.all": "Všechny soubory",
   "session.files.empty": "Žádné soubory",

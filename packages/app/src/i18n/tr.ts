@@ -772,6 +772,7 @@ export const dict = {
   "session.review.noUncommittedChanges": "Henüz işlenmemiş değişiklik yok",
   "session.review.noBranchChanges": "Henüz dal değişikliği yok",
 
+  "session.files.refresh": "Yenile",
   "session.files.selectToOpen": "Açmak için bir dosya seçin",
   "session.files.all": "Tüm dosyalar",
   "session.files.empty": "Dosya yok",

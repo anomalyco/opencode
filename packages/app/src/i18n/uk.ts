@@ -794,6 +794,7 @@ export const dict = {
   "session.review.noUncommittedChanges": "Ще немає незафіксованих змін",
   "session.review.noBranchChanges": "Ще немає змін у гілці",
 
+  "session.files.refresh": "Оновити",
   "session.files.selectToOpen": "Виберіть файл для відкриття",
   "session.files.all": "Усі файли",
   "session.files.empty": "Немає файлів",

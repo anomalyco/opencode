@@ -733,6 +733,7 @@ export const dict = {
   "session.review.noChanges": "کوئی تبدیلی نئیں",
   "session.review.noUncommittedChanges": "ہلے کوئی ان کمٹڈ تبدیلی نئیں",
   "session.review.noBranchChanges": "ہلے تیکر کوئی برانچ نئیں بدلی",
+  "session.files.refresh": "تازہ کرو",
   "session.files.selectToOpen": "کھولن لئی کوئی فائل چنو",
   "session.files.all": "ساریاں فائلاں",
   "session.files.empty": "کوئی فائل نئیں",

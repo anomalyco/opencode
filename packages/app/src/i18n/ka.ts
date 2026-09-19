@@ -724,6 +724,7 @@ export const dict = {
   "session.review.noChanges": "ცვლილებები არ არის",
   "session.review.noUncommittedChanges": "შეუსრულებელი ცვლილებები ჯერ არ არის",
   "session.review.noBranchChanges": "ფილიალი ჯერ არ არის ცვლილებები",
+  "session.files.refresh": "განახლება",
   "session.files.selectToOpen": "აირჩიეთ ფაილი გასახსნელად",
   "session.files.all": "ყველა ფაილი",
   "session.files.empty": "ფაილები არ არის",

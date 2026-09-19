@@ -730,6 +730,7 @@ export const dict = {
   "session.review.noChanges": "Без промени",
   "session.review.noUncommittedChanges": "Все още няма незавършени промени",
   "session.review.noBranchChanges": "Все още няма промени в клона",
+  "session.files.refresh": "Опресняване",
   "session.files.selectToOpen": "Изберете файл за отваряне",
   "session.files.all": "Всички файлове",
   "session.files.empty": "Няма файлове",
