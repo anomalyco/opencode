@@ -258,6 +258,18 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { headers: Record<string, string> },
   ) => Promise<void>
+  /**
+   * Called once per outbound MCP `client.callTool` HTTP request, immediately
+   * before headers are committed. The static `headers` from the server's
+   * config are pre-populated into `output.headers`; the plugin may add,
+   * override, or delete keys. Errors thrown from this hook are logged at
+   * `warn` and the MCP call proceeds with the headers as they stood when
+   * the throw happened — the call is not failed.
+   */
+  "mcp.call.before"?: (
+    input: { server: string; tool: string; sessionID: string; callID: string },
+    output: { headers: Record<string, string> },
+  ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },
