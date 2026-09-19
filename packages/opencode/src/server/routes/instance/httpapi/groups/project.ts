@@ -1,5 +1,6 @@
 import { Project } from "@/project/project"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ProjectNotFoundError } from "../errors"
@@ -9,6 +10,10 @@ import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware
 import { described } from "./metadata"
 
 const root = "/project"
+const DirectoryPayload = Schema.Struct({
+  directory: AbsolutePath,
+  strategy: Schema.optional(Schema.String),
+})
 const UpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),
   icon: Schema.optional(Project.Info.fields.icon),
@@ -71,6 +76,33 @@ export const ProjectApi = HttpApi.make("project")
             identifier: "project.directories",
             summary: "List project directories",
             description: "List known local absolute directories for a project.",
+          }),
+        ),
+        HttpApiEndpoint.post("directoryCreate", `${root}/:projectID/directories`, {
+          params: { projectID: ProjectV2.ID },
+          query: WorkspaceRoutingQuery,
+          payload: DirectoryPayload,
+          success: described(ProjectV2.Directories, "Project directories after the association"),
+          error: [HttpApiError.BadRequest, ProjectNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.directoryCreate",
+            summary: "Associate a directory with a project",
+            description:
+              "Associate a local absolute directory with a project. Use for a directory that is not itself a git worktree — sessions run there resolve to this project instead of `global`. Git discovery still takes precedence where it succeeds.",
+          }),
+        ),
+        HttpApiEndpoint.delete("directoryRemove", `${root}/:projectID/directories`, {
+          params: { projectID: ProjectV2.ID },
+          query: WorkspaceRoutingQuery,
+          payload: DirectoryPayload,
+          success: described(ProjectV2.Directories, "Project directories after the removal"),
+          error: [HttpApiError.BadRequest, ProjectNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.directoryRemove",
+            summary: "Remove a directory association",
+            description: "Remove a local absolute directory's association with a project.",
           }),
         ),
       )
