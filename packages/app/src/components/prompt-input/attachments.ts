@@ -1,7 +1,7 @@
 import { onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { showToast } from "@/utils/toast"
-import { type ContentPart, type ImageAttachmentPart, type usePrompt } from "@/context/prompt"
+import { type ContentPart, type FileAttachmentPart, type ImageAttachmentPart, type usePrompt } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { uuid } from "@/utils/uuid"
@@ -9,6 +9,7 @@ import { getCursorPosition } from "./editor-dom"
 import { createBlobReference, type DraftStore } from "@/utils/draft-store"
 import { attachmentMime } from "./files"
 import { normalizePaste, pasteMode } from "./paste"
+import { parseFileURL } from "@/context/file/path"
 
 type PromptTarget = Pick<ReturnType<ReturnType<typeof usePrompt>["capture"]>, "current" | "cursor" | "set">
 type AttachmentTarget = { prompt: PromptTarget; cursor: number | undefined }
@@ -33,6 +34,17 @@ export type PromptAttachmentsInput = {
   addPart: (part: ContentPart) => boolean
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
+}
+
+export function filePartFromFileURL(input: string): FileAttachmentPart | undefined {
+  if (!/^file:/i.test(input)) return undefined
+  if (/^file:\//i.test(input)) {
+    const file = parseFileURL(input)
+    if (!file) return undefined
+    return { type: "file", path: file.path, url: file.url, content: "@" + file.path, start: 0, end: 0 }
+  }
+  const filePath = input.slice("file:".length)
+  return { type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 }
 }
 
 export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
@@ -189,11 +201,10 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     input.setDraggingType(null)
 
     const plainText = event.dataTransfer?.getData("text/plain")
-    const filePrefix = "file:"
-    if (plainText?.startsWith(filePrefix)) {
-      const filePath = plainText.slice(filePrefix.length)
+    const file = plainText ? filePartFromFileURL(plainText) : undefined
+    if (file) {
       input.focusEditor()
-      input.addPart({ type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 })
+      input.addPart(file)
       return
     }
 
