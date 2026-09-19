@@ -4,6 +4,8 @@ export function decodeDataUrl(url: string) {
 
   const head = url.slice(0, idx)
   const body = url.slice(idx + 1)
-  if (head.includes(";base64")) return Buffer.from(body, "base64").toString("utf8")
+  if (head.split(";").some((part) => part.toLowerCase() === "base64")) {
+    return Buffer.from(body, "base64").toString("utf8")
+  }
   return decodeURIComponent(body)
 }
