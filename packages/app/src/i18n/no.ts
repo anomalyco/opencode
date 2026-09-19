@@ -774,6 +774,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Språk",
   "settings.general.row.language.description": "Endre visningsspråket for OpenCode",
+  "settings.general.row.navigation.description": "Bruk faner i tittellinjen eller et fast sidefelt",
+  "settings.general.row.navigation.tabs": "Faner",
+  "settings.general.row.navigation.sidebar": "Sidefelt",
+  "settings.general.row.sidebarSessions.title": "Avslutt inaktive tråder etter",
+  "settings.general.row.sidebarSessions.description": "Inaktive tråder flyttes til Avsluttede. Aktive tråder forblir synlige.",
+  "settings.general.row.sidebarSessions.always": "Vis alltid",
   "settings.general.row.appearance.title": "Utseende",
   "settings.general.row.appearance.description": "Tilpass hvordan OpenCode ser ut på enheten din",
   "settings.general.row.colorScheme.title": "Fargevalg",
@@ -1229,6 +1235,15 @@ export const dict = {
 
   "sidebar.empty.title": "Ingen åpne prosjekter",
   "sidebar.empty.description": "Åpne et prosjekt for å komme i gang",
+  "sidebar.settled": "Avsluttede",
+  "sidebar.settle": "Avslutt tråd",
+  "sidebar.unsettle": "Gjenåpne tråd",
+  "sidebar.thread.new": "Ny tråd",
+  "sidebar.thread.pin": "Fest tråd",
+  "sidebar.thread.unpin": "Løsne tråd",
+  "sidebar.status.working": "Arbeider",
+  "sidebar.status.done": "Ferdig",
+  "sidebar.status.attention": "Trenger inndata",
 
   "settings.general.section.advanced": "Avansert",
   "settings.general.row.shell.title": "Terminalskall",
