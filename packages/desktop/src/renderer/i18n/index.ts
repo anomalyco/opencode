@@ -17,6 +17,7 @@ import { dict as desktopJa } from "./ja"
 import { dict as desktopPl } from "./pl"
 import { dict as desktopRu } from "./ru"
 import { dict as desktopUk } from "./uk"
+import { dict as desktopBe } from "./be"
 import { dict as desktopAr } from "./ar"
 import { dict as desktopNo } from "./no"
 import { dict as desktopBr } from "./br"
@@ -125,6 +126,7 @@ function build(locale: Locale): Dictionary {
   if (locale === "pl") return { ...base, ...i18n.flatten(desktopPl) }
   if (locale === "ru") return { ...base, ...i18n.flatten(desktopRu) }
   if (locale === "uk") return { ...base, ...i18n.flatten(desktopUk) }
+  if (locale === "be") return { ...base, ...i18n.flatten(desktopBe) }
   if (locale === "ar") return { ...base, ...i18n.flatten(desktopAr) }
   if (locale === "no") return { ...base, ...i18n.flatten(desktopNo) }
   if (locale === "br") return { ...base, ...i18n.flatten(desktopBr) }
