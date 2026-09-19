@@ -58,6 +58,7 @@ export const builtinServerIds = [
   "tinymist",
   "haskell-language-server",
   "julials",
+  "graphql",
 ]
 
 export const requiresExtensionsForCustomServers = Schema.makeFilter<
