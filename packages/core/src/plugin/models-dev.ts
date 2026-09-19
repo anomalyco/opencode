@@ -57,16 +57,19 @@ export const ModelsDevPlugin = define({
         })
       }
     })
+    const apply = (data: readonly ModelsDev.Snapshot[]) => {
+      loaded.data = snapshots(data)
+      return ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload()))
+    }
     yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
-      Stream.runForEach(() =>
-        modelsDev.get().pipe(
-          Effect.tap((data) => Effect.sync(() => (loaded.data = snapshots(data)))),
-          Effect.andThen(ctx.integration.reload()),
-          Effect.andThen(ctx.provider.reload()),
-        ),
-      ),
+      Stream.runForEach(() => modelsDev.get().pipe(Effect.flatMap(apply))),
       Effect.forkScoped({ startImmediately: true }),
     )
+    // A refresh that landed between the initial read and the subscription above published
+    // Refreshed to nobody here. On a cold cache that read served the bundled snapshot, so
+    // re-read now instead of waiting for the next TTL refresh.
+    const latest = yield* modelsDev.get()
+    if (snapshots(latest) !== loaded.data) yield* apply(latest)
   }),
 })
 
