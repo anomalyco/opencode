@@ -5,6 +5,7 @@ import type { Plugin as PromisePlugin } from "@opencode-ai/plugin/v2/promise"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
+import { Catalog } from "../../catalog"
 import { Config } from "../../config"
 import { FSUtil } from "../../fs-util"
 import { Location } from "../../location"
@@ -33,9 +34,11 @@ export const Plugin = define({
   id: "config-plugin",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const catalog = yield* Catalog.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const npm = yield* Npm.Service
+    const release = yield* catalog.hold()
     yield* Effect.gen(function* () {
       const configured: { package: string; options?: Record<string, any> }[] = []
 
@@ -86,6 +89,6 @@ export const Plugin = define({
           })
         }).pipe(Effect.ignoreCause)
       }
-    }).pipe(Effect.forkScoped({ startImmediately: true }))
+    }).pipe(Effect.ensuring(release))
   }),
 })
