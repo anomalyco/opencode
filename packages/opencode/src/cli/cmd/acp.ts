@@ -1,10 +1,11 @@
 import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
-import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
+import { ndJsonStream } from "@agentclientprotocol/sdk/experimental/v2"
 import { ServerAuth } from "@/server/auth"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { ACPProfile } from "@/acp/profile"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 export const AcpCommand = effectCmd({
   command: "acp",
@@ -19,6 +20,7 @@ export const AcpCommand = effectCmd({
   handler: Effect.fn("Cli.acp")(function* (args) {
     const { Server } = yield* Effect.promise(() => import("@/server/server"))
     const { ACP } = yield* Effect.promise(() => import("@/acp/agent"))
+    const flags = yield* RuntimeFlags.Service
     ACPProfile.mark("cli.acp.handler")
     process.env.OPENCODE_CLIENT = "acp"
     const opts = yield* resolveNetworkOptions(args)
@@ -53,12 +55,9 @@ export const AcpCommand = effectCmd({
     })
 
     const stream = ndJsonStream(input, output)
-    const agent = ACP.init({ sdk })
-
-    new AgentSideConnection((conn) => {
-      ACPProfile.mark("cli.acp.connection.create")
-      return agent.create(conn)
-    }, stream)
+    const router = yield* Effect.promise(() => ACP.createRouter(sdk, flags.experimentalAcpV2))
+    ACPProfile.mark("cli.acp.connection.create")
+    router.connect(stream)
 
     yield* Effect.logInfo("setup connection")
     process.stdin.resume()
