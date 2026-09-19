@@ -374,6 +374,7 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
     "blinking": true
   },
   "mouse": true,
+  "linux_clipboard_selection": "both",
   "attention": {
     "enabled": true,
     "notifications": true,
@@ -401,6 +402,7 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
+- `linux_clipboard_selection` - Linux only. Controls which selection buffer OpenCode's clipboard copy writes to: `"clipboard"` (Ctrl+V), `"primary"` (middle-click), or `"both"` (default). This also selects the buffer that OpenCode reads when pasting inside the TUI. On other platforms the regular clipboard is always used.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
