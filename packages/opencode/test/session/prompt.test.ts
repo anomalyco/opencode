@@ -8,7 +8,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
@@ -208,10 +208,14 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  lsp?: Layer.Layer<LSP.Service>
+}) {
   const replacements = [
     [SessionSummary.node, summary],
-    [LSP.node, lsp],
+    [LSP.node, input?.lsp ?? lsp],
     [MCP.node, makeMcp(input?.mcpInstructions)],
     [RuntimeFlags.node, runtimeFlags],
   ] as const
@@ -221,11 +225,15 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
   return LayerNode.compile(promptRoot, replacements)
 }
 
-function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttp(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  lsp?: Layer.Layer<LSP.Service>
+}) {
   const root = LayerNode.group([promptRoot, testLLMServerNode])
   const replacements = [
     [SessionSummary.node, summary],
-    [LSP.node, lsp],
+    [LSP.node, input?.lsp ?? lsp],
     [MCP.node, makeMcp(input?.mcpInstructions)],
     [RuntimeFlags.node, runtimeFlags],
   ] as const
@@ -235,7 +243,11 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
   return LayerNode.compile(root, replacements)
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  lsp?: Layer.Layer<LSP.Service>
+}) {
   return makePrompt(input)
 }
 
@@ -255,6 +267,26 @@ const withMcpInstructions = testEffect(
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
+
+const symbolLsp = Layer.mock(LSP.Service)({
+  documentSymbol: () =>
+    Effect.succeed([
+      {
+        name: "whole",
+        kind: 12,
+        range: { start: { line: 0, character: 0 }, end: { line: 3, character: 0 } },
+        selectionRange: { start: { line: 0, character: 0 }, end: { line: 3, character: 0 } },
+      },
+      {
+        name: "foo",
+        kind: 12,
+        range: { start: { line: 1, character: 0 }, end: { line: 4, character: 0 } },
+        selectionRange: { start: { line: 1, character: 0 }, end: { line: 4, character: 0 } },
+      },
+    ]),
+})
+
+const symbolNoLLMServer = testEffect(makeHttpNoLLMServer({ lsp: symbolLsp }))
 
 // Config that registers a custom "test" provider with a "test-model" model
 // so provider model lookup succeeds inside the loop.
@@ -2243,6 +2275,92 @@ noLLMServer.instance(
       yield* sessions.remove(session.id)
     }),
   { git: true, config: cfg },
+)
+
+// File part line-range expansion via LSP document symbols.
+
+symbolNoLLMServer.instance(
+  "expands a single-line file mention to the enclosing LSP symbol (1-based lines)",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const testFile = path.join(dir, "symbols.ts")
+      yield* writeText(testFile, ["line one", "function foo() {", "  return 1", "}", "line five"].join("\n"))
+
+      const url = pathToFileURL(testFile)
+      url.searchParams.set("start", "2")
+      url.searchParams.set("end", "2")
+
+      const message = yield* prompt.prompt({
+        sessionID: session.id,
+        noReply: true,
+        parts: [
+          { type: "text", text: "read this" },
+          { type: "file", url: url.href, filename: "symbols.ts", mime: "text/plain" },
+        ],
+      })
+
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const call = stored.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .find((text) => text.startsWith("Called the Read tool with the following input:"))
+
+      expect(call).toBeDefined()
+      // Symbol range is 0-based [1, 4) => 1-based lines 2-4.
+      expect(call).toContain('"offset":2')
+      expect(call).toContain('"limit":3')
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+  30_000,
+)
+
+symbolNoLLMServer.instance(
+  "expands a file mention on line 1 to a symbol starting at 0-based line 0",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const testFile = path.join(dir, "symbols.ts")
+      yield* writeText(testFile, ["line one", "function foo() {", "  return 1", "}", "line five"].join("\n"))
+
+      const url = pathToFileURL(testFile)
+      url.searchParams.set("start", "1")
+      url.searchParams.set("end", "1")
+
+      const message = yield* prompt.prompt({
+        sessionID: session.id,
+        noReply: true,
+        parts: [
+          { type: "text", text: "read this" },
+          { type: "file", url: url.href, filename: "symbols.ts", mime: "text/plain" },
+        ],
+      })
+
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const call = stored.parts
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .find((text) => text.startsWith("Called the Read tool with the following input:"))
+
+      expect(call).toBeDefined()
+      // Symbol range is 0-based [0, 3) => 1-based lines 1-3.
+      expect(call).toContain('"offset":1')
+      expect(call).toContain('"limit":3')
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+  30_000,
 )
 
 // Regression: empty assistant turn loop
