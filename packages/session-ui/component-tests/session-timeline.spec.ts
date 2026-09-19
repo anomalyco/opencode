@@ -13,7 +13,8 @@ for (const width of [1280, 390]) {
         await expect(diagrams.nth(0)).toBeVisible()
         await expect(diagrams.nth(0)).toContainText("Client")
         await expect(diagrams.nth(1)).toBeVisible()
-        await expect(diagrams.nth(1)).toContainText("Send prompt")
+        await expect(diagrams.nth(1)).toContainText("Check permissions; create pending request")
+        await expect(diagrams.nth(1)).toContainText("Structured result")
         await expect(timeline.locator('[data-mermaid-ready="true"]')).toHaveCount(2)
         await expect(timeline.locator('[data-mermaid-ready="true"] > pre:visible')).toHaveCount(0)
         if (streaming) {
