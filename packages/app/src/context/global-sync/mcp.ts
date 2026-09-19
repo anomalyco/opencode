@@ -5,7 +5,8 @@ export async function toggleMcp(input: {
   connect: () => Promise<void>
   disconnect: () => Promise<void>
   authenticate: () => Promise<void>
-  refresh: () => Promise<void>
+  refreshStatus: () => Promise<void>
+  refreshResources: () => Promise<void>
 }) {
   if (input.status === "pending") return
   await {
@@ -15,5 +16,6 @@ export async function toggleMcp(input: {
     failed: input.connect,
     needs_client_registration: input.connect,
   }[input.status]()
-  await input.refresh()
+  await input.refreshStatus()
+  void input.refreshResources().catch(() => undefined)
 }

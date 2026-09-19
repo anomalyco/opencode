@@ -714,8 +714,10 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
           authenticate: async () => {
             await sdk.mcp.auth.authenticate({ name })
           },
-          refresh: async () => {
+          refreshStatus: async () => {
             await queryClient.refetchQueries(queryOptionsApi.mcp(key))
+          },
+          refreshResources: async () => {
             await queryClient.refetchQueries(queryOptionsApi.mcpResources(key))
           },
         })
