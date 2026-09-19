@@ -1,14 +1,10 @@
 import { parse, type Program } from "acorn"
 import { Cause, Effect, Scope } from "effect"
-// #transpile: conditional import — full typescript on node/bun, an identity
-// pass-through on workerd (the compiler is ~11 MiB and can't init there).
-import { transpile } from "#transpile"
 import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result } from "../codemode.js"
 import { toBoundary } from "../data.js"
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
 import { createBuiltins } from "./intrinsics.js"
-import { PendingThrow } from "./model.js"
 import { Pending } from "./promises.js"
 import { Interpreter } from "./interpreter.js"
 
@@ -110,16 +106,7 @@ export const executeProgram = <R>(
 }
 
 const parseProgram = (code: string): Program => {
-  const transpiled = transpile(`async function __codemode__() {\n${code}\n}`)
-
-  if (transpiled.error !== undefined) {
-    throw new PendingThrow("SyntaxError", `Failed to parse TypeScript: ${transpiled.error}`, undefined, "ParseError")
-  }
-
-  const bodyStart = transpiled.outputText.indexOf("{") + 1
-  const bodyEnd = transpiled.outputText.lastIndexOf("}")
-  const executableCode = transpiled.outputText.slice(bodyStart, bodyEnd)
-  return parse(executableCode, {
+  return parse(code, {
     ecmaVersion: "latest",
     sourceType: "script",
     allowReturnOutsideFunction: true,

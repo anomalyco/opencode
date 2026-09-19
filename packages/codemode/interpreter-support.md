@@ -15,8 +15,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 ## Source and execution model
 
 - [x] JavaScript parsed with the latest syntax accepted by Acorn, then restricted by the interpreter allowlist.
-- [x] Erasable TypeScript syntax, including type annotations, type declarations, assertions, and non-null assertions.
-      TypeScript is transpiled first; the emitted JavaScript must still use the supported subset.
+      TypeScript-only syntax is rejected rather than stripped before execution.
 - [x] Top-level `await` and `return` through the program's implicit async-function scope.
 - [x] Explicit `return`, final top-level expression as a REPL-style result, and `null` when no value is produced.
 - [x] The host boundary is `JSON.stringify` plus a short table. The program result and tool arguments cross as
@@ -41,8 +40,6 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       expression match can still run long on a pathological pattern; the host regex engine has no interrupt hook.
 - [ ] Strict-mode early errors: duplicate parameter names, `yield` as an identifier, and a trailing comma after a
       rest parameter are accepted unless the program itself begins with `"use strict"`.
-- [ ] Valid JavaScript rejected by TypeScript transpilation before interpretation, such as `in` inside a destructuring
-      default in a `for...of` head and Unicode-escaped keywords.
 
 ## Values and literals
 
@@ -494,9 +491,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
 - [x] Catchable user throws, runtime failures raised during interpreted evaluation, awaited tool failures, and awaited
       tool-call-limit failures; parse/compile failures, cooperative timeout, and output bounding remain outside program
       `catch`.
-- [x] Source locations on unsupported-syntax diagnostics for JavaScript-shaped input; TypeScript transpilation may
-      shift them. The diagnostic names the rejected node type and attaches a short orientation to the supported
-      subset; this matrix is the full reference.
+- [x] Source locations on unsupported-syntax diagnostics. The diagnostic names the rejected node type and attaches a
+      short orientation to the supported subset; this matrix is the full reference.
 - [x] Model-visible host failure messages and underlying causes, including output-validation errors.
 - [x] Caught errors do not distinguish user throws, interpreter failures, and tool failures; a program sees one
       Error-shaped value with `name` and `message` in `catch`, rejection handlers, and `Promise.allSettled` reasons.
