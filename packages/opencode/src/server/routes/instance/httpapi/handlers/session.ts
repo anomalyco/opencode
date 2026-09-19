@@ -321,6 +321,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
               sessionID: ctx.params.sessionID,
               error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),
             })
+            yield* statusSvc.set(ctx.params.sessionID, { type: "idle" }).pipe(Effect.ignore)
           }),
         ),
         Effect.forkIn(scope, { startImmediately: true }),
