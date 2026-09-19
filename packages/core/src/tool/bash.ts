@@ -161,6 +161,9 @@ const layer = Layer.effectDiscard(
                 stdin: "ignore",
                 detached: process.platform !== "win32",
                 forceKillAfter: Duration.seconds(3),
+                // Expose the active session to Bash tool subprocesses (e.g. so
+                // shell.online can fork this exact conversation).
+                env: { ...process.env, OPENCODE_SESSION_ID: context.sessionID },
               })
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
               const result = yield* appProcess
