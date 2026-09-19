@@ -1160,4 +1160,12 @@ export const dict = {
   "workspace.reset.archived.one": "1 सेशन संग्रहित किया जाएगा।",
   "workspace.reset.archived.many": "{{count}} सेशन संग्रहित किए जाएँगे।",
   "workspace.reset.note": "यह डिफ़ॉल्ट शाखा से मिलान करने के लिए वर्कस्पेस को रीसेट कर देगा।",
+  "settings.general.row.customTheme.title": "Custom theme URL",
+  "settings.general.row.customTheme.description":
+    "Load a private theme from a URL. Make sure the URL serves the theme JSON with permissive CORS headers.",
+  "settings.general.row.customTheme.placeholder": "https://example.com/theme.json",
+  "settings.general.row.customTheme.load": "Load",
+  "settings.general.row.customTheme.remove": "Remove",
+  "settings.general.row.customTheme.error.network": "Couldn't reach that URL.",
+  "settings.general.row.customTheme.error.invalid": "That URL didn't return a valid theme.",
 }

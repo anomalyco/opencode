@@ -1245,4 +1245,12 @@ export const dict = {
   "help.tabs.persistence": "Dine faner er stadig åbne, når du åbner appen igen.",
   "help.tabs.worktrees":
     "Det nye design understøtter endnu ikke Git Worktrees, men understøttelsen kommer snart. Hvis du foretrækker at fortsætte med det tidligere layout, kan du skifte mellem layoutene under Indstillinger. Bemærk, at det nye layout bliver permanent om nogle få uger.",
+  "settings.general.row.customTheme.title": "Custom theme URL",
+  "settings.general.row.customTheme.description":
+    "Load a private theme from a URL. Make sure the URL serves the theme JSON with permissive CORS headers.",
+  "settings.general.row.customTheme.placeholder": "https://example.com/theme.json",
+  "settings.general.row.customTheme.load": "Load",
+  "settings.general.row.customTheme.remove": "Remove",
+  "settings.general.row.customTheme.error.network": "Couldn't reach that URL.",
+  "settings.general.row.customTheme.error.invalid": "That URL didn't return a valid theme.",
 }

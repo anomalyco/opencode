@@ -1173,4 +1173,12 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} ဆက်ရှင်များကို သိမ်းဆည်းထားပါမည်။",
   "workspace.reset.note": "၎င်းသည် မူရင်းဌာနခွဲနှင့် ကိုက်ညီစေရန် အလုပ်ခွင်ကို ပြန်လည်သတ်မှတ်ပါမည်။",
   "dialog.usageExceeded.dontShowAgain": "ထပ်မပြပါနှင့်",
+  "settings.general.row.customTheme.title": "Custom theme URL",
+  "settings.general.row.customTheme.description":
+    "Load a private theme from a URL. Make sure the URL serves the theme JSON with permissive CORS headers.",
+  "settings.general.row.customTheme.placeholder": "https://example.com/theme.json",
+  "settings.general.row.customTheme.load": "Load",
+  "settings.general.row.customTheme.remove": "Remove",
+  "settings.general.row.customTheme.error.network": "Couldn't reach that URL.",
+  "settings.general.row.customTheme.error.invalid": "That URL didn't return a valid theme.",
 }
