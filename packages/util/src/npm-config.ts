@@ -27,7 +27,12 @@ export const load = (dir: string) =>
         warn: false,
       })
       await config.load()
-      return config.flat as Record<string, unknown>
+      const flat = { ...(config.flat as Record<string, unknown>) }
+      // Config assumes npmPath points at an npm CLI installation and synthesizes
+      // bin/npm-cli.js beneath it. Ours only supplies npm's config definitions,
+      // so let pacote resolve the real npm executable from PATH instead.
+      delete flat.npmBin
+      return flat
     },
     catch: (cause) => cause,
   }).pipe(Effect.orElseSucceed(() => ({}) as Record<string, unknown>))
