@@ -655,9 +655,9 @@ describe("Headers", () => {
           copied: [headers.get("content-type"), copy.get("content-type")],
           pairs: [...new Headers([["b", "2"], ["A", "1"]])],
           map: [...new Headers(new Map([["k", "v"]]))],
-          keys: headers.keys(),
-          values: headers.values(),
-          entries: headers.entries(),
+          keys: [...headers.keys()],
+          values: [...headers.values()],
+          entries: [...headers.entries()],
         }
       `),
     ).toEqual({
@@ -816,18 +816,28 @@ describe("Map", () => {
     expect((await error(`return new Map(["flat"])`)).message).toMatch(/\[key, value\] pairs/)
   })
 
-  test("keys/values/entries return arrays", async () => {
+  test("keys/values/entries return live iterators", async () => {
     expect(
       await value(`
       const m = new Map([["a", 1], ["b", 2]])
-      return { keys: m.keys(), values: m.values(), entries: m.entries() }
+      const keys = m.keys()
+      const first = keys.next()
+      m.set("c", 3)
+      return { first, rest: [...keys], values: [...m.values()], entries: [...m.entries()], same: [...m[Symbol.iterator]()] }
     `),
     ).toEqual({
-      keys: ["a", "b"],
-      values: [1, 2],
+      first: { value: "a", done: false },
+      rest: ["b", "c"],
+      values: [1, 2, 3],
       entries: [
         ["a", 1],
         ["b", 2],
+        ["c", 3],
+      ],
+      same: [
+        ["a", 1],
+        ["b", 2],
+        ["c", 3],
       ],
     })
   })
@@ -1116,6 +1126,108 @@ describe("TextEncoder and TextDecoder", () => {
       ),
     ).toEqual([true, 16, true])
     expect((await error(`crypto.getRandomValues([1])`)).message).toContain("expects a Uint8Array, received an array")
+  })
+})
+
+describe("built-in iterators", () => {
+  test("keys/values/entries and [Symbol.iterator] step with next() and stay live", async () => {
+    expect(
+      await value(`
+        const items = ["a"]
+        const it = items.entries()
+        items.push("b")
+        const steps = [it.next(), it.next(), it.next()]
+        items.push("c")
+        return { steps, after: it.next(), same: items[Symbol.iterator] === items.values }
+      `),
+    ).toEqual({
+      steps: [{ value: [0, "a"], done: false }, { value: [1, "b"], done: false }, { done: true }],
+      after: { done: true },
+      same: true,
+    })
+    expect(
+      await value(`
+        const s = new Set([1, 2])
+        const u = new URLSearchParams("a=1&b=2")
+        const h = new Headers({ b: "2", a: "1" })
+        const bytes = new Uint8Array([7, 8])
+        return [
+          [...s.entries()], [...s[Symbol.iterator]()], s[Symbol.iterator] === s.values,
+          [...u.keys()], [...u[Symbol.iterator]()], u[Symbol.iterator] === u.entries,
+          [...h.values()], [...h[Symbol.iterator]()], h[Symbol.iterator] === h.entries,
+          [...bytes.entries()], [...bytes[Symbol.iterator]()], bytes[Symbol.iterator] === bytes.values,
+          [..."ab"[Symbol.iterator]()],
+        ]
+      `),
+    ).toEqual([
+      [
+        [1, 1],
+        [2, 2],
+      ],
+      [1, 2],
+      true,
+      ["a", "b"],
+      [
+        ["a", "1"],
+        ["b", "2"],
+      ],
+      true,
+      ["1", "2"],
+      [
+        ["a", "1"],
+        ["b", "2"],
+      ],
+      true,
+      [
+        [0, 7],
+        [1, 8],
+      ],
+      [7, 8],
+      true,
+      ["a", "b"],
+    ])
+  })
+
+  test("iterators are consumed once by every iteration site", async () => {
+    expect(
+      await value(`
+        const it = [1, 2, 3, 4].values()
+        const picked = []
+        for (const item of it) { picked.push(item); if (item === 2) break }
+        const [third] = it
+        return { picked, third, rest: [...it], spent: Array.from(it), again: it[Symbol.iterator]() === it }
+      `),
+    ).toEqual({ picked: [1, 2], third: 3, rest: [4], spent: [], again: true })
+    expect(
+      await value(`
+        const m = new Map([["a", 1], ["b", 2]])
+        return [
+          Object.fromEntries(m.entries()), Array.from(m.keys(), (k) => k + "!"), new Set(m.values()).size,
+          await Promise.all([Promise.resolve(1), 2].values()),
+        ]
+      `),
+    ).toEqual([{ a: 1, b: 2 }, ["a!", "b!"], 2, [1, 2]])
+    expect(await value(`let s = 0; for await (const v of [Promise.resolve(1), 2].values()) s += v; return s`)).toBe(3)
+    expect(
+      await value(`return new Set([1, 2]).union({ size: 1, has: () => false, keys: () => new Set([3]).keys() })`),
+    ).toEqual([1, 2, 3])
+  })
+
+  test("iterators are opaque references", async () => {
+    expect(await value(`return [1].keys()`)).toEqual({})
+    expect(await value(`return JSON.stringify({ it: [1].keys() })`)).toBe('{"it":{}}')
+    expect(await value(`return [typeof [1].keys(), Array.isArray([1].keys()), Object.keys([1].keys())]`)).toEqual([
+      "object",
+      false,
+      [],
+    ])
+    const logged = await run(`console.log([1].keys()); return null`)
+    expect(logged.logs?.[0]).toBe("[opaque reference]")
+    expect((await error(`return [1].keys() + ""`)).message).toContain("Binary operators require data values")
+    expect((await error(`return [1].keys().next.call({})`)).message).toContain("is not a function")
+    expect((await error(`const it = [1].keys(); const next = it.next; return next()`)).message).toContain(
+      "Iterator.prototype.next called on incompatible receiver undefined",
+    )
   })
 })
 

@@ -20,6 +20,7 @@ import {
   DateObj,
   ErrorObj,
   GeneratorObj,
+  IteratorObj,
   MapObj,
   Obj,
   PromiseObj,
@@ -61,6 +62,7 @@ export const extensionGlobals = <R>(
       !(value instanceof Obj) ||
       value instanceof Callable ||
       value instanceof GeneratorObj ||
+      value instanceof IteratorObj ||
       value instanceof PromiseObj
     ) {
       throw typeError(`${label} contains ${describeValue(value)}, which cannot be passed to an extension.`)

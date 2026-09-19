@@ -1,7 +1,19 @@
 import { Effect } from "effect"
 import { constructor, fn, type Method, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
-import { PendingThrow, typeError, uriError } from "../interpreter/model.js"
-import { defineAccessor, entries, isWrapper, Arr, Obj, URLObj, URLSearchParamsObj } from "../interpreter/objects.js"
+import { IteratorSymbol, PendingThrow, typeError, uriError } from "../interpreter/model.js"
+import {
+  define,
+  defineAccessor,
+  entries,
+  get,
+  hidden,
+  isWrapper,
+  Arr,
+  IteratorObj,
+  Obj,
+  URLObj,
+  URLSearchParamsObj,
+} from "../interpreter/objects.js"
 import { isRuntimeReference } from "../interpreter/references.js"
 import { applyCollectionCallback, preserveConsumerError } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
@@ -258,13 +270,18 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ["keys", 0, (thisValue) => wrap(Array.from(self(thisValue, "keys").params.keys()))],
-    ["values", 0, (thisValue) => wrap(Array.from(self(thisValue, "values").params.values()))],
+    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").params.keys())],
+    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").params.values())],
     [
       "entries",
       0,
       (thisValue) =>
-        wrap(Array.from(self(thisValue, "entries").params.entries(), ([key, value]) => wrap([key, value]))),
+        new IteratorObj(
+          builtins.Iterator,
+          self(thisValue, "entries")
+            .params.entries()
+            .map(([key, value]) => wrap([key, value])),
+        ),
     ],
     ["toString", 0, (thisValue) => self(thisValue, "toString").params.toString()],
     [
@@ -281,5 +298,6 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
       },
     ],
   ])
+  define(proto, IteratorSymbol, get(proto, "entries"), hidden)
   return searchParams
 }

@@ -220,8 +220,9 @@ describe("values are converted at the boundary, never shared", () => {
     expect(held[1]).toBeInstanceOf(Error)
   })
 
-  test("functions, promises, and symbols cannot be passed in", async () => {
+  test("functions, promises, iterators, and symbols cannot be passed in", async () => {
     expect((await failure(`keep(() => 1)`)).message).toContain("Argument 1 to keep contains a function")
+    expect((await failure(`keep([1].keys())`)).message).toContain("Argument 1 to keep contains an iterator")
     expect((await failure(`keep(later(1))`)).message).toContain("un-awaited Promise")
     expect((await failure(`keep(Symbol.iterator)`)).message).toContain("Argument 1 to keep contains a symbol")
   })

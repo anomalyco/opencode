@@ -122,6 +122,16 @@ export class GeneratorObj extends Obj {
   }
 }
 
+/** A built-in collection iterator: live over the host collection, yielding program values. */
+export class IteratorObj extends Obj {
+  constructor(
+    proto: Obj,
+    readonly iterator: IteratorObject<unknown>,
+  ) {
+    super(proto)
+  }
+}
+
 export class DateObj extends Obj {
   constructor(
     proto: Obj,

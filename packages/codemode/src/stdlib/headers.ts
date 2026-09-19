@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { constructor, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
-import { typeError } from "../interpreter/model.js"
-import { entries, Arr, HeadersObj, Obj } from "../interpreter/objects.js"
+import { IteratorSymbol, typeError } from "../interpreter/model.js"
+import { define, entries, get, hidden, Arr, HeadersObj, IteratorObj, Obj } from "../interpreter/objects.js"
 import { applyCollectionCallback } from "../interpreter/callback.js"
 import { isRuntimeReference } from "../interpreter/references.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
@@ -93,13 +93,25 @@ export const headersGlobal = <R>(ctx: Interpreter<R>) => {
         return attempt(() => target.set(arg(args, 0), arg(args, 1)))
       },
     ],
-    ["keys", 0, (thisValue) => wrap(Array.from(self(thisValue, "keys").headers.keys()))],
-    ["values", 0, (thisValue) => wrap(Array.from(self(thisValue, "values").headers.values()))],
+    // Iterator.from because Bun's Headers typings predate iterator helpers; the runtime iterators already have them.
+    [
+      "keys",
+      0,
+      (thisValue) => new IteratorObj(builtins.Iterator, Iterator.from(self(thisValue, "keys").headers.keys())),
+    ],
+    [
+      "values",
+      0,
+      (thisValue) => new IteratorObj(builtins.Iterator, Iterator.from(self(thisValue, "values").headers.values())),
+    ],
     [
       "entries",
       0,
       (thisValue) =>
-        wrap(Array.from(self(thisValue, "entries").headers.entries(), ([key, value]) => wrap([key, value]))),
+        new IteratorObj(
+          builtins.Iterator,
+          Iterator.from(self(thisValue, "entries").headers.entries()).map(([key, value]) => wrap([key, value])),
+        ),
     ],
     [
       "forEach",
@@ -115,5 +127,6 @@ export const headersGlobal = <R>(ctx: Interpreter<R>) => {
       },
     ],
   ])
+  define(proto, IteratorSymbol, get(proto, "entries"), hidden)
   return headers
 }

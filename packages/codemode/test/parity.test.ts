@@ -502,9 +502,9 @@ describe("CodeMode-specific array behavior", () => {
     expect(err.message).toContain("circular")
   })
 
-  test("keys/values/entries return arrays usable with for...of and spread", async () => {
+  test("keys/values/entries return iterators usable with for...of and spread", async () => {
     expect(await value(`return [...["x","y","z"].keys()]`)).toEqual([0, 1, 2])
-    expect(await value(`return ["x","y"].values()`)).toEqual(["x", "y"])
+    expect(await value(`return [...["x","y"].values()]`)).toEqual(["x", "y"])
     expect(
       await value(`
       const out = []

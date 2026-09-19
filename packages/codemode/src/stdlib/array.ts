@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength, MAX_ARRAY_LENGTH } from "../interpreter/limits.js"
-import { invalidData, rangeError, typeError } from "../interpreter/model.js"
-import { get, Arr, GeneratorObj, Obj } from "../interpreter/objects.js"
+import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
+import { define, get, hidden, Arr, GeneratorObj, IteratorObj, Obj } from "../interpreter/objects.js"
 import { describeValue, rejectCircularInsertion } from "../interpreter/references.js"
 import { applyCollectionCallback, preserveConsumerError } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
@@ -340,13 +340,18 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
         return target
       },
     ],
-    ["keys", 0, (thisValue) => wrap(Array.from(self(thisValue, "keys").items.keys()))],
-    ["values", 0, (thisValue) => wrap([...self(thisValue, "values").items])],
+    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").items.keys())],
+    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").items.values())],
     [
       "entries",
       0,
       (thisValue) =>
-        wrap(Array.from(self(thisValue, "entries").items.entries(), ([index, item]) => wrap([index, item]))),
+        new IteratorObj(
+          builtins.Iterator,
+          self(thisValue, "entries")
+            .items.entries()
+            .map(([index, item]) => wrap([index, item])),
+        ),
     ],
     iterate("map", 1, (target, receiver, apply) =>
       Effect.gen(function* () {
@@ -490,5 +495,6 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       }),
     ),
   ])
+  define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return array
 }

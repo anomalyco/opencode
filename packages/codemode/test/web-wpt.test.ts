@@ -8,8 +8,8 @@
  * Copyright © web-platform-tests contributors. Governed by the 3-Clause BSD license in LICENSE.wpt.
  *
  * `assert_throws_dom("InvalidCharacterError", …)` becomes a check for a TypeError: CodeMode has no DOMException.
- * Headers cases that need `Symbol.iterator`, iterator objects from `keys()`/`values()`/`entries()` (CodeMode returns
- * arrays), or a custom iterator on a Headers instance are left out.
+ * `checkIteratorProperties` (prototype chain and property descriptors) and the custom iterator on a Headers
+ * instance are left out.
  */
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
@@ -253,33 +253,64 @@ describe("Headers WPT parity (fetch/api/headers)", () => {
         }).sort()
         test(function() {
           var headers = new Headers(headerEntriesDict)
-          assert_array_equals(headers.keys(), sortedHeaderKeys)
+          var actual = headers.keys()
+          sortedHeaderKeys.forEach(function(key) {
+            const entry = actual.next()
+            assert_false(entry.done)
+            assert_equals(entry.value, key)
+          })
+          assert_true(actual.next().done)
+          assert_true(actual.next().done)
           for (const key of headers.keys()) assert_true(sortedHeaderKeys.indexOf(key) != -1)
         }, "Check keys method")
         test(function() {
           var headers = new Headers(headerEntriesDict)
-          assert_array_equals(headers.values(), sortedHeaderKeys.map((key) => sortedHeaderDict[key]))
+          var actual = headers.values()
+          sortedHeaderKeys.forEach(function(key) {
+            const entry = actual.next()
+            assert_false(entry.done)
+            assert_equals(entry.value, sortedHeaderDict[key])
+          })
+          assert_true(actual.next().done)
+          assert_true(actual.next().done)
           for (const value of headers.values()) assert_true(headerValues.indexOf(value) != -1)
         }, "Check values method")
         test(function() {
           var headers = new Headers(headerEntriesDict)
-          assert_array_equals(headers.entries(), sortedHeaderKeys.map((key) => [key, sortedHeaderDict[key]]))
+          var actual = headers.entries()
+          sortedHeaderKeys.forEach(function(key) {
+            const entry = actual.next()
+            assert_false(entry.done)
+            assert_equals(entry.value[0], key)
+            assert_equals(entry.value[1], sortedHeaderDict[key])
+          })
+          assert_true(actual.next().done)
+          assert_true(actual.next().done)
           for (const entry of headers.entries()) assert_equals(entry[1], sortedHeaderDict[entry[0]])
         }, "Check entries method")
         test(function() {
           var headers = new Headers(headerEntriesDict)
-          assert_array_equals([...headers], sortedHeaderKeys.map((key) => [key, sortedHeaderDict[key]]))
+          var actual = headers[Symbol.iterator]()
+          sortedHeaderKeys.forEach(function(key) {
+            const entry = actual.next()
+            assert_false(entry.done)
+            assert_equals(entry.value[0], key)
+            assert_equals(entry.value[1], sortedHeaderDict[key])
+          })
+          assert_true(actual.next().done)
+          assert_true(actual.next().done)
         }, "Check Symbol.iterator method")
         test(function() {
           var headers = new Headers(headerEntriesDict)
-          var index = 0
+          var reference = sortedHeaderKeys[Symbol.iterator]()
           headers.forEach(function(value, key, container) {
             assert_equals(headers, container)
-            assert_equals(key, sortedHeaderKeys[index])
-            assert_equals(value, sortedHeaderDict[sortedHeaderKeys[index]])
-            index++
+            const entry = reference.next()
+            assert_false(entry.done)
+            assert_equals(key, entry.value)
+            assert_equals(value, sortedHeaderDict[entry.value])
           })
-          assert_equals(index, sortedHeaderKeys.length)
+          assert_true(reference.next().done)
         }, "Check forEach method")
         test(() => {
           const headers = new Headers({"foo": "2", "baz": "1", "BAR": "0"})

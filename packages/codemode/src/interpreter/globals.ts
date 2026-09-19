@@ -12,6 +12,7 @@ import { regexpGlobal } from "../stdlib/regexp.js"
 import { stringGlobal } from "../stdlib/string.js"
 import { uriGlobal, urlGlobal, urlSearchParamsGlobal } from "../stdlib/url.js"
 import { headersGlobal } from "../stdlib/headers.js"
+import { iteratorGlobals } from "../stdlib/iterator.js"
 import { coercion } from "../stdlib/value.js"
 import { base64Global, cryptoGlobal } from "../stdlib/web.js"
 import { ToolReference } from "../tool-runtime.js"
@@ -101,5 +102,6 @@ export const globalNames: ReadonlySet<string> = new Set(Object.keys(table))
 /** The immutable global bindings of every program, in declaration order. */
 export const globals = <R>(ctx: Interpreter<R>): ReadonlyArray<readonly [string, unknown]> => {
   generatorGlobals(ctx)
+  iteratorGlobals(ctx)
   return Object.entries(table).map(([name, factory]) => [name, factory(ctx)] as const)
 }

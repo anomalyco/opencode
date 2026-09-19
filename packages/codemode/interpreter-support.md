@@ -53,7 +53,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `NaN` and `Infinity` globals.
 - [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
 - [ ] Arbitrary Symbol primitive values and symbol-keyed properties. The confined `Symbol.iterator` and
-      `Symbol.asyncIterator` keys are available only for custom iterator protocols.
+      `Symbol.asyncIterator` keys are available only for the iterator protocols.
 - [ ] Tagged-template calls.
 - [ ] Getter and setter definitions in object literals.
 
@@ -92,8 +92,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `if`/`else` and conditional expressions.
 - [x] `switch`, including default clauses and fallthrough.
 - [x] `for`, `while`, and `do...while`.
-- [x] `for...of` over arrays, strings, Maps, Sets, URLSearchParams, Headers, custom synchronous iterators, and
-      confined synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
+- [x] `for...of` over arrays, strings, Maps, Sets, URLSearchParams, Headers, Uint8Arrays, built-in iterators, custom
+      synchronous iterators, and confined synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
 - [x] `for...in` over own keys of plain objects, arrays, strings, and tool references; other values iterate nothing.
 - [x] Unlabeled `break` and `continue`.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
@@ -287,7 +287,10 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Ordering: `sort`, `toSorted`, `reverse`, and `toReversed`.
 - [x] Access/copying: `at`, `slice`, `concat`, `flat`, `with`, and `join`.
 - [x] Mutation: `push`, `pop`, `shift`, `unshift`, `splice`, `fill`, and `copyWithin`.
-- [x] Materialized iteration helpers: `keys`, `values`, and `entries` return arrays rather than iterators.
+- [x] `keys`, `values`, `entries`, and `[Symbol.iterator]` (the same function as `values`) return live iterator objects
+      with `next()` and `[Symbol.iterator]`, as in JS. Iterator objects are opaque references: they print as
+      `[opaque reference]`, serialize to `{}`, and cannot be passed to extensions. Every built-in collection iterator
+      shares one prototype, which is only observable through `getPrototypeOf`.
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
 - [x] The `thisArg` argument of `Array.from` is accepted and ignored, like JS arrows.
 - [x] `Array.prototype.toSpliced`.
@@ -302,7 +305,6 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       separator: JavaScript applies ToIntegerOrInfinity/ToString (including `valueOf`, strings, and `undefined`), the
       interpreter requires numbers and strings; `includes()`/`indexOf()` with no argument should search for
       `undefined`.
-- [ ] Iterator objects from `keys`, `values`, and `entries` with a live `next()`.
 
 ## Strings
 
@@ -314,7 +316,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Regular-expression integration: `match`, materialized `matchAll`, `replace`, `replaceAll`, `split`, and `search`.
 - [x] `localeCompare`; locale and options arguments are currently ignored.
 - [x] `isWellFormed` and `toWellFormed`.
-- [x] `toString`, `length`, numeric indexing, spread, and `for...of` by Unicode code point.
+- [x] `toString`, `length`, numeric indexing, spread, `for...of`, and `[Symbol.iterator]` by Unicode code point.
 - [x] Static `String.fromCharCode` and `String.fromCodePoint`.
 - [x] Native argument coercion for supported String methods; for example, `includes(1)` and `slice("1")` coerce like
       native JS, `split(undefined)` returns the whole string, and `includes`/`startsWith`/`endsWith` reject regular
@@ -405,7 +407,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Map `get`, `set`, `has`, `delete`, `clear`, `size`, and `forEach`.
 - [x] `new Set()` from synchronous iterables.
 - [x] Set `add`, `has`, `delete`, `clear`, `size`, and `forEach`.
-- [x] Materialized `keys`, `values`, and `entries` arrays for Map and Set.
+- [x] Live `keys`, `values`, `entries`, and `[Symbol.iterator]` iterators for Map and Set; a Set-like operand's `keys()`
+      may return a built-in iterator or an array.
 - [x] Spread, `for...of`, `Array.from`, and `Object.fromEntries` integration.
 - [x] Map and Set values serialize to `{}` at host/JSON boundaries.
 - [x] Set composition and relation methods: `union`, `intersection`, `difference`, `symmetricDifference`, `isSubsetOf`,
@@ -421,7 +424,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Writable URL fields except `origin`.
 - [x] `new URLSearchParams()` from query strings, data objects, synchronous iterables of pairs, and URLSearchParams.
 - [x] URLSearchParams `append`, `delete`, `get`, `getAll`, `has`, `set`, `sort`, `forEach`, `keys`, `values`,
-      `entries`, `toString`, and `size`.
+      `entries`, `[Symbol.iterator]`, `toString`, and `size`.
 - [x] URL values serialize to their href; URLSearchParams serialize to `{}`.
 
 ## Uint8Array
@@ -434,7 +437,8 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 - [x] Index reads and writes with JS byte semantics: values wrap modulo 256, out-of-range writes are ignored, indexes
       cannot be deleted. `length` is a prototype accessor, so `Object.keys` lists only indexes.
 - [x] `at`, `slice`, `subarray` (a view on the same bytes), `set`, `fill`, `reverse`, `indexOf`, `lastIndexOf`,
-      `includes`, `join`, `toString`, `toBase64`, `toHex`, and materialized `keys`, `values`, and `entries` arrays.
+      `includes`, `join`, `toString`, `toBase64`, `toHex`, and live `keys`, `values`, `entries`, and `[Symbol.iterator]`
+      iterators.
 - [x] Spread, destructuring, `for...of`, `yield*`, `Array.from`, and `new Set(bytes)`. `Array.isArray` is false.
 - [x] String coercion joins with commas; `JSON.stringify` gives `{"0":1,...}`; `console.log` prints
       `Uint8Array(n) [...]`.
@@ -450,8 +454,8 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
       `fatal` and `ignoreBOM` options; `decode` takes a Uint8Array or nothing.
 - [x] `new Headers()` from records, synchronous iterables of pairs, and Headers, wrapping the host's `Headers`: names
       fold to lowercase, values are normalized and combined, and invalid names or values throw a `TypeError`.
-- [x] Headers `append`, `delete`, `get`, `getSetCookie`, `has`, `set`, `forEach`, `keys`, `values`, and `entries`;
-      iteration is live and sorted by name, with `set-cookie` values kept apart.
+- [x] Headers `append`, `delete`, `get`, `getSetCookie`, `has`, `set`, `forEach`, `keys`, `values`, `entries`, and
+      `[Symbol.iterator]`; iteration is live and sorted by name, with `set-cookie` values kept apart.
 - [x] Headers serialize to a `{ name: value }` object in JSON, in results, and in tool arguments.
 - [ ] `Request`, `Response`, and `Blob`.
 - [ ] `crypto.subtle` and `TextDecoder` streaming or non-UTF-8 encodings.

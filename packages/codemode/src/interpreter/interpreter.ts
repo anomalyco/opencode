@@ -79,6 +79,7 @@ import {
   DateObj,
   Fn,
   GeneratorObj,
+  IteratorObj,
   MapObj,
   Obj,
   PromiseObj,
@@ -650,8 +651,8 @@ class Frame<R> {
       if (declared?.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
       const right = yield* self.evaluateExpression(node.right)
 
-      const iterator = yield* self.customIterator(right, node, awaiting)
-      const cursor = iterator === undefined ? yield* self.iterate(right, node) : undefined
+      const cursor = self.hostCursor(right)
+      const iterator = cursor === undefined ? yield* self.customIterator(right, node, awaiting) : undefined
       if (iterator === undefined && cursor === undefined) {
         throw invalidData(
           `${awaiting ? "for await...of" : "for...of"} requires an array, string, Map, Set, URLSearchParams, or Headers, or custom iterator value.`,
@@ -746,6 +747,20 @@ class Frame<R> {
   }
 
   iterate(value: unknown, node?: AstNode) {
+    const cursor = this.hostCursor(value)
+    if (cursor !== undefined) return Effect.succeed(cursor)
+    const self = this
+    return Effect.map(this.customIterator(value, node, false), (iterator) =>
+      iterator === undefined
+        ? undefined
+        : {
+            next: self.nextIteratorResult(iterator, node, false),
+            close: Effect.suspend(() => self.closeIterator(iterator, node, false)),
+          },
+    )
+  }
+
+  private hostCursor(value: unknown) {
     const iterator =
       value instanceof Arr
         ? value.items[Symbol.iterator]()
@@ -761,29 +776,21 @@ class Frame<R> {
                   ? value.headers.entries()
                   : value instanceof Bytes
                     ? value.bytes.values()
-                    : undefined
-    if (iterator !== undefined) {
-      const proto = this.ctx.builtins.Array
-      return Effect.succeed({
-        next: Effect.sync(() => {
-          const step = iterator.next()
-          return {
-            done: Boolean(step.done),
-            value: Array.isArray(step.value) ? new Arr(proto, step.value) : step.value,
-          }
-        }),
-        close: Effect.void,
-      })
+                    : value instanceof IteratorObj
+                      ? value.iterator
+                      : undefined
+    if (iterator === undefined) return undefined
+    const proto = this.ctx.builtins.Array
+    return {
+      next: Effect.sync(() => {
+        const step = iterator.next()
+        return {
+          done: Boolean(step.done),
+          value: Array.isArray(step.value) ? new Arr(proto, step.value) : step.value,
+        }
+      }),
+      close: Effect.void,
     }
-    const self = this
-    return Effect.map(this.customIterator(value, node, false), (iterator) =>
-      iterator === undefined
-        ? undefined
-        : {
-            next: self.nextIteratorResult(iterator, node, false),
-            close: Effect.suspend(() => self.closeIterator(iterator, node, false)),
-          },
-    )
   }
 
   private customIterator(value: unknown, node: AstNode | undefined, allowAsync = true) {
