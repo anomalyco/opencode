@@ -22,7 +22,6 @@ import { ScopedKey } from "@/utils/server-scope"
 import { createPromptSubmissionState } from "./submission-state"
 import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
-import { blobDataUrl } from "@/utils/draft-store"
 
 type PendingPrompt = {
   abort: AbortController
@@ -55,6 +54,59 @@ const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? 
 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
 
+// TODO(review): Replace retry caching with server-side batch upload or rollback when the protocol supports it.
+const uploadedAttachments = new WeakMap<
+  DirectorySDK["api"]["session"],
+  Map<string, ReturnType<DirectorySDK["api"]["session"]["attachment"]>>
+>()
+
+const uploadKey = (sessionID: string, attachment: ImageAttachmentPart) =>
+  JSON.stringify([sessionID, attachment.blob.id, attachment.filename, attachment.mime])
+
+async function uploadAttachments(
+  api: DirectorySDK["api"]["session"],
+  sessionID: string,
+  attachments: ImageAttachmentPart[],
+) {
+  const cache = uploadedAttachments.get(api) ?? new Map()
+  uploadedAttachments.set(api, cache)
+  return Promise.all(
+    attachments.map(async (attachment) => {
+      const key = uploadKey(sessionID, attachment)
+      const existing = cache.get(key)
+      const request =
+        existing ??
+        fetch(attachment.blob.url)
+          .then((response) => response.blob())
+          .then((blob) =>
+            api.attachment({
+              sessionID,
+              file: blob.slice(0, blob.size, attachment.mime),
+              name: attachment.filename,
+            }),
+          )
+          .catch((error) => {
+            cache.delete(key)
+            throw error
+          })
+      if (!existing) cache.set(key, request)
+      const uploaded = await request
+      return { ...uploaded, previewUrl: attachment.blob.url }
+    }),
+  )
+}
+
+function clearUploadedAttachments(
+  api: DirectorySDK["api"]["session"],
+  sessionID: string,
+  attachments: ImageAttachmentPart[],
+) {
+  const cache = uploadedAttachments.get(api)
+  if (!cache) return
+  attachments.forEach((attachment) => cache.delete(uploadKey(sessionID, attachment)))
+  if (cache.size === 0) uploadedAttachments.delete(api)
+}
+
 export async function sendFollowupDraft(input: FollowupSendInput) {
   const text = draftText(input.draft.prompt)
   const images = draftImages(input.draft.prompt)
@@ -84,6 +136,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
         return false
       }
 
+      const attachments = await uploadAttachments(input.api, input.draft.sessionID, images)
       const messageID = Identifier.ascending("message")
       await input.api.command({
         sessionID: input.draft.sessionID,
@@ -96,13 +149,13 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
           providerID: input.draft.model.providerID,
           variant: input.draft.variant,
         },
-        files: await Promise.all(
-          images.map(async (attachment) => ({
-            uri: await blobDataUrl(attachment.blob, attachment.mime),
-            name: attachment.filename,
-          })),
-        ),
+        files: attachments.map((attachment) => ({
+          uri: attachment.uri,
+          name: attachment.name,
+          mime: attachment.mime,
+        })),
       })
+      clearUploadedAttachments(input.api, input.draft.sessionID, images)
       return true
     } catch (err) {
       setIdle()
@@ -111,16 +164,12 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   }
 
   const messageID = input.messageID ?? Identifier.ascending("message")
-  const encodedImages = await Promise.all(
-    images.map(async (attachment) => ({
-      ...attachment,
-      dataUrl: await blobDataUrl(attachment.blob, attachment.mime),
-    })),
-  )
+  if (!(await wait())) return false
+  const attachments = await uploadAttachments(input.api, input.draft.sessionID, images)
   const { requestParts, optimisticParts } = buildRequestParts({
     prompt: input.draft.prompt,
     context: input.draft.context,
-    images: encodedImages,
+    attachments,
     text,
     sessionID: input.draft.sessionID,
     messageID,
@@ -157,14 +206,6 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   })
 
   try {
-    if (!(await wait())) {
-      batch(() => {
-        setIdle()
-        remove()
-      })
-      return false
-    }
-
     await input.api.prompt({
       sessionID: input.draft.sessionID,
       id: messageID,
@@ -180,6 +221,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
           {
             uri: part.url,
             name: part.filename,
+            mime: part.mime,
             mention: text ? { start: text.start, end: text.end, text: text.value } : undefined,
           },
         ]
@@ -197,6 +239,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
           : [],
       ),
     })
+    clearUploadedAttachments(input.api, input.draft.sessionID, images)
     return true
   } catch (err) {
     batch(() => {
@@ -517,20 +560,22 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         clearInput()
         const messageID = Identifier.ascending("message")
         serverSync().session.set("session_status", session.id, { type: "busy" })
-        sdk()
-          .api.session.command({
-            sessionID: session.id,
-            id: messageID,
-            command: commandName,
-            arguments: args.join(" "),
-            agent,
-            model: { id: model.modelID, providerID: model.providerID, variant },
-            files: await Promise.all(
-              images.map(async (attachment) => ({
-                uri: await blobDataUrl(attachment.blob, attachment.mime),
-                name: attachment.filename,
+        void uploadAttachments(sdk().api.session, session.id, images)
+          .then(async (attachments) => {
+            await sdk().api.session.command({
+              sessionID: session.id,
+              id: messageID,
+              command: commandName,
+              arguments: args.join(" "),
+              agent,
+              model: { id: model.modelID, providerID: model.providerID, variant },
+              files: attachments.map((attachment) => ({
+                uri: attachment.uri,
+                name: attachment.name,
+                mime: attachment.mime,
               })),
-            ),
+            })
+            clearUploadedAttachments(sdk().api.session, session.id, images)
           })
           .catch((err) => {
             serverSync().session.set("session_status", session.id, { type: "idle" })

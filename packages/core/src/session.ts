@@ -9,7 +9,7 @@ import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
 import { Location } from "./location"
 import { SessionMessage } from "./session/message"
-import { Prompt } from "./session/prompt"
+import { Prompt, type FileAttachment } from "./session/prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { EventV2 } from "./event"
 import { Database } from "./database/database"
@@ -37,9 +37,26 @@ import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
+import { AttachmentStore } from "./attachment-store"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
+
+const bindAttachments = Effect.fn("V2Session.bindAttachments")(function* (
+  attachments: AttachmentStore.Interface,
+  sessionID: SessionSchema.ID,
+  messageID: SessionMessage.ID,
+  files: readonly FileAttachment[],
+) {
+  yield* Effect.forEach(
+    files,
+    (file) => {
+      const attachmentID = AttachmentStore.attachmentID(file.uri)
+      return attachmentID ? attachments.bind({ sessionID, attachmentID, messageID }) : Effect.void
+    },
+    { discard: true },
+  )
+})
 
 // get project -> project.locations
 //
@@ -108,7 +125,13 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
-export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
+export type Error =
+  | NotFoundError
+  | MessageDecodeError
+  | OperationUnavailableError
+  | PromptConflictError
+  | AttachmentStore.ReferenceError
+  | AttachmentStore.StorageError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
@@ -150,7 +173,10 @@ export interface Interface {
     prompt: PromptInput.Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
+  }) => Effect.Effect<
+    SessionInput.Admitted,
+    NotFoundError | PromptConflictError | AttachmentStore.ReferenceError | AttachmentStore.StorageError
+  >
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -191,6 +217,7 @@ const layer = Layer.effect(
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
+    const attachments = yield* AttachmentStore.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -361,8 +388,8 @@ const layer = Layer.effect(
         Effect.uninterruptible(
           Effect.gen(function* () {
             yield* result.get(input.sessionID)
-            const prompt = resolvePrompt(input.prompt)
             const messageID = input.id ?? SessionMessage.ID.create()
+            const prompt = yield* resolvePrompt(attachments, input.sessionID, input.prompt)
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
             const admitted = yield* SessionInput.admit(db, events, {
@@ -379,6 +406,7 @@ const layer = Layer.effect(
             )
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
+            yield* bindAttachments(attachments, input.sessionID, messageID, prompt.files ?? [])
             if (input.resume !== false) yield* execution.wake(admitted.sessionID)
             return admitted
           }),
@@ -457,19 +485,28 @@ const layer = Layer.effect(
   }),
 )
 
-const resolvePrompt = (input: PromptInput.Prompt) =>
-  Prompt.make({
-    text: input.text,
-    agents: input.agents,
-    files: input.files?.map((file) => {
+const resolvePrompt = Effect.fn("V2Session.resolvePrompt")(function* (
+  attachments: AttachmentStore.Interface,
+  sessionID: SessionSchema.ID,
+  input: PromptInput.Prompt,
+) {
+  const files = yield* Effect.forEach(input.files ?? [], (file) => {
+    if (!AttachmentStore.isManagedURI(file.uri)) {
       const dataMime = file.uri.match(/^data:([^;,]+)[;,]/i)?.[1]
       const target = URL.canParse(file.uri) ? new URL(file.uri).pathname : (file.name ?? file.uri)
-      return {
+      return Effect.succeed({
         ...file,
         mime: dataMime ?? (target.endsWith("/") ? "application/x-directory" : FSUtil.mimeType(target)),
-      }
-    }),
+      })
+    }
+    const attachmentID = AttachmentStore.attachmentID(file.uri)
+    if (!attachmentID) return Effect.fail(new AttachmentStore.ReferenceError({ sessionID }))
+    return attachments
+      .resolve({ sessionID, attachmentID })
+      .pipe(Effect.map((resolved) => ({ ...file, name: resolved.name, mime: resolved.mime })))
   })
+  return Prompt.make({ text: input.text, agents: input.agents, files: input.files ? files : undefined })
+})
 
 export const node = makeGlobalNode({
   service: Service,
@@ -482,5 +519,6 @@ export const node = makeGlobalNode({
     SessionStore.node,
     LocationServiceMap.node,
     SessionProjector.node,
+    AttachmentStore.node,
   ],
 })

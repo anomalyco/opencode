@@ -299,6 +299,31 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("lowers PDF user content as a document block", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_pdf",
+          model,
+          messages: [Message.user({ type: "media", mediaType: "application/pdf", data: "JVBERi0=" })],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf", data: "JVBERi0=" },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("prepares the composed native continuation request", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
