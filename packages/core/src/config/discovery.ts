@@ -1,7 +1,7 @@
 export * as ConfigDiscovery from "./discovery.js"
 
 import path from "path"
-import { Effect } from "effect"
+import { Config, Effect } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Location } from "../location.js"
@@ -50,6 +50,14 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
   )
 
   const globalEnabled = options?.global !== false
+  // Absence, malformed values, and provider failures all fall back to false so
+  // discovery stays infallible.
+  const disableClaudeCode =
+    options?.disableClaudeCode ??
+    (yield* Config.boolean("OPENCODE_DISABLE_CLAUDE_CODE").pipe(
+      Config.withDefault(false),
+      Effect.orElseSucceed(() => false),
+    ))
   const globalFiles = yield* Effect.forEach(names, (name) => fs.resolve(path.join(globalDirectory, name)))
   // Global sources must not re-enter through the project walk.
   const visible = discovered
@@ -60,6 +68,18 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     )
     .map(({ item }) => item)
 
+  // Optional roots vanish when disabled; their global directory joins only
+  // while the global scope is enabled.
+  const optionalRoots = (name: string, globalPath: AbsolutePath, enabled = true) =>
+    enabled
+      ? [
+          ...new Set([
+            ...(globalEnabled ? [globalPath] : []),
+            ...visible.filter((item) => path.basename(item) === name).toReversed(),
+          ]),
+        ]
+      : []
+
   return {
     global: globalEnabled ? globalDirectory : undefined,
     explicit: options?.file ? AbsolutePath.make(path.resolve(options.file)) : undefined,
@@ -68,17 +88,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
       visible.filter((item) => path.basename(item) === ".opencode").toReversed(),
       (directory) => fs.isDir(directory).pipe(Effect.map((present) => ({ path: directory, present }))),
     ),
-    claude: [
-      ...new Set([
-        ...(globalEnabled ? [globalClaudeDirectory] : []),
-        ...visible.filter((item) => path.basename(item) === ".claude").toReversed(),
-      ]),
-    ],
-    agents: [
-      ...new Set([
-        ...(globalEnabled ? [globalAgentsDirectory] : []),
-        ...visible.filter((item) => path.basename(item) === ".agents").toReversed(),
-      ]),
-    ],
+    claude: optionalRoots(".claude", globalClaudeDirectory, !disableClaudeCode),
+    agents: optionalRoots(".agents", globalAgentsDirectory),
   } satisfies Sources
 })
