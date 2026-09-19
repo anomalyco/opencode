@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.deepseek": "DeepSeek V4.1 Flash erhält für begrenzte Zeit 4x Nutzungslimits",
+  "go.graph.bonus": "{{count}}× Nutzung",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentation",
   "nav.changelog": "Changelog",
@@ -260,7 +262,6 @@ export const dict = {
   "zen.privacy.exceptionsLink": "folgenden Ausnahmen",
 
   "go.title": "OpenCode Go | Kostengünstige Coding-Modelle für alle",
-  "go.banner.text": "GLM-5.3-Flash erhält für begrenzte Zeit 2x Nutzungslimits",
   "go.meta.description":
     "Go kostet $10/Monat, mit großzügigen Nutzungslimits und zuverlässigem Zugang zu führenden Coding-Modellen.",
   "go.hero.title": "Kostengünstige Coding-Modelle für alle",
@@ -276,6 +277,14 @@ export const dict = {
   "go.graph.freePill": "Big Pickle und kostenlose Modelle",
   "go.graph.go": "Go",
   "go.graph.label": "Anfragen pro 5 Stunden",
+  "go.graph.period": "Nutzung",
+  "go.graph.model": "Modell",
+  "go.graph.requests": "Geschätzte Anfragen / 5 Std.",
+  "go.graph.allowance": "Monatliche Nutzung",
+  "go.graph.new": "Neu",
+  "go.graph.scale": "Nichtlineare Skala für Anfragen",
+  "go.graph.showAll": "Alle {{count}} Modelle anzeigen",
+  "go.graph.showLess": "Weniger Modelle anzeigen",
   "go.graph.limitedRegions": "begrenzte Regionen",
   "go.graph.limitedTime": "begrenzte Zeit",
   "go.graph.usageLimits": "Nutzungslimits",

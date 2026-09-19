@@ -1,7 +1,6 @@
 import "./index.css"
 import { Meta, Title } from "@solidjs/meta"
 import { A } from "@solidjs/router"
-import { createSignal, type JSX, onMount, Show } from "solid-js"
 import { Faq } from "~/component/faq"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
@@ -11,50 +10,10 @@ import { LocaleLinks } from "~/component/locale-links"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import desktopTabsVideo from "../../asset/lander/desktop-tabs-landscape.mp4"
 import type { DownloadPlatform } from "./types"
-
-type OS = "macOS" | "Windows" | "Linux" | null
-
-function detectOS(): OS {
-  if (typeof navigator === "undefined") return null
-  const platform = navigator.platform.toLowerCase()
-  const userAgent = navigator.userAgent.toLowerCase()
-
-  if (platform.includes("mac") || userAgent.includes("mac")) return "macOS"
-  if (platform.includes("win") || userAgent.includes("win")) return "Windows"
-  if (platform.includes("linux") || userAgent.includes("linux")) return "Linux"
-  return null
-}
-
-function getDownloadPlatform(os: OS): DownloadPlatform {
-  switch (os) {
-    case "macOS":
-      return "darwin-aarch64-dmg"
-    case "Windows":
-      return "windows-x64-nsis"
-    case "Linux":
-      return "linux-x64-deb"
-    default:
-      return "darwin-aarch64-dmg"
-  }
-}
 
 function getDownloadHref(platform: DownloadPlatform, channel: "stable" | "beta" = "stable") {
   return `/download/${channel}/${platform}`
-}
-
-function IconDownload(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-      <path
-        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="square"
-      />
-    </svg>
-  )
 }
 
 function CopyStatus() {
@@ -69,12 +28,6 @@ function CopyStatus() {
 export default function Download() {
   const i18n = useI18n()
   const language = useLanguage()
-  const [detectedOS, setDetectedOS] = createSignal<OS>(null)
-
-  onMount(() => {
-    setDetectedOS(detectOS())
-  })
-
   const handleCopyClick = (command: string) => (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
     void navigator.clipboard.writeText(command)
@@ -92,27 +45,6 @@ export default function Download() {
         <Header hideGetStarted />
 
         <div data-component="content">
-          <section data-component="download-hero">
-            <div data-component="hero-video">
-              <video src={desktopTabsVideo} autoplay playsinline loop muted preload="metadata" aria-hidden="true" />
-            </div>
-            <div data-component="hero-text">
-              <h1>{i18n.t("download.hero.title")}</h1>
-              <p>
-                {i18n.t("home.promo.body")} {i18n.t("home.promo.cta")}
-              </p>
-              <Show when={detectedOS()}>
-                <a
-                  href={language.route(getDownloadHref(getDownloadPlatform(detectedOS())))}
-                  data-component="download-button"
-                >
-                  <IconDownload />
-                  {i18n.t("download.hero.button", { os: detectedOS()! })}
-                </a>
-              </Show>
-            </div>
-          </section>
-
           <section data-component="download-section">
             <div data-component="section-label">
               <span>[1]</span> {i18n.t("download.section.terminal")}
@@ -120,34 +52,40 @@ export default function Download() {
             <div data-component="section-content">
               <button
                 data-component="cli-row"
-                onClick={handleCopyClick("curl -fsSL https://opencode.ai/install | bash")}
+                onClick={handleCopyClick("curl -fsSL https://opencode.ai/v2/install | bash")}
               >
                 <code>
-                  curl -fsSL https://<strong>opencode.ai/install</strong> | bash
+                  curl -fsSL https://<strong>opencode.ai/v2/install</strong> | bash
                 </code>
                 <CopyStatus />
               </button>
-              <button data-component="cli-row" onClick={handleCopyClick("npm i -g opencode-ai")}>
+              <button data-component="cli-row" onClick={handleCopyClick("npm install -g @opencode/cli")}>
                 <code>
-                  npm i -g <strong>opencode-ai</strong>
+                  npm install -g <strong>@opencode/cli</strong>
                 </code>
                 <CopyStatus />
               </button>
-              <button data-component="cli-row" onClick={handleCopyClick("bun add -g opencode-ai")}>
+              <button data-component="cli-row" onClick={handleCopyClick("bun install -g --trust @opencode/cli")}>
                 <code>
-                  bun add -g <strong>opencode-ai</strong>
+                  bun install -g --trust <strong>@opencode/cli</strong>
                 </code>
                 <CopyStatus />
               </button>
-              <button data-component="cli-row" onClick={handleCopyClick("brew install anomalyco/tap/opencode")}>
+              <button data-component="cli-row" onClick={handleCopyClick("brew install anomalyco/tap/opencode-v2")}>
                 <code>
-                  brew install <strong>anomalyco/tap/opencode</strong>
+                  brew install <strong>anomalyco/tap/opencode-v2</strong>
                 </code>
                 <CopyStatus />
               </button>
-              <button data-component="cli-row" onClick={handleCopyClick("paru -S opencode")}>
+              <button data-component="cli-row" onClick={handleCopyClick("paru -S opencode-beta")}>
                 <code>
-                  paru -S <strong>opencode</strong>
+                  paru -S <strong>opencode-beta</strong>
+                </code>
+                <CopyStatus />
+              </button>
+              <button data-component="cli-row" onClick={handleCopyClick("yay -S opencode-beta")}>
+                <code>
+                  yay -S <strong>opencode-beta</strong>
                 </code>
                 <CopyStatus />
               </button>
