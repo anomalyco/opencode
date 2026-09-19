@@ -42,19 +42,19 @@ runs:
         bun-version-file: ${{ !steps.bun-url.outputs.url && !inputs.bun-version && 'package.json' || '' }}
         bun-download-url: ${{ steps.bun-url.outputs.url }}
 
-    - name: Get cache directory
+    - name: Get cache configuration
       id: cache
       shell: bash
-      run: echo "dir=$(bun pm cache)" >> "$GITHUB_OUTPUT"
+      run: |
+        echo "dir=$(bun pm cache)" >> "$GITHUB_OUTPUT"
+        echo "key=${RUNNER_OS}-bun-${{ hashFiles('**/bun.lock') }}" >> "$GITHUB_OUTPUT"
 
     - name: Restore Bun dependencies
       id: bun-cache
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.cache.outputs.dir }}
-        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-bun-
+        key: ${{ steps.cache.outputs.key }}
 
     - name: Install setuptools for distutils compatibility
       run: python3 -m pip install setuptools || pip install setuptools || true
@@ -66,9 +66,9 @@ runs:
         # e.g. ./patches/ for standard-openapi
         # https://github.com/oven-sh/bun/issues/28147
         if [ "$RUNNER_OS" = "Windows" ]; then
-          bun install --linker hoisted ${{ inputs.install-flags }}
+          bun install --frozen-lockfile --linker hoisted ${{ inputs.install-flags }}
         else
-          bun install ${{ inputs.install-flags }}
+          bun install --frozen-lockfile ${{ inputs.install-flags }}
         fi
       shell: bash
 
@@ -77,4 +77,4 @@ runs:
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.cache.outputs.dir }}
-        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+        key: ${{ steps.cache.outputs.key }}
