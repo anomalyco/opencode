@@ -13,6 +13,7 @@ import { Session } from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
+import { ProviderError } from "@/provider/error"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -658,6 +659,21 @@ const layer = Layer.effect(
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
+
+            // A provider can close the stream cleanly without emitting any
+            // content or a real finish reason; the AI SDK reports finishReason
+            // "unknown" with zero usage in that case. Fail so the retry policy
+            // treats it like any other transient provider error instead of
+            // ending the turn silently.
+            if (
+              !ctx.needsCompaction &&
+              ctx.assistantMessage.finish === "unknown" &&
+              ctx.assistantMessage.tokens.output === 0
+            ) {
+              return yield* Effect.fail(
+                new ProviderError.ResponseStreamError("Provider returned an empty stream"),
+              )
+            }
           }).pipe(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
