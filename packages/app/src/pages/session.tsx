@@ -869,6 +869,8 @@ export default function Page() {
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
   let dockHeight = 0
+  let dockResizeHeight = 0
+  let dockResizeFrame: number | undefined
   let scroller: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
   let revealMessage = (_id: string) => {}
@@ -1944,24 +1946,36 @@ export default function Page() {
   createResizeObserver(
     () => promptDock,
     ({ height }) => {
-      const next = Math.ceil(height)
+      dockResizeHeight = height
+      if (dockResizeFrame !== undefined) return
+      // Defer to the next frame: reading scroller metrics and writing
+      // scrollTop inside the ResizeObserver delivery step keeps the browser's
+      // resize loop from settling ("undelivered notifications" spam).
+      dockResizeFrame = requestAnimationFrame(() => {
+        dockResizeFrame = undefined
+        const next = Math.ceil(dockResizeHeight)
 
-      if (next === dockHeight) return
+        if (next === dockHeight) return
 
-      const el = scroller
-      const delta = next - dockHeight
-      const stick = el
-        ? !autoScroll.userScrolled() || el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta)
-        : false
+        const el = scroller
+        const delta = next - dockHeight
+        const stick = el
+          ? !autoScroll.userScrolled() || el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta)
+          : false
 
-      dockHeight = next
+        dockHeight = next
 
-      if (stick) scrollToEnd()
+        if (stick) scrollToEnd()
 
-      if (el) scheduleScrollState(el)
-      fill()
+        if (el) scheduleScrollState(el)
+        fill()
+      })
     },
   )
+
+  onCleanup(() => {
+    if (dockResizeFrame !== undefined) cancelAnimationFrame(dockResizeFrame)
+  })
 
   const { clearMessageHash, scrollToMessage } = useSessionHashScroll({
     sessionKey,

@@ -95,9 +95,28 @@ export function createSessionComposerRegionController(input: {
   createEffect(() => {
     const el = store.body
     if (!el) return
-    const update = () => setStore("height", el.getBoundingClientRect().height)
+    let frame: number | undefined
+    const apply = () => {
+      const next = el.getBoundingClientRect().height
+      // Sub-pixel height deltas (<1px) are noise: feeding them back as the
+      // dock max-height re-triggers this observer with no stable fixed point.
+      if (Math.abs(next - store.height) < 1) return
+      setStore("height", next)
+    }
+    const update = () => {
+      if (frame !== undefined) return
+      // Run outside the ResizeObserver delivery step so the layout write
+      // (max-height) cannot cascade into same-frame re-observation.
+      frame = requestAnimationFrame(() => {
+        frame = undefined
+        apply()
+      })
+    }
     createResizeObserver(el, update)
-    update()
+    apply()
+    onCleanup(() => {
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    })
   })
 
   onCleanup(clear)

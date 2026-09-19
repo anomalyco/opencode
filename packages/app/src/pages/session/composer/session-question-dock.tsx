@@ -201,9 +201,26 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   createEffect(() => {
     const el = optionsRef
     if (!el) return
-    const update = () => setStore("optionsHeight", (height) => Math.max(height, el.scrollHeight))
-    update()
+    let frame: number | undefined
+    const apply = () => {
+      const next = el.scrollHeight
+      // Only grow on >=1px: sub-pixel noise fed into the dock height chain
+      // re-triggers the observer within the same frame.
+      if (next - store.optionsHeight < 1) return
+      setStore("optionsHeight", (height) => Math.max(height, next))
+    }
+    const update = () => {
+      if (frame !== undefined) return
+      frame = requestAnimationFrame(() => {
+        frame = undefined
+        apply()
+      })
+    }
+    apply()
     createResizeObserver(el, update)
+    onCleanup(() => {
+      if (frame !== undefined) cancelAnimationFrame(frame)
+    })
   })
 
   onCleanup(() => {
