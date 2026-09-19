@@ -16,7 +16,7 @@ export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outpu
     Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
   return input.model.limit.input
     ? Math.max(0, input.model.limit.input - reserved)
-    : Math.max(0, context - ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
+    : Math.max(0, context - ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax) - reserved)
 }
 
 export function isOverflow(input: {
@@ -29,6 +29,11 @@ export function isOverflow(input: {
   if (input.model.limit.context === 0) return false
 
   const count =
-    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+    input.tokens.total ||
+    input.tokens.input +
+      input.tokens.output +
+      input.tokens.reasoning +
+      input.tokens.cache.read +
+      input.tokens.cache.write
   return count >= usable(input)
 }
