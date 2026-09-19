@@ -310,8 +310,12 @@ export async function probeWslDistro(name: string, opts?: RunWslOptions): Promis
 export async function resolveWslOpencode(distro: string, opts?: RunWslOptions) {
   return firstLine(
     (
-      await runWslSh(
-        'if [ -x "$HOME/.opencode/bin/opencode" ]; then printf "%s\\n" "$HOME/.opencode/bin/opencode"; fi',
+      await runWslInDistro(
+        [
+          "sh",
+          "-c",
+          'PATH=$(printf "%s" "$PATH" | awk -v RS=: -v ORS=: \'$0 !~ /^\\/mnt\\//\' | sed "s/:$//"); export PATH; command -v opencode || { [ -x "$HOME/.opencode/bin/opencode" ] && printf "%s\\n" "$HOME/.opencode/bin/opencode"; }',
+        ],
         distro,
         opts,
       )
