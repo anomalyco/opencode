@@ -13,7 +13,9 @@ const withCategory = (category: string) => {
   })
 }
 
-export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
+export const useComposerCommands = (
+  input: { model?: ModelSelection; agent?: Pick<ReturnType<typeof useLocal>["agent"], "move"> } = {},
+) => {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
@@ -21,6 +23,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   const { sessionKey } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
   const model = input.model ?? local.model
+  const agent = input.agent ?? local.agent
   const modelCommand = withCategory(language.t("command.category.model"))
   const agentCommand = withCategory(language.t("command.category.agent"))
 
@@ -69,7 +72,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       keybind: "mod+.",
       slash: "agent",
       disabled: !local.agent.visible(),
-      onSelect: () => local.agent.move(1),
+      onSelect: () => agent.move(1),
     }),
     agentCommand({
       id: "agent.cycle.reverse",
@@ -77,7 +80,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       description: language.t("command.agent.cycle.reverse.description"),
       keybind: "shift+mod+.",
       disabled: !local.agent.visible(),
-      onSelect: () => local.agent.move(-1),
+      onSelect: () => agent.move(-1),
     }),
   ])
 }
