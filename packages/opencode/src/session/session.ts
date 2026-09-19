@@ -408,6 +408,15 @@ export class BusyError extends Schema.TaggedErrorClass<BusyError>()("SessionBusy
   sessionID: SessionID,
 }) {}
 
+export class AmbiguousIDError extends Schema.TaggedErrorClass<AmbiguousIDError>()("SessionIDAmbiguous", {
+  input: Schema.String,
+  matches: Schema.Array(SessionID),
+}) {
+  static isInstance(input: unknown): input is AmbiguousIDError {
+    return input instanceof AmbiguousIDError
+  }
+}
+
 export type NotFound = NotFoundError
 
 export interface Interface {
@@ -425,6 +434,7 @@ export interface Interface {
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
   readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
+  readonly resolve: (input: string) => Effect.Effect<SessionID, NotFound | AmbiguousIDError>
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
   readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
@@ -541,6 +551,28 @@ const layer: Layer.Layer<
       const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie)
       if (!row) return yield* Effect.fail(new NotFoundError({ message: `Session not found: ${id}` }))
       return fromRow(row)
+    })
+
+    const resolve = Effect.fn("Session.resolve")(function* (input: string) {
+      // A full id is `ses_` plus 26 chars; short prefixes fall through to the lookup below.
+      const decoded = Option.getOrUndefined(Schema.decodeUnknownOption(SessionID)(input))
+      if (decoded && decoded.length === 30) {
+        yield* get(decoded)
+        return decoded
+      }
+
+      const rows = yield* db
+        .select({ id: SessionTable.id })
+        .from(SessionTable)
+        .where(like(SessionTable.id, `${input}%`))
+        .limit(2)
+        .all()
+        .pipe(Effect.orDie)
+      if (rows.length === 0) return yield* Effect.fail(new NotFoundError({ message: `Session not found: ${input}` }))
+      if (rows.length > 1) {
+        return yield* Effect.fail(new AmbiguousIDError({ input, matches: rows.map((row) => SessionID.make(row.id)) }))
+      }
+      return SessionID.make(rows[0].id)
     })
 
     const list = Effect.fn("Session.list")(function* (input?: ListInput) {
@@ -910,6 +942,7 @@ const layer: Layer.Layer<
       fork,
       touch,
       get,
+      resolve,
       setTitle,
       setArchived,
       setMetadata,
