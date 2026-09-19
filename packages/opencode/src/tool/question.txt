@@ -8,3 +8,7 @@ Usage notes:
 - When `custom` is enabled (default), a "Type your own answer" option is added automatically; don't include "Other" or catch-all options
 - Answers are returned as arrays of labels; set `multiple: true` to allow selecting more than one
 - If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label
+- Every entry in `questions`, including the second and every later entry, must include its own `question`, `header`, and `options`. Write a deliberate, semantic `header` of at most 30 characters for each entry; never omit a later entry's header or reuse an earlier entry's header.
+
+Example of a valid two-question call with a distinct header on each entry:
+{"questions":[{"question":"Which database should we use?","header":"Database","options":[{"label":"PostgreSQL","description":"Relational, ACID"},{"label":"SQLite","description":"Embedded, simple"}]},{"question":"Which caching strategy should we use?","header":"Caching","options":[{"label":"Redis","description":"Shared cache"},{"label":"None","description":"Query the database"}]}]}
