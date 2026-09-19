@@ -1,0 +1,3 @@
+Change the session's working directory. Use this when you need to work in a different directory, such as a different worktree or project subdirectory.
+
+The directory can be an absolute path or relative to the current working directory. It must belong to the same project. Set moveChanges to true to transfer uncommitted changes to the destination directory.
