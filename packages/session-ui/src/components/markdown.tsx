@@ -17,6 +17,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { canReusePendingBlock, completedProjection } from "./markdown-projection"
+import { useOpenFile } from "../context/open-file"
 import type { Block, Projection } from "./markdown-stream"
 import {
   disposeMarkdownProjection,
@@ -330,6 +331,28 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   }
 }
 
+function setupPathLinks(root: HTMLDivElement, onOpenFile: (path: string) => void) {
+  const handleClick = (event: MouseEvent) => {
+    if (event.button !== 0) return
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+    const target = event.target
+    if (!(target instanceof Element)) return
+    const code = target.closest('code[data-inline-code-kind="path"]')
+    if (!(code instanceof HTMLElement)) return
+    const path = code.textContent?.trim()
+    if (!path) return
+    event.preventDefault()
+    event.stopPropagation()
+    onOpenFile(path)
+  }
+
+  root.addEventListener("click", handleClick)
+
+  return () => {
+    root.removeEventListener("click", handleClick)
+  }
+}
+
 function initialResult(text: string, key: string | undefined, projection: Projection, owner: string): RenderResult {
   if (!text) return { text, blocks: [] }
   const base = key ?? checksum(text)
@@ -490,7 +513,9 @@ export function Markdown(
     },
   )
 
+  const openFile = useOpenFile()
   let copyCleanup: (() => void) | undefined
+  let pathLinksCleanup: (() => void) | undefined
 
   createEffect(() => {
     const container = root()
@@ -530,10 +555,12 @@ export function Markdown(
         copy: i18n.t("ui.message.copy"),
         copied: i18n.t("ui.message.copied"),
       }))
+    if (openFile && !pathLinksCleanup) pathLinksCleanup = setupPathLinks(container, openFile)
   })
 
   onCleanup(() => {
     if (copyCleanup) copyCleanup()
+    if (pathLinksCleanup) pathLinksCleanup()
     disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
