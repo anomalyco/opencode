@@ -29,6 +29,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { TestConfig } from "../fixture/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LLMEvent, Usage } from "@opencode-ai/llm"
+import type { Hooks } from "@opencode-ai/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -375,6 +376,25 @@ function compactionContext(context: string) {
       })
     },
     list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  })
+}
+
+function compactionMessageTransform(text: string) {
+  const hook: Hooks = {
+    "experimental.chat.messages.transform": async (_input, output) => {
+      const part = output.messages[0]?.parts.find((item) => item.type === "text")
+      if (part?.type === "text") part.text = text
+    },
+  }
+  return Layer.mock(Plugin.Service)({
+    trigger: <Name extends string, Input, Output>(name: Name, input: Input, output: Output) => {
+      if (name !== "experimental.chat.messages.transform") return Effect.succeed(output)
+      return Effect.promise(() =>
+        hook["experimental.chat.messages.transform"]!(input as never, output as never),
+      ).pipe(Effect.as(output))
+    },
+    list: () => Effect.succeed([hook]),
     init: () => Effect.void,
   })
 }
@@ -1503,6 +1523,49 @@ describe("session.compaction.process", () => {
         withCompaction({
           llm: stub.llmLayer,
           plugin: compactionContext("Prioritize unresolved migration details"),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "isolates compaction message-transform mutations from source history",
+    () => {
+      const stub = llm()
+      let captured = ""
+      stub.push(
+        reply("summary", (input) => {
+          captured = JSON.stringify(input.messages)
+        }),
+      )
+
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "older context")
+        yield* createUserMessage(session.id, "keep this turn")
+        yield* createUserMessage(session.id, "and this one too")
+        yield* createCompactionMarker(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        expect(captured).toContain("transformed context")
+        expect(JSON.stringify(msgs)).toContain("older context")
+        expect(JSON.stringify(msgs)).not.toContain("transformed context")
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }),
+          plugin: compactionMessageTransform("transformed context"),
         }),
       )
     },
