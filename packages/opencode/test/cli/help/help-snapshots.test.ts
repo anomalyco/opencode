@@ -100,11 +100,11 @@ describe("opencode CLI help-text snapshots", () => {
       Effect.gen(function* () {
         const topLevel = yield* opencode.spawn(["--help"], { env: SNAPSHOT_ENV })
         expect(topLevel.exitCode).toBe(0)
-        expect(topLevel.stderr.endsWith("\n")).toBe(true)
-        expect(topLevel.stderr).toContain("--mini")
-        expect(topLevel.stderr).not.toContain("--thinking")
-        expect(topLevel.stderr).not.toContain("--variant")
-        expect(topLevel.stderr).not.toContain("--demo")
+        expect(topLevel.stdout.endsWith("\n")).toBe(true)
+        expect(topLevel.stdout).toContain("--mini")
+        expect(topLevel.stdout).not.toContain("--thinking")
+        expect(topLevel.stdout).not.toContain("--variant")
+        expect(topLevel.stdout).not.toContain("--demo")
 
         const argvs: Array<readonly string[]> = [...TOP_LEVEL.map((c) => [c] as const), ...SUBCOMMANDS]
 
@@ -126,10 +126,10 @@ describe("opencode CLI help-text snapshots", () => {
         )
 
         for (const { argv, result } of results) {
-          // yargs writes --help to stderr, not stdout. Snapshotting stderr
-          // means our test catches the help body; stdout for these commands
-          // is expected to be empty.
-          expect(normalize(result.stderr)).toMatchSnapshot(`opencode ${argv.join(" ")} --help`)
+          // Explicitly requested --help goes to stdout; error-triggered help
+          // stays on stderr. Snapshotting stdout means our test catches the
+          // help body; stderr for these commands is expected to be empty.
+          expect(normalize(result.stdout)).toMatchSnapshot(`opencode ${argv.join(" ")} --help`)
         }
         if (failures.length > 0) {
           throw new Error(`Help text failed for:\n  ${failures.join("\n  ")}`)
