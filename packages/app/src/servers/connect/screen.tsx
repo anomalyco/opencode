@@ -10,7 +10,7 @@ import { useCheckServerHealth } from "@/runtime/server/health"
 import { useServers } from "@/runtime/server/registry"
 import { serverAddress } from "./pairing"
 import type { decodePairingCode } from "./pairing"
-import { isMixedContent } from "./browser"
+import { isLoopback, isMixedContent } from "./browser"
 import { createCameraAvailability } from "./camera"
 import "./screen.css"
 
@@ -170,6 +170,40 @@ export function ConnectServerScreen(
             <code dir="ltr">opencode pair</code>
           </footer>
         </Show>
+      </div>
+    </main>
+  )
+}
+
+export function ConnectLocalScreen(props: { urls: readonly string[] }) {
+  const language = useLanguage()
+  const target = props.urls[0]
+  const loopback = isLoopback(new URL(target))
+  return (
+    <main data-component="connect-server" aria-labelledby="server-connect-title">
+      <div class="server-connect-content">
+        <div class="server-connect-brand" role="img" aria-label="OpenCode">
+          <Wordmark />
+        </div>
+        <header>
+          <h1 id="server-connect-title">
+            {language.t(loopback ? "server.connect.local.loopback.title" : "server.connect.local.title")}
+          </h1>
+          <p>{language.t(loopback ? "server.connect.local.loopback.description" : "server.connect.local.description")}</p>
+        </header>
+        <Button
+          variant="contrast"
+          size="large"
+          onClick={() => location.assign(`${new URL("/connect", target)}${location.search}${location.hash}`)}
+        >
+          {language.t(loopback ? "server.connect.local.loopback.open" : "server.connect.local.open")}
+        </Button>
+        <footer>
+          <Show when={loopback}>
+            <p>{language.t("server.connect.local.loopback.fix")}</p>
+          </Show>
+          <code dir="ltr">{loopback ? "opencode service set hostname 0.0.0.0" : target}</code>
+        </footer>
       </div>
     </main>
   )

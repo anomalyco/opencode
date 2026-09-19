@@ -7,6 +7,10 @@ export function isMixedContent(page: string, address: string) {
   const url = new URL(normalized)
   if (url.protocol !== "http:") return false
   // Secure Contexts treats loopback HTTP origins as potentially trustworthy.
+  return !isLoopback(url)
+}
+
+export function isLoopback(url: URL) {
   const host = url.hostname.replace(/\.$/, "")
-  return !(host === "localhost" || host.endsWith(".localhost") || host === "[::1]" || /^127(?:\.\d+){3}$/.test(host))
+  return host === "localhost" || host.endsWith(".localhost") || host === "[::1]" || /^127(?:\.\d+){3}$/.test(host)
 }

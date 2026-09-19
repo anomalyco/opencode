@@ -38,6 +38,12 @@ export function pairingUrl(
   return `${new URL("/connect", host)}?data=${encodeURIComponent(JSON.stringify(value))}`
 }
 
+export function decodePairingScan(value: string) {
+  const url = URL.parse(value)
+  if (!url || (url.protocol !== "http:" && url.protocol !== "https:")) return decodePairingCode(value)
+  return decodePairingUrl(url.search, url.origin) ?? decodePairingUrl(url.hash)
+}
+
 export function decodePairingUrl(value: string, origin?: string) {
   if (value.startsWith("?")) {
     const data = new URLSearchParams(value).get("data")

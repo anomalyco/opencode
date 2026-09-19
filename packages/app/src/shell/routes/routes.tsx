@@ -20,6 +20,9 @@ const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({
 const ConnectServerScreen = lazy(() =>
   import("@/servers/connect/screen").then((module) => ({ default: module.ConnectServerScreen })),
 )
+const ConnectLocalScreen = lazy(() =>
+  import("@/servers/connect/screen").then((module) => ({ default: module.ConnectLocalScreen })),
+)
 const TargetSessionRouteContent = lazy(() =>
   loadSessionRoute().then((module) => ({ default: module.TargetSessionRouteContent })),
 )
@@ -69,16 +72,18 @@ function ConnectRoute() {
   const navigate = useNavigate()
   const servers = useServers()
   const pairing = decodePairingUrl(location.search, location.origin) ?? decodePairingUrl(location.hash)
+  // From the hosted https page, http is mixed content and loopback is the scanning device itself.
+  const url =
+    pairing?.urls.find((item) => item === location.origin) ??
+    pairing?.urls.find((item) => location.protocol !== "https:" || item.startsWith("https:"))
   onMount(() => {
-    if (!pairing) return
-    servers.add({ type: "http", http: { url: pairing.urls[0], password: pairing.password } })
+    if (!pairing || !url) return
+    servers.add({ type: "http", http: { url, password: pairing.password } })
     navigate("/", { replace: true })
   })
-  return (
-    <Show when={!pairing}>
-      <ConnectServerScreen onConnect={() => navigate("/", { replace: true })} />
-    </Show>
-  )
+  if (!pairing) return <ConnectServerScreen onConnect={() => navigate("/", { replace: true })} />
+  if (!url) return <ConnectLocalScreen urls={pairing.urls} />
+  return null
 }
 
 function TargetServerRoute(props: ParentProps) {
