@@ -2,13 +2,17 @@ import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect } from "bun:test"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Effect } from "effect"
+import { Headers } from "effect/unstable/http"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { OpenAIPlugin } from "@opencode-ai/core/plugin/provider/openai"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
+import { LLM } from "@opencode-ai/llm"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -73,6 +77,56 @@ describe("OpenAIPlugin", () => {
         options: { name: "custom-openai", apiKey: "test" },
       })
       expect(result.sdk?.responses("gpt-5").provider).toBe("custom-openai.responses")
+    }),
+  )
+
+  it.effect("uses ChatGPT OAuth when Console also provides the OpenAI catalog", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const credentials = yield* Credential.Service
+      const integrations = yield* Integration.Service
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(ProviderV2.ID.openai, (provider) => {
+          provider.integrationID = Integration.ID.make("opencode")
+          provider.api = {
+            type: "aisdk",
+            package: "@ai-sdk/openai",
+            url: "https://chatgpt.com/backend-api/codex",
+          }
+        })
+        catalog.model.update(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6-luna"), () => {})
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "zen-key" }),
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-browser"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+        }),
+      })
+      yield* addPlugin()
+
+      const provider = required(yield* catalog.provider.get(ProviderV2.ID.openai))
+      const integrationID = required(provider.integrationID)
+      expect(integrationID).toBe(Integration.ID.make("openai"))
+      const connection = required(yield* integrations.connection.active(integrationID))
+      const credential = required(yield* integrations.connection.resolve(connection))
+      const model = required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5.6-luna")))
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(model, credential)
+      const headers = yield* resolved.route.auth.apply({
+        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        method: "POST",
+        url: "https://chatgpt.com/backend-api/codex/responses",
+        body: "{}",
+        headers: Headers.empty,
+      })
+      expect(headers.authorization).toBe("Bearer chatgpt-token")
     }),
   )
 
