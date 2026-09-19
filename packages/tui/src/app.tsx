@@ -658,6 +658,9 @@ function App(props: { pair?: DialogPairCredentials }) {
           prompt: startupPrompt,
         })
       }
+      if (args.sessionID === "") {
+        dialog.replace(() => <DialogSessionList />)
+      }
     })
   })
 
