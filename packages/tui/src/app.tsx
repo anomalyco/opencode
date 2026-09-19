@@ -40,6 +40,7 @@ import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
+import { setDefaultModel } from "./component/set-default-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
@@ -638,6 +639,22 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashAliases: ["mo"],
         run: () => {
           dialog.replace(() => <DialogModel />)
+        },
+      },
+      {
+        name: "model.set_default",
+        title: "Set current model as default",
+        category: "Agent",
+        run: () => {
+          const model = local.model.current()
+          if (!model) {
+            toast.show({
+              variant: "warning",
+              message: "No model selected",
+            })
+            return
+          }
+          void setDefaultModel({ sdk, toast, model })
         },
       },
       {
