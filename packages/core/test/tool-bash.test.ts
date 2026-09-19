@@ -148,12 +148,13 @@ describe("BashTool", () => {
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.command")
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.cwd")
             expect(yield* toolDefinitions(registry, [{ action: "bash", resource: "*", effect: "deny" }])).toEqual([])
+            const status = `Command exited with code 0.\nWorking directory: ${realpathSync(tmp.path)}`
             expect(yield* settleTool(registry, call({ command: "pwd" }))).toEqual({
               result: {
                 type: "content",
                 value: [
                   { type: "text", text: "hello\n" },
-                  { type: "text", text: "Command exited with code 0." },
+                  { type: "text", text: status },
                 ],
               },
               output: {
@@ -163,7 +164,7 @@ describe("BashTool", () => {
                 },
                 content: [
                   { type: "text", text: "hello\n" },
-                  { type: "text", text: "Command exited with code 0." },
+                  { type: "text", text: status },
                 ],
               },
             })
@@ -244,7 +245,10 @@ describe("BashTool", () => {
                   type: "content",
                   value: [
                     { type: "text", text: "core-bash" },
-                    { type: "text", text: "Command exited with code 0." },
+                    {
+                      type: "text",
+                      text: `Command exited with code 0.\nWorking directory: ${realpathSync(tmp.path)}`,
+                    },
                   ],
                 })
                 expect(settled.output?.structured).toMatchObject({
