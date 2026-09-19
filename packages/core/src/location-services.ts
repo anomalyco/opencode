@@ -33,6 +33,7 @@ import { Snapshot } from "./snapshot"
 import { SystemContextBuiltIns } from "./system-context/builtins"
 import { SystemContextRegistry } from "./system-context/registry"
 import { BuiltInTools } from "./tool/builtins"
+import { InteractiveJobs } from "./tool/interactive/store"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
 import { ToolOutputStore } from "./tool-output-store"
@@ -66,6 +67,9 @@ export const locationServices = LayerNode.group([
   ToolOutputStore.node,
   ToolRegistry.node,
   ToolRegistry.toolsNode,
+  // exposed so drain-interrupt wiring (spec R32/I10) can reach the store
+  // through the Location graph; also a transitive dep of the interactive tool
+  InteractiveJobs.node,
   Image.node,
   SkillGuidance.node,
   ReferenceGuidance.node,
