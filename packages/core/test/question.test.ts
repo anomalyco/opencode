@@ -89,6 +89,44 @@ describe("QuestionV2", () => {
     }),
   )
 
+  it.effect("settles a pending request exactly once under concurrent settlement", () =>
+    Effect.gen(function* () {
+      const service = yield* QuestionV2.Service
+      const events = yield* EventV2.Service
+      const gate = yield* Deferred.make<void>()
+      const entered = yield* Deferred.make<void>()
+      const settled: EventV2.Payload[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === QuestionV2.Event.Replied.type || event.type === QuestionV2.Event.Rejected.type
+          ? Effect.gen(function* () {
+              settled.push(event)
+              yield* Deferred.succeed(entered, undefined)
+              yield* Deferred.await(gate)
+            })
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const { fiber, request } = yield* waitForAsk(service, { sessionID, questions: [question] })
+
+      const winner = yield* service.reply({ requestID: request.id, answers: [["One"]] }).pipe(Effect.forkScoped)
+      yield* Deferred.await(entered)
+
+      expect(yield* service.reply({ requestID: request.id, answers: [["Two"]] }).pipe(Effect.flip)).toEqual(
+        new QuestionV2.NotFoundError({ requestID: request.id }),
+      )
+      expect(yield* service.reject(request.id).pipe(Effect.flip)).toEqual(
+        new QuestionV2.NotFoundError({ requestID: request.id }),
+      )
+
+      yield* Deferred.succeed(gate, undefined)
+      yield* Fiber.join(winner)
+      expect(yield* Fiber.join(fiber)).toEqual([["One"]])
+      expect(settled.map((event) => [event.type, event.data])).toEqual([
+        [QuestionV2.Event.Replied.type, { sessionID, requestID: request.id, answers: [["One"]] }],
+      ])
+    }),
+  )
+
   it.effect("isolates pending requests by location-layer instance and rejects them on finalization", () =>
     Effect.gen(function* () {
       const firstScope = yield* Scope.make()
