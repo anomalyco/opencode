@@ -1,16 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import os from "os"
 import path from "path"
+import { isUnsupportedByFff } from "@opencode-ai/core/filesystem/search-guard"
 
-function isUnsupportedByFff(directory: string): boolean {
-  const resolved = path.resolve(directory)
-  const home = os.homedir()
-  if (resolved === home || resolved === path.dirname(home)) return true
-  if (process.platform !== "win32" && resolved === "/") return true
-  return false
-}
-
-describe("isUnsupportedByFff (inline mirror of search.ts helper)", () => {
+describe("isUnsupportedByFff", () => {
   test("returns true for the user's home directory", () => {
     expect(isUnsupportedByFff(os.homedir())).toBe(true)
   })
