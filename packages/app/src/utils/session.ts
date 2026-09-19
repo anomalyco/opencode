@@ -28,11 +28,15 @@ export function normalizeSessionInfo(input: SessionInfo | Session): Session {
 }
 
 export async function listAllSessions(api: Pick<SessionApi, "list">, input: Omit<SessionListInput, "cursor">) {
+  const cursors = new Set<string>()
   const load = async (cursor?: string): Promise<Session[]> => {
     const result = await api.list({ ...input, limit: input.limit ?? 100, cursor })
     const sessions = result.data.map(normalizeSessionInfo)
-    if (result.data.length === 0 || !result.cursor.next) return sessions
-    return [...sessions, ...(await load(result.cursor.next))]
+    const next = result.cursor.next
+    if (result.data.length === 0 || !next) return sessions
+    if (cursors.has(next)) throw new Error(`Session list returned duplicate cursor: ${next}`)
+    cursors.add(next)
+    return [...sessions, ...(await load(next))]
   }
   return load()
 }
