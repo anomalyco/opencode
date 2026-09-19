@@ -118,6 +118,33 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("omits undefined permission metadata fields", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* PermissionV2.Service
+      yield* service.ask(
+        assertion({
+          metadata: {
+            root: ".",
+            path: undefined,
+            limit: undefined,
+            enabled: false,
+            count: 0,
+            nullable: null,
+          },
+        }),
+      )
+
+      const request = yield* service.get(PermissionV2.ID.create("per_test"))
+      expect(request?.metadata).toEqual({
+        root: ".",
+        enabled: false,
+        count: 0,
+        nullable: null,
+      })
+    }),
+  )
+
   it.effect("evaluates against an explicit provider-turn agent", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
