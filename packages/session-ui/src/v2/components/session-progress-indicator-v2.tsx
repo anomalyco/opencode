@@ -13,6 +13,7 @@ const dots = Array.from({ length: grid * grid }, (_, index) => ({
 
 export function SessionProgressIndicatorV2(props: ComponentProps<"svg">) {
   const [local, rest] = splitProps(props, ["class", "classList", "width", "height"])
+  const delay = `-${performance.now()}ms`
   return (
     <svg
       {...rest}
@@ -26,7 +27,18 @@ export function SessionProgressIndicatorV2(props: ComponentProps<"svg">) {
       data-component="session-progress-indicator-v2"
       aria-hidden={rest["aria-hidden"] ?? "true"}
     >
-      <For each={dots}>{(cell) => <rect data-dot={cell.index} x={cell.x} y={cell.y} width={dot} height={dot} />}</For>
+      <For each={dots}>
+        {(cell) => (
+          <rect
+            data-dot={cell.index}
+            x={cell.x}
+            y={cell.y}
+            width={dot}
+            height={dot}
+            style={{ "animation-delay": delay }}
+          />
+        )}
+      </For>
     </svg>
   )
 }
