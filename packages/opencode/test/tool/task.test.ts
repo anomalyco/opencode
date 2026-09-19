@@ -1098,4 +1098,113 @@ describe("tool.task", () => {
       expect((yield* jobs.get(grandchild.id))?.status).toBe("cancelled")
     }),
   )
+
+  it.instance("execute returns task_error and cancels the subagent when the timeout fires", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const cancelled = defer<SessionID>()
+      const promptOps: TaskPromptOps = {
+        cancel: (sessionID) =>
+          Effect.sync(() => {
+            cancelled.resolve(sessionID)
+          }),
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: () => Effect.never,
+      }
+
+      const result = yield* def.execute(
+        {
+          description: "stalls forever",
+          prompt: "hang please",
+          subagent_type: "general",
+          timeout: 50,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const cancelledId = yield* Effect.promise(() => cancelled.promise)
+      expect(result.output).toContain("<task_error>")
+      expect(result.output).toContain("did not complete within 50ms")
+      expect(result.output).toContain(cancelledId)
+      expect(result.output).not.toContain("<task_result>")
+    }),
+  )
+
+  it.instance("execute fails when given a negative timeout", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "bad timeout",
+            prompt: "irrelevant",
+            subagent_type: "general",
+            timeout: -1,
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  )
+
+  it.instance("timeout 0 waits indefinitely for completion", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const ops = stubOps()
+      const promptOps: TaskPromptOps = {
+        ...ops,
+        prompt: (input) =>
+          Effect.sleep("100 millis").pipe(Effect.flatMap(() => Effect.sync(() => reply(input, "slow but done")))),
+      }
+
+      const result = yield* def.execute(
+        {
+          description: "waits past any would-be timeout",
+          prompt: "finish normally",
+          subagent_type: "general",
+          timeout: 0,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).not.toContain("<task_error>")
+      expect(result.output).toContain("<task_result>")
+    }),
+  )
 })
