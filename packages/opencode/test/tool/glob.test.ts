@@ -106,6 +106,25 @@ describe("tool.glob", () => {
     }),
   )
 
+  it.instance("excludes hidden files by default", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, "visible.ts"), "export const visible = 1\n"))
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, ".hidden.ts"), "export const hidden = 1\n"))
+      const info = yield* GlobTool
+      const glob = yield* info.init()
+      const result = yield* glob.execute(
+        {
+          pattern: "**/*.ts",
+          path: test.directory,
+        },
+        ctx,
+      )
+      expect(result.output).toContain(path.join(test.directory, "visible.ts"))
+      expect(result.output).not.toContain(path.join(test.directory, ".hidden.ts"))
+    }),
+  )
+
   it.instance("rejects exact file paths", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
