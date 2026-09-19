@@ -882,6 +882,9 @@ export const RunCommand = effectCmd({
         try {
           await runInteractiveMode({
             sdk: client,
+            sdkOptions: args.attach
+              ? { baseUrl: args.attach, headers: attachHeaders }
+              : { baseUrl: "http://opencode.internal", fetch: fetchFn },
             directory: cwd,
             sessionID,
             sessionTitle: sess.title,
