@@ -259,6 +259,20 @@ test("reports a contender terminated by a signal", async () => {
   ).rejects.toThrow(/Server process (terminated by|exited with code)/)
 })
 
+test("surfaces a persistent failure hidden by contender overlap", async () => {
+  const directory = await temp()
+  const registration = join(directory, "service.json")
+  await expect(
+    run(
+      ensure({
+        file: registration,
+        version: "test",
+        command: [process.execPath, fixture, registration, "coordinated-double-failed"],
+      }),
+    ),
+  ).rejects.toThrow("Server process exited with code 1")
+}, 10_000)
+
 test("reports a slow contender that eventually fails", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
