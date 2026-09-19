@@ -60,6 +60,7 @@ import { useDirectoryPicker } from "@/components/directory-picker"
 import { ServerConnection, useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import { pathKey } from "@/utils/path-key"
+import { selectAutoselectProject } from "./layout-autoselect"
 import {
   displayName,
   effectiveWorkspaceOrder,
@@ -541,17 +542,13 @@ export default function LegacyLayout(props: ParentProps) {
     await layout.ready.promise
     if (!untrack(() => state.autoselect)) return
 
-    const list = layout.projects.list()
-    const last = server.projects.last()
-
-    if (list.length === 0) {
-      if (!last) return
-      await openProject(last, true)
-    } else {
-      const next = list.find((project) => project.worktree === last) ?? list[0]
-      if (!next) return
-      await openProject(next.worktree, true)
-    }
+    const next = selectAutoselectProject({
+      list: layout.projects.list(),
+      last: server.projects.last(),
+      launchDirectory: serverSync().data.path.directory,
+    })
+    if (!next) return
+    await openProject(next, true)
   })
 
   const workspaceName = (directory: string, projectId?: string, branch?: string) => {
