@@ -56,6 +56,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { RemoteAttachment } from "@/attachment"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -138,6 +139,7 @@ const layer = Layer.effect(
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
+    const attachment = yield* RemoteAttachment.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const { db } = database
@@ -784,6 +786,34 @@ const layer = Layer.effect(
           }
           const url = new URL(part.url)
           switch (url.protocol) {
+            case "attachment:": {
+              const uploaded = yield* attachment.consume({ sessionID: input.sessionID, id: url.hostname })
+              if (!uploaded) throw new Error("Text attachment is missing or has expired")
+              return [
+                {
+                  messageID: info.id,
+                  sessionID: input.sessionID,
+                  type: "text",
+                  synthetic: true,
+                  text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: uploaded.filename })}`,
+                },
+                {
+                  messageID: info.id,
+                  sessionID: input.sessionID,
+                  type: "text",
+                  synthetic: true,
+                  text: uploaded.content,
+                },
+                {
+                  ...part,
+                  messageID: info.id,
+                  sessionID: input.sessionID,
+                  mime: "text/plain",
+                  filename: uploaded.filename,
+                  url: `data:text/plain;base64,${Buffer.from(uploaded.content).toString("base64")}`,
+                },
+              ]
+            }
             case "data:":
               if (part.mime === "text/plain") {
                 return [
@@ -1625,6 +1655,7 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
+    RemoteAttachment.node,
   ],
 })
 

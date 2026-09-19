@@ -48,6 +48,7 @@ import { Storage } from "@/storage/storage"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { Worktree } from "@/worktree"
+import { RemoteAttachment } from "@/attachment"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
@@ -243,6 +244,7 @@ const app = LayerNode.group([
   SessionCompaction.node,
   SessionRevert.node,
   SessionSummary.node,
+  RemoteAttachment.node,
   SessionPrompt.node,
   Instruction.node,
   LLM.node,

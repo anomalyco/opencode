@@ -233,6 +233,8 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       putBlob: (blob) => blob.arrayBuffer().then(window.api.draftBlobPut),
       getBlob: (id) => window.api.draftBlobGet(id).then((data) => data && new Blob([data])),
     }),
+    materializeDraftBlob: (id) => window.api.draftBlobMaterialize(id),
+    cleanupMaterializedDraftBlob: (id) => window.api.draftBlobCleanup(id),
 
     updater: {
       state: updaterState,

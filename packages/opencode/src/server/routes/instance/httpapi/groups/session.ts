@@ -25,6 +25,7 @@ import { described } from "./metadata"
 import { QueryBoolean } from "./query"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { MAX_TEXT_ATTACHMENT_BYTES } from "@/attachment"
 
 const root = "/session"
 export const ListQuery = Schema.Struct({
@@ -74,6 +75,14 @@ export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput
 export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
 })
+export const AttachmentPayload = Schema.Struct({
+  filename: Schema.String,
+  content: Schema.String.check(Schema.isMaxLength(MAX_TEXT_ATTACHMENT_BYTES)),
+})
+export const AttachmentResponse = Schema.Struct({
+  id: Schema.String,
+  url: Schema.String,
+}).annotate({ identifier: "TextAttachment" })
 
 export const SessionPaths = {
   list: root,
@@ -95,6 +104,8 @@ export const SessionPaths = {
   prompt: `${root}/:sessionID/message`,
   promptAsync: `${root}/:sessionID/prompt_async`,
   command: `${root}/:sessionID/command`,
+  attachment: `${root}/:sessionID/attachment`,
+  removeAttachment: `${root}/:sessionID/attachment/:attachmentID`,
   shell: `${root}/:sessionID/shell`,
   revert: `${root}/:sessionID/revert`,
   unrevert: `${root}/:sessionID/unrevert`,
@@ -351,6 +362,31 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.command",
             summary: "Send command",
             description: "Send a new command to a session for execution by the AI assistant.",
+          }),
+        ),
+        HttpApiEndpoint.post("attachment", SessionPaths.attachment, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: AttachmentPayload,
+          success: described(AttachmentResponse, "Uploaded text attachment"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.attachment.upload",
+            summary: "Upload text attachment",
+            description: "Upload a short-lived text attachment for a prompt in this session.",
+          }),
+        ),
+        HttpApiEndpoint.delete("removeAttachment", SessionPaths.removeAttachment, {
+          params: { sessionID: SessionID, attachmentID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: HttpApiSchema.NoContent,
+          error: ApiNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.attachment.remove",
+            summary: "Remove text attachment",
+            description: "Remove an unused uploaded text attachment from this session.",
           }),
         ),
         HttpApiEndpoint.post("shell", SessionPaths.shell, {

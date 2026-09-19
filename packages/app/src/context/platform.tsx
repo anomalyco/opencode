@@ -68,6 +68,12 @@ type PlatformBase = {
   /** Prompt drafts, history, and their blobs. */
   draftStore?: DraftStore
 
+  /** Materialize a draft Blob as an application-owned temporary file for a local Server. */
+  materializeDraftBlob?(id: string): Promise<{ id: string; path: string }>
+
+  /** Remove an application-owned temporary draft file after local submission. */
+  cleanupMaterializedDraftBlob?(id: string): Promise<void>
+
   /** Stable platform window identity for window-scoped persistence */
   windowID?: string
 
