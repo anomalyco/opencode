@@ -1,6 +1,6 @@
 import path from "path"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Effect } from "effect"
+import { DateTime, Effect } from "effect"
 import { Agent } from "@/agent/agent"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
@@ -12,6 +12,14 @@ import PROMPT_PLAN from "./prompt/plan.txt"
 import BUILD_SWITCH from "./prompt/build-switch.txt"
 import PLAN_MODE from "./prompt/plan-mode.txt"
 
+const DATE_REGEX = /^<system-reminder>Today's date is (\d{4}-\d{2}-\d{2})<\/system-reminder>$/
+
+function localDateISO(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
 export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   messages: SessionV1.WithParts[]
   agent: Agent.Info
@@ -22,6 +30,27 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   const sessions = yield* Session.Service
   const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
   if (!userMessage) return input.messages
+
+  const today = localDateISO(yield* DateTime.nowAsDate)
+  const hasDate = (part: SessionV1.Part): part is SessionV1.TextPart =>
+    part.type === "text" && !part.ignored && Boolean(part.synthetic) && DATE_REGEX.test(part.text)
+  // TODO: remove this injection once the V2 System Context date ships.
+  const lastDate = input.messages
+    .findLast((msg) => msg.parts.some(hasDate))
+    ?.parts.findLast(hasDate)
+    ?.text.match(DATE_REGEX)?.[1]
+
+  if (lastDate !== today) {
+    const datePart = yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: userMessage.info.id,
+      sessionID: userMessage.info.sessionID,
+      type: "text",
+      text: `<system-reminder>Today's date is ${today}</system-reminder>`,
+      synthetic: true,
+    })
+    userMessage.parts.push(datePart)
+  }
 
   if (!flags.experimentalPlanMode) {
     if (input.agent.name === "plan") {
