@@ -1283,6 +1283,89 @@ describe("session.llm.stream", () => {
   )
 
   it.instance(
+    "injects _noop tool when messages contain tool calls but no tools are defined",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(alibabaQwenFixture.providerID, alibabaQwenFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Summary of conversation"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(alibabaQwenFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-noop-inject")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("msg_user-noop"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(alibabaQwenFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        // Simulate compaction: no tools, but messages contain tool-call and tool-result blocks
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: [],
+          messages: [
+            { role: "user", content: [{ type: "text", text: "Run a command" }] },
+            {
+              role: "assistant",
+              content: [
+                { type: "tool-call", toolCallId: "call-1", toolName: "bash", input: { command: "ls" } },
+              ],
+            },
+            {
+              role: "tool",
+              content: [
+                {
+                  type: "tool-result",
+                  toolCallId: "call-1",
+                  toolName: "bash",
+                  output: { type: "text", value: "file.txt" },
+                },
+              ],
+            },
+            { role: "assistant", content: [{ type: "text", text: "Done" }] },
+            { role: "user", content: [{ type: "text", text: "Summarize" }] },
+          ],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const tools = capture.body.tools as Array<{ function?: { name?: string } }> | undefined
+        expect(tools).toBeDefined()
+        expect(tools!.some((item) => item.function?.name === "_noop")).toBe(true)
+      }),
+    {
+      config: () => ({
+        enabled_providers: [alibabaQwenFixture.providerID],
+        provider: {
+          [alibabaQwenFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
     "sends responses API payload for OpenAI models",
     () =>
       Effect.gen(function* () {
