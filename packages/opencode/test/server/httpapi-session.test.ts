@@ -1,4 +1,5 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { afterEach, describe, expect } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -207,6 +208,17 @@ const clearSessionPath = (sessionID: SessionIDType) =>
     yield* db.update(SessionTable).set({ path: null }).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
   })
 
+const setSessionDirectory = (sessionID: SessionIDType, directory: string) =>
+  Effect.gen(function* () {
+    const database = yield* Database.Service
+    yield* database.db
+      .update(SessionTable)
+      .set({ directory })
+      .where(eq(SessionTable.id, sessionID))
+      .run()
+      .pipe(Effect.orDie)
+  })
+
 function request(path: string, init?: RequestInit) {
   const url = new URL(path, "http://localhost")
   return HttpClientRequest.fromWeb(new Request(url, init)).pipe(
@@ -388,7 +400,7 @@ describe("session HttpApi", () => {
     { git: true, config: { formatter: false, lsp: false } },
   )
 
-  it.live("uses the persisted session directory for prompt requests", () =>
+  it.live("does not override the persisted session directory for non-fork requests", () =>
     Effect.gen(function* () {
       const llm = yield* TestLLMServer
       yield* llm.text("ok", { usage: { input: 1, output: 1 } })
@@ -425,6 +437,50 @@ describe("session HttpApi", () => {
         root: sessionDirectory,
       })
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
+  )
+
+  it.live("forks a session with a stale directory into an explicit directory", () =>
+    Effect.gen(function* () {
+      const parentDirectory = yield* tmpdirScoped({ git: true })
+      const targetDirectory = yield* tmpdirScoped({ git: true })
+      const parent = yield* createSession({ title: "stale directory parent" }).pipe(
+        provideInstanceEffect(parentDirectory),
+      )
+      const message = yield* createTextMessage(parent.id, "preserve this history").pipe(
+        provideInstanceEffect(parentDirectory),
+      )
+      yield* setSessionDirectory(parent.id, path.join(parentDirectory, "missing"))
+
+      const sdk = yield* HttpServer.HttpServer.use((server) =>
+        Effect.succeed(
+          createOpencodeClient({
+            baseUrl: HttpServer.formatAddress(server.address),
+            directory: targetDirectory,
+          }),
+        ),
+      )
+      const current = yield* Effect.promise(() => sdk.session.get({ sessionID: parent.id }))
+      expect(current.data?.id).toBe(parent.id)
+
+      const forked = yield* Effect.promise(() => sdk.session.fork({ sessionID: parent.id }))
+      expect(forked.response.status).toBe(200)
+      if (!forked.data) return yield* Effect.die("Fork response did not include a session")
+      const child = forked.data
+      expect(child.directory).toBe(targetDirectory)
+
+      const childID = SessionID.make(child.id)
+      const messages = yield* Session.use
+        .messages({ sessionID: childID })
+        .pipe(provideInstanceEffect(targetDirectory), Effect.orDie)
+      expect(messages).toHaveLength(1)
+      expect(messages[0]?.parts).toEqual([
+        expect.objectContaining({
+          type: "text",
+          text: message.part.text,
+          sessionID: childID,
+        }),
+      ])
+    }),
   )
 
   it.instance(
