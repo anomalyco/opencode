@@ -1,6 +1,6 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { type Accessor, batch, createMemo } from "solid-js"
-import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import { createStore, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { pathKey } from "@/utils/path-key"
 import { ServerScope } from "@/utils/server-scope"
@@ -11,6 +11,33 @@ type ServerProjectState = {
   projects: Record<string, StoredProject[]>
   lastProject: Record<string, string>
   recentlyClosed: Record<string, string[]>
+  hiddenProjects?: Record<string, string[]>
+}
+
+const stringList = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+
+export function clearServerProjectScope<T extends ServerProjectState>(input: {
+  scope: ServerScope
+  store: Store<T>
+  setStore: SetStoreFunction<T>
+}) {
+  if (input.scope === ServerScope.local) return
+  const setStore = input.setStore as unknown as SetStoreFunction<ServerProjectState>
+  const projects = { ...input.store.projects }
+  const lastProject = { ...input.store.lastProject }
+  const recentlyClosed = { ...input.store.recentlyClosed }
+  const hiddenProjects = { ...input.store.hiddenProjects }
+  delete projects[input.scope]
+  delete lastProject[input.scope]
+  delete recentlyClosed[input.scope]
+  delete hiddenProjects[input.scope]
+  batch(() => {
+    setStore("projects", reconcile(projects))
+    setStore("lastProject", reconcile(lastProject))
+    setStore("recentlyClosed", reconcile(recentlyClosed))
+    setStore("hiddenProjects", reconcile(hiddenProjects))
+  })
 }
 const HEALTH_POLL_INTERVAL_MS = 10_000
 // The store retains more history than is displayed. Consumers filter recently closed entries
@@ -47,9 +74,16 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
   if (!isRecord(value)) return value
   const projects = isRecord(value.projects) ? value.projects : undefined
   const lastProject = isRecord(value.lastProject) ? value.lastProject : undefined
+  const hiddenProjects = isRecord(value.hiddenProjects) ? value.hiddenProjects : undefined
   const previousProjects = projects?.[canonicalLocalServer]
   const previousLastProject = lastProject?.[canonicalLocalServer]
-  if (!Array.isArray(previousProjects) && typeof previousLastProject !== "string") return value
+  const previousHiddenProjects = hiddenProjects?.[canonicalLocalServer]
+  if (
+    !Array.isArray(previousProjects) &&
+    typeof previousLastProject !== "string" &&
+    !Array.isArray(previousHiddenProjects)
+  )
+    return value
 
   const next = { ...value }
   if (projects && Array.isArray(previousProjects)) {
@@ -73,7 +107,46 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
     delete nextLastProject[canonicalLocalServer]
     next.lastProject = nextLastProject
   }
+  if (hiddenProjects && Array.isArray(previousHiddenProjects)) {
+    const local = stringList(hiddenProjects.local)
+    const keys = new Set(local.map(pathKey))
+    const migrated = stringList(previousHiddenProjects).filter((directory) => {
+      const key = pathKey(directory)
+      if (keys.has(key)) return false
+      keys.add(key)
+      return true
+    })
+    const nextHiddenProjects: Record<string, unknown> = { ...hiddenProjects, local: [...local, ...migrated] }
+    delete nextHiddenProjects[canonicalLocalServer]
+    next.hiddenProjects = nextHiddenProjects
+  }
   return next
+}
+
+export function visibleProjectEntries(
+  bookmarked: ReadonlyArray<StoredProject>,
+  server: ReadonlyArray<{ worktree: string }>,
+  hidden: ReadonlyArray<string>,
+) {
+  const seen = new Set<string>()
+  const result: StoredProject[] = []
+
+  for (const project of bookmarked) {
+    const key = pathKey(project.worktree)
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(project)
+  }
+
+  const blocked = new Set(stringList(hidden).map(pathKey))
+  for (const project of server) {
+    const key = pathKey(project.worktree)
+    if (seen.has(key) || blocked.has(key)) continue
+    seen.add(key)
+    result.push({ worktree: project.worktree, expanded: false })
+  }
+
+  return result
 }
 
 export function createServerProjects<T extends ServerProjectState>(input: {
@@ -84,20 +157,41 @@ export function createServerProjects<T extends ServerProjectState>(input: {
   const setStore = input.setStore as unknown as SetStoreFunction<ServerProjectState>
   const current = () => input.store.projects[input.scope()] ?? []
   const currentClosed = () => input.store.recentlyClosed?.[input.scope()] ?? []
+  const currentHidden = () => stringList(input.store.hiddenProjects?.[input.scope()])
+  const projectIndex = (directory: string) => {
+    const key = pathKey(directory)
+    return current().findIndex((project) => pathKey(project.worktree) === key)
+  }
+  const setHidden = (scope: ServerScope, directories: string[]) => {
+    if (!input.store.hiddenProjects) {
+      setStore("hiddenProjects", { [scope]: directories })
+      return
+    }
+    setStore("hiddenProjects", scope, directories)
+  }
   const remove = (directory: string) => {
+    const key = pathKey(directory)
     setStore(
       "projects",
       input.scope(),
-      current().filter((project) => project.worktree !== directory),
+      current().filter((project) => pathKey(project.worktree) !== key),
     )
   }
   return {
     list: current,
     recentlyClosed: currentClosed,
+    hidden: currentHidden,
     remove,
     open(directory: string) {
       const scope = input.scope()
       const key = pathKey(directory)
+      const hidden = currentHidden()
+      if (hidden.some((worktree) => pathKey(worktree) === key)) {
+        setHidden(
+          scope,
+          hidden.filter((worktree) => pathKey(worktree) !== key),
+        )
+      }
       const closed = currentClosed()
       if (closed.some((worktree) => pathKey(worktree) === key)) {
         setStore(
@@ -106,7 +200,7 @@ export function createServerProjects<T extends ServerProjectState>(input: {
           closed.filter((worktree) => pathKey(worktree) !== key),
         )
       }
-      if (current().some((project) => project.worktree === directory)) return
+      if (projectIndex(directory) !== -1) return
       setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
     },
     // User-initiated close: removes the project and records it in recently closed.
@@ -114,22 +208,36 @@ export function createServerProjects<T extends ServerProjectState>(input: {
     close(directory: string) {
       remove(directory)
       const key = pathKey(directory)
+      setHidden(input.scope(), [directory, ...currentHidden().filter((worktree) => pathKey(worktree) !== key)])
       const closed = [directory, ...currentClosed().filter((worktree) => pathKey(worktree) !== key)].slice(
         0,
         RECENTLY_CLOSED_HISTORY_LIMIT,
       )
       setStore("recentlyClosed", input.scope(), closed)
     },
+    reconcileHidden(discovered: string[]) {
+      const known = new Set(discovered.map(pathKey))
+      const seen = new Set<string>()
+      const current = currentHidden()
+      const next = current.filter((worktree) => {
+        const key = pathKey(worktree)
+        if (!known.has(key) || seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      if (next.length === current.length && next.every((worktree, index) => worktree === current[index])) return
+      setHidden(input.scope(), next)
+    },
     expand(directory: string) {
-      const index = current().findIndex((project) => project.worktree === directory)
+      const index = projectIndex(directory)
       if (index !== -1) setStore("projects", input.scope(), index, "expanded", true)
     },
     collapse(directory: string) {
-      const index = current().findIndex((project) => project.worktree === directory)
+      const index = projectIndex(directory)
       if (index !== -1) setStore("projects", input.scope(), index, "expanded", false)
     },
     move(directory: string, toIndex: number) {
-      const fromIndex = current().findIndex((project) => project.worktree === directory)
+      const fromIndex = projectIndex(directory)
       if (fromIndex === -1 || fromIndex === toIndex) return
       const next = [...current()]
       const [item] = next.splice(fromIndex, 1)
@@ -270,6 +378,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
         recentlyClosed: {} as Record<string, string[]>,
+        hiddenProjects: {} as Record<string, string[]>,
       }),
     )
 
@@ -306,8 +415,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     function remove(key: ServerConnection.Key) {
       const next = nextServerAfterRemoval(allServers(), key, props.defaultServer)
       const list = store.list.filter((x) => url(x) !== key)
+      const removedScope = scope(key)
       batch(() => {
         setStore("list", list)
+        clearServerProjectScope({ scope: removedScope, store, setStore })
+        projectStores.delete(key)
         if (state.active === key) setState("active", next)
       })
     }
