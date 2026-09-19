@@ -1,5 +1,5 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..0054b779ff7b550ecf6d4008e177a888003f9c92 100644
+index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..b8c3e0f1c2d4a6e8f0a1b3c5d7e9f1a3b5c7d9e1 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -977,7 +977,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
@@ -10,8 +10,17 @@ index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..0054b779ff7b550ecf6d4008e177a888
  	}
  	let response = await tryMetadataDiscovery(url, protocolVersion, fetchFn);
  	if (!opts?.metadataUrl && shouldAttemptFallback(response, issuer.pathname)) response = await tryMetadataDiscovery(new URL(`/.well-known/${wellKnownType}`, issuer), protocolVersion, fetchFn);
+@@ -1093,7 +1092,7 @@ async function discoverAuthorizationServerMetadata(authorizationServerUrl, { fet
+ 		const parsed = type === "oauth" ? _modelcontextprotocol_core_internal.OAuthMetadataSchema.parse(await response.json()) : _modelcontextprotocol_core_internal.OpenIdProviderDiscoveryMetadataSchema.parse(await response.json());
+ 		if (!skipIssuerValidation) {
+ 			const expectedIssuer = typeof authorizationServerUrl === "string" ? authorizationServerUrl : authorizationServerUrl.href;
+-			if (!(parsed.issuer === expectedIssuer || expectedIssuer.endsWith("/") && parsed.issuer === expectedIssuer.slice(0, -1))) throw new IssuerMismatchError("metadata", expectedIssuer, parsed.issuer);
++			if (!issuersMatch(parsed.issuer, expectedIssuer)) throw new IssuerMismatchError("metadata", expectedIssuer, parsed.issuer);
+ 		}
+ 		return parsed;
+ 	}
 diff --git a/dist/index.mjs b/dist/index.mjs
-index f02ce3ca394e826fc27c9848dbe9a214bf6ba7a9..8e27c9320e14ba8816fda752f250f6ddb1cc7ed0 100644
+index f02ce3ca394e826fc27c9848dbe9a214bf6ba7a9..c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -974,7 +974,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
@@ -22,3 +31,12 @@ index f02ce3ca394e826fc27c9848dbe9a214bf6ba7a9..8e27c9320e14ba8816fda752f250f6dd
  	}
  	let response = await tryMetadataDiscovery(url, protocolVersion, fetchFn);
  	if (!opts?.metadataUrl && shouldAttemptFallback(response, issuer.pathname)) response = await tryMetadataDiscovery(new URL(`/.well-known/${wellKnownType}`, issuer), protocolVersion, fetchFn);
+@@ -1090,7 +1089,7 @@ async function discoverAuthorizationServerMetadata(authorizationServerUrl, { fet
+ 		const parsed = type === "oauth" ? OAuthMetadataSchema.parse(await response.json()) : OpenIdProviderDiscoveryMetadataSchema.parse(await response.json());
+ 		if (!skipIssuerValidation) {
+ 			const expectedIssuer = typeof authorizationServerUrl === "string" ? authorizationServerUrl : authorizationServerUrl.href;
+-			if (!(parsed.issuer === expectedIssuer || expectedIssuer.endsWith("/") && parsed.issuer === expectedIssuer.slice(0, -1))) throw new IssuerMismatchError("metadata", expectedIssuer, parsed.issuer);
++			if (!issuersMatch(parsed.issuer, expectedIssuer)) throw new IssuerMismatchError("metadata", expectedIssuer, parsed.issuer);
+ 		}
+ 		return parsed;
+ 	}
