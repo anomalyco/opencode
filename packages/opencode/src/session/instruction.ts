@@ -11,6 +11,9 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
+import { Shell } from "@opencode-ai/core/shell"
+import { ConfigMarkdown } from "@/config/markdown"
+import { Process } from "@/util/process"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
@@ -89,7 +92,18 @@ const layer: Layer.Layer<
     })
 
     const read = Effect.fnUntraced(function* (filepath: string) {
-      return yield* fs.readFileString(filepath).pipe(Effect.catch(() => Effect.succeed("")))
+      const content = yield* fs.readFileString(filepath).pipe(Effect.catch(() => Effect.succeed("")))
+      const shellMatches = ConfigMarkdown.shell(content)
+      if (shellMatches.length === 0) return content
+      const config = yield* cfg.get()
+      const sh = Shell.preferred(config.shell)
+      const results = yield* Effect.promise(() =>
+        Promise.all(
+          shellMatches.map(async ([, cmd]) => (await Process.text([cmd], { cwd: path.dirname(filepath), shell: sh, nothrow: true })).text),
+        ),
+      )
+      let index = 0
+      return content.replace(ConfigMarkdown.SHELL_REGEX, () => results[index++] ?? "")
     })
 
     const fetch = Effect.fnUntraced(function* (url: string) {
