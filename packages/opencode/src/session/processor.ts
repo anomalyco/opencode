@@ -12,6 +12,7 @@ import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
+import { DoomLoop } from "./doom-loop"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
@@ -23,10 +24,8 @@ import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
-const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
@@ -62,10 +61,13 @@ type ToolCall = {
   messageID: SessionV1.ToolPart["messageID"]
   sessionID: SessionV1.ToolPart["sessionID"]
   done: Deferred.Deferred<void>
+  // Overlapping updates replace the record, but must share the same admission state.
+  readonly admission: { counted: boolean }
 }
 
 interface ProcessorContext extends Input {
   toolcalls: Record<string, ToolCall>
+  doomLoop: DoomLoop.Detector
   shouldBreak: boolean
   snapshot: string | undefined
   blocked: boolean
@@ -93,7 +95,6 @@ const layer = Layer.effect(
     const status = yield* SessionStatus.Service
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
-    const database = yield* Database.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -105,6 +106,7 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         model: input.model,
         toolcalls: {},
+        doomLoop: DoomLoop.create(),
         shouldBreak: false,
         snapshot: initialSnapshot,
         blocked: false,
@@ -245,6 +247,7 @@ const layer = Layer.effect(
         } satisfies SessionV1.ToolPart)
         ctx.toolcalls[input.id] = {
           done: yield* Deferred.make<void>(),
+          admission: { counted: false },
           partID: part.id,
           messageID: part.messageID,
           sessionID: part.sessionID,
@@ -334,7 +337,7 @@ const layer = Layer.effect(
             }
             yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
-            yield* updateToolCall(value.id, (match) => ({
+            const part = yield* updateToolCall(value.id, (match) => ({
               ...match,
               tool: value.name,
               state:
@@ -350,23 +353,11 @@ const layer = Layer.effect(
                 : value.providerMetadata,
             }))
 
-            const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
-              Effect.provideService(Database.Service, database),
-            )
-            const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
-
-            if (
-              recentParts.length !== DOOM_LOOP_THRESHOLD ||
-              !recentParts.every(
-                (part) =>
-                  part.type === "tool" &&
-                  part.tool === value.name &&
-                  part.state.status !== "pending" &&
-                  JSON.stringify(part.state.input) === JSON.stringify(input),
-              )
-            ) {
-              return
-            }
+            // Metadata may start execution before normalized delivery; persisted status is not an admission flag.
+            const call = ctx.toolcalls[value.id]
+            if (!part || !call || call.admission.counted) return
+            call.admission.counted = true
+            if (!ctx.doomLoop.check(value.name, input)) return
 
             const agent = yield* agents.get(ctx.assistantMessage.agent)
             yield* permission.ask({
@@ -725,7 +716,6 @@ export const node = LayerNode.make({
     SessionStatus.node,
     Image.node,
     EventV2Bridge.node,
-    Database.node,
   ],
 })
 
