@@ -167,15 +167,20 @@ const layer = Layer.effect(
           $: typeof Bun === "undefined" ? undefined : Bun.$,
         }
 
-        for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
+        for (const [index, plugin] of (flags.disableDefaultPlugins ? [] : internalPlugins(flags)).entries()) {
+          const name = plugin.name || `internal-${index + 1}`
+          yield* Effect.logInfo("internal plugin init started", { plugin: name })
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),
             catch: errorMessage,
           }).pipe(
-            Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
+            Effect.timeout("5 seconds"),
+            Effect.tapError((error) => Effect.logError("failed to load internal plugin", { plugin: name, error })),
             Effect.option,
           )
-          if (init._tag === "Some") hooks.push(init.value)
+          if (init._tag === "None") continue
+          hooks.push(init.value)
+          yield* Effect.logInfo("internal plugin init completed", { plugin: name })
         }
 
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
@@ -242,12 +247,13 @@ const layer = Layer.effect(
         }
 
         // Notify plugins of current config
-        for (const hook of hooks) {
+        for (const [index, hook] of hooks.entries()) {
           yield* Effect.tryPromise({
             try: () => Promise.resolve((hook as any).config?.(cfg)),
             catch: errorMessage,
           }).pipe(
-            Effect.tapError((error) => Effect.logError("plugin config hook failed", { error })),
+            Effect.timeout("5 seconds"),
+            Effect.tapError((error) => Effect.logError("plugin config hook failed", { plugin: index + 1, error })),
             Effect.ignore,
           )
         }
