@@ -286,39 +286,34 @@ Para perfiles de inferencia personalizados, utilice el modelo y el nombre del pr
 
 ### Anthropic
 
-1. Una vez que se haya registrado, ejecute el comando `/connect` y seleccione Anthropic.
+1. Después de registrarte, crea una clave API desde la [consola de Anthropic](https://console.anthropic.com/settings/keys).
+
+2. Ejecuta el comando `/connect` y selecciona Anthropic.
 
    ```txt
    /connect
    ```
 
-2. Aquí puedes seleccionar la opción **Claude Pro/Max** y se abrirá tu navegador.
-   y pedirle que se autentique.
+3. Selecciona **Manually enter API Key** y pega tu clave API de Anthropic.
 
    ```txt
    ┌ Select auth method
    │
-   │ Claude Pro/Max
-   │ Create an API Key
    │ Manually enter API Key
    └
    ```
 
-3. Ahora todos los modelos Anthropic deberían estar disponibles cuando use el comando `/models`.
+4. Ahora todos los modelos de Anthropic deberían estar disponibles cuando uses el comando `/models`.
 
    ```txt
    /models
    ```
 
 :::info
-El uso de su suscripción Claude Pro/Max en OpenCode no está oficialmente respaldado por [Anthropic](https://anthropic.com).
+OpenCode usa Anthropic mediante claves API. La autenticación con suscripciones Claude Pro/Max no está soportada.
+
+Las versiones anteriores de OpenCode incluían plugins para Claude Pro/Max, pero Anthropic prohíbe ese uso y los plugins ya no vienen incluidos desde la versión 1.3.0.
 :::
-
-##### Usando las teclas API
-
-También puede seleccionar **Crear una clave API** si no tiene una suscripción Pro/Max. También abrirá su navegador y le pedirá que inicie sesión en Anthropic y le dará un código que puede pegar en su terminal.
-
-O si ya tienes una clave API, puedes seleccionar **Ingresar manualmente la clave API** y pegarla en tu terminal.
 
 ---
 
