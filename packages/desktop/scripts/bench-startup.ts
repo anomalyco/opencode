@@ -175,8 +175,12 @@ const summaries = Object.fromEntries(
 const phaseOrder = [
   ["electron native init", "processCreated", "nodeStart"],
   ["node bootstrap", "nodeStart", "nodeBootstrapped"],
-  ["electron js init + main bundle", "nodeBootstrapped", "appStarting"],
-  ["main layers → window created", "appStarting", "rendererProcess"],
+  ["electron js init → entry", "nodeBootstrapped", "entryStart"],
+  ["entry → chromium ready", "entryStart", "electronReady"],
+  ["ready → window shown", "electronReady", "windowVisible"],
+  ["main bundle load + evaluate", "windowVisible", "bundleEvaluated"],
+  ["layers → first log line", "bundleEvaluated", "appStarting"],
+  ["layers → renderer process", "appStarting", "rendererProcess"],
   ["renderer boot → first paint", "rendererProcess", "firstPaint"],
   ["first paint → shell", "firstPaint", "shellVisible"],
   ["shell → idle", "shellVisible", "rendererIdle"],
@@ -368,6 +372,9 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
       processCreated: boot && Math.round(boot.created - spawnAt),
       nodeStart: boot && Math.round(boot.origin + boot.nodeStart - spawnAt),
       nodeBootstrapped: boot && Math.round(boot.origin + boot.bootstrapComplete - spawnAt),
+      entryStart: main.marks.entry && main.marks.entry - spawnAt,
+      electronReady: main.marks.ready && main.marks.ready - spawnAt,
+      bundleEvaluated: main.marks.bundle && main.marks.bundle - spawnAt,
       appStarting: main.appStarting && main.appStarting - spawnAt,
       cliVersionStart: main.versionStart && main.versionStart - spawnAt,
       cliVersionDone: main.versionDone && main.versionDone - spawnAt,
@@ -525,6 +532,8 @@ function mainLog() {
   const dir = dirs.map((d) => join(paths.logs, d)).find((d) => existsSync(join(d, "main.log")))
   const timeline: [number, string, string][] = []
   let windowShownAt: number | undefined
+  // Epoch marks the entry module recorded before any logger existed, reported with "app starting".
+  const marks: Record<string, number> = {}
   for (const name of dir ? readdirSync(dir).filter((f) => f.endsWith(".log")) : []) {
     const text = readFileSync(join(dir!, name), "utf8")
     // electron-log wraps long objects onto continuation lines; read them as part of the entry.
@@ -536,6 +545,8 @@ function mainLog() {
       // A window shown before the logger existed reports when it was shown; the line itself is later.
       const shown = /main window visible/.test(message) ? entry.match(/shownAt: (\d+)/)?.[1] : undefined
       if (shown) windowShownAt = Number(shown)
+      if (/app starting/.test(message))
+        for (const [, key, value] of entry.matchAll(/\b(entry|ready|window|bundle): (\d{10,})/g)) marks[key] = Number(value)
       timeline.push([new Date(m[1].replace(" ", "T")).getTime(), name.replace(/\.log$/, ""), message])
     }
   }
@@ -548,7 +559,8 @@ function mainLog() {
     versionDone: at(/v2 CLI command completed/),
     serviceStarting: at(/v2 CLI background service starting/),
     serviceReady: at(/background service ready/),
-    windowVisible: windowShownAt ?? at(/main window visible/),
+    windowVisible: windowShownAt ?? marks.window ?? at(/main window visible/),
+    marks,
   }
 }
 

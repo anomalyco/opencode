@@ -8,6 +8,10 @@ import { ApplicationLifecycle } from "./lifecycle"
 import { BackgroundService } from "./service/background-service"
 import { DesktopCli } from "./service/desktop-cli"
 import { UpdaterLive } from "./updater/live"
+import { marks } from "./lifecycle/marks"
+
+// Everything above has been loaded and evaluated by now; the layers start below.
+marks.bundle = Date.now()
 
 const runIpc = Effect.fn("Desktop.runIpc")(function* () {
   const lifecycle = yield* ApplicationLifecycle.Service
