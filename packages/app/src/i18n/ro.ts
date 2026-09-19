@@ -881,6 +881,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Șterge notificările",
   "sidebar.empty.title": "Niciun proiect deschis",
   "sidebar.empty.description": "Deschide un proiect pentru a începe",
+  "sidebar.projects.empty": "No projects",
   "debugBar.ariaLabel": "Diagnosticare performanță dezvoltare",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",
