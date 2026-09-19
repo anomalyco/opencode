@@ -13,9 +13,9 @@ import {
   parseQuestionAnswers,
   parseQuestions,
   parseTodos,
-  alwaysSeparate,
   toolDisplay,
 } from "../../../src/routes/session"
+import { alwaysSeparate } from "../../../src/util/separate"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
 
