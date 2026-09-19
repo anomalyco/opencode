@@ -91,6 +91,11 @@ export type RunHandle = {
 
 export type SpawnOpts = { readonly timeoutMs?: number; readonly env?: Record<string, string> }
 
+// Override the child's stdin (default "ignore"). Honored only by `run` and
+// `spawn` — stdin-handling tests pass a Stream: with data for piped input,
+// Stream.never for a held-open fd. `startRun`/`serve`/`acp` manage their own.
+export type StdinOverride = { readonly stdin?: ChildProcess.CommandInput }
+
 // Typed equivalent of constructing argv for `opencode run`. New flags should
 // land here so tests stay grep-able and refactor-safe.
 export type RunOpts = SpawnOpts & {
@@ -154,7 +159,7 @@ export type AcpHandle = {
 
 export type OpencodeCli = {
   // High-level: run a single prompt against the test model. Short-lived.
-  readonly run: (message: string, opts?: RunOpts) => Effect.Effect<RunResult>
+  readonly run: (message: string, opts?: RunOpts & StdinOverride) => Effect.Effect<RunResult>
   readonly startRun: (message: string, opts?: RunOpts) => Effect.Effect<RunHandle, never, Scope.Scope>
   // Spawn `opencode serve` and wait until it's listening. Long-lived: the
   // returned handle is killed when the caller's Scope closes. Fails if the
@@ -165,7 +170,7 @@ export type OpencodeCli = {
   readonly acp: (opts?: AcpOpts) => Effect.Effect<AcpHandle, Error, Scope.Scope>
   // Escape hatch: any CLI invocation with full control over argv. Used to test
   // commands that don't yet have a typed builder.
-  readonly spawn: (args: string[], opts?: SpawnOpts) => Effect.Effect<RunResult>
+  readonly spawn: (args: string[], opts?: SpawnOpts & StdinOverride) => Effect.Effect<RunResult>
   // Convenience assertion. Dumps captured stderr/stdout on mismatch so CI
   // failures are debuggable without re-running locally.
   readonly expectExit: (result: RunResult, expected: number, label?: string) => void
@@ -204,7 +209,7 @@ export function withCliFixture<A, E>(
     const configJson = JSON.stringify(testProviderConfig(llm.url))
     const env = isolatedEnv(home, configJson)
 
-    const spawn = Effect.fn("opencode.spawn")(function* (args: string[], opts?: SpawnOpts) {
+    const spawn = Effect.fn("opencode.spawn")(function* (args: string[], opts?: SpawnOpts & StdinOverride) {
       const start = Date.now()
       const timeoutMs = opts?.timeoutMs ?? 30_000
       // stdin: "ignore" so the child doesn't see a piped stdin and block
@@ -215,7 +220,7 @@ export function withCliFixture<A, E>(
         cwd: home,
         env: { ...env, ...opts?.env },
         extendEnv: true,
-        stdin: "ignore",
+        stdin: opts?.stdin ?? "ignore",
       })
       // Pass timeout to appProc.run rather than wrapping with
       // Effect.timeoutOrElse externally: AppProcess.run is itself scoped, so
@@ -274,8 +279,8 @@ export function withCliFixture<A, E>(
       }
     }
 
-    const run = (message: string, opts?: RunOpts): Effect.Effect<RunResult> => {
-      return spawn(runArgs(message, opts), runOpts(opts))
+    const run = (message: string, opts?: RunOpts & StdinOverride): Effect.Effect<RunResult> => {
+      return spawn(runArgs(message, opts), { ...runOpts(opts), stdin: opts?.stdin })
     }
 
     const startRun = Effect.fn("opencode.startRun")(function* (message: string, opts?: RunOpts) {
