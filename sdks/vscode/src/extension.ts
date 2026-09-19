@@ -40,7 +40,23 @@ export function activate(context: vscode.ExtensionContext) {
     }
   })
 
-  context.subscriptions.push(openNewTerminalDisposable, openTerminalDisposable, addFilepathDisposable)
+  const sidebarProvider: vscode.WebviewViewProvider = {
+    resolveWebviewView(view) {
+      view.webview.options = { enableScripts: true }
+      view.webview.html = getSidebarHtml(view.webview)
+      view.webview.onDidReceiveMessage(async (message) => {
+        if (message.command === "open") {
+          await vscode.commands.executeCommand("opencode.openTerminal")
+        }
+        if (message.command === "openNew") {
+          await vscode.commands.executeCommand("opencode.openNewTerminal")
+        }
+      })
+    },
+  }
+
+  const sidebarDisposable = vscode.window.registerWebviewViewProvider("opencode.sidebar", sidebarProvider)
+  context.subscriptions.push(openNewTerminalDisposable, openTerminalDisposable, addFilepathDisposable, sidebarDisposable)
 
   async function openTerminal() {
     // Create a new terminal in split screen
@@ -133,5 +149,37 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     return filepathWithAt
+  }
+
+  function getSidebarHtml(_webview: vscode.Webview) {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { padding: 16px; font-family: var(--vscode-font-family); color: var(--vscode-foreground); }
+h3 { margin: 0 0 8px; font-size: 13px; }
+p { margin: 0 0 12px; font-size: 12px; opacity: 0.9; }
+button { display: block; width: 100%; margin: 6px 0; padding: 6px 10px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; cursor: pointer; }
+button:hover { background: var(--vscode-button-hoverBackground); }
+button.secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
+.hint { margin-top: 12px; font-size: 11px; opacity: 0.7; }
+</style>
+</head>
+<body>
+<h3>OpenCode</h3>
+<p>Run OpenCode in the integrated terminal. The sidebar delegates to the same terminal workflow.</p>
+<button id="open">Open OpenCode</button>
+<button id="openNew" class="secondary">Open in New Tab</button>
+<p class="hint">Also available via editor title button and Cmd+Esc / Ctrl+Esc.</p>
+<script>
+const vscode = acquireVsCodeApi();
+document.getElementById('open').addEventListener('click', () => vscode.postMessage({ command: 'open' }));
+document.getElementById('openNew').addEventListener('click', () => vscode.postMessage({ command: 'openNew' }));
+</script>
+</body>
+</html>`
   }
 }
