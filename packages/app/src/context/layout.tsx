@@ -5,7 +5,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useServerSync } from "./server-sync"
 import { useServerSDK } from "./server-sdk"
-import { RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
+import { RECENTLY_CLOSED_HISTORY_LIMIT, ServerConnection, useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { normalizeProjectInfo } from "./global-sync/utils"
@@ -637,7 +637,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return server.projects
             .recentlyClosed()
             .filter((worktree) => known.has(pathKey(worktree)))
-            .slice(0, RECENTLY_CLOSED_DISPLAY_LIMIT)
+            .slice(0, RECENTLY_CLOSED_HISTORY_LIMIT)
             .map((worktree) => enrich({ worktree, expanded: false }))
         }),
         open(directory: string) {

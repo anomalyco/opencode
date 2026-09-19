@@ -5,6 +5,7 @@ import {
   createServerProjects,
   migrateCanonicalLocalServerState,
   nextServerAfterRemoval,
+  RECENTLY_CLOSED_HISTORY_LIMIT,
   resolveServerList,
   ServerConnection,
 } from "./server"
@@ -96,10 +97,12 @@ test("active server removal falls back across built-in and persisted servers", (
 })
 
 describe("createServerProjects", () => {
+  const emptyStore = () => ({ projects: {}, lastProject: {}, recentlyClosed: {}, hiddenClosed: {}, archivedClosed: {} })
+
   test("keeps active and explicit server buckets in one reactive store", () => {
     createRoot((dispose) => {
       const [scope] = createSignal(ServerScope.local)
-      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const [store, setStore] = createStore(emptyStore())
       const active = createServerProjects({ scope, store, setStore })
       const remote = createServerProjects({ scope: () => "https://debian.example" as ServerScope, store, setStore })
 
@@ -119,7 +122,7 @@ describe("createServerProjects", () => {
   test("tracks recently closed projects and drops them when reopened", () => {
     createRoot((dispose) => {
       const [scope] = createSignal(ServerScope.local)
-      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const [store, setStore] = createStore(emptyStore())
       const projects = createServerProjects({ scope, store, setStore })
 
       projects.open("/a")
@@ -140,7 +143,7 @@ describe("createServerProjects", () => {
   test("remove drops a project without recording it as recently closed", () => {
     createRoot((dispose) => {
       const [scope] = createSignal(ServerScope.local)
-      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const [store, setStore] = createStore(emptyStore())
       const projects = createServerProjects({ scope, store, setStore })
 
       projects.open("/repo/subdir")
@@ -154,7 +157,7 @@ describe("createServerProjects", () => {
   test("retains recently closed history beyond the visible display limit", () => {
     createRoot((dispose) => {
       const [scope] = createSignal(ServerScope.local)
-      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const [store, setStore] = createStore(emptyStore())
       const projects = createServerProjects({ scope, store, setStore })
 
       // Closing 6 projects keeps all 6 in the store even though only 5 are displayed;
@@ -171,15 +174,16 @@ describe("createServerProjects", () => {
   test("caps recently closed history at the store limit", () => {
     createRoot((dispose) => {
       const [scope] = createSignal(ServerScope.local)
-      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const [store, setStore] = createStore(emptyStore())
       const projects = createServerProjects({ scope, store, setStore })
 
-      for (let i = 1; i <= 20; i++) {
+      const total = RECENTLY_CLOSED_HISTORY_LIMIT + 4
+      for (let i = 1; i <= total; i++) {
         projects.open(`/p${i}`)
         projects.close(`/p${i}`)
       }
-      expect(projects.recentlyClosed()).toHaveLength(16)
-      expect(projects.recentlyClosed()[0]).toBe("/p20")
+      expect(projects.recentlyClosed()).toHaveLength(RECENTLY_CLOSED_HISTORY_LIMIT)
+      expect(projects.recentlyClosed()[0]).toBe(`/p${total}`)
       expect(projects.recentlyClosed().at(-1)).toBe("/p5")
       dispose()
     })
@@ -188,12 +192,148 @@ describe("createServerProjects", () => {
   test("dedupes recently closed entries by normalized path", () => {
     createRoot((dispose) => {
       const [scope] = createSignal(ServerScope.local)
-      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const [store, setStore] = createStore(emptyStore())
       const projects = createServerProjects({ scope, store, setStore })
 
       projects.close("/repo")
       projects.close("/repo/")
       expect(projects.recentlyClosed()).toEqual(["/repo/"])
+      dispose()
+    })
+  })
+
+  test("archives and restores closed projects", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore(emptyStore())
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/a")
+      projects.close("/a")
+      expect(projects.isArchivedClosed("/a")).toBe(false)
+
+      projects.archiveClosed("/a")
+      expect(projects.isArchivedClosed("/a")).toBe(true)
+      expect(projects.archivedClosed()).toEqual(["/a"])
+
+      projects.unarchiveClosed("/a")
+      expect(projects.isArchivedClosed("/a")).toBe(false)
+      expect(projects.archivedClosed()).toEqual([])
+      // Unarchiving keeps history entry.
+      expect(projects.recentlyClosed()).toEqual(["/a"])
+      dispose()
+    })
+  })
+
+  test("hides and unhides closed projects", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore(emptyStore())
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/a")
+      projects.close("/a")
+      projects.hideClosed("/a")
+      expect(projects.isHiddenClosed("/a")).toBe(true)
+
+      projects.unhideClosed("/a")
+      expect(projects.isHiddenClosed("/a")).toBe(false)
+      expect(projects.recentlyClosed()).toEqual(["/a"])
+      dispose()
+    })
+  })
+
+  test("reopening clears hidden and archived flags", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore(emptyStore())
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/a")
+      projects.close("/a")
+      projects.hideClosed("/a")
+      projects.archiveClosed("/a")
+      expect(projects.isHiddenClosed("/a")).toBe(true)
+      expect(projects.isArchivedClosed("/a")).toBe(true)
+
+      projects.open("/a")
+      expect(projects.recentlyClosed()).toEqual([])
+      expect(projects.isHiddenClosed("/a")).toBe(false)
+      expect(projects.isArchivedClosed("/a")).toBe(false)
+      dispose()
+    })
+  })
+
+  test("re-closing makes a project visible again", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore(emptyStore())
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/a")
+      projects.close("/a")
+      projects.hideClosed("/a")
+      projects.open("/a")
+      projects.close("/a")
+      expect(projects.isHiddenClosed("/a")).toBe(false)
+      expect(projects.recentlyClosed()).toEqual(["/a"])
+      dispose()
+    })
+  })
+
+  test("forgetting removes history and flags without touching active projects", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore(emptyStore())
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/a")
+      projects.close("/a")
+      projects.hideClosed("/a")
+      projects.archiveClosed("/a")
+      projects.removeClosed("/a")
+      expect(projects.recentlyClosed()).toEqual([])
+      expect(projects.hiddenClosed()).toEqual([])
+      expect(projects.archivedClosed()).toEqual([])
+
+      // Forgetting unknown entries is a no-op for history but clears stray flags.
+      projects.removeClosed("/missing")
+      expect(projects.recentlyClosed()).toEqual([])
+      dispose()
+    })
+  })
+
+  test("ignores flags for directories that are not in history", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore(emptyStore())
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.archiveClosed("/never-closed")
+      projects.hideClosed("/never-closed")
+      expect(projects.archivedClosed()).toEqual([])
+      expect(projects.hiddenClosed()).toEqual([])
+      dispose()
+    })
+  })
+
+  test("prunes flags that fall out of the history window", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore(emptyStore())
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/old")
+      projects.close("/old")
+      projects.hideClosed("/old")
+      expect(projects.isHiddenClosed("/old")).toBe(true)
+
+      for (let i = 1; i <= RECENTLY_CLOSED_HISTORY_LIMIT; i++) {
+        projects.open(`/p${i}`)
+        projects.close(`/p${i}`)
+      }
+      expect(projects.recentlyClosed()).not.toContain("/old")
+      expect(projects.isHiddenClosed("/old")).toBe(false)
       dispose()
     })
   })
@@ -240,6 +380,26 @@ describe("migrateCanonicalLocalServerState", () => {
         ],
       },
       lastProject: { local: "/local" },
+    })
+  })
+
+  test("merges recently closed history and flags into local scope", () => {
+    expect(
+      migrateCanonicalLocalServerState(
+        {
+          recentlyClosed: {
+            local: ["/local"],
+            "https://opencode.example.com": ["/local/", "/remote", 42, null],
+          },
+          archivedClosed: { "https://opencode.example.com": ["/remote"] },
+          hiddenClosed: { local: ["/local"] },
+        },
+        ServerConnection.Key.make("https://opencode.example.com"),
+      ),
+    ).toEqual({
+      recentlyClosed: { local: ["/local", "/remote"] },
+      archivedClosed: { local: ["/remote"] },
+      hiddenClosed: { local: ["/local"] },
     })
   })
 })
