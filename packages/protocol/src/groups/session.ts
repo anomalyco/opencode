@@ -43,6 +43,10 @@ import { FileDiff } from "@opencode/schema/file-diff"
 import { Form } from "@opencode/schema/form"
 import { PublicSessionMessage } from "./message.js"
 
+export const SessionLogItem = Schema.Union([SessionEvent.Durable, EventLog.Synced]).annotate({
+  identifier: "SessionLogItem",
+})
+
 const ParentIDFilter = Schema.Union([
   Session.ID,
   Schema.Null.pipe(
@@ -727,7 +731,7 @@ export const makeSessionGroup = <
           follow: BooleanFromString.pipe(Schema.optional),
         },
         success: HttpApiSchema.StreamSse({
-          data: Schema.Union([SessionEvent.Durable, EventLog.Synced]).annotate({ identifier: "SessionLogItem" }),
+          data: SessionLogItem,
         }),
         error: SessionNotFoundError,
       }).annotateMerge(

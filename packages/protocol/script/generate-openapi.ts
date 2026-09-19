@@ -1,10 +1,17 @@
-import { OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, OpenApi } from "effect/unstable/httpapi"
 import { format } from "prettier"
 import { fileURLToPath } from "url"
 import { ClientApi } from "../src/client.js"
+import { OpenCodeEvent } from "../src/groups/event.js"
+import { SessionLogItem } from "../src/groups/session.js"
 import { stabilizeOpenApi } from "./openapi-stabilize.js"
 
-const document = await format(JSON.stringify(stabilizeOpenApi(OpenApi.fromApi(ClientApi)), null, 2), {
+// Effect documents StreamSse data as a bare JSON string. Link the payload schemas until it emits `contentSchema` again.
+const spec = OpenApi.fromApi(ClientApi.annotate(HttpApi.AdditionalSchemas, [OpenCodeEvent, SessionLogItem]))
+spec.components.schemas.V2EventEncoded.contentSchema = { $ref: "#/components/schemas/V2Event" }
+spec.components.schemas.SessionLogItemEncoded.contentSchema = { $ref: "#/components/schemas/SessionLogItem" }
+
+const document = await format(JSON.stringify(stabilizeOpenApi(spec), null, 2), {
   parser: "json",
   printWidth: 120,
 })
