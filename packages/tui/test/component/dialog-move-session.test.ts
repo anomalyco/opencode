@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import os from "node:os"
 import fs from "node:fs"
-import { expandHome, canonicalDirectory, autocompleteDirectories } from "../../src/component/dialog-move-session"
+import {
+  expandHome,
+  canonicalDirectory,
+  autocompleteDirectories,
+  mergeProjectDirectories,
+} from "../../src/component/dialog-move-session"
 
 describe("dialog move session", () => {
   const fakeHome = process.platform === "win32" ? "C:\\Users\\tester" : "/home/tester"
@@ -60,5 +65,83 @@ describe("dialog move session", () => {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true })
     }
+  })
+})
+
+describe("mergeProjectDirectories", () => {
+  const home = process.platform === "win32" ? "C:\\Users\\tester" : "/home/tester"
+  const always = () => true
+
+  test("merges worktrees and sandboxes from every project", () => {
+    const merged = mergeProjectDirectories({
+      candidates: [
+        path.join(home, "work"),
+        path.join(home, "work", "repos", "HomeLab"),
+        path.join(home, "work", "sandbox"),
+      ],
+      existing: [],
+      home,
+      exists: always,
+    })
+
+    expect(merged).toEqual([
+      path.join(home, "work"),
+      path.join(home, "work", "repos", "HomeLab"),
+      path.join(home, "work", "sandbox"),
+    ])
+  })
+
+  test("excludes directories already shown for the active project", () => {
+    const active = path.join(home, "work")
+    const merged = mergeProjectDirectories({
+      candidates: [active, path.join(home, "other")],
+      existing: [active],
+      home,
+      exists: always,
+    })
+
+    expect(merged).toEqual([path.join(home, "other")])
+  })
+
+  test("de-duplicates case-insensitively", () => {
+    const dir = path.join(home, "work")
+    const merged = mergeProjectDirectories({
+      candidates: [dir, dir.toUpperCase(), dir],
+      existing: [],
+      home,
+      exists: always,
+    })
+
+    expect(merged.length).toBe(1)
+  })
+
+  test("drops blank and non-existent directories", () => {
+    const merged = mergeProjectDirectories({
+      candidates: ["", "   ", path.join(home, "gone")],
+      existing: [],
+      home,
+      exists: (directory) => directory !== path.join(home, "gone"),
+    })
+
+    expect(merged).toEqual([])
+  })
+
+  test("sorts alphabetically and honours the limit", () => {
+    const merged = mergeProjectDirectories({
+      candidates: [path.join(home, "zeta"), path.join(home, "alpha"), path.join(home, "mid")],
+      existing: [],
+      home,
+      exists: always,
+    })
+    expect(merged).toEqual([path.join(home, "alpha"), path.join(home, "mid"), path.join(home, "zeta")])
+
+    const capped = mergeProjectDirectories({
+      candidates: [path.join(home, "zeta"), path.join(home, "alpha")],
+      existing: [],
+      home,
+      exists: always,
+      limit: 1,
+    })
+    expect(capped).toEqual([path.join(home, "alpha")])
   })
 })

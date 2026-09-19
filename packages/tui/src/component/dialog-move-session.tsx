@@ -78,6 +78,40 @@ export function autocompleteDirectories(input: string, home: string, limit = 15)
   return results.slice(0, limit)
 }
 
+/**
+ * Merge directories discovered across every opened project into the picker's
+ * "Other" section.
+ *
+ * The dialog's own directory list is scoped to the active project, so nested
+ * and sibling projects are otherwise unreachable. Candidates are canonicalized,
+ * de-duplicated case-insensitively, filtered to directories that exist on disk,
+ * and sorted alphabetically.
+ */
+export function mergeProjectDirectories(input: {
+  candidates: readonly string[]
+  existing: readonly string[]
+  home: string
+  limit?: number
+  exists?: (directory: string) => boolean
+}): string[] {
+  const existing = new Set(input.existing.map((directory) => directory.toLowerCase()))
+  const exists = input.exists ?? ((directory: string) => fs.existsSync(directory))
+  const seen = new Set<string>()
+  const merged: string[] = []
+
+  for (const candidate of input.candidates) {
+    if (!candidate || !candidate.trim()) continue
+    const canonical = canonicalDirectory(candidate, input.home)
+    const key = canonical.toLowerCase()
+    if (existing.has(key) || seen.has(key)) continue
+    if (!exists(canonical)) continue
+    seen.add(key)
+    merged.push(canonical)
+  }
+
+  return merged.sort((a, b) => a.localeCompare(b)).slice(0, input.limit ?? 50)
+}
+
 type DialogMoveSessionProps = {
   projectID: string
   current?: MoveSessionSelection
@@ -168,6 +202,35 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     )
   })
 
+  // Known directories for every opened project (`project.list` is global, not
+  // scoped to the active project), plus the registered `project_directory`
+  // rows for each. Without this the picker can never reach a nested or sibling
+  // project — the sync-backed list is scoped to the active project's directory.
+  const [otherProjectDirectories] = createResource(async (): Promise<string[]> => {
+    const listed = await sdk.client.project.list({}, { throwOnError: true }).catch(() => undefined)
+    const projects = listed?.data ?? []
+    if (projects.length === 0) return []
+
+    const registered = await Promise.all(
+      projects.map((project) =>
+        sdk.client.project
+          .directories({ projectID: project.id }, { throwOnError: true })
+          .then((result) => (result.data ?? []).map((item) => item.directory))
+          .catch(() => [] as string[]),
+      ),
+    )
+
+    const candidates: string[] = []
+    for (const project of projects) {
+      candidates.push(project.worktree)
+      for (const sandbox of project.sandboxes) candidates.push(sandbox)
+    }
+    for (const group of registered) {
+      for (const directory of group) candidates.push(directory)
+    }
+    return candidates
+  })
+
   const options = createMemo<DialogSelectOption<MoveSessionSelection | undefined>[]>(() => {
     if (showError()) return []
     const data = directoryData()
@@ -200,18 +263,32 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       }))
       .filter((item): item is { location: string; root: ProjectDirectory } => item.root !== undefined)
 
-    const otherProjects = sync.data.session
-      .filter((session) => session.directory && !roots.some((root) => root.directory === session.directory))
-      .map((session) => session.directory)
-      .filter((directory, index, directories) => directories.indexOf(directory) === index)
-      .map((location) => ({
-        location,
-        root: { directory: location } as ProjectDirectory,
-      }))
+    const knownProjectDirectories = roots.map((root) => root.directory)
+    const otherProjectDirs = mergeProjectDirectories({
+      candidates: [
+        ...(otherProjectDirectories() ?? []),
+        ...sync.data.session.map((session) => session.directory).filter(Boolean),
+      ],
+      existing: [...knownProjectDirectories, ...subdirectories.map((item) => item.location)],
+      home: paths.home,
+    })
 
-    const list = [...roots.map((root) => ({ location: root.directory, root })), ...subdirectories, ...otherProjects]
+    const otherProjects = otherProjectDirs.map((location) => ({
+      location,
+      root: { directory: location } as ProjectDirectory,
+      other: true,
+    }))
+
+    const list = [
+      ...roots.map((root) => ({ location: root.directory, root, other: false })),
+      ...subdirectories.map((item) => ({ location: item.location, root: item.root, other: false })),
+      ...otherProjects,
+    ]
       .filter((item, index, self) => self.findIndex((s) => s.location === item.location) === index)
       .toSorted((a, b) => {
+        // Keep the active project's checkouts before other projects.
+        if (a.other !== b.other) return a.other ? 1 : -1
+        if (a.other) return a.location.localeCompare(b.location)
         const root = roots.indexOf(a.root) - roots.indexOf(b.root)
         if (root !== 0) return root
         if (a.location === a.root.directory) return -1
