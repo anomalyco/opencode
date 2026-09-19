@@ -21,6 +21,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
 import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
@@ -100,6 +101,74 @@ afterEach(async () => {
 })
 
 describe("tool.registry", () => {
+  const cases: {
+    name: string
+    permission?: PermissionV1.Ruleset
+    explore: boolean
+    general: boolean
+  }[] = [
+    { name: "omitted session permissions", explore: true, general: false },
+    { name: "empty session permissions", permission: [], explore: true, general: false },
+    {
+      name: "session deny overriding agent allow",
+      permission: [{ permission: "task", pattern: "explore", action: "deny" }],
+      explore: false,
+      general: false,
+    },
+    {
+      name: "session allow overriding agent deny",
+      permission: [{ permission: "task", pattern: "general", action: "allow" }],
+      explore: true,
+      general: true,
+    },
+    {
+      name: "session ask overriding agent deny",
+      permission: [{ permission: "task", pattern: "general", action: "ask" }],
+      explore: true,
+      general: true,
+    },
+    {
+      name: "ordered session wildcard and target rules",
+      permission: [
+        { permission: "task", pattern: "*", action: "deny" },
+        { permission: "task", pattern: "general", action: "allow" },
+      ],
+      explore: false,
+      general: true,
+    },
+  ]
+
+  for (const item of cases) {
+    it.instance(`task description respects ${item.name}`, () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        const agents = yield* Agent.Service
+        const agent = {
+          ...(yield* agents.defaultInfo()),
+          permission: [
+            { permission: "task", pattern: "*", action: "deny" },
+            { permission: "task", pattern: "explore", action: "allow" },
+          ] satisfies PermissionV1.Ruleset,
+        }
+        const tools = yield* registry.tools({
+          providerID: ProviderV2.ID.opencode,
+          modelID: ModelV2.ID.make("test"),
+          agent,
+          permission: item.permission,
+        })
+        const task = tools.find((tool) => tool.id === "task")
+
+        expect(task).toBeDefined()
+        expect(task!.description.includes("\n- explore:")).toBe(item.explore)
+        expect(task!.description.includes("\n- general:")).toBe(item.general)
+        expect(agent.permission).toEqual([
+          { permission: "task", pattern: "*", action: "deny" },
+          { permission: "task", pattern: "explore", action: "allow" },
+        ])
+      }),
+    )
+  }
+
   it.instance("does not expose task_status", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service
