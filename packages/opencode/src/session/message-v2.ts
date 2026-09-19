@@ -104,7 +104,7 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
         .select()
         .from(PartTable)
         .where(inArray(PartTable.message_id, ids))
-        .orderBy(PartTable.message_id, PartTable.id)
+        .orderBy(PartTable.message_id, PartTable.time_created, PartTable.id)
         .all()
         .pipe(Effect.orDie)
       for (const row of partRows) {
@@ -496,7 +496,7 @@ export function parts(messageID: MessageID) {
       .select()
       .from(PartTable)
       .where(eq(PartTable.message_id, messageID))
-      .orderBy(PartTable.id)
+      .orderBy(PartTable.time_created, PartTable.id)
       .all()
       .pipe(Effect.orDie)
     return rows.map(part)
@@ -601,6 +601,12 @@ function isAfter(info: Info, other?: Info) {
   if (!other) return true
   if (info.time.created !== other.time.created) return info.time.created > other.time.created
   return info.id > other.id
+}
+
+export function compareChronology(left: Info, right: Info) {
+  if (left.time.created !== right.time.created) return left.time.created < right.time.created ? -1 : 1
+  if (left.id === right.id) return 0
+  return left.id < right.id ? -1 : 1
 }
 
 export function fromError(
