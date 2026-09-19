@@ -2,6 +2,7 @@ import { type ChildProcess } from "child_process"
 import type { Stream } from "node:stream"
 import launch from "cross-spawn"
 import { buffer } from "node:stream/consumers"
+import { resolveWindowsSpawnFile } from "@opencode-ai/core/util/which"
 import { errorMessage } from "./error"
 
 export type Stdio = "inherit" | "pipe" | "ignore" | number | Stream
@@ -60,10 +61,11 @@ export function spawn(cmd: string[], opts: Options = {}): Child {
   if (cmd.length === 0) throw new Error("Command is required")
   opts.abort?.throwIfAborted()
 
-  const proc = launch(cmd[0], cmd.slice(1), {
+  const env = opts.env === null ? {} : opts.env ? { ...process.env, ...opts.env } : undefined
+  const proc = launch(resolveWindowsSpawnFile(cmd[0], env), cmd.slice(1), {
     cwd: opts.cwd,
     shell: opts.shell,
-    env: opts.env === null ? {} : opts.env ? { ...process.env, ...opts.env } : undefined,
+    env,
     stdio: [opts.stdin ?? "ignore", opts.stdout ?? "ignore", opts.stderr ?? "ignore"],
     windowsHide: process.platform === "win32",
   })

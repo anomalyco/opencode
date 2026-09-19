@@ -26,6 +26,7 @@ import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
 import { makeGlobalNode } from "./effect/app-node"
 import { filesystem, path } from "./effect/app-node-platform"
+import { resolveWindowsSpawnFile } from "./util/which"
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 
@@ -267,7 +268,7 @@ export const make = Effect.gen(function* () {
   const spawn = (command: ChildProcess.StandardCommand, opts: NodeChildProcess.SpawnOptions) =>
     Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(command.command, command.args, opts)
+      const proc = launch(resolveWindowsSpawnFile(command.command, opts.env), command.args, opts)
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
       proc.on("error", (err) => {
