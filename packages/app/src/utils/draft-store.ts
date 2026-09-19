@@ -1,4 +1,6 @@
 import type { AsyncStorage } from "@solid-primitives/storage"
+import { sha256 } from "@noble/hashes/sha2.js"
+import { bytesToHex } from "@noble/hashes/utils.js"
 
 export type BlobReference = { id: string; url: string }
 
@@ -21,11 +23,10 @@ function blobUrl(id: string, blob: Blob) {
   return url
 }
 
+// SubtleCrypto only exists in secure contexts (HTTPS or localhost), so plain HTTP origins need the pure JS fallback.
 async function blobID(blob: Blob) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
-  return id
+  if (!globalThis.crypto?.subtle) return bytesToHex(sha256(new Uint8Array(await blob.arrayBuffer())))
+  return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
 }
 
 export async function createBlobReference(blob: Blob): Promise<BlobReference> {
