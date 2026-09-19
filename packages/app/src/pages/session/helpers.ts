@@ -64,6 +64,7 @@ export const createSessionTabs = (input: TabsInput) => {
     if (active === "context") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (active === "review" && review()) return active
+    if (active?.startsWith("preview:")) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
 
     const first = openedTabs()[0]
@@ -74,8 +75,13 @@ export const createSessionTabs = (input: TabsInput) => {
   })
   const activeFileTab = createMemo(() => {
     const active = activeTab()
+    if (!active || active.startsWith("preview:")) return
     if (!openedTabs().includes(active)) return
     return active
+  })
+  const activePreviewTab = createMemo(() => {
+    const active = activeTab()
+    return active?.startsWith("preview:") ? active : undefined
   })
   const closableTab = createMemo(() => {
     const active = activeTab()
@@ -92,6 +98,7 @@ export const createSessionTabs = (input: TabsInput) => {
     openedTabs,
     activeTab,
     activeFileTab,
+    activePreviewTab,
     closableTab,
   }
 }

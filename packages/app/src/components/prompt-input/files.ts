@@ -1,4 +1,4 @@
-import { ACCEPTED_FILE_TYPES, ACCEPTED_IMAGE_TYPES } from "@/constants/file-picker"
+import { ACCEPTED_FILE_TYPES, ACCEPTED_IMAGE_TYPES, OFFICE_FILE_TYPES } from "@/constants/file-picker"
 
 export { ACCEPTED_FILE_TYPES }
 
@@ -82,10 +82,13 @@ function textBytes(bytes: Uint8Array) {
   return count / bytes.length <= 0.3
 }
 
+const OFFICE_MIMES = new Set(OFFICE_FILE_TYPES)
+
 export async function attachmentMime(file: File) {
   const type = kind(file.type)
   if (IMAGE_MIMES.has(type)) return type
   if (type === "application/pdf") return type
+  if (OFFICE_MIMES.has(type)) return type
 
   const suffix = ext(file.name)
   const fallback = IMAGE_EXTS.get(suffix) ?? (suffix === "pdf" ? "application/pdf" : undefined)
