@@ -656,12 +656,7 @@ const layer: Layer.Layer<
         .get()
         .pipe(Effect.orDie)
       if (!row) return
-      return {
-        ...row.data,
-        id: row.id,
-        sessionID: row.session_id,
-        messageID: row.message_id,
-      } as SessionV1.Part
+      return MessageV2.fromPartRow(row)
     })
 
     const create = Effect.fn("Session.create")(function* (input?: {
