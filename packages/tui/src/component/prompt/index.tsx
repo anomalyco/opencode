@@ -56,6 +56,7 @@ import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
+import { Selection } from "../../util/selection"
 import { useLocation } from "../../context/location"
 
 registerOpencodeSpinner()
@@ -368,6 +369,27 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Add selection to chat",
+        desc: "Quote the selected text into the prompt",
+        name: "prompt.add_selection",
+        category: "Prompt",
+        run: () => {
+          const selected = Selection.text(renderer)?.trim()
+          if (!selected) {
+            toast.show({ message: "Select text in the conversation first", variant: "warning" })
+            dialog.clear()
+            return
+          }
+
+          const lines = selected.split("\n").length
+          pasteText(Selection.quote(selected), `[Quoted ${lines} ${lines === 1 ? "line" : "lines"}]`)
+          // Only drop the highlight once the quote is actually in the prompt.
+          renderer.clearSelection()
+          input.focus()
+          dialog.clear()
+        },
+      },
+      {
         title: "Paste",
         name: "prompt.paste",
         category: "Prompt",
@@ -569,6 +591,7 @@ export function Prompt(props: PromptProps) {
       "prompt.submit",
       "prompt.editor",
       "prompt.editor_context.clear",
+      "prompt.add_selection",
       "prompt.stash",
       "prompt.stash.pop",
       "prompt.stash.list",

@@ -152,6 +152,7 @@ export const Definitions = {
 
   prompt_submit: keybind("none", "Submit prompt"),
   prompt_editor_context_clear: keybind("none", "Clear editor context"),
+  prompt_add_selection: keybind("<leader>p", "Add the selected text to the prompt as a quote"),
   prompt_skills: keybind("none", "Open skill selector"),
   prompt_stash: keybind("none", "Stash prompt"),
   prompt_stash_pop: keybind("none", "Pop stashed prompt"),
@@ -356,6 +357,7 @@ export const CommandMap = {
   display_thinking: "session.toggle.thinking",
   prompt_submit: "prompt.submit",
   prompt_editor_context_clear: "prompt.editor_context.clear",
+  prompt_add_selection: "prompt.add_selection",
   prompt_skills: "prompt.skills",
   prompt_stash: "prompt.stash",
   prompt_stash_pop: "prompt.stash.pop",
