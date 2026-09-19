@@ -182,6 +182,10 @@ export const dict = {
   "command.session.unshare.description": "Bu sessiyanın paylaşımını dayandır",
   "command.session.export": "Sessiyanı ixrac et",
   "command.session.export.description": "Sessiyanın tam transkriptini JSON formatında ixrac et",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "Fayl, əmr və sessiya axtar",
   "palette.search.placeholder.home": "Əmr və sessiyaları axtar",

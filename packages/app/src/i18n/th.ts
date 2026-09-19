@@ -193,6 +193,10 @@ export const dict = {
 
   "command.session.export": "ส่งออกเซสชัน",
   "command.session.export.description": "ส่งออกบันทึกทั้งหมดของเซสชันเป็น JSON",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "ค้นหาไฟล์ คำสั่ง และเซสชัน",
   "palette.search.placeholder.home": "ค้นหาคำสั่งและเซสชัน",

@@ -83,6 +83,10 @@ export const dict = {
   "command.session.unshare.description": "이 세션 공유 중지",
   "command.session.export": "세션 내보내기",
   "command.session.export.description": "전체 세션 기록을 JSON으로 내보내기",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "파일, 명령어 및 세션 검색",
   "palette.search.placeholder.home": "명령어 및 세션 검색",

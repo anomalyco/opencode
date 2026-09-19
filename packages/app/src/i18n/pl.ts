@@ -187,6 +187,10 @@ export const dict = {
   "command.session.unshare.description": "Zatrzymaj udostępnianie tej sesji",
   "command.session.export": "Eksportuj sesję",
   "command.session.export.description": "Eksportuj pełny zapis sesji w formacie JSON",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "Szukaj plików, poleceń i sesji",
   "palette.search.placeholder.home": "Szukaj poleceń i sesji",

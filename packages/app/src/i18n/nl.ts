@@ -180,6 +180,10 @@ export const dict = {
   "command.session.unshare.description": "Stop met het delen van deze sessie",
   "command.session.export": "Sessie exporteren",
   "command.session.export.description": "Het volledige sessietranscript exporteren als JSON",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "Zoek naar bestanden, opdrachten en sessies",
   "palette.search.placeholder.home": "Opdrachten en sessies zoeken",
