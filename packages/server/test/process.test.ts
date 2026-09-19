@@ -165,7 +165,7 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
 
 it.live("allows unauthenticated requests when no server password is configured", () =>
   Effect.gen(function* () {
-    const server = yield* ServerProcess.start({
+    const server = yield* ServerProcess.start<never, never>({
       hostname: "127.0.0.1",
       port: 0,
       app: { version: "test-version" },

@@ -126,6 +126,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           : {
               onListen: (address, shutdown) =>
                 Effect.gen(function* () {
+                  if (!password) return yield* Effect.fail(new Error("Missing server password"))
                   if (!config.password) yield* ServiceConfig.password(password)
                   return yield* ServiceRegistration.register({
                     address,

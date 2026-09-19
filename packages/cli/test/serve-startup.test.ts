@@ -9,9 +9,7 @@ const LISTENING = "opencode server listening"
 
 test("foreground serve prints the VS Code listening marker and stays unauthenticated", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-cli-serve-startup-"))
-  const env = isolatedEnv(root)
-  delete env.OPENCODE_PASSWORD
-  delete env.OPENCODE_SERVER_PASSWORD
+  const env = isolatedEnv(root, { OPENCODE_PASSWORD: undefined, OPENCODE_SERVER_PASSWORD: undefined })
   const proc = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--port", "0"], {
     cwd: path.join(import.meta.dir, ".."),
     env,
