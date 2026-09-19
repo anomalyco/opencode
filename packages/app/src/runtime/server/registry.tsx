@@ -199,6 +199,9 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     defaultServer?: ServerConnection.Key
     canonicalLocalServer?: ServerConnection.Key
     servers?: Array<ServerConnection.Any>
+    // The host is still discovering connections (desktop: the local service, WSL, SSH). The shell
+    // renders meanwhile; nothing that depends on the list being complete may act on it yet.
+    pending?: boolean
   }) => {
     const [store, setStore, _] = persisted(
       {
@@ -257,6 +260,9 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       },
       get visible() {
         return visibleServers()
+      },
+      get pending() {
+        return props.pending ?? false
       },
       isHidden(key: ServerConnection.Key) {
         return store.hidden[key] ?? false
