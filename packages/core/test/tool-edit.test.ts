@@ -381,6 +381,29 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("writes newString literally without expanding $ patterns", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "dollar.txt")
+        return Effect.promise(() => fs.writeFile(target, 'log("done");\n')).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              executeTool(
+                registry,
+                call({ path: "dollar.txt", oldString: 'log("done");', newString: 'log("$& $1 $` ok");' }),
+              ),
+            ),
+          ),
+          Effect.andThen(() => Effect.promise(() => fs.readFile(target, "utf8"))),
+          Effect.tap((content) => Effect.sync(() => expect(content).toBe('log("$& $1 $` ok");\n'))),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("rejects an in-place content change after matching but before conditional commit", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
