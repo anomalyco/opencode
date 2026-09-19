@@ -628,21 +628,23 @@ const layer: Layer.Layer<
 
     const updateMessage = <T extends SessionV1.Info>(
       msg: T,
-      opts?: { stripSummaryDiffs?: boolean },
+      // Kept for existing callers; durable stripping is now unconditional in EventV2.
+      _opts?: { stripSummaryDiffs?: boolean },
     ): Effect.Effect<T> =>
       Effect.gen(function* () {
-        if (!opts?.stripSummaryDiffs || msg.role !== "user" || msg.summary?.diffs === undefined) {
+        if (msg.role !== "user" || msg.summary?.diffs === undefined) {
           yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg })
           return msg
         }
         const user: SessionV1.User = msg
-        const { summary, ...info } = user
-        // The commit hook runs after projection, in the same transaction as the event.
-        // V1 requires diffs whenever summary is present, so omit the entire summary
-        // from the event and retain its title/body/patches in the read model.
+        const summary = user.summary
+        // EventV2 strips summary only from durable/projector data; live consumers need it.
+        // Every summary write needs this hook, including callers without options, because
+        // merging the previous projection cannot supply first-time or replacement diffs.
+        // The hook runs after projection, in the same transaction as the event.
         yield* events.publish(
           SessionV1.Event.MessageUpdated,
-          { sessionID: msg.sessionID, info },
+          { sessionID: msg.sessionID, info: msg },
           {
             commit: () =>
               db

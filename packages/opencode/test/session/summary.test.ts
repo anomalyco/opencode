@@ -5,7 +5,9 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
 import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
-import { EventTable } from "@opencode-ai/core/event/sql"
+import { EventV2 } from "@opencode-ai/core/event"
+import { SessionV1 } from "@opencode-ai/schema/v1/session"
+import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -23,6 +25,7 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
       Session.node,
+      EventV2.node,
       Snapshot.node,
       Database.node,
       SessionSummary.node,
@@ -188,6 +191,43 @@ it.instance(
 )
 
 it.instance(
+  "live message updates retain new, replacement, and empty diffs while durable rows omit summary",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const events = yield* EventV2.Service
+      const summary = yield* SessionSummary.Service
+      const f = yield* fixture
+      const received: EventV2.Data<typeof SessionV1.Event.MessageUpdated>["info"][] = []
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.sync(() => {
+          if (event.type !== SessionV1.Event.MessageUpdated.type) return
+          const data = event.data as EventV2.Data<typeof SessionV1.Event.MessageUpdated>
+          if (data.info.id === f.user.id) received.push(structuredClone(data.info))
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const summaries = [
+        { title: "first", diffs: [{ file: "new.txt", patch: "new patch\n".repeat(2000), additions: 1, deletions: 0 }] },
+        { title: "replacement", diffs: [{ file: "next.txt", patch: "next patch", additions: 2, deletions: 0 }] },
+        { title: "empty", diffs: [] },
+      ]
+      for (const value of summaries) {
+        const msg = { ...f.user, summary: value }
+        yield* sessions.updateMessage(msg, { stripSummaryDiffs: true })
+        expect(received.at(-1)).toEqual(msg)
+        expect(msg.summary).toEqual(value)
+        expect(yield* summary.diff(f.input)).toEqual(value.diffs)
+        const row = (yield* f.rows()).at(-1)!
+        expect(row.data.info).not.toHaveProperty("summary")
+        expect(Buffer.byteLength(JSON.stringify(row.data))).toBeLessThan(1000)
+      }
+      expect(received).toHaveLength(3)
+    }),
+  { git: true },
+)
+
+it.instance(
   "failed event insertion rolls back the local summary commit",
   () =>
     Effect.gen(function* () {
@@ -198,9 +238,24 @@ it.instance(
         ...f.user,
         summary: { diffs: [{ file: "old.txt", patch: "old patch", additions: 1, deletions: 0 }] },
       }
-      yield* sessions.updateMessage(full)
-      const initial = (yield* f.rows()).length
+      // Positive control: prove this same hook writes a new summary before testing rollback.
+      yield* sessions.updateMessage(full, { stripSummaryDiffs: true })
+      expect(yield* summary.diff(f.input)).toEqual(full.summary.diffs)
       const { db } = yield* Database.Service
+      const message = () =>
+        db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get().pipe(Effect.orDie)
+      const sequence = () =>
+        db
+          .select()
+          .from(EventSequenceTable)
+          .where(eq(EventSequenceTable.aggregate_id, f.input.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+      const initial = yield* f.rows()
+      const previous = yield* message()
+      const { id, sessionID, ...data } = full
+      expect(previous?.data).toEqual(data)
+      const seq = yield* sequence()
       yield* db
         .run(
           sql`CREATE TEMP TRIGGER reject_summary_event BEFORE INSERT ON event
@@ -212,7 +267,9 @@ it.instance(
         .pipe(Effect.exit, Effect.ensuring(db.run(sql`DROP TRIGGER reject_summary_event`).pipe(Effect.orDie)))
       expect(Exit.isFailure(exit)).toBe(true)
       expect(yield* summary.diff(f.input)).toEqual(full.summary.diffs)
-      expect((yield* f.rows()).length).toBe(initial)
+      expect(yield* message()).toEqual(previous)
+      expect(yield* f.rows()).toEqual(initial)
+      expect(yield* sequence()).toEqual(seq)
     }),
   { git: true },
 )

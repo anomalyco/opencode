@@ -115,6 +115,24 @@ export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberO
 export const define = Event.define
 export const versionedType = Event.versionedType
 
+// Storage policy belongs to core, not the shared event schema or live notification path.
+const durableTransforms = new Map<string, (data: Record<string, unknown>) => Record<string, unknown>>([
+  [
+    "message.updated.1",
+    (data) => {
+      const info = data.info
+      if (!info || typeof info !== "object" || !("role" in info) || info.role !== "user" || !("summary" in info))
+        return data
+      const { summary, ...message } = info
+      // Diffs live durably in the message projection, written by the local commit hook.
+      // Events intentionally omit summary (V1 requires diffs when summary is present).
+      // Replay preserves an existing projection's summary; rebuilding diffs by replaying
+      // events into another database is unsupported. Migrations must copy the projection.
+      return { ...data, info: message }
+    },
+  ],
+])
+
 export interface PublishOptions {
   readonly id?: ID
   readonly metadata?: Record<string, unknown>
@@ -247,10 +265,9 @@ export const layerWith = (options?: LayerOptions) =>
                             .get()
                             .pipe(Effect.orDie)
                           const latest = row?.seq ?? -1
-                          const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<
-                            string,
-                            unknown
-                          >
+                          const transform = durableTransforms.get(versionedType(definition.type, durable.version))
+                          const data = transform ? transform(event.data as Record<string, unknown>) : event.data
+                          const encoded = Schema.encodeUnknownSync(definition.data)(data) as Record<string, unknown>
                           if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
                             yield* Effect.die(
                               new InvalidDurableEventError({
@@ -315,6 +332,7 @@ export const layerWith = (options?: LayerOptions) =>
                             )
                           const committed = {
                             ...event,
+                            data,
                             durable: { aggregateID, seq, version: durable.version },
                           } as Payload
                           for (const projector of list) {
