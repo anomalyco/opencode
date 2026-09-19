@@ -38,13 +38,13 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
     setCursor(cursor: number) {
       setStore()("cursor", cursor)
     },
-    setText(content: string) {
+    setText(content: string, cursor?: number) {
       batch(() => {
         setStore()("prompt", (prompt) => [
           { type: "text", content, start: 0, end: content.length },
           ...prompt.filter((part) => part.type !== "text"),
         ])
-        setStore()("cursor", content.length)
+        setStore()("cursor", cursor ?? content.length)
       })
     },
     addText(content: string) {

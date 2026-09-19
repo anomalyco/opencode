@@ -46,3 +46,15 @@ export function mentionTriggerIndex(value: string, offset = promptOffsetWidth(va
     return promptOffsetWidth(text.slice(0, index))
   }
 }
+
+// Display-width offset of the "/" that starts the slash-command token ending at
+// the cursor, or undefined when the cursor is not inside such a token. The token
+// must start the prompt or follow whitespace, so in-word paths like "src/app"
+// don't trigger.
+export function slashTriggerIndex(value: string, offset = promptOffsetWidth(value)) {
+  const text = displaySlice(value, 0, offset)
+  const match = text.match(/(?:^|\s)(\/\S*)$/)
+  if (!match) return
+  return promptOffsetWidth(text.slice(0, text.length - match[1].length))
+}
+

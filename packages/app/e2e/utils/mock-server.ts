@@ -28,6 +28,7 @@ export interface MockServerConfig {
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown | Promise<unknown>
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
+  command?: unknown[]
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -134,7 +135,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           },
         ],
       })
-    if (path === "/api/command") return json(route, { location: location(config), data: [] })
+    if (path === "/api/command") return json(route, { location: location(config), data: config.command ?? [] })
     if (path === "/api/mcp") return json(route, { location: location(config), data: [] })
     if (path === "/api/mcp/resource")
       return json(route, { location: location(config), data: { resources: [], templates: [] } })
