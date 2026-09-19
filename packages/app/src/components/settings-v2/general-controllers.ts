@@ -16,7 +16,7 @@ import {
   terminalInput,
   useSettings,
 } from "@/context/settings"
-import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
+import { playSoundPreview, SOUND_OPTIONS } from "@/utils/sound"
 import { createSoundPreviewController, type ShellOption } from "./general-controller-behavior"
 
 export { createShellOptions, createSoundPreviewController } from "./general-controller-behavior"
@@ -118,7 +118,7 @@ export type SoundSelectOption = (typeof soundOptions)[number]
 
 export function createSoundSettingsController() {
   const settings = useSettings()
-  const preview = createSoundPreviewController(playSoundById)
+  const preview = createSoundPreviewController(playSoundPreview)
   const channel = (
     enabled: Accessor<boolean>,
     current: Accessor<string>,
