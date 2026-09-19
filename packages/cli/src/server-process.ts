@@ -14,6 +14,7 @@ import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { ServiceRegistration } from "./services/service-registration"
 import { WebUi } from "./services/web-ui"
+import { WslPorts } from "./services/wsl-ports"
 import { databasePath } from "./database-path"
 
 export type Mode = "default" | "service" | "stdio"
@@ -80,50 +81,48 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       if (!password) return yield* Effect.fail(new Error("Missing server password"))
       const instanceID = randomUUID()
       const transform = yield* WebUi.handler()
-      const server = yield* start(
-        {
-          app: {
-            name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
-            version: OPENCODE_VERSION,
-            channel: OPENCODE_CHANNEL,
-          },
-          hostname,
-          port,
-          cors: options.cors ?? config.cors,
-          password,
-          pty: { handoff },
-          simulation: truthy(process.env.OPENCODE_SIMULATE),
-          database: {
-            path: databasePath(global.data),
-          },
-          models: {
-            url: process.env.OPENCODE_MODELS_URL,
-            file: process.env.OPENCODE_MODELS_PATH,
-            fetch: !truthy(process.env.OPENCODE_DISABLE_MODELS_FETCH),
-          },
-          config: {
-            directory: process.env.OPENCODE_CONFIG_DIR,
-            project: !truthy(
-              process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
-            ),
-            file: process.env.OPENCODE_CONFIG,
-            content: process.env.OPENCODE_CONFIG_CONTENT,
-          },
-          windows: {
-            gitbash: process.env.OPENCODE_GIT_BASH_PATH,
-          },
-          fs: {
-            filewatcher: !truthy(process.env.OPENCODE_FILEWATCHER_DISABLE ?? process.env.OPENCODE_DISABLE_FILEWATCHER),
-            fff:
-              process.env.OPENCODE_DISABLE_FFF === undefined
-                ? process.platform !== "win32"
-                : !truthy(process.env.OPENCODE_DISABLE_FFF),
-          },
+      const serverOptions = {
+        app: {
+          name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
+          version: OPENCODE_VERSION,
+          channel: OPENCODE_CHANNEL,
         },
+        hostname,
+        port,
+        cors: options.cors ?? config.cors,
+        password,
+        pty: { handoff },
+        simulation: truthy(process.env.OPENCODE_SIMULATE),
+        database: {
+          path: databasePath(global.data),
+        },
+        models: {
+          url: process.env.OPENCODE_MODELS_URL,
+          file: process.env.OPENCODE_MODELS_PATH,
+          fetch: !truthy(process.env.OPENCODE_DISABLE_MODELS_FETCH),
+        },
+        config: {
+          directory: process.env.OPENCODE_CONFIG_DIR,
+          project: !truthy(process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG),
+          file: process.env.OPENCODE_CONFIG,
+          content: process.env.OPENCODE_CONFIG_CONTENT,
+        },
+        windows: {
+          gitbash: process.env.OPENCODE_GIT_BASH_PATH,
+        },
+        fs: {
+          filewatcher: !truthy(process.env.OPENCODE_FILEWATCHER_DISABLE ?? process.env.OPENCODE_DISABLE_FILEWATCHER),
+          fff:
+            process.env.OPENCODE_DISABLE_FFF === undefined
+              ? process.platform !== "win32"
+              : !truthy(process.env.OPENCODE_DISABLE_FFF),
+        },
+      }
+      const lifecycle =
         serviceOptions === undefined
           ? undefined
           : {
-              onListen: (address, shutdown) =>
+              onListen: (address: HttpServer.Address, shutdown: Effect.Effect<void>) =>
                 Effect.gen(function* () {
                   if (!config.password) yield* ServiceConfig.password(password)
                   return yield* ServiceRegistration.register({
@@ -134,25 +133,15 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                     shutdown,
                   })
                 }),
-            },
-        transform,
-      ).pipe(
-        Effect.catch((error) => {
-          if (serviceOptions === undefined || port === undefined || !addressInUse(error)) return Effect.fail(error)
-          return recognizeIncumbent(serviceOptions, hostname, port).pipe(
-            Effect.flatMap((found) =>
-              found
-                ? Effect.void
-                : Effect.fail(
-                    new Error(
-                      `Managed service port ${port} on ${hostname} is already in use by another process. ` +
-                        "Configure another port with `opencode service set port <port>` and start the service again.",
-                      { cause: error },
-                    ),
-                  ),
-            ),
-          )
-        }),
+            }
+      const server = yield* start(serverOptions, lifecycle, transform).pipe(
+        Effect.catch((error) =>
+          serviceOptions !== undefined && port !== undefined && addressInUse(error)
+            ? resolvePortConflict(error, serviceOptions, hostname, port, () =>
+                start({ ...serverOptions, port: 0 }, lifecycle, transform),
+              )
+            : Effect.fail(error),
+        ),
       )
       if (server === undefined) return
       const url = HttpServer.formatAddress(server.address)
@@ -165,6 +154,34 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           : Effect.never
     }).pipe(Effect.annotateLogs({ role: "server" })),
   )
+})
+
+// The fixed port is a rendezvous between sibling contenders, so a taken port normally means a sibling
+// is still registering. A WSL distro's service forwarded onto the Windows loopback can never be this
+// host's incumbent, so the host service takes a free port instead of waiting for one.
+const resolvePortConflict = Effect.fnUntraced(function* <A, E, R>(
+  error: unknown,
+  options: DiscoverOptions,
+  hostname: string,
+  port: number,
+  rebind: () => Effect.Effect<A, E, R>,
+) {
+  const wsl = yield* WslPorts.holds(port)
+  const sibling = wsl ? yield* Service.discover(options) : yield* recognizeIncumbent(options, hostname, port)
+  if (sibling) return undefined
+  if (!wsl)
+    return yield* Effect.fail(
+      new Error(
+        `Managed service port ${port} on ${hostname} is already in use by another process. ` +
+          "Configure another port with `opencode service set port <port>` and start the service again.",
+        { cause: error },
+      ),
+    )
+  yield* Effect.logWarning("managed service port is held by a WSL distro; binding a free port instead", {
+    hostname,
+    port,
+  })
+  return yield* rebind()
 })
 
 const recognizeIncumbent = Effect.fnUntraced(function* (options: DiscoverOptions, hostname: string, port: number) {
