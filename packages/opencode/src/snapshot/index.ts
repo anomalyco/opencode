@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context } from "effect"
+import { Cause, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore, Context } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
@@ -22,6 +22,8 @@ export type FileDiff = typeof FileDiff.Type
 
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
+// gc runs hourly, so a repack temp file older than an hour is always orphaned.
+const staleTmpPack = 60 * 60 * 1000
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -297,17 +299,64 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           yield* stage(allow.filter((item) => !block.has(item)))
         })
 
+        // Failed or interrupted repack runs leave tmp_pack_* files behind and
+        // git only removes them at the end of a successful gc, so they would
+        // otherwise accumulate forever.
+        const pruneStale = Effect.fnUntraced(function* () {
+          const pack = path.join(state.gitdir, "objects", "pack")
+          if (!(yield* exists(pack))) return
+          const entries = yield* fs.readDirectoryEntries(pack).pipe(Effect.catch(() => Effect.succeed([])))
+          const candidates = entries
+            .filter(
+              (entry) =>
+                entry.type === "file" && (entry.name.startsWith("tmp_pack_") || entry.name.startsWith("tmp_idx_")),
+            )
+            .map((entry) => entry.name)
+          if (!candidates.length) return
+          const stale = yield* Effect.all(
+            candidates.map((name) =>
+              fs.stat(path.join(pack, name)).pipe(
+                Effect.catch(() => Effect.succeed(undefined)),
+                Effect.map((info) => {
+                  if (!info) return
+                  const modified = Option.getOrElse(info.mtime, () => new Date(0))
+                  return Date.now() - modified.getTime() > staleTmpPack ? name : undefined
+                }),
+              ),
+            ),
+            { concurrency: 8 },
+          )
+          const files = stale.filter((item): item is string => Boolean(item))
+          if (!files.length) return
+          yield* Effect.all(
+            files.map((file) => fs.remove(path.join(pack, file)).pipe(Effect.catch(() => Effect.void))),
+            { concurrency: 8 },
+          )
+          yield* Effect.logInfo("pruned stale tmp pack files", { count: files.length })
+        })
+
+        // gc fails on objects the project's own gc pruned from the shared
+        // object database; the store can never be repacked again.
+        const broken = (stderr: string) =>
+          stderr.includes("unable to read") || stderr.includes("bad object") || stderr.includes("bad tree")
+
         const cleanup = Effect.fnUntraced(function* () {
           return yield* locked(
             Effect.gen(function* () {
               if (!(yield* enabled())) return
               if (!(yield* exists(state.gitdir))) return
               const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
+              yield* pruneStale()
               if (result.code !== 0) {
                 yield* Effect.logWarning("cleanup failed", {
                   exitCode: result.code,
                   stderr: result.stderr,
                 })
+                if (broken(result.stderr)) {
+                  // Drop the store so the next track() rebuilds it from scratch.
+                  yield* fs.remove(state.gitdir, { recursive: true, force: true }).pipe(Effect.catch(() => Effect.void))
+                  yield* Effect.logWarning("snapshot store corrupted, rebuilding", { gitdir: state.gitdir })
+                }
                 return
               }
               yield* Effect.logInfo("cleanup", { prune })
