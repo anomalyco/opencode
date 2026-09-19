@@ -2483,6 +2483,28 @@ export type PermissionRequest = {
   }
 }
 
+export type PermissionAutoScope =
+  | {
+      type: "instance"
+    }
+  | {
+      type: "session"
+      sessionID: string
+    }
+
+export type PermissionAutoLease = {
+  id: string
+  scope: PermissionAutoScope
+  ttl: number
+  expires: number
+}
+
+export type PermissionAutoLeaseNotFoundError = {
+  _tag: "PermissionAutoLeaseNotFoundError"
+  leaseID: string
+  message: string
+}
+
 export type PermissionNotFoundError = {
   _tag: "PermissionNotFoundError"
   requestID: string
@@ -9263,6 +9285,129 @@ export type PermissionListResponses = {
 }
 
 export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
+
+export type PermissionAutoListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/permission/auto"
+}
+
+export type PermissionAutoListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PermissionAutoListError = PermissionAutoListErrors[keyof PermissionAutoListErrors]
+
+export type PermissionAutoListResponses = {
+  /**
+   * Active auto-approve leases
+   */
+  200: Array<PermissionAutoLease>
+}
+
+export type PermissionAutoListResponse = PermissionAutoListResponses[keyof PermissionAutoListResponses]
+
+export type PermissionAutoAcquireData = {
+  body?: {
+    scope: PermissionAutoScope
+    ttl?: number
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/permission/auto"
+}
+
+export type PermissionAutoAcquireErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PermissionAutoAcquireError = PermissionAutoAcquireErrors[keyof PermissionAutoAcquireErrors]
+
+export type PermissionAutoAcquireResponses = {
+  /**
+   * Acquired lease
+   */
+  200: PermissionAutoLease
+}
+
+export type PermissionAutoAcquireResponse = PermissionAutoAcquireResponses[keyof PermissionAutoAcquireResponses]
+
+export type PermissionAutoRenewData = {
+  body?: never
+  path: {
+    leaseID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/permission/auto/{leaseID}/renew"
+}
+
+export type PermissionAutoRenewErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * PermissionAutoLeaseNotFoundError
+   */
+  404: PermissionAutoLeaseNotFoundError
+}
+
+export type PermissionAutoRenewError = PermissionAutoRenewErrors[keyof PermissionAutoRenewErrors]
+
+export type PermissionAutoRenewResponses = {
+  /**
+   * Renewed lease
+   */
+  200: PermissionAutoLease
+}
+
+export type PermissionAutoRenewResponse = PermissionAutoRenewResponses[keyof PermissionAutoRenewResponses]
+
+export type PermissionAutoReleaseData = {
+  body?: never
+  path: {
+    leaseID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/permission/auto/{leaseID}"
+}
+
+export type PermissionAutoReleaseErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PermissionAutoReleaseError = PermissionAutoReleaseErrors[keyof PermissionAutoReleaseErrors]
+
+export type PermissionAutoReleaseResponses = {
+  /**
+   * Lease released
+   */
+  200: boolean
+}
+
+export type PermissionAutoReleaseResponse = PermissionAutoReleaseResponses[keyof PermissionAutoReleaseResponses]
 
 export type PermissionReplyData = {
   body?: {

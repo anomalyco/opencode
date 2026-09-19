@@ -140,6 +140,15 @@ export class PermissionNotFoundError extends Schema.TaggedErrorClass<PermissionN
   { httpApiStatus: 404 },
 ) {}
 
+export class PermissionAutoLeaseNotFoundError extends Schema.TaggedErrorClass<PermissionAutoLeaseNotFoundError>()(
+  "PermissionAutoLeaseNotFoundError",
+  {
+    leaseID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
 export class McpServerNotFoundError extends Schema.TaggedErrorClass<McpServerNotFoundError>()(
   "McpServerNotFoundError",
   {
