@@ -119,6 +119,23 @@ function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model
   )
 }
 
+// Old-history scan shared by reactive admission and the overflow replay selection: the newest
+// ordinary user strictly before `parentID`, together with the history truncated in front of it.
+function replaySource(messages: SessionV1.WithParts[], parentID: MessageID) {
+  const idx = messages.findIndex((m) => m.info.id === parentID)
+  for (let i = idx - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
+      return { info: msg.info, parts: msg.parts, history: messages.slice(0, i) }
+    }
+  }
+  return undefined
+}
+
+// An ordinary user the replay target can be summarised together with.
+const hasCompactable = (messages: SessionV1.WithParts[]) =>
+  messages.some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))
+
 function turns(messages: SessionV1.WithParts[]) {
   const result: Turn[] = []
   for (let i = 0; i < messages.length; i++) {
@@ -167,6 +184,7 @@ export interface Interface {
     tokens: SessionV1.Assistant["tokens"]
     model: Provider.Model
   }) => Effect.Effect<boolean>
+  readonly admissible: (messages: SessionV1.WithParts[], parentID: MessageID) => Effect.Effect<boolean>
   readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
   readonly process: (input: {
     parentID: MessageID
@@ -218,6 +236,16 @@ const layer = Layer.effect(
     }) {
       const msgs = yield* MessageV2.toModelMessagesEffect(input.messages, input.model)
       return Token.estimate(JSON.stringify(msgs))
+    })
+
+    // Read-only admission for a reactive overflow recovery: is there old history left to compact?
+    // It must decide before the compaction part row exists, so a vetoed episode never writes one.
+    // Shares the overflow replay scan with processCompaction instead of copying it.
+    const admissible = Effect.fn("SessionCompaction.admissible")(function* (
+      messages: SessionV1.WithParts[],
+      parentID: MessageID,
+    ) {
+      return replaySource(messages, parentID) !== undefined
     })
 
     const select = Effect.fn("SessionCompaction.select")(function* (input: {
@@ -338,20 +366,10 @@ const layer = Layer.effect(
           }
         | undefined
       if (input.overflow) {
-        const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
-        for (let i = idx - 1; i >= 0; i--) {
-          const msg = input.messages[i]
-          if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
-            replay = { info: msg.info, parts: msg.parts }
-            messages = input.messages.slice(0, i)
-            break
-          }
-        }
-        const hasContent =
-          replay && messages.some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))
-        if (!hasContent) {
-          replay = undefined
-          messages = input.messages
+        const source = replaySource(input.messages, input.parentID)
+        if (source && hasCompactable(source.history)) {
+          replay = { info: source.info, parts: source.parts }
+          messages = source.history
         }
       }
 
@@ -583,6 +601,7 @@ const layer = Layer.effect(
 
     return Service.of({
       isOverflow,
+      admissible,
       prune,
       process: processCompaction,
       create,

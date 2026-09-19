@@ -85,6 +85,11 @@ function exponential(attempt: number, random: number) {
 export function retryable(error: Err, provider: string) {
   // context overflow errors should not be retried
   if (SessionV1.ContextOverflowError.isInstance(error)) return undefined
+  // Processor-private retry controls travel the failure channel as plain Err values. Only the
+  // incomplete classification is retryable; a mixed interrupt never is.
+  const classification = isRecord(error.data) ? error.data.classification : undefined
+  if (classification === "incomplete-stream") return { message: "Provider returned an incomplete stream" }
+  if (classification === "mixed-interrupt") return undefined
   if (SessionV1.APIError.isInstance(error)) {
     const status = error.data.statusCode
     // 5xx errors are transient server failures and should always be retried,
@@ -183,11 +188,15 @@ function parseJSON(value: unknown) {
 export function policy(opts: {
   provider: string
   parse: (error: unknown) => Err
+  gate?: () => boolean
   set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
 }) {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
+      // A declined gate stops the schedule before any retry is published or slept, so the
+      // caller's own failure stays the presented one.
+      if (opts.gate && !opts.gate()) return Cause.done(meta.attempt)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
       if (meta.attempt > RETRY_MAX_RETRIES) return Cause.done(meta.attempt)
