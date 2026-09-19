@@ -14,6 +14,22 @@ import { Global } from "@opencode-ai/core/global"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 
+/**
+ * Keeps `OPENCODE_CONFIG_DIR` additive rather than replacing the global
+ * instructions source (see issue #28658): `Global.configDirs` checks the
+ * override first (so it still takes priority when it defines its own
+ * AGENTS.md), then falls back to the real static global default.
+ */
+export function globalInstructionFiles(
+  global: Pick<Global.Interface, "home" | "config">,
+  disableClaudeCodePrompt: boolean,
+) {
+  return [
+    ...Global.configDirs(global.config).map((dir) => path.join(dir, "AGENTS.md")),
+    ...(!disableClaudeCodePrompt ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
+  ]
+}
+
 function extract(messages: SessionV1.WithParts[]) {
   const paths = new Set<string>()
   for (const msg of messages) {
@@ -57,10 +73,7 @@ const layer: Layer.Layer<
     const global = yield* Global.Service
     const flags = yield* RuntimeFlags.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
-    const globalFiles = [
-      path.join(global.config, "AGENTS.md"),
-      ...(!flags.disableClaudeCodePrompt ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
-    ]
+    const globalFiles = globalInstructionFiles(global, flags.disableClaudeCodePrompt)
     const instructionFiles = [
       "AGENTS.md",
       ...(!flags.disableClaudeCodePrompt ? ["CLAUDE.md"] : []),
