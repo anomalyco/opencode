@@ -6,9 +6,11 @@ import { useData } from "../../context/data"
 import { useClient } from "../../context/client"
 import {
   append,
+  collectPartKeys,
   completePrevious,
   groupRefs,
   hasPart,
+  partKey,
   partitionPending,
   projectEntries,
   type AppendPart,
@@ -61,6 +63,18 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     )
   }
 
+  // Index of every part in the rows. Rebuilt from the plain reduce() output on
+  // each reconcile and extended on appendPart, so the streaming fast path below
+  // can skip no-op store updates with an O(1) lookup. The other mutation sites
+  // only add message/footer rows or reorder group children, never part membership.
+  let parts = new Set<string>()
+
+  const syncRows = () => {
+    const next = reduce()
+    parts = collectPartKeys(next)
+    setRows(reconcile(next))
+  }
+
   createEffect(() => {
     const pending = pendingPermissions()
     setRows(
@@ -73,12 +87,12 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   createEffect(
     on([sessionID, () => client.connection.status()], ([id, status]) => {
       if (status !== "connected") return
-      setRows(reconcile(reduce()))
+      syncRows()
       void data.session.pending.sync(id).catch(() => undefined)
       void data.session.message.sync(id).then(
         () => {
           if (sessionID() !== id) return
-          setRows(reconcile(reduce()))
+          syncRows()
           onSynced?.(id)
         },
         () => undefined,
@@ -92,7 +106,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     on(
       revertBoundary,
       () => {
-        setRows(reconcile(reduce()))
+        syncRows()
       },
       { defer: true },
     ),
@@ -106,7 +120,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
           if (item.type === "user" && item.delivery === "queue") return [`${item.id}:queue`]
           return []
         }),
-      () => setRows(reconcile(reduce())),
+      () => syncRows(),
       { defer: true },
     ),
   )
@@ -132,12 +146,12 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
                 ]
               : [],
         ),
-      () => setRows(reconcile(reduce())),
+      () => syncRows(),
       { defer: true },
     ),
   )
 
-  createEffect(on(turnTokens, () => setRows(reconcile(reduce())), { defer: true }))
+  createEffect(on(turnTokens, () => syncRows(), { defer: true }))
 
   const appendMessage = (messageID: string) =>
     setRows(
@@ -152,7 +166,12 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       }),
     )
 
-  const appendPart = (ref: PartRef, part: AppendPart) =>
+  const appendPart = (ref: PartRef, part: AppendPart) => {
+    const key = partKey(ref)
+    // Streaming deltas re-assert an existing part. Skip the store update without
+    // touching it: even a no-op root-array setRows traverses the whole tree.
+    // Reasoning completion still flows through to flip the group flag below.
+    if ((part.type !== "reasoning" || part.time?.completed === undefined) && parts.has(key)) return
     setRows(
       produce((draft) => {
         if (!hasPart(draft, ref)) {
@@ -169,6 +188,8 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
         if (row?.type === "group" && row.kind === "reasoning") row.completed = true
       }),
     )
+    parts.add(key)
+  }
 
   const appendFooter = (messageID: string) =>
     setRows(
@@ -263,12 +284,12 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     data.on("session.step.ended", (event) => {
       if (event.data.sessionID !== sessionID() || ["tool-calls", "unknown"].includes(event.data.finish)) return
       appendFooter(event.data.assistantMessageID)
-      if (turnTokens()) setRows(reconcile(reduce()))
+      if (turnTokens()) syncRows()
     }),
     data.on("session.step.failed", (event) => {
       if (event.data.sessionID !== sessionID()) return
       appendFooter(event.data.assistantMessageID)
-      if (turnTokens()) setRows(reconcile(reduce()))
+      if (turnTokens()) syncRows()
     }),
   ]
   onCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()))

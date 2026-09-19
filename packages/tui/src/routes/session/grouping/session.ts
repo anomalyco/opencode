@@ -139,3 +139,18 @@ export function hasPart(rows: SessionRow[], ref: PartRef) {
     return groupRefs(row, true).some((item) => item.messageID === ref.messageID && item.partID === ref.partID)
   })
 }
+
+export function partKey(ref: PartRef) {
+  return `${ref.messageID} ${ref.partID}`
+}
+
+/** Index of every part in the rows, mirroring hasPart membership. */
+export function collectPartKeys(rows: SessionRow[]) {
+  return new Set(
+    rows.flatMap((row) => {
+      if (row.type === "part") return [partKey(row.ref)]
+      if (row.type !== "group") return []
+      return groupRefs(row, true).map(partKey)
+    }),
+  )
+}
