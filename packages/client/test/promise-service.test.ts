@@ -4,6 +4,7 @@ import { serviceFixture } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
 
 const ensure = accelerate(Service.ensure)
+const stop = accelerate(Service.stop)
 
 test("discovers a registered service", async () => {
   await using fixture = await serviceFixture()
@@ -158,3 +159,20 @@ test("signals the registered service process", async () => {
   expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
   expect(await Bun.file(registration).exists()).toBe(false)
 })
+
+test("stop outlives a server that unregisters before releasing its port", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("lingering", "5000")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+
+  await stop({ file: registration })
+
+  expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+  expect(() => process.kill(original.pid, 0)).toThrow()
+  const listener = Bun.serve({ port: Number(new URL(original.url).port), fetch: () => new Response() })
+  await listener.stop(true)
+  expect(await Bun.file(registration).exists()).toBe(false)
+  await existing.exited
+}, 15_000)
