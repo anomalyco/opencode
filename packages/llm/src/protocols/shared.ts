@@ -13,6 +13,7 @@ import {
   type TextPart,
   type ToolResultPart,
 } from "../schema"
+import type { MediaAdmissionQuery, MediaInputCapability } from "../route/protocol"
 import { isRecord } from "../utils/record"
 export { isRecord }
 
@@ -156,11 +157,27 @@ export const parseToolInput = (route: string, name: string, raw: string) =>
   parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`)
 
 export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
+export const PDF_MIMES = ["application/pdf"] as const
 export const VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"] as const
 export const AUDIO_MIMES = ["audio/wav", "audio/mp3", "audio/aiff", "audio/aac", "audio/ogg", "audio/flac"] as const
 export const MEDIA_MIMES = [...IMAGE_MIMES, ...VIDEO_MIMES, ...AUDIO_MIMES] as const
 export const MAX_MEDIA_ENCODED_BYTES = 28 * 1024 * 1024
 export const MAX_MEDIA_DECODED_BYTES = 20 * 1024 * 1024
+
+export const mediaAdmission = (input: {
+  readonly image?: ReadonlyArray<string>
+  readonly pdf?: ReadonlyArray<string>
+}): MediaAdmissionQuery => {
+  const accepted = new Map<string, MediaInputCapability>([
+    ...(input.image ?? []).map((mime) => [mime, "image"] as const),
+    ...(input.pdf ?? []).map((mime) => [mime, "pdf"] as const),
+  ])
+  return (media) => {
+    if (media.bytes > MAX_MEDIA_DECODED_BYTES) return undefined
+    const capability = accepted.get(media.mime.toLowerCase())
+    return capability ? { capability } : undefined
+  }
+}
 
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
 

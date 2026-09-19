@@ -1315,17 +1315,35 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("rejects unsupported user media content", () =>
+  it.effect("lowers PDF user content as an input file", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
         LLM.request({
           id: "req_media",
           model,
-          messages: [Message.user({ type: "media", mediaType: "application/pdf", data: "AAECAw==" })],
+          messages: [
+            Message.user({
+              type: "media",
+              mediaType: "application/pdf",
+              data: "JVBERi0=",
+              filename: "/managed/document.pdf",
+            }),
+          ],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("OpenAI Responses does not support media type application/pdf")
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_file",
+              filename: "/managed/document.pdf",
+              file_data: "data:application/pdf;base64,JVBERi0=",
+            },
+          ],
+        },
+      ])
     }),
   )
 

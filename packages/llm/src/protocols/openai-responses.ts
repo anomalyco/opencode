@@ -40,7 +40,16 @@ const OpenAIResponsesInputImage = Schema.Struct({
   type: Schema.tag("input_image"),
   image_url: Schema.String,
 })
-const OpenAIResponsesInputContent = Schema.Union([OpenAIResponsesInputText, OpenAIResponsesInputImage])
+const OpenAIResponsesInputFile = Schema.Struct({
+  type: Schema.tag("input_file"),
+  filename: Schema.String,
+  file_data: Schema.String,
+})
+const OpenAIResponsesInputContent = Schema.Union([
+  OpenAIResponsesInputText,
+  OpenAIResponsesInputImage,
+  OpenAIResponsesInputFile,
+])
 type OpenAIResponsesInputContent = Schema.Schema.Type<typeof OpenAIResponsesInputContent>
 
 const OpenAIResponsesOutputText = Schema.Struct({
@@ -310,6 +319,18 @@ const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function*
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
   if (part.type === "media") {
+    if (part.mediaType.toLowerCase() === "application/pdf") {
+      const media = yield* ProviderShared.validateMedia(
+        "OpenAI Responses",
+        part,
+        new Set<string>(ProviderShared.PDF_MIMES),
+      )
+      return {
+        type: "input_file" as const,
+        filename: part.filename ?? "attachment.pdf",
+        file_data: media.dataUrl,
+      }
+    }
     const media = yield* ProviderShared.validateMedia(
       "OpenAI Responses",
       part,
@@ -958,6 +979,7 @@ const step = (state: ParserState, event: OpenAIResponsesEvent) => {
  */
 export const protocol = Protocol.make({
   id: ADAPTER,
+  media: ProviderShared.mediaAdmission({ image: ProviderShared.IMAGE_MIMES, pdf: ProviderShared.PDF_MIMES }),
   body: {
     schema: OpenAIResponsesBody,
     from: fromRequest,

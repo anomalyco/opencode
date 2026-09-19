@@ -23,7 +23,7 @@ import { Lifecycle } from "./utils/lifecycle"
 import { ToolSchemaProjection } from "./utils/tool-schema"
 
 const ADAPTER = "gemini"
-const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
+const MEDIA_MIMES = new Set<string>([...ProviderShared.MEDIA_MIMES, ...ProviderShared.PDF_MIMES])
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // =============================================================================
@@ -485,6 +485,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
  */
 export const protocol = Protocol.make({
   id: ADAPTER,
+  media: ProviderShared.mediaAdmission({ image: ProviderShared.IMAGE_MIMES, pdf: ProviderShared.PDF_MIMES }),
   body: {
     schema: GeminiBody,
     from: fromRequest,
