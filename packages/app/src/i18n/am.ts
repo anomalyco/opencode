@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "ብርሃን",
   "theme.scheme.dark": "ጨለማ",
   "command.sidebar.toggle": "የጎን አሞሌን ቀይር",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "ክፍት ፕሮጀክት",
   "command.project.previous": "የቀድሞው ፕሮጀክት",
   "command.project.next": "ቀጣይ ፕሮጀክት",

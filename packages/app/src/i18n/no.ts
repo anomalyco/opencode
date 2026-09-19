@@ -125,6 +125,7 @@ export const dict = {
   "theme.scheme.dark": "Mørk",
 
   "command.sidebar.toggle": "Veksle sidepanel",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Åpne prosjekt",
   "command.provider.connect": "Koble til leverandør",
   "command.server.switch": "Bytt server",

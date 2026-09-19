@@ -121,6 +121,7 @@ export const dict = {
   "theme.scheme.light": "Claro",
   "theme.scheme.dark": "Escuro",
   "command.sidebar.toggle": "Alternar barra lateral",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Abrir projeto",
   "command.project.previous": "Projeto anterior",
   "command.project.next": "Próximo projeto",

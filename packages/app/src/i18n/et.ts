@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "Valgus",
   "theme.scheme.dark": "Tume",
   "command.sidebar.toggle": "Lülita külgriba sisse",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Avatud projekt",
   "command.project.previous": "Eelmine projekt",
   "command.project.next": "Järgmine projekt",

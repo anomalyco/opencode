@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "Luminoasă",
   "theme.scheme.dark": "Întunecată",
   "command.sidebar.toggle": "Comută bara laterală",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Deschide proiectul",
   "command.project.previous": "Proiectul anterior",
   "command.project.next": "Proiectul următor",

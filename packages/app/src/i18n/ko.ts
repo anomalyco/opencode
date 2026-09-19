@@ -20,6 +20,7 @@ export const dict = {
   "theme.scheme.light": "라이트",
   "theme.scheme.dark": "다크",
   "command.sidebar.toggle": "사이드바 표시/숨기기",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "프로젝트 열기",
   "command.provider.connect": "공급자 연결",
   "command.server.switch": "서버 전환",
