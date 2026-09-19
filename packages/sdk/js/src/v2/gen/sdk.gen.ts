@@ -2631,6 +2631,7 @@ export class Project extends HeyApiClient {
       name?: string
       icon?: ProjectIcon
       commands?: ProjectCommands
+      worktree?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2645,11 +2646,51 @@ export class Project extends HeyApiClient {
             { in: "body", key: "name" },
             { in: "body", key: "icon" },
             { in: "body", key: "commands" },
+            { in: "body", key: "worktree" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).patch<ProjectUpdateResponses, ProjectUpdateErrors, ThrowOnError>({
+      url: "/project/{projectID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete a project
+   *
+   * Remove a registered project. mode=cascade also deletes every session and its history.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      mode?: "cascade" | "detach"
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "mode" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).del<void, never, ThrowOnError>({
       url: "/project/{projectID}",
       ...options,
       ...params,

@@ -37,6 +37,16 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
             />
           </Field>
 
+          <Field>
+            <Field.Label>{language.t("dialog.project.edit.folder")}</Field.Label>
+            <TextInputV2
+              appearance="large"
+              class="!w-full"
+              value={model.store.worktree}
+              onInput={(event) => model.setStore("worktree", event.currentTarget.value)}
+            />
+          </Field>
+
           <div class="flex w-full flex-col gap-2">
             <div class="select-none text-[13px] font-[530] leading-none tracking-[-0.04px] text-v2-text-text-base">
               {language.t("dialog.project.edit.icon")}
@@ -141,6 +151,25 @@ export function DialogEditProjectV2(props: { project: LocalProject; server: Serv
               onInput={(event) => model.setStore("startup", event.currentTarget.value)}
             />
           </Field>
+          <Show when={props.project.id && props.project.id !== "global"}>
+            <DividerV2 />
+            <div class="flex items-center justify-between gap-3 pb-4">
+              <span class="text-[12px] leading-tight text-v2-text-text-muted">
+                {language.t("dialog.project.delete.hint")}
+              </span>
+              <ButtonV2
+                variant={model.store.confirmDelete ? "danger" : "secondary"}
+                disabled={model.removeProject.isPending}
+                onClick={() =>
+                  model.store.confirmDelete ? model.removeProject.mutate() : model.setStore("confirmDelete", true)
+                }
+              >
+                {language.t(
+                  model.store.confirmDelete ? "dialog.project.delete.confirm" : "dialog.project.delete.title",
+                )}
+              </ButtonV2>
+            </div>
+          </Show>
         </DialogBody>
         <DialogFooter>
           <ButtonV2 type="button" variant="neutral" disabled={model.save.isPending} onClick={model.close}>
