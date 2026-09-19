@@ -103,6 +103,15 @@ function assistantInfo(
   } as unknown as SessionV1.Assistant
 }
 
+function systemInfo(id: string): SessionV1.System {
+  return {
+    id,
+    sessionID,
+    role: "system",
+    time: { created: 0 },
+  } as unknown as SessionV1.System
+}
+
 function basePart(messageID: string, id: string) {
   return {
     id: PartID.make(id.startsWith("prt") ? id : `prt_${id}`),
@@ -126,6 +135,166 @@ describe("session.message-v2.toModelMessage", () => {
             type: "text",
             text: "hello",
           },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+    ])
+  })
+
+  test("passes system messages through at their array position", async () => {
+    const input: SessionV1.WithParts[] = [
+      {
+        info: systemInfo("m-lead"),
+        parts: [{ ...basePart("m-lead", "s0"), type: "text", text: "leading marker" }] as SessionV1.Part[],
+      },
+      {
+        info: userInfo("m-user"),
+        parts: [{ ...basePart("m-user", "p1"), type: "text", text: "hello" }] as SessionV1.Part[],
+      },
+      {
+        info: systemInfo("m-mid"),
+        parts: [{ ...basePart("m-mid", "s1"), type: "text", text: "mid marker" }] as SessionV1.Part[],
+      },
+      {
+        info: systemInfo("m-mid-2"),
+        parts: [
+          { ...basePart("m-mid-2", "s2a"), type: "text", text: "multi " },
+          { ...basePart("m-mid-2", "s2b"), type: "text", text: "part" },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo("m-assistant", "m-user"),
+        parts: [{ ...basePart("m-assistant", "a1"), type: "text", text: "done" }] as SessionV1.Part[],
+      },
+      {
+        info: systemInfo("m-trail"),
+        parts: [{ ...basePart("m-trail", "s3"), type: "text", text: "trailing marker" }] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "system",
+        content: "leading marker",
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+      {
+        role: "system",
+        content: "mid marker",
+      },
+      {
+        role: "system",
+        content: "multi part",
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+      },
+      {
+        role: "system",
+        content: "trailing marker",
+      },
+    ])
+  })
+
+  test("keeps system message position across tool-result expansion", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [{ ...basePart(userID, "u1"), type: "text", text: "run tool" }] as SessionV1.Part[],
+      },
+      {
+        info: systemInfo("m-mid"),
+        parts: [{ ...basePart("m-mid", "s1"), type: "text", text: "mid marker" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [],
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: systemInfo("m-trail"),
+        parts: [{ ...basePart("m-trail", "s2"), type: "text", text: "trailing marker" }] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "system",
+        content: "mid marker",
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "text", value: "ok" },
+          },
+        ],
+      },
+      {
+        role: "system",
+        content: "trailing marker",
+      },
+    ])
+  })
+
+  test("filters out system messages with no text parts", async () => {
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("m-user"),
+        parts: [{ ...basePart("m-user", "p1"), type: "text", text: "hello" }] as SessionV1.Part[],
+      },
+      {
+        info: systemInfo("m-empty"),
+        parts: [
+          { ...basePart("m-empty", "s1"), type: "step-start" },
+          { ...basePart("m-empty", "s2"), type: "text", text: "", ignored: true },
         ] as SessionV1.Part[],
       },
     ]

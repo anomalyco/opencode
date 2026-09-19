@@ -16380,6 +16380,36 @@
         ],
         "additionalProperties": false
       },
+      "SystemMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["system"]
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "sessionID", "role", "time"],
+        "additionalProperties": false
+      },
       "Message": {
         "anyOf": [
           {
@@ -16387,6 +16417,9 @@
           },
           {
             "$ref": "#/components/schemas/AssistantMessage"
+          },
+          {
+            "$ref": "#/components/schemas/SystemMessage"
           }
         ]
       },
