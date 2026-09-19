@@ -32,9 +32,14 @@ export type ResolvedThemeTokens = {
   readonly text: {
     readonly base: RGBA
     readonly muted: RGBA
+    /** Alias of `muted` so pre-2.0.9 plugins keep resolving. */
+    readonly subdued: RGBA
     readonly action: Readonly<Record<ActionVariant, StatefulColor>>
     readonly formfield: FormfieldColor
-    readonly feedback: Readonly<Record<FeedbackKind, { readonly base: RGBA; readonly muted: RGBA }>>
+    /** `feedback.*.default` aliases `base` so pre-2.0.9 plugins keep resolving. */
+    readonly feedback: Readonly<
+      Record<FeedbackKind, { readonly base: RGBA; readonly muted: RGBA; readonly default: RGBA }>
+    >
   }
   readonly background: {
     readonly base: RGBA
