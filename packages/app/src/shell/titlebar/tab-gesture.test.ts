@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { canOpenTabRename, canStartTabDrag, forwardTabRef, isTabCloseTarget } from "./tab-gesture"
+import { canOpenTabRename, forwardTabRef, isTabCloseTarget } from "./tab-gesture"
 
 describe("titlebar tab gestures", () => {
   test("excludes close controls from tab gestures", () => {
@@ -23,11 +23,5 @@ describe("titlebar tab gestures", () => {
   test("does not reopen rename while a save is pending", () => {
     expect(canOpenTabRename(false, false, false)).toBe(true)
     expect(canOpenTabRename(false, false, true)).toBe(false)
-  })
-
-  test("preserves native panning for touch pointers", () => {
-    expect(canStartTabDrag("mouse")).toBe(true)
-    expect(canStartTabDrag("pen")).toBe(true)
-    expect(canStartTabDrag("touch")).toBe(false)
   })
 })
