@@ -17,6 +17,7 @@ export function serviceWorker(directory: string) {
       // Keep each open tab on its complete build until all old clients close.
       skipWaiting: false,
       inlineWorkboxRuntime: true,
+      importScripts: ["/notification.js"],
       navigateFallback: "/index.html",
       navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/(?:_assets|assets)(?:\/|$)/],
       // Include lazy chunks and non-JS dependencies, not just the startup bundle.
