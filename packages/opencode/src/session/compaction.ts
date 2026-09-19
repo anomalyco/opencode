@@ -31,6 +31,9 @@ const TOOL_OUTPUT_MAX_CHARS = 2_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 15_000
+// Default fraction of the scoped conversation shown to the summarizer as the
+// <newest_context> relevance lens when newest_ratio is not configured.
+const DEFAULT_NEWEST_RATIO = 0.15
 type Turn = {
   start: number
   end: number
@@ -112,7 +115,14 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
   })
 }
 
-function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
+function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model; scopedTokens: number }) {
+  // preserve_recent_ratio (proportional) overrides the absolute preserve_recent_tokens
+  // when set: the verbatim tail is a fraction of the CURRENT SESSION's scoped tokens
+  // (the conversation being compacted), not the model window. So the split is always
+  // a proportion of the actual content -- e.g. 0.6 keeps the newest 60% verbatim and
+  // summarizes the oldest 40%, regardless of model context size.
+  const ratio = input.cfg.compaction?.preserve_recent_ratio
+  if (ratio !== undefined) return Math.floor(input.scopedTokens * ratio)
   return (
     input.cfg.compaction?.preserve_recent_tokens ??
     Math.min(MAX_PRESERVE_RECENT_TOKENS, Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)))
@@ -227,7 +237,20 @@ const layer = Layer.effect(
     }) {
       const limit = input.cfg.compaction?.tail_turns
       if (limit !== undefined && limit <= 0) return { head: input.messages, tail_start_id: undefined }
-      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
+      // preserve_recent_ratio sizes the tail against the scoped session tokens, so
+      // estimate them once here; the absolute/default path ignores this value.
+      const scopedTokens =
+        input.cfg.compaction?.preserve_recent_ratio !== undefined
+          ? yield* estimate({ messages: input.messages, model: input.model })
+          : 0
+      const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model, scopedTokens })
+      if (input.cfg.compaction?.preserve_recent_ratio !== undefined) {
+        yield* Effect.logInfo("preserve recent ratio", {
+          ratio: input.cfg.compaction.preserve_recent_ratio,
+          scopedTokens,
+          budget,
+        })
+      }
       const all = turns(input.messages)
       if (!all.length) return { head: input.messages, tail_start_id: undefined }
       const recent = limit === undefined ? all : all.slice(-limit)
@@ -266,6 +289,34 @@ const layer = Layer.effect(
         head: input.messages.slice(0, keep.start),
         tail_start_id: keep.id,
       }
+    })
+
+    // newest_ratio (opt-in): the newest slice of the scoped conversation, sized to
+    // newest_ratio of the scoped token total, serialized for the summarizer as a
+    // relevance signal. Returns undefined when the ratio is unset or the slice is empty.
+    const newestContext = Effect.fn("SessionCompaction.newestContext")(function* (input: {
+      messages: SessionV1.WithParts[]
+      cfg: ConfigV1.Info
+      model: Provider.Model
+    }) {
+      // The newest-context lens is on by default; set newest_ratio: 0 to disable it.
+      const ratio = input.cfg.compaction?.newest_ratio ?? DEFAULT_NEWEST_RATIO
+      if (ratio <= 0 || input.messages.length === 0) return undefined
+      const scopedTokens = yield* estimate({ messages: input.messages, model: input.model })
+      const budget = Math.floor(scopedTokens * ratio)
+      if (budget <= 0) return undefined
+      let total = 0
+      let start = input.messages.length
+      for (let i = input.messages.length - 1; i >= 0; i--) {
+        const size = yield* estimate({ messages: input.messages.slice(i, i + 1), model: input.model })
+        if (total + size > budget) break
+        total += size
+        start = i
+      }
+      const slice = input.messages.slice(start)
+      if (!slice.length) return undefined
+      yield* Effect.logInfo("newest context", { ratio, budget, messages: slice.length })
+      return slice.map(serialize).filter(Boolean).join("\n\n") || undefined
     })
 
     // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
@@ -364,11 +415,16 @@ const layer = Layer.effect(
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
       const previousSummary = prior.at(-1)?.summary
+      const scoped = history.filter((_, index) => !hidden.has(index))
       const selected = yield* select({
-        messages: history.filter((_, index) => !hidden.has(index)),
+        messages: scoped,
         cfg,
         model,
       })
+      // newest_ratio (opt-in): serialize the newest slice of the scoped conversation
+      // as a relevance signal for the summarizer. It stays verbatim in the tail; this
+      // only steers what the summary emphasizes toward the current direction.
+      const newest = yield* newestContext({ messages: scoped, cfg, model })
       // Allow plugins to inject context or replace compaction prompt.
       const compacting = yield* plugin.trigger(
         "experimental.session.compacting",
@@ -384,6 +440,7 @@ const layer = Layer.effect(
           buildPrompt({
             previousSummary,
             context: [conversation],
+            newest,
           }),
           ...compacting.context,
         ]
