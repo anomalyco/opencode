@@ -49,6 +49,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
+import { DialogMemory } from "../dialog-memory"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
@@ -524,6 +525,27 @@ export function Prompt(props: PromptProps) {
                 input.setText(`/${skill} `)
                 setStore("prompt", {
                   input: `/${skill} `,
+                  parts: [],
+                })
+                input.gotoBufferEnd()
+              }}
+            />
+          ))
+        },
+      },
+      {
+        title: "Memory",
+        desc: "Explore saved long-term persistence memories",
+        name: "prompt.memory",
+        category: "Prompt",
+        slashName: "memory",
+        run: () => {
+          dialog.replace(() => (
+            <DialogMemory
+              onSelect={(item) => {
+                input.setText(`/recall ${item.title}`)
+                setStore("prompt", {
+                  input: `/recall ${item.title}`,
                   parts: [],
                 })
                 input.gotoBufferEnd()
