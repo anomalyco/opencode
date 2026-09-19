@@ -190,6 +190,37 @@ Don't see a provider here? Submit a PR.
 
 ---
 
+### ai&
+
+[ai&](https://aiand.com) is a sovereign AI platform hosted entirely in Japan, serving frontier open-weight models.
+
+1. Head over to the [ai& console](https://console.aiand.com/api-keys), create an account, and generate an API key.
+
+2. Run the `/connect` command and search for **ai&**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your ai& API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _GLM-5.2_ or _DeepSeek V4 Pro_.
+
+   ```txt
+   /models
+   ```
+
+Model references use `aiand/<model-id>`, for example `aiand/zai-org/glm-5.2`. See the [ai& catalog](https://docs.aiand.com/models/catalog/) for the full list.
+
+---
+
 ### Amazon Bedrock
 
 To use Amazon Bedrock with OpenCode:
