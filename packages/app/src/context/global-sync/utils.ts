@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AgentListOutput,
   ModelDefaultOutput,
   ModelListOutput,
@@ -131,7 +131,7 @@ export function normalizeProviderList(
       status: model.status,
       options: model.settings ?? {},
       headers: model.headers ?? {},
-      release_date: new Date(model.time.released).toISOString().slice(0, 10),
+      release_date: model.time.released === 0 ? undefined : new Date(model.time.released).toISOString().slice(0, 10),
       variants: Object.fromEntries(model.variants.map((variant) => [variant.id, variant.settings ?? {}])),
     }
   }
