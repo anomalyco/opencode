@@ -1724,36 +1724,104 @@ ToolRegistry.register({
     const pending = () => props.status === "streaming" || props.status === "running"
     const code = createMemo(() => (typeof props.input.code === "string" ? props.input.code : ""))
     const output = () => stripAnsi(props.output ?? "").replace(/\r\n?/g, "\n")
+    const calls = createMemo(() => executeCalls(props.metadata.toolCalls))
     const sawPending = pending()
     return (
-      <BasicTool
-        {...props}
-        icon="console"
-        rail={false}
-        hasContent
-        compact
-        allowOpenWhilePending
-        trigger={(open) => (
-          <div data-slot="basic-tool-tool-info-structured">
-            <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
-              </span>
-              <Show when={!open() && code()}>
-                <ShellSubmessage text={code().split("\n", 1)[0]} animate={sawPending} />
-              </Show>
+      <div data-component="execute-tool">
+        <BasicTool
+          {...props}
+          icon="console"
+          rail={false}
+          hasContent
+          compact
+          allowOpenWhilePending
+          trigger={(open) => (
+            <div data-slot="basic-tool-tool-info-structured">
+              <div data-slot="basic-tool-tool-info-main">
+                <span data-slot="basic-tool-tool-title">
+                  <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
+                </span>
+                <Show when={!open() && code()}>
+                  <ShellSubmessage text={code().split("\n", 1)[0]} animate={sawPending} />
+                </Show>
+              </div>
             </div>
+          )}
+        >
+          <ConsoleOutput copy={code()} variant="shell">
+            <span data-slot="bash-command">{code()}</span>
+            <Show when={output()}>{(value) => <span data-slot="bash-result">{value()}</span>}</Show>
+          </ConsoleOutput>
+        </BasicTool>
+        <Show when={calls().length > 0}>
+          <div data-component="execute-tool-calls">
+            <Index each={calls()}>{(call) => <ExecuteCallRow call={call} />}</Index>
           </div>
-        )}
-      >
-        <ConsoleOutput copy={code()} variant="shell">
-          <span data-slot="bash-command">{code()}</span>
-          <Show when={output()}>{(value) => <span data-slot="bash-result">{value()}</span>}</Show>
-        </ConsoleOutput>
-      </BasicTool>
+        </Show>
+      </div>
     )
   },
 })
+
+type ExecuteCall = {
+  tool: string
+  status: "running" | "completed" | "error"
+  input?: Record<string, unknown>
+}
+
+function executeCalls(value: unknown): ExecuteCall[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((call) => {
+    if (!record(call) || typeof call.tool !== "string") return []
+    if (call.status !== "running" && call.status !== "completed" && call.status !== "error") return []
+    return [{ tool: call.tool, status: call.status, input: record(call.input) ? call.input : undefined }]
+  })
+}
+
+function ExecuteCallRow(props: { call: () => ExecuteCall }) {
+  const [open, setOpen] = createSignal(false)
+  const input = createMemo(() => Object.entries(props.call().input ?? {}))
+  const summary = createMemo(() => {
+    const args = input()
+      .filter(([, value]) => typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(", ")
+      .replace(/\s+/g, " ")
+    return `${props.call().tool}${args ? ` [${args}]` : ""}`
+  })
+  return (
+    <div data-component="execute-tool-call" data-status={props.call().status} data-open={open() ? "true" : "false"}>
+      <button
+        type="button"
+        data-slot="execute-tool-call-trigger"
+        disabled={input().length === 0}
+        aria-expanded={input().length > 0 ? open() : undefined}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span data-slot="execute-tool-call-status" aria-hidden="true">
+          <Show when={props.call().status !== "running"} fallback={<SessionProgressIndicatorV2 />}>
+            <Show when={props.call().status === "error"} fallback={<Icon name="chevron-right" size="small" />}>
+              ×
+            </Show>
+          </Show>
+        </span>
+        <span data-slot="execute-tool-call-title">{open() ? props.call().tool : summary()}</span>
+      </button>
+      <Show when={open()}>
+        <dl data-slot="execute-tool-call-details">
+          <For each={input()}>
+            {([key, value]) => (
+              <div data-slot="execute-tool-call-detail">
+                <dt>{key}</dt>
+                <dd>{typeof value === "string" ? value : (JSON.stringify(value, null, 2) ?? String(value))}</dd>
+              </div>
+            )}
+          </For>
+        </dl>
+      </Show>
+    </div>
+  )
+}
 
 ToolRegistry.register({
   name: "shell",

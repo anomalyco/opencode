@@ -545,6 +545,31 @@ export const executeCodeDocument = document([
           code: 'const greeting = "Code Mode execute completed"\nreturn { greeting, timestamp: new Date().toISOString() }',
         },
         output: '{\n  "greeting": "Code Mode execute completed",\n  "timestamp": "2026-08-17T09:01:43.590Z"\n}',
+        metadata: {
+          toolCalls: [
+            {
+              tool: "planetscale.planetscale_execute_write_query",
+              status: "completed",
+              input: {
+                organization: "anomalyco",
+                database: "opencode",
+                branch: "production",
+                confirm_destructive: true,
+                query: "UPDATE workspace SET time_deleted = UTC_TIMESTAMP(3) WHERE time_deleted IS NULL LIMIT 50000",
+              },
+            },
+            {
+              tool: "planetscale.planetscale_execute_write_query",
+              status: "completed",
+              input: { organization: "anomalyco", database: "opencode", branch: "production" },
+            },
+            {
+              tool: "planetscale.planetscale_execute_write_query",
+              status: "completed",
+              input: { organization: "anomalyco", database: "opencode", branch: "production", limit: 50000 },
+            },
+          ],
+        },
       }),
     ],
   }),
