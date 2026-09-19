@@ -3,8 +3,6 @@ import { exec } from "child_process"
 import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
-import { Octokit } from "@octokit/rest"
-import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
@@ -31,9 +29,15 @@ import { SessionPrompt } from "@/session/prompt"
 import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
-import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
+import {
+  createGitHubClients,
+  extractResponseText,
+  formatPromptTooLargeError,
+  getGitHubURLs,
+  getNoreplyEmail,
+  parseGitRemote,
+} from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -140,6 +144,83 @@ type IssueQueryResponse = {
   }
 }
 
+type GHESAuthStrategy = "oidc" | "in-workflow"
+
+type AppManifestResult = {
+  id: number
+  slug: string
+  pem: string
+  webhook_secret: string
+  client_id: string
+  client_secret: string
+}
+
+function buildManifestFormHTML(ghesUrl: string, manifestJson: string) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>OpenCode - Create GitHub App</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
+    .container { text-align: center; padding: 2rem; }
+    h1 { color: #60a5fa; margin-bottom: 1rem; }
+    p { color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Creating GitHub App...</h1>
+    <p>Redirecting to ${ghesUrl}...</p>
+  </div>
+  <form id="form" method="post" action="${ghesUrl}/settings/apps/new">
+    <input type="hidden" name="manifest" value='${manifestJson.replace(/'/g, "&#39;")}' />
+  </form>
+  <script>document.getElementById('form').submit();</script>
+</body>
+</html>`
+}
+
+const HTML_MANIFEST_SUCCESS = `<!DOCTYPE html>
+<html>
+<head>
+  <title>OpenCode - GitHub App Created</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
+    .container { text-align: center; padding: 2rem; }
+    h1 { color: #4ade80; margin-bottom: 1rem; }
+    p { color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>GitHub App Created Successfully</h1>
+    <p>You can close this window and return to the terminal.</p>
+  </div>
+  <script>setTimeout(() => window.close(), 2000);</script>
+</body>
+</html>`
+
+const HTML_MANIFEST_ERROR = (error: string) => `<!DOCTYPE html>
+<html>
+<head>
+  <title>OpenCode - GitHub App Creation Failed</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
+    .container { text-align: center; padding: 2rem; }
+    h1 { color: #f87171; margin-bottom: 1rem; }
+    p { color: #aaa; }
+    .error { color: #fca5a5; font-family: monospace; margin-top: 1rem; padding: 1rem; background: rgba(248,113,113,0.1); border-radius: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>GitHub App Creation Failed</h1>
+    <p>An error occurred.</p>
+    <div class="error">${error}</div>
+  </div>
+</body>
+</html>`
+
 const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
@@ -162,10 +243,10 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
   const gitSvc = yield* Git.Service
   yield* Effect.promise(async () => {
     {
-      UI.empty()
-      prompts.intro("Install GitHub agent")
-      const app = await getAppInfo()
-      await installGitHubApp()
+        UI.empty()
+        prompts.intro("Install GitHub agent")
+        const app = await getAppInfo()
+        const ghesStrategy = await installGitHubApp()
 
       const providers = await Effect.runPromise(modelsDev.get()).then((p) => {
         // TODO: add guide for copilot, for now just hide it
@@ -181,28 +262,51 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
       printNextSteps()
 
       function printNextSteps() {
-        let step2
-        if (provider === "amazon-bedrock") {
-          step2 =
-            "Configure OIDC in AWS - https://docs.github.com/en/actions/how-tos/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services"
-        } else {
-          step2 = [
-            `    2. Add the following secrets in org or repo (${app.owner}/${app.repo}) settings`,
-            "",
-            ...providers[provider].env.map((e) => `       - ${e}`),
-          ].join("\n")
-        }
+        const providerSecrets =
+          provider === "amazon-bedrock"
+            ? [
+                "  2. Configure OIDC in AWS - https://docs.github.com/en/actions/how-tos/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services",
+              ]
+            : [
+                `  2. Add the following secrets in org or repo (${app.owner}/${app.repo}) settings`,
+                "",
+                ...providers[provider].env.map((e) => `     - ${e}`),
+              ]
+
+        const ghesSteps =
+          ghesStrategy === "in-workflow"
+            ? [
+                "",
+                `  3. Add GHES app secrets in org or repo (${app.owner}/${app.repo}) settings`,
+                "",
+                "     - OPENCODE_GHES_APP_ID (the App ID printed above)",
+                "     - OPENCODE_GHES_APP_PRIVATE_KEY (the private key from app creation)",
+              ]
+            : ghesStrategy === "oidc"
+              ? [
+                  "",
+                  `  3. Deploy GHES exchange server (packages/ghes-exchange)`,
+                  "",
+                  `  4. Add secrets in org or repo (${app.owner}/${app.repo}) settings`,
+                  "",
+                  "     - OPENCODE_OIDC_BASE_URL (URL of deployed exchange server)",
+                ]
+              : []
+        const learnMoreStep = ghesStrategy
+          ? "  Go to a GitHub issue and comment `/oc summarize` to see the agent in action"
+          : "  3. Go to a GitHub issue and comment `/oc summarize` to see the agent in action"
 
         prompts.outro(
           [
             "Next steps:",
             "",
-            `    1. Commit the \`${WORKFLOW_FILE}\` file and push`,
-            step2,
+            `  1. Commit \`${WORKFLOW_FILE}\` file and push`,
+            ...providerSecrets,
+            ...ghesSteps,
             "",
-            "    3. Go to a GitHub issue and comment `/oc summarize` to see the agent in action",
+            learnMoreStep,
             "",
-            "   Learn more about the GitHub agent - https://opencode.ai/docs/github/#usage-examples",
+            "  Learn more about GitHub agent - https://opencode.ai/docs/github/#usage-examples",
           ].join("\n"),
         )
       }
@@ -214,16 +318,22 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
           throw new UI.CancelledError()
         }
 
-        // Get repo info
+        // Get repo info - use parseGitRemote to support any host (GHES)
         const info = await Effect.runPromise(gitSvc.run(["remote", "get-url", "origin"], { cwd: ctx.worktree })).then(
           (x) => x.text().trim(),
         )
-        const parsed = parseGitHubRemote(info)
+        const parsed = parseGitRemote(info)
         if (!parsed) {
           prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
         }
-        return { owner: parsed.owner, repo: parsed.repo, root: ctx.worktree }
+        return {
+          owner: parsed.owner,
+          repo: parsed.repo,
+          host: parsed.host,
+          root: ctx.worktree,
+          isGHES: parsed.host !== "github.com",
+        }
       }
 
       async function promptProvider() {
@@ -277,13 +387,36 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         return model
       }
 
-      async function installGitHubApp() {
+      async function installGitHubApp(): Promise<GHESAuthStrategy | undefined> {
+        if (app.isGHES) {
+          const strategy = await prompts.select({
+            message: "Select authentication strategy for GHES",
+            options: [
+              {
+                label: "In-workflow token generation",
+                value: "in-workflow" as const,
+                hint: "recommended - simpler setup",
+              },
+              {
+                label: "Self-hosted OIDC exchange server",
+                value: "oidc" as const,
+                hint: "requires deploying an exchange service",
+              },
+            ],
+          })
+
+          if (prompts.isCancel(strategy)) throw new UI.CancelledError()
+
+          await createGHESApp()
+          return strategy
+        }
+
         const s = prompts.spinner()
         s.start("Installing GitHub app")
 
         // Get installation
         const installation = await getInstallation()
-        if (installation) return s.stop("GitHub app already installed")
+        if (installation) return s.stop("GitHub app already installed") as undefined
 
         // Open browser
         const url = "https://github.com/apps/opencode-agent"
@@ -320,6 +453,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         } while (true) // oxlint-disable-line no-constant-condition
 
         s.stop("Installed GitHub app")
+        return undefined
 
         async function getInstallation() {
           return await fetch(`https://api.opencode.ai/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`)
@@ -328,29 +462,174 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         }
       }
 
+      async function createGHESApp(): Promise<AppManifestResult> {
+        const ghesUrl = `https://${app.host}`
+        const manifest = {
+          name: `opencode-agent-${app.owner}`,
+          url: "https://opencode.ai",
+          hook_attributes: { url: "https://example.com/placeholder" },
+          redirect_url: "",
+          public: false,
+          default_permissions: {
+            contents: "write",
+            pull_requests: "write",
+            issues: "write",
+            metadata: "read",
+          },
+          default_events: ["issue_comment", "pull_request_review_comment"],
+        }
+
+        const s = prompts.spinner()
+        s.start("Creating GitHub App on your GHES instance")
+
+        const result = await new Promise<AppManifestResult>((resolve, reject) => {
+          let server: ReturnType<typeof Bun.serve>
+
+          const timeout = setTimeout(() => {
+            server.stop()
+            reject(new Error("Timed out waiting for GitHub App creation (5 minutes)"))
+          }, 5 * 60 * 1000)
+
+          server = Bun.serve({
+            port: 0,
+            fetch(req): Response | Promise<Response> {
+              const url = new URL(req.url)
+
+              if (url.pathname === "/callback") {
+                const code = url.searchParams.get("code")
+                if (!code) {
+                  return new Response(HTML_MANIFEST_ERROR("No code parameter received"), {
+                    headers: { "Content-Type": "text/html" },
+                  })
+                }
+
+                ;(async () => {
+                  try {
+                    const response = await globalThis.fetch(`${ghesUrl}/api/v3/app-manifests/${code}/conversions`, {
+                      method: "POST",
+                      headers: { Accept: "application/vnd.github+json" },
+                    })
+
+                    if (!response.ok) {
+                      const body = await response.text()
+                      throw new Error(`Failed to create app: ${response.status} ${body}`)
+                    }
+
+                    const data = (await response.json()) as AppManifestResult
+                    clearTimeout(timeout)
+                    server.stop()
+                    resolve(data)
+                  } catch (err) {
+                    clearTimeout(timeout)
+                    server.stop()
+                    reject(err)
+                  }
+                })()
+
+                return new Response(HTML_MANIFEST_SUCCESS, {
+                  headers: { "Content-Type": "text/html" },
+                })
+              }
+
+              const callbackUrl: string = `http://localhost:${server.port}/callback`
+              const manifestWithRedirect = { ...manifest, redirect_url: callbackUrl }
+              const manifestJson: string = JSON.stringify(manifestWithRedirect)
+              return new Response(buildManifestFormHTML(ghesUrl, manifestJson), {
+                headers: { "Content-Type": "text/html" },
+              })
+            },
+          })
+
+          const localUrl = `http://localhost:${server.port}/`
+          const openCmd =
+            process.platform === "darwin"
+              ? `open "${localUrl}"`
+              : process.platform === "win32"
+                ? `start "" "${localUrl}"`
+                : `xdg-open "${localUrl}"`
+
+          exec(openCmd, (error) => {
+            if (error) prompts.log.warn(`Could not open browser. Please visit: ${localUrl}`)
+          })
+        })
+
+        s.stop("GitHub App created")
+
+        prompts.log.info(
+          [
+            "Save the following credentials as GitHub Actions secrets:",
+            "",
+            `  App ID:         ${result.id}`,
+            `  App Slug:       ${result.slug}`,
+            `  Client ID:      ${result.client_id}`,
+            "",
+            "  Private Key and Client Secret have been generated.",
+            "  Store them securely - they cannot be retrieved again.",
+          ].join("\n"),
+        )
+
+        return result
+      }
+
       async function addWorkflowFiles() {
         const envStr =
           provider === "amazon-bedrock"
             ? ""
             : `\n        env:${providers[provider].env.map((e) => `\n          ${e}: \${{ secrets.${e} }}`).join("")}`
 
-        await Filesystem.write(
-          path.join(app.root, WORKFLOW_FILE),
-          `name: opencode
-
-on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
-
-jobs:
-  opencode:
-    if: |
+        const jobIf = `    if: |
       contains(github.event.comment.body, ' /oc') ||
       startsWith(github.event.comment.body, '/oc') ||
       contains(github.event.comment.body, ' /opencode') ||
-      startsWith(github.event.comment.body, '/opencode')
+      startsWith(github.event.comment.body, '/opencode')`
+
+        const triggers = `on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]`
+
+        const workflowContent =
+          ghesStrategy === "in-workflow"
+            ? `name: opencode
+
+${triggers}
+
+jobs:
+  opencode:
+${jobIf}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: \${{ secrets.OPENCODE_GHES_APP_ID }}
+          private-key: \${{ secrets.OPENCODE_GHES_APP_PRIVATE_KEY }}
+
+      - name: Run opencode
+        uses: anomalyco/opencode/github@latest${envStr}
+        env:
+          GHES_APP_TOKEN: \${{ steps.app-token.outputs.token }}
+        with:
+          model: ${provider}/${model}`
+            : ghesStrategy === "oidc"
+              ? `name: opencode
+
+${triggers}
+
+jobs:
+  opencode:
+${jobIf}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -366,8 +645,33 @@ jobs:
       - name: Run opencode
         uses: anomalyco/opencode/github@latest${envStr}
         with:
-          model: ${provider}/${model}`,
-        )
+          model: ${provider}/${model}
+          oidc_base_url: \${{ secrets.OPENCODE_OIDC_BASE_URL }}`
+              : `name: opencode
+
+${triggers}
+
+jobs:
+  opencode:
+${jobIf}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run opencode
+        uses: anomalyco/opencode/github@latest${envStr}
+        with:
+          model: ${provider}/${model}`
+
+        await Filesystem.write(path.join(app.root, WORKFLOW_FILE), workflowContent)
 
         prompts.log.success(`Added workflow file: "${WORKFLOW_FILE}"`)
       }
@@ -422,17 +726,18 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     // workflow_dispatch has an actor (the user who triggered it), schedule does not
     const actor = isScheduleEvent ? undefined : context.actor
 
-    const issueId = isRepoEvent
-      ? undefined
-      : context.eventName === "issue_comment" || context.eventName === "issues"
-        ? (payload as IssueCommentEvent | IssuesEvent).issue.number
-        : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
-    const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
-    const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
+      const issueId = isRepoEvent
+        ? undefined
+        : context.eventName === "issue_comment" || context.eventName === "issues"
+          ? (payload as IssueCommentEvent | IssuesEvent).issue.number
+          : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
+      const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
+      const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
+      const ghUrls = getGitHubURLs()
 
     let appToken: string
-    let octoRest: Octokit
-    let octoGraph: typeof graphql
+    let octoRest: Awaited<ReturnType<typeof createGitHubClients>>["rest"]
+    let octoGraph: Awaited<ReturnType<typeof createGitHubClients>>["graph"]
     let gitConfig: string
     let session: { id: SessionID; title: string; version: string }
     let shareId: string | undefined
@@ -465,13 +770,16 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     const gitStatus = (args: string[]) => Effect.runPromise(gitSvc.run(args, { cwd: ctx.worktree }))
     const commitChanges = async (summary: string, actor?: string) => {
       const args = ["commit", "-m", summary]
-      if (actor) args.push("-m", `Co-authored-by: ${actor} <${actor}@users.noreply.github.com>`)
+      if (actor) args.push("-m", `Co-authored-by: ${actor} <${getNoreplyEmail(actor, ghUrls.host)}>`)
       await gitRun(args)
-    }
+      }
 
-    try {
-      if (useGithubToken) {
-        const githubToken = process.env["GITHUB_TOKEN"]
+      try {
+        const ghesAppToken = process.env["GHES_APP_TOKEN"]
+        if (ghesAppToken) {
+          appToken = ghesAppToken
+        } else if (useGithubToken) {
+          const githubToken = process.env["GITHUB_TOKEN"]
         if (!githubToken) {
           throw new Error(
             "GITHUB_TOKEN environment variable is not set. When using use_github_token, you must provide GITHUB_TOKEN.",
@@ -482,10 +790,9 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         const actionToken = isMock ? args.token! : await getOidcToken()
         appToken = await exchangeForAppToken(actionToken)
       }
-      octoRest = new Octokit({ auth: appToken })
-      octoGraph = graphql.defaults({
-        headers: { authorization: `token ${appToken}` },
-      })
+      const clients = await createGitHubClients(appToken)
+      octoRest = clients.rest
+      octoGraph = clients.graph
       githubClientReady = true
 
       const { userPrompt, promptFiles } = await getUserPrompt()
@@ -783,8 +1090,9 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       // ie. <img alt="Image" src="https://github.com/user-attachments/assets/xxxx" />
       // ie. [api.json](https://github.com/user-attachments/files/21433810/api.json)
       // ie. ![Image](https://github.com/user-attachments/assets/xxxx)
-      const mdMatches = prompt.matchAll(/!?\[.*?\]\((https:\/\/github\.com\/user-attachments\/[^)]+)\)/gi)
-      const tagMatches = prompt.matchAll(/<img .*?src="(https:\/\/github\.com\/user-attachments\/[^"]+)" \/>/gi)
+      const hostPattern = ghUrls.host.replace(/\./g, "\\.")
+      const mdMatches = prompt.matchAll(new RegExp(`!?\\[.*?\\]\\((https:\\/\\/${hostPattern}\\/user-attachments\\/[^)]+)\\)`, "gi"))
+      const tagMatches = prompt.matchAll(new RegExp(`<img .*?src="(https:\\/\\/${hostPattern}\\/user-attachments\\/[^"]+)" \\/>`, "gi"))
       const matches = [...mdMatches, ...tagMatches].sort((a, b) => a.index - b.index)
       console.log("Images", JSON.stringify(matches, null, 2))
 
@@ -1024,7 +1332,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       if (isMock) return
 
       console.log("Configuring git...")
-      const config = "http.https://github.com/.extraheader"
+      const config = `http.${ghUrls.serverUrl}/.extraheader`
       // actions/checkout@v6 no longer stores credentials in .git/config,
       // so this may not exist - use nothrow() to handle gracefully
       const ret = await gitStatus(["config", "--local", "--get", config])
@@ -1037,12 +1345,12 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
 
       await gitRun(["config", "--local", config, `AUTHORIZATION: basic ${newCredentials}`])
       await gitRun(["config", "--global", "user.name", AGENT_USERNAME])
-      await gitRun(["config", "--global", "user.email", `${AGENT_USERNAME}@users.noreply.github.com`])
+      await gitRun(["config", "--global", "user.email", getNoreplyEmail(AGENT_USERNAME, ghUrls.host)])
     }
 
     async function restoreGitConfig() {
       if (gitConfig === undefined) return
-      const config = "http.https://github.com/.extraheader"
+      const config = `http.${ghUrls.serverUrl}/.extraheader`
       await gitRun(["config", "--local", config, gitConfig])
     }
 
@@ -1070,7 +1378,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       const localBranch = generateBranchName("pr")
       const depth = Math.max(pr.commits.totalCount, 20)
 
-      await gitRun(["remote", "add", "fork", `https://github.com/${pr.headRepository.nameWithOwner}.git`])
+      await gitRun(["remote", "add", "fork", `${ghUrls.serverUrl}/${pr.headRepository.nameWithOwner}.git`])
       await gitRun(["fetch", "fork", `--depth=${depth}`, remoteBranch])
       await gitRun(["checkout", "-b", localBranch, `fork/${remoteBranch}`])
       return localBranch
@@ -1593,7 +1901,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
     async function revokeAppToken() {
       if (!appToken) return
 
-      await fetch("https://api.github.com/installation/token", {
+      await fetch(`${ghUrls.apiUrl}/installation/token`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${appToken}`,
