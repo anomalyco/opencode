@@ -61,7 +61,7 @@ describe("resolveServerList", () => {
   })
 })
 
-test("treats WSL sidecars as remote server connections", () => {
+test("classifies local and remote server connections", () => {
   expect(
     ServerConnection.local({
       type: "sidecar",
@@ -74,7 +74,11 @@ test("treats WSL sidecars as remote server connections", () => {
     true,
   )
   expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } })).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://LOCALHOST:4096" } })).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://user@localhost:4096" } })).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://[::1]:4096" } })).toBe(true)
   expect(ServerConnection.local({ type: "http", http: { url: "https://server.example.test" } })).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "not a URL" } })).toBe(false)
 })
 
 test("active server removal falls back across built-in and persisted servers", () => {
