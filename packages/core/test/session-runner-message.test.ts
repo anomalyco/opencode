@@ -14,6 +14,32 @@ const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = Model.make({ id: "model", provider: "provider", route: OpenAIChat.route })
 
 describe("toLLMMessages", () => {
+  test("lowers managed attachments to one absolute-path text part", () => {
+    const uri = "opencode://attachment/att_test"
+    const message = SessionMessage.User.make({
+      id: id("managed"),
+      type: "user",
+      text: "Inspect this file",
+      files: [FileAttachment.make({ uri, mime: "application/octet-stream", name: "report.csv" })],
+      time: { created },
+    })
+
+    expect(toLLMMessages([message], model, new Map([[uri, "/managed/session/att_test/report.csv"]]))).toEqual([
+      Message.make({
+        id: id("managed"),
+        role: "user",
+        content: [
+          { type: "text", text: "Inspect this file" },
+          {
+            type: "text",
+            text: 'Attached file: {"name":"report.csv","path":"/managed/session/att_test/report.csv","mime":"application/octet-stream"}',
+          },
+        ],
+        metadata: {},
+      }),
+    ])
+  })
+
   test("omits empty assistant turns", () => {
     const assistant = (value: string, content: SessionMessage.Assistant["content"]) =>
       SessionMessage.Assistant.make({
