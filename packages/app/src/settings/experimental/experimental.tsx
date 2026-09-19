@@ -1,5 +1,4 @@
 import { Component, Show } from "solid-js"
-import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -7,8 +6,6 @@ import { SettingsList } from "@/settings/list"
 import { useSettings } from "@/settings/model"
 import { SettingsRow } from "@/settings/row"
 import "@/settings/settings.css"
-
-const tabLayoutOptions: ("horizontal" | "vertical")[] = ["horizontal", "vertical"]
 
 export const SettingsExperimental: Component = () => {
   const language = useLanguage()
@@ -31,24 +28,6 @@ export const SettingsExperimental: Component = () => {
       <div class="settings-tab-body">
         <div class="settings-section">
           <SettingsList>
-            <SettingsRow
-              title={language.t("settings.appearance.row.tabs.title")}
-              description={language.t("settings.appearance.row.tabs.description")}
-            >
-              <Select
-                data-action="settings-tab-layout"
-                options={tabLayoutOptions}
-                current={tabLayoutOptions.find((option) => option === settings.appearance.tabLayout())}
-                placement="bottom-end"
-                gutter={6}
-                label={(option) =>
-                  option === "horizontal"
-                    ? language.t("settings.appearance.row.tabs.horizontal")
-                    : language.t("settings.appearance.row.tabs.vertical")
-                }
-                onSelect={(option) => option && settings.appearance.setTabLayout(option)}
-              />
-            </SettingsRow>
             <Show when={platform.browserPane}>
               <SettingsRow
                 title={language.t("settings.general.row.browserPane.title")}
