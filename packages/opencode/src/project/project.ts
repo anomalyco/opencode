@@ -248,7 +248,7 @@ const layer = Layer.effect(
         result.sandboxes,
         (s) =>
           fs.exists(s).pipe(
-            Effect.orDie,
+            Effect.catchAll(() => Effect.succeed(false)),
             Effect.map((exists) => (exists ? s : undefined)),
           ),
         { concurrency: "unbounded" },
@@ -407,7 +407,7 @@ const layer = Layer.effect(
         data.sandboxes,
         (dir) =>
           fs.isDir(dir).pipe(
-            Effect.orDie,
+            Effect.catchAll(() => Effect.succeed(false)),
             Effect.map((ok) => (ok ? dir : undefined)),
           ),
         { concurrency: "unbounded" },
