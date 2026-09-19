@@ -185,6 +185,35 @@ export const Info = Schema.Struct({
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),
+      retry: Schema.optional(
+        Schema.Struct({
+          maxRetries: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(-1))).annotate({
+            description:
+              "Maximum retry attempts for a retryable provider error. Use -1 to keep retrying for as long as the error stays retryable (default: 5)",
+          }),
+          initialDelayMs: Schema.optional(PositiveInt).annotate({
+            description: "Delay before the first retry, in milliseconds (default: 2000)",
+          }),
+          backoffFactor: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(1))).annotate({
+            description:
+              "Multiplier applied to the delay after each attempt. 1 keeps the delay flat instead of doubling (default: 2)",
+          }),
+          jitterFactor: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))).annotate({
+            description: "Fraction of the delay added back as random jitter (default: 0.25)",
+          }),
+          maxDelayMs: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(2_147_483_647))).annotate({
+            description:
+              "Absolute ceiling on any retry delay, in milliseconds. Cannot exceed 2147483647, the largest value setTimeout can represent (default: 2147483647)",
+          }),
+          maxDelayNoHeadersMs: Schema.optional(PositiveInt).annotate({
+            description:
+              "Ceiling on the backoff delay when the error carries no retry-after headers, in milliseconds (default: 30000)",
+          }),
+        }),
+      ).annotate({
+        description:
+          "Retry policy for retryable provider errors. Omitted fields keep their defaults, so the schedule is unchanged unless you set them.",
+      }),
     }),
   ),
 }).annotate({ identifier: "Config" })
