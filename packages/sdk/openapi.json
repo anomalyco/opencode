@@ -21524,6 +21524,9 @@
               "reserved": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "preserve_prefix_cache": {
+                "type": "boolean"
               }
             },
             "additionalProperties": false
