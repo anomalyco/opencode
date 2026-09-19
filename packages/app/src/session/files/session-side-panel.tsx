@@ -26,6 +26,7 @@ const browserTabID = "session-side-panel-browser-tab"
 const browserTabPanelID = "session-side-panel-browser-tabpanel"
 const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
 import { SessionContextTab } from "@/session/files/session-context-tab"
+import { SessionPerformanceTab } from "@/session/performance/tab"
 import { SortableTab } from "@/session/files/tab"
 import { OpenInAppButton } from "@/session/files/open-in-app-button"
 import { useCommand } from "@/shell/commands/command"
@@ -177,6 +178,7 @@ export function SessionSidePanel(props: {
     browser: props.browser.attached,
   })
   const contextOpen = tabState.contextOpen
+  const performanceOpen = tabState.performanceOpen
   const openFileOpen = tabState.openFileOpen
   const panelTabs = tabState.panelTabs
   const openedTabs = tabState.openedTabs
@@ -227,7 +229,7 @@ export function SessionSidePanel(props: {
   })
   const fileBrowserVisible = createMemo(() => {
     const active = activeTab()
-    return active !== "review" && active !== "context" && active !== "empty" && !isSessionBrowserTab(active)
+    return active !== "review" && active !== "context" && active !== "performance" && active !== "empty" && !isSessionBrowserTab(active)
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
   const openBrowserKeybind = createMemo(() => command.keybindParts("browser.open"))
@@ -323,7 +325,7 @@ export function SessionSidePanel(props: {
                               (event) => (selectionEvent = event),
                               { capture: true },
                             )
-                            const stop = createFileTabListSync({ el, contextOpen })
+                            const stop = createFileTabListSync({ el, contextOpen: () => contextOpen() || performanceOpen() })
                             onCleanup(stop)
                           }}
                         >
@@ -370,6 +372,34 @@ export function SessionSidePanel(props: {
                                 <SessionContextUsage variant="indicator" />
                                 <div>{language.t("session.tab.context")}</div>
                               </div>
+                            </Tabs.Trigger>
+                          </Show>
+                          <Show when={performanceOpen()}>
+                            <Tabs.Trigger
+                              value="performance"
+                              onMiddleClick={() => tabs().close("performance")}
+                              closeButton={
+                                <Tooltip
+                                  value={
+                                    <>
+                                      {language.t("common.closeTab")}
+                                      <Show when={closeTabKeybind().length > 0}>
+                                        <Keybind keys={closeTabKeybind()} variant="neutral" />
+                                      </Show>
+                                    </>
+                                  }
+                                  placement="bottom"
+                                  gutter={10}
+                                >
+                                  <Tabs.CloseButton
+                                    onClick={() => tabs().close("performance")}
+                                    aria-label={language.t("common.closeTab")}
+                                  />
+                                </Tooltip>
+                              }
+                              hideCloseButton
+                            >
+                              <div>{language.t("session.tab.performance")}</div>
                             </Tabs.Trigger>
                           </Show>
                           <For each={panelTabs()}>
@@ -579,6 +609,14 @@ export function SessionSidePanel(props: {
                         <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                           <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                             <SessionContextTab />
+                          </div>
+                        </Tabs.Content>
+                      </Show>
+
+                      <Show when={activeTab() === "performance"}>
+                        <Tabs.Content value="performance" class="flex flex-col h-full overflow-hidden contain-strict">
+                          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                            <SessionPerformanceTab />
                           </div>
                         </Tabs.Content>
                       </Show>

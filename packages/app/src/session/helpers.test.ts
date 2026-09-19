@@ -191,6 +191,20 @@ describe("createSessionTabs", () => {
     })
   })
 
+  test("falls back to performance when it is the only open tab", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({ active: undefined as string | undefined, all: ["performance"] })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({ tabs, pathFromTab: () => undefined, normalizeTab: (tab) => tab })
+
+      expect(result.performanceOpen()).toBe(true)
+      expect(result.activeTab()).toBe("performance")
+      expect(result.closableTab()).toBe("performance")
+      expect(result.panelTabs()).toEqual([])
+      dispose()
+    })
+  })
+
   test("exposes the Open File tab without treating it as a file tab", () => {
     createRoot((dispose) => {
       const [state] = createStore({

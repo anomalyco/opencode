@@ -60,6 +60,15 @@ export function openSessionTab(current: SessionTabState, tab: string): SessionTa
     }
   }
 
+  if (tab === "performance") {
+    const rest = current.tabs.all.filter((item) => item !== tab)
+    const at = rest[0] === "context" ? 1 : 0
+    return {
+      tabs: { all: [...rest.slice(0, at), tab, ...rest.slice(at)], active: tab },
+      preview,
+    }
+  }
+
   const previewIndex = preview ? current.tabs.all.indexOf(preview) : -1
   const existingIndex = current.tabs.all.indexOf(tab)
   if (existingIndex !== -1) {

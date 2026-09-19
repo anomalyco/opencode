@@ -38,6 +38,9 @@ export const createSessionTabs = (input: TabsInput) => {
   const fileBrowser = input.fileBrowser ?? (() => false)
   const browser = input.browser ?? (() => false)
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
+  const performanceOpen = createMemo(
+    () => input.tabs().active() === "performance" || input.tabs().all().includes("performance"),
+  )
   const openFileOpen = createMemo(
     () =>
       fileBrowser() &&
@@ -50,7 +53,7 @@ export const createSessionTabs = (input: TabsInput) => {
         .tabs()
         .all()
         .flatMap((tab) => {
-          if (tab === "context" || tab === "review") return []
+          if (tab === "context" || tab === "review" || tab === "performance") return []
           if (isSessionBrowserTab(tab)) return browser() ? [tab] : []
           if (tab === SESSION_OPEN_FILE_TAB && !fileBrowser()) return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
@@ -69,7 +72,7 @@ export const createSessionTabs = (input: TabsInput) => {
   )
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
-    if (active === "context") return active
+    if (active === "context" || active === "performance") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (active && isSessionBrowserTab(active) && browser()) return active
     if (active === "review" && review()) return active
@@ -78,6 +81,7 @@ export const createSessionTabs = (input: TabsInput) => {
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
+    if (performanceOpen()) return "performance"
     if (review() && hasReview()) return "review"
     return "empty"
   })
@@ -88,7 +92,7 @@ export const createSessionTabs = (input: TabsInput) => {
   })
   const closableTab = createMemo<string | undefined>(() => {
     const active = activeTab()
-    if (active === "context") return active
+    if (active === "context" || active === "performance") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (active && isSessionBrowserTab(active) && browser()) return active
     if (!openedTabs().includes(active)) return
@@ -97,6 +101,7 @@ export const createSessionTabs = (input: TabsInput) => {
 
   return {
     contextOpen,
+    performanceOpen,
     openFileOpen,
     panelTabs,
     openedTabs,

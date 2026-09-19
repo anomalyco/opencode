@@ -20,7 +20,7 @@ type SessionCommandSource = {
   history: Pick<SessionModel["history"], "visibleUserMessages">
   layout: SessionModel["layout"]
   ownership: SessionModel["ownership"]
-  tabs: Pick<SessionModel["tabs"], "activeFileTab" | "closableTab">
+  tabs: Pick<SessionModel["tabs"], "activeFileTab" | "closableTab" | "activeTab">
 }
 
 export type SessionCommandContext = {
@@ -371,6 +371,22 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.review.toggle"),
       keybind: "mod+shift+r",
       onSelect: () => actions.session.layout.view().reviewPanel.toggle(),
+    }),
+    viewCommand({
+      id: "performance.toggle",
+      title: language.t("command.performance.toggle"),
+      onSelect: () => {
+        if (!actions.session.identity.params.id) return
+        const view = actions.session.layout.view()
+        const tabs = actions.session.layout.tabs()
+        if (view.reviewPanel.opened() && actions.session.tabs.activeTab() === "performance") {
+          tabs.close("performance")
+          return
+        }
+        if (!view.reviewPanel.opened()) view.reviewPanel.open()
+        if (layout.fileTree.opened() && layout.fileTree.tab() !== "all") layout.fileTree.setTab("all")
+        void tabs.open("performance").then(() => tabs.setActive("performance"))
+      },
     }),
     ...(shown()
       ? [
