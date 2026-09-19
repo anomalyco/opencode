@@ -727,3 +727,49 @@
   line-height: 1;
   color: var(--v2-state-fg-danger);
 }
+
+.settings-v2-server-dialog-hint {
+  font-size: 11px;
+  font-weight: 440;
+  line-height: 1.4;
+  color: var(--v2-text-text-muted);
+}
+
+.settings-v2-mcp-test-result {
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.settings-v2-mcp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.settings-v2-mcp-row-lead {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-v2-mcp-row-name {
+  font-size: 13px;
+  font-weight: 530;
+  color: var(--v2-text-text-base);
+}
+
+.settings-v2-mcp-row-meta {
+  font-size: 11px;
+  font-weight: 440;
+  color: var(--v2-text-text-muted);
+}
+
+.settings-v2-mcp-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
