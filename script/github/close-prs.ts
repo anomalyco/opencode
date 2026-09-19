@@ -2,7 +2,6 @@
 
 import { parseArgs } from "util"
 
-const defaultRepo = "anomalyco/opencode"
 const defaultAgeMonths = 1
 const defaultThreshold = 2
 const defaultSleepMs = 20_000
@@ -15,7 +14,7 @@ const { values } = parseArgs({
   options: {
     execute: { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
-    repo: { type: "string", default: defaultRepo },
+    repo: { type: "string" },
     threshold: { type: "string", default: String(defaultThreshold) },
     "age-months": { type: "string", default: String(defaultAgeMonths) },
     "max-close": { type: "string" },
@@ -39,7 +38,7 @@ Criteria:
 Options:
   --execute              Comment and close matching PRs
   --dry-run              Explicitly run without changing anything
-  --repo <owner/repo>    Repository to clean up (default: ${defaultRepo})
+  --repo <owner/repo>    Repository to clean up (required)
   --threshold <n>        Positive reaction threshold (default: ${defaultThreshold})
   --age-months <n>       Age cutoff in months (default: ${defaultAgeMonths})
   --max-close <n>        Maximum matching PRs to process
@@ -60,8 +59,8 @@ if (values.execute && values["dry-run"]) {
   process.exit(1)
 }
 
-const token = await requireToken()
 const repo = requireRepo(values.repo)
+const token = await requireToken()
 const threshold = requirePositiveInteger("threshold", values.threshold)
 const ageMonths = requirePositiveInteger("age-months", values["age-months"])
 const maxClose =
@@ -336,9 +335,8 @@ function hasPriorCleanup(pr: PullRequest) {
 }
 
 function requireRepo(value: string | undefined) {
-  if (!value) throw new Error("repo is required")
+  if (!value || !/^[^/\s]+\/[^/\s]+$/.test(value)) throw new Error(`Invalid repo ${value ?? ""}; expected owner/name`)
   const [owner, name] = value.split("/")
-  if (!owner || !name) throw new Error(`Invalid repo ${value}; expected owner/name`)
   return { owner, name }
 }
 

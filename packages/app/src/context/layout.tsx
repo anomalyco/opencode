@@ -17,7 +17,7 @@ import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { createProjectSessionLoader, createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
 import { requireServerKey } from "@/utils/session-route"
 import { type DraftTab, useTabs } from "./tabs"
 import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./layout-tabs"
@@ -589,27 +589,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     })
 
-    let sessionFrame: number | undefined
-    let sessionTimer: number | undefined
-
-    onMount(() => {
-      sessionFrame = requestAnimationFrame(() => {
-        sessionFrame = undefined
-        sessionTimer = window.setTimeout(() => {
-          sessionTimer = undefined
-          void Promise.all(
-            server.projects.list().map((project) => {
-              return serverSync().project.loadSessions(project.worktree)
-            }),
-          )
-        }, 0)
+    const loadProjectSessions = createProjectSessionLoader((directory) => serverSync().project.loadSessions(directory))
+    createEffect(() => {
+      if (!serverSync().ready) return
+      server.projects.list().forEach((project) => {
+        void loadProjectSessions(project.worktree)
       })
     })
-
-    onCleanup(() => {
-      if (sessionFrame !== undefined) cancelAnimationFrame(sessionFrame)
-      if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
-    })
+    onCleanup(loadProjectSessions.dispose)
 
     return {
       route,

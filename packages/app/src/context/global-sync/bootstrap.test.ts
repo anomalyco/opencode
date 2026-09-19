@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
-import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
+import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse } from "@opencode-ai/sdk/v2/client"
 import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import {
   bootstrapDirectory,
+  bootstrapGlobal,
   loadAgentsQuery,
   loadCommands,
   loadGlobalConfigQuery,
@@ -37,6 +38,57 @@ const api = {
   reference: { list: async () => ({ location: {}, data: [] }) },
   vcs: { get: async () => ({ location: {}, data: {} }) },
 } as unknown as ServerApi
+
+describe("bootstrapGlobal", () => {
+  test("reports every loaded non-global project", async () => {
+    const [store, setStore] = createStore<{
+      ready: boolean
+      path: Path
+      project: Project[]
+      provider: NormalizedProviderListResponse
+      provider_auth: ProviderAuthResponse
+      config: Config
+      reload: undefined | "pending" | "complete"
+    }>({
+      ready: false,
+      path: { state: "", config: "", worktree: "", directory: "", home: "" },
+      project: [] as Project[],
+      provider,
+      provider_auth: {},
+      config: {} satisfies Config,
+      reload: undefined,
+    })
+    const updated: Project[] = []
+
+    await bootstrapGlobal({
+      serverSDK: {} as OpencodeClient,
+      serverAPI: {
+        ...api,
+        project: {
+          list: async () => [
+            { id: "b", worktree: "/b", time: { created: 1, updated: 1 }, sandboxes: [] },
+            { id: "global", worktree: "/", time: { created: 1, updated: 1 }, sandboxes: [] },
+            { id: "a", worktree: "/a", time: { created: 1, updated: 1 }, sandboxes: [] },
+          ],
+          current: async () => ({ id: "global", directory: "/" }),
+        },
+      },
+      protocol: Promise.resolve("v2"),
+      scope: ServerScope.local,
+      requestFailedTitle: "request failed",
+      translate: (key) => key,
+      formatMoreCount: (count) => ` +${count}`,
+      setGlobalStore: setStore,
+      queryClient: new QueryClient(),
+      onProjectUpdated(project) {
+        updated.push(project)
+      },
+    })
+
+    expect(store.project.map((project) => project.id)).toEqual(["a", "b", "global"])
+    expect(updated.map((project) => project.worktree)).toEqual(["/a", "/b"])
+  })
+})
 
 function directoryState() {
   return createStore<State>({
@@ -130,7 +182,7 @@ describe("bootstrapDirectory", () => {
       store,
       setStore,
       vcsCache: { setStore() {} } as unknown as VcsCache,
-      loadSessions() {},
+      loadSessions: () => true,
       translate: (key) => key,
       queryClient: new QueryClient(),
       protocol: Promise.resolve("v1"),
@@ -169,7 +221,7 @@ describe("bootstrapDirectory", () => {
       store,
       setStore,
       vcsCache: { setStore() {} } as unknown as VcsCache,
-      loadSessions() {},
+      loadSessions: () => true,
       translate: (key) => key,
       queryClient: new QueryClient(),
       protocol: Promise.resolve("v2"),

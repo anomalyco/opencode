@@ -1,8 +1,30 @@
 #!/usr/bin/env bun
 
-const repo = "anomalyco/opencode"
+import { parseArgs } from "util"
+
 const days = 60
 const msg = `To stay organized issues are automatically closed after ${days} days of no activity. If the issue is still relevant please open a new one.`
+
+const { values } = parseArgs({
+  args: Bun.argv.slice(2),
+  options: {
+    repo: { type: "string" },
+    help: { type: "boolean", short: "h", default: false },
+  },
+})
+
+if (values.help) {
+  console.log(`
+Usage: bun script/github/close-issues.ts --repo <owner/repo>
+
+Options:
+  --repo <owner/repo>    Repository to clean up (required)
+  -h, --help             Show this help message
+`)
+  process.exit(0)
+}
+
+const repo = requireRepo(values.repo)
 
 const token = process.env.GITHUB_TOKEN
 if (!token) {
@@ -40,7 +62,7 @@ function shouldSkip(i: Issue) {
 }
 
 async function close(num: number) {
-  const base = `https://api.github.com/repos/${repo}/issues/${num}`
+  const base = `https://api.github.com/repos/${repo.owner}/${repo.name}/issues/${num}`
 
   const comment = await fetch(`${base}/comments`, {
     method: "POST",
@@ -56,7 +78,7 @@ async function close(num: number) {
   })
   if (!patch.ok) throw new Error(`Failed to close #${num}: ${patch.status} ${patch.statusText}`)
 
-  console.log(`Closed https://github.com/${repo}/issues/${num}`)
+  console.log(`Closed https://github.com/${repo.owner}/${repo.name}/issues/${num}`)
 }
 
 async function main() {
@@ -65,7 +87,7 @@ async function main() {
 
   while (true) {
     const res = await fetch(
-      `https://api.github.com/repos/${repo}/issues?state=open&sort=updated&direction=asc&per_page=100&page=${page}`,
+      `https://api.github.com/repos/${repo.owner}/${repo.name}/issues?state=open&sort=updated&direction=asc&per_page=100&page=${page}`,
       { headers },
     )
     if (!res.ok) throw new Error(res.statusText)
@@ -107,6 +129,12 @@ async function main() {
   }
 
   console.log(`Closed ${closed} issues total`)
+}
+
+function requireRepo(value: string | undefined) {
+  if (!value || !/^[^/\s]+\/[^/\s]+$/.test(value)) throw new Error(`Invalid repo ${value ?? ""}; expected owner/name`)
+  const [owner, name] = value.split("/")
+  return { owner, name }
 }
 
 main().catch((err) => {

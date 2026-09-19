@@ -108,7 +108,10 @@ function createServerCtx(
     },
   })
   const sdk = createServerSdkContext(conn, scope)
-  const sync = createServerSyncContext(sdk)
+  const sync = createServerSyncContext(sdk, (project) => {
+    if (project.id === "global") return
+    projects.discover(project.worktree)
+  })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })

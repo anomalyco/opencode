@@ -154,6 +154,16 @@ export function retainHomeSessions(sessions: Session[], limit: number, now: numb
   return [...grouped.values()].flatMap((items) => trimSessions(items, { limit, permission: {}, now }))
 }
 
+export function discoverHomeSessionDirectories(sessions: Session[], discover: (directory: string) => void) {
+  const seen = new Set<string>()
+  sessions.forEach((session) => {
+    const key = pathKey(session.directory)
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    discover(session.directory)
+  })
+}
+
 export function applyHomeSessionEvent(sessions: Session[], event: HomeSessionEvent) {
   const info = event.properties.info
   const index = sessions.findIndex((session) => session.id === info.id)
