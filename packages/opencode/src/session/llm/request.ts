@@ -11,7 +11,7 @@ import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "../system"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Record } from "effect"
-import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
+import { jsonSchema, tool as aiTool, type JSONSchema7, type ModelMessage, type Tool } from "ai"
 import type { Plugin } from "@/plugin"
 import { mergeDeep } from "remeda"
 
@@ -181,7 +181,17 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   return {
     system,
     messages,
-    tools: Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b))),
+    tools: Object.fromEntries(
+      Object.entries(tools)
+        .toSorted(([a], [b]) => a.localeCompare(b))
+        .map(([name, tool]) => {
+          if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
+            const schema = extractJsonSchema(tool.inputSchema)
+            if (schema) return [name, { ...tool, inputSchema: jsonSchema(foldArrayItems(schema) as JSONSchema7) }]
+          }
+          return [name, tool]
+        }),
+    ),
     params,
     messageTransformOptions: options,
     headers: {
@@ -211,6 +221,73 @@ function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission"
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+// @ai-sdk/google's convertJSONSchemaToOpenAPISchema splits a nullable array
+// written as `type: ["null", "array"]` into `anyOf: [{ type: "array" }]` but
+// leaves a sibling `items` dangling at the parent, which Gemini rejects. Fold
+// `items` into the array-typed branches of any union so the generated
+// function declaration carries `items` inside the array branch. Returns a
+// deep clone — the caller's original schema is never mutated, so tools shared
+// across providers (or defined once at module scope) stay untouched.
+export const foldArrayItems = (schema: unknown): unknown => {
+  const clone = structuredClone(schema)
+  fold(clone)
+  return clone
+}
+
+// Only treat objects that actually look like JSON Schema as schemas; anything
+// else (e.g. a raw Zod instance passed as inputSchema) is left alone.
+function extractJsonSchema(inputSchema: unknown): Record<string, unknown> | undefined {
+  const candidate = isRecord(inputSchema) && isRecord(inputSchema.jsonSchema) ? inputSchema.jsonSchema : inputSchema
+  const JSON_SCHEMA_KEYS = ["type", "properties", "items", "$ref", "anyOf", "oneOf", "allOf", "$defs", "definitions"]
+  return isRecord(candidate) && JSON_SCHEMA_KEYS.some((key) => key in candidate) ? candidate : undefined
+}
+
+function fold(schema: unknown): void {
+  if (Array.isArray(schema)) {
+    for (const item of schema) fold(item)
+    return
+  }
+  if (!isRecord(schema)) return
+  for (const value of Object.values(schema)) fold(value)
+  if (schema.items === undefined) return
+  const type = schema.type
+  if (Array.isArray(type)) {
+    // Carry non-array, non-null members over as extra branches instead of
+    // discarding them; only array/null become anyOf branches.
+    const branches: Record<string, unknown>[] = type.filter((t) => t !== "array" && t !== "null").map((t) => ({ type: t }))
+    branches.unshift({ type: "array", items: schema.items })
+    if (type.includes("null")) branches.push({ type: "null" })
+    schema.anyOf = branches
+    delete schema.type
+    delete schema.items
+    return
+  }
+  // Folding items into every allOf branch would change intersection
+  // semantics, so restrict this to unions.
+  const combiner = ["anyOf", "oneOf"].find((key) => Array.isArray(schema[key]))
+  if (!combiner) return
+  let matched = false
+  const branches = schema[combiner]
+  if (!Array.isArray(branches)) return
+  for (const branch of branches) {
+    if (!isRecord(branch)) continue
+    const branchType = branch.type
+    if (
+      (branchType === "array" || (Array.isArray(branchType) && branchType.includes("array"))) &&
+      branch.items === undefined
+    ) {
+      branch.items = schema.items
+      matched = true
+    }
+  }
+  // If no branch is array-typed, dropping items would silently weaken
+  // validation — keep it on the parent.
+  if (matched) delete schema.items
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {
