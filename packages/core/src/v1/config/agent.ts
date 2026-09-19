@@ -59,14 +59,11 @@ const KNOWN_KEYS = new Set([
   "tools",
 ])
 
-const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema.Type<typeof AgentSchema> => {
-  const options: Record<string, unknown> = { ...agent.options }
-  for (const [key, value] of Object.entries(agent)) {
-    if (!KNOWN_KEYS.has(key)) options[key] = value
-  }
-
+// Derives permission rules from the deprecated per-agent `tools` map (write/edit/patch collapse to `edit`).
+// Exported so consumers can rank these legacy rules below explicit `permission` config.
+export const permissionFromTools = (tools: Record<string, boolean> | undefined): ConfigPermissionV1.Info => {
   const permission: ConfigPermissionV1.Info = {}
-  for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
+  for (const [tool, enabled] of Object.entries(tools ?? {})) {
     const action = enabled ? "allow" : "deny"
     if (tool === "write" || tool === "edit" || tool === "patch") {
       permission.edit = action
@@ -74,6 +71,16 @@ const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema
     }
     permission[tool] = action
   }
+  return permission
+}
+
+const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema.Type<typeof AgentSchema> => {
+  const options: Record<string, unknown> = { ...agent.options }
+  for (const [key, value] of Object.entries(agent)) {
+    if (!KNOWN_KEYS.has(key)) options[key] = value
+  }
+
+  const permission = permissionFromTools(agent.tools)
   globalThis.Object.assign(permission, agent.permission)
 
   const steps = agent.steps ?? agent.maxSteps

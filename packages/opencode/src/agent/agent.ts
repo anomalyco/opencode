@@ -1,5 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { ConfigAgentV1 } from "@opencode-ai/core/v1/config/agent"
+import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { Config } from "@/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Provider } from "@/provider/provider"
@@ -148,7 +150,6 @@ const layer = Layer.effect(
                 question: "allow",
                 plan_enter: "allow",
               }),
-              user,
             ),
             mode: "primary",
             native: true,
@@ -174,7 +175,6 @@ const layer = Layer.effect(
                   [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
                 },
               }),
-              user,
             ),
             mode: "primary",
             native: true,
@@ -187,7 +187,6 @@ const layer = Layer.effect(
               Permission.fromConfig({
                 todowrite: "deny",
               }),
-              user,
             ),
             options: {},
             mode: "subagent",
@@ -208,7 +207,6 @@ const layer = Layer.effect(
                 read: "allow",
                 external_directory: readonlyExternalDirectory,
               }),
-              user,
             ),
             description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
             prompt: PROMPT_EXPLORE,
@@ -227,7 +225,6 @@ const layer = Layer.effect(
               Permission.fromConfig({
                 "*": "deny",
               }),
-              user,
             ),
             options: {},
           },
@@ -243,7 +240,6 @@ const layer = Layer.effect(
               Permission.fromConfig({
                 "*": "deny",
               }),
-              user,
             ),
             prompt: PROMPT_TITLE,
           },
@@ -258,12 +254,12 @@ const layer = Layer.effect(
               Permission.fromConfig({
                 "*": "deny",
               }),
-              user,
             ),
             prompt: PROMPT_SUMMARY,
           },
         }
 
+        const configuredAgents = new Set(Object.keys(cfg.agent ?? {}))
         for (const [key, value] of Object.entries(cfg.agent ?? {})) {
           if (value.disable) {
             delete agents[key]
@@ -274,7 +270,7 @@ const layer = Layer.effect(
             item = agents[key] = {
               name: key,
               mode: "all",
-              permission: Permission.merge(defaults, user),
+              permission: defaults,
               options: {},
               native: false,
             }
@@ -290,7 +286,25 @@ const layer = Layer.effect(
           item.name = value.name ?? item.name
           item.steps = value.steps ?? item.steps
           item.options = mergeDeep(item.options, value.options ?? {})
-          item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+
+          // Legacy `tools` maps are a deprecated shorthand for permission rules. Rank the
+          // tools-derived rules BELOW the user's global `permission` config so a tools-based
+          // "*" deny cannot defeat global allows, while explicit per-agent `permission`
+          // still ranks above everything else.
+          const legacy = Permission.fromConfig(ConfigAgentV1.permissionFromTools(value.tools))
+          const legacyKeys = new Set(legacy.map((rule) => rule.permission))
+          const explicit: ConfigPermissionV1.Info = {}
+          for (const [permissionKey, permissionValue] of Object.entries(value.permission ?? {})) {
+            if (legacyKeys.has(permissionKey)) continue
+            explicit[permissionKey] = permissionValue
+          }
+          item.permission = Permission.merge(item.permission, legacy, user, Permission.fromConfig(explicit))
+        }
+
+        // Native agents that were not overridden in config still receive the user's global permission
+        for (const key of Object.keys(agents)) {
+          if (configuredAgents.has(key)) continue
+          agents[key].permission = Permission.merge(agents[key].permission, user)
         }
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured
