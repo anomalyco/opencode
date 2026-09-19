@@ -9,6 +9,30 @@ export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
 const file = path.join(Global.Path.data, "auth.json")
 
+const PROFILE_DELIMITER = ":"
+const PROFILE_REGEX = /^[a-zA-Z0-9_-]+$/
+
+/** Parse composite key into provider and profile */
+export function parseKey(key: string): { providerID: string; profile?: string } {
+  const idx = key.indexOf(PROFILE_DELIMITER)
+  if (idx === -1) return { providerID: key }
+  return {
+    providerID: key.slice(0, idx),
+    profile: key.slice(idx + 1),
+  }
+}
+
+/** Build composite key from provider and profile */
+export function buildKey(providerID: string, profile?: string): string {
+  if (!profile) return providerID
+  return `${providerID}${PROFILE_DELIMITER}${profile}`
+}
+
+/** Validate profile name (alphanumeric, hyphen, underscore) */
+export function validateProfileName(name: string): boolean {
+  return PROFILE_REGEX.test(name)
+}
+
 const fail = (message: string) => (cause: unknown) => new AuthError({ message, cause })
 
 export class Oauth extends Schema.Class<Oauth>("OAuth")({
@@ -41,10 +65,13 @@ export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthError",
 }) {}
 
 export interface Interface {
-  readonly get: (providerID: string) => Effect.Effect<Info | undefined, AuthError>
+  readonly get: (providerID: string, profile?: string) => Effect.Effect<Info | undefined, AuthError>
   readonly all: () => Effect.Effect<Record<string, Info>, AuthError>
-  readonly set: (key: string, info: Info) => Effect.Effect<void, AuthError>
-  readonly remove: (key: string) => Effect.Effect<void, AuthError>
+  readonly set: (providerID: string, info: Info, profile?: string) => Effect.Effect<void, AuthError>
+  readonly remove: (providerID: string, profile?: string) => Effect.Effect<void, AuthError>
+  readonly profiles: (providerID: string) => Effect.Effect<Array<{ profile?: string; info: Info }>, AuthError>
+  readonly hasDefault: (providerID: string) => Effect.Effect<boolean, AuthError>
+  readonly setDefault: (providerID: string, profile: string) => Effect.Effect<void, AuthError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Auth") {}
@@ -66,11 +93,13 @@ const layer = Layer.effect(
       return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
     })
 
-    const get = Effect.fn("Auth.get")(function* (providerID: string) {
-      return (yield* all())[providerID]
+    const get = Effect.fn("Auth.get")(function* (providerID: string, profile?: string) {
+      const key = buildKey(providerID, profile)
+      return (yield* all())[key]
     })
 
-    const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
+    const set = Effect.fn("Auth.set")(function* (providerID: string, info: Info, profile?: string) {
+      const key = buildKey(providerID, profile)
       const norm = key.replace(/\/+$/, "")
       const data = yield* all()
       if (norm !== key) delete data[key]
@@ -80,7 +109,8 @@ const layer = Layer.effect(
         .pipe(Effect.mapError(fail("Failed to write auth data")))
     })
 
-    const remove = Effect.fn("Auth.remove")(function* (key: string) {
+    const remove = Effect.fn("Auth.remove")(function* (providerID: string, profile?: string) {
+      const key = buildKey(providerID, profile)
       const norm = key.replace(/\/+$/, "")
       const data = yield* all()
       delete data[key]
@@ -88,7 +118,47 @@ const layer = Layer.effect(
       yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
     })
 
-    return Service.of({ get, all, set, remove })
+    const profiles = Effect.fn("Auth.profiles")(function* (providerID: string) {
+      const data = yield* all()
+      const result: Array<{ profile?: string; info: Info }> = []
+      for (const [key, info] of Object.entries(data)) {
+        const parsed = parseKey(key)
+        if (parsed.providerID === providerID) {
+          result.push({ profile: parsed.profile, info })
+        }
+      }
+      return result
+    })
+
+    const hasDefault = Effect.fn("Auth.hasDefault")(function* (providerID: string) {
+      const data = yield* all()
+      return providerID in data
+    })
+
+    const setDefault = Effect.fn("Auth.setDefault")(function* (providerID: string, profile: string) {
+      const data = yield* all()
+      const namedKey = buildKey(providerID, profile)
+      const defaultKey = providerID
+
+      const namedInfo = data[namedKey]
+      if (!namedInfo) {
+        return yield* new AuthError({ message: `Profile "${profile}" not found for provider "${providerID}"` })
+      }
+
+      const defaultInfo = data[defaultKey]
+
+      // Swap: named becomes default, old default becomes named
+      const newData = { ...data }
+      newData[defaultKey] = namedInfo
+      if (defaultInfo) {
+        newData[namedKey] = defaultInfo
+      } else {
+        delete newData[namedKey]
+      }
+      yield* fsys.writeJson(file, newData, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+    })
+
+    return Service.of({ get, all, set, remove, profiles, hasDefault, setDefault })
   }),
 )
 
