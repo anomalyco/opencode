@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { $ } from "bun"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -7,7 +8,7 @@ import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -16,6 +17,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
+import { Project } from "@/project/project"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -25,6 +27,7 @@ const it = testEffect(
       SessionProjector.node,
       CrossSpawnSpawner.node,
       InstanceStore.node,
+      Project.node,
     ]),
     [
       [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces: false })],
@@ -281,5 +284,37 @@ describe("Session", () => {
       expect(created.metadata).toBeUndefined()
       expect(saved.metadata).toBeUndefined()
     }),
+  )
+})
+
+describe("Session.create with a stale project id", () => {
+  it.instance(
+    "uses the current project when the cached project row was deleted",
+    () =>
+      Effect.gen(function* () {
+        const session = yield* SessionNs.Service
+        const project = yield* Project.Service
+        const instance = yield* TestInstance
+        const created = yield* Effect.acquireRelease(session.create({ title: "before-rekey" }), (info) =>
+          session.remove(info.id).pipe(Effect.ignore),
+        )
+
+        // Rekey the project the way another opencode process would: adding a
+        // remote changes the resolved id and fromDirectory migrates the row,
+        // deleting the id this instance still holds.
+        yield* Effect.promise(() =>
+          $`git remote add origin git@github.com:opencode-test/stale-project-id.git`.cwd(instance.directory).quiet(),
+        )
+        const migrated = yield* project.fromDirectory(instance.directory)
+        expect(migrated.project.id).not.toBe(created.projectID)
+
+        const after = yield* Effect.acquireRelease(session.create({ title: "after-rekey" }), (info) =>
+          session.remove(info.id).pipe(Effect.ignore),
+        )
+
+        expect(after.projectID).toBe(migrated.project.id)
+        expect((yield* session.get(after.id)).projectID).toBe(migrated.project.id)
+      }),
+    { git: true },
   )
 })
