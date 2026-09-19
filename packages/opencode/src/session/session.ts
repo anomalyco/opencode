@@ -447,6 +447,7 @@ export interface Interface {
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
+  readonly totalCost: (sessionID: SessionID) => Effect.Effect<{ cost: number; tokens: NonNullable<Info["tokens"]> }>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
   readonly updateMessage: <T extends SessionV1.Info>(msg: T) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
@@ -603,6 +604,40 @@ const layer: Layer.Layer<
       return rows.map(fromRow)
     })
 
+    const totalCost = Effect.fn("Session.totalCost")(function* (sessionID: SessionID) {
+      const own = yield* get(sessionID)
+      let cost = own.cost ?? 0
+      let tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+      if (own.tokens) {
+        tokens = {
+          input: own.tokens.input,
+          output: own.tokens.output,
+          reasoning: own.tokens.reasoning,
+          cache: { read: own.tokens.cache.read, write: own.tokens.cache.write },
+        }
+      }
+      const queue = [sessionID]
+      const visited = new Set([sessionID])
+      while (queue.length > 0) {
+        const current = queue.shift()!
+        const kids = yield* children(current)
+        for (const kid of kids) {
+          if (visited.has(kid.id)) continue
+          visited.add(kid.id)
+          cost += kid.cost ?? 0
+          if (kid.tokens) {
+            tokens.input += kid.tokens.input
+            tokens.output += kid.tokens.output
+            tokens.reasoning += kid.tokens.reasoning
+            tokens.cache.read += kid.tokens.cache.read
+            tokens.cache.write += kid.tokens.cache.write
+          }
+          queue.push(kid.id)
+        }
+      }
+      return { cost, tokens }
+    })
+
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
       const session = yield* get(sessionID)
       try {
@@ -721,6 +756,9 @@ const layer: Layer.Layer<
             id: PartID.ascending(),
             messageID: cloned.id,
             sessionID: session.id,
+            ...(part.type === "step-finish"
+              ? { cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }
+              : {}),
           }
           if (p.type === "compaction" && p.tail_start_id) {
             p.tail_start_id = idMap.get(p.tail_start_id)
@@ -923,6 +961,7 @@ const layer: Layer.Layer<
       diff,
       messages,
       children,
+      totalCost,
       remove,
       updateMessage,
       removeMessage,

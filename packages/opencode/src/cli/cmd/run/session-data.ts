@@ -86,6 +86,7 @@ export type SessionData = {
   visible: Map<string, string>
   end: Set<string>
   echo: Map<string, Set<string>>
+  totalCost: number
 }
 
 export type SessionDataInput = {
@@ -124,6 +125,7 @@ export function createSessionData(
     visible: new Map(),
     end: new Set(),
     echo: new Map(),
+    totalCost: 0,
   }
 }
 
@@ -846,7 +848,7 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
     const usage = formatUsage(
       info.tokens,
       input.limits[modelKey(info.providerID, info.modelID)],
-      typeof info.cost === "number" ? info.cost : undefined,
+      data.totalCost > 0 ? data.totalCost : (typeof info.cost === "number" ? info.cost : 0),
     )
     if (usage) {
       next = {
