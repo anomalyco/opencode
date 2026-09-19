@@ -118,6 +118,31 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("preserves an optional reason in events and pending requests without changing decisions", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* PermissionV2.Service
+      const events = yield* EventV2.Service
+      const asked = yield* Deferred.make<PermissionV2.Request>()
+      const unsubscribe = yield* events.listen((event) =>
+        event.type === PermissionV2.Event.Asked.type
+          ? Deferred.succeed(asked, event.data as PermissionV2.Request).pipe(Effect.asVoid)
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      expect(yield* service.ask(assertion({ reason: "Read source to verify the fix." }))).toMatchObject({
+        effect: "ask",
+      })
+      expect((yield* Deferred.await(asked)).reason).toBe("Read source to verify the fix.")
+      expect((yield* service.list())[0]?.reason).toBe("Read source to verify the fix.")
+      expect((yield* service.get(PermissionV2.ID.create("per_test")))?.reason).toBe("Read source to verify the fix.")
+      yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
+      expect(yield* service.ask(assertion({ reason: "Please allow this." }))).toMatchObject({ effect: "deny" })
+      yield* setRules([{ action: "read", resource: "*", effect: "allow" }])
+      expect(yield* service.ask(assertion({ reason: "Please deny this." }))).toMatchObject({ effect: "allow" })
+    }),
+  )
+
   it.effect("evaluates against an explicit provider-turn agent", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
@@ -295,7 +320,9 @@ describe("PermissionV2", () => {
           : Effect.void,
       )
       yield* Effect.addFinalizer(() => unsubscribe)
-      const fiber = yield* service.assert(assertion({ save: ["src/*"] })).pipe(Effect.forkScoped)
+      const fiber = yield* service
+        .assert(assertion({ save: ["src/*"], reason: "Read project source." }))
+        .pipe(Effect.forkScoped)
       const request = yield* Deferred.await(asked)
       yield* service.reply({ requestID: request.id, reply: "always" })
       yield* Fiber.join(fiber)
@@ -308,6 +335,13 @@ describe("PermissionV2", () => {
       const id = (yield* saved.list())[0]!.id
       expect(yield* saved.list()).toEqual([{ id, projectID: Project.ID.global, action: "read", resource: "src/*" }])
       yield* service.assert(assertion({ id: PermissionV2.ID.create("per_next"), resources: ["src/next.ts"] }))
+      yield* service.assert(
+        assertion({
+          id: PermissionV2.ID.create("per_other"),
+          resources: ["src/other.ts"],
+          reason: "A different explanation.",
+        }),
+      )
       yield* saved.remove(id)
       expect(yield* saved.list()).toEqual([])
     }),

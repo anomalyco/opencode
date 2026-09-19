@@ -26,6 +26,7 @@ const RequestFields = {
   resources: Permission.Request.fields.resources,
   save: Permission.Request.fields.save,
   metadata: Permission.Request.fields.metadata,
+  reason: Permission.Request.fields.reason,
   source: Permission.Request.fields.source,
 }
 
@@ -169,6 +170,7 @@ const layer = Layer.effect(
         resources: input.resources,
         save: input.save,
         metadata: input.metadata,
+        reason: input.reason,
         source: input.source,
       }
     }

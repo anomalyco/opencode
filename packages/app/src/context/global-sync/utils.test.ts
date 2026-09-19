@@ -53,6 +53,7 @@ describe("normalizePermissionRequest", () => {
         resources: ["README.md"],
         save: ["*.md"],
         metadata: { path: "README.md" },
+        reason: "Read the project instructions.",
         source: { type: "tool", messageID: "message-1", callID: "call-1" },
       }),
     ).toEqual({
@@ -62,6 +63,7 @@ describe("normalizePermissionRequest", () => {
       patterns: ["README.md"],
       always: ["*.md"],
       metadata: { path: "README.md" },
+      reason: "Read the project instructions.",
       tool: { messageID: "message-1", callID: "call-1" },
     })
   })

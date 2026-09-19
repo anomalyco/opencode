@@ -332,6 +332,7 @@ function currentPermission(value: unknown) {
     resources: permission.patterns ?? [],
     save: permission.always,
     metadata: permission.metadata,
+    reason: permission.reason,
     source:
       tool?.messageID && tool.callID ? { type: "tool", messageID: tool.messageID, callID: tool.callID } : undefined,
   }
