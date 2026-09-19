@@ -228,6 +228,7 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
       hunkSeparators={view().fileDiff.isPartial ? "simple" : "line-info-basic"}
       enableLineSelection={lineCommentsEnabled()}
       enableGutterUtility={lineCommentsEnabled()}
+      textSelectionAction={lineCommentsEnabled() ? { label: i18n.t("ui.lineComment.add") } : undefined}
       onLineSelected={(range: SelectedLineRange | null) => {
         if (!lineCommentsEnabled()) return
         commentsUi.onLineSelected(range)

@@ -47,6 +47,7 @@ function DiffSSRViewer<T>(props: SSRDiffFileProps<T>) {
     "onLineNumberSelectionEnd",
     "onRendered",
     "preloadedDiff",
+    "textSelectionAction",
   ])
 
   const getRoot = () => fileDiffRef?.shadowRoot ?? undefined
