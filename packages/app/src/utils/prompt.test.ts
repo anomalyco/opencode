@@ -3,6 +3,75 @@ import type { Part } from "@opencode-ai/sdk/v2"
 import { extractPromptFromParts } from "./prompt"
 
 describe("extractPromptFromParts", () => {
+  test("restores the resolved path for a reference alias", () => {
+    const parts = [
+      {
+        id: "text_1",
+        type: "text",
+        text: "check @docs",
+        sessionID: "ses_1",
+        messageID: "msg_1",
+      },
+      {
+        id: "file_1",
+        type: "file",
+        mime: "text/plain",
+        url: "file:///shared/company-docs",
+        filename: "docs",
+        sessionID: "ses_1",
+        messageID: "msg_1",
+        source: {
+          type: "file",
+          path: "/shared/company-docs",
+          text: {
+            value: "@docs",
+            start: 6,
+            end: 11,
+          },
+        },
+      },
+    ] satisfies Part[]
+
+    expect(extractPromptFromParts(parts, { directory: "/repo" })).toMatchObject([
+      { type: "text", content: "check " },
+      { type: "file", path: "/shared/company-docs", content: "@docs" },
+    ])
+  })
+
+  test("normalizes a restored Windows reference path inside the session directory", () => {
+    const parts = [
+      {
+        id: "text_1",
+        type: "text",
+        text: "@docs",
+        sessionID: "ses_1",
+        messageID: "msg_1",
+      },
+      {
+        id: "file_1",
+        type: "file",
+        mime: "text/plain",
+        url: "file:///C:/repo/shared/docs",
+        filename: "docs",
+        sessionID: "ses_1",
+        messageID: "msg_1",
+        source: {
+          type: "file",
+          path: "C:\\repo\\shared\\docs",
+          text: {
+            value: "@docs",
+            start: 0,
+            end: 5,
+          },
+        },
+      },
+    ] satisfies Part[]
+
+    expect(extractPromptFromParts(parts, { directory: "C:\\repo" })).toMatchObject([
+      { type: "file", path: "shared/docs", content: "@docs" },
+    ])
+  })
+
   test("restores multiple uploaded attachments", () => {
     const parts = [
       {
