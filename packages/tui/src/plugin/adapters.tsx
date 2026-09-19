@@ -151,7 +151,7 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       return sync.data.lsp.map((item) => ({ id: item.id, root: item.root, status: item.status }))
     },
     mcp() {
-      return Object.entries(sync.data.mcp)
+      return Object.entries(sync.data.mcp ?? {})
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([name, item]) => ({
           name,
