@@ -14,6 +14,7 @@ import { SessionTabAvatar } from "@/pages/layout/session-tab-avatar"
 import type { Session } from "@opencode-ai/sdk/v2"
 import { canOpenTabRename, forwardTabRef } from "./titlebar-tab-gesture"
 import { TabPreviewPopover } from "./titlebar-tab-popover"
+import { showToast } from "@/utils/toast"
 import "./titlebar-tab-nav.css"
 
 // MouseEvent.button uses 1 for the middle/wheel button.
@@ -335,6 +336,18 @@ export function TabNavItem(props: {
         >
           <MenuV2.Item disabled={!props.session() || rename.isPending} onSelect={() => setMenu("rename", true)}>
             {language.t("common.rename")}
+          </MenuV2.Item>
+          <MenuV2.Item
+            onSelect={async () => {
+              try {
+                await navigator.clipboard.writeText(new URL(props.href, window.location.href).href)
+                showToast({ title: language.t("session.share.copy.copied"), variant: "success" })
+              } catch {
+                showToast({ title: language.t("toast.session.share.copyFailed.title"), variant: "error" })
+              }
+            }}
+          >
+            {language.t("session.share.copy.copyLink")}
           </MenuV2.Item>
           <MenuV2.Item onSelect={props.onClose}>{language.t("common.closeTab")}</MenuV2.Item>
         </MenuV2.Context.Content>
