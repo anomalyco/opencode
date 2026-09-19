@@ -5,6 +5,8 @@ import { type Model } from "@opencode-ai/llm"
 import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-messages"
 import * as OpenAICompatibleChat from "@opencode-ai/llm/protocols/openai-compatible-chat"
 import * as OpenAIResponses from "@opencode-ai/llm/protocols/openai-responses"
+import * as OpenAICompatibleProfile from "@opencode-ai/llm/providers/openai-compatible-profile"
+import * as OpenRouter from "@opencode-ai/llm/providers/openrouter"
 import { Auth, type AnyRoute } from "@opencode-ai/llm/route"
 import { Context, Effect, Layer, Schema } from "effect"
 import { produce } from "immer"
@@ -87,14 +89,14 @@ const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
   if (typeof value === "string") return Auth.value(value)
 }
 
-const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
+const withDefaults = (model: ModelV2.Info, route: AnyRoute, baseURL = model.api.url) => {
   const body = model.request.body
   const httpBody = Object.hasOwn(body, "apiKey")
     ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "apiKey"))
     : body
   return route.with({
     provider: model.providerID,
-    endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
+    endpoint: baseURL === undefined ? undefined : { baseURL },
     headers: model.request.headers,
     http: { body: httpBody },
     limits: { context: model.limit.context, output: model.limit.output },
@@ -160,6 +162,14 @@ export const fromCatalogModel = (
         .model({ id: resolved.api.id }),
     )
   }
+  const profile = compatibleProfile(resolved)
+  if (profile) {
+    return Effect.succeed(
+      withDefaults(resolved, profile.route, resolved.api.url ?? profile.baseURL)
+        .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
+        .model({ id: resolved.api.id }),
+    )
+  }
   return Effect.fail(
     new UnsupportedApiError({
       providerID: resolved.providerID,
@@ -169,6 +179,26 @@ export const fromCatalogModel = (
   )
 }
 
+/**
+ * The route for a provider whose AI SDK package this runner has no protocol for
+ * but whose API is OpenAI-compatible, from the profile table the LLM package
+ * already keeps. Without it the catalog lists models — every `openrouter` model
+ * (`@openrouter/ai-sdk-provider`) and every `groq` one (`@ai-sdk/groq`) — that a
+ * keyed provider then fails to dispatch.
+ *
+ * `openrouter` gets its own route rather than the generic one so its usage,
+ * reasoning and prompt-cache body options survive.
+ */
+const compatibleProfile = (model: ModelV2.Info) => {
+  if (model.api.type !== "aisdk") return undefined
+  const profile = OpenAICompatibleProfile.byProvider[model.providerID]
+  if (!profile) return undefined
+  return {
+    baseURL: profile.baseURL,
+    route: model.providerID === OpenRouter.profile.provider ? OpenRouter.route : OpenAICompatibleChat.route,
+  }
+}
+
 export const resolve = (session: SessionSchema.Info, model: ModelV2.Info, credential?: Credential.Value) =>
   withVariant(model, session.model?.variant).pipe(Effect.flatMap((model) => fromCatalogModel(model, credential)))
 
@@ -176,7 +206,8 @@ export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
   (model.api.package === "@ai-sdk/openai" ||
     model.api.package === "@ai-sdk/anthropic" ||
-    (model.api.package === "@ai-sdk/openai-compatible" && model.api.url !== undefined))
+    (model.api.package === "@ai-sdk/openai-compatible" && model.api.url !== undefined) ||
+    compatibleProfile(model) !== undefined)
 
 /** Resolves models from the catalog belonging to the current Location runtime. */
 export const locationLayer = Layer.effect(
