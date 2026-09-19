@@ -44,12 +44,18 @@ function segment(value: string) {
   return value
 }
 
+function channelSegment(value: string) {
+  if (/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value) && value !== "." && value !== "..") return value
+  return `encoded-${Buffer.from(value).toString("base64url")}`
+}
+
 function createStorage(root: string, channel: string) {
   const entries = new Map<string, { readonly value: Entry<object>; readonly reload: () => void }>()
   const memories = new Map<string, MemoryEntry<object>>()
   const pending = new Set<Promise<void>>()
-  const directory = path.join(root, segment(channel), "tui")
-  const locks = path.join(root, segment(channel), "locks")
+  const namespace = channelSegment(channel)
+  const directory = path.join(root, namespace, "tui")
+  const locks = path.join(root, namespace, "locks")
   mkdirSync(directory, { recursive: true })
 
   const storage: Storage = {
