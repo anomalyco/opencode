@@ -238,6 +238,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     })
 
+    // The inotify watcher can go quiet for a session's directory (location teardown drains its
+    // subscription), so watcher events alone leave the panel stale. Poll loaded dirs as a fallback;
+    // FileSystem.list is cacheless, so a forced re-list always reflects disk state.
+    const poll = setInterval(() => {
+      if (document.visibilityState !== "visible") return
+      void tree.refreshLoaded()
+    }, 5_000)
+
     const get = (input: string) => {
       const file = path.normalize(input)
       const state = store.file[file]
@@ -264,6 +272,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     onCleanup(() => {
       stop()
+      clearInterval(poll)
       viewCache.clear()
     })
 
@@ -275,6 +284,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       tree: {
         list: tree.listDir,
         refresh: (input: string) => tree.listDir(input, { force: true }),
+        refreshLoaded: tree.refreshLoaded,
         state: tree.dirState,
         children: tree.children,
         expand: tree.expandDir,
