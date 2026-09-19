@@ -100,6 +100,52 @@ test("middle-click closes a session tab without selecting it", async () => {
   }
 })
 
+test("close control includes the cells beside its glyph", async () => {
+  const closed: Array<string | undefined> = []
+  const click = async (offset: number) => {
+    const [active, setActive] = createSignal("first")
+    const controller = {
+      tabs: () => [
+        { sessionID: "first", title: "First" },
+        { sessionID: "second", title: "Second" },
+      ],
+      current: active,
+      select: setActive,
+      close: (sessionID?: string) => closed.push(sessionID),
+      move() {},
+      status: () => EMPTY_SESSION_TAB_STATUS,
+    } satisfies SessionTabsController
+    const app = await testRender(
+      () => (
+        <TestTuiContexts>
+          <ConfigProvider config={createTuiResolvedConfig({ tabs: { enabled: true } })}>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <SessionTabs controller={controller} animations={false} />
+            </ThemeProvider>
+          </ConfigProvider>
+        </TestTuiContexts>
+      ),
+      { width: 60, height: 2 },
+    )
+
+    try {
+      app.renderer.start()
+      await app.waitForFrame((frame) => frame.includes("Second"))
+      await app.mockMouse.moveTo(40, 0)
+      await app.waitForFrame((frame) => Array.from(frame.split("\n")[0] ?? "").indexOf("✕") !== -1)
+      const glyph = Array.from(app.captureCharFrame().split("\n")[0] ?? "").indexOf("✕")
+      await app.mockMouse.click(glyph + offset, 0)
+      expect(active()).toBe("first")
+    } finally {
+      app.renderer.destroy()
+    }
+  }
+
+  await click(-1)
+  await click(1)
+  expect(closed).toEqual(["second", "second"])
+})
+
 test("keeps consecutive close controls fixed across overflow window changes", async () => {
   const [active, setActive] = createSignal("fifth")
   const [items, setItems] = createSignal([
