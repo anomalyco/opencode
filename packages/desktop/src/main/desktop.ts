@@ -3,6 +3,7 @@ import { app } from "electron"
 import { Effect, Layer } from "effect"
 import { Ipc } from "./ipc"
 import { DesktopInitialization } from "./lifecycle/desktop-initialization"
+import { installContextMenu } from "./lifecycle/environment"
 import { ApplicationLifecycle } from "./lifecycle"
 import { BackgroundService } from "./service/background-service"
 import { DesktopCli } from "./service/desktop-cli"
@@ -12,6 +13,7 @@ const runIpc = Effect.fn("Desktop.runIpc")(function* () {
   const lifecycle = yield* ApplicationLifecycle.Service
   const ipc = yield* Ipc.registerIpcHandlers
   if (lifecycle.restoreWindows().length) ipc.installMenu()
+  yield* installContextMenu
   yield* Effect.callback<void>((resume) => {
     const quit = () => resume(Effect.void)
     app.once("will-quit", quit)

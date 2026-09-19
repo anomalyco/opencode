@@ -1,11 +1,17 @@
 import http from "node:http"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app } from "electron"
-import contextMenu from "electron-context-menu"
 import { Effect, Path } from "effect"
 import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { registerRendererProtocol, setDockIcon } from "../windows"
+
+// electron-context-menu attaches to every existing and future window, so it can load once the first
+// window is up instead of holding up startup with its dependency tree.
+export const installContextMenu = Effect.gen(function* () {
+  const { default: contextMenu } = yield* Effect.promise(() => import("electron-context-menu"))
+  contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
+})
 
 export const prepareApplicationEnvironment = Effect.gen(function* () {
   yield* loadSystemCertificates
