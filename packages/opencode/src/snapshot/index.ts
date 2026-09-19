@@ -146,7 +146,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
         const stage = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return
           const result = yield* git(
-            [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
+            [...cfg, ...args(["add", "--all", "--sparse", "--ignore-errors", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
               cwd: state.worktree,
               stdin: encodeTopLevelLiteralPathspecs(files),
