@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>OpenCode</title>
+    <organization>ai.opencode</organization>
+    <domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
+    <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+
+    <welcome language="en" mime-type="text/plain"><![CDATA[OpenCode — The open source AI coding agent for the terminal.
+
+This installer will place the opencode binary in /usr/local/bin and shell completions in /usr/local/share.
+
+For more information visit https://opencode.ai]]></welcome>
+
+    <license file="LICENSE" mime-type="text/plain"/>
+
+    <pkg-ref id="ai.opencode.cli"/>
+
+    <choices-outline>
+        <line choice="default">
+            <line choice="ai.opencode.cli"/>
+        </line>
+    </choices-outline>
+
+    <choice id="default"/>
+    <choice id="ai.opencode.cli" visible="false">
+        <pkg-ref id="ai.opencode.cli"/>
+    </choice>
+
+    <pkg-ref id="ai.opencode.cli" version="${VERSION}" onConclusion="none">${COMPONENT_PKG}</pkg-ref>
+</installer-gui-script>
