@@ -296,6 +296,51 @@ describe("session.llm-native.request", () => {
     ])
   })
 
+  test("preserves content tool results in native requests", () => {
+    const request = LLMNative.request({
+      model: baseModel,
+      messages: [
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call-1",
+              toolName: "read",
+              output: {
+                type: "content",
+                value: [
+                  { type: "text", text: "preview" },
+                  { type: "media", mediaType: "image/png", data: "Zm9v" },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(request.messages).toMatchObject([
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            id: "call-1",
+            name: "read",
+            result: {
+              type: "content",
+              value: [
+                { type: "text", text: "preview" },
+                { type: "file", uri: "data:image/png;base64,Zm9v", mime: "image/png" },
+              ],
+            },
+          },
+        ],
+      },
+    ])
+  })
+
   test("maps stored provider metadata to native content metadata", () => {
     const reasoning = Object.assign(
       { type: "reasoning" as const, text: "thinking" },
