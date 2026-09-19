@@ -116,8 +116,11 @@ const layer = Layer.effect(
       const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
       const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved))) : undefined
       if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
+        // watch HEAD (branch switches) and index (staging/commits) so clients can
+        // refresh VCS state after out-of-band git commands; everything else under
+        // .git is noise
         const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
-          (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
+          (entry) => (entry.name === "HEAD" || entry.name === "index" ? [] : [entry.name]),
         )
         yield* Effect.forkScoped(subscribe(vcs, ignore))
       }
