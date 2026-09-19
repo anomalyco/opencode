@@ -1,4 +1,4 @@
-import { createMemo, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal } from "solid-js"
 import { useLocal } from "../context/local"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
@@ -8,12 +8,24 @@ import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useSync } from "../context/sync"
+import { useTerminalDimensions } from "@opentui/solid"
+
+export function getDialogModelSize(width: number): "xlarge" | "large" | "medium" {
+  if (width >= 128) return "xlarge"
+  if (width >= 96) return "large"
+  return "medium"
+}
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
+  const dimensions = useTerminalDimensions()
   const [query, setQuery] = createSignal("")
+
+  createEffect(() => {
+    dialog.setSize(getDialogModelSize(dimensions().width))
+  })
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
