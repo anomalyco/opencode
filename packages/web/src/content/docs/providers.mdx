@@ -2308,6 +2308,32 @@ The model catalog is provided automatically. A minimal `opencode.json` is all th
 
 ---
 
+### Standard Compute
+
+[Standard Compute](https://standardcompute.com/) provides a model gateway with a fixed monthly price and an included compute budget.
+
+1. Create an account and copy your API key from the [Standard Compute dashboard](https://standardcompute.com/dashboard).
+
+2. Run `/connect` and search for **Standard Compute**, then enter your API key.
+
+   ```txt
+   /connect
+   ```
+
+3. Run `/models` and select **Standard Compute**.
+
+   ```txt
+   /models
+   ```
+
+The full model identifier is `standardcompute/standardcompute`. Configure routing and model selection in the Standard Compute dashboard. See the [available models](https://standardcompute.com/models) and [plan budgets](https://standardcompute.com/pricing).
+
+:::note
+Requests consume your included compute budget and stop when it is exhausted. A fixed monthly price does not mean unlimited usage.
+:::
+
+---
+
 ### Together AI
 
 1. Head over to the [Together AI console](https://api.together.ai), create an account, and click **Add Key**.
