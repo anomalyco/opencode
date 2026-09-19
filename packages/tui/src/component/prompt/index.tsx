@@ -32,7 +32,8 @@ import { promptOffsetWidth } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
-import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
+import { expandPastedTextPlaceholders, expandTrackedPastedText, stripPromptPartIDs } from "../../prompt/part"
+import { queuedMessages } from "../../prompt/queued"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -412,6 +413,24 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
+            // Aborting drops queued follow-ups, so hand their text back unless a new draft started.
+            const queued =
+              store.prompt.input || store.prompt.parts.length > 0
+                ? []
+                : queuedMessages(sync.data.message[props.sessionID] ?? [])
+            if (queued.length > 0)
+              ref.set(
+                queued
+                  .flatMap((message) => sync.data.part[message.id] ?? [])
+                  .reduce(
+                    (agg, part) => {
+                      if (part.type === "text" && !part.synthetic) agg.input += part.text
+                      if (part.type === "file") agg.parts.push(stripPromptPartIDs(part))
+                      return agg
+                    },
+                    { input: "", parts: [] as PromptInfo["parts"] },
+                  ),
+              )
             void sdk.client.session.abort({
               sessionID: props.sessionID,
             })
