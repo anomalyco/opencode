@@ -2308,6 +2308,46 @@ export type SessionTodoResponses = {
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
 
+export type SessionTodoUpdateData = {
+  body: Array<{
+    content: string
+    status: string
+    priority: string
+  }>
+  path: {
+    /**
+     * Session ID
+     */
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{id}/todo"
+}
+
+export type SessionTodoUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionTodoUpdateError = SessionTodoUpdateErrors[keyof SessionTodoUpdateErrors]
+
+export type SessionTodoUpdateResponses = {
+  /**
+   * Updated todo list
+   */
+  200: Array<Todo>
+}
+
+export type SessionTodoUpdateResponse = SessionTodoUpdateResponses[keyof SessionTodoUpdateResponses]
+
 export type SessionInitData = {
   body?: {
     modelID: string

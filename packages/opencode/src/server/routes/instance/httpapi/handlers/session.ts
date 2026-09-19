@@ -96,6 +96,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* todoSvc.get(ctx.params.sessionID)
     })
 
+    const todoUpdate = Effect.fn("SessionHttpApi.todoUpdate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: ReadonlyArray<{ readonly content: string; readonly status: string; readonly priority: string }>
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      yield* todoSvc.update({ sessionID: ctx.params.sessionID, todos: ctx.payload })
+      return yield* todoSvc.get(ctx.params.sessionID)
+    })
+
     const diff = Effect.fn("SessionHttpApi.diff")(function* (ctx: {
       params: { sessionID: SessionID }
       query: typeof DiffQuery.Type
@@ -416,6 +425,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("get", get)
       .handle("children", children)
       .handle("todo", todo)
+      .handle("todoUpdate", todoUpdate)
       .handle("diff", diff)
       .handle("messages", messages)
       .handle("message", message)
