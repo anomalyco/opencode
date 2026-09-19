@@ -142,6 +142,14 @@ console.log(`service: ${service}, runs: ${runs} (+${warmup} warm-up), cdp ${cdpP
 if (service === "warm") await warmService()
 
 const samples: Sample[] = []
+// A launch that never produces a renderer would otherwise leave an instance behind that every later
+// launch hands off to through the single-instance lock.
+process.on("uncaughtException", async (error) => {
+  console.error(error)
+  await killApp()
+  await stopService()
+  process.exit(1)
+})
 for (let run = 1 - warmup; run <= runs; run++) {
   for (const build of builds) {
     const sample = await launch(build, run)
@@ -599,8 +607,12 @@ function bundledCli(exe: string) {
 async function warmService() {
   await stopService()
   const clis = builds.map((build) => bundledCli(build.exe))
-  if (new Set(clis.map((cli) => statSync(cli).size)).size > 1)
-    console.warn("warning: the compared builds bundle different CLIs; the desktop will restart the service on the mismatch")
+  const identity = (cli: string) => {
+    const version = join(dirname(cli), "opencode-cli.version")
+    return existsSync(version) ? readFileSync(version, "utf8").trim() : String(statSync(cli).size)
+  }
+  if (new Set(clis.map(identity)).size > 1)
+    throw new Error("The compared builds bundle different CLIs; the desktop would restart the service on the mismatch")
   serviceProcess = spawn(clis[0], ["serve", "--service"], { env, detached: true, stdio: "ignore" })
   serviceProcess.unref()
   const deadline = Date.now() + 60_000
