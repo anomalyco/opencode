@@ -135,6 +135,53 @@ test("MCP authentication starts before a slow resource catalog finishes", async 
   expect(new URL(attempts[0]).searchParams.get("location[directory]")).toBe(fixture.directory)
 })
 
+test("an MCP awaiting authentication signs in instead of disconnecting", async ({ page, context }) => {
+  await mockStressTimeline(page)
+  const write = Promise.withResolvers<"disconnect" | "oauth">()
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+  await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, (route) => {
+    if (route.request().method() === "OPTIONS") return route.fallback()
+    const url = new URL(route.request().url())
+    if (route.request().method() === "POST") {
+      write.resolve("disconnect")
+      return route.fulfill({ status: 204 })
+    }
+    return route.fulfill({
+      json: {
+        location: { directory: fixture.directory },
+        data:
+          url.pathname === "/api/mcp/resource"
+            ? { resources: [], templates: [] }
+            : [{ name: "linear", integrationID: "linear-oauth", status: { status: "needs_auth" } }],
+      },
+    })
+  })
+  await page.route("**/api/integration/**", (route) => {
+    if (route.request().method() === "OPTIONS") return route.fallback()
+    if (route.request().method() === "POST") {
+      write.resolve("oauth")
+      return route.fulfill({
+        json: { location: { directory: fixture.directory }, data: { url: "https://auth.example.test/authorize" } },
+      })
+    }
+    return route.fulfill({
+      json: {
+        location: { directory: fixture.directory },
+        data: { id: "linear-oauth", methods: [{ id: "oauth", type: "oauth" }] },
+      },
+    })
+  })
+  await page.goto(stressSessionHref(fixture.targetID))
+  await page.getByRole("button", { name: "Session details", exact: true }).click()
+  await page.getByRole("button", { name: "MCP", exact: true }).click()
+  const submenu = page.getByRole("dialog", { name: "MCP", exact: true })
+  const toggle = submenu.getByRole("switch", { name: "linear", exact: true })
+  await expect(toggle).toHaveAccessibleDescription("Sign in required")
+
+  await submenu.getByText("linear", { exact: true }).click()
+  expect(await write.promise).toBe("oauth")
+})
+
 test("multiple desktop connections show the session's server name", async ({ page }) => {
   await mockStressTimeline(page)
   await page.route("http://secondary.test/**", (route) =>
