@@ -13,6 +13,7 @@ import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { AttachmentCardV2 } from "../attachment-card-v2"
 import { CommentCardV2 } from "../comment-card-v2"
 import { typeLabel } from "../../../components/message-file"
+import { visibleAddMenuCommands } from "./add-menu"
 import type {
   PromptInputV2Attachment,
   PromptInputV2Comment,
@@ -208,13 +209,23 @@ export function PromptInputV2(props: PromptInputV2Props) {
               keybind={props.attachKeybind ?? ["Mod", "U"]}
               attachLabel={i18n.t("ui.promptInput.attachments")}
               attachShortcut={props.attachShortcut ?? "Mod+U"}
+              attachDescription={i18n.t("ui.promptInput.addMenu.attachDescription")}
               commandsLabel={i18n.t("ui.promptInput.commands")}
+              commands={props.controller.commands()}
               contextLabel={i18n.t("ui.promptInput.context")}
+              contextFilesLabel={i18n.t("ui.promptInput.addMenu.contextFiles")}
+              contextFilesDescription={i18n.t("ui.promptInput.addMenu.contextFilesDescription")}
+              contextAgentsLabel={i18n.t("ui.promptInput.addMenu.contextAgents")}
+              contextAgentsDescription={i18n.t("ui.promptInput.addMenu.contextAgentsDescription")}
+              contextResourcesLabel={i18n.t("ui.promptInput.addMenu.contextResources")}
+              contextResourcesDescription={i18n.t("ui.promptInput.addMenu.contextResourcesDescription")}
               shellLabel={i18n.t("ui.promptInput.shell")}
+              shellDescription={i18n.t("ui.promptInput.addMenu.shellDescription")}
               onAttach={props.controller.attach}
               onCommands={props.controller.openCommands}
               onContext={props.controller.openContext}
               onShell={props.controller.openShell}
+              onSelectCommand={props.controller.selectCommand}
             />
             <Show when={view.agent} keyed>
               {(control) => (
@@ -473,14 +484,25 @@ export function PromptInputV2AddMenu(props: {
   keybind?: string[]
   attachLabel: string
   attachShortcut?: string
+  attachDescription: string
   commandsLabel: string
+  commands: PromptInputV2Suggestion[]
   contextLabel: string
+  contextFilesLabel: string
+  contextFilesDescription: string
+  contextAgentsLabel: string
+  contextAgentsDescription: string
+  contextResourcesLabel: string
+  contextResourcesDescription: string
   shellLabel: string
+  shellDescription: string
   onAttach: () => void
   onCommands: () => void
   onContext: () => void
   onShell: () => void
+  onSelectCommand: (item: PromptInputV2Suggestion) => void
 }) {
+  const visibleCommands = createMemo(() => visibleAddMenuCommands(props.commands))
   return (
     <TooltipV2
       placement="top"
@@ -503,20 +525,81 @@ export function PromptInputV2AddMenu(props: {
           aria-label={props.title}
         />
         <MenuV2.Portal>
-          <MenuV2.Content style={{ "min-width": "180px" }}>
-            <MenuV2.Item onSelect={props.onAttach} shortcut={props.attachShortcut}>
-              {props.attachLabel}
-            </MenuV2.Item>
+          <MenuV2.Content style={{ "min-width": "280px", "max-height": "320px", "overflow-y": "auto" }}>
+            <MenuV2.Group>
+              <MenuV2.GroupLabel>{props.attachLabel}</MenuV2.GroupLabel>
+              <MenuV2.Item onSelect={props.onAttach} shortcut={props.attachShortcut}>
+                <IconV2 name="folder-add-left" size="small" class="shrink-0" />
+                <span class="shrink-0 text-v2-text-text-base">{props.attachLabel}</span>
+                <Show when={props.attachDescription}>
+                  <span class="min-w-0 truncate text-v2-text-text-muted">{props.attachDescription}</span>
+                </Show>
+              </MenuV2.Item>
+            </MenuV2.Group>
             <MenuV2.Separator />
-            <MenuV2.Item onSelect={props.onCommands} shortcut="/">
-              {props.commandsLabel}
-            </MenuV2.Item>
-            <MenuV2.Item onSelect={props.onContext} shortcut="@">
-              {props.contextLabel}
-            </MenuV2.Item>
-            <MenuV2.Item onSelect={props.onShell} shortcut="!">
-              {props.shellLabel}
-            </MenuV2.Item>
+            <MenuV2.Group>
+              <MenuV2.GroupLabel>{props.commandsLabel}</MenuV2.GroupLabel>
+              <Show
+                when={visibleCommands().length > 0}
+                fallback={
+                  <MenuV2.Item onSelect={props.onCommands} shortcut="/">
+                    <IconV2 name="menu" size="small" class="shrink-0" />
+                    <span class="shrink-0 text-v2-text-text-base">{props.commandsLabel}</span>
+                  </MenuV2.Item>
+                }
+              >
+                <For each={visibleCommands()}>
+                  {(command) => (
+                    <MenuV2.Item
+                      onSelect={() => props.onSelectCommand(command)}
+                      shortcut={command.keybind?.join("+")}
+                    >
+                      <IconV2 name="menu" size="small" class="shrink-0" />
+                      <span class="shrink-0 text-v2-text-text-base">{command.label}</span>
+                      <Show when={command.description}>
+                        <span class="min-w-0 truncate text-v2-text-text-muted">{command.description}</span>
+                      </Show>
+                    </MenuV2.Item>
+                  )}
+                </For>
+              </Show>
+            </MenuV2.Group>
+            <MenuV2.Separator />
+            <MenuV2.Group>
+              <MenuV2.GroupLabel>{props.contextLabel}</MenuV2.GroupLabel>
+              <MenuV2.Item onSelect={props.onContext} shortcut="@">
+                <IconV2 name="folder" size="small" class="shrink-0" />
+                <span class="shrink-0 text-v2-text-text-base">{props.contextFilesLabel}</span>
+                <Show when={props.contextFilesDescription}>
+                  <span class="min-w-0 truncate text-v2-text-text-muted">{props.contextFilesDescription}</span>
+                </Show>
+              </MenuV2.Item>
+              <MenuV2.Item onSelect={props.onContext} shortcut="@">
+                <IconV2 name="branch" size="small" class="shrink-0" />
+                <span class="shrink-0 text-v2-text-text-base">{props.contextAgentsLabel}</span>
+                <Show when={props.contextAgentsDescription}>
+                  <span class="min-w-0 truncate text-v2-text-text-muted">{props.contextAgentsDescription}</span>
+                </Show>
+              </MenuV2.Item>
+              <MenuV2.Item onSelect={props.onContext} shortcut="@">
+                <IconV2 name="filetree" size="small" class="shrink-0" />
+                <span class="shrink-0 text-v2-text-text-base">{props.contextResourcesLabel}</span>
+                <Show when={props.contextResourcesDescription}>
+                  <span class="min-w-0 truncate text-v2-text-text-muted">{props.contextResourcesDescription}</span>
+                </Show>
+              </MenuV2.Item>
+            </MenuV2.Group>
+            <MenuV2.Separator />
+            <MenuV2.Group>
+              <MenuV2.GroupLabel>{props.shellLabel}</MenuV2.GroupLabel>
+              <MenuV2.Item onSelect={props.onShell} shortcut="!">
+                <IconV2 name="monitor" size="small" class="shrink-0" />
+                <span class="shrink-0 text-v2-text-text-base">{props.shellLabel}</span>
+                <Show when={props.shellDescription}>
+                  <span class="min-w-0 truncate text-v2-text-text-muted">{props.shellDescription}</span>
+                </Show>
+              </MenuV2.Item>
+            </MenuV2.Group>
           </MenuV2.Content>
         </MenuV2.Portal>
       </MenuV2>
