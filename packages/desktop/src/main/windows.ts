@@ -14,6 +14,7 @@ import { PINCH_ZOOM_ENABLED_KEY, WINDOW_IDS_KEY } from "./store-keys"
 import { createUnresponsiveSampler } from "./unresponsive"
 import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
+import { resolveCloseAction } from "./close-behavior"
 import { safeWindowURL } from "./window-state"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
 
@@ -89,7 +90,7 @@ function iconsDir() {
   return app.isPackaged ? join(process.resourcesPath, "icons") : join(root, "../../resources/icons")
 }
 
-function iconPath() {
+export function iconPath() {
   const ext = process.platform === "win32" ? "ico" : "png"
   return join(iconsDir(), `icon.${ext}`)
 }
@@ -157,6 +158,21 @@ export function getLastFocusedWindow() {
 export function restoreMainWindows() {
   const ids = registry.persisted()
   return (ids.length ? ids : [randomUUID()]).map((id) => createMainWindow(id))
+}
+
+/**
+ * Restore the main window from the tray/Dock: show + focus an existing
+ * window, or create a fresh one when none survives (e.g. macOS closed it).
+ */
+export function showMainWindow() {
+  const existing =
+    getLastFocusedWindow() ?? BrowserWindow.getAllWindows().find((win) => !win.isDestroyed())
+  if (existing) {
+    existing.show()
+    existing.focus()
+    return
+  }
+  createMainWindow()
 }
 
 export function setDockIcon() {
@@ -272,6 +288,24 @@ function registerWindow(win: BrowserWindow, id: string) {
   registry.register(id, win)
 
   win.on("focus", () => registry.focused(id))
+  // Tray mode: closing the LAST window hides it to the tray instead of
+  // quitting, so background work keeps running. A real quit (tray "Quit",
+  // app menu, Cmd+Q, SIGTERM) sets the quitting flag first, so every window
+  // closes normally and the process can exit.
+  win.on("close", (event) => {
+    const otherWindows = BrowserWindow.getAllWindows().filter(
+      (candidate) => candidate !== win && !candidate.isDestroyed(),
+    ).length
+    const action = resolveCloseAction({
+      isQuitting: registry.isQuitting(),
+      otherWindows,
+      platform: process.platform,
+    })
+    if (action === "hide") {
+      event.preventDefault()
+      win.hide()
+    }
+  })
   // Windows never emits before-quit on OS shutdown/logoff, but each window
   // gets session-end before it closes; flag the quit so ids stay persisted.
   win.on("session-end", () => registry.setQuitting())
