@@ -1,6 +1,6 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { fileURLToPath } from "node:url"
-import { defineConfig } from "vite"
+import { defineConfig, type Plugin } from "vite"
 import desktopPlugin, { channel } from "./vite.js"
 import { icons } from "./vite.icons"
 import { serviceWorker } from "./vite.pwa"
@@ -26,6 +26,15 @@ export default defineConfig({
   plugins: [
     desktopPlugin,
     icons(channel),
+    {
+      name: "opencode:nonempty-chunks",
+      generateBundle(_, bundle) {
+        // SST's KV router serves HTML for zero-byte chunks, failing precache integrity checks.
+        Object.values(bundle).forEach((output) => {
+          if (output.type === "chunk" && !output.code) output.code = ";"
+        })
+      },
+    } satisfies Plugin,
     serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))),
     sentry,
   ] as any,
