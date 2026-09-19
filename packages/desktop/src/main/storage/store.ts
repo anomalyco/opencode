@@ -3,6 +3,7 @@ import path from "node:path"
 import electron from "electron"
 
 import { SETTINGS_STORE } from "./keys"
+import { isStoreName } from "./name"
 
 const cache = new Map<string, SettingsStore>()
 
@@ -20,6 +21,7 @@ export type SettingsStore = ReturnType<typeof createSettingsStore>
 // written to the default directory (e.g. bad: %APPDATA%\@opencode\desktop\opencode.settings vs
 // good: %APPDATA%\ai.opencode.desktop.dev\opencode.settings).
 export function getStore(name = SETTINGS_STORE) {
+  if (!isStoreName(name)) throw new Error("Invalid store name")
   const cached = cache.get(name)
   if (cached) return cached
   const next = createSettingsStore(path.join(electron.app.getPath("userData"), name))
