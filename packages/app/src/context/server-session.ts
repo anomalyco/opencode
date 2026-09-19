@@ -1052,12 +1052,19 @@ export function createServerSession(
         }
         const result = Binary.search(messages, messageKey(info), messageKey)
         if (result.found) setData("message", info.sessionID, result.index, reconcile(info))
-        if (!result.found)
+        if (!result.found) {
+          // The optimistic row for this message carries a client-clock time.created while the server row
+          // arrives with the server clock; the composite key misses it, so dedupe by message id to avoid
+          // rendering the same message twice.
+          const stale = messages.findIndex((message) => message.id === info.id)
           setData("message", info.sessionID, (value = []) => {
             const next = value.slice()
-            next.splice(result.index, 0, info)
+            if (stale >= 0) next.splice(stale, 1)
+            const at = stale >= 0 ? Binary.search(next, messageKey(info), messageKey) : result
+            next.splice(at.index, 0, info)
             return next
           })
+        }
         return
       }
       case "message.removed": {
