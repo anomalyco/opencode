@@ -1692,6 +1692,57 @@ export default function Page() {
     })
   }
 
+  const recoverModelError = async (input: {
+    messageID: string
+    model: { modelID: string; providerID: string }
+  }) => {
+    const sessionID = params.id
+    if (!sessionID) return
+    const message = (sync().data.session_message[sessionID] ?? []).find((item) => item.id === input.messageID)
+    if (!message || message.type !== "user") {
+      fail(new Error(language.t("session.errorRecovery.promptUnavailable")))
+      return
+    }
+    if ((await sdk().protocol) === "v1") {
+      serverSync().session.set("session_status", sessionID, { type: "busy" })
+      await sdk()
+        .client.session.retry({
+          sessionID,
+          providerID: input.model.providerID,
+          modelID: input.model.modelID,
+        })
+        .catch((error) => {
+          serverSync().session.set("session_status", sessionID, { type: "idle" })
+          fail(error)
+        })
+      return
+    }
+
+    serverSync().session.set("session_status", sessionID, { type: "busy" })
+    try {
+      await sdk().api.session.switchModel({
+        sessionID,
+        model: { id: input.model.modelID, providerID: input.model.providerID },
+      })
+      await sdk().api.session.prompt({
+        sessionID,
+        id: message.id,
+        text: message.text,
+        files: message.files?.map((file) => ({
+          uri: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
+          name: file.name,
+          description: file.description,
+          mention: file.mention,
+        })),
+        agents: message.agents,
+        resume: true,
+      })
+    } catch (error) {
+      serverSync().session.set("session_status", sessionID, { type: "idle" })
+      fail(error)
+    }
+  }
+
   const merge = (next: NonNullable<ReturnType<typeof info>>, target = sync()) => target.session.remember(next)
 
   const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"], target = sync()) => {
@@ -2107,6 +2158,7 @@ export default function Page() {
                     if (root) scheduleScrollState(root)
                   }}
                   userMessages={visibleUserMessages()}
+                  onRecoverError={recoverModelError}
                   setHistoryAnchor={(handlers) => {
                     captureHistoryAnchor = handlers.capture
                     restoreHistoryAnchor = handlers.restore

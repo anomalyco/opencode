@@ -66,6 +66,54 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
+  it.effect("starts a forced execution when retrying while idle", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const drained = yield* Deferred.make<void>()
+        const forces: boolean[] = []
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: (_key: string, force) =>
+            Effect.sync(() => forces.push(force)).pipe(Effect.andThen(Deferred.succeed(drained, undefined))),
+        })
+
+        yield* coordinator.retry("session")
+        yield* Deferred.await(drained)
+
+        expect(forces).toEqual([true])
+      }),
+    ),
+  )
+
+  it.effect("queues one forced retry behind active execution", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const firstGate = yield* Deferred.make<void>()
+        const retried = yield* Deferred.make<void>()
+        const forces: boolean[] = []
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: (_key: string, force) =>
+            Effect.sync(() => forces.push(force)).pipe(
+              Effect.flatMap(() =>
+                forces.length === 1
+                  ? Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(firstGate)))
+                  : Deferred.succeed(retried, undefined),
+              ),
+            ),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(firstStarted)
+        yield* coordinator.retry("session")
+        yield* coordinator.retry("session")
+        yield* Deferred.succeed(firstGate, undefined)
+        yield* Deferred.await(retried)
+
+        expect(forces).toEqual([false, true])
+      }),
+    ),
+  )
+
   it.effect("snapshots only active executions", () =>
     Effect.scoped(
       Effect.gen(function* () {

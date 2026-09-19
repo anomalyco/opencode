@@ -345,6 +345,12 @@ export const dict = {
 
   "app.server.unreachable": "Could not reach {{server}}",
   "app.server.retrying": "Retrying automatically...",
+  "session.errorRecovery.title": "Continue with another model",
+  "session.errorRecovery.description": "Choose a replacement model to continue without sending another message.",
+  "session.errorRecovery.chooseModel": "Choose replacement model",
+  "session.errorRecovery.switching": "Switching model...",
+  "session.errorRecovery.promptUnavailable": "The failed message is no longer available for recovery.",
+  "session.errorRecovery.details": "Show error details",
   "app.server.otherServers": "Other servers",
 
   "dialog.server.title": "Servers",
