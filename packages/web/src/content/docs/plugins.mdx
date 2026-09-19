@@ -64,6 +64,14 @@ Duplicate npm packages with the same name and version are loaded once. However, 
 
 ---
 
+### Manage plugins from the TUI
+
+Run `/plugins` (alias `/plugin`) to open the plugin manager. It lists both built-in and external plugins with their state, and `space` toggles a plugin on or off without editing your config.
+
+Run `/plugin-install` to install an npm plugin and add it to your config. `tab` switches between local and global scope.
+
+---
+
 ## Create a plugin
 
 A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
