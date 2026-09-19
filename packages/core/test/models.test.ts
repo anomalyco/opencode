@@ -1,6 +1,6 @@
 import { describe, expect, beforeAll, beforeEach, afterAll } from "bun:test"
 import { Effect, Layer, Ref } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -285,6 +285,95 @@ describe("ModelsDev Service", () => {
       // retryTransient retries 5xx, so calls may be > 1.
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBeGreaterThanOrEqual(1)
+    }),
+  )
+
+  // No cache on disk + unreachable models.dev is the desktop-client cascade from
+  // https://github.com/anomalyco/opencode/issues/47328: bootstrap used to die
+  // (Effect.orDie on populate) and take the whole server down. get() must degrade
+  // to an empty catalog instead — same behavior as OPENCODE_DISABLE_MODELS_FETCH.
+  it.live("get() falls back to an empty catalog when disk is empty and fetch fails", () =>
+    Effect.gen(function* () {
+      const state = yield* Ref.make({ ...initialState, status: 500, body: "boom" })
+      const context = yield* Layer.build(buildLayer(state))
+      const result = yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          Flag.OPENCODE_DISABLE_MODELS_FETCH = false
+        }),
+        () => ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(context)),
+        () =>
+          Effect.sync(() => {
+            Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+          }),
+      )
+      expect(result).toEqual({})
+      const final = yield* Ref.get(state)
+      expect(final.calls.length).toBeGreaterThanOrEqual(1)
+    }),
+  )
+
+  it.live("get() falls back to an empty catalog when the transport errors (dropped connection)", () =>
+    Effect.gen(function* () {
+      const state = yield* Ref.make(0)
+      const erroring = HttpClient.make((request) =>
+        Effect.gen(function* () {
+          yield* Ref.update(state, (n) => n + 1)
+          return yield* Effect.fail(
+            new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({
+                request,
+                description: "connection dropped",
+              }),
+            }),
+          )
+        }),
+      )
+      const layer = Layer.fresh(
+        AppNodeBuilder.build(ModelsDev.node, [
+          [LayerNodePlatform.httpClient, Layer.succeed(HttpClient.HttpClient, erroring)],
+        ]),
+      )
+      const result = yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          Flag.OPENCODE_DISABLE_MODELS_FETCH = false
+        }),
+        () => ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(layer)),
+        () =>
+          Effect.sync(() => {
+            Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+          }),
+      )
+      expect(result).toEqual({})
+      expect(yield* Ref.get(state)).toBeGreaterThanOrEqual(1)
+    }),
+  )
+
+  it.live("get() recovers via refresh after starting from the empty fallback", () =>
+    Effect.gen(function* () {
+      const state = yield* Ref.make({ ...initialState, status: 500, body: "boom" })
+      const context = yield* Layer.build(buildLayer(state))
+      const result = yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          Flag.OPENCODE_DISABLE_MODELS_FETCH = false
+        }),
+        () =>
+          ModelsDev.Service.use((svc) =>
+            Effect.gen(function* () {
+              const empty = yield* svc.get()
+              // Network comes back: flip the mock to a healthy catalog and refresh.
+              yield* Ref.update(state, () => ({ ...initialState, status: 200 }))
+              yield* svc.refresh(true)
+              return { empty, recovered: yield* svc.get() }
+            }),
+          ).pipe(Effect.provide(context)),
+        () =>
+          Effect.sync(() => {
+            Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+          }),
+      )
+      expect(result.empty).toEqual({})
+      expect(result.recovered).toEqual(fixture)
+      expect(yield* Effect.promise(() => readFile(cacheFile, "utf8"))).toBe(JSON.stringify(fixture))
     }),
   )
 })
