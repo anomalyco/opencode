@@ -123,6 +123,7 @@ const appBindingCommands = [
   "theme.switch",
   "theme.switch_mode",
   "theme.mode.lock",
+  "theme.transparency",
   "help.show",
   "docs.open",
   "diff.open",
@@ -378,7 +379,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const sdk = useSDK()
   const toast = useToast()
   const themeState = useTheme()
-  const { theme, mode, setMode, locked, lock, unlock } = themeState
+  const { theme, mode, setMode, locked, lock, unlock, transparency, setTransparency } = themeState
   const sync = useSync()
   const project = useProject()
   const exit = useExit()
@@ -804,6 +805,17 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: () => {
           if (locked()) unlock()
           else lock()
+          dialog.clear()
+        },
+        category: "System",
+      },
+      {
+        name: "theme.transparency",
+        title: `Transparency: ${
+          transparency() === "auto" ? `Auto (${theme.transparent ? "on" : "off"})` : transparency() === "on" ? "Force on" : "Force off"
+        }`,
+        run: () => {
+          setTransparency(transparency() === "auto" ? "on" : transparency() === "on" ? "off" : "auto")
           dialog.clear()
         },
         category: "System",
