@@ -1,3 +1,4 @@
+import type { StorageScanOptions, StorageScanResult, StorageValue } from "../src/repository"
 import type { Evidence, ReportCommand, RunSnapshot, Task, TaskDefinition } from "../src/schema"
 
 const plan = { path: "docs/plan.md", sha256: "0".repeat(64) }
@@ -170,4 +171,92 @@ export function fixtureScopeChange(overrides: Partial<RunSnapshot> = {}): RunSna
     evidence: [fixtureEvidence({ id: "ev-spec", taskID: "spec" })],
     ...overrides,
   })
+}
+
+export interface MemoryStorage {
+  get(key: string): Promise<StorageValue | undefined>
+  set(key: string, value: StorageValue): Promise<void>
+  remove(key: string): Promise<void>
+  scan(options: StorageScanOptions): Promise<StorageScanResult>
+  writes(): number
+  seed(key: string, value: StorageValue): void
+  failNextSet(options?: { afterWrite?: boolean }): void
+  failNextGet(): void
+  failNextScan(): void
+  pauseNextSet(): { started: Promise<void>; release: () => void }
+}
+
+export function memoryStorage(): MemoryStorage {
+  const values = new Map<string, StorageValue>()
+  let writeCount = 0
+  let failSet: { afterWrite: boolean } | undefined
+  let failGet = false
+  let failScan = false
+  let pause: { started: Promise<void>; released: Promise<void>; start: () => void; release: () => void } | undefined
+
+  return {
+    async get(key) {
+      if (failGet) {
+        failGet = false
+        throw new Error("storage get failed")
+      }
+      const value = values.get(key)
+      return value === undefined ? undefined : structuredClone(value)
+    },
+    async set(key, value) {
+      const fault = failSet
+      failSet = undefined
+      if (fault !== undefined) {
+        if (fault.afterWrite) {
+          values.set(key, structuredClone(value))
+          writeCount += 1
+        }
+        throw new Error("storage set failed")
+      }
+      const gate = pause
+      if (gate !== undefined) {
+        pause = undefined
+        gate.start()
+        await gate.released
+      }
+      values.set(key, structuredClone(value))
+      writeCount += 1
+    },
+    async remove(key) {
+      values.delete(key)
+    },
+    async scan(options) {
+      if (failScan) {
+        failScan = false
+        throw new Error("storage scan failed")
+      }
+      const prefixMatches = [...values.keys()].filter((key) => key.startsWith(options.prefix)).sort()
+      const after = options.after
+      const remaining = after === undefined ? prefixMatches : prefixMatches.filter((key) => key > after)
+      const page = options.limit === undefined ? remaining : remaining.slice(0, options.limit)
+      return {
+        entries: page.map((key) => ({ key, value: structuredClone(values.get(key)!) })),
+        ...(page.length < remaining.length ? { next: page[page.length - 1] } : {}),
+      }
+    },
+    writes: () => writeCount,
+    seed(key, value) {
+      values.set(key, structuredClone(value))
+    },
+    failNextSet(options) {
+      failSet = { afterWrite: options?.afterWrite ?? false }
+    },
+    failNextGet() {
+      failGet = true
+    },
+    failNextScan() {
+      failScan = true
+    },
+    pauseNextSet() {
+      const started = Promise.withResolvers<void>()
+      const released = Promise.withResolvers<void>()
+      pause = { started: started.promise, released: released.promise, start: started.resolve, release: released.resolve }
+      return { started: started.promise, release: released.resolve }
+    },
+  }
 }
