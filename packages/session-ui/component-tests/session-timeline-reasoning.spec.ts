@@ -21,6 +21,7 @@ for (const mode of ["hidden", "compact", "full"] as const) {
       const body = part.getByText("I will inspect the timeline before changing its state.", { exact: true })
       await expect(trigger).toHaveAttribute("aria-expanded", String(mode === "full"))
       await expect(part.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
+      await expect(trigger.locator('[data-slot="basic-tool-tool-subtitle"][data-kind="duration"]')).toBeVisible()
       if (mode === "compact") {
         await expect(trigger).toContainText("Inspecting stability")
         await expect(body).toBeHidden()
@@ -68,10 +69,10 @@ for (const mode of ["hidden", "compact", "full"] as const) {
       if (mode === "hidden") return
       const thought = part.locator('[data-slot="collapsible-trigger"]')
       const thoughtTitle = thought.locator('[data-slot="basic-tool-tool-title"]')
-      await expect(thoughtTitle).toContainText("Thought")
+      await expect(thoughtTitle).toContainText("Thought for 7s")
       await expect(thoughtTitle).toHaveCSS("font-size", "13px")
       await expect(thoughtTitle).toHaveCSS("line-height", "16px")
-      await expect(thought.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("7s")
+      await expect(thought.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveCount(0)
       await expect(thought).toHaveAttribute("aria-expanded", String(mode === "full"))
       await expect(thought).not.toContainText("Inspecting stability")
       await expect(part.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "false")
