@@ -103,7 +103,10 @@ export function createBrowserPage(
     revision++
   })
   let closed = false
-  let blank = true
+  // Whether the native surface holds a real document worth showing. Chromium keeps the
+  // previous document painted until the next one renders, so a shown page stays shown
+  // through later navigations; blank and failed documents hide until a real one is ready.
+  let content = false
   let failure: { url: string; message: string } | undefined
   const state = (): Browser.Tab => ({
     id: options.id,
@@ -120,33 +123,36 @@ export function createBrowserPage(
   }
   const reset = (event: Electron.Event<{ url: string; isMainFrame: boolean; isSameDocument: boolean }>) => {
     if (!event.isMainFrame || event.isSameDocument) return
-    blank = event.url === "about:blank"
     failure = undefined
-    updateVisibility()
     generation++
     documents.clear()
     refs.clear()
     diagnostics.clear()
     publish()
   }
+  const settle = () => {
+    content = contents.getURL() !== "about:blank" && !failure
+    updateVisibility()
+  }
   contents.on("did-start-navigation", reset)
   contents.on("did-navigate", (_event, url, status, statusText) => {
-    // The server-network proxy reports connection failures as HTTP error pages.
-    if (status < 400) return
-    failure = { url, message: `${status} ${statusText}`.trim().slice(0, 2_048) }
-    updateVisibility()
+    // The server-network proxy answers an unreachable HTTP target with an empty 502. Other
+    // error statuses are real documents from the user's server and stay visible.
+    if (status === 502) failure = { url, message: `${status} ${statusText}`.trim().slice(0, 2_048) }
+    // A blank or failed document paints at commit; a real one waits for dom-ready.
+    if (url === "about:blank" || failure) settle()
     publish()
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     // Cancelled navigation and failed subframes do not replace the current page.
     if (!isMainFrame || code === -3) return
     failure = { url, message: description.slice(0, 2_048) }
-    updateVisibility()
+    settle()
     publish()
   })
-  contents.on("did-start-loading", () => updateVisibility())
+  contents.on("dom-ready", settle)
   contents.on("did-stop-loading", () => {
-    updateVisibility()
+    settle()
     publish()
   })
   contents.on("did-navigate-in-page", publish)
@@ -278,9 +284,9 @@ export function createBrowserPage(
   })
   let visible = false
   const updateVisibility = () => {
-    // Keep the themed DOM background exposed throughout loading, including
-    // stale renderer layout updates while clearing a failed URL.
-    const show = visible && !contents.isLoading() && !blank && !failure
+    // The renderer's layout requests may lag behind navigation; the page decides
+    // whether there is a document worth exposing over the themed background.
+    const show = visible && content
     view.setVisible(show)
     corners.forEach((corner) => corner.setVisible(show && !!cornerKey))
   }

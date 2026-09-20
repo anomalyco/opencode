@@ -43,12 +43,24 @@ export async function verifyTargets(win: BrowserWindow, url: string) {
     await stopped
     assert.equal(page.state().loading, false)
     assert(page.view.getVisible(), "The requested visibility must return after loading finishes")
-    console.log("PASS native loading keeps the themed background visible until navigation completes")
+    console.log("PASS native loading from a blank page keeps the themed background visible until the document is ready")
+    const again = new Promise<void>((resolve) => page.contents.once("did-navigate", () => resolve()))
+    const reloading = execute({ type: "navigate", tabID, url: url + "/loading" })
+    await again
+    assert(page.state().loading)
+    assert(page.view.getVisible(), "A shown page must stay visible while the next document loads")
+    await fetch(url + "/finish-loading")
+    await reloading
+    assert(page.view.getVisible())
+    console.log("PASS native loading from a shown page keeps the previous document visible")
+    await execute({ type: "navigate", tabID, url: url + "/missing" })
+    assert.equal(page.state().loadError, undefined, "An HTTP error page from the server is a real document")
+    page.setVisible(true)
+    assert(page.view.getVisible(), "An HTTP error page from the server must stay visible")
+    console.log("PASS native HTTP error pages stay visible")
     await assert.rejects(execute({ type: "navigate", tabID, url: url + "/unreachable" }), /ERR_EMPTY_RESPONSE/)
     assert.equal(page.state().loadError, "ERR_EMPTY_RESPONSE")
     assert.equal(page.state().url, url + "/unreachable")
-    await execute({ type: "navigate", tabID, url: url + "/missing" })
-    assert.equal(page.state().loadError, "404 Not Found")
     page.setVisible(true)
     assert(win.contentView.children.slice(children).every((view) => !view.getVisible()))
     const clearing = new Promise<void>((resolve) => {

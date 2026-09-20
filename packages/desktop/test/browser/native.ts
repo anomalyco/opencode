@@ -32,16 +32,17 @@ async function main() {
   app.on("window-all-closed", () => {})
   await app.whenReady()
   let unavailable = true
-  const loading = Promise.withResolvers<() => void>()
+  let finishLoading: (() => void) | undefined
   const web = createServer((request, response) => {
     if (request.url === "/loading") {
       response.writeHead(200, { "content-type": "text/html" })
       response.write("<!doctype html><html><body>Loading")
-      loading.resolve(() => response.end("</body></html>"))
+      finishLoading = () => response.end("</body></html>")
       return
     }
     if (request.url === "/finish-loading") {
-      void loading.promise.then((finish) => finish())
+      finishLoading?.()
+      finishLoading = undefined
       response.end()
       return
     }

@@ -25,8 +25,8 @@ export function mountBrowserPane() {
       delayNavigation: false,
       pendingURL: undefined as string | undefined,
       loadErrors: {} as Record<string, string | undefined>,
+      error: undefined as string | undefined,
       layouts: {} as Record<string, BrowserPaneLayout | undefined>,
-      shows: {} as Record<string, number>,
     })
     const tabs = ["Alpha", "Beta"].map((name) => ({
       id: Browser.TabID.make(`tab_${name === "Alpha" ? "11111111" : "22222222"}-1111-1111-1111-111111111111`),
@@ -42,10 +42,7 @@ export function mountBrowserPane() {
       tabs.map((tab) => [
         tab.title,
         {
-          setLayout: (layout) => {
-            setStore("layouts", tab.title, layout)
-            if (layout?.visible) setStore("shows", tab.title, (count = 0) => count + 1)
-          },
+          setLayout: (layout) => setStore("layouts", tab.title, layout),
           command: async () => undefined,
           close: () => undefined,
         },
@@ -68,11 +65,12 @@ export function mountBrowserPane() {
         }
       },
       registration: () => registrations.get(store.session),
-      error: () => (store.loadErrors[store.session] ? "Request failed" : undefined),
+      error: () => store.error ?? (store.loadErrors[store.session] ? "Request failed" : undefined),
       suspended: () => false,
       close: () => undefined,
       open: () => undefined,
       command: (command) => {
+        setStore("error", undefined)
         if (command.type === "navigate" || command.type === "reload") setStore("loadErrors", store.session, undefined)
         if (command.type === "navigate") {
           if (store.delayNavigation) {
@@ -104,9 +102,17 @@ export function mountBrowserPane() {
           </button>
           <button onClick={() => setStore("loadErrors", store.session, "ERR_CONNECTION_REFUSED")}>Failed page</button>
           <button onClick={() => setStore("delayNavigation", true)}>Delay navigation</button>
+          <button onClick={() => setStore({ error: "ERR_BLOCKED_BY_CLIENT", pendingURL: undefined })}>
+            Block navigation
+          </button>
           <button
             onClick={() =>
-              setStore({ url: store.pendingURL, pendingURL: undefined, loading: false, generation: store.generation + 1 })
+              setStore({
+                url: store.pendingURL,
+                pendingURL: undefined,
+                loading: false,
+                generation: store.generation + 1,
+              })
             }
           >
             Complete navigation
@@ -125,7 +131,6 @@ export function mountBrowserPane() {
             <div
               data-testid={`native-${tab.title}`}
               data-visible={!!store.layouts[tab.title]?.visible}
-              data-shows={store.shows[tab.title] ?? 0}
               style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
             >
               {tab.title}: {store.layouts[tab.title]?.visible ? "visible" : "hidden"}

@@ -62,7 +62,7 @@ story("shows the empty state over a blank native page and restores navigation", 
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
   await expect(root.getByText("Enter URL", { exact: true })).toBeVisible()
-  await expect(root.getByText('Or prompt "Open my app in the browser"', { exact: true })).toBeVisible()
+  await expect(root.getByText('Or prompt "Open in the app browser"', { exact: true })).toBeVisible()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeDisabled()
 
@@ -76,11 +76,10 @@ story("shows the empty state over a blank native page and restores navigation", 
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeEnabled()
 })
 
-story("keeps Stop available without exposing a blank native page during loading", async ({ page }) => {
+story("keeps Stop available and hides the empty state while a blank page loads", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Loading page", exact: true }).click()
   await expect(root.getByText("Enter URL", { exact: true })).toBeHidden()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
   await root.getByRole("button", { name: "Stop", exact: true }).click()
   await expect(root.getByText("Enter URL", { exact: true })).toBeVisible()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
@@ -95,7 +94,7 @@ story("keeps the submitted URL visible until the browser reports navigation", as
   await address.press("Enter")
   await expect(address).not.toBeFocused()
   await expect(address).toHaveValue("https://example.com/")
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
+  await expect(root.getByText("Enter URL", { exact: true })).toBeHidden()
 
   await root.getByRole("button", { name: "Complete navigation", exact: true }).click()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
@@ -106,6 +105,19 @@ story("keeps the submitted URL visible until the browser reports navigation", as
   await expect(address).toHaveValue("https://example.com/")
 })
 
+story("restores the current URL when a submitted navigation is blocked", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
+  const address = root.getByRole("textbox", { name: "Browser address", exact: true })
+  await address.fill("https://blocked.example/")
+  await address.press("Enter")
+  await expect(address).toHaveValue("https://blocked.example/")
+  await root.getByRole("button", { name: "Block navigation", exact: true }).click()
+  await expect(root.getByText("ERR_BLOCKED_BY_CLIENT", { exact: true })).toBeVisible()
+  await expect(address).toHaveValue("https://alpha.example/")
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
 story("shows a themed failure state for only the failed tab and allows retry", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Failed page", exact: true }).click()
@@ -113,7 +125,9 @@ story("shows a themed failure state for only the failed tab and allows retry", a
   await expect(root.getByText("Check the URL and your connection, then try again.", { exact: true })).toBeVisible()
   await expect(root.getByText("Request failed", { exact: true })).toBeHidden()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
-  await expect(root.getByRole("textbox", { name: "Browser address", exact: true })).toHaveValue("https://alpha.example/")
+  await expect(root.getByRole("textbox", { name: "Browser address", exact: true })).toHaveValue(
+    "https://alpha.example/",
+  )
 
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await expect(root.getByText("URL can't be reached", { exact: true })).toBeHidden()
@@ -131,7 +145,6 @@ story("returns a failed tab to the empty state when an empty URL is submitted", 
   await root.getByRole("button", { name: "Failed page", exact: true }).click()
   await expect(root.getByText("URL can't be reached", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
-  const shows = await root.getByTestId("native-Alpha").getAttribute("data-shows")
 
   const address = root.getByRole("textbox", { name: "Browser address", exact: true })
   await address.fill("")
@@ -145,7 +158,6 @@ story("returns a failed tab to the empty state when an empty URL is submitted", 
   await expect(root.getByText("Enter URL", { exact: true })).toBeVisible()
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeDisabled()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-shows", shows!)
 })
 
 story("selects the full URL when the address field gains focus", async ({ page }) => {
@@ -167,18 +179,18 @@ story("selects the full URL when the address field gains focus", async ({ page }
   await expect(address).toHaveJSProperty("selectionEnd", "https://example.com/".length)
 })
 
-story("hides the native page immediately on submission and throughout loading", async ({ page }) => {
+story("keeps the current page visible while a submitted URL loads", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
   const address = root.getByRole("textbox", { name: "Browser address", exact: true })
   await address.fill("https://example.com/")
   await address.press("Enter")
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
   await expect(address).toHaveValue("https://example.com/")
 
   await root.getByRole("button", { name: "Load current page", exact: true }).click()
   await expect(root.getByRole("button", { name: "Stop", exact: true })).toBeEnabled()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
   await root.getByRole("button", { name: "Complete navigation", exact: true }).click()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
   await expect(address).toHaveValue("https://example.com/")

@@ -20,7 +20,6 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
   const command = useCommand()
   const state = props.browser.active
   const address = () => (state()?.url === "about:blank" ? "" : (state()?.url ?? ""))
-  const empty = () => !address() && !state()?.loading
   const failed = () => !!state()?.loadError
   const registration = props.browser.registration
   const button = { variant: "ghost", size: "large" } as const
@@ -28,9 +27,11 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
     address: "",
     editing: false,
     submitted: false,
+    // A submitted navigation the browser has not reported yet; keeps the empty state hidden meanwhile.
     navigating: false,
     visible: typeof document === "undefined" || document.visibilityState === "visible",
   })
+  const empty = () => !address() && !state()?.loading && !store.navigating
   let surface: HTMLDivElement | undefined
   let addressDisplay: HTMLDivElement | undefined
   let frame: number | undefined
@@ -75,16 +76,9 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
     const top = Math.round(rect.top * zoom)
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
-    // Keep the themed surface visible until the destination is ready.
-    const visible =
-      props.visible &&
-      store.visible &&
-      !store.navigating &&
-      !tab.loading &&
-      !empty() &&
-      !failed() &&
-      !dialog.active &&
-      !covered(rect)
+    // The desktop page hides blank and loading documents itself; only hide here
+    // while the pane shows its own empty or failed state over the surface.
+    const visible = props.visible && store.visible && !empty() && !failed() && !dialog.active && !covered(rect)
     // The cutout exposes the app backdrop outside the rounded Review card,
     // not the browser surface inside it.
     const color = getComputedStyle(
@@ -121,19 +115,24 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
   }
 
   createEffect(on([() => state()?.id, address], () => !store.editing && setStore("address", address())))
+  // Any reported movement, including a rejected or blocked request, ends the submitted navigation.
   createEffect(
     on(
-      [() => state()?.id, () => state()?.generation],
-      (current, previous) => {
-        if (current[0] === previous?.[0] && current[1] === previous?.[1]) return
-        setStore("navigating", false)
+      [() => state()?.id, () => state()?.generation, () => state()?.loading, () => props.browser.error()],
+      () => setStore("navigating", false),
+      { defer: true },
+    ),
+  )
+  // A blocked or rejected submission leaves the page where it was; show that page's URL again.
+  createEffect(
+    on(
+      () => props.browser.error(),
+      (error) => {
+        if (error && !store.editing) setStore("address", address())
       },
       { defer: true },
     ),
   )
-  createEffect(() => {
-    if (props.browser.error()) setStore("navigating", false)
-  })
   createEffect(
     on(registration, (current) => {
       // Session routes can change before this pane unmounts. Hide the registration
@@ -149,8 +148,6 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
         () => store.visible,
         () => props.visible,
         () => state()?.id,
-        () => state()?.loading,
-        () => store.navigating,
         empty,
         failed,
         registration,
@@ -246,7 +243,6 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
             if (!tab) return
             if (url || failed()) {
               setStore({ submitted: true, address: url, navigating: true })
-              registration()?.setLayout()
               props.browser.command({ type: "navigate", tabID: tab.id, url: url || "about:blank" })
             }
             event.currentTarget.querySelector("input")?.blur()
