@@ -38,6 +38,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
+import { messageRace, raceActive, raceModel } from "../../util/model-race"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { Dynamic, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "../../context/sdk"
@@ -77,6 +78,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
+import { DialogRaceStatus } from "../../component/dialog-race-status"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
@@ -1471,8 +1473,24 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
+  const dialog = useDialog()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
-  const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const raceEnabled = createMemo(() => sync.data.config.modelRace?.enabled === true)
+  const race = createMemo(() => (raceEnabled() ? messageRace(sync.data.model_race, props.message.id) : undefined))
+  const selectedRaceModel = createMemo(() => raceModel(race()))
+  const model = createMemo(() =>
+    selectedRaceModel()
+      ? Model.name(ctx.providers(), selectedRaceModel()!.providerID, selectedRaceModel()!.modelID)
+      : Model.name(ctx.providers(), props.message.providerID, props.message.modelID),
+  )
+  const raceTPS = createMemo(() => {
+    const current = race()
+    const leader = current?.leader
+    if (!current || !leader || !raceActive(current)) return undefined
+    return current.candidates.find(
+      (candidate) => candidate.providerID === leader.providerID && candidate.modelID === leader.modelID,
+    )?.tokensPerSecond
+  })
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1484,6 +1502,20 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
     if (!user || !user.time) return 0
     return props.message.time.completed - user.time.created
+  })
+
+  const tokenCount = createMemo(() => {
+    const tokens = props.message.tokens.output
+    return tokens > 0 ? `${Locale.number(tokens)} tokens` : undefined
+  })
+
+  const outputTPS = createMemo(() => {
+    const tokens = props.message.tokens.output
+    const completed = props.message.time.completed
+    if (tokens <= 0 || !completed) return undefined
+    const ms = completed - props.message.time.created
+    if (ms <= 0) return undefined
+    return `${Math.round(tokens / (ms / 1000))} tok/s`
   })
 
   const childShortcut = useCommandShortcut("session.child.first")
@@ -1548,7 +1580,10 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
           <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
-            <text marginTop={1}>
+            <text
+              marginTop={1}
+              onMouseUp={() => dialog.replace(() => <DialogRaceStatus sessionID={props.message.sessionID} />)}
+            >
               <span
                 style={{
                   fg:
@@ -1560,9 +1595,23 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 ▣{" "}
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
+              <span style={{ fg: theme.textMuted }}> · </span>
+              <Show when={tokenCount()}>
+                <span style={{ fg: theme.textMuted }}>{tokenCount()} · </span>
+              </Show>
+              <span style={{ fg: theme.text }}>{model()}</span>
+              <Show when={race()}>
+                <span style={{ fg: theme.textMuted }}>
+                  {" "}
+                  · race {race()!.winner ? "winner" : "leader"}
+                  {raceTPS() ? ` · ${Math.round(raceTPS()!)} tok/s` : ""}
+                </span>
+              </Show>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+              </Show>
+              <Show when={outputTPS()}>
+                <span style={{ fg: theme.textMuted }}> · {outputTPS()}</span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>

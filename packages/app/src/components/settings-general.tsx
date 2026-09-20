@@ -31,6 +31,7 @@ import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { ExternalLink } from "./external-link"
 import { SettingsList } from "./settings-list"
+import { SettingsModelRace } from "./settings-model-race"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -451,6 +452,8 @@ export const SettingsGeneral: Component = () => {
           </div>
         </SettingsRow>
       </SettingsList>
+
+      <SettingsModelRace />
     </div>
   )
 

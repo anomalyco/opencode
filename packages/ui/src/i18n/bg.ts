@@ -177,6 +177,7 @@ export const dict = {
   "ui.message.copyMessage": "Копиране на съобщение",
   "ui.message.forkMessage": "Разклоняване в нова сесия",
   "ui.message.revertMessage": "Възстановяване на съобщението",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Копиране на отговора",
   "ui.message.copied": "Копирано",
   "ui.message.duration.seconds": "{{count}} сек",
@@ -194,4 +195,7 @@ export const dict = {
   "ui.question.multiHint": "Изберете всички приложими отговори",
   "ui.question.singleHint": "Изберете един отговор",
   "ui.question.custom.placeholder": "Въведете вашия отговор...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

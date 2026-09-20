@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Sao chép tin nhắn",
   "ui.message.forkMessage": "Tách sang phiên mới",
   "ui.message.revertMessage": "Hoàn nguyên tin nhắn",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Sao chép phản hồi",
   "ui.message.copied": "Đã sao chép",
   "ui.message.duration.seconds": "{{count}}s",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Chọn tất cả các câu trả lời phù hợp",
   "ui.question.singleHint": "Chọn một câu trả lời",
   "ui.question.custom.placeholder": "Nhập câu trả lời của bạn...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

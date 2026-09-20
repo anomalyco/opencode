@@ -86,6 +86,29 @@ export const {
         [sessionID: string]: QuestionRequest[]
       }
       config: Config
+      model_race: Record<
+        string,
+        {
+          sessionID: string
+          messageID: string
+          raceID: string
+          phase: string
+          candidates: Array<{
+            providerID: string
+            modelID: string
+            state: string
+            ttft?: number
+            tokenCount: number
+            tokensPerSecond?: number
+            toolCallAt?: number
+          }>
+          leader?: { providerID: string; modelID: string }
+          winner?: { providerID: string; modelID: string }
+          reason?: string
+          startedAt: number
+          updatedAt: number
+        }
+      >
       session: Session[]
       session_status: {
         [sessionID: string]: SessionStatus
@@ -123,6 +146,7 @@ export const {
       },
       provider_auth: {},
       config: {},
+      model_race: {},
       status: "loading",
       agent: [],
       permission: {},
@@ -294,6 +318,12 @@ export const {
               draft.splice(result.index, 0, event.properties.info)
             }),
           )
+          break
+        }
+
+        case "session.next.model-race.updated": {
+          const race = event.properties as (typeof store.model_race)[string]
+          setStore("model_race", race.messageID, reconcile(race))
           break
         }
 

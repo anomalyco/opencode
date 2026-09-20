@@ -4,7 +4,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Provider } from "@/provider/provider"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Exit, Layer } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
 import type { LLMEvent } from "@opencode-ai/llm"
@@ -21,6 +21,8 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Auth } from "@/auth"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -29,6 +31,8 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { ModelRace } from "@/model-race"
+import type { ToolExecutionGate } from "@/model-race/gate"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
@@ -45,10 +49,16 @@ export type StreamInput = {
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
+  onModelRaceUpdate?: (update: ModelRace.ModelRaceUpdate) => Effect.Effect<void>
 }
 
 export type StreamRequest = StreamInput & {
   abort: AbortSignal
+  race?: {
+    candidateID: string
+    raceID: string
+    gate: ToolExecutionGate
+  }
 }
 
 export interface Interface {
@@ -90,6 +100,7 @@ const live: Layer.Layer<
         small: (input.small ?? false).toString(),
         agent: input.agent.name,
         mode: input.agent.mode,
+        ...(input.race ? { "race.id": input.race.raceID, "race.candidate": input.race.candidateID } : {}),
       })
 
       const [language, cfg, item, info] = yield* Effect.all(
@@ -111,6 +122,9 @@ const live: Layer.Layer<
         flags,
         isWorkflow,
       })
+      const tools = input.race
+        ? ModelRace.gateTools(prepared.tools, input.race.candidateID, input.race.gate)
+        : prepared.tools
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
@@ -125,6 +139,7 @@ const live: Layer.Layer<
         workflowModel.sessionID = input.sessionID
         workflowModel.systemPrompt = prepared.system.join("\n")
         workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
+          if (input.race) await input.race.gate.wait(input.race.candidateID)
           const t = prepared.tools[toolName]
           if (!t || !t.execute) {
             return { result: "", error: `Unknown tool: ${toolName}` }
@@ -314,8 +329,8 @@ const live: Layer.Layer<
           topP: prepared.params.topP,
           topK: prepared.params.topK,
           providerOptions: ProviderTransform.providerOptions(input.model, prepared.params.options),
-          activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
-          tools: prepared.tools,
+          activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+          tools,
           toolChoice: input.toolChoice,
           maxOutputTokens: prepared.params.maxOutputTokens,
           abortSignal: input.abort,
@@ -354,7 +369,10 @@ const live: Layer.Layer<
       }
     })
 
-    const stream: Interface["stream"] = (input) =>
+    const defaultStream = (
+      input: StreamInput,
+      race?: { candidateID: string; raceID: string; gate: ToolExecutionGate },
+    ): Stream.Stream<LLMEvent, unknown> =>
       Stream.scoped(
         Stream.unwrap(
           Effect.gen(function* () {
@@ -363,7 +381,7 @@ const live: Layer.Layer<
               (ctrl) => Effect.sync(() => ctrl.abort()),
             )
 
-            const result = yield* run({ ...input, abort: ctrl.signal })
+            const result = yield* run({ ...input, abort: ctrl.signal, race })
 
             if (result.type === "native") return result.stream
 
@@ -376,6 +394,57 @@ const live: Layer.Layer<
               Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
               Stream.flatMap((events) => Stream.fromIterable(events)),
             )
+          }),
+        ),
+      )
+
+    const stream: Interface["stream"] = (input) =>
+      Stream.scoped(
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const cfg = yield* config.get()
+            if (!cfg.modelRace?.enabled || input.small || flags.experimentalNativeLlm) return defaultStream(input)
+
+            const options = ModelRace.options(cfg.modelRace)
+            const references = ModelRace.references(cfg.modelRace)
+            if (references.length < 2) return defaultStream(input)
+
+            const candidates = yield* Effect.forEach(
+              references,
+              (reference) =>
+                provider.getModel(ProviderV2.ID.make(reference.providerID), ModelV2.ID.make(reference.modelID)).pipe(
+                  Effect.exit,
+                  Effect.map((exit) => (Exit.isSuccess(exit) ? { reference, model: exit.value } : undefined)),
+                ),
+              { concurrency: "unbounded" },
+            ).pipe(
+              Effect.map((items) =>
+                items.filter(
+                  (item): item is { reference: ModelRace.ModelReference; model: Provider.Model } => item !== undefined,
+                ),
+              ),
+            )
+
+            if (candidates.length < 2) {
+              yield* Effect.logWarning("model race requires at least two available candidates", {
+                candidates: references.map((reference) => reference.id).join(", "),
+              })
+              return defaultStream(input)
+            }
+
+            const models = new Map(candidates.map((candidate) => [candidate.reference.id, candidate.model]))
+            const raceID = crypto.randomUUID()
+            return ModelRace.stream({
+              raceID,
+              candidates: candidates.map((candidate) => ({ ...candidate.reference, label: candidate.reference.id })),
+              options,
+              onUpdate: input.onModelRaceUpdate,
+              runCandidate: (candidate, gate) => {
+                const model = models.get(candidate.id)
+                if (!model) throw new Error(`Model race candidate disappeared: ${candidate.id}`)
+                return defaultStream({ ...input, model }, { candidateID: candidate.id, raceID, gate })
+              },
+            })
           }),
         ),
       )

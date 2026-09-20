@@ -185,6 +185,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Zkopírujte zprávu",
   "ui.message.forkMessage": "Vytvořit větev v nové relaci",
   "ui.message.revertMessage": "Vrátit zprávu",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Zkopírujte odpověď",
   "ui.message.copied": "Zkopírováno",
   "ui.message.duration.seconds": "{{count}} s",
@@ -202,4 +203,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Vyberte všechny platné odpovědi",
   "ui.question.singleHint": "Vyberte jednu odpověď",
   "ui.question.custom.placeholder": "Napište svou odpověď...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

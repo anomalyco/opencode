@@ -171,6 +171,7 @@ export const dict = {
   "ui.message.copyMessage": "Nachricht kopieren",
   "ui.message.forkMessage": "In neue Sitzung abzweigen",
   "ui.message.revertMessage": "Auf diesen Punkt zurücksetzen",
+  "ui.message.resendMessage": "Nachricht erneut senden",
   "ui.message.copyResponse": "Antwort kopieren",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Unterbrochen",
@@ -218,4 +219,7 @@ export const dict = {
   "ui.promptInput.send": "Senden",
   "ui.promptInput.stop": "Stoppen",
   "ui.tabs.close": "Tab schließen",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 } satisfies Partial<Record<Keys, string>>

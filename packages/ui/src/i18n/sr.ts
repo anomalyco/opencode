@@ -182,6 +182,7 @@ export const dict = {
   "ui.message.copyMessage": "Копирај поруку",
   "ui.message.forkMessage": "Нова грана у новој сесији",
   "ui.message.revertMessage": "Врати поруку",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Копирај одговор",
   "ui.message.copied": "Копирано",
   "ui.message.duration.seconds": "{{count}}с",
@@ -199,4 +200,7 @@ export const dict = {
   "ui.question.multiHint": "Изаберите све одговоре који се примењују",
   "ui.question.singleHint": "Изаберите један одговор",
   "ui.question.custom.placeholder": "Унесите свој одговор...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

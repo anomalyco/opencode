@@ -179,6 +179,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Üzenet másolása",
   "ui.message.forkMessage": "Elágazás az új munkamenethez",
   "ui.message.revertMessage": "Üzenet visszaállítása",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Válasz másolása",
   "ui.message.copied": "Másolva",
   "ui.message.duration.seconds": "{{count}}s",
@@ -196,4 +197,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Válassza ki az összes megfelelő választ",
   "ui.question.singleHint": "Válasszon ki egy választ",
   "ui.question.custom.placeholder": "Írja be a választ...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

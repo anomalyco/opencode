@@ -1,5 +1,15 @@
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { batch, createContext, createEffect, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
+import {
+  batch,
+  createContext,
+  createEffect,
+  onCleanup,
+  Show,
+  useContext,
+  type Component,
+  type JSX,
+  type ParentProps,
+} from "solid-js"
 import { useTheme } from "../context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
@@ -7,6 +17,7 @@ import { useToast } from "./toast"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 import { useClipboard } from "../context/clipboard"
+import { Dynamic } from "solid-js/web"
 
 export function Dialog(
   props: ParentProps<{
@@ -212,10 +223,12 @@ export function DialogProvider(props: ParentProps) {
         }}
         onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
       >
-        <Show when={value.stack.length}>
-          <Dialog onClose={() => value.clear()} size={value.size}>
-            {value.stack.at(-1)!.element}
-          </Dialog>
+        <Show when={value.stack.at(-1)} keyed>
+          {(item) => (
+            <Dialog onClose={() => value.clear()} size={value.size}>
+              <Dynamic component={item.element as unknown as Component} />
+            </Dialog>
+          )}
         </Show>
       </box>
     </ctx.Provider>

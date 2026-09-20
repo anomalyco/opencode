@@ -22,11 +22,18 @@ export function DialogPrompt(props: DialogPromptProps) {
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
   const submitShortcut = useCommandShortcut("dialog.prompt.submit")
+  const nativeSubmit = () =>
+    tuiConfig.keybinds.get("dialog.prompt.submit").some((binding) => binding.key === "return")
   const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
   let textarea: TextareaRenderable
+  let confirmLocked = false
 
   function confirm() {
-    if (props.busy) return
+    if (props.busy || confirmLocked) return
+    confirmLocked = true
+    setTimeout(() => {
+      confirmLocked = false
+    }, 100)
     props.onConfirm?.(textarea.plainText)
   }
 
@@ -85,6 +92,16 @@ export function DialogPrompt(props: DialogPromptProps) {
       <box gap={1}>
         {props.description?.()}
         <textarea
+          onSubmit={() => {
+            if (nativeSubmit()) confirm()
+          }}
+          onKeyDown={(event) => {
+            if (!nativeSubmit()) return
+            if (event.name !== "return" && event.name !== "enter") return
+            if (event.shift || event.ctrl || event.option || event.meta || event.super) return
+            event.preventDefault()
+            confirm()
+          }}
           height={3}
           ref={(val: TextareaRenderable) => {
             textarea = val

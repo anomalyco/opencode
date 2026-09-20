@@ -12,6 +12,7 @@ import { useSettings } from "@/context/settings"
 import { ExternalLink } from "../external-link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
+import { SettingsModelRaceV2 } from "./model-race"
 import { LayoutRetirementNotice, LayoutTransitionToggle } from "./interface-transition"
 import {
   createAppearanceSettingsController,
@@ -439,6 +440,8 @@ export const SettingsGeneralV2: Component<{
           </div>
         </SettingsRowV2>
       </SettingsListV2>
+
+      <SettingsModelRaceV2 />
     </div>
   )
 

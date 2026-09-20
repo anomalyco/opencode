@@ -889,6 +889,43 @@ Experimental options are not stable. They may change or be removed without notic
 
 ---
 
+### Model racing
+
+Model racing can request multiple candidate models for each LLM generation and commit the first complete result. The first response token selects a provisional leader; after a warmup period, measured throughput can replace that leader. A complete tool call locks its candidate immediately.
+
+Racing is disabled by default. When disabled, OpenCode uses the existing generation path unchanged.
+
+In the TUI, run `/race` to edit these settings in an interactive dialog. In the desktop app, the same settings are available under **General > Advanced > Model Racing**.
+
+Race lifecycle events and performance metrics are written to the standard OpenCode log file. The log records each race start, candidate first token, leader switch, tool-call lock, winner, and completion summary.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+  "modelRace": {
+    "enabled": true,
+    "models": ["anthropic/claude-sonnet-4-5", "custom/coding-model"],
+    "strategy": {
+      "firstToken": true,
+      "throughput": true,
+      "toolCall": true
+    },
+    "throughput": {
+      "warmupTokens": 8,
+      "measurementWindowMs": 1000
+    },
+    "switch": {
+      "enabled": true
+    }
+  }
+}
+```
+
+Candidate outputs remain isolated from the committed session message until the race locks a winner. This prevents duplicate message parts and ensures that only the winning candidate can enter the existing tool executor.
+
+---
+
 ## Variables
 
 You can use variable substitution in your config files to reference environment variables and file contents.

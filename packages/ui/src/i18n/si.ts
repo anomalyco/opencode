@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "පණිවිඩය පිටපත් කරන්න",
   "ui.message.forkMessage": "නව සැසියට ෆෝක් කරන්න",
   "ui.message.revertMessage": "පණිවිඩය ප්‍රතිවර්තනය කරන්න",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "ප්රතිචාරය පිටපත් කරන්න",
   "ui.message.copied": "පිටපත් කර ඇත",
   "ui.message.duration.seconds": "{{count}}s",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "අදාළ සියලු පිළිතුරු තෝරන්න",
   "ui.question.singleHint": "එක් පිළිතුරක් තෝරන්න",
   "ui.question.custom.placeholder": "ඔබේ පිළිතුර ටයිප් කරන්න...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

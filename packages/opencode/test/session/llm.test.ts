@@ -2246,4 +2246,79 @@ describe("session.llm.stream", () => {
       }),
     },
   )
+
+  it.instance(
+    "races configured candidate models and emits one winner stream",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const providerID = "model-race-test"
+        const modelA = `race-a-${fixture.model.id}`
+        const modelB = `race-b-${fixture.model.id}`
+        const first = waitRequest("/chat/completions", new Response(createChatStream("winner")))
+        const second = waitRequest("/chat/completions", new Response(createChatStream("winner")))
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelA))
+        const sessionID = SessionID.make("session-model-race")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-model-race"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        const events = yield* LLM.Service.use((llm) =>
+          llm
+            .stream({
+              user,
+              sessionID,
+              model: resolved,
+              agent,
+              system: ["You are a helpful assistant."],
+              messages: [{ role: "user", content: "Hello" }],
+              tools: {},
+            })
+            .pipe(Stream.runCollect),
+        ).pipe(Effect.map((events) => [...events]))
+
+        const requests = yield* Effect.promise(() => Promise.all([first, second]))
+        expect(requests.map((request) => request.body.model).toSorted()).toEqual([modelA, modelB])
+        expect(events.filter((event) => event.type === "text-delta")).toHaveLength(1)
+        expect(events.filter((event) => event.type === "text-delta")[0]).toMatchObject({ text: "winner" })
+      }),
+    {
+      config: () => {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const providerID = "model-race-test"
+        const modelA = `race-a-${fixture.model.id}`
+        const modelB = `race-b-${fixture.model.id}`
+        return {
+          enabled_providers: [providerID],
+          modelRace: {
+            enabled: true,
+            models: [`${providerID}/${modelA}`, `${providerID}/${modelB}`],
+            throughput: { warmupTokens: 1, measurementWindowMs: 10 },
+          },
+          provider: {
+            [providerID]: {
+              name: "Model Race Test",
+              npm: "@ai-sdk/openai-compatible",
+              models: {
+                [modelA]: configModel({ ...fixture.model, id: modelA, name: modelA }) as ConfigModel,
+                [modelB]: configModel({ ...fixture.model, id: modelB, name: modelB }) as ConfigModel,
+              },
+              options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+            },
+          },
+        }
+      },
+    },
+  )
 })

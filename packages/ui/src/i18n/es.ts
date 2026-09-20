@@ -189,6 +189,7 @@ export const dict = {
   "ui.message.copyMessage": "Copiar mensaje",
   "ui.message.forkMessage": "Bifurcar a nueva sesión",
   "ui.message.revertMessage": "Restablecer a este punto",
+  "ui.message.resendMessage": "Reenviar mensaje",
   "ui.message.copyResponse": "Copiar respuesta",
   "ui.message.copied": "¡Copiado!",
   "ui.message.interrupted": "Interrumpido",
@@ -218,4 +219,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "Copiar error",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

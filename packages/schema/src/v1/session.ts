@@ -656,11 +656,43 @@ export const Error = define({
   },
 })
 
+const ModelRaceModel = Schema.Struct({
+  providerID: Schema.String,
+  modelID: Schema.String,
+})
+
+const ModelRaceCandidate = Schema.Struct({
+  providerID: Schema.String,
+  modelID: Schema.String,
+  state: Schema.Literals(["pending", "streaming", "leader", "winner", "failed", "cancelled", "completed"]),
+  ttft: optional(NonNegativeInt),
+  tokenCount: NonNegativeInt,
+  tokensPerSecond: optional(Schema.Finite),
+  toolCallAt: optional(NonNegativeInt),
+})
+
+export const ModelRaceUpdated = define({
+  type: "session.next.model-race.updated",
+  schema: {
+    sessionID: SessionID,
+    messageID: MessageID,
+    raceID: Schema.String,
+    phase: Schema.Literals(["dispatching", "waiting-first-token", "measuring", "locked", "completed", "failed"]),
+    candidates: Schema.Array(ModelRaceCandidate),
+    leader: optional(ModelRaceModel),
+    winner: optional(ModelRaceModel),
+    reason: optional(Schema.Literals(["first-token", "throughput", "tool-call", "completed", "fallback"])),
+    startedAt: NonNegativeInt,
+    updatedAt: NonNegativeInt,
+  },
+})
+
 export const Event = {
   ...events,
   PartDelta,
   Diff,
   Error,
+  ModelRaceUpdated,
   Definitions: inventory(
     events.Created,
     events.Updated,
@@ -672,5 +704,6 @@ export const Event = {
     PartDelta,
     Diff,
     Error,
+    ModelRaceUpdated,
   ),
 }

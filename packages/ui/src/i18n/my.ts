@@ -178,6 +178,7 @@ export const dict = {
   "ui.message.copyMessage": "မက်ဆေ့ဂျ်ကို ကူးယူပါ။",
   "ui.message.forkMessage": "စက်ရှင်အသစ်သို့ ဖြတ်လိုက်ပါ။",
   "ui.message.revertMessage": "မက်ဆေ့ဂျ်ကို ပြန်ပြောင်းပါ။",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "တုံ့ပြန်မှုကို ကူးယူပါ။",
   "ui.message.copied": "ကူးယူထားသည်။",
   "ui.message.duration.seconds": "{{count}}s",
@@ -195,4 +196,7 @@ export const dict = {
   "ui.question.multiHint": "သက်ဆိုင်သည့် အဖြေအားလုံးကို ရွေးပါ။",
   "ui.question.singleHint": "အဖြေတစ်ခု ရွေးပါ။",
   "ui.question.custom.placeholder": "သင့်အဖြေကို ရိုက်ထည့်ပါ...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

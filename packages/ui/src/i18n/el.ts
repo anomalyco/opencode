@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Αντιγραφή μηνύματος",
   "ui.message.forkMessage": "Διακλάδωση σε νέα συνεδρία",
   "ui.message.revertMessage": "Επαναφορά μηνύματος",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Απάντηση αντιγραφής",
   "ui.message.copied": "Αντιγράφηκε",
   "ui.message.duration.seconds": "{{count}}δ",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Επιλογή όλων των απαντήσεων που ισχύουν",
   "ui.question.singleHint": "Επιλέξτε μία απάντηση",
   "ui.question.custom.placeholder": "Πληκτρολογήστε την απάντησή σας...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

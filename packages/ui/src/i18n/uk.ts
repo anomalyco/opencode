@@ -206,6 +206,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Копіювати повідомлення",
   "ui.message.forkMessage": "Відгалузити в нову сесію",
   "ui.message.revertMessage": "Скинути до цього моменту",
+  "ui.message.resendMessage": "Надіслати повідомлення повторно",
   "ui.message.copyResponse": "Копіювати відповідь",
   "ui.message.copied": "Скопійовано",
   "ui.message.duration.seconds": "{{count}}с",
@@ -225,4 +226,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Виберіть усі відповідні варіанти",
   "ui.question.singleHint": "Виберіть одну відповідь",
   "ui.question.custom.placeholder": "Введіть свою відповідь...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

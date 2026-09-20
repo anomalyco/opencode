@@ -181,6 +181,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Copiază mesajul",
   "ui.message.forkMessage": "Deschide într-o sesiune nouă",
   "ui.message.revertMessage": "Revino la mesaj",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Copiază răspunsul",
   "ui.message.copied": "Copiat",
   "ui.message.duration.seconds": "{{count}}s",
@@ -198,4 +199,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Selectează toate răspunsurile corecte",
   "ui.question.singleHint": "Selectează un răspuns",
   "ui.question.custom.placeholder": "Scrie răspunsul...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

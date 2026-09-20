@@ -187,6 +187,7 @@ export const dict = {
   "ui.message.copyMessage": "複製訊息",
   "ui.message.forkMessage": "分支到新工作階段",
   "ui.message.revertMessage": "重設至此點",
+  "ui.message.resendMessage": "重送此訊息",
   "ui.message.copyResponse": "複製回覆",
   "ui.message.copied": "已複製！",
   "ui.message.interrupted": "已中斷",
@@ -216,4 +217,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "複製錯誤",
   "ui.message.duration.seconds": "{{count}}秒",
   "ui.message.duration.minutesSeconds": "{{minutes}}分 {{seconds}}秒",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 } satisfies Partial<Record<Keys, string>>

@@ -182,6 +182,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Kopiraj poruku",
   "ui.message.forkMessage": "Odvoji u novu sesiju",
   "ui.message.revertMessage": "Vrati poruku",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Kopiraj odgovor",
   "ui.message.copied": "Kopirano",
   "ui.message.duration.seconds": "{{count}}s",
@@ -199,4 +200,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Odaberite sve primjenjive odgovore",
   "ui.question.singleHint": "Odaberite jedan odgovor",
   "ui.question.custom.placeholder": "Upišite svoj odgovor...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

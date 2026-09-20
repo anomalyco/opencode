@@ -40,6 +40,8 @@ import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
+import { DialogRace } from "./component/dialog-race"
+import { DialogRaceStatus } from "./component/dialog-race-status"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
@@ -638,6 +640,28 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashAliases: ["mo"],
         run: () => {
           dialog.replace(() => <DialogModel />)
+        },
+      },
+      {
+        name: "race.configure",
+        title: "Configure model racing",
+        category: "Agent",
+        slashName: "race",
+        slashAliases: ["racing"],
+        run: () => {
+          dialog.replace(() => <DialogRace />)
+        },
+      },
+      {
+        name: "race.status",
+        title: "View model racing",
+        category: "Agent",
+        slashName: "race-status",
+        slashAliases: ["racing-status"],
+        run: () => {
+          dialog.replace(() => (
+            <DialogRaceStatus sessionID={route.data.type === "session" ? route.data.sessionID : undefined} />
+          ))
         },
       },
       {

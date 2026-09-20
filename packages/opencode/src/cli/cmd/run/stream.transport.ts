@@ -80,6 +80,25 @@ type StreamInput = {
   signal?: AbortSignal
 }
 
+function raceColor(phase: string) {
+  if (phase === "completed" || phase === "locked") return "32"
+  if (phase === "failed") return "31"
+  if (phase === "measuring") return "33"
+  if (phase === "waiting-first-token") return "36"
+  return "90"
+}
+
+function colorRace(phase: string, value: string) {
+  if (!process.stderr.isTTY || process.env.NO_COLOR !== undefined) return value
+  return `\u001b[${raceColor(phase)}m${value}\u001b[0m`
+}
+
+function formatRaceDuration(ms: number) {
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`
+}
+
 type Wait = {
   tick: number
   armed: boolean
@@ -456,6 +475,8 @@ function createLayer(input: StreamInput) {
         let replayDisabled = false
         let replayPending: SessionResizeReplayInput | undefined
         const buffered: Event[] = []
+        const races = new Map<string, string>()
+        const completedRaces = new Set<string>()
         const replayedParts = new Set<string>()
         const recovering = new Set<string>()
         const tracked = (sessionID: string | undefined) =>
@@ -881,6 +902,57 @@ function createLayer(input: StreamInput) {
         }
 
         const applyEvent = Effect.fn("RunStreamTransport.applyEvent")(function* (event: Event) {
+          if ((event.type as string) === "session.next.model-race.updated") {
+            const race = event.properties as {
+              sessionID: string
+              raceID: string
+              phase: string
+              startedAt: number
+              updatedAt: number
+              leader?: { providerID: string; modelID: string }
+              winner?: { providerID: string; modelID: string }
+              reason?: string
+              candidates: Array<{
+                providerID: string
+                modelID: string
+                state: string
+                tokenCount: number
+                tokensPerSecond?: number
+              }>
+            }
+            if (race.sessionID !== input.sessionID) return
+            const selected = race.winner ?? race.leader
+            const model = selected ? `${selected.providerID}/${selected.modelID}` : "waiting"
+            const candidate = selected
+              ? race.candidates.find(
+                  (item) => item.providerID === selected.providerID && item.modelID === selected.modelID,
+                )
+              : undefined
+            const tps = candidate?.tokensPerSecond
+            const signature = `${race.phase}:${model}:${tps ?? ""}`
+            const previous = races.get(race.raceID)
+            if (previous !== signature) {
+              races.set(race.raceID, signature)
+              process.stderr.write(
+                `[model-race] ${colorRace(race.phase, race.phase)}: ${model}${tps ? ` ${Math.round(tps)} tok/s` : ""}${race.reason ? ` (${race.reason})` : ""}\n`,
+              )
+            }
+            if (race.phase === "locked" || race.phase === "completed" || race.phase === "failed") {
+              const label = race.phase === "locked" ? "winner" : "final"
+              const summaryKey = `${race.raceID}:${label}`
+              if (!completedRaces.has(summaryKey)) {
+                completedRaces.add(summaryKey)
+                const failed = race.candidates.filter((item) => item.state === "failed").length
+                const cancelled = race.candidates.filter((item) => item.state === "cancelled").length
+                process.stderr.write(
+                  `[model-race] ${colorRace(race.phase, label)}: ${model} · ${race.reason ?? race.phase} · ${formatRaceDuration(race.updatedAt - race.startedAt)} · ${candidate?.tokenCount ?? 0} tokens${tps ? ` · ${Math.round(tps)} tok/s` : ""} · failed ${failed} · cancelled ${cancelled}\n`,
+                )
+              }
+            }
+            input.trace?.write("model-race.updated", race)
+            return
+          }
+
           if (event.type === "message.part.delta" && event.properties.sessionID === input.sessionID) {
             if (replayedParts.has(event.properties.partID)) {
               const seen = state.data.text.get(event.properties.partID) ?? ""

@@ -182,6 +182,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Copia messaggio",
   "ui.message.forkMessage": "Crea una nuova sessione da qui",
   "ui.message.revertMessage": "Annulla messaggio",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Copia la risposta",
   "ui.message.copied": "Copiato",
   "ui.message.duration.seconds": "{{count}}s",
@@ -199,4 +200,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Seleziona tutte le risposte pertinenti",
   "ui.question.singleHint": "Seleziona una risposta",
   "ui.question.custom.placeholder": "Digita la tua risposta...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }
