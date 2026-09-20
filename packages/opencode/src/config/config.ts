@@ -682,6 +682,93 @@ export namespace Config {
   })
   export type Skills = z.infer<typeof Skills>
 
+  export const JevTier = z.object({
+    id: z.string().min(1).describe("Stable tier identifier"),
+    model: ModelId.describe("Model this tier maps to, in the format provider/model"),
+    capability: z
+      .string()
+      .min(1)
+      .describe(
+        "Free-text eligibility test describing what this tier handles well (never a model name). This is how the router learns your pool.",
+      ),
+    costHintUsdPerMTokOut: z.number().optional().describe("Reporting only; the router never optimizes cost"),
+    window: z
+      .object({
+        startHour: z.number().min(0).max(23),
+        endHour: z.number().min(0).max(23),
+        utcOffsetMinutes: z.number().int(),
+      })
+      .optional()
+      .describe("Tier is only eligible inside this local-time window; startHour may be > endHour to wrap midnight"),
+    maxContextTokens: z.number().int().positive().optional().describe("Requests above this context size are ineligible"),
+    quota: z
+      .object({ used: z.number(), limit: z.number() })
+      .optional()
+      .describe("Budget for the current period; omit for unmetered tiers"),
+    rate: z
+      .object({ used: z.number(), limit: z.number() })
+      .optional()
+      .describe("Rolling request cap"),
+  })
+  export type JevTier = z.infer<typeof JevTier>
+
+  export const Jev = z.object({
+    enabled: z.boolean().optional().describe("Enable Jev decision routing (default: false)"),
+    tiers: z
+      .array(JevTier)
+      .optional()
+      .describe(
+        "Model tiers ordered cheapest -> most capable. Order is load-bearing: the last tier is the fail-open default. Define the pool so its most capable tier matches your default model.",
+      ),
+    timeoutMs: z
+      .number()
+      .int()
+      .min(100)
+      .max(10_000)
+      .optional()
+      .describe("Hard timeout for a Jev call (default: 1500ms); on timeout the router fails open"),
+    thresholds: z
+      .object({
+        minConfidenceToDegrade: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe(
+            "Confidence required to route DOWN to a cheaper tier (default: 0.85; flat-capability pools may use 0.55-0.65)",
+          ),
+        maxComplexityForDegrade: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("Complexity score at or below which degrading is allowed (default: 0.5)"),
+        minComplexityConfidence: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("Minimum confidence in the complexity score to degrade (default: 0.5)"),
+        allowVerify: z.boolean().optional().describe("Enable post-hoc adequacy verification and escalation (default: true)"),
+        minConfidenceToEscalate: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("Confidence required to act on an 'inadequate' verdict (default: 0.7)"),
+        maxEscalationsPerTurn: z
+          .number()
+          .int()
+          .min(0)
+          .max(10)
+          .optional()
+          .describe("Re-runs allowed per turn after a failed verification (default: 1)"),
+      })
+      .optional()
+      .describe("Routing thresholds — pool-specific, tune per pool shape"),
+  })
+  export type Jev = z.infer<typeof Jev>
+
   export const Agent = z
     .object({
       model: ModelId.optional(),
@@ -1059,6 +1146,9 @@ export namespace Config {
       small_model: ModelId.describe(
         "Small model to use for tasks like title generation in the format of provider/model",
       ).optional(),
+      jev: Jev.optional().describe(
+        "Jev decision routing — confidence-gated model tier routing (default: disabled). Credentials resolve from TYPESAFE_API_KEY, the auth.json `typesafe` entry, or a custom `provider.typesafe` options.apiKey.",
+      ),
       default_agent: z
         .string()
         .optional()

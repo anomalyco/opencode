@@ -41,6 +41,7 @@ import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
+import { Jev } from "./jev"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
@@ -72,6 +73,7 @@ export namespace SessionPrompt {
             resolve(input: MessageV2.WithParts): void
             reject(reason?: any): void
           }[]
+          routing: Jev.TurnState
         }
       > = {}
       return data
@@ -242,6 +244,7 @@ export namespace SessionPrompt {
     s[sessionID] = {
       abort: controller,
       callbacks: [],
+      routing: { escalations: 0 },
     }
     return controller.signal
   }
@@ -298,12 +301,16 @@ export namespace SessionPrompt {
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
       let lastUser: MessageV2.User | undefined
+      let lastUserParts: MessageV2.Part[] = []
       let lastAssistant: MessageV2.Assistant | undefined
       let lastFinished: MessageV2.Assistant | undefined
       let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
       for (let i = msgs.length - 1; i >= 0; i--) {
         const msg = msgs[i]
-        if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
+        if (!lastUser && msg.info.role === "user") {
+          lastUser = msg.info as MessageV2.User
+          lastUserParts = msg.parts
+        }
         if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
         if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
           lastFinished = msg.info as MessageV2.Assistant
@@ -333,7 +340,8 @@ export namespace SessionPrompt {
           history: msgs,
         })
 
-      const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
+      const routing = state()[sessionID].routing
+      let model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
         if (Provider.ModelNotFoundError.isInstance(e)) {
           const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
           Bus.publish(Session.Event.Error, {
@@ -345,6 +353,32 @@ export namespace SessionPrompt {
         }
         throw e
       })
+
+      // Jev routing. An escalation override (set after a failed verification)
+      // wins and disables further down-routing for the rest of the turn.
+      // Otherwise steps after the first re-resolve the tier — complexity can
+      // grow once tool results are in context. Fail-open: router trouble keeps
+      // the model the turn already resolved.
+      if (routing.override) {
+        model = await Provider.getModel(routing.override.providerID, routing.override.modelID).catch(() => model)
+      } else if (step > 1) {
+        const routed = await Jev.route({
+          request: Jev.requestText(lastUserParts),
+          defaultModel: lastUser.model,
+          contextTokens: lastFinished
+            ? lastFinished.tokens.input +
+              lastFinished.tokens.output +
+              lastFinished.tokens.reasoning +
+              lastFinished.tokens.cache.read +
+              lastFinished.tokens.cache.write
+            : undefined,
+          signal: abort,
+        }).catch(() => undefined)
+        if (routed) {
+          model = await Provider.getModel(routed.model.providerID, routed.model.modelID).catch(() => model)
+          log.info("jev route", { sessionID, step, tier: routed.decision.tier, reason: routed.decision.reason })
+        }
+      }
       const task = tasks.pop()
 
       // pending subtask
@@ -700,6 +734,36 @@ export namespace SessionPrompt {
         }
       }
 
+      // Jev verify-and-escalate: a down-routed step that finished inadequate is
+      // re-run from the original state on the next stronger tier. The inadequate
+      // attempt is discarded; tool side effects from earlier steps are retained
+      // (they are irreversible and part of the true state the re-run sees).
+      if (result === "stop" && !abort.aborted && !processor.message.error && !routing.override) {
+        let output = ""
+        for await (const item of MessageV2.stream(sessionID)) {
+          if (item.info.id !== processor.message.id) continue
+          output = item.parts
+            .filter((p): p is MessageV2.TextPart => p.type === "text")
+            .map((p) => p.text)
+            .join("\n")
+          break
+        }
+        const verdict = await Jev.verify({
+          request: Jev.requestText(lastUserParts),
+          output,
+          model: { providerID: processor.message.providerID, modelID: processor.message.modelID },
+          escalations: routing.escalations,
+          signal: abort,
+        }).catch(() => undefined)
+        if (verdict?.escalate && verdict.model) {
+          await Session.removeMessage({ sessionID, messageID: processor.message.id })
+          routing.escalations += 1
+          routing.override = verdict.model
+          log.info("jev escalate", { sessionID, tier: verdict.tier, escalations: routing.escalations })
+          continue
+        }
+      }
+
       if (result === "stop") break
       if (result === "compact") {
         await SessionCompaction.create({
@@ -954,7 +1018,20 @@ export namespace SessionPrompt {
   async function createUserMessage(input: PromptInput) {
     const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
 
-    const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
+    let model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
+    // Jev routing: when the model was not chosen explicitly for this message,
+    // let the router pick the tier for the turn. Any router failure (disabled,
+    // unavailable, unsure) keeps `model` — fail-open means fail expensive.
+    if (!input.model) {
+      const routed = await Jev.route({
+        request: Jev.requestText(input.parts),
+        defaultModel: model,
+      }).catch(() => undefined)
+      if (routed) {
+        model = routed.model
+        log.info("jev route", { sessionID: input.sessionID, tier: routed.decision.tier, reason: routed.decision.reason })
+      }
+    }
     const full =
       !input.variant && agent.variant
         ? await Provider.getModel(model.providerID, model.modelID).catch(() => undefined)
