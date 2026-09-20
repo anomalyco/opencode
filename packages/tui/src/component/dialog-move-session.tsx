@@ -189,8 +189,9 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     )
     const recentOrder = new Map(recent.map((directory, index) => [directory, index]))
     const category = (item: (typeof list)[number]) => {
-      if (item.location === currentDirectory() || item.root.directory === current) return "Current"
+      if (item.location === currentDirectory()) return "Current"
       if (recentOrder.has(item.location)) return "Recent"
+      if (item.root.directory === current) return "Current"
       return "Other"
     }
     const ordered = list.toSorted((a, b) => {
