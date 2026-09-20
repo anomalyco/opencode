@@ -124,11 +124,26 @@ const durableTransforms = new Map<string, (data: Record<string, unknown>) => Rec
       if (!info || typeof info !== "object" || !("role" in info) || info.role !== "user" || !("summary" in info))
         return data
       const { summary, ...message } = info
-      // Diffs live durably in the message projection, written from the original payload.
-      // Events intentionally omit summary (V1 requires diffs when summary is present).
-      // Normalized retries skip projection, including changes only to omitted patches.
-      // Stripped events cannot rebuild diffs; migrations must copy the projection.
-      return { ...data, info: message }
+      // V1 requires diffs whenever summary is present. Keep its legal metadata so
+      // replay can recover patches from the snapshots in durable part events.
+      if (!summary || typeof summary !== "object" || !("diffs" in summary) || !Array.isArray(summary.diffs))
+        return { ...data, info: message }
+      return {
+        ...data,
+        info: {
+          ...message,
+          summary: {
+            ...("title" in summary ? { title: summary.title } : {}),
+            ...("body" in summary ? { body: summary.body } : {}),
+            diffs: summary.diffs.map((d) => ({
+              file: d.file,
+              status: d.status,
+              additions: d.additions,
+              deletions: d.deletions,
+            })),
+          },
+        },
+      }
     },
   ],
 ])

@@ -4,7 +4,7 @@ import { and, eq, sql } from "drizzle-orm"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
-import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionV1 } from "@opencode-ai/schema/v1/session"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
@@ -18,24 +18,21 @@ import { MessageID, PartID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
-import { TestInstance } from "../fixture/fixture"
+import { TestInstance, provideInstance } from "../fixture/fixture"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
 
-const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([
-      Session.node,
-      EventV2.node,
-      Snapshot.node,
-      Database.node,
-      SessionSummary.node,
-      SessionProjector.node,
-      CrossSpawnSpawner.node,
-      InstanceStore.node,
-    ]),
-    [[InstanceBootstrap.node, Layer.succeed(InstanceBootstrap.Service, { run: Effect.void })]],
-  ),
-)
+const nodes = LayerNode.group([
+  Session.node,
+  EventV2.node,
+  Snapshot.node,
+  Database.node,
+  SessionSummary.node,
+  SessionProjector.node,
+  CrossSpawnSpawner.node,
+  InstanceStore.node,
+])
+const bootstrap = Layer.succeed(InstanceBootstrap.Service, { run: Effect.void })
+const it = testEffect(AppNodeBuilder.build(nodes, [[InstanceBootstrap.node, bootstrap]]))
 
 const fixture = Effect.gen(function* () {
   const sessions = yield* Session.Service
@@ -103,6 +100,190 @@ const fixture = Effect.gen(function* () {
   return { input, user, assistant, finish, rows, directory: tmp.directory }
 })
 
+const replayFixture = Effect.gen(function* () {
+  const summary = yield* SessionSummary.Service
+  const snapshot = yield* Snapshot.Service
+  const { db } = yield* Database.Service
+  const f = yield* fixture
+  yield* f.finish()
+  yield* summary.summarize(f.input)
+  const expected = yield* summary.diff(f.input)
+  expect(expected[0]!.patch).toContain("+large patch fixture")
+  const rows = yield* db
+    .select()
+    .from(EventTable)
+    .where(eq(EventTable.aggregate_id, f.input.sessionID))
+    .orderBy(EventTable.seq)
+    .all()
+    .pipe(Effect.orDie)
+  const parts = yield* db
+    .select()
+    .from(PartTable)
+    .where(eq(PartTable.session_id, f.input.sessionID))
+    .orderBy(PartTable.id)
+    .all()
+    .pipe(Effect.orDie)
+  expect(parts.map((part) => part.data.type)).toEqual(["step-start", "step-finish"])
+  const replay = Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    const events = yield* EventV2.Service
+    // B is a separate, empty database. Instance setup creates only project
+    // metadata; all session/message/part rows below come from durable events.
+    expect(yield* db.select().from(SessionTable).all()).toEqual([])
+    expect(yield* db.select().from(MessageTable).all()).toEqual([])
+    expect(yield* db.select().from(PartTable).all()).toEqual([])
+    expect(yield* db.select().from(EventTable).all()).toEqual([])
+    for (const row of rows) {
+      yield* events.replay({
+        id: row.id,
+        type: row.type,
+        seq: row.seq,
+        aggregateID: row.aggregate_id,
+        data: row.data,
+      })
+    }
+    const rebuilt = yield* db.select().from(PartTable).orderBy(PartTable.id).all()
+    expect(rebuilt.map((part) => ({ id: part.id, data: part.data }))).toEqual(
+      parts.map((part) => ({ id: part.id, data: part.data })),
+    )
+    const projected = yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()
+    expect(projected?.data.summary?.diffs).toEqual(expected.map(({ patch, ...metadata }) => metadata))
+  })
+  return {
+    ...f,
+    expected,
+    replay,
+    layer: AppNodeBuilder.build(nodes, [
+      [InstanceBootstrap.node, bootstrap],
+      [Database.node, Database.layerFromPath(":memory:")],
+      [Snapshot.node, Layer.succeed(Snapshot.Service, snapshot)],
+    ]),
+  }
+})
+
+it.instance(
+  "durable-only replay rebuilds parts and recovers complete patches into database B",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* replayFixture
+      yield* Effect.gen(function* () {
+        yield* f.replay
+        const summary = yield* SessionSummary.Service
+        const events = yield* EventV2.Service
+        const { db } = yield* Database.Service
+        const before = yield* db.select().from(EventTable).orderBy(EventTable.seq).all()
+        const received: unknown[] = []
+        const unsubscribe = yield* events.listen((event) => Effect.sync(() => { received.push(event) }))
+        yield* Effect.addFinalizer(() => unsubscribe)
+        expect(yield* summary.diff(f.input)).toEqual(f.expected)
+        const projected = yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()
+        expect(projected?.data.summary?.diffs).toEqual(f.expected)
+        expect(yield* db.select().from(EventTable).orderBy(EventTable.seq).all()).toEqual(before)
+        expect(received).toEqual([])
+      }).pipe(provideInstance(f.directory), Effect.provide(f.layer))
+    }),
+  { git: true },
+)
+
+it.instance(
+  "recovered projection is idempotent and the second diff read does not recompute",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* replayFixture
+      yield* Effect.gen(function* () {
+        yield* f.replay
+        const summary = yield* SessionSummary.Service
+        const snapshot = yield* Snapshot.Service
+        const { db } = yield* Database.Service
+        const real = snapshot.diffFull
+        let calls = 0
+        Object.assign(snapshot, {
+          diffFull: (...args: Parameters<typeof real>) => Effect.suspend(() => { calls++; return real(...args) }),
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(() => Object.assign(snapshot, { diffFull: real })))
+        expect(yield* summary.diff(f.input)).toEqual(f.expected)
+        expect(calls).toBe(1)
+        const projected = yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()
+        expect(yield* summary.diff(f.input)).toEqual(f.expected)
+        expect(calls).toBe(1)
+        expect(yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()).toEqual(projected)
+      }).pipe(provideInstance(f.directory), Effect.provide(f.layer))
+    }),
+  { git: true },
+)
+
+it.instance(
+  "failed patch recovery returns runtime truncation without backfill and can retry",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* replayFixture
+      yield* Effect.gen(function* () {
+        yield* f.replay
+        const summary = yield* SessionSummary.Service
+        const snapshot = yield* Snapshot.Service
+        const { db } = yield* Database.Service
+        const before = yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()
+        const events = yield* db.select().from(EventTable).orderBy(EventTable.seq).all()
+        const real = snapshot.diffFull
+        Object.assign(snapshot, { diffFull: () => Effect.die(new Error("snapshot unavailable")) })
+        yield* Effect.addFinalizer(() => Effect.sync(() => Object.assign(snapshot, { diffFull: real })))
+        expect(yield* summary.diff(f.input)).toEqual(
+          f.expected.map((item) => ({ ...item, patch: "", truncated: true })),
+        )
+        expect(yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()).toEqual(before)
+        expect(yield* db.select().from(EventTable).orderBy(EventTable.seq).all()).toEqual(events)
+        Object.assign(snapshot, { diffFull: real })
+        expect(yield* summary.diff(f.input)).toEqual(f.expected)
+      }).pipe(provideInstance(f.directory), Effect.provide(f.layer))
+    }),
+  { git: true },
+)
+
+it.instance(
+  "unmatched files and missing snapshots return runtime truncation without backfill",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const summary = yield* SessionSummary.Service
+      const { db } = yield* Database.Service
+      const f = yield* fixture
+      const diffs = [{ file: "missing.txt", additions: 1, deletions: 0 }]
+      yield* sessions.updateMessage({ ...f.user, summary: { title: "keep", body: "body", diffs } })
+      const before = yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()
+      // No finish snapshot yet, then a real snapshot diff that has no matching file.
+      for (const finish of [false, true]) {
+        if (finish) yield* f.finish()
+        expect(yield* summary.diff(f.input)).toEqual([{ ...diffs[0], patch: "", truncated: true }])
+        expect(yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()).toEqual(before)
+      }
+    }),
+  { git: true },
+)
+
+it.instance(
+  "complete local projections including empty patches never recompute",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const summary = yield* SessionSummary.Service
+      const snapshot = yield* Snapshot.Service
+      const f = yield* fixture
+      const real = snapshot.diffFull
+      let calls = 0
+      Object.assign(snapshot, {
+        diffFull: () => Effect.sync(() => { calls++; return [] }),
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(() => Object.assign(snapshot, { diffFull: real })))
+      for (const patch of ["full local patch", ""]) {
+        const diffs = [{ file: "local.txt", patch, additions: 1, deletions: 0 }]
+        yield* sessions.updateMessage({ ...f.user, summary: { diffs } })
+        expect(yield* summary.diff(f.input)).toEqual(diffs)
+      }
+      expect(calls).toBe(0)
+    }),
+  { git: true },
+)
+
 it.instance(
   "unchanged step-finish diffs publish one message update and remain readable",
   () =>
@@ -123,8 +304,11 @@ it.instance(
         `SUMMARY_VOLUME ${JSON.stringify({ rows: updates.length, bytes: updates.reduce((sum, row) => sum + Buffer.byteLength(JSON.stringify(row.data)), 0) })}\n`,
       )
       expect(updates.length).toBe(1)
-      expect(updates[0]!.data.info).not.toHaveProperty("summary")
-      expect(Buffer.byteLength(JSON.stringify(updates[0]!.data))).toBeLessThan(1000)
+      expect(updates[0]!.data.info.summary.diffs).toEqual([
+        { file: "changed.txt", status: "added", additions: 2000, deletions: 0 },
+      ])
+      // Replaces the old 236-byte summary-free payload with replayable metadata.
+      expect(Buffer.byteLength(JSON.stringify(updates[0]!.data))).toBeLessThanOrEqual(400)
       expect(yield* summary.diff(f.input)).toEqual(diffs)
     }),
   { git: true },
@@ -188,13 +372,13 @@ it.instance(
         .get()
         .pipe(Effect.orDie)
       expect(updated?.data.summary).toEqual(empty.summary)
-      expect((yield* f.rows()).at(-1)!.data.info).not.toHaveProperty("summary")
+      expect((yield* f.rows()).at(-1)!.data.info.summary).toEqual(empty.summary)
     }),
   { git: true },
 )
 
 it.instance(
-  "live message updates retain new, replacement, and empty diffs while durable rows omit summary",
+  "live message updates retain new, replacement, and empty diffs while durable rows omit patches",
   () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
@@ -222,7 +406,10 @@ it.instance(
         expect(msg.summary).toEqual(value)
         expect(yield* summary.diff(f.input)).toEqual(value.diffs)
         const row = (yield* f.rows()).at(-1)!
-        expect(row.data.info).not.toHaveProperty("summary")
+        expect(row.data.info.summary).toEqual({
+          ...value,
+          diffs: value.diffs.map(({ patch, ...metadata }) => metadata),
+        })
         expect(Buffer.byteLength(JSON.stringify(row.data))).toBeLessThan(1000)
       }
       expect(received).toHaveLength(3)
@@ -335,7 +522,7 @@ it.instance(
 )
 
 it.instance(
-  "durable transform strips only user summary and preserves complete assistant and session updates",
+  "durable transform strips only user patches and preserves complete assistant and session updates",
   () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
@@ -358,7 +545,13 @@ it.instance(
       yield* sessions.updateMessage(full)
       const user = (yield* rows()).filter((row) => row.aggregate_id === f.input.sessionID).at(-1)!
       expect(user.type).toBe("message.updated.1")
-      expect(user.data).toEqual({ sessionID: f.input.sessionID, info: f.user })
+      expect(user.data).toEqual({
+        sessionID: f.input.sessionID,
+        info: {
+          ...f.user,
+          summary: { title: "t", body: "b", diffs: [{ file: "x.txt", additions: 1, deletions: 0 }] },
+        },
+      })
       for (const output of [11, 23]) {
         const next = { ...f.assistant, summary: true, tokens: { ...f.assistant.tokens, output } }
         yield* sessions.updateMessage(next)
@@ -441,7 +634,10 @@ it.instance(
         expect(projected?.data).toEqual(info)
         expect(yield* summary.diff(f.input)).toEqual(value.diffs)
         const stored = (yield* f.rows()).at(-1)!
-        expect(stored.data).toEqual({ sessionID: f.input.sessionID, info: f.user })
+        expect(stored.data).toEqual({
+          sessionID: f.input.sessionID,
+          info: { ...f.user, summary: { ...value, diffs: value.diffs.map(({ patch, ...metadata }) => metadata) } },
+        })
         const bytes = Buffer.byteLength(JSON.stringify(stored.data))
         sizes.push(bytes)
         expect(bytes).toBeLessThan(1000)
