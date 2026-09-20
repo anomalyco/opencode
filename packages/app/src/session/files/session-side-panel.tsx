@@ -54,10 +54,109 @@ import { SessionBrowserPane } from "@/session/browser/pane"
 import type { createSessionBrowser } from "@/session/browser/model"
 import type { ExecutionModel } from "@/superpowers/model"
 
-const ExecutionPanel = lazy(async () => {
+export const LazyExecutionPanel = lazy(async () => {
   const { ExecutionPanel } = await import("@/superpowers/panel")
   return { default: ExecutionPanel }
 })
+
+export function SessionTabAddControl(props: {
+  browserAvailable: boolean
+  executionOpen: boolean
+  fileKeybind: string[]
+  browserKeybind: string[]
+  onOpenFile: () => void
+  onOpenBrowser: () => void
+  onOpenExecution: () => void
+}) {
+  const language = useLanguage()
+  return (
+    <div class="h-full shrink-0 sticky end-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
+      {/* With only files to add, the plus stays a one-click "Open file" button. */}
+      <Show
+        when={props.browserAvailable || !props.executionOpen}
+        fallback={
+          <Tooltip
+            value={
+              <>
+                {language.t("command.file.open")}
+                <Show when={props.fileKeybind.length > 0}>
+                  <Keybind keys={props.fileKeybind} variant="neutral" />
+                </Show>
+              </>
+            }
+            placement="bottom"
+            class="flex items-center"
+          >
+            <IconButton
+              icon={<Icon name="plus" />}
+              variant="ghost-muted"
+              size="large"
+              onClick={props.onOpenFile}
+              aria-label={language.t("command.file.open")}
+            />
+          </Tooltip>
+        }
+      >
+        <Tooltip value={language.t("session.tab.add")} placement="bottom" class="flex items-center">
+          <Menu appearance="standard" modal={false} placement="bottom-start" gutter={4}>
+            <Menu.Trigger
+              as={IconButton}
+              icon={<Icon name="plus" />}
+              variant="ghost-muted"
+              size="large"
+              aria-label={language.t("session.tab.add")}
+              // The tablist redirects focus entering it to the selected
+              // tab, which counts as focus-outside and closes the menu.
+              onPointerDown={(event: PointerEvent) => event.preventDefault()}
+            />
+            <Menu.Portal>
+              <Menu.Content>
+                <Menu.Item
+                  class="!gap-6"
+                  onSelect={props.onOpenFile}
+                  shortcut={
+                    <Show when={props.fileKeybind.length > 0}>
+                      <Keybind keys={props.fileKeybind} variant="neutral" />
+                    </Show>
+                  }
+                >
+                  <div class="flex items-center gap-2">
+                    <Icon name="file-tree" size="small" />
+                    <span>{language.t("command.file.open")}</span>
+                  </div>
+                </Menu.Item>
+                <Show when={props.browserAvailable}>
+                  <Menu.Item
+                    class="!gap-6"
+                    onSelect={props.onOpenBrowser}
+                    shortcut={
+                      <Show when={props.browserKeybind.length > 0}>
+                        <Keybind keys={props.browserKeybind} variant="neutral" />
+                      </Show>
+                    }
+                  >
+                    <div class="flex items-center gap-2">
+                      <Icon name="globe" size="small" />
+                      <span>{language.t("session.tab.browser")}</span>
+                    </div>
+                  </Menu.Item>
+                </Show>
+                <Show when={!props.executionOpen}>
+                  <Menu.Item class="!gap-6" onSelect={props.onOpenExecution}>
+                    <div class="flex items-center gap-2">
+                      <Icon name="dot-grid" size="small" />
+                      <span>{language.t("session.tab.execution")}</span>
+                    </div>
+                  </Menu.Item>
+                </Show>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
+        </Tooltip>
+      </Show>
+    </div>
+  )
+}
 
 type ReviewDiff = FileDiffInfo
 type RenderDiff = FileDiffInfo
@@ -188,6 +287,7 @@ export function SessionSidePanel(props: {
     execution: () => true,
   })
   const contextOpen = tabState.contextOpen
+  const executionOpen = tabState.executionOpen
   const openFileOpen = tabState.openFileOpen
   const panelTabs = tabState.panelTabs
   const openedTabs = tabState.openedTabs
@@ -216,6 +316,9 @@ export function SessionSidePanel(props: {
   const openFileBrowser = () => {
     previewTab(SESSION_OPEN_FILE_TAB)
     queueMicrotask(() => fileFilter?.focus())
+  }
+  const openExecution = () => {
+    void tabs().open(SESSION_EXECUTION_TAB)
   }
   const activateTab = (value: string) => {
     const next = normalizeTab(value)
@@ -486,85 +589,15 @@ export function SessionSidePanel(props: {
                               </Switch>
                             )}
                           </For>
-                          <div class="h-full shrink-0 sticky end-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
-                            {/* With only files to add, the plus stays a one-click "Open file" button. */}
-                            <Show
-                              when={props.browser.available()}
-                              fallback={
-                                <Tooltip
-                                  value={
-                                    <>
-                                      {language.t("command.file.open")}
-                                      <Show when={openFileKeybind().length > 0}>
-                                        <Keybind keys={openFileKeybind()} variant="neutral" />
-                                      </Show>
-                                    </>
-                                  }
-                                  placement="bottom"
-                                  class="flex items-center"
-                                >
-                                  <IconButton
-                                    icon={<Icon name="plus" />}
-                                    variant="ghost-muted"
-                                    size="large"
-                                    onClick={() => openFileBrowser()}
-                                    aria-label={language.t("command.file.open")}
-                                  />
-                                </Tooltip>
-                              }
-                            >
-                              <Tooltip
-                                value={language.t("session.tab.add")}
-                                placement="bottom"
-                                class="flex items-center"
-                              >
-                                <Menu appearance="standard" modal={false} placement="bottom-start" gutter={4}>
-                                  <Menu.Trigger
-                                    as={IconButton}
-                                    icon={<Icon name="plus" />}
-                                    variant="ghost-muted"
-                                    size="large"
-                                    aria-label={language.t("session.tab.add")}
-                                    // The tablist redirects focus entering it to the selected
-                                    // tab, which counts as focus-outside and closes the menu.
-                                    onPointerDown={(event: PointerEvent) => event.preventDefault()}
-                                  />
-                                  <Menu.Portal>
-                                    <Menu.Content>
-                                      <Menu.Item
-                                        class="!gap-6"
-                                        onSelect={openFileBrowser}
-                                        shortcut={
-                                          <Show when={openFileKeybind().length > 0}>
-                                            <Keybind keys={openFileKeybind()} variant="neutral" />
-                                          </Show>
-                                        }
-                                      >
-                                        <div class="flex items-center gap-2">
-                                          <Icon name="file-tree" size="small" />
-                                          <span>{language.t("command.file.open")}</span>
-                                        </div>
-                                      </Menu.Item>
-                                      <Menu.Item
-                                        class="!gap-6"
-                                        onSelect={props.browser.open}
-                                        shortcut={
-                                          <Show when={openBrowserKeybind().length > 0}>
-                                            <Keybind keys={openBrowserKeybind()} variant="neutral" />
-                                          </Show>
-                                        }
-                                      >
-                                        <div class="flex items-center gap-2">
-                                          <Icon name="globe" size="small" />
-                                          <span>{language.t("session.tab.browser")}</span>
-                                        </div>
-                                      </Menu.Item>
-                                    </Menu.Content>
-                                  </Menu.Portal>
-                                </Menu>
-                              </Tooltip>
-                            </Show>
-                          </div>
+                          <SessionTabAddControl
+                            browserAvailable={props.browser.available()}
+                            executionOpen={executionOpen()}
+                            fileKeybind={openFileKeybind()}
+                            browserKeybind={openBrowserKeybind()}
+                            onOpenFile={openFileBrowser}
+                            onOpenBrowser={props.browser.open}
+                            onOpenExecution={openExecution}
+                          />
                         </Tabs.List>
                         <div
                           data-slot="session-side-panel-actions"
@@ -627,7 +660,7 @@ export function SessionSidePanel(props: {
                               <div class="p-3 text-12-regular text-text-weak">{language.t("execution.loading")}</div>
                             }
                           >
-                            <ExecutionPanel model={props.execution} presentation="panel" />
+                            <LazyExecutionPanel model={props.execution} presentation="panel" />
                           </Suspense>
                         </div>
                       </Show>

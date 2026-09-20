@@ -17,39 +17,71 @@ export async function openExecutionFixture(page: Page, scenario = "observer") {
   await expect(page.getByTestId("execution-fixture")).toBeVisible()
 }
 
-story("execution tab opens without loading a file", async ({ page }) => {
+async function openAddTabMenu(page: Page) {
+  await page.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(page.getByRole("menu")).toBeVisible()
+}
+
+async function openFileFromMenu(page: Page) {
+  await openAddTabMenu(page)
+  await page.getByRole("menuitem", { name: /Open file/ }).click()
+}
+
+async function openExecutionFromMenu(page: Page) {
+  await openAddTabMenu(page)
+  await page.getByRole("menuitem", { name: /Execution/ }).click()
+}
+
+story("execution tab opens from the add-tab control without loading a file", async ({ page }) => {
   await openExecutionFixture(page, "observer")
-  const root = page.getByTestId("execution-fixture")
-  await root.getByRole("button", { name: "Open File A", exact: true }).click()
+  await expect(page.getByTestId("execution-browser-available")).toHaveText("false")
+  await openAddTabMenu(page)
+  await expect(page.getByRole("menuitem", { name: /Execution/ })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: /Browser/ })).toHaveCount(0)
+  await page.getByRole("menuitem", { name: /Open file/ }).click()
   await expect(page.getByTestId("execution-load-log")).toHaveText("a.ts")
-  await root.getByRole("button", { name: "Open Execution", exact: true }).click()
+  await expect(page.getByTestId("execution-open-tabs")).toHaveText("file://a.ts")
+  await openExecutionFromMenu(page)
   await expect(page.getByTestId("execution-panel")).toBeVisible()
   await expect(page.getByTestId("execution-load-log")).toHaveText("a.ts")
   await expect(page.getByTestId("execution-open-tabs")).toHaveText("file://a.ts,execution")
 })
 
+story("execution tab is offered with files and browser when browser support is available", async ({ page }) => {
+  await openExecutionFixture(page, "observer")
+  await page.getByRole("button", { name: "Toggle browser support", exact: true }).click()
+  await expect(page.getByTestId("execution-browser-available")).toHaveText("true")
+  await openAddTabMenu(page)
+  await expect(page.getByRole("menuitem", { name: /Open file/ })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: /Browser/ })).toBeVisible()
+  await page.getByRole("menuitem", { name: /Execution/ }).click()
+  await expect(page.getByTestId("execution-panel")).toBeVisible()
+  await expect(page.getByTestId("execution-open-tabs")).toHaveText("execution")
+})
+
 story("execution tab keeps the existing file tab when it closes", async ({ page }) => {
   await openExecutionFixture(page, "observer")
-  const root = page.getByTestId("execution-fixture")
-  await root.getByRole("button", { name: "Open File A", exact: true }).click()
-  await root.getByRole("button", { name: "Open Execution", exact: true }).click()
+  await openFileFromMenu(page)
+  await expect(page.getByTestId("execution-open-tabs")).toHaveText("file://a.ts")
+  await openExecutionFromMenu(page)
+  await expect(page.getByTestId("execution-open-tabs")).toHaveText("file://a.ts,execution")
   await expect(page.getByTestId("execution-file-tab")).toHaveText("")
-  await root.getByRole("button", { name: "Close Execution", exact: true }).click()
+  await page.getByRole("button", { name: "Close Execution", exact: true }).click()
   await expect(page.getByTestId("execution-file-tab")).toHaveText("file://a.ts")
   await expect(page.getByTestId("execution-open-tabs")).toHaveText("file://a.ts")
+  await expect(page.getByTestId("execution-load-log")).toHaveText("a.ts")
 })
 
 story("execution tab mounts the graph only while open", async ({ page }) => {
   await openExecutionFixture(page, "observer")
-  const root = page.getByTestId("execution-fixture")
   await expect(page.locator('[data-testid="execution-graph"]')).toHaveCount(0)
-  await root.getByRole("button", { name: "Open Execution", exact: true }).click()
+  await openExecutionFromMenu(page)
   await expect(page.getByTestId("execution-panel")).toBeVisible()
   await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
   await expect(page.locator('[data-testid="execution-graph"]')).toHaveCount(0)
   await page.getByRole("button", { name: "Map", exact: true }).click()
   await expect(page.locator('[data-testid="execution-graph"]')).toHaveCount(1)
   await expect(page.getByText("Tracking not connected", { exact: true })).toBeVisible()
-  await root.getByRole("button", { name: "Close Execution", exact: true }).click()
+  await page.getByRole("button", { name: "Close Execution", exact: true }).click()
   await expect(page.locator('[data-testid="execution-graph"]')).toHaveCount(0)
 })
