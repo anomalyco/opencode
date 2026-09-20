@@ -133,11 +133,11 @@ const durableTransforms = new Map<string, (data: Record<string, unknown>) => Rec
         info: {
           ...message,
           summary: {
-            ...("title" in summary ? { title: summary.title } : {}),
-            ...("body" in summary ? { body: summary.body } : {}),
+            ...("title" in summary && summary.title !== undefined ? { title: summary.title } : {}),
+            ...("body" in summary && summary.body !== undefined ? { body: summary.body } : {}),
             diffs: summary.diffs.map((d) => ({
-              file: d.file,
-              status: d.status,
+              ...(d.file !== undefined ? { file: d.file } : {}),
+              ...(d.status !== undefined ? { status: d.status } : {}),
               additions: d.additions,
               deletions: d.deletions,
             })),

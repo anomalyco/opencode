@@ -187,7 +187,11 @@ const layer = Layer.effect(
           .where(and(eq(MessageTable.id, message.info.id), eq(MessageTable.session_id, input.sessionID)))
           .get()
           .pipe(Effect.orDie)
-        if (row && isDeepStrictEqual(row.data.summary?.diffs, diffs)) {
+        if (
+          row?.data.role === "user" &&
+          typeof row.data.summary === "object" &&
+          isDeepStrictEqual(row.data.summary.diffs, diffs)
+        ) {
           // Bypass publish/updateMessage. A read must neither recurse nor append an
           // event; the compare-and-set also avoids overwriting a concurrent update.
           yield* db

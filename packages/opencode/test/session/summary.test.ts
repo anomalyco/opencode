@@ -147,7 +147,10 @@ const replayFixture = Effect.gen(function* () {
       parts.map((part) => ({ id: part.id, data: part.data })),
     )
     const projected = yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()
-    expect(projected?.data.summary?.diffs).toEqual(expected.map(({ patch, ...metadata }) => metadata))
+    expect(projected).toHaveProperty(
+      "data.summary.diffs",
+      expected.map(({ patch, ...metadata }) => metadata),
+    )
   })
   return {
     ...f,
@@ -157,7 +160,7 @@ const replayFixture = Effect.gen(function* () {
       [InstanceBootstrap.node, bootstrap],
       [Database.node, Database.layerFromPath(":memory:")],
       [Snapshot.node, Layer.succeed(Snapshot.Service, snapshot)],
-    ]),
+    ]).pipe(Layer.fresh),
   }
 })
 
@@ -173,11 +176,15 @@ it.instance(
         const { db } = yield* Database.Service
         const before = yield* db.select().from(EventTable).orderBy(EventTable.seq).all()
         const received: unknown[] = []
-        const unsubscribe = yield* events.listen((event) => Effect.sync(() => { received.push(event) }))
+        const unsubscribe = yield* events.listen((event) =>
+          Effect.sync(() => {
+            received.push(event)
+          }),
+        )
         yield* Effect.addFinalizer(() => unsubscribe)
         expect(yield* summary.diff(f.input)).toEqual(f.expected)
         const projected = yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()
-        expect(projected?.data.summary?.diffs).toEqual(f.expected)
+        expect(projected).toHaveProperty("data.summary.diffs", f.expected)
         expect(yield* db.select().from(EventTable).orderBy(EventTable.seq).all()).toEqual(before)
         expect(received).toEqual([])
       }).pipe(provideInstance(f.directory), Effect.provide(f.layer))
@@ -198,7 +205,11 @@ it.instance(
         const real = snapshot.diffFull
         let calls = 0
         Object.assign(snapshot, {
-          diffFull: (...args: Parameters<typeof real>) => Effect.suspend(() => { calls++; return real(...args) }),
+          diffFull: (...args: Parameters<typeof real>) =>
+            Effect.suspend(() => {
+              calls++
+              return real(...args)
+            }),
         })
         yield* Effect.addFinalizer(() => Effect.sync(() => Object.assign(snapshot, { diffFull: real })))
         expect(yield* summary.diff(f.input)).toEqual(f.expected)
@@ -253,7 +264,8 @@ it.instance(
       // No finish snapshot yet, then a real snapshot diff that has no matching file.
       for (const finish of [false, true]) {
         if (finish) yield* f.finish()
-        expect(yield* summary.diff(f.input)).toEqual([{ ...diffs[0], patch: "", truncated: true }])
+        const truncated = [{ ...diffs[0], patch: "", truncated: true }]
+        expect(yield* summary.diff(f.input)).toEqual(truncated)
         expect(yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get()).toEqual(before)
       }
     }),
@@ -271,7 +283,11 @@ it.instance(
       const real = snapshot.diffFull
       let calls = 0
       Object.assign(snapshot, {
-        diffFull: () => Effect.sync(() => { calls++; return [] }),
+        diffFull: () =>
+          Effect.sync(() => {
+            calls++
+            return []
+          }),
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => Object.assign(snapshot, { diffFull: real })))
       for (const patch of ["full local patch", ""]) {
@@ -304,7 +320,7 @@ it.instance(
         `SUMMARY_VOLUME ${JSON.stringify({ rows: updates.length, bytes: updates.reduce((sum, row) => sum + Buffer.byteLength(JSON.stringify(row.data)), 0) })}\n`,
       )
       expect(updates.length).toBe(1)
-      expect(updates[0]!.data.info.summary.diffs).toEqual([
+      expect(updates[0]!.data.info).toHaveProperty("summary.diffs", [
         { file: "changed.txt", status: "added", additions: 2000, deletions: 0 },
       ])
       // Replaces the old 236-byte summary-free payload with replayable metadata.
@@ -372,7 +388,7 @@ it.instance(
         .get()
         .pipe(Effect.orDie)
       expect(updated?.data.summary).toEqual(empty.summary)
-      expect((yield* f.rows()).at(-1)!.data.info.summary).toEqual(empty.summary)
+      expect((yield* f.rows()).at(-1)!.data.info).toHaveProperty("summary", empty.summary)
     }),
   { git: true },
 )
@@ -406,7 +422,7 @@ it.instance(
         expect(msg.summary).toEqual(value)
         expect(yield* summary.diff(f.input)).toEqual(value.diffs)
         const row = (yield* f.rows()).at(-1)!
-        expect(row.data.info.summary).toEqual({
+        expect(row.data.info).toHaveProperty("summary", {
           ...value,
           diffs: value.diffs.map(({ patch, ...metadata }) => metadata),
         })
