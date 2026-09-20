@@ -6,6 +6,7 @@ import { Effect, Schema } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Config } from "../../config"
+import { Flag } from "../../flag/flag"
 import { FSUtil } from "../../fs-util"
 import { Location } from "../../location"
 import { Npm } from "../../npm"
@@ -32,6 +33,9 @@ const PluginModule = Schema.Struct({
 export const Plugin = define({
   id: "config-plugin",
   effect: Effect.fn(function* (ctx) {
+    // `--pure` runs without external plugins, so plugins declared in config and files
+    // under `.opencode/plugin(s)` are left unloaded.
+    if (Flag.OPENCODE_PURE) return
     const config = yield* Config.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
