@@ -106,6 +106,18 @@ test("task state transitions follow the section 8 table", () => {
   expect(codeOf(() => report(run, { type: "task.state", taskID: "task-a", attempt: 1, state: "running" }))).toBe("invalid_transition")
 })
 
+test("awaiting review can fail or verify", () => {
+  let failed = report(startSingle(), { type: "task.state", taskID: "task-a", attempt: 1, state: "running" })
+  failed = report(failed, { type: "task.state", taskID: "task-a", attempt: 1, state: "awaiting_review" })
+  failed = report(failed, { type: "task.state", taskID: "task-a", attempt: 1, state: "failed", reason: "review rejected" })
+  expect(taskOf(failed, "task-a")).toMatchObject({ state: "failed", reason: "review rejected" })
+
+  let verified = report(startSingle(), { type: "task.state", taskID: "task-a", attempt: 1, state: "running" })
+  verified = report(verified, { type: "task.state", taskID: "task-a", attempt: 1, state: "awaiting_review" })
+  verified = verify(verified, "task-a")
+  expect(taskOf(verified, "task-a")).toMatchObject({ state: "verified", attempt: 1 })
+})
+
 test("denied transitions are rejected instead of repaired", () => {
   const pending = startSingle()
   expect(codeOf(() => report(pending, { type: "task.state", taskID: "task-a", attempt: 1, state: "awaiting_review" }))).toBe("invalid_transition")
@@ -223,6 +235,26 @@ test("changed gates and dependencies invalidate the affected closure", () => {
   expect(taskOf(run, "review")).toMatchObject({ state: "pending", attempt: 2 })
   expect(taskOf(run, "docs")).toMatchObject({ state: "verified", attempt: 1 })
   expect(summarizeProgress(run.tasks)).toMatchObject({ verified: 1, total: 4, percent: 25 })
+})
+
+test("plan revision closes assignments for invalidated and removed work", () => {
+  let run = start()
+  run = verify(run, "spec")
+  run = verify(run, "impl")
+  run = report(run, { type: "assignment.add", id: "assign-impl", taskID: "impl", attempt: 1, sessionID: "child", role: "implementer" })
+  run = report(run, { type: "assignment.add", id: "assign-docs", taskID: "docs", attempt: 1, sessionID: "child", role: "implementer" })
+  const evidenceBefore = run.evidence.length
+  const trimmed = fixtureDefinitions()
+    .filter((task) => task.id !== "docs")
+    .map((task): TaskDefinition => (task.id === "spec" ? { ...task, requiredGates: ["tests", "manual"] } : task))
+  const revised = report(run, { type: "plan.revise", plan: fixturePlan, tasks: trimmed, reason: "tighten gates" })
+  expect(taskOf(revised, "docs")).toMatchObject({ state: "skipped", reason: "tighten gates" })
+  expect(revised.assignments).toHaveLength(2)
+  expect(revised.assignments.map((assignment) => assignment.id)).toEqual(["assign-impl", "assign-docs"])
+  expect(revised.assignments.every((assignment) => assignment.endedAt === 1_000)).toBe(true)
+  expect(revised.evidence).toHaveLength(evidenceBefore)
+  expect(taskOf(revised, "spec").attempt).toBe(2)
+  expect(taskOf(revised, "impl").attempt).toBe(2)
 })
 
 test("omitted tasks stay as skipped history and reintroduction starts a new attempt", () => {

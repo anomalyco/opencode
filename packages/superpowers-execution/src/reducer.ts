@@ -309,8 +309,15 @@ function applyPlanRevise(current: RunSnapshot, operation: ReviseOperation, conte
   const removed = current.tasks
     .filter((task) => !definitions.has(task.id))
     .map((task) => (task.state === "skipped" ? task : taskWithState(task, "skipped", operation.reason)))
+  const invalidated = new Set([...closure, ...removed.map((task) => task.id)])
+  const assignments = closeAssignments(current.assignments, context.now, invalidated)
   return commit(
-    { ...current, plan: { ...operation.plan, revision: current.plan.revision + 1 }, tasks: [...tasks, ...removed] },
+    {
+      ...current,
+      plan: { ...operation.plan, revision: current.plan.revision + 1 },
+      tasks: [...tasks, ...removed],
+      assignments,
+    },
     "plan.revise",
     operation.reason,
     context,
