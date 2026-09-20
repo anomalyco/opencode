@@ -192,13 +192,23 @@ story("agents virtualize more than one hundred rows with a tall row", async ({ p
   const tall = page.getByRole("treeitem", { name: /Worker 001/ })
   await expect(tall).toBeVisible()
   const tallBox = await tall.boundingBox()
-  expect(tallBox?.height ?? 0).toBeGreaterThan(44)
+  const tallHeight = Math.round(tallBox?.height ?? 0)
+  expect(tallHeight).toBeGreaterThan(44)
+
+  const scroller = page.locator(".execution-agents__scroller")
+  const expectedExtent = 120 * 44 + tallHeight
+  await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBe(expectedExtent)
+
   await controller.focus()
   await page.keyboard.press("End")
   const last = page.getByRole("treeitem", { name: /Worker 120/ })
   await expect(last).toBeVisible()
   await expect(last).toBeFocused()
   await expect(page.getByRole("treeitem", { name: /Worker 001/ })).toHaveCount(0)
+  await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBe(expectedExtent)
+  const bottom = await scroller.evaluate((element) => element.scrollTop + element.clientHeight)
+  expect(Math.abs(bottom - expectedExtent)).toBeLessThanOrEqual(2)
+
   await page.keyboard.press("Home")
   await expect(controller).toBeVisible()
   await expect(controller).toBeFocused()

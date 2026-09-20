@@ -78,10 +78,10 @@ export function ExecutionAgentList(props: { model: ExecutionModel }) {
         const element = elements.get(row.agent.id)
         return element ? [element] : []
       }),
-    (rect, element) => {
+    (_rect, element) => {
       const id = element.dataset.agentId
       if (!id) return
-      const height = Math.round(rect.height)
+      const height = Math.round(element.getBoundingClientRect().height)
       if (height > 0 && heights()[id] !== height) setHeights((previous) => ({ ...previous, [id]: height }))
     },
   )
