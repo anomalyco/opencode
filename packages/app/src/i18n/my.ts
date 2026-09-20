@@ -115,6 +115,7 @@ export const dict = {
   "theme.scheme.light": "အလင်း",
   "theme.scheme.dark": "အမှောင်",
   "command.sidebar.toggle": "ဘေးဘားကို ပြောင်းရန်",
+  "command.tabs.toggle": "တဘ်များကို ပြောင်းရန်",
   "command.project.open": "ပရောဂျက်ကို ဖွင့်ပါ။",
   "command.project.previous": "ယခင်ပရောဂျက်",
   "command.project.next": "နောက်ပရောဂျက်",

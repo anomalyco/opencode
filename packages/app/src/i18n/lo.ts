@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "ແສງສະຫວ່າງ",
   "theme.scheme.dark": "ມືດ",
   "command.sidebar.toggle": "ສະຫຼັບແຖບດ້ານຂ້າງ",
+  "command.tabs.toggle": "ສະຫຼັບແຖບ",
   "command.project.open": "ເປີດໂຄງການ",
   "command.project.previous": "ໂຄງການທີ່ຜ່ານມາ",
   "command.project.next": "ໂຄງການຕໍ່ໄປ",

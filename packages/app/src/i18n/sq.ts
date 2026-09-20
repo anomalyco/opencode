@@ -114,6 +114,7 @@ export const dict = {
   "theme.scheme.light": "Drita",
   "theme.scheme.dark": "E errët",
   "command.sidebar.toggle": "Ndrysho shiritin anësor",
+  "command.tabs.toggle": "Ndrysho skedat",
   "command.project.open": "Projekt i hapur",
   "command.project.previous": "Projekti i mëparshëm",
   "command.project.next": "Projekti i radhës",

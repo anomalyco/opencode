@@ -116,6 +116,7 @@ export const dict: Record<string, string> = {
   "theme.scheme.light": "ཡང་འཕྲོས་འཕྲོས",
   "theme.scheme.dark": "གནག་དུང་དུ",
   "command.sidebar.toggle": "ཟུར་ཁའི་ཕྲ་རིང་སོར་སྟོན་འབད།",
+  "command.tabs.toggle": "མཆོང་ལྡེ་ཚུ་སོར་སྟོན་འབད།",
   "command.project.open": "ལས་གཞི་ཁ་ཕྱེ།",
   "command.project.previous": "ལས་གཞི་སྔོན་མ།",
   "command.project.next": "ལས་གཞི་རྗེས་མ།",

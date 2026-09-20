@@ -353,6 +353,13 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   keybind: "mod+shift+t",
                   onSelect: () => tabsStoreActions.reopenClosedTab(),
                 },
+                {
+                  id: "tabs.toggle",
+                  title: language.t("command.tabs.toggle"),
+                  category: language.t("command.category.view"),
+                  keybind: "mod+shift+b",
+                  onSelect: () => settings.general.setShowTabs(!settings.general.showTabs()),
+                },
               ].filter((v) => v !== undefined)
             })
 
@@ -396,6 +403,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                 </TooltipV2>
 
                 <TitlebarTabStrip
+                  hidden={!settings.general.showTabs()}
                   tabs={tabsStore}
                   currentTab={currentTab}
                   forceTruncate={tabsAreOverflowing()}

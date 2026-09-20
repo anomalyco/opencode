@@ -119,6 +119,7 @@ export const dict = {
   "theme.scheme.light": "ہلکا",
   "theme.scheme.dark": "گہرا",
   "command.sidebar.toggle": "سائڈبار نوں ٹوگل کرو",
+  "command.tabs.toggle": "ٹیبز نوں ٹوگل کرو",
   "command.project.open": "پروجیکٹ کھولو",
   "command.project.previous": "پچھلا پروجیکٹ",
   "command.project.next": "اگلا پروجیکٹ",

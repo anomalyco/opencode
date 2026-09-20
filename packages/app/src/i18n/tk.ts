@@ -114,6 +114,7 @@ export const dict = {
   "theme.scheme.light": "Lightagtylyk",
   "theme.scheme.dark": "Garaňky",
   "command.sidebar.toggle": "Gapdal paneli çalyşyň",
+  "command.tabs.toggle": "Goýmalary çalyşyň",
   "command.project.open": "Açyk taslama",
   "command.project.previous": "Öňki taslama",
   "command.project.next": "Indiki taslama",

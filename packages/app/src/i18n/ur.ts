@@ -121,6 +121,7 @@ export const dict = {
   "theme.scheme.light": "روشن",
   "theme.scheme.dark": "تاریک",
   "command.sidebar.toggle": "سائیڈ بار دکھائیں یا چھپائیں",
+  "command.tabs.toggle": "ٹیبز دکھائیں یا چھپائیں",
   "command.project.open": "پروجیکٹ کھولیں۔",
   "command.project.previous": "پچھلا پروجیکٹ",
   "command.project.next": "اگلا پروجیکٹ",

@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "ពន្លឺ",
   "theme.scheme.dark": "ងងឹត",
   "command.sidebar.toggle": "បិទ/បើករបារចំហៀង",
+  "command.tabs.toggle": "បិទ/បើកផ្ទាំង",
   "command.project.open": "គម្រោងបើក",
   "command.project.previous": "គម្រោងមុន។",
   "command.project.next": "គម្រោងបន្ទាប់",

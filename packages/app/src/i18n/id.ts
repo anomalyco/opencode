@@ -123,6 +123,7 @@ export const dict = {
   "theme.scheme.dark": "Gelap",
 
   "command.sidebar.toggle": "Alihkan panel samping",
+  "command.tabs.toggle": "Alihkan tab",
   "command.project.open": "Buka proyek",
   "command.project.previous": "Proyek sebelumnya",
   "command.project.next": "Proyek berikutnya",

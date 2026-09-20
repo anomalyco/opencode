@@ -114,6 +114,7 @@ export const dict: Record<string, string> = {
   "theme.scheme.light": "আলো",
   "theme.scheme.dark": "অন্ধকার",
   "command.sidebar.toggle": "সাইডবার টগল করুন",
+  "command.tabs.toggle": "ট্যাব টগল করুন",
   "command.project.open": "প্রকল্প খুলুন",
   "command.project.previous": "আগের প্রকল্প",
   "command.project.next": "পরবর্তী প্রকল্প",

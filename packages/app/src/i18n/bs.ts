@@ -123,6 +123,7 @@ export const dict = {
   "theme.scheme.dark": "Tamno",
 
   "command.sidebar.toggle": "Prikaži/sakrij bočnu traku",
+  "command.tabs.toggle": "Prikaži/sakrij kartice",
   "command.project.open": "Otvori projekat",
   "command.project.previous": "Prethodni projekat",
   "command.project.next": "Sljedeći projekat",

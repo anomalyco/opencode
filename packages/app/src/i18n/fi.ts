@@ -20,6 +20,7 @@ export const dict = {
   "theme.scheme.light": "Vaalea",
   "theme.scheme.dark": "Tumma",
   "command.sidebar.toggle": "Näytä tai piilota sivupalkki",
+  "command.tabs.toggle": "Näytä tai piilota välilehdet",
   "command.project.open": "Avaa projekti",
   "command.project.previous": "Edellinen projekti",
   "command.project.next": "Seuraava projekti",

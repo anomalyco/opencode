@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "Svetloba",
   "theme.scheme.dark": "Temno",
   "command.sidebar.toggle": "Preklop stranske vrstice",
+  "command.tabs.toggle": "Preklop zavihkov",
   "command.project.open": "Odprt projekt",
   "command.project.previous": "Prejšnji projekt",
   "command.project.next": "Naslednji projekt",

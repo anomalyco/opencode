@@ -217,6 +217,7 @@ export function TitlebarTabStrip(props: {
   onClose: (tab: Tab) => void
   onReorder: (keys: string[]) => void
   onOverflowChange: (overflowing: boolean) => void
+  hidden: boolean
 }) {
   const global = useGlobal()
   const language = useLanguage()
@@ -285,7 +286,7 @@ export function TitlebarTabStrip(props: {
   })
 
   return (
-    <div data-slot="titlebar-tabs" class="relative min-w-0">
+    <div data-slot="titlebar-tabs" class="relative min-w-0" classList={{ hidden: props.hidden }}>
       <div
         data-slot="titlebar-tabs-scroll"
         class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"

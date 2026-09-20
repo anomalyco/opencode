@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "ღია",
   "theme.scheme.dark": "მუქი",
   "command.sidebar.toggle": "გვერდითი ზოლის გადართვა",
+  "command.tabs.toggle": "ჩანართების გადართვა",
   "command.project.open": "გახსნა პროექტი",
   "command.project.previous": "წინა პროექტი",
   "command.project.next": "შემდეგი პროექტი",

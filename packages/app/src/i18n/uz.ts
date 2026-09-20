@@ -115,6 +115,7 @@ export const dict = {
   "theme.scheme.light": "Nur",
   "theme.scheme.dark": "Qorong'i",
   "command.sidebar.toggle": "Yon panelni almashtirish",
+  "command.tabs.toggle": "Tablarni almashtirish",
   "command.project.open": "Ochiq loyiha",
   "command.project.previous": "Oldingi loyiha",
   "command.project.next": "Keyingi loyiha",

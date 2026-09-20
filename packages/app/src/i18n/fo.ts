@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "Ljós",
   "theme.scheme.dark": "Myrkt",
   "command.sidebar.toggle": "Skift síðulinjuna",
+  "command.tabs.toggle": "Skift flipar",
   "command.project.open": "Opin verkætlan",
   "command.project.previous": "Fyrra verkætlan",
   "command.project.next": "Næsta verkætlan",

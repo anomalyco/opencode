@@ -117,6 +117,7 @@ export const dict = {
   "theme.scheme.light": "Világos",
   "theme.scheme.dark": "Sötét",
   "command.sidebar.toggle": "Oldalsáv váltása",
+  "command.tabs.toggle": "Lapok váltása",
   "command.project.open": "Projekt megnyitása",
   "command.project.previous": "Előző projekt",
   "command.project.next": "Következő projekt",

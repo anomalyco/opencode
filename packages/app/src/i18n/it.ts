@@ -21,6 +21,7 @@ export const dict = {
   "theme.scheme.light": "Chiaro",
   "theme.scheme.dark": "Scuro",
   "command.sidebar.toggle": "Mostra o nascondi la barra laterale",
+  "command.tabs.toggle": "Mostra o nascondi le schede",
   "command.project.open": "Apri progetto",
   "command.project.previous": "Progetto precedente",
   "command.project.next": "Progetto successivo",

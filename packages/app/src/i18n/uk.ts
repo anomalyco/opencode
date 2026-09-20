@@ -123,6 +123,7 @@ export const dict = {
   "theme.scheme.dark": "Темна",
 
   "command.sidebar.toggle": "Перемкнути бічну панель",
+  "command.tabs.toggle": "Перемкнути вкладки",
   "command.project.open": "Відкрити проєкт",
   "command.project.previous": "Попередній проєкт",
   "command.project.next": "Наступний проєкт",

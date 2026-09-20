@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "Cerah",
   "theme.scheme.dark": "Gelap",
   "command.sidebar.toggle": "Togol bar sisi",
+  "command.tabs.toggle": "Togol tab",
   "command.project.open": "Buka projek",
   "command.project.previous": "Projek sebelum",
   "command.project.next": "Projek seterusnya",
