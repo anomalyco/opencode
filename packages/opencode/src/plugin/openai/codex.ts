@@ -322,7 +322,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
                       }
                     : model.limit,
               },
-            ]),
+            ] as const),
         )
         return addAutoSelectModel(models)
       },

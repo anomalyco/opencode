@@ -1,4 +1,3 @@
-import { ModelV2 } from "@opencode-ai/core/model"
 import type { Model as CatalogModel, Provider as CatalogProvider } from "@opencode-ai/core/models-dev"
 import type { Model as ProviderModel } from "@/provider/provider"
 
@@ -60,19 +59,28 @@ type TypeSafeSDK = {
   choice(instructions: string, criteria: Record<string, string>): unknown
 }
 
-export function addAutoSelectModel(models: Readonly<Record<string, ProviderModel>>) {
+type AutoSelectModel = {
+  id: string
+  name: string
+  api: { id: string }
+  variants?: Record<string, Record<string, unknown>>
+}
+
+export function addAutoSelectModel<T extends AutoSelectModel>(models: Readonly<Record<string, T>>): Record<string, T> {
   const base = Object.values(models)[0]
   if (!base) return models
 
+  const autoSelect = {
+    ...base,
+    id: AUTOSELECT_MODEL_ID,
+    name: "Jev OpenAI Auto",
+    api: { ...base.api, id: AUTOSELECT_MODEL_ID },
+    variants: {},
+  } as T
+
   return {
     ...models,
-    [AUTOSELECT_MODEL_ID]: {
-      ...base,
-      id: ModelV2.ID.make(AUTOSELECT_MODEL_ID),
-      name: "Jev OpenAI Auto",
-      api: { ...base.api, id: AUTOSELECT_MODEL_ID },
-      variants: {},
-    },
+    [AUTOSELECT_MODEL_ID]: autoSelect,
   }
 }
 

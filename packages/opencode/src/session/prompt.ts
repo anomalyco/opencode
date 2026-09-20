@@ -697,6 +697,7 @@ const layer = Layer.effect(
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
       const variant = selection?.model.variant ?? input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+      const sessionVariant = selection ? undefined : variant
 
       const info: SessionV1.User = {
         id: input.messageID ?? MessageID.ascending(),
@@ -729,7 +730,7 @@ const layer = Layer.effect(
         session.agent !== info.agent ||
         session.model?.providerID !== requestedModel.providerID ||
         session.model?.id !== requestedModel.modelID ||
-        (session.model?.variant === "default" ? undefined : session.model?.variant) !== requestedModel.variant
+        (session.model?.variant === "default" ? undefined : session.model?.variant) !== sessionVariant
       ) {
         yield* sessions.setAgentModel({
           sessionID: input.sessionID,
@@ -737,7 +738,7 @@ const layer = Layer.effect(
           model: {
             id: requestedModel.modelID,
             providerID: requestedModel.providerID,
-            variant: requestedModel.variant ?? "default",
+            variant: sessionVariant ?? "default",
           },
           time: info.time.created,
         })
@@ -1685,6 +1686,7 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
+    ModelsDev.node,
   ],
 })
 
