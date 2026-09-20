@@ -2668,6 +2668,41 @@ Configuration details:
 
 The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
 
+###### Model capabilities
+
+Custom models also accept capability flags that tell OpenCode what the model supports:
+
+```json title="opencode.json" {12-15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI Provider Display Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1"
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name",
+          "attachment": true,
+          "modalities": {
+            "input": ["text", "image"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+- **attachment**: Whether the model supports file attachments. For a new custom model without catalog metadata, this defaults to `false`; an existing catalog model inherits its value unless overridden.
+- **modalities.input**: The input types the model accepts (`text`, `image`, `audio`, `video`, `pdf`).
+
+:::warning
+For a new custom model that accepts images, set both `attachment: true` and `modalities.input: ["text", "image"]`. OpenCode uses these flags to determine the model's capabilities; it does not infer vision support from an OpenAI-compatible endpoint. These flags describe upstream support and do not add vision capabilities to a text-only model.
+:::
+
 ---
 
 ## Troubleshooting
