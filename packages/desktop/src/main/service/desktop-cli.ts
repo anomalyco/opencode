@@ -1,6 +1,7 @@
 export * as DesktopCli from "./desktop-cli"
 
 import { execFile, spawn } from "node:child_process"
+import { existsSync, readFileSync } from "node:fs"
 import { promisify } from "node:util"
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Option, Path } from "effect"
@@ -93,9 +94,15 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
 const bundledVersion = Effect.fn("DesktopCli.bundledVersion")(function* (bundled: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const shipped = yield* fs
-    .readFileString(path.join(path.dirname(bundled), "opencode-cli.version"))
-    .pipe(Effect.map((text) => text.trim()), Effect.orElseSucceed(() => ""))
+  // Synchronous on purpose: this sits on the path to the first window's IPC port, and a queued
+  // async read waits behind everything else the main thread is doing at that moment.
+  const shipped = yield* Effect.sync(() => {
+    try {
+      return readFileSync(path.join(path.dirname(bundled), "opencode-cli.version"), "utf8").trim()
+    } catch {
+      return ""
+    }
+  })
   if (shipped) {
     yield* Effect.logInfo("v2 CLI version bundled", { version: shipped })
     return shipped
@@ -147,7 +154,7 @@ const installCli = Effect.fn("DesktopCli.install")(function* (source: string, ve
   const path = yield* Path.Path
   const directory = path.join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"))
   const destination = path.join(directory, executableName())
-  if (yield* fs.exists(destination)) {
+  if (existsSync(destination)) {
     yield* Effect.logInfo("v2 CLI staged executable reused", { path: destination, version })
     return destination
   }

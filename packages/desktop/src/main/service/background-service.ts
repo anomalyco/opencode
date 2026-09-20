@@ -3,6 +3,7 @@ import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { BackgroundServiceState } from "./background-service-state"
 import { cleanStages, DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
+import { sidecarProbe } from "./sidecar-probe"
 
 export * as BackgroundService from "./background-service"
 
@@ -36,7 +37,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const version = mode === "initial" ? cli.version : undefined
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
-  const service = yield* Effect.tryPromise(() =>
+  const ensure = () =>
     client.Service.ensure({
       file:
         isolated && process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
@@ -46,13 +47,18 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
       command: [...cli.command, "serve", "--service", ...(isolated ? ["--port", "0"] : [])],
       onStart: (reason, previousVersion) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
-    }),
-  )
+    })
+  // A compatible service the entry module already found is adopted at once; ensure() still runs
+  // afterwards for its side effects (terminal handoff completion), off the renderer's path.
+  const early = mode === "initial" && !isolated ? yield* Effect.promise(sidecarProbe) : undefined
+  if (early) yield* Effect.sync(() => void ensure().catch(() => undefined))
+  const service = early ?? (yield* Effect.tryPromise(ensure))
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
   const url = new URL(service.url)
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
   yield* Effect.logInfo("v2 CLI background service ready", {
     version,
+    probed: !!early,
     ...endpoint(url.origin),
   })
   if (mode === "initial" && isolated && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
