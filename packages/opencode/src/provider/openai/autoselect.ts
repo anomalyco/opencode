@@ -101,27 +101,27 @@ export async function resolve(input: SelectionContext): Promise<{
     )
     const client = new sdk.TypeSafeClient({ timeout: AUTOSELECT_TIMEOUT_MS, logLevel: "off" })
     const response = (await client.systemOne({
-        model: JEV_MODEL,
-        state: {
-          task: input.prompt.slice(0, 32_000),
-          attachments: input.attachments,
-          agent: input.agent,
-          priority: "quality-and-speed",
-          effortGuidance: {
-            none: "Trivial lookup, formatting, or transformation.",
-            low: "Clear, bounded question or small edit.",
-            medium: "Normal multi-file coding and tool use.",
-            high: "Ambiguous debugging, architecture, or long dependency chains.",
-            xhigh: "The hardest high-risk or long-running agentic work.",
-          },
+      model: JEV_MODEL,
+      state: {
+        task: input.prompt.slice(0, 32_000),
+        attachments: input.attachments,
+        agent: input.agent,
+        priority: "quality-and-speed",
+        effortGuidance: {
+          none: "Trivial lookup, formatting, or transformation.",
+          low: "Clear, bounded question or small edit.",
+          medium: "Normal multi-file coding and tool use.",
+          high: "Ambiguous debugging, architecture, or long dependency chains.",
+          xhigh: "The hardest high-risk or long-running agentic work.",
         },
-        questions: {
-          route: sdk.choice(
-            "Choose the smallest OpenAI model and reasoning effort that can complete this task reliably. Promote aggressively for difficult coding, debugging, architecture, or long dependency chains.",
-            criteria,
-          ),
-        },
-      })) as {
+      },
+      questions: {
+        route: sdk.choice(
+          "Choose the smallest OpenAI model and reasoning effort that can complete this task reliably. Promote aggressively for difficult coding, debugging, architecture, or long dependency chains.",
+          criteria,
+        ),
+      },
+    })) as {
       answers?: { route?: { choice?: unknown; confidence?: unknown } }
       model?: unknown
     }
@@ -170,7 +170,8 @@ function compareCandidates(a: Candidate, b: Candidate) {
     a.catalog?.release_date ?? a.model.release_date,
   )
   if (date !== 0) return date
-  return a.modelID.localeCompare(b.modelID)
+  const model = a.modelID.localeCompare(b.modelID)
+  return model !== 0 ? model : a.variant.localeCompare(b.variant)
 }
 
 function describeCandidate(candidate: Candidate) {
