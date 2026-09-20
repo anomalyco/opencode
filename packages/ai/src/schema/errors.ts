@@ -83,7 +83,12 @@ export class RateLimitError extends Schema.TaggedError<RateLimitError>("AI.Error
 
 export class QuotaExceededError extends Schema.TaggedError<QuotaExceededError>("AI.Error.QuotaExceeded")(
   "QuotaExceeded",
-  ReasonFields,
+  {
+    ...ReasonFields,
+    // Set when the provider schedules the retry itself (Gemini RetryInfo);
+    // a scheduled quota is a transient rate window, not a billing dead end.
+    retryAfterMs: Schema.optional(Schema.Number),
+  },
 ) {}
 
 export class ContentPolicyError extends Schema.TaggedError<ContentPolicyError>("AI.Error.ContentPolicy")(

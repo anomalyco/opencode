@@ -53,6 +53,20 @@ export const isContextOverflow = (message: string) =>
 
 export const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
 
+// Google renders scheduled retries as seconds: a RetryInfo proto Duration
+// ("retryDelay":"38.601s") plus the human-readable hint Gemini appends to
+// quota messages ("Please retry in 38.601658672s.").
+const RETRY_HINT_FIELD = /"(?:retryDelay|retry_delay)"\s*:\s*"([\d.]+)s"/i
+const RETRY_HINT_TEXT = /\b(?:retry|try)(?:ing)?\s+(?:again\s+)?(?:in|after)\s+([\d.]+)\s*s(?:econds?)?\b/i
+
+/** Milliseconds until the provider schedules a retry, or undefined when it does not. */
+export const retryHintMs = (input: string): number | undefined => {
+  const seconds = RETRY_HINT_FIELD.exec(input)?.[1] ?? RETRY_HINT_TEXT.exec(input)?.[1]
+  if (seconds === undefined) return undefined
+  const parsed = Number.parseFloat(seconds)
+  return Number.isNaN(parsed) ? undefined : Math.ceil(parsed * 1_000)
+}
+
 export const isContextOverflowFailure = (failure: unknown) =>
   failure instanceof AIError
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
@@ -129,6 +143,9 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   // Scan the raw payload too so signals missing from the summary message
   // (e.g. overflow phrases nested in a JSON error body) still classify.
   const text = [input.message, body].filter((value) => value.length > 0).join("\n")
+  // Providers without Retry-After headers schedule retries inside the error
+  // payload itself (Gemini free tier: "Please retry in 38.601658672s").
+  const retryAfterMs = input.retryAfterMs ?? retryHintMs(text)
   const clientScoped = input.status === undefined || (input.status >= 400 && input.status < 500)
 
   if (
@@ -144,7 +161,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   if (codes.some((code) => CONTENT_POLICY_CODES.has(code)) || (clientScoped && CONTENT_POLICY_TEXT.test(input.message)))
     return new ContentPolicyError(details)
   if (codes.some((code) => QUOTA_CODES.has(code)) || (input.status === 429 && QUOTA_TEXT.test(text)))
-    return new QuotaExceededError(details)
+    return new QuotaExceededError({ ...details, retryAfterMs })
   if (input.status === 401 || input.status === 403 || codes.some((code) => AUTH_CODES.has(code)))
     return new AuthenticationError(details)
   if (
@@ -156,7 +173,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   )
     return new RateLimitError({
       ...details,
-      retryAfterMs: input.retryAfterMs,
+      retryAfterMs,
       rateLimit: input.rateLimit,
     })
   if (
@@ -170,7 +187,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   )
     return new ProviderInternalError({
       ...details,
-      retryAfterMs: input.retryAfterMs,
+      retryAfterMs,
     })
   if (codes.some((code) => INVALID_REQUEST_CODES.has(code))) return new InvalidRequestError(details)
   // Any remaining 4xx is a deterministic rejection of this request.
