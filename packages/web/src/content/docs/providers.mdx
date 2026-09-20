@@ -1797,7 +1797,7 @@ We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
    /models
    ```
 
-The picker also includes **Jev OpenAI Auto** for ChatGPT Plus/Pro OAuth. It asks Jev to choose one of the currently available OpenAI models and its reasoning effort from the first prompt, then keeps that route for the rest of the session. The transcript shows the selected model, effort, and whether Jev used the normal route or a fallback.
+The picker also includes **Jev OpenAI Auto** for ChatGPT Plus/Pro OAuth. It asks Jev to choose one of the currently available GPT-5.6 family models or GPT-6 Astra and its reasoning effort from the first prompt, then keeps that route for the rest of the session. The transcript shows the selected model, effort, and whether Jev used the normal route or a fallback.
 
 Jev runs through OpenRouter's [Decisions API](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-questions-and-answers-request) using the `~typesafe/jev-latest` model. Set `OPENROUTER_API_KEY` in the environment used to launch OpenCode. OpenRouter usage is separate from the ChatGPT Plus subscription: the key is used only for the bounded selector request, while the selected OpenAI model still runs through your existing ChatGPT OAuth connection. Jev receives the first prompt, attachment names and MIME types, agent name, and live OpenAI model metadata. It does not receive repository files, attachment contents, credentials, tool output, or prior conversation history.
 

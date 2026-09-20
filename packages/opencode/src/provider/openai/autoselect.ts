@@ -183,6 +183,7 @@ function buildCandidates(
   return Object.values(models)
     .filter((model) => model.id !== AUTOSELECT_MODEL_ID)
     .filter((model) => model.providerID === "openai")
+    .filter((model) => isAutoSelectableModel(model.api.id))
     .filter((model) => !model.id.endsWith("-fast"))
     .flatMap((model) => {
       const variants = Object.keys(model.variants ?? {})
@@ -194,6 +195,10 @@ function buildCandidates(
         catalog: catalog?.models[model.api.id],
       }))
     })
+}
+
+function isAutoSelectableModel(modelID: string) {
+  return modelID === "gpt-6-astra" || /^gpt-5\.6(?:-|$)/.test(modelID)
 }
 
 function chooseFallback(candidates: Candidate[]) {
