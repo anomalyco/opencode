@@ -7,6 +7,7 @@ export const AUTOSELECT_METADATA_KEY = "jevOpenAIAutoselect"
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 const OPENROUTER_JEV_MODEL = "~typesafe/jev-latest"
 const OPENROUTER_TIMEOUT_MS = 10_000
+const FALLBACK_MODEL_ID = "gpt-5.6-luna"
 
 export type AutoSelectSource = "jev" | "fallback"
 
@@ -183,6 +184,14 @@ function buildCandidates(
 }
 
 function chooseFallback(candidates: Candidate[]) {
+  const preferred = candidates.find(
+    (candidate) => candidate.modelID === FALLBACK_MODEL_ID && candidate.variant === "medium",
+  )
+  if (preferred) return preferred
+
+  const preferredVariant = candidates.find((candidate) => candidate.modelID === FALLBACK_MODEL_ID)
+  if (preferredVariant) return preferredVariant
+
   const sorted = [...candidates].sort(compareCandidates)
   const medium = sorted.filter((candidate) => candidate.variant === "medium")
   const general = medium.filter((candidate) => !/(mini|nano|spark|codex)/i.test(candidate.modelID))

@@ -1805,7 +1805,7 @@ Jev runs through [OpenRouter](https://openrouter.ai/docs/api_reference/overview)
 OPENROUTER_API_KEY=your_openrouter_key
 ```
 
-If the key is missing, OpenRouter times out, or Jev returns an invalid route, OpenCode chooses the newest suitable general OpenAI model at medium reasoning effort and labels the message `Jev fallback`. See the [Jev model page](https://openrouter.ai/~typesafe/jev-latest) for OpenRouter model availability and pricing.
+If the key is missing, OpenRouter times out, or Jev returns an invalid route, OpenCode prefers `GPT-5.6 Luna` at medium reasoning effort and labels the message `Jev fallback`. If Luna is unavailable in the active catalog, it falls back to the newest suitable general OpenAI model. See the [Jev model page](https://openrouter.ai/~typesafe/jev-latest) for OpenRouter model availability and pricing.
 
 ##### Compute residency
 
