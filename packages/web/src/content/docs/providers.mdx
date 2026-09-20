@@ -2696,11 +2696,11 @@ Custom models also accept capability flags that tell OpenCode what the model sup
 }
 ```
 
-- **attachment**: Whether the model can process file attachments such as images. Defaults to `false` for custom models.
+- **attachment**: Whether the model supports file attachments. For a new custom model without catalog metadata, this defaults to `false`; an existing catalog model inherits its value unless overridden.
 - **modalities.input**: The input types the model accepts (`text`, `image`, `audio`, `video`, `pdf`).
 
 :::warning
-If a custom model can see images but `attachment` is not set to `true`, pasted or attached images are replaced with a plain text placeholder (for example `[Attached image/png: file.png]`) before the request is sent. The model never receives the image and no warning is shown, which is easy to mistake for a provider problem. Set `attachment: true` (and `modalities.input`) on custom models that accept images.
+For a new custom model that accepts images, set both `attachment: true` and `modalities.input: ["text", "image"]`. OpenCode uses these flags to determine the model's capabilities; it does not infer vision support from an OpenAI-compatible endpoint. These flags describe upstream support and do not add vision capabilities to a text-only model.
 :::
 
 ---
