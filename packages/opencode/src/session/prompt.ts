@@ -1,5 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
 import path from "path"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import os from "os"
@@ -56,6 +57,11 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import {
+  AUTOSELECT_METADATA_KEY,
+  AUTOSELECT_MODEL_ID,
+  resolve as resolveAutoSelect,
+} from "@/provider/openai/autoselect"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -117,6 +123,7 @@ const layer = Layer.effect(
     const sessions = yield* Session.Service
     const agents = yield* Agent.Service
     const provider = yield* Provider.Service
+    const modelsDev = yield* ModelsDev.Service
     const processor = yield* SessionProcessor.Service
     const compaction = yield* SessionCompaction.Service
     const plugin = yield* Plugin.Service
@@ -273,6 +280,7 @@ const layer = Layer.effect(
         mode: task.agent,
         agent: task.agent,
         variant: lastUser.model.variant,
+        modelSelection: lastUser.modelSelection,
         path: { cwd: ctx.directory, root: ctx.worktree },
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -643,15 +651,52 @@ const layer = Layer.effect(
         throw error
       }
 
-      const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
+      const requestedModel = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
+      const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      const autoSelect = requestedModel.providerID === "openai" && requestedModel.modelID === AUTOSELECT_MODEL_ID
+      const openai = autoSelect ? yield* provider.getProvider(ProviderV2.ID.make("openai")) : undefined
+      const catalog = autoSelect ? yield* modelsDev.get() : undefined
+      const selection = autoSelect
+        ? yield* Effect.promise(() =>
+            resolveAutoSelect({
+              models: openai?.models ?? {},
+              catalog: catalog?.openai,
+              prompt: input.parts
+                .filter((part) => part.type === "text")
+                .map((part) => part.text)
+                .join("\n"),
+              attachments: input.parts
+                .filter((part) => part.type === "file")
+                .map((part) => ({ filename: part.filename, mime: part.mime })),
+              agent: ag.name,
+              metadata: session.metadata,
+            }),
+          )
+        : undefined
+      const model = selection
+        ? {
+            providerID: ProviderV2.ID.make(selection.model.providerID),
+            modelID: ModelV2.ID.make(selection.model.modelID),
+            variant: selection.model.variant,
+          }
+        : requestedModel
+      if (selection) {
+        yield* sessions.setMetadata({
+          sessionID: input.sessionID,
+          metadata: {
+            ...(session.metadata ?? {}),
+            [AUTOSELECT_METADATA_KEY]: selection.cache,
+          },
+        })
+      }
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
-        !input.variant && ag.variant && same
+        !selection && !input.variant && ag.variant && same
           ? yield* provider
               .getModel(model.providerID, model.modelID)
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
-      const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+      const variant = selection?.model.variant ?? input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
       const info: SessionV1.User = {
         id: input.messageID ?? MessageID.ascending(),
@@ -665,24 +710,34 @@ const layer = Layer.effect(
           modelID: model.modelID,
           variant,
         },
+        ...(selection
+          ? {
+              modelSelection: {
+                ...selection.metadata,
+                requested: {
+                  providerID: ProviderV2.ID.make("openai"),
+                  modelID: ModelV2.ID.make(AUTOSELECT_MODEL_ID),
+                },
+              },
+            }
+          : {}),
         system: input.system,
         format: input.format,
       }
 
-      const current = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       if (
-        current.agent !== info.agent ||
-        current.model?.providerID !== info.model.providerID ||
-        current.model?.id !== info.model.modelID ||
-        (current.model?.variant === "default" ? undefined : current.model?.variant) !== info.model.variant
+        session.agent !== info.agent ||
+        session.model?.providerID !== requestedModel.providerID ||
+        session.model?.id !== requestedModel.modelID ||
+        (session.model?.variant === "default" ? undefined : session.model?.variant) !== requestedModel.variant
       ) {
         yield* sessions.setAgentModel({
           sessionID: input.sessionID,
           agent: info.agent,
           model: {
-            id: info.model.modelID,
-            providerID: info.model.providerID,
-            variant: info.model.variant ?? "default",
+            id: requestedModel.modelID,
+            providerID: requestedModel.providerID,
+            variant: requestedModel.variant ?? "default",
           },
           time: info.time.created,
         })
@@ -1190,6 +1245,7 @@ const layer = Layer.effect(
             mode: agent.name,
             agent: agent.name,
             variant: lastUser.model.variant,
+            modelSelection: lastUser.modelSelection,
             path: { cwd: ctx.directory, root: ctx.worktree },
             cost: 0,
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -1418,7 +1474,9 @@ const layer = Layer.effect(
         return yield* currentModel(input.sessionID)
       })
 
-      yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
+      if (!(taskModel.providerID === "openai" && taskModel.modelID === AUTOSELECT_MODEL_ID)) {
+        yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
+      }
 
       const agent = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!agent) {
@@ -1444,7 +1502,9 @@ const layer = Layer.effect(
               agent: agent.name,
               description: cmd.description ?? "",
               command: input.command,
-              model: { providerID: taskModel.providerID, modelID: taskModel.modelID },
+              ...(taskModel.providerID === "openai" && taskModel.modelID === AUTOSELECT_MODEL_ID
+                ? {}
+                : { model: { providerID: taskModel.providerID, modelID: taskModel.modelID } }),
               prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
             },
           ]

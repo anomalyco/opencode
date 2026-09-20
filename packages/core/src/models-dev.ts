@@ -67,6 +67,8 @@ const ReasoningOption = Schema.Union([
 export const Model = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
+  description: Schema.optional(Schema.String),
+  knowledge: Schema.optional(Schema.String),
   family: Schema.optional(Schema.String),
   release_date: Schema.String,
   attachment: Schema.Boolean,

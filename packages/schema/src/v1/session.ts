@@ -329,6 +329,18 @@ const messageBase = {
   sessionID: partBase.sessionID,
 }
 
+export const ModelSelection = Schema.Struct({
+  type: Schema.Literal("jev-openai-autoselect"),
+  requested: Schema.Struct({
+    providerID: Provider.ID,
+    modelID: Model.ID,
+  }),
+  source: Schema.Literals(["jev", "fallback"]),
+  confidence: Schema.optional(Schema.Finite),
+  selectorModel: Schema.optional(Schema.String),
+}).annotate({ identifier: "ModelSelection" })
+export type ModelSelection = Types.DeepMutable<Schema.Schema.Type<typeof ModelSelection>>
+
 export const User = Schema.Struct({
   ...messageBase,
   role: Schema.Literal("user"),
@@ -349,6 +361,7 @@ export const User = Schema.Struct({
     modelID: Model.ID,
     variant: Schema.optional(Schema.String),
   }),
+  modelSelection: Schema.optional(ModelSelection),
   system: Schema.optional(Schema.String),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
 }).annotate({ identifier: "UserMessage" })
@@ -481,6 +494,7 @@ export const Assistant = Schema.Struct({
   }),
   structured: Schema.optional(Schema.Any),
   variant: Schema.optional(Schema.String),
+  modelSelection: Schema.optional(ModelSelection),
   finish: Schema.optional(Schema.String),
 }).annotate({ identifier: "AssistantMessage" })
 export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assistant>>, "error"> & {

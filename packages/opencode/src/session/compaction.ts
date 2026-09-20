@@ -398,6 +398,7 @@ const layer = Layer.effect(
         mode: "compaction",
         agent: "compaction",
         variant: userMessage.model.variant,
+        modelSelection: userMessage.modelSelection,
         summary: true,
         path: {
           cwd: ctx.directory,

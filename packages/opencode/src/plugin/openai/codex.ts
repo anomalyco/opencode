@@ -6,6 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 import { OpenAIWebSocketPool } from "./ws-pool"
 import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
+import { addAutoSelectModel } from "../../provider/openai/autoselect"
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
@@ -290,7 +291,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       async models(provider, ctx) {
         if (ctx.auth?.type !== "oauth") return provider.models
 
-        return Object.fromEntries(
+        const models = Object.fromEntries(
           Object.entries(provider.models)
             .filter(([, model]) => {
               if (model.options.reasoningMode === "pro") return false
@@ -323,6 +324,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
               },
             ]),
         )
+        return addAutoSelectModel(models)
       },
     },
     auth: {

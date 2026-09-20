@@ -680,6 +680,7 @@
         "@types/mime-types": "3.0.1",
         "@types/npm-package-arg": "6.1.4",
         "@types/semver": "^7.5.8",
+        "@typesafe-ai/sdk": "catalog:",
         "@types/turndown": "5.0.5",
         "@types/yargs": "17.0.33",
         "@typescript/native-preview": "catalog:",
@@ -1121,6 +1122,7 @@
     "@types/luxon": "3.7.1",
     "@types/node": "24.12.2",
     "@types/semver": "7.7.1",
+    "@typesafe-ai/sdk": "0.6.0",
     "@typescript/native-preview": "7.0.0-dev.20251207.1",
     "ai": "6.0.168",
     "cross-spawn": "7.0.6",
@@ -2933,6 +2935,8 @@
     "@types/scheduler": ["@types/scheduler@0.26.0", "", {}, "sha512-WFHp9YUJQ6CKshqoC37iOlHnQSmxNc795UhB26CyBBttrN9svdIrUjl/NjnNmfcwtncN0h/0PPAFWv9ovP8mLA=="],
 
     "@types/semver": ["@types/semver@7.7.1", "", {}, "sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA=="],
+
+    "@typesafe-ai/sdk": ["@typesafe-ai/sdk@0.6.0", "", {}],
 
     "@types/send": ["@types/send@0.17.6", "", { "dependencies": { "@types/mime": "^1", "@types/node": "*" } }, "sha512-Uqt8rPBE8SY0RK8JB1EzVOIZ32uqy8HwdxCnoCOsYrvnswqmFZ/k+9Ikidlk/ImhsdvBsloHbAlewb2IEBV/Og=="],
 
