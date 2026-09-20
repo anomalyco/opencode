@@ -77,3 +77,35 @@ test("propagates a later page failure instead of returning partial aggregates", 
   expect(result).toBe(error)
   expect(calls).toHaveLength(2)
 })
+
+test("retries a transient timeout on the same page without repeating earlier rows", async () => {
+  const calls: string[] = []
+  const rows = await Effect.runPromise(
+    queryR2SqlPages("SELECT * FROM aggregates", ["model"], (query) => {
+      calls.push(query)
+      if (calls.length === 1)
+        return Effect.succeed(Array.from({ length: 10000 }, (_, index) => ({ model: String(index).padStart(5, "0") })))
+      if (calls.length === 2)
+        return Effect.fail(new R2SqlQueryError({ message: "query timeout", status: 400, code: 40005 }))
+      return Effect.succeed([{ model: "10000" }])
+    }),
+  )
+  expect(rows).toHaveLength(10001)
+  expect(new Set(rows.map((row) => row.model)).size).toBe(10001)
+  expect(calls).toHaveLength(3)
+  expect(calls[1]).toBe(calls[2])
+  expect(calls[0]).not.toBe(calls[1])
+}, 10000)
+
+test("bounds transient retries and preserves the final error", async () => {
+  const calls: string[] = []
+  const error = new R2SqlQueryError({ message: "unavailable", status: 503 })
+  const result = await Effect.runPromise(
+    queryR2SqlPages("SELECT * FROM aggregates", undefined, (query) => {
+      calls.push(query)
+      return Effect.fail(error)
+    }).pipe(Effect.flip),
+  )
+  expect(calls).toHaveLength(3)
+  expect(result).toBe(error)
+}, 20000)

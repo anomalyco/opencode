@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schedule, Schema } from "effect"
 import { Resource } from "sst/resource"
 
 const R2_SQL_MAX_ROWS = 10_000
@@ -16,6 +16,7 @@ const R2SqlResponse = Schema.Struct({
   ),
   errors: Schema.Array(Schema.Unknown),
 })
+const R2SqlApiError = Schema.Struct({ code: Schema.Number, message: Schema.String })
 const decodeResponse = Schema.decodeUnknownEffect(Schema.fromJsonString(R2SqlResponse))
 
 export type R2SqlData = Record<string, string>
@@ -24,14 +25,16 @@ export class R2SqlQueryError extends Error {
   readonly _tag = "R2SqlQueryError"
   readonly requestId?: string
   readonly status?: number
+  readonly code?: number
 
-  constructor(input: { message: string; requestId?: string; status?: number; cause?: unknown }) {
+  constructor(input: { message: string; requestId?: string; status?: number; code?: number; cause?: unknown }) {
     super(input.cause instanceof Error ? `${input.message}: ${input.cause.toString()}` : input.message, {
       cause: input.cause,
     })
     this.name = "R2SqlQueryError"
     this.requestId = input.requestId
     this.status = input.status
+    this.code = input.code
   }
 }
 
@@ -60,7 +63,18 @@ export const queryR2SqlPages = Effect.fn("R2Sql.query")(function* (
   const rows: R2SqlData[] = []
   let cursor: R2SqlData | undefined
   while (true) {
-    const page = yield* fetchRows(columns?.length ? pageQuery(query, columns, cursor) : query)
+    const page = yield* Effect.suspend(() =>
+      fetchRows(columns?.length ? pageQuery(query, columns, cursor) : query),
+    ).pipe(
+      // Retry only this page; a transient R2 timeout must not discard the whole
+      // display-window backfill. Syntax, auth, and row-limit errors still fail.
+      Effect.retry({
+        times: 2,
+        schedule: Schedule.exponential("5 seconds"),
+        while: (error) =>
+          error.code === 40005 || error.status === 429 || (error.status !== undefined && error.status >= 500),
+      }),
+    )
     if (page.length >= R2_SQL_MAX_ROWS && !columns?.length)
       return yield* Effect.fail(
         new R2SqlQueryError({ message: `R2 SQL stats query reached the ${R2_SQL_MAX_ROWS} row limit` }),
@@ -134,6 +148,7 @@ const fetchRows = Effect.fn("R2Sql.fetchRows")(function* (query: string) {
         message: `R2 SQL stats query failed: ${JSON.stringify(decoded.errors)}`,
         requestId: decoded.result?.request_id,
         status: response.status,
+        code: decoded.errors.find(Schema.is(R2SqlApiError))?.code,
       }),
     )
 
