@@ -490,3 +490,40 @@ test("remaps fallback oauth model urls to the enterprise host", async () => {
   expect(models.claude.api.url).toBe("https://copilot-api.ghe.example.com")
   expect(models.claude.api.npm).toBe("@ai-sdk/github-copilot")
 })
+
+test("sends the Copilot integration header when fetching models", async () => {
+  let seen: Record<string, string> | undefined
+  globalThis.fetch = mock(async (_input: unknown, init?: RequestInit) => {
+    seen = init?.headers as Record<string, string>
+    return new Response(JSON.stringify({ data: [] }), { status: 200 })
+  }) as unknown as typeof fetch
+
+  const hooks = await CopilotAuthPlugin({
+    client: {} as never,
+    project: {} as never,
+    directory: "",
+    worktree: "",
+    experimental_workspace: {
+      register() {},
+    },
+    serverUrl: new URL("https://example.com"),
+    $: {} as never,
+  })
+
+  await hooks.provider!.models!(
+    { id: "github-copilot", models: {} } as never,
+    {
+      auth: {
+        type: "oauth",
+        refresh: "token",
+        access: "token",
+        expires: Date.now() + 60_000,
+      } as never,
+    },
+  )
+
+  expect(seen).toMatchObject({
+    Authorization: "Bearer token",
+    "Copilot-Integration-Id": "vscode-chat",
+  })
+})
