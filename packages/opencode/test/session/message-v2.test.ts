@@ -601,6 +601,104 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  // Bedrock Converse only accepts toolResult images for Anthropic and Amazon Nova models:
+  // https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ToolResultContentBlock.html
+  test.each([
+    ["anthropic.claude-sonnet-4-6", "keeps"],
+    ["us.amazon.nova-pro-v1:0", "keeps"],
+    ["amazon.nova-pro-v1:0", "keeps"],
+    ["global.openai.gpt-6-astra", "hoists"],
+    ["us.mistral.pixtral-large-2502-v1:0", "hoists"],
+  ] as const)("bedrock %s %s image tool-result media", async (apiID, expected) => {
+    const bedrockModel: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make(`amazon-bedrock/${apiID}`),
+      providerID: ProviderV2.ID.make("amazon-bedrock"),
+      api: {
+        id: apiID,
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+      capabilities: {
+        ...model.capabilities,
+        attachment: true,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+        },
+      },
+    }
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString("base64")
+    const userID = `m-user-${apiID}`
+    const assistantID = `m-assistant-${apiID}`
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [{ ...basePart(userID, `u1-${apiID}`), type: "text", text: "run tool" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, `a1-${apiID}`),
+            type: "tool",
+            callID: `call-${apiID}`,
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/example.png" },
+              output: "Image read successfully",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, `file-${apiID}`),
+                  type: "file",
+                  mime: "image/png",
+                  filename: "example.png",
+                  url: `data:image/png;base64,${png}`,
+                },
+              ],
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, bedrockModel)
+    const toolMessage = result[2]
+    expect(toolMessage.role).toBe("tool")
+
+    if (expected === "keeps") {
+      expect(result).toHaveLength(3)
+      expect(toolMessage.content[0]).toMatchObject({
+        type: "tool-result",
+        output: {
+          type: "content",
+          value: [
+            { type: "text", text: "Image read successfully" },
+            { type: "media", mediaType: "image/png", data: png },
+          ],
+        },
+      })
+      return
+    }
+
+    expect(result).toHaveLength(4)
+    expect(toolMessage.content[0]).toMatchObject({
+      type: "tool-result",
+      output: { type: "text", value: "Image read successfully" },
+    })
+    expect(result[3]).toStrictEqual({
+      role: "user",
+      content: [
+        { type: "text", text: "Attached media from tool result:" },
+        { type: "file", mediaType: "image/png", filename: "example.png", data: `data:image/png;base64,${png}` },
+      ],
+    })
+  })
+
   test("omits provider metadata when assistant model differs", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
