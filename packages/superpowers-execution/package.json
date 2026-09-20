@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@bearmanser/opencode-superpowers-execution",
+  "version": "0.1.0",
+  "description": "Portable execution run and reporting contract for the Superpowers execution UI",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./contract": "./src/contract.ts",
+    "./progress": "./src/progress.ts",
+    "./schema": "./src/schema.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "test": "bun test --timeout 30000 --only-failures",
+    "typecheck": "tsgo --noEmit",
+    "build": "bun run script/build.ts"
+  },
+  "dependencies": {
+    "@opencode/schema": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
+  }
+}
