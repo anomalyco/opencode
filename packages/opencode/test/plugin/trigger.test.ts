@@ -105,4 +105,21 @@ describe("plugin.trigger", () => {
       }),
     ),
   )
+
+  it.instance("loads named exports next to a default export for another plugin shape", () =>
+    withProject(
+      [
+        'export default { id: "guard", setup: () => {} }',
+        "export const guard = async () => ({",
+        `  ${JSON.stringify(systemHook)}: (_input, output) => {`,
+        '    output.system.unshift("named")',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+      Effect.gen(function* () {
+        expect(yield* triggerSystemTransform()).toEqual(["named"])
+      }),
+    ),
+  )
 })
