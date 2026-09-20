@@ -19,7 +19,11 @@ const quota = (retryAfterMs?: number) =>
 
 describe("SessionRunnerRetry", () => {
   test("retries quota failures only when the provider scheduled a retry within the maximum wait", () => {
+    expect(isRetryable(quota(0))).toBe(true)
     expect(isRetryable(quota(38_602))).toBe(true)
+    // Inclusive boundary at RETRY_AFTER_MAX (15 minutes).
+    expect(isRetryable(quota(900_000))).toBe(true)
+    expect(isRetryable(quota(900_001))).toBe(false)
     expect(isRetryable(quota())).toBe(false)
     // Gemini daily free-tier windows schedule hours out.
     expect(isRetryable(quota(4 * 60 * 60_000))).toBe(false)

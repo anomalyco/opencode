@@ -388,6 +388,13 @@ describe("retry hints", () => {
 
   test("returns undefined without a scheduled retry", () => {
     expect(retryHintMs("You exceeded your current quota, please check your plan and billing details.")).toBeUndefined()
+    expect(
+      retryHintMs(
+        "You exceeded your current quota. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits",
+      ),
+    ).toBeUndefined()
+    // Minutes-only hints are a deliberate scope cut: Google renders seconds.
+    expect(retryHintMs("Please try again in 5 minutes")).toBeUndefined()
     expect(retryHintMs("Rate limit exceeded, please slow down your request rate")).toBeUndefined()
     expect(retryHintMs("")).toBeUndefined()
   })

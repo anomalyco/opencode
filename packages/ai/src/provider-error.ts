@@ -64,7 +64,7 @@ export const retryHintMs = (input: string): number | undefined => {
   const seconds = RETRY_HINT_FIELD.exec(input)?.[1] ?? RETRY_HINT_TEXT.exec(input)?.[1]
   if (seconds === undefined) return undefined
   const parsed = Number.parseFloat(seconds)
-  return Number.isNaN(parsed) ? undefined : Math.ceil(parsed * 1_000)
+  return Number.isFinite(parsed) ? Math.ceil(parsed * 1_000) : undefined
 }
 
 export const isContextOverflowFailure = (failure: unknown) =>
