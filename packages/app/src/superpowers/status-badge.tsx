@@ -1,5 +1,6 @@
 import { Show } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ExecutionModel } from "./model"
 
@@ -28,26 +29,67 @@ const STATE_ICONS: Record<ExecutionAttentionState, string> = {
 
 export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () => void }) {
   const language = useLanguage()
-  const state = () => attentionState(props.model.attention())
-  const statusLabel = () => language.t(statusKey(state()))
+  const attention = () => props.model.attention()
+  const state = () => attentionState(attention())
+  const activeAgents = () => props.model.agents().filter((agent) => agent.state === "running").length
+  const summary = () => {
+    const current = state()
+    if (current === "stale") return language.t("execution.status.stale")
+    if (current === "needs_input") return language.t("execution.status.needs_input")
+    if (current === "failed") return language.t("execution.status.failed")
+    if (current === "blocked") return language.t("execution.status.blocked")
+    const progress = props.model.progress()
+    if (progress) return language.t("execution.status.verified", { verified: progress.verified, total: progress.total })
+    if (activeAgents() > 0) return language.plural("execution.status.activeAgents", activeAgents())
+    return language.t("execution.status.normal")
+  }
 
   return (
     <div class="flex items-center gap-1">
-      <button
-        type="button"
-        data-testid="execution-status-badge"
-        data-attention={state()}
-        class="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-13-regular text-v2-text-text-muted hover:text-v2-text-text-base"
-        onClick={props.onOpen}
-        aria-label={language.t("execution.status.open")}
+      <Tooltip
+        class="shrink-0"
+        placement="bottom"
+        value={
+          <div class="flex flex-col gap-0.5" data-testid="execution-status-detail">
+            <span>{language.t("execution.status.detail.title")}</span>
+            <span>
+              {attention().stale
+                ? language.t("execution.status.detail.stale")
+                : language.t("execution.status.detail.connected")}
+            </span>
+            <span>{language.t("execution.status.detail.needsInput", { count: attention().needsInput })}</span>
+            <span>{language.t("execution.status.detail.failed", { count: attention().failed })}</span>
+            <span>{language.t("execution.status.detail.blocked", { count: attention().blocked })}</span>
+            <Show when={props.model.progress()}>
+              {(progress) => (
+                <span>
+                  {language.t("execution.status.detail.verified", {
+                    verified: progress().verified,
+                    total: progress().total,
+                  })}
+                </span>
+              )}
+            </Show>
+            <span>{language.t("execution.status.detail.agents", { count: activeAgents() })}</span>
+          </div>
+        }
       >
-        <span data-testid="execution-status-icon" class="shrink-0">
-          <Icon name={STATE_ICONS[state()]} size="small" />
-        </span>
-        <span data-testid="execution-status-label" class="max-md:hidden">
-          {statusLabel()}
-        </span>
-      </button>
+        <button
+          type="button"
+          data-testid="execution-status-badge"
+          data-attention={state()}
+          class="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-13-regular text-v2-text-text-muted hover:text-v2-text-text-base"
+          onClick={props.onOpen}
+          aria-label={language.t("execution.status.open")}
+        >
+          <span data-testid="execution-status-icon" class="shrink-0">
+            <Icon name={STATE_ICONS[state()]} size="small" />
+          </span>
+          <span data-testid="execution-status-label" class="max-md:hidden">
+            {summary()}
+          </span>
+        </button>
+      </Tooltip>
       <Show when={state() === "needs_input"}>
         <button
           type="button"
@@ -58,16 +100,8 @@ export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () 
         </button>
       </Show>
       <span role="status" class="sr-only">
-        {statusLabel()}
+        {summary()}
       </span>
     </div>
   )
-}
-
-function statusKey(state: ExecutionAttentionState) {
-  if (state === "stale") return "execution.status.stale" as const
-  if (state === "needs_input") return "execution.status.needs_input" as const
-  if (state === "failed") return "execution.status.failed" as const
-  if (state === "blocked") return "execution.status.blocked" as const
-  return "execution.status.normal" as const
 }

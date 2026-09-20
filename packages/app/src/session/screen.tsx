@@ -286,6 +286,7 @@ export function SessionScreen(props: { session: SessionModel }) {
         setContentRef={timeline.view.setContentRef}
         diffs={review.details.diffs}
         onReview={review.open}
+        onViewAgents={openExecutionOverview}
         workspaceMoveEligible={composer.workspaceMoveEligible()}
         onSummaryOpenChange={review.details.setOpen}
         anchor={timeline.view.anchor}

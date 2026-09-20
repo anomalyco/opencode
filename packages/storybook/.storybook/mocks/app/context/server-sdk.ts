@@ -47,6 +47,15 @@ const api = {
     reply: async () => ({ data: true }),
     cancel: async () => ({ data: true }),
   },
+  worktree: {
+    list: async () => ({ data: [] }),
+    refresh: async () => ({ data: [] }),
+  },
+}
+
+const event = {
+  listen: () => () => undefined,
+  location: () => ({ on: () => () => undefined }),
 }
 
 export function useServerSDK() {
@@ -55,6 +64,7 @@ export function useServerSDK() {
     url: "http://storybook.local",
     api,
     client,
+    event,
   }
 }
 import { ServerScope } from "@/runtime/server/scope"

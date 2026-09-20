@@ -178,3 +178,42 @@ No threshold was changed and no result was fabricated.
   and shell jobs keep their labels.
 - The badge sits beside the existing review toggle; opening Execution also selects the Agents
   subview so the same action is consistent from the header and the summary.
+
+## Review round 1 fixes
+
+Finding 1 (desktop summary link, authorized file extension):
+
+- `message-timeline.tsx` gained `onViewAgents` on `MessageTimelineProps`, forwarded to
+  `SessionSummaryPanel`; `screen.tsx` supplies `openExecutionOverview`.
+- New `desktop-summary` fixture scenario mounts the real `SessionSummaryPanel` with the app
+  providers and `onViewAgents`; story `desktop summary composition opens agents` opens the
+  background-summary popover, asserts one `View all agents`, clicks it, and asserts Execution →
+  Agents opens. It no longer mounts `BackgroundWorkSummary` directly.
+- Enabling test-infra change: added `event.listen`/`event.location` and `api.worktree` to the
+  Storybook `@/runtime/server/client` mock (`packages/storybook/.storybook/mocks/app/context/
+  server-sdk.ts`), which `SessionWorkspaceMenu` reads at render. Additive only.
+
+Finding 2 (compact summary detail and tooltip):
+
+- `ExecutionStatusBadge` derives the visible summary from `model.progress()` and `model.agents()`
+  in §5.5 order (stale → pending input → failed → blocked → verification → active agents →
+  ready), says "Execution blocked", and wraps the control in a `Tooltip` that preserves full
+  detail. New English keys for the verification string, active-agent plural, and detail rows.
+- New stories: verification progress, active-agent count, blocked wording, tooltip detail.
+
+Out of scope (unchanged): `attention.failed` stays `0`; T11 wires the failure source.
+
+### Fix-round verification
+
+| Command | Result |
+|---|---|
+| `bun test --conditions=solid --preload ./happydom.ts ./src/superpowers` | PASS: 55 pass, 0 fail, 184 expect() calls |
+| `bun run test:components component-tests/superpowers.spec.ts --grep "execution shortcut\|summary" --workers=2` | 14 passed, 1 cold-Storybook-compile flake (`Failed to fetch dynamically imported module`); the flaky story passed alone |
+| `bun run test:components component-tests/superpowers.spec.ts --grep "execution shortcut\|summary" --workers=2 --retries=1` | PASS: 15 passed |
+| `bun run test:components component-tests/superpowers.spec.ts --workers=2 --retries=1` | PASS: 30 passed |
+| `bun run typecheck` (`tsgo -b`) | PASS (exit 0) |
+| `oxlint` on 7 changed files | PASS: 0 warnings, 0 errors |
+
+Files changed in the fix round: `status-badge.tsx`, `en.ts`, `message-timeline.tsx`,
+`screen.tsx`, `superpowers.fixture.tsx`, `superpowers.spec.ts`,
+`packages/storybook/.storybook/mocks/app/context/server-sdk.ts`, and this record.

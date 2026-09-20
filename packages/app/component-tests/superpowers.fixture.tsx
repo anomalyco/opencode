@@ -1,20 +1,27 @@
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { DataProvider } from "@opencode/session-ui/context"
+import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Show, Suspense, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { LanguageProvider, UiI18nBridge } from "../src/runtime/i18n/language"
-import { ServerConnection } from "../src/runtime/server/registry"
+import { ServerConnection, ServersProvider } from "../src/runtime/server/registry"
+import { GlobalProvider } from "../src/runtime/server/runtime"
+import { ServerProvider } from "../src/runtime/server/current"
+import { SettingsProvider } from "../src/settings/model"
 import { sessionHref } from "../src/shell/routes/session"
 import { SESSION_EXECUTION_TAB, closeSessionTab, openSessionTab } from "../src/shell/state/session-tabs"
+import { TabsProvider } from "../src/shell/tabs/tabs"
 import { createOpenSessionFileTab, createSessionTabs } from "../src/session/helpers"
 import { LazyExecutionPanel, SessionTabAddControl } from "../src/session/files/session-side-panel"
 import { BackgroundWorkSummary, type BackgroundTask } from "../src/session/summary/background"
-import { createExecutionModel, type ExecutionAttention } from "../src/superpowers/model"
+import { SessionSummaryPanel } from "../src/session/summary/panel"
+import { createExecutionModel, type ExecutionAttention, type ExecutionProgress } from "../src/superpowers/model"
 import { ExecutionStatusBadge } from "../src/superpowers/status-badge"
 import { agentFixture } from "../src/superpowers/fixtures"
 import type { ExecutionScope } from "../src/superpowers/identity"
 import type { ExecutionPresentation } from "../src/superpowers/panel"
+import type { Project } from "../src/runtime/server/types"
 
 type PendingRequest = { type: "permission" | "question"; owner: string }
 
@@ -36,10 +43,35 @@ function fixtureAttention(scenario: string): ExecutionAttention {
   }
 }
 
+function fixtureProgress(scenario: string): ExecutionProgress | undefined {
+  if (scenario !== "tracked-progress") return undefined
+  return {
+    verified: 3,
+    total: 5,
+    skipped: 0,
+    failed: 0,
+    blocked: 0,
+    awaitingReview: 0,
+    percent: 60,
+    source: "controller_report",
+  }
+}
+
 const backgroundTasks: BackgroundTask[] = [
   { id: "task_shell", type: "shell", label: "bun run test:components" },
   { id: "task_subagent", type: "subagent", agent: "explore", label: "Reviewing execution UI" },
 ]
+
+const desktopServer = { type: "http" as const, http: { url: "http://storybook.local" } }
+const desktopQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+const desktopProject: Project = {
+  id: "demo",
+  name: "Demo",
+  time: { created: 0, updated: 0 },
+  sandboxes: [],
+  worktree: "/root/git/demo",
+  worktrees: [],
+}
 
 export async function mountExecutionFixture(input: {
   surface?: ExecutionPresentation
@@ -97,6 +129,7 @@ export async function mountExecutionFixture(input: {
       scope,
       agents: () => agentFixture(scenario),
       attention: () => fixtureAttention(scenario),
+      progress: () => fixtureProgress(scenario),
       reviewRequest: () => requestRegion?.focus(),
       openSession: (sessionID) => {
         setState("navigationTarget", `${scope().serverKey}/${sessionID}`)
@@ -182,8 +215,37 @@ export async function mountExecutionFixture(input: {
         <div data-testid="prompt-count">{state.prompts}</div>
         <div data-testid="subagent-count">{state.subagents}</div>
         <div data-testid="interrupt-count">{state.interrupts}</div>
-        <Show when={tasks().length > 0}>
+        <Show when={tasks().length > 0 && scenario !== "desktop-summary"}>
           <BackgroundWorkSummary tasks={tasks()} onViewAgents={openExecution} />
+        </Show>
+        <Show when={scenario === "desktop-summary"}>
+          <QueryClientProvider client={desktopQueryClient}>
+            <SettingsProvider>
+              <ServersProvider servers={[desktopServer]}>
+                <TabsProvider>
+                  <GlobalProvider>
+                    <ServerProvider conn={desktopServer}>
+                      <SessionSummaryPanel
+                        shown={false}
+                        project={desktopProject}
+                        directory="/root/git/demo"
+                        local
+                        branch="main"
+                        diffs={[]}
+                        sessionID="root"
+                        moveEligible={false}
+                        moveDismissed
+                        onMoveDismiss={() => undefined}
+                        onReview={() => undefined}
+                        backgroundTasks={tasks()}
+                        onViewAgents={openExecution}
+                      />
+                    </ServerProvider>
+                  </GlobalProvider>
+                </TabsProvider>
+              </ServersProvider>
+            </SettingsProvider>
+          </QueryClientProvider>
         </Show>
         <Show when={executionVisible()}>
           <Suspense>

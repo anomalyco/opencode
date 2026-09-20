@@ -95,6 +95,7 @@ type MessageTimelineProps = {
   setContentRef: (el: HTMLDivElement) => void
   diffs: Accessor<{ additions: number; deletions: number }[] | undefined>
   onReview: () => void
+  onViewAgents?: () => void
   workspaceMoveEligible: boolean
   onSummaryOpenChange: (open: boolean) => void
   anchor: (id: string) => string
@@ -568,6 +569,7 @@ function MessageTimelineView(
                                 props.onReview()
                               }}
                               backgroundTasks={props.background.tasks()}
+                              onViewAgents={props.onViewAgents}
                             />
                           </Suspense>
                         </SummaryPopover>

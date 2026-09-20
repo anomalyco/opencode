@@ -300,3 +300,40 @@ story("background summary stays empty without running work", async ({ page }) =>
   await expect(page.locator('[data-component="session-background-summary"]')).toHaveCount(0)
   await expect(page.getByRole("button", { name: "View all agents", exact: true })).toHaveCount(0)
 })
+
+story("execution shortcut shows reported verification progress", async ({ page }) => {
+  await openExecutionFixture(page, "tracked-progress")
+  await expect(page.getByTestId("execution-status-label")).toHaveText("3 of 5 verified")
+})
+
+story("execution shortcut shows the active agent count", async ({ page }) => {
+  await openExecutionFixture(page, "observer")
+  await expect(page.getByTestId("execution-status-label")).toHaveText("2 active agents")
+})
+
+story("execution shortcut names blocked work", async ({ page }) => {
+  await openExecutionFixture(page, "blocked-pending")
+  await expect(page.getByTestId("execution-status-badge")).toHaveAttribute("data-attention", "blocked")
+  await expect(page.getByTestId("execution-status-label")).toHaveText("Execution blocked")
+})
+
+story("execution shortcut tooltip preserves full detail", async ({ page }) => {
+  await openExecutionFixture(page, "tracked-progress")
+  await page.getByTestId("execution-status-badge").hover()
+  const detail = page.getByTestId("execution-status-detail")
+  await expect(detail).toBeVisible()
+  await expect(detail).toContainText("Execution detail")
+  await expect(detail).toContainText("Connection: live")
+  await expect(detail).toContainText("Pending input: 0")
+  await expect(detail).toContainText("Verified: 3 of 5")
+  await expect(detail).toContainText("Active agents: 2")
+})
+
+story("desktop summary composition opens agents", async ({ page }) => {
+  await openExecutionFixture(page, "desktop-summary")
+  await page.getByRole("button", { name: "2 background tasks running", exact: true }).click()
+  await expect(page.getByRole("button", { name: "View all agents", exact: true })).toHaveCount(1)
+  await page.getByRole("button", { name: "View all agents", exact: true }).click()
+  await expect(page.getByTestId("execution-panel")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+})
