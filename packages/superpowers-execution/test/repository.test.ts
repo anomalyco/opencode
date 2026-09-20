@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createRunRepository, runKey, type RunAggregate } from "../src/repository"
-import { MAX_EVIDENCE, MAX_EVENTS, MAX_RECEIPTS } from "../src/schema"
+import { MAX_ASSIGNMENTS, MAX_EVIDENCE, MAX_EVENTS, MAX_RECEIPTS, type ReportCommand } from "../src/schema"
 import {
   fixtureDefinition,
   fixtureEvidence,
@@ -422,6 +422,101 @@ test("evidence and assignments are retained up to their hard limits", async () =
   if (!run.ok) return
   expect(run.value.assignments.length).toBe(3)
   expect(run.value.evidence.length).toBe(3)
+})
+
+test("assignments are retained up to and rejected beyond the hard limit", async () => {
+  const storage = memoryStorage()
+  const assignments = Array.from({ length: MAX_ASSIGNMENTS - 1 }, (_, index) => ({
+    id: `ass-${index}`,
+    taskID: "task-a",
+    attempt: 1,
+    sessionID: "child",
+    role: "implementer" as const,
+    createdAt: index,
+  }))
+  storage.seed(runKey(ownerDirectory, "root", "run-1"), {
+    snapshot: fixtureRun({ revision: 1, assignments }),
+    receipts: [],
+  })
+  const repository = createRunRepository({ storage, ownerDirectory, now: () => 1000 })
+  const accepted = await repository.report(
+    {
+      operationID: "op-ass-new",
+      runID: "run-1",
+      expectedRevision: 1,
+      operation: { type: "assignment.add", id: "ass-new", taskID: "task-a", attempt: 1, sessionID: "child", role: "implementer" },
+    },
+    principal,
+  )
+  expect(accepted.ok).toBe(true)
+  const run = await repository.getRun("root", "run-1")
+  expect(run.ok).toBe(true)
+  if (run.ok) expect(run.value.assignments.length).toBe(MAX_ASSIGNMENTS)
+  const rejected = await repository.report(
+    {
+      operationID: "op-ass-over",
+      runID: "run-1",
+      expectedRevision: 2,
+      operation: { type: "assignment.add", id: "ass-over", taskID: "task-a", attempt: 1, sessionID: "child", role: "implementer" },
+    },
+    principal,
+  )
+  expect(rejected.ok).toBe(false)
+  if (!rejected.ok) expect(rejected.error.code).toBe("limit_exceeded")
+  expect(storage.writes()).toBe(1)
+})
+
+test("reused operation ids ignore canonical key order", async () => {
+  const storage = memoryStorage()
+  const repository = createRunRepository({ storage, ownerDirectory, now: () => 1000 })
+  expect((await repository.report(fixtureStart(), principal)).ok).toBe(true)
+  const reordered: ReportCommand = {
+    expectedRevision: 0,
+    runID: "run-1",
+    operationID: "op-start",
+    operation: {
+      tasks: [fixtureDefinition()],
+      plan: { sha256: fixturePlan.sha256, path: fixturePlan.path },
+      title: "Execution run",
+      type: "run.start",
+    },
+  }
+  const replay = await repository.report(reordered, principal)
+  expect(replay.ok).toBe(true)
+  if (replay.ok) expect(replay.value.duplicate).toBe(true)
+  expect(storage.writes()).toBe(1)
+})
+
+test("close waits for an accepted notification to settle", async () => {
+  const storage = memoryStorage()
+  const started = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let notified = false
+  const repository = createRunRepository({
+    storage,
+    ownerDirectory,
+    now: () => 1000,
+    onChanged: async () => {
+      started.resolve()
+      await release.promise
+      notified = true
+    },
+  })
+  const accepted = repository.report(fixtureStart(), principal)
+  await started.promise
+  let closed = false
+  const closing = repository.close().then(() => {
+    closed = true
+  })
+  await Promise.resolve()
+  expect(closed).toBe(false)
+  release.resolve()
+  const result = await accepted
+  expect(result.ok).toBe(true)
+  await closing
+  expect(closed).toBe(true)
+  expect(notified).toBe(true)
+  expect(storage.writes()).toBe(1)
 })
 
 test("an evidence count beyond the hard limit is rejected", async () => {

@@ -133,7 +133,6 @@ interface SnapshotEntry {
 
 interface WriterQueue {
   run<T>(key: string, task: () => Promise<T>): Promise<T>
-  drain(): Promise<void>
 }
 
 const KEY_PREFIX = "superpowers.execution.v1"
@@ -170,7 +169,20 @@ export function createRunRepository(options: RunRepositoryOptions): RunRepositor
     now: options.now,
   }
   const queue = createWriterQueue()
+  const pending = new Set<Promise<void>>()
   let closed = false
+
+  const trackAccepted = (accepted: Promise<RepositoryOutcome<ReportResponse>>): Promise<RepositoryOutcome<ReportResponse>> => {
+    const tracked = accepted.then(
+      () => undefined,
+      () => undefined,
+    )
+    pending.add(tracked)
+    tracked.then(() => {
+      pending.delete(tracked)
+    })
+    return accepted
+  }
 
   return {
     async report(command, principal) {
@@ -178,12 +190,7 @@ export function createRunRepository(options: RunRepositoryOptions): RunRepositor
       if (principal.sessionID !== principal.rootSessionID) {
         return failure("forbidden", "only the root controller can report")
       }
-      const queued = await queue.run(runKeyPrefix(context.ownerDirectory, principal.rootSessionID), () =>
-        runReport(context, command, principal),
-      )
-      if (!queued.ok) return queued
-      if (queued.notify !== undefined) await notifyCommitted(options.onChanged, queued.notify)
-      return { ok: true, value: queued.value }
+      return trackAccepted(acceptReport(context, options.onChanged, queue, command, principal))
     },
     async getRun(rootSessionID, runID) {
       return readRun(context, rootSessionID, runID)
@@ -196,9 +203,24 @@ export function createRunRepository(options: RunRepositoryOptions): RunRepositor
     },
     async close() {
       closed = true
-      await queue.drain()
+      await Promise.all([...pending])
     },
   }
+}
+
+async function acceptReport(
+  context: RepositoryContext,
+  onChanged: RunRepositoryOptions["onChanged"],
+  queue: WriterQueue,
+  command: ReportCommand,
+  principal: ReportPrincipal,
+): Promise<RepositoryOutcome<ReportResponse>> {
+  const queued = await queue.run(runKeyPrefix(context.ownerDirectory, principal.rootSessionID), () =>
+    runReport(context, command, principal),
+  )
+  if (!queued.ok) return queued
+  if (queued.notify !== undefined) await notifyCommitted(onChanged, queued.notify)
+  return { ok: true, value: queued.value }
 }
 
 async function runReport(
@@ -520,9 +542,6 @@ function createWriterQueue(): WriterQueue {
         ),
       )
       return next
-    },
-    async drain() {
-      await Promise.all([...tails.values()])
     },
   }
 }
