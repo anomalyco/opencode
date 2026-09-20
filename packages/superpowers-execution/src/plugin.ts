@@ -5,6 +5,12 @@ import { Tool } from "@opencode/schema/tool"
 import { z } from "zod"
 import { ExecutionRpc } from "./contract"
 import { createSessionReader, resolveReportPrincipal, type ResolvedPrincipal, type SessionReader } from "./principal"
+import {
+  createReportingContextHook,
+  createReportingSkill,
+  warnReportingDiagnostic,
+  type ActiveRun,
+} from "./reporting"
 import { createRunRepository, type RunRepository } from "./repository"
 import {
   IdentifierSchema,
@@ -172,6 +178,14 @@ async function readRun(
   return outcome.value
 }
 
+async function readActiveRun(repository: RunRepository, rootSessionID: string): Promise<ActiveRun | undefined> {
+  const summaries = await repository.getSummaries({ rootSessionIDs: [rootSessionID] })
+  if (!summaries.ok) return undefined
+  const active = summaries.value.items.find((item) => item.status === "active")
+  if (active === undefined) return undefined
+  return { runID: active.runID, revision: active.revision }
+}
+
 function toolFailure(error: ExecutionError): Tool.Error {
   return new Tool.Error({ message: error.detail, error, metadata: { execution: error } })
 }
@@ -187,8 +201,22 @@ export default Plugin.define({
       editor.add(createReportTool(ctx, repository))
       editor.add(createReadTool(ctx, repository))
     })
+    const reportingSkill = await createReportingSkill()
+    const skills = await ctx.skill.transform((editor) => {
+      editor.add(reportingSkill)
+    })
+    const reporting = await ctx.session.hook(
+      "context",
+      createReportingContextHook({
+        readSession: createSessionReader(ctx.session),
+        readActiveRun: (rootSessionID) => readActiveRun(repository, rootSessionID),
+        onDiagnostic: warnReportingDiagnostic,
+      }),
+    )
     return async () => {
       await repository.close()
+      await reporting.dispose()
+      await skills.dispose()
       await tools.dispose()
       await rpc.dispose()
     }

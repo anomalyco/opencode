@@ -1,11 +1,15 @@
 import type { Agent } from "@opencode/schema/agent"
 import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
+import type { Skill } from "@opencode/schema/skill"
 import { Tool } from "@opencode/schema/tool"
 import type { Context as PluginContext } from "@opencode/plugin/promise/plugin"
+import type { SessionContext } from "@opencode/plugin/promise/session"
+import type { SkillEditor } from "@opencode/plugin/promise/skill"
 import type { Info, ToolContext, ToolEditor } from "@opencode/plugin/promise/tool"
 import { ExecutionRpc } from "../src/contract"
 import executionPlugin from "../src/plugin"
+import { containsReportingReminder, reportingReminderMarker } from "../src/reporting"
 import type { StorageScanOptions, StorageScanResult, StorageValue } from "../src/repository"
 import type {
   Changed,
@@ -318,8 +322,23 @@ export interface PluginHarness {
   notifyWriteCounts(): readonly number[]
   hostAccesses(): readonly string[]
   sessionLookups(): number
-  registrations(): { readonly rpc: number; readonly toolTransforms: number }
-  disposeCounts(): { readonly rpc: number; readonly tools: number }
+  registrations(): {
+    readonly rpc: number
+    readonly toolTransforms: number
+    readonly skillTransforms: number
+    readonly sessionHooks: number
+  }
+  disposeCounts(): {
+    readonly rpc: number
+    readonly tools: number
+    readonly skills: number
+    readonly hooks: number
+  }
+  skills(): readonly Skill.Info[]
+  applyContextHooks(context: SessionContext): Promise<void>
+  reapplySkillTransforms(): Promise<void>
+  historyWrites(): number
+  durableMessages(): readonly string[]
   failNextSessionGet(): void
   dispose(): Promise<void>
 }
@@ -327,6 +346,8 @@ export interface PluginHarness {
 interface CapturedTool extends Info {
   readonly id: string
 }
+
+type MutableSkill = { -readonly [K in keyof Skill.Info]: Skill.Info[K] }
 
 type SchemaValidationResult =
   | { readonly value: unknown }
@@ -347,7 +368,20 @@ export async function pluginHarness(options: PluginHarnessOptions): Promise<Plug
   const notifyWriteCounts: number[] = []
   const captured: CapturedTool[] = []
   const registered = new Map<string, CapturedTool>()
-  const counters = { rpc: 0, toolTransforms: 0, rpcDisposals: 0, toolDisposals: 0 }
+  const counters = {
+    rpc: 0,
+    toolTransforms: 0,
+    skillTransforms: 0,
+    sessionHooks: 0,
+    rpcDisposals: 0,
+    toolDisposals: 0,
+    skillDisposals: 0,
+    hookDisposals: 0,
+  }
+  const contextHooks: Array<(input: SessionContext) => Promise<void> | void> = []
+  const skillTransforms: Array<(editor: SkillEditor) => void> = []
+  const skills = new Map<string, MutableSkill>()
+  const durableMessages: string[] = []
   let definition: typeof ExecutionRpc | undefined
   let handlers: Record<string, (input: unknown, context: unknown) => Promise<unknown>> = {}
   let cleanup: (() => Promise<void> | void) | undefined
@@ -389,12 +423,47 @@ export async function pluginHarness(options: PluginHarnessOptions): Promise<Plug
     },
   }
 
+  const skillEditor: SkillEditor = {
+    list: () => [...skills.values()],
+    get: (id) => skills.get(id),
+    add: (skill) => {
+      skills.set(skill.id, { ...skill })
+    },
+    update: (id, update) => {
+      const skill = skills.get(id)
+      if (skill !== undefined) update(skill)
+    },
+    remove: (id) => {
+      skills.delete(id)
+    },
+  }
+
   const domains: Record<string, unknown> = {
     app: { name: "opencode", version: "2.0.11", channel: "test" },
     location: { directory: location, project: { id: "project", directory: location, canonical: location } },
     options: {},
     storage,
-    session: { get: (input: { readonly sessionID: string }) => lookup(input.sessionID) },
+    session: {
+      get: (input: { readonly sessionID: string }) => lookup(input.sessionID),
+      synthetic: async (input: { readonly sessionID: string; readonly text: string }) => {
+        durableMessages.push(input.text)
+      },
+      hook: async (name: string, callback: (input: SessionContext) => Promise<void> | void) => {
+        counters.sessionHooks += 1
+        if (name !== "context") return { dispose: async () => {} }
+        contextHooks.push(callback)
+        let done = false
+        return {
+          dispose: async () => {
+            if (done) return
+            done = true
+            counters.hookDisposals += 1
+            const index = contextHooks.indexOf(callback)
+            if (index !== -1) contextHooks.splice(index, 1)
+          },
+        }
+      },
+    },
     rpc: {
       register: async (nextDefinition: typeof ExecutionRpc, nextHandlers: typeof handlers) => {
         counters.rpc += 1
@@ -429,6 +498,26 @@ export async function pluginHarness(options: PluginHarnessOptions): Promise<Plug
             done = true
             counters.toolDisposals += 1
             registered.clear()
+          },
+        }
+      },
+    },
+    skill: {
+      list: async () => [...skills.values()],
+      reload: async () => {},
+      transform: async (callback: (editor: SkillEditor) => void) => {
+        counters.skillTransforms += 1
+        skillTransforms.push(callback)
+        callback(skillEditor)
+        let done = false
+        return {
+          dispose: async () => {
+            if (done) return
+            done = true
+            counters.skillDisposals += 1
+            const index = skillTransforms.indexOf(callback)
+            if (index !== -1) skillTransforms.splice(index, 1)
+            skills.clear()
           },
         }
       },
@@ -506,8 +595,27 @@ export async function pluginHarness(options: PluginHarnessOptions): Promise<Plug
     notifyWriteCounts: () => [...notifyWriteCounts],
     hostAccesses: () => [...accesses],
     sessionLookups: () => lookups,
-    registrations: () => ({ rpc: counters.rpc, toolTransforms: counters.toolTransforms }),
-    disposeCounts: () => ({ rpc: counters.rpcDisposals, tools: counters.toolDisposals }),
+    registrations: () => ({
+      rpc: counters.rpc,
+      toolTransforms: counters.toolTransforms,
+      skillTransforms: counters.skillTransforms,
+      sessionHooks: counters.sessionHooks,
+    }),
+    disposeCounts: () => ({
+      rpc: counters.rpcDisposals,
+      tools: counters.toolDisposals,
+      skills: counters.skillDisposals,
+      hooks: counters.hookDisposals,
+    }),
+    skills: () => [...skills.values()],
+    async applyContextHooks(context) {
+      for (const hook of [...contextHooks]) await hook(context)
+    },
+    async reapplySkillTransforms() {
+      for (const callback of [...skillTransforms]) callback(skillEditor)
+    },
+    historyWrites: () => durableMessages.length,
+    durableMessages: () => [...durableMessages],
     failNextSessionGet() {
       failSessionGet = true
     },
@@ -515,6 +623,54 @@ export async function pluginHarness(options: PluginHarnessOptions): Promise<Plug
       await cleanup?.()
     },
   }
+}
+
+export interface ReportingContextInput {
+  readonly system?: SessionContext["system"]
+  readonly messages?: SessionContext["messages"]
+}
+
+export interface ReportingHarness extends PluginHarness {
+  context(sessionID: string, overrides?: ReportingContextInput): SessionContext
+  apply(context: SessionContext): Promise<void>
+  hasReportingReminder(context: SessionContext): boolean
+  reportingReminderCount(context: SessionContext): number
+  reminders(context: SessionContext): readonly string[]
+}
+
+export async function reportingHarness(options: PluginHarnessOptions = defaultReportingOptions()): Promise<ReportingHarness> {
+  const plugin = await pluginHarness(options)
+  return {
+    ...plugin,
+    context: (sessionID, overrides = {}) => reportingContext(sessionID, overrides),
+    apply: (context) => plugin.applyContextHooks(context),
+    hasReportingReminder: (context) => containsReportingReminder(context.system),
+    reportingReminderCount: (context) =>
+      context.system.filter((part) => part.text.includes(reportingReminderMarker)).length,
+    reminders: (context) =>
+      context.system.flatMap((part) => (part.text.includes(reportingReminderMarker) ? [part.text] : [])),
+  }
+}
+
+function defaultReportingOptions(): PluginHarnessOptions {
+  return {
+    sessions: [
+      { id: "root" },
+      { id: "child", parentID: "root" },
+    ],
+  }
+}
+
+function reportingContext(sessionID: string, overrides: ReportingContextInput): SessionContext {
+  return {
+    sessionID: sessionID as Session.ID,
+    agent: "agent" as Agent.ID,
+    model: { id: "model", providerID: "provider" },
+    system: overrides.system ?? [],
+    messages: overrides.messages ?? [],
+    options: {},
+    tools: {},
+  } as SessionContext
 }
 
 async function decodeInput(schema: unknown, input: unknown): Promise<HarnessResult<unknown>> {

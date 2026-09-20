@@ -374,14 +374,15 @@ test("the read RPC exposes no mutation method", async () => {
   expect(Object.keys(harness.definition.events)).toEqual(["changed"])
 })
 
-test("unloading unregisters tools and the RPC, closes the writer, and is idempotent", async () => {
+test("unloading unregisters tools, the RPC, the skill, and the hook, and is idempotent", async () => {
   const harness = await pluginHarness({ sessions: [{ id: "root" }] })
   await startRun(harness, "run-1")
   await harness.dispose()
   await harness.dispose()
 
   expect(harness.toolNames()).toEqual([])
-  expect(harness.disposeCounts()).toEqual({ rpc: 1, tools: 1 })
+  expect(harness.skills()).toEqual([])
+  expect(harness.disposeCounts()).toEqual({ rpc: 1, tools: 1, skills: 1, hooks: 1 })
 
   const rpc = await harness.callRpc("capabilities", {})
   expect(rpc.ok).toBe(false)
@@ -395,12 +396,13 @@ test("unloading unregisters tools and the RPC, closes the writer, and is idempot
   expect(harness.storage.writes()).toBe(1)
 })
 
-test("setup registers one RPC and one tool transform without an event, socket, or HTTP surface", async () => {
+test("setup registers one RPC, one tool transform, one skill transform, and one context hook without an event, socket, or HTTP surface", async () => {
   const harness = await pluginHarness({ sessions: [{ id: "root" }] })
-  expect(harness.registrations()).toEqual({ rpc: 1, toolTransforms: 1 })
+  expect(harness.registrations()).toEqual({ rpc: 1, toolTransforms: 1, skillTransforms: 1, sessionHooks: 1 })
   const accesses = new Set(harness.hostAccesses())
   expect(accesses.has("storage")).toBe(true)
   expect(accesses.has("session")).toBe(true)
+  expect(accesses.has("skill")).toBe(true)
   for (const unavailable of ["event", "experimental", "generate", "websearch", "mcp", "worktree", "provider"]) {
     expect(accesses.has(unavailable)).toBe(false)
   }
