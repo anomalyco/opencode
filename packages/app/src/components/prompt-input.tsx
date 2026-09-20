@@ -44,8 +44,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover, ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
-import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
-import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
+import { DialogConnectProvider } from "@/components/dialog-connect-provider"
 import { useCommand } from "@/context/command"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
@@ -1697,7 +1696,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
                               style={control()}
                               onClick={() => {
-                                dialog.show(() => <DialogSelectModelUnpaid model={props.controls.model.selection} />)
+                                dialog.show(() => <DialogConnectProvider />)
                               }}
                             >
                               <Show when={props.controls.model.selection.current()?.provider?.id}>

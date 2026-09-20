@@ -16,16 +16,9 @@ import "./settings-v2.css"
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
 
-const PROVIDER_NOTES = [
-  { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
-  { match: (id: string) => id === "opencode-go", key: "dialog.provider.opencodeGo.tagline" },
-  { match: (id: string) => id === "anthropic", key: "dialog.provider.anthropic.note" },
-  { match: (id: string) => id.startsWith("github-copilot"), key: "dialog.provider.copilot.note" },
-  { match: (id: string) => id === "openai", key: "dialog.provider.openai.note" },
-  { match: (id: string) => id === "google", key: "dialog.provider.google.note" },
-  { match: (id: string) => id === "openrouter", key: "dialog.provider.openrouter.note" },
-  { match: (id: string) => id === "vercel", key: "dialog.provider.vercel.note" },
-] as const
+// Only Venice ships in this build; notes for other providers described catalogs
+// VeniceCode no longer offers.
+const PROVIDER_NOTES: { match: (id: string) => boolean; key: string }[] = []
 
 const PROVIDER_ICON_SIZE = 16
 
@@ -208,9 +201,6 @@ export const SettingsProvidersV2: Component<{
                     <div class="settings-v2-provider-copy">
                       <div class="settings-v2-provider-main">
                         <span class="settings-v2-provider-name">{item.name}</span>
-                        <Show when={item.id === "opencode" || item.id === "opencode-go"}>
-                          <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
-                        </Show>
                       </div>
                       <Show when={note(item.id)}>
                         {(key) => <p class="settings-v2-provider-description">{language.t(key())}</p>}

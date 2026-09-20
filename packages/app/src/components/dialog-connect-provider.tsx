@@ -40,6 +40,7 @@ import { CustomProviderForm } from "./dialog-custom-provider"
 import { decode64 } from "@/utils/base64"
 
 const CUSTOM_ID = "_custom"
+const VENICE_API_KEYS_URL = "https://venice.ai/settings/api"
 type ConnectMethod = Extract<IntegrationMethod, { type: "key" | "oauth" }>
 
 export function useProviderConnectController(options: { onBack?: () => void } = {}) {
@@ -59,6 +60,7 @@ export const DialogConnectProvider: Component<{
 }> = (props) => {
   const fallback = useProviderConnectController()
   const controller = props.controller ?? fallback
+  const available = useProviders(() => props.directory?.())
   const language = useLanguage()
   const settings = useSettings()
   const newLayout = settings.general.newLayoutDesigns
@@ -70,6 +72,18 @@ export const DialogConnectProvider: Component<{
     back.current = reset
     controller.select(provider)
   }
+
+  // With a single provider in the catalog there is nothing to choose, so skip the
+  // picker and open its connection form directly. Only auto-advances once, so the
+  // back button still reveals the picker (and the custom-provider escape hatch).
+  let advanced = false
+  createEffect(() => {
+    if (advanced || controller.selected()) return
+    const all = [...available.all().values()]
+    if (all.length !== 1) return
+    advanced = true
+    controller.select(all[0]!.id)
+  })
 
   function Content() {
     return (
@@ -163,14 +177,6 @@ function ProviderPicker(props: {
   const popularGroup = () => language.t("dialog.provider.group.popular")
   const otherGroup = () => language.t("dialog.provider.group.other")
   const customLabel = () => language.t("settings.providers.tag.custom")
-  const note = (id: string) => {
-    if (id === "anthropic") return language.t("dialog.provider.anthropic.note")
-    if (id === "openai") return language.t("dialog.provider.openai.note")
-    if (id.startsWith("github-copilot")) return language.t("dialog.provider.copilot.note")
-    if (id === "opencode-go") return language.t("dialog.provider.opencodeGo.tagline")
-    return undefined
-  }
-
   return (
     <List
       class="px-3"
@@ -206,18 +212,8 @@ function ProviderPicker(props: {
         <div class="px-1.25 w-full flex items-center gap-x-3">
           <ProviderIcon data-slot="list-item-extra-icon" id={i.id} />
           <span>{i.name}</span>
-          <Show when={i.id === "opencode"}>
-            <div class="text-14-regular text-text-weak">{language.t("dialog.provider.opencode.tagline")}</div>
-          </Show>
           <Show when={i.id === CUSTOM_ID}>
             <Tag>{language.t("settings.providers.tag.custom")}</Tag>
-          </Show>
-          <Show when={i.id === "opencode"}>
-            <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
-          </Show>
-          <Show when={note(i.id)}>{(value) => <div class="text-14-regular text-text-weak">{value()}</div>}</Show>
-          <Show when={i.id === "opencode-go"}>
-            <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
           </Show>
         </div>
       )}
@@ -237,7 +233,7 @@ function ProviderPickerV2(props: {
     active: undefined as string | undefined,
     connecting: undefined as string | undefined,
   })
-  const featured = ["opencode", "opencode-go", "anthropic", "openai", "google", "openrouter", "vercel"]
+  const featured = ["venice"]
   const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
   const all = createMemo(() => {
     language.locale()
@@ -334,18 +330,6 @@ function ProviderPickerV2(props: {
                       >
                         <ProviderIcon id={provider.id} class="size-4 shrink-0 text-v2-icon-icon-base" />
                         <span class="min-w-0 truncate font-[530] text-v2-text-text-base">{provider.name}</span>
-                        <Show when={provider.id === "opencode" || provider.id === "opencode-go"}>
-                          <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">
-                            {language.t(
-                              provider.id === "opencode"
-                                ? "dialog.provider.opencode.tagline"
-                                : "dialog.provider.opencodeGo.tagline",
-                            )}
-                          </span>
-                          <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
-                            {language.t("dialog.provider.tag.recommended")}
-                          </span>
-                        </Show>
                         <Show when={provider.id === CUSTOM_ID}>
                           <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
                             {language.t("settings.providers.tag.custom")}
@@ -562,11 +546,6 @@ function ProviderConnection(props: {
         })
         .then((x) => {
           if (!alive.value) return
-          if (props.provider === "opencode" && platform.platform === "desktop") {
-            const url = new URL(x.data.url)
-            url.searchParams.set("client_id", "opencode-desktop")
-            x.data.url = url.href
-          }
           dispatch({ type: "auth.complete", authorization: x.data })
         })
         .catch((e) => {
@@ -840,21 +819,20 @@ function ProviderConnection(props: {
       return (
         <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
           <Show
-            when={provider().id === "opencode"}
+            when={provider().id === "venice"}
             fallback={language.t("provider.connect.apiKey.description", { provider: provider().name })}
           >
             <div class="flex flex-col gap-5">
-              <div>{language.t("provider.connect.opencodeZen.line1")}</div>
-              <div>{language.t("provider.connect.opencodeZen.line2")}</div>
+              <div>{language.t("provider.connect.apiKey.description", { provider: provider().name })}</div>
               <div>
-                {language.t("provider.connect.opencodeZen.visit.prefix")}
+                {language.t("provider.connect.venice.visit.prefix")}
                 <ExternalLink
-                  href="https://opencode.ai/zen"
+                  href={VENICE_API_KEYS_URL}
                   class="text-v2-text-text-base focus-visible:rounded-xs focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
                 >
-                  {language.t("provider.connect.opencodeZen.visit.link")}
+                  {language.t("provider.connect.venice.visit.link")}
                 </ExternalLink>
-                {language.t("provider.connect.opencodeZen.visit.suffix")}
+                {language.t("provider.connect.venice.visit.suffix")}
               </div>
             </div>
           </Show>
@@ -892,16 +870,17 @@ function ProviderConnection(props: {
     return (
       <div class="flex flex-col gap-6">
         <Switch>
-          <Match when={provider().id === "opencode"}>
+          <Match when={provider().id === "venice"}>
             <div class="flex flex-col gap-4">
-              <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line1")}</div>
-              <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line2")}</div>
               <div class="text-14-regular text-text-base">
-                {language.t("provider.connect.opencodeZen.visit.prefix")}
-                <ExternalLink href="https://opencode.ai/zen" tabIndex={-1}>
-                  {language.t("provider.connect.opencodeZen.visit.link")}
+                {language.t("provider.connect.apiKey.description", { provider: provider().name })}
+              </div>
+              <div class="text-14-regular text-text-base">
+                {language.t("provider.connect.venice.visit.prefix")}
+                <ExternalLink href={VENICE_API_KEYS_URL} tabIndex={-1}>
+                  {language.t("provider.connect.venice.visit.link")}
                 </ExternalLink>
-                {language.t("provider.connect.opencodeZen.visit.suffix")}
+                {language.t("provider.connect.venice.visit.suffix")}
               </div>
             </div>
           </Match>

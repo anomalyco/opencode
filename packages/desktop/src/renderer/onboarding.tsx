@@ -1,13 +1,29 @@
-import { ServerConnection, useServer, useSettings, useTabs } from "@opencode-ai/app"
-import { onMount } from "solid-js"
+import { DialogConnectProvider, ServerConnection, useProviders, useServer, useSettings, useTabs } from "@opencode-ai/app"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { createEffect, onMount } from "solid-js"
 
 export function DesktopFirstLaunchOnboarding(props: { initialUrl: string; onLoaded: () => void }) {
   const server = useServer()
   const settings = useSettings()
   const tabs = useTabs()
+  const dialog = useDialog()
+  const providers = useProviders(() => undefined)
 
   onMount(() => {
     void runFirstLaunchOnboarding().finally(props.onLoaded)
+  })
+
+  // VeniceCode cannot do anything without a Venice API key, so ask for one as soon
+  // as we know none is stored. A non-empty catalog means the provider list has
+  // actually loaded — without that check an empty `connected` is just a cold start.
+  let askedForKey = false
+  createEffect(() => {
+    if (askedForKey) return
+    if (providers.all().size === 0) return
+    if (providers.connected().length > 0) return
+    askedForKey = true
+    console.info("[desktop-onboarding] no provider connected, prompting for API key")
+    void dialog.show(() => <DialogConnectProvider />)
   })
 
   async function runFirstLaunchOnboarding() {

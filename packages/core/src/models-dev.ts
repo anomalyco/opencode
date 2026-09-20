@@ -142,6 +142,19 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
+const DEFAULT_MODELS_URL = "https://models.dev"
+
+/**
+ * VeniceCode ships a single provider. Every surface that offers a model — the
+ * picker, settings, the CLI — reads this catalog, so narrowing it here is what
+ * keeps them all in agreement. Add an id to widen the app back out.
+ */
+const SUPPORTED_PROVIDERS = new Set(["venice"])
+
+function onlySupportedProviders(catalog: Record<string, Provider>) {
+  return Object.fromEntries(Object.entries(catalog).filter(([id]) => SUPPORTED_PROVIDERS.has(id)))
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -157,10 +170,11 @@ const layer = Layer.effect(
       ),
     )
 
-    const source = Flag.OPENCODE_MODELS_URL || "https://models.opencode.ai"
+    // models.dev is the upstream community catalog; opencode only mirrored it.
+    const source = Flag.OPENCODE_MODELS_URL || DEFAULT_MODELS_URL
     const filepath = path.join(
       Global.Path.cache,
-      source === "https://models.opencode.ai" ? "models.json" : `models-${Hash.fast(source)}.json`,
+      source === DEFAULT_MODELS_URL ? "models.json" : `models-${Hash.fast(source)}.json`,
     )
     const ttl = Duration.minutes(5)
     const lockKey = `models-dev:${filepath}`
@@ -228,7 +242,7 @@ const layer = Layer.effect(
         }),
       )
       return JSON.parse(text) as Record<string, Provider>
-    }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
+    }).pipe(Effect.map(onlySupportedProviders), Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
 
