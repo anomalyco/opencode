@@ -69,11 +69,24 @@ test("titles, summaries, and phases cap at their documented lengths", () => {
   expect(TitleSchema.safeParse("").success).toBe(false)
   expect(TitleSchema.safeParse("t".repeat(201)).success).toBe(false)
   expect(SummarySchema.safeParse("s".repeat(1_000)).success).toBe(true)
-  expect(SummarySchema.safeParse("").success).toBe(false)
+  expect(SummarySchema.safeParse("").success).toBe(true)
   expect(SummarySchema.safeParse("s".repeat(1_001)).success).toBe(false)
   expect(PhaseSchema.safeParse("p".repeat(80)).success).toBe(true)
   expect(PhaseSchema.safeParse("").success).toBe(false)
   expect(PhaseSchema.safeParse("p".repeat(81)).success).toBe(false)
+})
+
+test("summaries, reasons, and details allow empty text while titles and phases stay nonempty", () => {
+  expect(SummarySchema.safeParse("").success).toBe(true)
+  expect(ErrorSchema.safeParse({ code: "not_found", detail: "" }).success).toBe(true)
+  expect(ErrorSchema.safeParse({ code: "not_found", detail: "d".repeat(1_000) }).success).toBe(true)
+  expect(ErrorSchema.safeParse({ code: "not_found", detail: "d".repeat(1_001) }).success).toBe(false)
+  expect(TaskSchema.safeParse(fixtureTask({ state: "blocked", reason: "" })).success).toBe(true)
+  expect(TaskSchema.safeParse(fixtureTask({ state: "skipped", reason: "" })).success).toBe(true)
+  expect(TaskSchema.safeParse(fixtureTask({ state: "blocked" })).success).toBe(false)
+  expect(TaskSchema.safeParse(fixtureTask({ state: "blocked", reason: "r".repeat(1_001) })).success).toBe(false)
+  expect(TitleSchema.safeParse("").success).toBe(false)
+  expect(PhaseSchema.safeParse("").success).toBe(false)
 })
 
 test("plan paths stay workspace-relative and bounded", () => {

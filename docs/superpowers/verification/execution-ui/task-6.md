@@ -9,7 +9,7 @@
 | Base commit | a32ba6eee75c215e94c2686153b2635218350348 |
 | Package | `packages/superpowers-execution` (`@bearmanser/opencode-superpowers-execution` 0.1.0) |
 | Portable schema choice | Zod 4.1.8 (`catalog:`) |
-| Fixture size | 23 focused tests, 174 `expect()` calls in `test/schema.test.ts` |
+| Fixture size | 24 focused tests, 184 `expect()` calls in `test/schema.test.ts` |
 
 ## Step 2: RED
 
@@ -31,10 +31,10 @@ error: Cannot find module '../src/schema' from '.../test/schema.test.ts'
 $ cd packages/superpowers-execution && bun test ./test/schema.test.ts
 bun test v1.4.2 (744846f84)
 
- 23 pass
+ 24 pass
  0 fail
- 174 expect() calls
-Ran 23 tests across 1 file. [95.00ms]
+ 184 expect() calls
+Ran 24 tests across 1 file. [92.00ms]
 ```
 
 ```text

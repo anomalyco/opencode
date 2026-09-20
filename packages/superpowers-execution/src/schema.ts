@@ -13,7 +13,7 @@ export const MAX_SUMMARY_ROOTS = 50
 
 export const IdentifierSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9_.:-]+$/)
 export const TitleSchema = z.string().min(1).max(200)
-export const SummarySchema = z.string().min(1).max(1_000)
+export const SummarySchema = z.string().max(1_000)
 export const PhaseSchema = z.string().min(1).max(80)
 export const NonNegativeIntSchema = z.number().int().min(0)
 export const PositiveIntSchema = z.number().int().min(1)
