@@ -572,6 +572,7 @@ export const dict = {
   "context.stats.outputTokens": "Output Tokens",
   "context.stats.reasoningTokens": "Reasoning Tokens",
   "context.stats.cacheTokens": "Cache Tokens (read/write)",
+  "context.stats.cacheHitRate": "Cache Hit Rate (session)",
   "context.stats.userMessages": "User Messages",
   "context.stats.assistantMessages": "Assistant Messages",
   "context.stats.totalCost": "Total Cost",
