@@ -26,10 +26,10 @@ it.live("Promise tool executors receive interruption through their AbortSignal",
             description: "Wait until cancelled",
             input: { type: "object", properties: {}, additionalProperties: false },
             options: { codemode: false },
-            execute: (_input, tool) =>
+            execute: (_input, context) =>
               new Promise<never>((_resolve, reject) => {
-                tool.signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true })
-                Effect.runSync(Deferred.succeed(started, tool.signal))
+                context.signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true })
+                Effect.runSync(Deferred.succeed(started, context.signal))
               }),
           }),
         )

@@ -237,26 +237,26 @@ export function fromPromise(plugin: Plugin) {
         const VcsEndpoints = ClientApi.groups["server.vcs"].endpoints
         const WebSearchEndpoints = ClientApi.groups["server.websearch"].endpoints
         const WorktreeEndpoints = ClientApi.groups["server.worktree"].endpoints
-        const context = yield* Effect.context<Scope.Scope>()
+        const runtime = yield* Effect.context<Scope.Scope>()
         const streams = yield* makeStreams()
 
         // Run a hook registration on the plugin scope and resolve once it is registered.
         const register = (effect: Effect.Effect<HostRegistration, never, Scope.Scope>): Promise<Registration> =>
-          Effect.runPromiseWith(context)(effect).then((registration) => ({
-            dispose: () => Effect.runPromiseWith(context)(registration.dispose),
+          Effect.runPromiseWith(runtime)(effect).then((registration) => ({
+            dispose: () => Effect.runPromiseWith(runtime)(registration.dispose),
           }))
 
-        const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(effect)
+        const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(runtime)(effect)
 
         const promiseExecutor =
           (execute: Tool.Info["execute"]): Info["execute"] =>
-          (input, tool) =>
-            Effect.runPromiseWith(context)(
+          (input, context) =>
+            Effect.runPromiseWith(runtime)(
               execute(input, {
-                ...tool,
-                progress: (update) => Effect.promise(() => tool.progress(update)),
+                ...context,
+                progress: (update) => Effect.promise(() => context.progress(update)),
               }),
-              { signal: tool.signal },
+              { signal: context.signal },
             )
 
         const adaptApiMethod = <PromiseMethod>(
@@ -274,7 +274,7 @@ export function fromPromise(plugin: Plugin) {
               const result = yield* method(Object.assign({}, ...decoded) as never)
               if (compiled.noContent) return undefined
               return yield* compiled.encode(result)
-            }).pipe(Effect.runPromiseWith(context))) as PromiseMethod
+            }).pipe(Effect.runPromiseWith(runtime))) as PromiseMethod
         }
 
         const transform =
@@ -425,8 +425,8 @@ export function fromPromise(plugin: Plugin) {
               ),
             reload: () => run(host.integration.reload()),
             connection: {
-              active: (id) => Effect.runPromiseWith(context)(host.integration.connection.active(id)),
-              resolve: (connection) => Effect.runPromiseWith(context)(host.integration.connection.resolve(connection)),
+              active: (id) => Effect.runPromiseWith(runtime)(host.integration.connection.active(id)),
+              resolve: (connection) => Effect.runPromiseWith(runtime)(host.integration.connection.resolve(connection)),
             },
           },
           mcp: {
