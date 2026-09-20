@@ -13,9 +13,8 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
 import { Button } from "@opencode/ui/button"
-import { TextReveal } from "@opencode/ui/text-reveal"
-import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { BasicTool } from "../components/basic-tool"
+import { ThinkingState } from "../components/thinking-state"
 import { reasoningHeading } from "../timeline/projection"
 import { Card } from "@opencode/ui/card"
 import type {
@@ -566,63 +565,24 @@ export function AssistantReasoningContent(props: {
   onOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
 }) {
-  const i18n = useI18n()
-  const [state, setState] = createStore<{ open?: boolean }>({})
-  const open = () => props.open ?? state.open ?? props.defaultOpen ?? false
   const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
-  const duration = createMemo(() => {
-    const time = props.content.time
-    if (time?.completed === undefined) return undefined
-    const total = Math.max(0, Math.round((time.completed - time.created) / 1000))
-    const numfmt = new Intl.NumberFormat(i18n.locale())
-    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
-    return i18n.t("ui.message.duration.minutesSeconds", {
-      minutes: numfmt.format(Math.floor(total / 60)),
-      seconds: numfmt.format(total % 60),
-    })
-  })
   return (
     <div data-component="reasoning-part" data-timeline-part-id={props.id}>
-      <BasicTool
-        icon="mcp"
-        status={props.streaming ? "running" : "completed"}
-        compact
-        hasContent
-        allowOpenWhilePending
+      <ThinkingState
+        streaming={props.streaming}
+        createdAt={props.content.time?.created}
+        completedAt={props.content.time?.completed}
+        heading={heading()}
         hideDetails={!props.content.text.trim()}
-        open={open()}
+        open={props.open}
+        defaultOpen={props.defaultOpen}
         onOpenChange={(value) => {
-          setState("open", value)
           props.onOpenChange?.(value)
           props.onContentRendered?.()
         }}
-        trigger={
-          <div data-slot="basic-tool-tool-info-structured">
-            <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
-                <TextShimmer
-                  text={i18n.t(props.streaming ? "ui.sessionTurn.status.thinking" : "ui.message.thought")}
-                  active={props.streaming}
-                />
-              </span>
-              <Show
-                when={props.streaming && !open()}
-                fallback={
-                  <Show when={!props.streaming && duration()}>
-                    {(value) => <span data-slot="basic-tool-tool-subtitle">{value()}</span>}
-                  </Show>
-                }
-              >
-                <span data-slot="basic-tool-tool-subtitle">
-                  <TextReveal text={heading()} />
-                </span>
-              </Show>
-            </div>
-          </div>
-        }
       >
         <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
-      </BasicTool>
+      </ThinkingState>
     </div>
   )
 }

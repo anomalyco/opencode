@@ -240,6 +240,7 @@ const source = {
   "ui.message.copyResponse": "Copy response",
   "ui.message.copied": "Copied",
   "ui.message.thought": "Thought",
+  "ui.message.thoughtFor": "Thought for {{duration}}",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
   "ui.message.interrupted": "Interrupted",
