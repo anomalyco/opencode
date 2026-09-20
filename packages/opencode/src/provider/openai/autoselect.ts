@@ -4,12 +4,20 @@ import type { Model as ProviderModel } from "@/provider/provider"
 export const AUTOSELECT_MODEL_ID = "jev-openai-autoselect"
 export const AUTOSELECT_METADATA_KEY = "jevOpenAIAutoselect"
 
-const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/alpha/decisions"
 const OPENROUTER_JEV_MODEL = "~typesafe/jev-latest"
 const OPENROUTER_TIMEOUT_MS = 10_000
 const FALLBACK_MODEL_ID = "gpt-5.6-luna"
 
 export type AutoSelectSource = "jev" | "fallback"
+
+export type AutoSelectDiagnostic = {
+  reason: "missing-api-key" | "http-error" | "invalid-response" | "request-error"
+  status?: number
+  code?: string
+  error?: string
+  message?: string
+}
 
 export type AutoSelectMetadata = {
   type: "jev-openai-autoselect"
@@ -77,6 +85,7 @@ export async function resolve(input: SelectionContext): Promise<{
   model: { providerID: "openai"; modelID: string; variant: string }
   metadata: AutoSelectMetadata
   cache: AutoSelectCache
+  diagnostic?: AutoSelectDiagnostic
 }> {
   const candidates = buildCandidates(input.models, input.catalog)
   const cached = readCache(input.metadata?.[AUTOSELECT_METADATA_KEY])
@@ -87,7 +96,9 @@ export async function resolve(input: SelectionContext): Promise<{
 
   const fallback = chooseFallback(candidates)
   if (!fallback) throw new Error("No OpenAI model is available for auto-selection")
-  if (!process.env.OPENROUTER_API_KEY) return result(fallback, "fallback")
+  if (!process.env.OPENROUTER_API_KEY) {
+    return result(fallback, "fallback", undefined, undefined, { reason: "missing-api-key" })
+  }
 
   try {
     const response = await fetch(OPENROUTER_ENDPOINT, {
@@ -101,65 +112,67 @@ export async function resolve(input: SelectionContext): Promise<{
       signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
       body: JSON.stringify({
         model: OPENROUTER_JEV_MODEL,
-        messages: [
-          {
-            role: "system",
-            content: [
-              "You are Jev, an OpenAI model router for OpenCode.",
-              "Select exactly one candidate key from the supplied list.",
+        questions: {
+          route: {
+            type: "choice",
+            instructions: [
+              "Choose exactly one candidate key.",
               "Choose the smallest model and reasoning effort that can complete the task reliably; promote aggressively for difficult coding, debugging, architecture, or long dependency chains.",
               "Reasoning effort guidance: none is trivial lookup or formatting; low is a clear bounded question or small edit; medium is ordinary multi-file coding and tool use; high is ambiguous debugging, architecture, or long dependency chains; xhigh is the hardest high-risk or long-running agentic work.",
-              'Return only a JSON object with a string "candidate" field and an optional numeric "confidence" field from 0 to 1.',
             ].join(" "),
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              prompt: input.prompt.slice(0, 32_000),
-              attachments: input.attachments,
-              agent: input.agent,
-              priority: "quality-and-speed",
-              billing: "openrouter",
-              candidates: candidates.map((candidate) => ({
-                key: candidate.key,
-                ...describeCandidate(candidate),
-              })),
-            }),
-          },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "openai_route",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                candidate: { type: "string" },
-                confidence: { type: "number" },
-              },
-              required: ["candidate"],
-            },
+            criteria: Object.fromEntries(
+              candidates.map((candidate) => [candidate.key, JSON.stringify(describeCandidate(candidate))]),
+            ),
           },
         },
-        temperature: 0,
+        state: {
+          prompt: input.prompt.slice(0, 32_000),
+          attachments: input.attachments,
+          agent: input.agent,
+          priority: "quality-and-speed",
+          billing: "openrouter",
+          effortGuidance: {
+            none: "Trivial lookup, formatting, or transformation.",
+            low: "Clear, bounded question or small edit.",
+            medium: "Normal multi-file coding and tool use.",
+            high: "Ambiguous debugging, architecture, or long dependency chains.",
+            xhigh: "The hardest high-risk or long-running agentic work.",
+          },
+          candidates: candidates.map((candidate) => ({
+            key: candidate.key,
+            ...describeCandidate(candidate),
+          })),
+        },
       }),
     })
-    if (!response.ok) return result(fallback, "fallback")
+    if (!response.ok) {
+      const error = await readOpenRouterError(response)
+      return result(fallback, "fallback", undefined, undefined, {
+        reason: "http-error",
+        status: response.status,
+        ...error,
+      })
+    }
 
     const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: unknown } }>
+      answers?: { route?: { choice?: unknown; confidence?: unknown } }
       model?: unknown
     }
-    const answer = parseRoute(payload.choices?.[0]?.message?.content)
-    const selected = answer ? candidates.find((candidate) => candidate.key === answer.candidate) : undefined
-    if (!selected) return result(fallback, "fallback")
+    const answer = payload.answers?.route
+    const key = typeof answer?.choice === "string" ? answer.choice : undefined
+    const selected = key ? candidates.find((candidate) => candidate.key === key) : undefined
+    if (!selected) return result(fallback, "fallback", undefined, undefined, { reason: "invalid-response" })
     const selectorModel = typeof payload.model === "string" ? payload.model : OPENROUTER_JEV_MODEL
-    const confidence = answer?.confidence
+    const confidence =
+      typeof answer?.confidence === "number" && Number.isFinite(answer.confidence) ? answer.confidence : undefined
     return result(selected, "jev", confidence, selectorModel)
-  } catch {
-    return result(fallback, "fallback")
+  } catch (error) {
+    return result(fallback, "fallback", undefined, undefined, {
+      reason: "request-error",
+      ...(error instanceof Error
+        ? { error: error.name, message: error.message.slice(0, 200) }
+        : { error: "UnknownError" }),
+    })
   }
 }
 
@@ -227,26 +240,21 @@ function describeCandidate(candidate: Candidate) {
   }
 }
 
-function parseRoute(value: unknown) {
-  if (typeof value !== "string") return
-  const json = value.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] ?? value
-  let parsed: unknown
+async function readOpenRouterError(response: Response) {
   try {
-    parsed = JSON.parse(json)
+    const payload = (await response.json()) as {
+      error?: { code?: unknown; message?: unknown }
+    }
+    return {
+      ...(typeof payload.error?.code === "string" || typeof payload.error?.code === "number"
+        ? { code: String(payload.error.code) }
+        : {}),
+      ...(typeof payload.error?.message === "string"
+        ? { message: payload.error.message.replace(/Bearer\s+\S+/gi, "Bearer [redacted]").slice(0, 200) }
+        : {}),
+    }
   } catch {
-    return
-  }
-  if (!parsed || typeof parsed !== "object") return
-  const item = parsed as Record<string, unknown>
-  const candidate =
-    typeof item.candidate === "string" ? item.candidate : typeof item.choice === "string" ? item.choice : undefined
-  if (!candidate) return
-  return {
-    candidate,
-    confidence:
-      typeof item.confidence === "number" && Number.isFinite(item.confidence)
-        ? Math.min(1, Math.max(0, item.confidence))
-        : undefined,
+    return {}
   }
 }
 
@@ -271,6 +279,7 @@ function result(
   source: AutoSelectSource,
   confidence?: number,
   selectorModel?: string,
+  diagnostic?: AutoSelectDiagnostic,
 ) {
   if (!candidate) throw new Error("No OpenAI model is available for auto-selection")
   const cache: AutoSelectCache = {
@@ -295,5 +304,6 @@ function result(
       ...(selectorModel === undefined ? {} : { selectorModel }),
     },
     cache,
+    ...(diagnostic === undefined ? {} : { diagnostic }),
   }
 }

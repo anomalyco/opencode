@@ -681,6 +681,19 @@ const layer = Layer.effect(
           }
         : requestedModel
       if (selection) {
+        yield* Effect.logInfo("Jev auto-selection", {
+          source: selection.metadata.source,
+          modelID: selection.model.modelID,
+          variant: selection.model.variant,
+          selectorModel: selection.metadata.selectorModel,
+        })
+        if (selection.diagnostic) {
+          yield* Effect.logWarning("Jev auto-selection fallback", {
+            ...selection.diagnostic,
+            modelID: selection.model.modelID,
+            variant: selection.model.variant,
+          })
+        }
         yield* sessions.setMetadata({
           sessionID: input.sessionID,
           metadata: {
@@ -696,7 +709,10 @@ const layer = Layer.effect(
               .getModel(model.providerID, model.modelID)
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
-      const variant = selection?.model.variant ?? input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+      const variant =
+        selection?.model.variant ??
+        input.variant ??
+        (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
       const sessionVariant = selection ? undefined : variant
 
       const info: SessionV1.User = {
