@@ -17,8 +17,12 @@ export function createMarkdownParser(highlight: (code: string, language: string)
   )
 }
 
-const inlineMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
-const blockMathRegex = /^\$\$\n([\s\S]+?)\n\$\$(?:\n|$)/
+const inlineParenMath = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
+const inlineBracketMath = /^\\\[((?:\\.|[^\\\n])+?)\\\]/
+const inlineDoubleDollarMath = /^\$\$([^\n]+?)\$\$/
+const inlineDollarMath = /^\$(?!\s)((?:\\.|[^\\$\n])+?)(?<!\s)\$(?!\d)/
+const blockBracketMath = /^\\\[[ \t]*\n?([\s\S]+?)\n?[ \t]*\\\](?:\n|$)/
+const blockDollarMath = /^\$\$[ \t]*\n?([\s\S]+?)\n?[ \t]*\$\$(?:\n|$)/
 
 const katexExtension: MarkedExtension = {
   extensions: [
@@ -26,19 +30,23 @@ const katexExtension: MarkedExtension = {
       name: "inlineKatex",
       level: "inline",
       start(src) {
-        const index = src.indexOf("\\(")
-        if (index === -1) return
-        return index
+        const indexes = [src.indexOf("\\("), src.indexOf("\\["), src.indexOf("$")].filter((index) => index !== -1)
+        if (indexes.length === 0) return
+        return Math.min(...indexes)
       },
       tokenizer(src) {
-        const match = src.match(inlineMathRegex)
-        if (!match) return
-        return {
-          type: "inlineKatex",
-          raw: match[0],
-          text: match[1].trim(),
-          displayMode: false,
-        }
+        const paren = src.match(inlineParenMath)
+        if (paren) return { type: "inlineKatex", raw: paren[0], text: paren[1].trim(), displayMode: false }
+
+        const bracket = src.match(inlineBracketMath)
+        if (bracket) return { type: "inlineKatex", raw: bracket[0], text: bracket[1].trim(), displayMode: true }
+
+        const double = src.match(inlineDoubleDollarMath)
+        if (double) return { type: "inlineKatex", raw: double[0], text: double[1].trim(), displayMode: true }
+
+        const single = src.match(inlineDollarMath)
+        if (single) return { type: "inlineKatex", raw: single[0], text: single[1].trim(), displayMode: false }
+        return
       },
       renderer: renderKatexToken,
     },
@@ -46,14 +54,12 @@ const katexExtension: MarkedExtension = {
       name: "blockKatex",
       level: "block",
       tokenizer(src) {
-        const match = src.match(blockMathRegex)
-        if (!match) return
-        return {
-          type: "blockKatex",
-          raw: match[0],
-          text: match[1].trim(),
-          displayMode: true,
-        }
+        const bracket = src.match(blockBracketMath)
+        if (bracket) return { type: "blockKatex", raw: bracket[0], text: bracket[1].trim(), displayMode: true }
+
+        const dollar = src.match(blockDollarMath)
+        if (dollar) return { type: "blockKatex", raw: dollar[0], text: dollar[1].trim(), displayMode: true }
+        return
       },
       renderer: renderKatexToken,
     },
