@@ -120,9 +120,18 @@ Identity boundaries: server identity, owner directory, root session, and run ID.
 tuples, never slash-concatenated path fragments, so delimiter-containing directory names cannot
 collide and identical session IDs on two authenticated server connections never share a key.
 
-`serverKey` is `ServerConnection.key(conn)` from `packages/app/src/runtime/server/registry.tsx`
-(`http:{url}`, `wsl:{distro}`, or `ssh:{id|host}`). `ownerDirectory` is the owning session location
-directory. `rootSessionID` is the resolved family root.
+`serverKey` is `ServerConnection.key(conn)` from `packages/app/src/runtime/server/registry.tsx`.
+Downstream consumers must call that function instead of reconstructing a key, so identity always
+agrees with the selected-server registry. Its exact mapping is:
+
+| `conn.type` | Returned key |
+|---|---|
+| `http` | `conn.http.url` (the raw URL, branded `ServerConnection.Key`; no `http:` prefix) |
+| `sidecar` with `variant: "base"` | `"sidecar"` |
+| `sidecar` with `variant: "wsl"` | `wsl:{conn.distro}` |
+| `ssh` | `ssh:{conn.id ?? conn.host}` |
+
+`ownerDirectory` is the owning session location directory. `rootSessionID` is the resolved family root.
 
 `packages/app/src/superpowers/native-types.ts` exports the shared `NativeRecord` shape consumed by T02.
 
