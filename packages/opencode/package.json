@@ -42,7 +42,6 @@
     "@types/mime-types": "3.0.1",
     "@types/npm-package-arg": "6.1.4",
     "@types/semver": "^7.5.8",
-    "@typesafe-ai/sdk": "catalog:",
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",

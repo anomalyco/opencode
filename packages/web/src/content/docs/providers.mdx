@@ -1799,13 +1799,13 @@ We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
 
 The picker also includes **Jev OpenAI Auto** for ChatGPT Plus/Pro OAuth. It asks Jev to choose one of the currently available OpenAI models and its reasoning effort from the first prompt, then keeps that route for the rest of the session. The transcript shows the selected model, effort, and whether Jev used the normal route or a fallback.
 
-Jev runs server-side through TypeSafe. Set `TYPESAFE_API_KEY` in the environment used to launch OpenCode. Jev receives the first prompt, attachment names and MIME types, agent name, and OpenAI model metadata. It does not receive repository files, attachment contents, credentials, or prior conversation history. TypeSafe usage is separate from the ChatGPT Plus subscription.
+Jev runs through [OpenRouter](https://openrouter.ai/docs/api_reference/overview) using the `~typesafe/jev-latest` model. Set `OPENROUTER_API_KEY` in the environment used to launch OpenCode. OpenRouter usage is separate from the ChatGPT Plus subscription: the key is used only for the bounded selector request, while the selected OpenAI model still runs through your existing ChatGPT OAuth connection. Jev receives the first prompt, attachment names and MIME types, agent name, and live OpenAI model metadata. It does not receive repository files, attachment contents, credentials, tool output, or prior conversation history.
 
 ```dotenv title=".env"
-TYPESAFE_API_KEY=your_typesafe_key
+OPENROUTER_API_KEY=your_openrouter_key
 ```
 
-If the key is missing or Jev cannot be reached, OpenCode chooses the newest suitable general OpenAI model at medium reasoning effort and labels the message `Jev fallback`.
+If the key is missing, OpenRouter times out, or Jev returns an invalid route, OpenCode chooses the newest suitable general OpenAI model at medium reasoning effort and labels the message `Jev fallback`. See the [Jev model page](https://openrouter.ai/~typesafe/jev-latest) for OpenRouter model availability and pricing.
 
 ##### Compute residency
 
