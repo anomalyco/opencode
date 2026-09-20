@@ -22,6 +22,11 @@ export function updaterAction(state: UpdaterState | undefined) {
   }
 }
 
+export function useUpdaterAvailable() {
+  const platform = usePlatform()
+  return createMemo(() => !!platform.updater && platform.updater.state().status !== "disabled")
+}
+
 export function useUpdaterAction() {
   const platform = usePlatform()
   const language = useLanguage()

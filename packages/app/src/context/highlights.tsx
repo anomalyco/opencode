@@ -7,7 +7,9 @@ import { useSettings } from "@/context/settings"
 import { persisted } from "@/utils/persist"
 import { DialogReleaseNotes, type Highlight } from "@/components/dialog-release-notes"
 
-const CHANGELOG_URL = "https://opencode.ai/changelog.json"
+// VeniceCode publishes no changelog feed yet, and upstream's describes a different
+// product. Set this to a VeniceCode feed to switch release notes back on.
+const CHANGELOG_URL = ""
 
 type Store = {
   version?: string
@@ -165,7 +167,7 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
     }
 
     const start = (previous: string) => {
-      if (!settings.general.releaseNotes()) {
+      if (!CHANGELOG_URL || !settings.general.releaseNotes()) {
         markSeen()
         return
       }

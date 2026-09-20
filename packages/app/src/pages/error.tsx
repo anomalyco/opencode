@@ -321,7 +321,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               )
             }}
           </Show>
-          <Show when={platform.updater}>
+          <Show when={platform.updater && platform.updater.state().status !== "disabled"}>
             <Show
               when={updateVersion()}
               fallback={

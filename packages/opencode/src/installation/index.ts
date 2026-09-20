@@ -164,6 +164,9 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
       Effect.mapError(() => new UpgradeFailedError({ stderr: upgradeFailure("curl") })),
     )
 
+    // Flip on once VeniceCode publishes releases of its own.
+    const RELEASE_FEED_ENABLED = false
+
     const result: Interface = {
       info: Effect.fn("Installation.info")(function* () {
         return {
@@ -206,6 +209,12 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
         return "unknown" as Method
       }),
       latest: Effect.fn("Installation.latest")(function* (installMethod?: Method) {
+        // Every lookup below resolves an upstream artifact: the `opencode`/`opencode-ai`
+        // packages on npm, brew, choco and scoop, or anomalyco/opencode releases on
+        // GitHub. VeniceCode publishes none of those, so report the running version
+        // instead of asking upstream what "latest" is.
+        if (!RELEASE_FEED_ENABLED) return InstallationVersion
+
         const detectedMethod = installMethod || (yield* result.method())
 
         if (detectedMethod === "brew") {
