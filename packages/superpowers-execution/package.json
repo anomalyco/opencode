@@ -6,6 +6,7 @@
   "type": "module",
   "license": "MIT",
   "exports": {
+    ".": "./index.js",
     "./contract": "./src/contract.ts",
     "./progress": "./src/progress.ts",
     "./schema": "./src/schema.ts",
@@ -17,6 +18,7 @@
     "build": "bun run script/build.ts"
   },
   "dependencies": {
+    "@opencode/plugin": "workspace:*",
     "@opencode/schema": "workspace:*",
     "zod": "catalog:"
   },

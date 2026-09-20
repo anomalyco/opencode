@@ -876,6 +876,7 @@
       "name": "@bearmanser/opencode-superpowers-execution",
       "version": "0.1.0",
       "dependencies": {
+        "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
         "zod": "catalog:",
       },

@@ -1,5 +1,21 @@
+import type { Agent } from "@opencode/schema/agent"
+import type { Session } from "@opencode/schema/session"
+import type { SessionMessage } from "@opencode/schema/session-message"
+import { Tool } from "@opencode/schema/tool"
+import type { Context as PluginContext } from "@opencode/plugin/promise/plugin"
+import type { Info, ToolContext, ToolEditor } from "@opencode/plugin/promise/tool"
+import { ExecutionRpc } from "../src/contract"
+import executionPlugin from "../src/plugin"
 import type { StorageScanOptions, StorageScanResult, StorageValue } from "../src/repository"
-import type { Evidence, ReportCommand, RunSnapshot, Task, TaskDefinition } from "../src/schema"
+import type {
+  Changed,
+  Evidence,
+  ExecutionError,
+  ReportCommand,
+  RunSnapshot,
+  Task,
+  TaskDefinition,
+} from "../src/schema"
 
 const plan = { path: "docs/plan.md", sha256: "0".repeat(64) }
 
@@ -259,4 +275,269 @@ export function memoryStorage(): MemoryStorage {
       return { started: started.promise, release: released.resolve }
     },
   }
+}
+
+export interface SessionFixture {
+  readonly id: string
+  readonly parentID?: string
+  readonly directory?: string
+}
+
+export interface PluginHarnessOptions {
+  readonly sessions: readonly SessionFixture[]
+  readonly location?: string
+}
+
+export interface Identity {
+  readonly sessionID: string
+}
+
+export type HarnessResult<T = unknown> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: ExecutionError }
+
+export interface RpcFailure {
+  readonly type: string
+  readonly message: string
+  readonly data?: ExecutionError
+}
+
+export type RpcCallResult<T = unknown> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly failure: RpcFailure }
+
+export interface PluginHarness {
+  readonly location: string
+  readonly storage: MemoryStorage
+  readonly definition: typeof ExecutionRpc
+  toolNames(): readonly string[]
+  callTool<T = unknown>(name: string, input: unknown, identity: Identity): Promise<HarnessResult<T>>
+  invokeCapturedTool<T = unknown>(name: string, input: unknown, identity: Identity): Promise<HarnessResult<T>>
+  callRpc<T = unknown>(name: string, input: unknown): Promise<RpcCallResult<T>>
+  changes(): readonly Changed[]
+  notifyWriteCounts(): readonly number[]
+  hostAccesses(): readonly string[]
+  sessionLookups(): number
+  registrations(): { readonly rpc: number; readonly toolTransforms: number }
+  disposeCounts(): { readonly rpc: number; readonly tools: number }
+  failNextSessionGet(): void
+  dispose(): Promise<void>
+}
+
+interface CapturedTool extends Info {
+  readonly id: string
+}
+
+type SchemaValidationResult =
+  | { readonly value: unknown }
+  | { readonly issues: readonly { readonly message?: string }[] }
+
+interface StandardSchemaLike {
+  readonly "~standard": {
+    readonly validate: (value: unknown) => SchemaValidationResult | Promise<SchemaValidationResult>
+  }
+}
+
+export async function pluginHarness(options: PluginHarnessOptions): Promise<PluginHarness> {
+  const location = options.location ?? "/root/git/demo"
+  const storage = memoryStorage()
+  const sessions = new Map(options.sessions.map((session) => [session.id, session]))
+  const accesses: string[] = []
+  const changes: Changed[] = []
+  const notifyWriteCounts: number[] = []
+  const captured: CapturedTool[] = []
+  const registered = new Map<string, CapturedTool>()
+  const counters = { rpc: 0, toolTransforms: 0, rpcDisposals: 0, toolDisposals: 0 }
+  let definition: typeof ExecutionRpc | undefined
+  let handlers: Record<string, (input: unknown, context: unknown) => Promise<unknown>> = {}
+  let cleanup: (() => Promise<void> | void) | undefined
+  let failSessionGet = false
+  let rpcDisposed = false
+  let lookups = 0
+
+  const lookup = async (sessionID: string) => {
+    lookups += 1
+    if (failSessionGet) {
+      failSessionGet = false
+      throw new Error("native session lookup failed")
+    }
+    const session = sessions.get(sessionID)
+    if (session === undefined) return undefined
+    return {
+      id: session.id,
+      ...(session.parentID === undefined ? {} : { parentID: session.parentID }),
+      location: { directory: session.directory ?? location },
+    }
+  }
+
+  const editor: ToolEditor = {
+    list: () => [...registered.values()],
+    get: (id) => registered.get(id),
+    namespace: () => undefined,
+    add: (tool) => {
+      const id = tool.options?.namespace === undefined ? tool.name : `${tool.options.namespace}_${tool.name}`
+      const entry = { ...tool, id } as CapturedTool
+      registered.set(id, entry)
+      captured.push(entry)
+    },
+    update: (id, update) => {
+      const tool = registered.get(id)
+      if (tool !== undefined) update(tool)
+    },
+    remove: (id) => {
+      registered.delete(id)
+    },
+  }
+
+  const domains: Record<string, unknown> = {
+    app: { name: "opencode", version: "2.0.11", channel: "test" },
+    location: { directory: location, project: { id: "project", directory: location, canonical: location } },
+    options: {},
+    storage,
+    session: { get: (input: { readonly sessionID: string }) => lookup(input.sessionID) },
+    rpc: {
+      register: async (nextDefinition: typeof ExecutionRpc, nextHandlers: typeof handlers) => {
+        counters.rpc += 1
+        definition = nextDefinition
+        handlers = nextHandlers
+        let done = false
+        return {
+          events: {
+            emit: async (name: string, data: Changed) => {
+              if (name !== "changed") return
+              changes.push(data)
+              notifyWriteCounts.push(storage.writes())
+            },
+          },
+          dispose: async () => {
+            if (done) return
+            done = true
+            counters.rpcDisposals += 1
+            rpcDisposed = true
+          },
+        }
+      },
+    },
+    tool: {
+      transform: async (callback: (editor: ToolEditor) => void) => {
+        counters.toolTransforms += 1
+        callback(editor)
+        let done = false
+        return {
+          dispose: async () => {
+            if (done) return
+            done = true
+            counters.toolDisposals += 1
+            registered.clear()
+          },
+        }
+      },
+    },
+  }
+
+  const host = new Proxy(domains, {
+    get(target, property) {
+      if (typeof property !== "string") return undefined
+      accesses.push(property)
+      if (!Object.hasOwn(target, property)) throw new Error(`unavailable host domain: ${property}`)
+      return target[property]
+    },
+  }) as unknown as PluginContext
+
+  const returned = await executionPlugin.setup(host)
+  if (typeof returned === "function") cleanup = returned
+
+  const contextFor = (identity: Identity): ToolContext => ({
+    sessionID: identity.sessionID as Session.ID,
+    agent: "agent" as Agent.ID,
+    messageID: "message" as SessionMessage.ID,
+    id: "call" as Tool.CallID,
+    signal: new AbortController().signal,
+    progress: async () => undefined,
+  })
+
+  const invoke = async <T>(tool: CapturedTool, input: unknown, identity: Identity): Promise<HarnessResult<T>> => {
+    const decoded = await decodeInput(tool.input, input)
+    if (!decoded.ok) return decoded
+    try {
+      const result = await tool.execute(decoded.value, contextFor(identity))
+      return { ok: true, value: result.output as T }
+    } catch (error) {
+      if (error instanceof Tool.Error) return { ok: false, error: toolErrorData(error) }
+      throw error
+    }
+  }
+
+  return {
+    location,
+    storage,
+    definition: definition as typeof ExecutionRpc,
+    toolNames: () => [...registered.keys()],
+    async callTool<T>(name: string, input: unknown, identity: Identity): Promise<HarnessResult<T>> {
+      const tool = registered.get(name)
+      if (tool === undefined) return { ok: false, error: { code: "not_found", detail: `tool not registered: ${name}` } }
+      return invoke<T>(tool, input, identity)
+    },
+    async invokeCapturedTool<T>(name: string, input: unknown, identity: Identity): Promise<HarnessResult<T>> {
+      const tool = captured.find((candidate) => candidate.name === name)
+      if (tool === undefined) return { ok: false, error: { code: "not_found", detail: `tool was never registered: ${name}` } }
+      return invoke<T>(tool, input, identity)
+    },
+    async callRpc<T>(name: string, input: unknown): Promise<RpcCallResult<T>> {
+      if (rpcDisposed) return { ok: false, failure: { type: "rpc.method_not_found", message: `rpc unavailable: ${name}` } }
+      const handler = handlers[name]
+      if (handler === undefined) {
+        return { ok: false, failure: { type: "rpc.method_not_found", message: `unknown rpc method: ${name}` } }
+      }
+      const failures: RpcFailure[] = []
+      const context = {
+        signal: new AbortController().signal,
+        error: (type: string, message: string, data?: ExecutionError) => {
+          const failure = data === undefined ? { type, message } : { type, message, data }
+          failures.push(failure)
+          return failure
+        },
+      }
+      const value = await handler(input, context)
+      if (failures.length > 0) return { ok: false, failure: failures[0] }
+      return { ok: true, value: value as T }
+    },
+    changes: () => [...changes],
+    notifyWriteCounts: () => [...notifyWriteCounts],
+    hostAccesses: () => [...accesses],
+    sessionLookups: () => lookups,
+    registrations: () => ({ rpc: counters.rpc, toolTransforms: counters.toolTransforms }),
+    disposeCounts: () => ({ rpc: counters.rpcDisposals, tools: counters.toolDisposals }),
+    failNextSessionGet() {
+      failSessionGet = true
+    },
+    async dispose() {
+      await cleanup?.()
+    },
+  }
+}
+
+async function decodeInput(schema: unknown, input: unknown): Promise<HarnessResult<unknown>> {
+  if (!isStandardSchema(schema)) return { ok: true, value: input }
+  const result = await schema["~standard"].validate(input)
+  if ("issues" in result) {
+    const detail = result.issues.map((issue) => issue.message ?? "invalid input").join("; ")
+    return { ok: false, error: { code: "invalid_input", detail } }
+  }
+  return { ok: true, value: result.value }
+}
+
+function isStandardSchema(value: unknown): value is StandardSchemaLike {
+  return typeof value === "object" && value !== null && "~standard" in value
+}
+
+function toolErrorData(error: Tool.Error): ExecutionError {
+  const candidate = error.metadata?.execution ?? error.error
+  if (isExecutionError(candidate)) return candidate
+  return { code: "storage_unavailable", detail: error.message }
+}
+
+function isExecutionError(value: unknown): value is ExecutionError {
+  if (typeof value !== "object" || value === null) return false
+  return "code" in value && typeof value.code === "string"
 }
