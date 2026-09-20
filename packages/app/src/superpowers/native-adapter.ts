@@ -2,11 +2,13 @@ import type { FormInfo, OpenCodeClient, SessionInfo } from "@opencode/client/pro
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionHref } from "@/shell/routes/session"
 import { projectAgentTree, type AgentTree } from "./agent-tree"
+import { scopeKey, type ExecutionScope } from "./identity"
 import type { NativeRecord } from "./native-types"
 
+export type NativeScope = ExecutionScope & { serverKey: ServerConnection.Key }
+
 export type NativeTarget = {
-  serverKey: string
-  ownerDirectory: string
+  scope: NativeScope
   selectedSessionID: string
 }
 
@@ -35,8 +37,7 @@ export type NativeBoundary = {
 }
 
 export type NativeSnapshot = AgentTree & {
-  serverKey: string
-  ownerDirectory: string
+  scope: NativeScope
 }
 
 export type NativeExecutionAdapter = {
@@ -109,7 +110,6 @@ export function createNativeExecutionAdapter(input: {
   signal?: AbortSignal
 }): NativeExecutionAdapter {
   const records = new Map<string, NativeRecord>()
-  const hydrated = new Set<string>()
   const requests = new Map<string, Promise<NativeRecord | undefined>>()
   const semaphore = createSemaphore(4)
   const controller = new AbortController()
@@ -122,16 +122,19 @@ export function createNativeExecutionAdapter(input: {
   const runNative = <Value>(task: () => Promise<Value>) => semaphore.run(task)
 
   function snapshot(): NativeSnapshot {
-    const currentTarget = input.target()
+    const current = input.target()
+    const tree = projectAgentTree(current.selectedSessionID, [...records.values()])
+    const aligned = tree.rootSessionID === current.scope.rootSessionID
     return {
-      serverKey: currentTarget.serverKey,
-      ownerDirectory: currentTarget.ownerDirectory,
-      ...projectAgentTree(currentTarget.selectedSessionID, [...records.values()]),
+      scope: current.scope,
+      rootSessionID: aligned ? tree.rootSessionID : undefined,
+      nodes: tree.nodes,
+      complete: aligned && tree.complete,
+      missingParentID: tree.missingParentID,
     }
   }
 
   function detail(sessionID: string): Promise<NativeRecord | undefined> {
-    if (hydrated.has(sessionID)) return Promise.resolve(records.get(sessionID))
     const pending = requests.get(sessionID)
     if (pending) return pending
     const request = loadDetail(sessionID).finally(() => {
@@ -148,7 +151,6 @@ export function createNativeExecutionAdapter(input: {
       if (stale(current)) return records.get(sessionID)
       const record = nativeRecord(loaded.info, "unknown", loaded.needsInput)
       records.set(sessionID, record)
-      hydrated.add(sessionID)
       return record
     } catch (error) {
       if (stale(current)) return records.get(sessionID)
@@ -158,7 +160,7 @@ export function createNativeExecutionAdapter(input: {
           id: sessionID,
           parentID: provisional?.parentID,
           title: provisional?.title,
-          directory: provisional?.directory ?? input.target().ownerDirectory,
+          directory: provisional?.directory ?? input.target().scope.ownerDirectory,
         },
         "unknown",
         false,
@@ -171,16 +173,18 @@ export function createNativeExecutionAdapter(input: {
 
   async function resolveRoot(selectedSessionID: string, current: number) {
     const seen = new Set([selectedSessionID])
+    const chain: string[] = []
     let cursor = selectedSessionID
     while (!stale(current)) {
       const record = await detail(cursor)
-      if (!record || record.error) return {}
-      if (!record.parentID) return { rootID: cursor }
-      if (seen.has(record.parentID)) return {}
+      if (!record || record.error) return { chain }
+      chain.push(cursor)
+      if (!record.parentID) return { rootID: cursor, chain }
+      if (seen.has(record.parentID)) return { chain }
       seen.add(record.parentID)
       cursor = record.parentID
     }
-    return {}
+    return { chain }
   }
 
   async function listChildIDs(parentID: string, current: number) {
@@ -199,15 +203,16 @@ export function createNativeExecutionAdapter(input: {
     return ids
   }
 
-  async function hydrateDescendants(rootID: string, current: number) {
+  async function hydrateDescendants(rootID: string, current: number, detailed: Set<string>) {
+    const visited = new Set([rootID])
     let frontier = [rootID]
     while (frontier.length && !stale(current)) {
       const discovered = (await Promise.all(frontier.map((parentID) => listChildIDs(parentID, current)))).flat()
       if (stale(current)) return
-      const fresh = discovered.filter((id) => !hydrated.has(id))
-      if (fresh.length === 0) return
-      await Promise.all(fresh.map((id) => detail(id)))
-      frontier = discovered.filter((id) => {
+      const fresh = discovered.filter((id) => !visited.has(id))
+      for (const id of fresh) visited.add(id)
+      await Promise.all(fresh.filter((id) => !detailed.has(id)).map((id) => detail(id)))
+      frontier = fresh.filter((id) => {
         const record = records.get(id)
         return !!record && record.error === undefined
       })
@@ -216,27 +221,27 @@ export function createNativeExecutionAdapter(input: {
 
   function applyStatuses(active: Record<string, { type: "running" }>) {
     for (const [id, record] of records) {
-      if (!hydrated.has(id)) continue
+      if (record.error !== undefined) continue
       records.set(id, { ...record, status: active[id] ? "running" : "idle" })
     }
   }
 
   async function hydrate(): Promise<NativeSnapshot> {
     const currentTarget = input.target()
-    const key = JSON.stringify([currentTarget.serverKey, currentTarget.ownerDirectory, currentTarget.selectedSessionID])
+    const key = scopeKey(currentTarget.scope)
     if (key !== activeKey) {
       activeKey = key
       generation += 1
       records.clear()
-      hydrated.clear()
       requests.clear()
     }
     const current = generation
 
     const resolution = await resolveRoot(currentTarget.selectedSessionID, current)
-    if (stale(current) || !resolution.rootID) return snapshot()
+    if (stale(current)) return snapshot()
+    if (resolution.rootID !== currentTarget.scope.rootSessionID) return snapshot()
 
-    await hydrateDescendants(resolution.rootID, current)
+    await hydrateDescendants(currentTarget.scope.rootSessionID, current, new Set(resolution.chain))
     if (stale(current)) return snapshot()
 
     const active = await runNative(() => input.boundary.active({ signal }))
@@ -247,7 +252,7 @@ export function createNativeExecutionAdapter(input: {
   }
 
   function openSession(sessionID: string) {
-    return sessionHref(ServerConnection.Key.make(input.target().serverKey), sessionID)
+    return sessionHref(input.target().scope.serverKey, sessionID)
   }
 
   function dispose() {

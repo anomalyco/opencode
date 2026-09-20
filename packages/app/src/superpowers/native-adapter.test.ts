@@ -2,12 +2,14 @@ import { expect, test } from "bun:test"
 import type { OpenCodeClient } from "@opencode/client/promise"
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionHref } from "@/shell/routes/session"
+import { scopeKey } from "./identity"
 import {
   createNativeBoundary,
   createNativeExecutionAdapter,
   nativeState,
   type NativeBoundary,
   type NativeDetail,
+  type NativeScope,
   type NativeSessionInfo,
 } from "./native-adapter"
 import type { NativeRecord } from "./native-types"
@@ -28,9 +30,15 @@ const apiSession = (id: string, overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
-const target = (overrides: Partial<{ serverKey: string; ownerDirectory: string; selectedSessionID: string }> = {}) => ({
-  serverKey: "wsl:Ubuntu",
+const scope = (overrides: Partial<NativeScope> = {}): NativeScope => ({
+  serverKey: ServerConnection.Key.make("wsl:Ubuntu"),
   ownerDirectory: "/root/git/demo",
+  rootSessionID: "root",
+  ...overrides,
+})
+
+const target = (overrides: Partial<{ scope: NativeScope; selectedSessionID: string }> = {}) => ({
+  scope: scope(),
   selectedSessionID: "grandchild",
   ...overrides,
 })
@@ -70,10 +78,7 @@ const basePages = () =>
       "root",
       [
         {
-          data: [
-            sessionInfo("child", { parentID: "root" }),
-            sessionInfo("idle-child", { parentID: "root" }),
-          ],
+          data: [sessionInfo("child", { parentID: "root" }), sessionInfo("idle-child", { parentID: "root" })],
         },
       ],
     ],
@@ -142,8 +147,9 @@ test("a grandchild hydrates its real root and keeps idle distinct from completio
   const fake = fakeBoundary({ details: baseDetails(), pages: basePages(), active: { root: { type: "running" } } })
   const adapter = createNativeExecutionAdapter({ target: () => target(), boundary: fake.boundary })
   const snapshot = await adapter.hydrate()
-  expect(snapshot.serverKey).toBe("wsl:Ubuntu")
-  expect(snapshot.ownerDirectory).toBe("/root/git/demo")
+  expect(snapshot.scope.serverKey).toBe(ServerConnection.Key.make("wsl:Ubuntu"))
+  expect(snapshot.scope.ownerDirectory).toBe("/root/git/demo")
+  expect(snapshot.scope.rootSessionID).toBe("root")
   expect(snapshot.rootSessionID).toBe("root")
   expect(snapshot.nodes.map((node) => node.id)).toEqual(["root", "child", "idle-child", "grandchild"])
   expect(snapshot.nodes.find((node) => node.id === "root")?.status).toBe("running")
@@ -200,8 +206,60 @@ test("a root with no children is complete", async () => {
   expect(snapshot.complete).toBe(true)
 })
 
+test("attention is refreshed when a descendant later gains a permission", async () => {
+  const needsInput = new Set<string>()
+  const fake = fakeBoundary({ details: baseDetails(), pages: basePages(), needsInput })
+  const adapter = createNativeExecutionAdapter({ target: () => target(), boundary: fake.boundary })
+  const first = await adapter.hydrate()
+  expect(first.nodes.find((node) => node.id === "child")?.needsInput).toBe(false)
+  needsInput.add("child")
+  const second = await adapter.hydrate()
+  const child = second.nodes.find((node) => node.id === "child")
+  expect(child?.needsInput).toBe(true)
+  expect(nativeState(child!)).toBe("needs_input")
+})
+
+test("a new grandchild below a known child is discovered on a later hydrate", async () => {
+  const details = baseDetails()
+  const pages = basePages()
+  const fake = fakeBoundary({ details, pages })
+  const adapter = createNativeExecutionAdapter({ target: () => target(), boundary: fake.boundary })
+  await adapter.hydrate()
+  details.set("new-grandchild", sessionInfo("new-grandchild", { parentID: "child" }))
+  pages.set("child", [
+    {
+      data: [sessionInfo("grandchild", { parentID: "child" }), sessionInfo("new-grandchild", { parentID: "child" })],
+    },
+  ])
+  const snapshot = await adapter.hydrate()
+  expect(snapshot.nodes.map((node) => node.id)).toContain("new-grandchild")
+  expect(snapshot.complete).toBe(true)
+})
+
+test("selecting another descendant preserves the root execution scope", async () => {
+  const details = baseDetails()
+  const pages = basePages()
+  const fake = fakeBoundary({ details, pages })
+  const execution = scope()
+  let selected = "grandchild"
+  const adapter = createNativeExecutionAdapter({
+    target: () => ({ scope: execution, selectedSessionID: selected }),
+    boundary: fake.boundary,
+  })
+  const first = await adapter.hydrate()
+  expect(first.nodes.map((node) => node.id)).toContain("grandchild")
+
+  selected = "child"
+  pages.set("child", [{ data: [] }])
+  const second = await adapter.hydrate()
+  expect(scopeKey(second.scope)).toBe(scopeKey(execution))
+  expect(second.scope.rootSessionID).toBe("root")
+  expect(second.rootSessionID).toBe("root")
+  expect(second.nodes.map((node) => node.id)).toContain("grandchild")
+})
+
 test("identical session IDs on another server do not leak across a scope change", async () => {
-  let serverKey = "server-a"
+  let serverKey = ServerConnection.Key.make("server-a")
   const first = deferred<NativeDetail>()
   const second = deferred<NativeDetail>()
   let requests = 0
@@ -214,18 +272,18 @@ test("identical session IDs on another server do not leak across a scope change"
     active: async () => ({}),
   }
   const adapter = createNativeExecutionAdapter({
-    target: () => target({ serverKey, selectedSessionID: "root" }),
+    target: () => ({ scope: scope({ serverKey }), selectedSessionID: "root" }),
     boundary,
   })
   const oldHydrate = adapter.hydrate()
-  serverKey = "server-b"
+  serverKey = ServerConnection.Key.make("server-b")
   const newHydrate = adapter.hydrate()
   second.resolve({ info: sessionInfo("root", { title: "Server B controller" }), needsInput: false })
   await newHydrate
   first.resolve({ info: sessionInfo("root", { title: "Server A controller" }), needsInput: false })
   await oldHydrate
   const snapshot = adapter.snapshot()
-  expect(snapshot.serverKey).toBe("server-b")
+  expect(snapshot.scope.serverKey).toBe(ServerConnection.Key.make("server-b"))
   expect(snapshot.nodes.find((node) => node.id === "root")?.title).toBe("Server B controller")
 })
 
@@ -255,7 +313,7 @@ test("a child worktree directory never replaces the owner directory", async () =
   const fake = fakeBoundary({ details: baseDetails(), pages: basePages() })
   const adapter = createNativeExecutionAdapter({ target: () => target(), boundary: fake.boundary })
   const snapshot = await adapter.hydrate()
-  expect(snapshot.ownerDirectory).toBe("/root/git/demo")
+  expect(snapshot.scope.ownerDirectory).toBe("/root/git/demo")
   expect(snapshot.nodes.find((node) => node.id === "child")?.directory).toBe("/root/git/demo/.worktrees/feature")
   expect(snapshot.nodes.find((node) => node.id === "grandchild")?.directory).toBe(
     "/root/git/demo/.worktrees/feature",
@@ -357,13 +415,25 @@ test("dispose stops applying late responses", async () => {
   expect(adapter.snapshot().complete).toBe(false)
 })
 
-test("detail requests are deduplicated across hydrations", async () => {
+test("concurrent detail requests for the same session are deduplicated", async () => {
+  const gate = deferred<NativeDetail>()
+  let selectedCalls = 0
   const fake = fakeBoundary({ details: baseDetails(), pages: basePages() })
-  const adapter = createNativeExecutionAdapter({ target: () => target(), boundary: fake.boundary })
-  await adapter.hydrate()
-  await adapter.hydrate()
-  expect(fake.calls.filter((call) => call === "detail:child")).toHaveLength(1)
-  expect(fake.calls.filter((call) => call === "detail:grandchild")).toHaveLength(1)
+  const boundary: NativeBoundary = {
+    detail: ({ sessionID, signal }) => {
+      if (sessionID !== "grandchild") return fake.boundary.detail({ sessionID, signal })
+      selectedCalls += 1
+      return gate.promise
+    },
+    children: fake.boundary.children,
+    active: fake.boundary.active,
+  }
+  const adapter = createNativeExecutionAdapter({ target: () => target(), boundary })
+  const both = Promise.all([adapter.hydrate(), adapter.hydrate()])
+  await Promise.resolve()
+  expect(selectedCalls).toBe(1)
+  gate.resolve({ info: baseDetails().get("grandchild")!, needsInput: false })
+  await both
 })
 
 test("detail hydration never exceeds four concurrent requests", async () => {
@@ -396,16 +466,32 @@ test("detail hydration never exceeds four concurrent requests", async () => {
   expect(max).toBe(4)
 })
 
-test("openSession targets the selected server's native route", () => {
+test("openSession passes the supplied server key directly to the route helper", () => {
+  const supplied = ServerConnection.key({
+    type: "ssh",
+    host: "build-box",
+    id: "ssh-1",
+    http: { url: "http://127.0.0.1:4096" },
+  })
   const boundary: NativeBoundary = {
     detail: () => Promise.reject(new Error("unused")),
     children: async () => ({ data: [] }),
     active: async () => ({}),
   }
-  const adapter = createNativeExecutionAdapter({ target: () => target(), boundary })
-  expect(adapter.openSession("grandchild")).toBe(sessionHref(ServerConnection.Key.make("wsl:Ubuntu"), "grandchild"))
+  const adapter = createNativeExecutionAdapter({
+    target: () => ({ scope: scope({ serverKey: supplied }), selectedSessionID: "grandchild" }),
+    boundary,
+  })
+  expect(adapter.openSession("grandchild")).toBe(sessionHref(supplied, "grandchild"))
   expect(adapter.openSession("grandchild")).toContain("/session/grandchild")
-  const other = createNativeExecutionAdapter({ target: () => target({ serverKey: "server-b" }), boundary })
+  expect(adapter.snapshot().scope.serverKey).toBe(supplied)
+  const other = createNativeExecutionAdapter({
+    target: () => ({
+      scope: scope({ serverKey: ServerConnection.Key.make("sidecar") }),
+      selectedSessionID: "grandchild",
+    }),
+    boundary,
+  })
   expect(other.openSession("grandchild")).not.toBe(adapter.openSession("grandchild"))
 })
 

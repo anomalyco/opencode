@@ -30,7 +30,9 @@ No Core, native Protocol/HttpApi, or generated client file changed. No new code 
 - `nativeRecord(info, status, needsInput)`.
 - `createNativeBoundary({ api })` mapping T01's verified calls to a `NativeBoundary`.
 - `createNativeExecutionAdapter({ target, boundary, signal })` with `snapshot()`, `hydrate()`,
-  `openSession(id)`, `dispose()`.
+  `openSession(id)`, `dispose()`. `target()` returns `{ scope: NativeScope; selectedSessionID }`
+  where `NativeScope = ExecutionScope & { serverKey: ServerConnection.Key }`; the snapshot exposes
+  the resolved `scope` alongside `rootSessionID`, `nodes`, `complete`, and `missingParentID`.
 - `nativeFixture()` with ordered ids `["root", "child", "idle-child", "grandchild"]`.
 
 ## Native calls and paging
@@ -51,19 +53,26 @@ Adapter behavior:
 
 1. Walk `parentID` upward with a visited set; fetch each unknown ancestor (bounded by that set).
    A failed/unknown lookup marks the tree incomplete with `missingParentID` and never treats the
-   selected child as a root.
-2. Breadth-first descendant enumeration from the resolved root, paging every child page.
-3. Deduplicate detail requests by session ID and cap concurrent native requests at four
-   (shared semaphore over detail, child pages, and the active snapshot).
+   selected child as a root. The resolved topmost ancestor must equal `scope.rootSessionID`.
+2. Breadth-first descendant enumeration from `scope.rootSessionID`, paging every child page and
+   traversing already-known descendants each hydration with a traversal-local visited set, so a new
+   grandchild under a known child is discovered on a later `hydrate()`.
+3. Detail requests are refreshed on every hydration and only deduplicated while concurrent (the
+   in-flight request map); a session that later gains a permission or changes details is reflected
+   on the next `hydrate()`. Concurrent native requests are capped at four by one shared semaphore.
 4. Preserve provisional records from a child page as `status: "unknown"` placeholders while their
    detail loads; a failed detail keeps an `error` placeholder.
 5. `status` is `"running"` only when `session.active()` lists the id, `"idle"` after a successful
    hydration otherwise, and `"unknown"` while un-hydrated. Idle is not completion; `complete`
    requires all reachable records hydrated, error-free, and no unknown status.
-6. Scope identity is the tuple `(serverKey, ownerDirectory, selectedSessionID)`. A target change
-   bumps a generation, clears cached records, and discards late responses; `dispose()` aborts.
-7. `openSession(id)` returns `sessionHref(ServerConnection.key, id)` so navigation stays on the
-   selected server.
+6. Execution identity is T01's `ExecutionScope` keyed by `scopeKey(scope)`, i.e. the tuple
+   `(serverKey, ownerDirectory, rootSessionID)`; `selectedSessionID` is a separate field and never
+   part of the cache key, so selecting another descendant of the same execution preserves the root
+   boundary and its records. A scope change bumps a generation, clears cached records, and discards
+   late responses; `dispose()` aborts.
+7. `serverKey` is typed `ServerConnection.Key` and is passed straight to
+   `sessionHref(serverKey, id)`; the adapter never reconstructs the key. Callers supply the
+   selected connection's existing key from `ServerConnection.key`.
 
 ## TDD evidence
 
@@ -96,6 +105,9 @@ src/superpowers/native-adapter.test.ts:
 (pass) every child page is enumerated instead of only the first
 (pass) a running child absent from background tasks is still enumerated
 (pass) a root with no children is complete
+(pass) attention is refreshed when a descendant later gains a permission
+(pass) a new grandchild below a known child is discovered on a later hydrate
+(pass) selecting another descendant preserves the root execution scope
 (pass) identical session IDs on another server do not leak across a scope change
 (pass) aborting during a scope switch discards late responses
 (pass) a child worktree directory never replaces the owner directory
@@ -103,30 +115,31 @@ src/superpowers/native-adapter.test.ts:
 (pass) an inaccessible child becomes an error placeholder instead of disappearing
 (pass) malformed cyclic ancestry terminates without fetching forever
 (pass) dispose stops applying late responses
-(pass) detail requests are deduplicated across hydrations
+(pass) concurrent detail requests for the same session are deduplicated
 (pass) detail hydration never exceeds four concurrent requests
-(pass) openSession targets the selected server's native route
+(pass) openSession passes the supplied server key directly to the route helper
 (pass) native state distinguishes needs input, error, running, idle, and unknown
 (pass) the native boundary follows the session list cursor
 (pass) attention comes only from permissions and question forms
 
- 24 pass
+ 27 pass
  0 fail
- 76 expect() calls
-Ran 24 tests across 2 files.
+ 87 expect() calls
+Ran 27 tests across 2 files.
 ```
 
-The concurrency case asserts `max <= 4` and `max === 4` (six children), so the cap is exercised,
-not merely satisfied by serial execution.
+This GREEN block is the amended run after the T02 review fixes (see the fix report appended to
+`task-2-report.md`). The concurrency case asserts `max <= 4` and `max === 4` (six children), so the
+cap is exercised, not merely satisfied by serial execution.
 
 ## Focused verification
 
 | Command | Result |
 |---|---|
-| `bun test --conditions=solid --preload ./happydom.ts ./src/superpowers/agent-tree.test.ts ./src/superpowers/native-adapter.test.ts` | PASS: 24 pass, 0 fail, 76 expect() calls |
-| `bun test --conditions=solid --preload ./happydom.ts ./src/superpowers` | PASS: 29 pass, 0 fail, 92 expect() calls (includes T01 identity tests) |
+| `bun test --conditions=solid --preload ./happydom.ts ./src/superpowers/agent-tree.test.ts ./src/superpowers/native-adapter.test.ts` | PASS: 27 pass, 0 fail, 87 expect() calls |
+| `bun test --conditions=solid --preload ./happydom.ts ./src/superpowers` | PASS: 32 pass, 0 fail, 103 expect() calls (includes T01 identity tests) |
 | `bun run typecheck` (`tsgo -b`) | PASS (exit 0) |
-| `bun run test:unit` | PASS: 890 pass, 1 skip, 0 fail, 131 files, 5.05s |
+| `bun run test:unit` | PASS: 893 pass, 1 skip, 0 fail, 131 files, 7.76s |
 | `bun run lint` (oxlint, repo root) | PASS: 0 warnings, 0 errors, 4189 files |
 
 The `test:unit` log contains expected negative-path `read ECONNRESET` output from existing
@@ -150,6 +163,10 @@ No threshold was changed and no result was fabricated.
 - Enumerates descendants via parent pages, independent of the client-side background summary that
   omits blocking/foreground children.
 - Child worktree directories never replace the owner directory in the snapshot.
+- Execution cache identity is `scopeKey(scope)`; `selectedSessionID` is separate, so selecting
+  another descendant of the same root keeps the scope and its records.
+- Details and attention are refreshed on each hydration; only concurrent requests dedupe.
+- `serverKey` is a supplied `ServerConnection.Key` passed directly to `sessionHref`.
 - Scope generation discards stale responses and dispose aborts in-flight work.
 - Test fakes are injected boundaries; projections under test are the production functions
   (`projectAgentTree`, `nativeState`, adapter `hydrate`/`snapshot`, `createNativeBoundary`), not
