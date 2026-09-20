@@ -1,4 +1,4 @@
-import { Duration, Effect, Schema } from "effect"
+import { Duration, Effect, Schedule, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 
 export const EXA_URL = process.env.EXA_API_KEY
@@ -74,6 +74,7 @@ export const call = <F extends Schema.Struct.Fields>(
   value: Schema.Struct.Type<F>,
   timeout: Duration.Input,
   headers?: Record<string, string>,
+  attempts = 3,
 ) =>
   Effect.gen(function* () {
     const request = yield* HttpClientRequest.post(url).pipe(
@@ -89,8 +90,50 @@ export const call = <F extends Schema.Struct.Fields>(
     const response = yield* HttpClient.filterStatusOk(http)
       .execute(request)
       .pipe(
-        Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.die(new Error(`${tool} request timed out`)) }),
+        // Fail (not die): timeouts must stay retryable and fall back to the
+        // other provider. The tool boundary still dies via orDie if all fails.
+        Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.fail(new Error(`${tool} request timed out`)) }),
       )
     const body = yield* response.text
     return yield* parseResponse(body)
-  })
+  }).pipe(
+    // Transient egress failures (proxy/TLS/reset) are periodic: retry with backoff.
+    Effect.retry({
+      times: Math.max(attempts - 1, 0),
+      schedule: Schedule.exponential(500).pipe(Schedule.jittered),
+    }),
+  )
+
+// Optional MCP handshake (initialize -> Mcp-Session-Id). Most endpoints
+// tolerate direct tools/call; enable via OPENCODE_WEBSEARCH_HANDSHAKE=1
+// when a provider starts rejecting session-less calls.
+const McpInitialize = Schema.Struct({
+  jsonrpc: Schema.Literal("2.0"),
+  id: Schema.Literal(0),
+  method: Schema.Literal("initialize"),
+  params: Schema.Struct({
+    protocolVersion: Schema.String,
+    capabilities: Schema.Struct({}),
+    clientInfo: Schema.Struct({ name: Schema.String, version: Schema.String }),
+  }),
+})
+
+export const handshake = (http: HttpClient.HttpClient, url: string, headers?: Record<string, string>) =>
+  Effect.gen(function* () {
+    const request = yield* HttpClientRequest.post(url).pipe(
+      HttpClientRequest.accept("application/json, text/event-stream"),
+      HttpClientRequest.setHeaders(headers ?? {}),
+      HttpClientRequest.schemaBodyJson(McpInitialize)({
+        jsonrpc: "2.0" as const,
+        id: 0 as const,
+        method: "initialize" as const,
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "opencode", version: "websearch" },
+        },
+      }),
+    )
+    const response = yield* HttpClient.filterStatusOk(http).execute(request)
+    return response.headers["mcp-session-id"] ?? undefined
+  }).pipe(Effect.catch(() => Effect.succeed(undefined)))
