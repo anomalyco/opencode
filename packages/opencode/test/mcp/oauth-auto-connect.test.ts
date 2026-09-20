@@ -273,12 +273,20 @@ mcpTest.instance("authenticate() stores a connected client when auth completes w
     yield* stopOAuthCallback
     const server = yield* serveOAuthMcp()
     const mcp = yield* MCP.Service
+    const auth = yield* McpAuth.Service
     const name = "test-oauth-connect"
     const added = yield* mcp.add(name, remote(server.url))
     expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("needs_auth")
 
     server.allowAnonymous()
-    expect((yield* mcp.authenticate(name)).status).toBe("connected")
+    // Explicit auth starts the SDK OAuth flow directly, so it enters OAuth
+    // (REDIRECT) even when the handshake would succeed without tokens.
+    // This prevents false-positive "connected" on servers like Gmail MCP.
+    const started = yield* mcp.startAuth(name)
+    expect(started.authorizationUrl).toContain("/authorize")
+    expect((yield* auth.get(name))?.tokens).toBeUndefined()
+
+    expect((yield* mcp.finishAuth(name, "valid-code")).status).toBe("connected")
     expect((yield* mcp.status())[name]?.status).toBe("connected")
   }),
 )
@@ -293,7 +301,9 @@ mcpTest.instance("authenticate() connects a resource-only server without listing
     expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("needs_auth")
 
     server.allowAnonymous()
-    expect((yield* mcp.authenticate(name)).status).toBe("connected")
+    const started = yield* mcp.startAuth(name)
+    expect(started.authorizationUrl).toContain("/authorize")
+    expect((yield* mcp.finishAuth(name, "valid-code")).status).toBe("connected")
     expect(server.listToolsCalls()).toBe(0)
     expect(Object.keys(yield* mcp.resources())).toEqual([`${name}:docs://readme`])
   }),
