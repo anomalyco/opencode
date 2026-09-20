@@ -53,6 +53,8 @@ test("the companion registers one uniquely named skill whose content is the pack
   expect(skill.content).toContain("run.finish")
   expect(skill.content).toContain("assignment represents inline execution")
   expect(skill.content).toContain("tracking is degraded")
+  expect(skill.content).toContain("UNRUN")
+  expect(skill.content).toContain("recorded as passed or failed")
   expect(skill.content).not.toContain("<system-reminder>")
 })
 

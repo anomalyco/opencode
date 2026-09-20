@@ -22,6 +22,8 @@ successful tracking.
   change state.
 - Native `subagent`, `shell`, `skill`, and prompt tools keep their exact input schemas. Do not add
   reporting fields to their arguments.
+- A required gate the environment cannot run stays UNRUN: it is never reported as passed or as
+  failed, it blocks verification, and the inability is disclosed explicitly.
 - A "verified (reported)" task reflects your report, not an independent attestation. Report only
   gates you actually ran and evidence you actually have.
 
@@ -168,10 +170,21 @@ available) part that produced it. Mark each required gate `passed` or `failed`.
 A failed gate is evidence, not a verification. Report the failure, keep the task out of `verified`,
 and reopen or reassign as the plan requires.
 
+When the environment cannot run a required gate at all, that gate stays **UNRUN**. It must not be
+recorded as passed or failed: an unavailable environment is an unrun gate, never a pass, and an
+inability to execute is not a failed result. Leave the gate unreported and keep the task out of
+`verified`, because `task.verify` requires a passing report for every required gate on the current
+attempt. Disclose the inability visibly with the exact command and error, and record the reason
+when you report the task `blocked` or `failed`. Never let a missing tool, credential, network path,
+or skipped run silently imply successful tracking, and never substitute a partial or unrelated
+result for the gate.
+
 ### 10. Verify only after the required gates pass
 
 Call `task.verify` only when every required gate has a passing report on the current attempt and
-dependencies are resolved. Otherwise a run can claim completion it never verified.
+dependencies are resolved. A gate that could not run (UNRUN), a gate with no report, and a gate
+whose latest report failed all block verification. Otherwise a run can claim completion it never
+verified.
 
 ### 11. Update the plan revision on approved scope changes
 
