@@ -1018,11 +1018,11 @@ describe("ModelsDevPlugin", () => {
       const budgetModel = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-budget"))
       expect(budgetModel?.variants).toContainEqual({
         id: Model.VariantID.make("high"),
-        settings: { thinking: { type: "enabled", budgetTokens: 32000 } },
+        settings: { thinking: { type: "enabled", budgetTokens: 16000 } },
       })
       expect(budgetModel?.variants).toContainEqual({
         id: Model.VariantID.make("max"),
-        settings: { thinking: { type: "enabled", budgetTokens: 63999 } },
+        settings: { thinking: { type: "enabled", budgetTokens: 31999 } },
       })
 
       const anthropicEffortModel = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-opus-4.7"))
