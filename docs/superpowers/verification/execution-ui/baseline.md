@@ -184,27 +184,71 @@ The benchmark harness starts only a disposable in-process mock server
 (`packages/app/e2e/utils/mock-server.ts`) and a production build served on a local port; it never
 contacts the user's OpenCode service.
 
-`bench:tabs` and `bench:entry` **could not produce paired baseline numbers** in this environment.
-Both fail at Playwright Chromium launch, before any metric is recorded, because the host is missing
-the Playwright browser system libraries (`libnspr4.so`, `libnss3`). The production build and preview
-server start correctly; the failure is environmental, not a product regression. Exact commands and
-errors are in section 8.
+Both benchmarks now run: the Chromium system libraries (`libnspr4`, `libnss3`) were installed with
+`playwright install-deps chromium`, so Chromium launches. Both specs build and serve a local
+production app on `127.0.0.1:3000` and drive a disposable in-process mock server; they never contact
+the user's service.
 
-Both benchmark specs build and serve a local production app and drive a disposable in-process mock
-server, so they are safe to run; the blocker is only the missing OS libraries for the headless
-browser.
+### bench:tabs — PASS (EXIT 0)
+
+`cd packages/app && bun run bench:tabs` — 100 tests passed in 10.2m. p95 figures from the reporter
+(`firstCorrectObservedMs` / `stableObservedMs`), 20 samples per scenario:
+
+| Scenario | firstCorrect median | firstCorrect p95 | stable median | stable p95 |
+|---|---|---|---|---|
+| cold, review closed | 356.65 ms | 530.90 ms | 396.20 ms | 583.00 ms |
+| cold, review open | 411.55 ms | 657.50 ms | 469.25 ms | 759.80 ms |
+| warm, review closed | 59.60 ms | 106.60 ms | 201.65 ms | 305.50 ms |
+| warm, review open | 126.50 ms | 200.70 ms | 249.45 ms | 434.70 ms |
+| warm, review resized | 161.75 ms | 246.80 ms | 284.70 ms | 365.70 ms |
+
+Reference facts reported by the run: production build served at `http://127.0.0.1:3000`, fixture
+`long-complex-markdown-v1`, 200 exchanges / 400 messages per session, `payloadBytes` 3915458 and
+`markdownBytes` 611530 per session, viewport 1440x900, Chromium `147.0.7727.15`, service workers
+blocked, transport `playwright-route`, input `mousedown`, project chromium, platform linux. Raw
+records: `packages/app/e2e/test-results/performance/tab-switch-benchmark.jsonl`. Log:
+`/tmp/opencode/bench-tabs2.log`.
+
+### bench:entry — PARTIAL (EXIT 1; pre-existing assertion failure)
+
+`cd packages/app && bun run bench:entry` — 60 tests: 20 passed, 40 failed. The failing cases fail
+**before** any metric is recorded, on a stock assertion, and are unrelated to this feature (nothing
+is mounted yet). Recorded honestly; not fixed here.
+
+| Scenario | Result | firstCorrect median / p95 | stable median / p95 |
+|---|---|---|---|
+| entry: cold session from Home | PASS 20/20 | 727.65 ms / 1069.80 ms | 810.45 ms / 1227.00 ms |
+| entry: new session from home | FAIL 20/20 | n/a | n/a |
+| entry: new session from session | FAIL 20/20 | n/a | n/a |
+
+Exact failure (both failing scenarios, `session-entry-benchmark.spec.ts:47`):
+
+```text
+Error: expect(received).toEqual(expected) // deep equality
+- Expected  - 1
++ Received  + 4
+- Array []
++ Array [
++   "POST",
++   "POST",
++ ]
+  45 |     await page.keyboard.type("Draft input")
+  46 |     await expect(editor).toHaveText("Draft input")
+> 47 |     expect(writes).toEqual([])
+```
+
+Raw records: `packages/app/e2e/test-results/performance/tab-switch-benchmark.jsonl`. Log:
+`/tmp/opencode/bench-entry2.log`.
 
 ## 8. Unrun gates
 
-All rows below are **UNRUN**, not passes. No threshold was changed and no result was fabricated.
+Playwright now launches in this environment (Chromium system libraries installed). The benchmark
+results above are measured. Remaining unrun items:
 
 | Gate | Exact command | Outcome |
 |---|---|---|
-| `bench:tabs` | `cd packages/app && bun run bench:tabs` | EXIT 1. Build served; 100 tests ran; every test failed at browser launch: `browserType.launch: Target page, context or browser has been closed` → `chrome-headless-shell: error while loading shared libraries: libnspr4.so: cannot open shared object file: No such file or directory`. Log: `/tmp/opencode/bench-tabs.log`. |
-| `bench:entry` | `cd packages/app && bun run bench:entry` | EXIT 1, same missing `libnspr4.so` launch failure (120 occurrences). Log: `/tmp/opencode/bench-entry.log`. |
-| Playwright component tests | `cd packages/app && bun run test:components ...` | UNRUN for the same missing-browser-library reason. |
-| Playwright e2e tests | `cd packages/app && bun run test:e2e` | UNRUN for the same missing-browser-library reason. |
 | Windows Desktop smoke | (Windows host required) | UNRUN; no Windows host in this environment. |
 | Live-server checks | `bun run dev:live` etc. | Deliberately not run against the user's service; only disposable fixtures/mock servers are permitted. |
 
-Host: Ubuntu 24.04.2 LTS; `ldconfig -p` reports no `libnspr4`/`libnss3`.
+No threshold was changed and no result was fabricated. Host: Ubuntu 24.04.2 LTS. Playwright
+component/e2e suites were not part of T01 verification.
