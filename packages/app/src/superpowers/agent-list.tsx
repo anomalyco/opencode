@@ -1,4 +1,5 @@
-import { For, Show, createMemo, createSignal, onMount } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Icon } from "@opencode/ui/icon"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
@@ -11,7 +12,7 @@ import {
 } from "./model"
 
 const ROW_HEIGHT = 44
-const OVERSCAN = 8
+const OVERSCAN_PX = ROW_HEIGHT * 2
 const FALLBACK_VIEWPORT = 600
 
 const STATE_ICONS: Record<ExecutionAgentState, string> = {
@@ -26,33 +27,105 @@ export function ExecutionAgentList(props: { model: ExecutionModel }) {
   const language = useLanguage()
   const rows = createMemo(() => props.model.agentRows())
   const [focusedID, setFocusedID] = createSignal<string | undefined>()
+  const [pendingFocus, setPendingFocus] = createSignal<string | undefined>()
   const [scrollTop, setScrollTop] = createSignal(0)
   const [viewport, setViewport] = createSignal(FALLBACK_VIEWPORT)
+  const [heights, setHeights] = createSignal<Record<string, number>>({})
+  const elements = new Map<string, HTMLElement>()
   let scroller: HTMLDivElement | undefined
+
+  const layout = createMemo(() => {
+    const measured = heights()
+    const offsets: number[] = []
+    const sizes: number[] = []
+    let total = 0
+    for (const row of rows()) {
+      const size = measured[row.agent.id] ?? ROW_HEIGHT
+      offsets.push(total)
+      sizes.push(size)
+      total += size
+    }
+    return { offsets, sizes, total }
+  })
 
   const virtualized = createMemo(() => rows().length > AGENT_ROWS_VIRTUALIZE_THRESHOLD)
   const window = createMemo(() => {
     const total = rows().length
     if (!virtualized()) return { start: 0, end: total }
-    const start = Math.max(0, Math.floor(scrollTop() / ROW_HEIGHT) - OVERSCAN)
-    const end = Math.min(total, Math.ceil((scrollTop() + viewport()) / ROW_HEIGHT) + OVERSCAN)
+    const { offsets } = layout()
+    const start = Math.max(0, rowAt(offsets, scrollTop() - OVERSCAN_PX) - 1)
+    const end = Math.min(total, rowAt(offsets, scrollTop() + viewport()) + 2)
     return { start, end }
   })
   const visible = createMemo(() => rows().slice(window().start, window().end))
+  const paddingTop = createMemo(() => (virtualized() ? layout().offsets[window().start] ?? 0 : 0))
+  const paddingBottom = createMemo(() => {
+    if (!virtualized()) return 0
+    const { offsets, sizes, total } = layout()
+    const last = window().end - 1
+    if (last < 0) return 0
+    return total - ((offsets[last] ?? 0) + (sizes[last] ?? ROW_HEIGHT))
+  })
+
+  const register = (sessionID: string, element: HTMLElement) => {
+    elements.set(sessionID, element)
+    onCleanup(() => elements.delete(sessionID))
+  }
+
+  createResizeObserver(
+    () =>
+      visible().flatMap((row) => {
+        const element = elements.get(row.agent.id)
+        return element ? [element] : []
+      }),
+    (rect, element) => {
+      const id = element.dataset.agentId
+      if (!id) return
+      const height = Math.round(rect.height)
+      if (height > 0 && heights()[id] !== height) setHeights((previous) => ({ ...previous, [id]: height }))
+    },
+  )
+
+  createEffect(() => {
+    visible()
+    const id = pendingFocus()
+    if (!id) return
+    const element = document.getElementById(`execution-agent-${id}`)
+    if (!element) return
+    element.focus()
+    setPendingFocus(undefined)
+  })
+
+  onMount(() => {
+    if (scroller?.clientHeight) setViewport(scroller.clientHeight)
+  })
 
   const focusRow = (index: number) => {
     const row = rows()[index]
     if (!row) return
     setFocusedID(row.agent.id)
-    document.getElementById(`execution-agent-${row.agent.id}`)?.focus()
+    if (virtualized()) {
+      const { offsets, sizes } = layout()
+      const top = offsets[index] ?? 0
+      const bottom = top + (sizes[index] ?? ROW_HEIGHT)
+      const current = scrollTop()
+      const next =
+        top < current ? top : bottom > current + viewport() ? Math.max(0, bottom - viewport()) : current
+      if (next !== current) {
+        setScrollTop(next)
+        if (scroller) scroller.scrollTop = next
+      }
+    }
+    setPendingFocus(row.agent.id)
   }
 
   const refocus = (sessionID: string) => {
     setFocusedID(sessionID)
-    document.getElementById(`execution-agent-${sessionID}`)?.focus()
+    setPendingFocus(sessionID)
   }
 
   const onKeyDown = (event: KeyboardEvent, row: ExecutionAgentRow) => {
+    if (event.target !== event.currentTarget) return
     const list = rows()
     const index = list.findIndex((candidate) => candidate.agent.id === row.agent.id)
     if (event.key === "ArrowDown") {
@@ -107,10 +180,6 @@ export function ExecutionAgentList(props: { model: ExecutionModel }) {
     }
   }
 
-  onMount(() => {
-    if (scroller?.clientHeight) setViewport(scroller.clientHeight)
-  })
-
   return (
     <div class="execution-agents" data-testid="execution-agents">
       <PartialTreeBanner model={props.model} />
@@ -127,8 +196,8 @@ export function ExecutionAgentList(props: { model: ExecutionModel }) {
           aria-label={language.t("execution.agents.tree.label")}
           class="execution-agents__tree"
           style={{
-            "padding-top": `${window().start * ROW_HEIGHT}px`,
-            "padding-bottom": `${(rows().length - window().end) * ROW_HEIGHT}px`,
+            "padding-top": `${paddingTop()}px`,
+            "padding-bottom": `${paddingBottom()}px`,
           }}
         >
           <For each={visible()}>
@@ -139,6 +208,7 @@ export function ExecutionAgentList(props: { model: ExecutionModel }) {
                 focused={focusedID() === row.agent.id || (focusedID() === undefined && index() === 0)}
                 onFocus={() => setFocusedID(row.agent.id)}
                 onKeyDown={(event) => onKeyDown(event, row)}
+                register={(element) => register(row.agent.id, element)}
               />
             )}
           </For>
@@ -146,6 +216,22 @@ export function ExecutionAgentList(props: { model: ExecutionModel }) {
       </div>
     </div>
   )
+}
+
+function rowAt(offsets: number[], position: number) {
+  let low = 0
+  let high = offsets.length - 1
+  let result = 0
+  while (low <= high) {
+    const mid = (low + high) >> 1
+    if ((offsets[mid] ?? 0) <= position) {
+      result = mid
+      low = mid + 1
+    } else {
+      high = mid - 1
+    }
+  }
+  return result
 }
 
 function PartialTreeBanner(props: { model: ExecutionModel }) {
@@ -170,6 +256,7 @@ function AgentRow(props: {
   focused: boolean
   onFocus: () => void
   onKeyDown: (event: KeyboardEvent) => void
+  register: (element: HTMLElement) => void
 }) {
   const language = useLanguage()
   const agent = () => props.row.agent
@@ -181,6 +268,7 @@ function AgentRow(props: {
   return (
     <li
       id={`execution-agent-${agent().id}`}
+      ref={props.register}
       role="treeitem"
       data-agent-id={agent().id}
       aria-level={props.row.level}

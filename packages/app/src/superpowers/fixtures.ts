@@ -46,6 +46,7 @@ export const AGENT_FIXTURE_SCENARIOS = [
   "agents-foreground",
   "agents-deleted",
   "agents-assignments",
+  "agents-many",
 ] as const
 
 export function agentFixture(scenario: string): ExecutionAgent[] {
@@ -81,6 +82,31 @@ export function agentFixture(scenario: string): ExecutionAgent[] {
       const assignments = assignmentFixture[agent.id]
       return assignments ? { ...agent, assignments } : agent
     })
+  }
+  if (scenario === "agents-many") {
+    const many: NativeRecord[] = [
+      {
+        id: "root",
+        title: "Many controller",
+        directory: "/root/git/demo",
+        status: "running",
+        needsInput: false,
+        model: { id: "gpt-5-codex", providerID: "openai" },
+      },
+    ]
+    for (let index = 1; index <= 120; index += 1) {
+      const suffix = String(index).padStart(3, "0")
+      many.push({
+        id: `worker-${suffix}`,
+        parentID: "root",
+        title: `Worker ${suffix}`,
+        directory: "/root/git/demo",
+        status: index % 3 === 0 ? "running" : "idle",
+        needsInput: false,
+        error: index === 1 ? "Session not found" : undefined,
+      })
+    }
+    return many.map(toAgent)
   }
   return base
 }

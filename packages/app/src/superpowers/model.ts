@@ -1,6 +1,6 @@
 import { createSignal, type Accessor } from "solid-js"
 import { projectAgentTree } from "./agent-tree"
-import { scopeKey, type ExecutionScope } from "./identity"
+import type { ExecutionScope } from "./identity"
 import type { NativeRecord } from "./native-types"
 
 export const EXECUTION_SUBVIEWS = ["map", "agents", "tasks", "activity"] as const
@@ -132,7 +132,8 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
 
   const nodeKey = (sessionID: string) => {
     const current = scope()
-    return current ? `${scopeKey(current)}::${sessionID}` : sessionID
+    if (!current) return sessionID
+    return `${current.serverKey}::${current.rootSessionID}::${sessionID}`
   }
 
   const agentTree = (): ExecutionAgentTree => {

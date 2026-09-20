@@ -237,22 +237,30 @@ describe("createExecutionModel agents", () => {
       model.toggleAgentExpanded("child")
       expect(model.isAgentExpanded("child")).toBe(true)
       expect(model.agentRows().some((row) => row.agent.id === "grandchild")).toBe(true)
-      setScope({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: "root" })
-      expect(model.isAgentExpanded("child")).toBe(true)
       setScope({ serverKey: "wsl", ownerDirectory: "/root/git/other", rootSessionID: "root" })
+      expect(model.isAgentExpanded("child")).toBe(true)
+      expect(model.agentRows().some((row) => row.agent.id === "grandchild")).toBe(true)
+      setScope({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: "other-root" })
       expect(model.isAgentExpanded("child")).toBe(false)
       expect(model.agentRows().some((row) => row.agent.id === "grandchild")).toBe(false)
+      setScope({ serverKey: "ssh:other", ownerDirectory: "/root/git/demo", rootSessionID: "root" })
+      expect(model.isAgentExpanded("child")).toBe(false)
     }))
 
   test("keeps multiple assignments on one session instead of cloning the session", () =>
     root(() => {
-      const model = createExecutionModel({ scope, agents: () => agentFixture("agents-assignments") })
+      const [scopeSignal, setScope] = createSignal(scope())
+      const model = createExecutionModel({ scope: scopeSignal, agents: () => agentFixture("agents-assignments") })
       const rows = model.agentRows()
       expect(rows.filter((row) => row.agent.id === "child")).toHaveLength(1)
       expect(rows.find((row) => row.agent.id === "child")!.agent.assignments).toHaveLength(3)
       expect(model.isAssignmentHistoryExpanded("child")).toBe(false)
       model.toggleAssignmentHistory("child")
       expect(model.isAssignmentHistoryExpanded("child")).toBe(true)
+      setScope({ serverKey: "wsl", ownerDirectory: "/root/git/other", rootSessionID: "root" })
+      expect(model.isAssignmentHistoryExpanded("child")).toBe(true)
+      setScope({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: "other-root" })
+      expect(model.isAssignmentHistoryExpanded("child")).toBe(false)
     }))
 
   test("keeps a deleted child and marks the tree partial", () =>
