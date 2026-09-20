@@ -213,3 +213,90 @@ story("agents virtualize more than one hundred rows with a tall row", async ({ p
   await expect(controller).toBeVisible()
   await expect(controller).toBeFocused()
 })
+
+story("execution shortcut preserves permission handling", async ({ page }) => {
+  await openExecutionFixture(page, "permission-pending")
+  await page.getByRole("button", { name: "Open execution overview", exact: true }).click()
+  await expect(page.getByRole("button", { name: "Review pending request", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Review pending request", exact: true }).click()
+  await expect(page.getByTestId("native-request-region")).toBeFocused()
+  await expect(page.getByTestId("permission-reply-count")).toHaveText("0")
+})
+
+story("execution shortcut reuses nested child requests for attention", async ({ page }) => {
+  await openExecutionFixture(page, "nested-permission")
+  await expect(page.getByTestId("execution-status-badge")).toHaveAttribute("data-attention", "needs_input")
+  await expect(page.getByTestId("native-request-owner")).toHaveText("grandchild")
+  await page.getByRole("button", { name: "Review pending request", exact: true }).click()
+  await expect(page.getByTestId("native-request-region")).toBeFocused()
+  await expect(page.getByTestId("permission-reply-count")).toHaveText("0")
+})
+
+story("execution shortcut surfaces question forms", async ({ page }) => {
+  await openExecutionFixture(page, "question-pending")
+  await expect(page.getByTestId("execution-status-label")).toHaveText("Waiting for your input")
+  await page.getByRole("button", { name: "Review pending request", exact: true }).click()
+  await expect(page.getByTestId("native-request-region")).toBeFocused()
+  await expect(page.getByTestId("native-request-owner")).toHaveText("child")
+  await expect(page.getByTestId("question-reply-count")).toHaveText("0")
+})
+
+story("execution shortcut prefers a stale connection before pending input", async ({ page }) => {
+  await openExecutionFixture(page, "offline-pending")
+  await expect(page.getByTestId("execution-status-badge")).toHaveAttribute("data-attention", "stale")
+  await expect(page.getByTestId("execution-status-label")).toHaveText("Execution status stale")
+})
+
+story("execution shortcut keeps an accessible name when narrow", async ({ page }) => {
+  await page.setViewportSize({ width: 480, height: 800 })
+  await openExecutionFixture(page, "narrow-header")
+  await expect(page.getByTestId("execution-status-label")).toBeHidden()
+  await expect(page.getByRole("button", { name: "Open execution overview", exact: true })).toBeVisible()
+})
+
+story("execution shortcut mirrors the icon before the label in rtl", async ({ page }) => {
+  await openExecutionFixture(page, "rtl")
+  const badge = page.getByTestId("execution-status-badge")
+  await expect(badge).toHaveCSS("direction", "rtl")
+  const icon = await page.getByTestId("execution-status-icon").boundingBox()
+  const label = await page.getByTestId("execution-status-label").boundingBox()
+  expect(icon!.x).toBeGreaterThan(label!.x)
+})
+
+story("execution shortcut opens execution while review stays closed", async ({ page }) => {
+  await openExecutionFixture(page, "observer")
+  await expect(page.getByTestId("review-state")).toHaveText("false")
+  await page.getByRole("button", { name: "Open execution overview", exact: true }).click()
+  await expect(page.getByTestId("execution-panel")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByTestId("review-state")).toHaveText("false")
+})
+
+story("execution shortcut never replies, prompts, or interrupts", async ({ page }) => {
+  await openExecutionFixture(page, "permission-pending")
+  await page.getByRole("button", { name: "Open execution overview", exact: true }).click()
+  await page.getByRole("button", { name: "Review pending request", exact: true }).click()
+  await page.getByRole("button", { name: "Map", exact: true }).click()
+  await page.getByRole("button", { name: "Agents", exact: true }).click()
+  await expect(page.getByTestId("permission-reply-count")).toHaveText("0")
+  await expect(page.getByTestId("question-reply-count")).toHaveText("0")
+  await expect(page.getByTestId("prompt-count")).toHaveText("0")
+  await expect(page.getByTestId("subagent-count")).toHaveText("0")
+  await expect(page.getByTestId("interrupt-count")).toHaveText("0")
+})
+
+story("background summary keeps shell jobs and adds one view all agents action", async ({ page }) => {
+  await openExecutionFixture(page, "background-tasks")
+  await page.getByRole("button", { name: "2 background tasks running", exact: true }).click()
+  await expect(page.getByText("bun run test:components", { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "View all agents", exact: true })).toHaveCount(1)
+  await page.getByRole("button", { name: "View all agents", exact: true }).click()
+  await expect(page.getByTestId("execution-panel")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+})
+
+story("background summary stays empty without running work", async ({ page }) => {
+  await openExecutionFixture(page, "background-empty")
+  await expect(page.locator('[data-component="session-background-summary"]')).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "View all agents", exact: true })).toHaveCount(0)
+})

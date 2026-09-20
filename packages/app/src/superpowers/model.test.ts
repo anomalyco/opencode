@@ -281,6 +281,14 @@ describe("createExecutionModel agents", () => {
       expect(retried).toEqual(["deleted-child"])
     }))
 
+  test("forwards the native request focus action", () =>
+    root(() => {
+      const recentered: number[] = []
+      const model = createExecutionModel({ reviewRequest: () => recentered.push(recentered.length) })
+      model.reviewRequest()
+      expect(recentered).toHaveLength(1)
+    }))
+
   test("virtualizes agent rows above one hundred", () => {
     expect(AGENT_ROWS_VIRTUALIZE_THRESHOLD).toBe(100)
   })

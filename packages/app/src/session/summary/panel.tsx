@@ -28,6 +28,7 @@ export function SessionSummaryPanel(props: {
   onMoveDismiss: () => void
   onReview: () => void
   backgroundTasks: BackgroundTask[]
+  onViewAgents?: () => void
 }) {
   const language = useLanguage()
   const settings = useSettings()
@@ -111,7 +112,7 @@ export function SessionSummaryPanel(props: {
               </Show>
             </span>
           </button>
-          <BackgroundWorkSummary tasks={props.backgroundTasks} mobile={props.mobile} />
+          <BackgroundWorkSummary tasks={props.backgroundTasks} mobile={props.mobile} onViewAgents={props.onViewAgents} />
         </ProjectSummaryCard>
         <Show when={expanded() && props.local && props.diffs?.length && props.moveEligible && !props.moveDismissed}>
           <div class="session-summary-move">

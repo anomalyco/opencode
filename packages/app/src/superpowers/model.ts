@@ -82,6 +82,7 @@ export type ExecutionModelInput = {
   initialSubview?: ExecutionSubview
   openSession?: (sessionID: string) => void
   retry?: (sessionID: string) => void
+  reviewRequest?: () => void
   selectRun?: (runID: string | undefined) => void
   reconcile?: () => void
 }
@@ -108,6 +109,7 @@ export type ExecutionModel = {
   toggleAssignmentHistory: (sessionID: string) => void
   openSession: (sessionID: string) => void
   retryAgent: (sessionID: string) => void
+  reviewRequest: () => void
   reconcile: () => void
 }
 
@@ -230,6 +232,7 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     toggleAssignmentHistory,
     openSession: (sessionID) => input.openSession?.(sessionID),
     retryAgent: (sessionID) => input.retry?.(sessionID),
+    reviewRequest: () => input.reviewRequest?.(),
     reconcile: () => input.reconcile?.(),
   }
 }

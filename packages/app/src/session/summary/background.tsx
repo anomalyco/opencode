@@ -14,7 +14,7 @@ export type BackgroundTask = {
   agent?: string
 }
 
-export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?: boolean }) {
+export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?: boolean; onViewAgents?: () => void }) {
   const language = useLanguage()
   const data = useData()
   const [store, setStore] = createStore({ open: false })
@@ -82,6 +82,20 @@ export function BackgroundWorkSummary(props: { tasks: BackgroundTask[]; mobile?:
               </Dynamic>
             )}
           </For>
+          <Show when={props.onViewAgents}>
+            <button
+              type="button"
+              data-component="session-background-view-agents"
+              class="session-service-row"
+              onClick={() => {
+                setStore("open", false)
+                props.onViewAgents?.()
+              }}
+            >
+              <Icon name="dot-grid" class="shrink-0 text-v2-icon-icon-muted" />
+              <span class="session-summary-label">{language.t("session.background.viewAllAgents")}</span>
+            </button>
+          </Show>
         </Popover.Content>
       </Popover.Portal>
     </Popover>

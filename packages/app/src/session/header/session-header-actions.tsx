@@ -5,13 +5,20 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useCommand } from "@/shell/commands/command"
 import { reviewTooltipKeybind } from "@/shell/commands/tooltip-keybind"
+import { SESSION_EXECUTION_TAB } from "@/shell/state/session-tabs"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSessionLayout } from "@/session/session-layout"
+import { ExecutionStatusBadge } from "@/superpowers/status-badge"
+import type { ExecutionModel } from "@/superpowers/model"
 
-export function SessionReviewToggle() {
+export function SessionReviewToggle(props: { execution?: ExecutionModel }) {
   const command = useCommand()
   const language = useLanguage()
-  const { view } = useSessionLayout()
+  const { view, tabs } = useSessionLayout()
+  const openExecution = () => {
+    props.execution?.selectSubview("agents")
+    void tabs().open(SESSION_EXECUTION_TAB)
+  }
 
   return (
     <SessionHeaderActions
@@ -22,6 +29,7 @@ export function SessionReviewToggle() {
         reviewOpened: view().reviewPanel.opened(),
         onReviewToggle: () => view().reviewPanel.toggle(),
       }}
+      execution={props.execution ? { model: props.execution, onOpen: openExecution } : undefined}
     />
   )
 }
@@ -34,9 +42,15 @@ export type SessionHeaderActionsState = {
   onReviewToggle: () => void
 }
 
-export function SessionHeaderActions(props: { state: SessionHeaderActionsState }) {
+export function SessionHeaderActions(props: {
+  state: SessionHeaderActionsState
+  execution?: { model: ExecutionModel; onOpen: () => void }
+}) {
   return (
     <div class="flex items-center gap-2">
+      <Show when={props.execution}>
+        {(execution) => <ExecutionStatusBadge model={execution().model} onOpen={execution().onOpen} />}
+      </Show>
       <Show when={props.state.reviewVisible}>
         <Tooltip
           class="shrink-0"

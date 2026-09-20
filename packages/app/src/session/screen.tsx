@@ -38,6 +38,7 @@ import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
+import { SESSION_EXECUTION_TAB } from "@/shell/state/session-tabs"
 import { createExecutionModel } from "@/superpowers/model"
 
 const SessionMobileFiles = lazy(async () => {
@@ -59,7 +60,6 @@ export function SessionScreen(props: { session: SessionModel }) {
   })
   const isDesktop = session.isDesktop
   const browser = createSessionBrowser(session)
-  const execution = createExecutionModel()
   const screen = createSessionScreenLayout(session)
   const timeline = createSessionTimelineInteraction(session)
   const timelineSearch = createTimelineSearchController({
@@ -185,6 +185,24 @@ export function SessionScreen(props: { session: SessionModel }) {
   })
   useUsageExceededDialogs()
 
+  const reviewNativeRequest = () => {
+    const dock = document.querySelector('[data-component="session-composer-dock"]')
+    dock?.querySelector<HTMLElement>("button, textarea, input, [tabindex]")?.focus()
+  }
+  const execution = createExecutionModel({
+    attention: () => ({
+      stale: server.ctx.sdk.connection.status() !== "connected",
+      needsInput: [composer.requests.permissionRequest(), composer.requests.questionRequest()].filter(Boolean).length,
+      failed: 0,
+      blocked: composer.requests.background.blocking().length,
+    }),
+    reviewRequest: reviewNativeRequest,
+  })
+  const openExecutionOverview = () => {
+    execution.selectSubview("agents")
+    void session.layout.tabs().open(SESSION_EXECUTION_TAB)
+  }
+
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
     createEffect(on(session.identity.sessionKey, reset, { defer: true }))
     return <SessionErrorFallback error={error} sessionID={session.identity.params.id} />
@@ -224,6 +242,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                           session.layout.view().terminal.close()
                         }}
                         backgroundTasks={composer.requests.background.tasks()}
+                        onViewAgents={openExecutionOverview}
                       />
                     )}
                   </Show>
@@ -345,7 +364,7 @@ export function SessionScreen(props: { session: SessionModel }) {
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
             >
-              <SessionReviewToggle />
+              <SessionReviewToggle execution={execution} />
             </div>
           </Show>
           <div
