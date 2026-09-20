@@ -53,6 +53,7 @@ export async function getLastSeenWorkspaceID() {
             eq(UserTable.accountID, actor.properties.accountID),
             isNull(UserTable.timeDeleted),
             isNull(WorkspaceTable.timeDeleted),
+            isNull(WorkspaceTable.migrated_at),
           ),
         )
         .orderBy(desc(UserTable.timeSeen))
