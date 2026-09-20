@@ -85,3 +85,72 @@ story("execution tab mounts the graph only while open", async ({ page }) => {
   await page.getByRole("button", { name: "Close Execution", exact: true }).click()
   await expect(page.locator('[data-testid="execution-graph"]')).toHaveCount(0)
 })
+
+story("agents retain idle and nested sessions", async ({ page }) => {
+  await openExecutionFixture(page, "agents")
+  await expect(page.getByTestId("execution-panel")).toBeVisible()
+  await expect(page.getByRole("treeitem", { name: /Idle reviewer/ })).toBeVisible()
+  await page.getByRole("button", { name: "Expand Child implementer", exact: true }).click()
+  await expect(page.getByRole("treeitem", { name: /Grandchild worker/ })).toBeVisible()
+  await expect(page.getByText("100%", { exact: true })).toHaveCount(0)
+  await page.getByRole("button", { name: "Open Grandchild worker session", exact: true }).click()
+  await expect(page.getByTestId("navigation-target")).toHaveText("wsl/grandchild")
+})
+
+story("agents expand and collapse with the keyboard", async ({ page }) => {
+  await openExecutionFixture(page, "agents")
+  await expect(page.getByRole("treeitem", { name: /Child implementer/ })).toBeVisible()
+  await page.getByRole("treeitem", { name: /Child implementer/ }).focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(page.getByRole("treeitem", { name: /Grandchild worker/ })).toBeVisible()
+  await page.keyboard.press("ArrowLeft")
+  await expect(page.getByRole("treeitem", { name: /Grandchild worker/ })).toHaveCount(0)
+})
+
+story("agents show an unknown model instead of the parent model", async ({ page }) => {
+  await openExecutionFixture(page, "agents-missing-model")
+  await page.getByRole("button", { name: "Expand Child implementer", exact: true }).click()
+  const grandchild = page.getByRole("treeitem", { name: /Grandchild worker/ })
+  await expect(grandchild.getByText("Model unknown", { exact: true })).toBeVisible()
+  await expect(grandchild.getByText("gpt-5-codex", { exact: true })).toHaveCount(0)
+})
+
+story("agents include a foreground subagent", async ({ page }) => {
+  await openExecutionFixture(page, "agents-foreground")
+  const foreground = page.getByRole("treeitem", { name: /Foreground subagent/ })
+  await expect(foreground).toBeVisible()
+  await expect(foreground.getByText("Running", { exact: true })).toBeVisible()
+  await expect(foreground.getByText("Editing src/api.ts", { exact: true })).toBeVisible()
+})
+
+story("agents mark a deleted child and keep the tree partial", async ({ page }) => {
+  await openExecutionFixture(page, "agents-deleted")
+  await expect(page.getByTestId("execution-agents-partial")).toBeVisible()
+  await page.getByRole("button", { name: "Expand Child implementer", exact: true }).click()
+  const deleted = page.getByRole("treeitem", { name: /Deleted child/ })
+  await expect(deleted).toBeVisible()
+  await expect(deleted.getByText("Session not found", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Retry loading Deleted child", exact: true }).click()
+  await expect(page.getByTestId("retry-target")).toHaveText("deleted-child")
+})
+
+story("agents preserve the root key while navigating a child", async ({ page }) => {
+  await openExecutionFixture(page, "agents")
+  await expect(page.getByTestId("execution-scope-root")).toHaveText("root")
+  await page.getByRole("button", { name: "Expand Child implementer", exact: true }).click()
+  await page.getByRole("button", { name: "Open Grandchild worker session", exact: true }).click()
+  await expect(page.getByTestId("navigation-target")).toHaveText("wsl/grandchild")
+  await expect(page.getByTestId("navigation-href")).toContainText("/session/grandchild")
+  await expect(page.getByTestId("execution-scope-root")).toHaveText("root")
+})
+
+story("agents separate current assignments from history", async ({ page }) => {
+  await openExecutionFixture(page, "agents-assignments")
+  const child = page.getByRole("treeitem", { name: /Child implementer/ })
+  await expect(page.getByRole("treeitem", { name: /Child implementer/ })).toHaveCount(1)
+  await expect(child.getByText("API contract", { exact: true })).toBeVisible()
+  await expect(child.getByText("Verification", { exact: true })).toBeVisible()
+  await expect(child.getByText("Earlier bootstrap", { exact: true })).toHaveCount(0)
+  await child.getByRole("button", { name: "Show 1 earlier assignment", exact: true }).click()
+  await expect(child.getByText("Earlier bootstrap", { exact: true })).toBeVisible()
+})

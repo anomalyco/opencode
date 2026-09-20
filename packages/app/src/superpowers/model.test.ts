@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createRoot } from "solid-js"
+import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSessionTabs, getTabReorderIndex } from "../session/helpers"
 import {
@@ -10,7 +10,9 @@ import {
   sessionBrowserTab,
   type SessionTabState,
 } from "../shell/state/session-tabs"
-import { EXECUTION_SUBVIEWS, createExecutionModel } from "./model"
+import { agentFixture } from "./fixtures"
+import { AGENT_ROWS_VIRTUALIZE_THRESHOLD, EXECUTION_SUBVIEWS, createExecutionModel } from "./model"
+import type { ExecutionScope } from "./identity"
 
 type TabsInput = {
   active?: string
@@ -204,5 +206,74 @@ describe("createExecutionModel", () => {
       expect(opened).toEqual(["child"])
       expect(reconciled).toBe(1)
     })
+  })
+})
+
+describe("createExecutionModel agents", () => {
+  const scope = (): ExecutionScope => ({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: "root" })
+
+  test("projects the controller and descendants and keeps idle distinct from completion", () =>
+    root(() => {
+      const model = createExecutionModel({ scope, agents: () => agentFixture("agents") })
+      const tree = model.agentTree()
+      expect(tree.rootSessionID).toBe("root")
+      expect(tree.complete).toBe(true)
+      expect(tree.nodes.map((node) => node.id)).toEqual(["root", "child", "idle-child", "grandchild"])
+
+      const rows = model.agentRows()
+      expect(rows.map((row) => row.agent.id)).toEqual(["root", "child", "idle-child"])
+      expect(rows[0]!.controller).toBe(true)
+      expect(rows[0]!.expanded).toBe(true)
+      expect(rows.find((row) => row.agent.id === "child")!.hasChildren).toBe(true)
+      expect(rows.find((row) => row.agent.id === "child")!.expanded).toBe(false)
+      expect(rows.find((row) => row.agent.id === "idle-child")!.agent.state).toBe("idle")
+    }))
+
+  test("preserves expanded state by server, root, and session ID", () =>
+    root(() => {
+      const [scopeSignal, setScope] = createSignal(scope())
+      const model = createExecutionModel({ scope: scopeSignal, agents: () => agentFixture("agents") })
+      expect(model.isAgentExpanded("child")).toBe(false)
+      model.toggleAgentExpanded("child")
+      expect(model.isAgentExpanded("child")).toBe(true)
+      expect(model.agentRows().some((row) => row.agent.id === "grandchild")).toBe(true)
+      setScope({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: "root" })
+      expect(model.isAgentExpanded("child")).toBe(true)
+      setScope({ serverKey: "wsl", ownerDirectory: "/root/git/other", rootSessionID: "root" })
+      expect(model.isAgentExpanded("child")).toBe(false)
+      expect(model.agentRows().some((row) => row.agent.id === "grandchild")).toBe(false)
+    }))
+
+  test("keeps multiple assignments on one session instead of cloning the session", () =>
+    root(() => {
+      const model = createExecutionModel({ scope, agents: () => agentFixture("agents-assignments") })
+      const rows = model.agentRows()
+      expect(rows.filter((row) => row.agent.id === "child")).toHaveLength(1)
+      expect(rows.find((row) => row.agent.id === "child")!.agent.assignments).toHaveLength(3)
+      expect(model.isAssignmentHistoryExpanded("child")).toBe(false)
+      model.toggleAssignmentHistory("child")
+      expect(model.isAssignmentHistoryExpanded("child")).toBe(true)
+    }))
+
+  test("keeps a deleted child and marks the tree partial", () =>
+    root(() => {
+      const model = createExecutionModel({ scope, agents: () => agentFixture("agents-deleted") })
+      expect(model.agentTree().complete).toBe(false)
+      model.toggleAgentExpanded("child")
+      const deleted = model.agentRows().find((row) => row.agent.id === "deleted-child")
+      expect(deleted?.agent.state).toBe("error")
+      expect(deleted?.agent.error).toBe("Session not found")
+    }))
+
+  test("retries a failed child through the injected boundary", () =>
+    root(() => {
+      const retried: string[] = []
+      const model = createExecutionModel({ retry: (sessionID) => retried.push(sessionID) })
+      model.retryAgent("deleted-child")
+      expect(retried).toEqual(["deleted-child"])
+    }))
+
+  test("virtualizes agent rows above one hundred", () => {
+    expect(AGENT_ROWS_VIRTUALIZE_THRESHOLD).toBe(100)
   })
 })

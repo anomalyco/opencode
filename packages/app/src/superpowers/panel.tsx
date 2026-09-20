@@ -1,6 +1,7 @@
 import "./execution.css"
-import { For, Match, Switch } from "solid-js"
+import { For, Match, Show, Switch } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
+import { ExecutionAgentList } from "./agent-list"
 import { EXECUTION_SUBVIEWS, type ExecutionModel } from "./model"
 
 export type ExecutionPresentation = "panel" | "expanded" | "mobile"
@@ -38,9 +39,16 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
       <div data-slot="execution-body" class="execution-panel__body">
         <Switch>
           <Match when={props.model.subview() === "agents"}>
-            <p data-slot="execution-agents-empty" class="execution-panel__empty">
-              {language.t("execution.agents.empty")}
-            </p>
+            <Show
+              when={props.model.agents().length > 0}
+              fallback={
+                <p data-slot="execution-agents-empty" class="execution-panel__empty">
+                  {language.t("execution.agents.empty")}
+                </p>
+              }
+            >
+              <ExecutionAgentList model={props.model} />
+            </Show>
           </Match>
           <Match when={props.model.subview() === "map"}>
             <div data-slot="execution-graph" data-testid="execution-graph" class="execution-panel__graph">

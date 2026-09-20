@@ -68,3 +68,140 @@
   font-size: 13px;
   line-height: var(--line-height-compact);
 }
+
+.execution-agents {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 8px;
+}
+
+.execution-agents__partial {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 6px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-agents__scroller {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.execution-agents__tree {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.execution-agent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.execution-agent:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+}
+
+.execution-agent__main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.execution-agent__toggle,
+.execution-agent__open,
+.execution-agent__retry,
+.execution-agent__history-toggle {
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-agent__toggle:hover,
+.execution-agent__open:hover,
+.execution-agent__retry:hover,
+.execution-agent__history-toggle:hover {
+  color: var(--v2-text-text-base);
+}
+
+.execution-agent__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-agent__title {
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-agent__badge,
+.execution-agent__role,
+.execution-agent__assignment-role {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--v2-background-bg-deep);
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-agent__model,
+.execution-agent__activity {
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-agent__error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-agent__assignments {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 24px;
+}
+
+.execution-agent__assignments-current,
+.execution-agent__assignments-history {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.execution-agent__assignment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
