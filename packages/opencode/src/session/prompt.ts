@@ -13,6 +13,7 @@ import { Provider } from "@/provider/provider"
 import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
+import { tokenCount } from "./overflow"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
@@ -1083,7 +1084,32 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        // Token count that triggered the last automatic compaction. An automatic
+        // compaction has to bring the session back under the model's usable context,
+        // so when the first measured step after it is still at or above that count the
+        // compaction did not reduce the session: the declared limits leave too little
+        // room for the conversation (limit.output can cover the whole context), and
+        // compacting again would only repeat the same request.
+        let autoCompaction: number | undefined
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
+
+        const stopCompaction = Effect.fnUntraced(function* (input: {
+          message: SessionV1.Assistant
+          model: Provider.Model
+          triggering: number
+          measured: number
+        }) {
+          const error = new SessionV1.ContextOverflowError({
+            message:
+              `Automatic compaction is not reducing this session: compaction ran at ${input.triggering} tokens and the next step still measured ${input.measured}. ` +
+              `${input.model.providerID}/${input.model.id} declares limit.context ${input.model.limit.context} and limit.output ${input.model.limit.output}, which leaves too little room for the conversation. ` +
+              `Lower limit.output, raise limit.context, or disable compaction.auto to continue.`,
+          })
+          input.message.error = error.toObject()
+          input.message.finish = "error"
+          yield* sessions.updateMessage(input.message)
+          yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+        })
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
@@ -1158,13 +1184,18 @@ const layer = Layer.effect(
             continue
           }
 
-          if (
-            lastFinished &&
-            lastFinished.summary !== true &&
-            (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
-          ) {
-            yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
-            continue
+          if (lastFinished && lastFinished.summary !== true) {
+            const measured = tokenCount(lastFinished.tokens)
+            if (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model })) {
+              if (autoCompaction !== undefined && measured >= autoCompaction) {
+                yield* stopCompaction({ message: lastFinished, model, triggering: autoCompaction, measured })
+                break
+              }
+              autoCompaction = measured
+              yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+              continue
+            }
+            autoCompaction = undefined
           }
 
           const agent = yield* agents.get(lastUser.agent)
@@ -1318,6 +1349,12 @@ const layer = Layer.effect(
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
+              const measured = tokenCount(handle.message.tokens)
+              if (autoCompaction !== undefined && measured >= autoCompaction) {
+                yield* stopCompaction({ message: handle.message, model, triggering: autoCompaction, measured })
+                return "break" as const
+              }
+              autoCompaction = measured
               yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,

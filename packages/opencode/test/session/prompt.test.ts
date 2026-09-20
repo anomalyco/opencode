@@ -704,6 +704,53 @@ it.instance("loop stops provider overflow instead of auto-compacting when disabl
   }),
 )
 
+it.instance("loop stops auto-compaction that cannot reduce the session", () =>
+  Effect.gen(function* () {
+    // A model that declares as much output as context leaves almost no usable context,
+    // so every step measures as an overflow and an automatic compaction cannot bring
+    // the session back under the limit.
+    const { llm } = yield* useServerConfig((url) => ({
+      ...providerCfg(url),
+      provider: {
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": { ...cfg.provider.test.models["test-model"], limit: { context: 32768, output: 32768 } },
+          },
+          options: { ...cfg.provider.test.options, baseURL: url },
+        },
+      },
+    }))
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+
+    yield* llm.push(reply().tool("first", { value: "first" }).usage({ input: 5_000, output: 100 }))
+    yield* llm.text("summary")
+    yield* llm.push(reply().tool("second", { value: "second" }).usage({ input: 5_200, output: 100 }))
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    const messages = yield* sessions.messages({ sessionID: chat.id })
+    const compactions = messages.flatMap((message) => message.parts).filter((part) => part.type === "compaction")
+
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.error?.name).toBe("ContextOverflowError")
+      expect(result.info.finish).toBe("error")
+    }
+    expect(compactions).toHaveLength(1)
+  }),
+)
+
 noLLMServer.instance.skip(
   "prompt emits v2 prompted and synthetic events (v2 projector disabled)",
   () =>
