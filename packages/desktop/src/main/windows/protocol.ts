@@ -14,11 +14,39 @@ export function setProtocolReporter(reporter: ProtocolReport) {
   report = reporter
 }
 
+// Requests in flight and when the last one arrived. The entry module holds the main bundle back
+// until the renderer's initial burst of asset requests has been answered, because this handler
+// runs on the main thread and a 100 ms module evaluation would otherwise sit between the renderer
+// and its HTML.
+let inflight = 0
+let served = 0
+let lastRequest = 0
+
+export function rendererAssetsServed(options: { quietMs: number; capMs: number }) {
+  const start = Date.now()
+  return new Promise<void>((resolve) => {
+    const check = () => {
+      const now = Date.now()
+      if (now - start >= options.capMs) return resolve()
+      if (served > 0 && inflight === 0 && now - lastRequest >= options.quietMs) return resolve()
+      setTimeout(check, 5)
+    }
+    check()
+  })
+}
+
 export function registerRendererProtocol(rendererRoot: string) {
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
   protocol.handle(rendererProtocol, async (request) => {
-    return serve(request, rendererRoot)
+    inflight++
+    lastRequest = Date.now()
+    try {
+      return await serve(request, rendererRoot)
+    } finally {
+      inflight--
+      served++
+    }
   })
 }
 
@@ -60,4 +88,3 @@ function addDocumentPolicy(response: Response, file: string) {
   headers.set(documentPolicyHeader, jsCallStacksDocumentPolicy)
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
-
