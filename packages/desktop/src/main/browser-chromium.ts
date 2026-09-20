@@ -103,11 +103,17 @@ export function createBrowserPage(
     revision++
   })
   let closed = false
+  // Whether the native surface holds a real document worth showing. Chromium keeps the
+  // previous document painted until the next one renders, so a shown page stays shown
+  // through later navigations; blank and failed documents hide until a real one is ready.
+  let content = false
+  let failure: { url: string; message: string } | undefined
   const state = (): Browser.Tab => ({
     id: options.id,
-    url: contents.getURL().slice(0, 16_384),
+    url: (failure?.url ?? contents.getURL()).slice(0, 16_384),
     title: contents.getTitle().slice(0, 2_048),
     loading: contents.isLoading(),
+    ...(failure ? { loadError: failure.message } : {}),
     canGoBack: contents.navigationHistory.canGoBack(),
     canGoForward: contents.navigationHistory.canGoForward(),
     generation,
@@ -115,16 +121,40 @@ export function createBrowserPage(
   const publish = () => {
     if (!closed) options.publish()
   }
-  const reset = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
+  const reset = (event: Electron.Event<{ url: string; isMainFrame: boolean; isSameDocument: boolean }>) => {
     if (!event.isMainFrame || event.isSameDocument) return
+    failure = undefined
     generation++
     documents.clear()
     refs.clear()
     diagnostics.clear()
     publish()
   }
+  const settle = () => {
+    content = contents.getURL() !== "about:blank" && !failure
+    updateVisibility()
+  }
   contents.on("did-start-navigation", reset)
-  contents.on("did-stop-loading", publish)
+  contents.on("did-navigate", (_event, url, status, statusText) => {
+    // The server-network proxy answers an unreachable HTTP target with an empty 502. Other
+    // error statuses are real documents from the user's server and stay visible.
+    if (status === 502) failure = { url, message: `${status} ${statusText}`.trim().slice(0, 2_048) }
+    // A blank or failed document paints at commit; a real one waits for dom-ready.
+    if (url === "about:blank" || failure) settle()
+    publish()
+  })
+  contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
+    // Cancelled navigation and failed subframes do not replace the current page.
+    if (!isMainFrame || code === -3) return
+    failure = { url, message: description.slice(0, 2_048) }
+    settle()
+    publish()
+  })
+  contents.on("dom-ready", settle)
+  contents.on("did-stop-loading", () => {
+    settle()
+    publish()
+  })
   contents.on("did-navigate-in-page", publish)
   contents.on("page-title-updated", publish)
   contents.on("render-process-gone", () => {
@@ -252,6 +282,14 @@ export function createBrowserPage(
     corner.setVisible(false)
     win.contentView.addChildView(corner)
   })
+  let visible = false
+  const updateVisibility = () => {
+    // The renderer's layout requests may lag behind navigation; the page decides
+    // whether there is a document worth exposing over the themed background.
+    const show = visible && content
+    view.setVisible(show)
+    corners.forEach((corner) => corner.setVisible(show && !!cornerKey))
+  }
   const ready = Promise.all([
     files.ready,
     ...(options.initialize === false
@@ -302,9 +340,9 @@ export function createBrowserPage(
         )
       })
     },
-    setVisible(visible: boolean) {
-      view.setVisible(visible)
-      corners.forEach((corner) => corner.setVisible(visible && !!cornerKey))
+    setVisible(value: boolean) {
+      visible = value
+      updateVisibility()
     },
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
