@@ -744,6 +744,7 @@ export const dict = {
   "session.view.select": "Session view",
   "session.tab.review": "Review",
   "session.tab.browser": "Browser",
+  "session.tab.execution": "Execution",
   "session.tab.add": "Add tab",
   "session.tab.context": "Context",
   "session.tab.unknown": "Unknown Session",
@@ -803,6 +804,18 @@ export const dict = {
   "session.files.all": "All files",
   "session.files.empty": "No files",
   "session.files.binaryContent": "Binary file (content cannot be displayed)",
+
+  "execution.panel.label": "Execution",
+  "execution.subviews.label": "Execution views",
+  "execution.subview.map": "Map",
+  "execution.subview.agents": "Agents",
+  "execution.subview.tasks": "Tasks",
+  "execution.subview.activity": "Activity",
+  "execution.loading": "Loading execution…",
+  "execution.agents.empty": "No agents yet",
+  "execution.tracking.unavailable.title": "Tracking not connected",
+  "execution.tracking.unavailable.description":
+    "Connect the Superpowers reporting plugin to show the plan map, tasks, and activity.",
 
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages…",

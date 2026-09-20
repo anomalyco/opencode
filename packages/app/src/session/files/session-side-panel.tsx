@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, Suspense, createEffect, createMemo, lazy, onCleanup, type JSX } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
@@ -24,6 +24,8 @@ const reviewTabID = "session-side-panel-review-tab"
 const reviewTabPanelID = "session-side-panel-review-tabpanel"
 const browserTabID = "session-side-panel-browser-tab"
 const browserTabPanelID = "session-side-panel-browser-tabpanel"
+const executionTabID = "session-side-panel-execution-tab"
+const executionTabPanelID = "session-side-panel-execution-tabpanel"
 const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
 import { SessionContextTab } from "@/session/files/session-context-tab"
 import { SortableTab } from "@/session/files/tab"
@@ -36,6 +38,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useSettings } from "@/settings/model"
 import { createFileTabListSync } from "@/session/files/file-tab-scroll"
 import {
+  SESSION_EXECUTION_TAB,
   SESSION_OPEN_FILE_TAB,
   isSessionBrowserTab,
   sessionBrowserTab,
@@ -49,6 +52,12 @@ import { useSessionLayout } from "@/session/session-layout"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/session/files/session-file-browser-tab"
 import { SessionBrowserPane } from "@/session/browser/pane"
 import type { createSessionBrowser } from "@/session/browser/model"
+import type { ExecutionModel } from "@/superpowers/model"
+
+const ExecutionPanel = lazy(async () => {
+  const { ExecutionPanel } = await import("@/superpowers/panel")
+  return { default: ExecutionPanel }
+})
 
 type ReviewDiff = FileDiffInfo
 type RenderDiff = FileDiffInfo
@@ -74,6 +83,7 @@ export function SessionSidePanel(props: {
   size: Sizing
   stacked?: boolean
   browser: ReturnType<typeof createSessionBrowser>
+  execution: ExecutionModel
 }) {
   const layout = useLayout()
   const settings = useSettings()
@@ -175,6 +185,7 @@ export function SessionSidePanel(props: {
     hasReview: () => props.canReview,
     fileBrowser: () => true,
     browser: props.browser.attached,
+    execution: () => true,
   })
   const contextOpen = tabState.contextOpen
   const openFileOpen = tabState.openFileOpen
@@ -227,7 +238,13 @@ export function SessionSidePanel(props: {
   })
   const fileBrowserVisible = createMemo(() => {
     const active = activeTab()
-    return active !== "review" && active !== "context" && active !== "empty" && !isSessionBrowserTab(active)
+    return (
+      active !== "review" &&
+      active !== "context" &&
+      active !== "empty" &&
+      active !== SESSION_EXECUTION_TAB &&
+      !isSessionBrowserTab(active)
+    )
   })
   const openFileKeybind = createMemo(() => command.keybindParts("file.open"))
   const openBrowserKeybind = createMemo(() => command.keybindParts("browser.open"))
@@ -407,6 +424,20 @@ export function SessionSidePanel(props: {
                                     )}
                                   </Show>
                                 </Match>
+                                <Match when={tab === SESSION_EXECUTION_TAB}>
+                                  <SortableTab
+                                    tab={tab}
+                                    index={tabs().all().indexOf(tab)}
+                                    onTabClose={tabs().close}
+                                    id={executionTabID}
+                                    ariaControls={activeTab() === tab ? executionTabPanelID : undefined}
+                                  >
+                                    <div class="flex items-center gap-1.5">
+                                      <Icon name="dot-grid" size="small" />
+                                      <span>{language.t("session.tab.execution")}</span>
+                                    </div>
+                                  </SortableTab>
+                                </Match>
                                 <Match when={tab === SESSION_OPEN_FILE_TAB}>
                                   <Tabs.Trigger
                                     value={SESSION_OPEN_FILE_TAB}
@@ -581,6 +612,24 @@ export function SessionSidePanel(props: {
                             <SessionContextTab />
                           </div>
                         </Tabs.Content>
+                      </Show>
+
+                      <Show when={activeTab() === SESSION_EXECUTION_TAB}>
+                        <div
+                          id={executionTabPanelID}
+                          role="tabpanel"
+                          aria-labelledby={executionTabID}
+                          data-slot="tabs-content"
+                          class="flex flex-col h-full overflow-hidden contain-strict"
+                        >
+                          <Suspense
+                            fallback={
+                              <div class="p-3 text-12-regular text-text-weak">{language.t("execution.loading")}</div>
+                            }
+                          >
+                            <ExecutionPanel model={props.execution} presentation="panel" />
+                          </Suspense>
+                        </div>
                       </Show>
 
                       <Show when={props.browser.opened()}>

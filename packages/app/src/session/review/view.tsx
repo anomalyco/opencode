@@ -14,6 +14,7 @@ import { ReviewPanel } from "./panel"
 import { SessionReviewTab } from "./review-tab"
 import type { ChangeMode, SessionReviewModel } from "./model"
 import type { createSessionBrowser } from "../browser/model"
+import type { ExecutionModel } from "@/superpowers/model"
 
 const MobilePanelDrawer = lazy(async () => {
   const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
@@ -127,6 +128,7 @@ export function SessionMobileReview(props: { review: SessionReviewModel }) {
 export function SessionDesktopReview(props: {
   review: SessionReviewModel
   browser: ReturnType<typeof createSessionBrowser>
+  execution: ExecutionModel
   present?: boolean
 }) {
   return (
@@ -153,6 +155,7 @@ export function SessionDesktopReview(props: {
         size={props.review.screen.size}
         stacked={props.review.screen.side.layout().stacked}
         browser={props.browser}
+        execution={props.execution}
       />
     </Suspense>
   )
