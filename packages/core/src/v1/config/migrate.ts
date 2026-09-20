@@ -115,7 +115,7 @@ function permissions(info?: ConfigPermissionV1.Info, tools?: Readonly<Record<str
 
 // Map v1 permission/tool keys onto their renamed v2 tool actions so migrated rules keep matching.
 export function normalizeAction(action: string) {
-  if (action === "write" || action === "patch") return "edit"
+  if (action === "write" || action === "patch" || action === "apply_patch") return "edit"
   if (action === "task") return "subagent"
   if (action === "bash") return "shell"
   return action
