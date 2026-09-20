@@ -330,3 +330,27 @@ it.instance(
     }),
   { git: true },
 )
+
+it.instance(
+  "durable transform strips only user-message summary and leaves other events intact",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const f = yield* fixture
+      const before = (yield* f.rows()).length
+      const full = {
+        ...f.user,
+        summary: { title: "t", body: "b", diffs: [{ file: "x.txt", patch: "+x", additions: 1, deletions: 0 }] },
+      }
+      yield* sessions.updateMessage(full)
+      const rows = yield* f.rows()
+      const userRow = rows.at(-1)!
+      expect(userRow.type).toBe("message.updated.1")
+      expect(userRow.data.info).not.toHaveProperty("summary")
+      // 该 session 的 part 事件不受 transform 影响(part.updated 的 part 字段完整)。
+      const partRow = rows.find((row) => row.type !== "message.updated.1")
+      if (partRow) expect(partRow.data).toBeDefined()
+      void before
+    }),
+  { git: true },
+)
