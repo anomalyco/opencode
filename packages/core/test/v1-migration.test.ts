@@ -481,7 +481,14 @@ describe("V1Migration.transformSession", () => {
       })
     const result = transform(
       [parent, message],
-      [call("prt_1", "bash"), call("prt_2", "read"), call("prt_3", "glob"), call("prt_4", "todowrite")],
+      [
+        call("prt_1", "bash"),
+        call("prt_2", "read"),
+        call("prt_3", "glob"),
+        call("prt_4", "todowrite"),
+        call("prt_5", "task"),
+        call("prt_6", "apply_patch"),
+      ],
     )
     expect(result.messages.map((row) => [row.type, row.seq])).toEqual([
       ["user", 0],
@@ -495,7 +502,8 @@ describe("V1Migration.transformSession", () => {
       data: {
         text: [
           "The available tools have changed.",
-          "The following tools were renamed and must be called by their new names: `bash` is now `shell`.",
+          "The following tools were renamed and must be called by their new names: `bash` is now `shell`; `task` is now `subagent`; `apply_patch` is now `patch`.",
+          "The `subagent` tool takes `agent` instead of `subagent_type` and `sessionID` instead of `task_id`.",
           "The following tools now take `path` instead of `filePath`: `read`.",
           "The following tools are no longer available and must not be called: `todowrite`.",
         ].join("\n\n"),

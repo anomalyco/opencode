@@ -925,8 +925,11 @@ function legacyToolNotice(messages: ReadonlyArray<TransformResult["messages"][nu
       ? [
           `The following tools were renamed and must be called by their new names: ${renamed
             .map((name) => `\`${name}\` is now \`${RENAMED_TOOLS[name]}\``)
-            .join(", ")}.`,
+            .join("; ")}.`,
         ]
+      : []),
+    ...(called.has("task")
+      ? ["The `subagent` tool takes `agent` instead of `subagent_type` and `sessionID` instead of `task_id`."]
       : []),
     ...(paths.length > 0 ? [`The following tools now take \`path\` instead of \`filePath\`: ${list(paths)}.`] : []),
     ...(called.has("skill") ? ["The `skill` tool now takes `id` instead of `name`."] : []),
