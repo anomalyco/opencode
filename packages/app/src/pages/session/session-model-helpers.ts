@@ -25,12 +25,19 @@ type PromptState = {
   }
 }
 
+type AutoSelectMessage = UserMessage & {
+  modelSelection?: {
+    requested: UserMessage["model"]
+  }
+}
+
 export const resetSessionModel = (local: Local) => {
   local.session.reset()
 }
 
 export const syncSessionModel = (local: Local, msg: UserMessage) => {
-  local.session.restore(msg)
+  const selection = (msg as AutoSelectMessage).modelSelection
+  local.session.restore(selection ? { ...msg, model: selection.requested } : msg)
 }
 
 export const syncPromptModel = (local: ModelSelection, prompt: PromptState) => {

@@ -1668,6 +1668,23 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return match?.models?.[message.modelID]?.name ?? message.modelID
   })
 
+  const modelDetails = createMemo(() => {
+    const message = props.message as AssistantMessage & {
+      modelSelection?: { source?: "jev" | "fallback" }
+    }
+    return [
+      model(),
+      message.variant && message.variant !== "default" ? message.variant : "",
+      message.modelSelection?.source === "fallback"
+        ? "Jev fallback"
+        : message.modelSelection
+          ? "Jev"
+          : "",
+    ]
+      .filter(Boolean)
+      .join(" \u00B7 ")
+  })
+
   const duration = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const message = props.message as AssistantMessage
@@ -1694,7 +1711,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     const agent = (props.message as AssistantMessage).agent
     const items = [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
-      model(),
+      modelDetails(),
       duration(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
     ]

@@ -1473,6 +1473,22 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const modelDetails = createMemo(() => {
+    const message = props.message as AssistantMessage & {
+      modelSelection?: { source?: "jev" | "fallback" }
+    }
+    return [
+      model(),
+      props.message.variant && props.message.variant !== "default" ? props.message.variant : "",
+      message.modelSelection?.source === "fallback"
+        ? "Jev fallback"
+        : message.modelSelection
+          ? "Jev"
+          : "",
+    ]
+      .filter(Boolean)
+      .join(" · ")
+  })
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1560,7 +1576,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 ▣{" "}
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
+              <span style={{ fg: theme.textMuted }}> · {modelDetails()}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>

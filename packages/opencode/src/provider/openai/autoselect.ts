@@ -91,7 +91,8 @@ export async function resolve(input: SelectionContext): Promise<{
   }
 
   const fallback = chooseFallback(candidates)
-  if (!fallback || !process.env.TYPESAFE_API_KEY) return result(fallback, "fallback")
+  if (!fallback) throw new Error("No OpenAI model is available for auto-selection")
+  if (!process.env.TYPESAFE_API_KEY) return result(fallback, "fallback")
 
   try {
     const sdk = await loadTypeSafeSDK()
@@ -128,7 +129,8 @@ export async function resolve(input: SelectionContext): Promise<{
     const key = typeof answer?.choice === "string" ? answer.choice : undefined
     const selected = key ? candidates.find((candidate) => candidate.key === key) : undefined
     if (!selected) return result(fallback, "fallback")
-    const confidence = typeof answer?.confidence === "number" && Number.isFinite(answer.confidence) ? answer.confidence : undefined
+    const confidence =
+      typeof answer?.confidence === "number" && Number.isFinite(answer.confidence) ? answer.confidence : undefined
     const selectorModel = typeof response.model === "string" ? response.model : undefined
     return result(selected, "jev", confidence, selectorModel)
   } catch {
@@ -144,15 +146,16 @@ function buildCandidates(
     .filter((model) => model.id !== AUTOSELECT_MODEL_ID)
     .filter((model) => model.providerID === "openai")
     .filter((model) => !model.id.endsWith("-fast"))
-    .flatMap((model) =>
-      Object.keys(model.variants ?? {}).map((variant) => ({
+    .flatMap((model) => {
+      const variants = Object.keys(model.variants ?? {})
+      return (variants.length > 0 ? variants : ["default"]).map((variant) => ({
         key: `${model.id}:${variant}`,
         modelID: model.id,
         variant,
         model,
         catalog: catalog?.models[model.api.id],
-      })),
-    )
+      }))
+    })
 }
 
 function chooseFallback(candidates: Candidate[]) {

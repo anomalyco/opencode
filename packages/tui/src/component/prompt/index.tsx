@@ -325,8 +325,12 @@ export function Prompt(props: PromptProps) {
         // Keep command line --agent if specified.
         if (!args.agent) local.agent.set(msg.agent)
         if (msg.model) {
-          local.model.set(msg.model)
-          local.model.variant.set(msg.model.variant)
+          const modelSelection = (
+            msg as UserMessage & { modelSelection?: { requested: UserMessage["model"] } }
+          ).modelSelection
+          const selectedModel = modelSelection?.requested ?? msg.model
+          local.model.set(selectedModel)
+          local.model.variant.set(modelSelection ? undefined : selectedModel.variant)
         }
       }
     }
