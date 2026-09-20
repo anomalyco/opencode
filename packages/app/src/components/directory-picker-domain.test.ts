@@ -20,6 +20,7 @@ import {
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
+  resolvePickerStart,
 } from "./directory-picker-domain"
 
 test("maps server directory entries into Pierre paths", () => {
@@ -300,6 +301,45 @@ test("wraps autocomplete keyboard navigation", () => {
   expect(nextSuggestionIndex(3, 1, 4)).toBe(0)
   expect(nextSuggestionIndex(0, -1, 4)).toBe(3)
   expect(nextSuggestionIndex(0, 1, 0)).toBe(-1)
+})
+
+test("prefers the server directory over home for the picker start", () => {
+  const home = "C:/Users/boyanzh"
+  const directory = "C:/Users/boyanzh/Desktop/Programs/repos"
+  expect(resolvePickerStart(undefined, directory, home, undefined, undefined)).toBe(directory)
+  expect(resolvePickerStart(undefined, "/repo", "/home/luke", undefined, undefined)).toBe("/repo")
+  expect(resolvePickerStart("D:/explicit", directory, home, undefined, undefined)).toBe("D:/explicit")
+  expect(resolvePickerStart(undefined, "", home, undefined, undefined)).toBe(home)
+  expect(resolvePickerStart(undefined, "", "", "C:/fallback/dir", "C:/fallback/home")).toBe("C:/fallback/dir")
+  expect(resolvePickerStart(undefined, "", "", "", "C:/fallback/home")).toBe("C:/fallback/home")
+  expect(resolvePickerStart(undefined, "", "", "", "")).toBeFalsy()
+})
+
+test("walks nested Windows directories level by level", () => {
+  const home = "C:/Users/boyanzh"
+  const levels = ["Desktop", "Programs", "repos", "ApexLayer"]
+  const descended = levels.reduce((root, segment) => absoluteTreePath(root, segment + "/"), home)
+  expect(descended).toBe("C:/Users/boyanzh/Desktop/Programs/repos/ApexLayer")
+  expect(pickerParent(descended)).toBe("C:/Users/boyanzh/Desktop/Programs/repos")
+  expect(pickerParent("C:/Users/boyanzh")).toBe("C:/Users")
+  expect(pickerParent("C:/Users")).toBe("C:/")
+  expect(pickerParent("C:/")).toBe("C:/")
+  expect(pickerRoot(descended)).toBe("C:/")
+})
+
+test("accepts absolute Windows drive input with either separator", () => {
+  const home = "C:/Users/boyanzh"
+  const current = "C:/Users/boyanzh/Desktop/Programs/repos"
+  expect(pickerAbsoluteInput("C:\\Users\\boyanzh\\Desktop\\Programs\\repos\\ApexLayer", home, current)).toBe(
+    "C:/Users/boyanzh/Desktop/Programs/repos/ApexLayer",
+  )
+  expect(pickerAbsoluteInput("C:/Users/boyanzh/Desktop/Programs/repos/ApexLayer", home, current)).toBe(
+    "C:/Users/boyanzh/Desktop/Programs/repos/ApexLayer",
+  )
+  expect(pickerAbsoluteInput("D:/code/python-demo", home, current)).toBe("D:/code/python-demo")
+  expect(pickerRoot("D:/code/python-demo")).toBe("D:/")
+  expect(pickerAbsoluteInput("C:", home, current)).toBe("C:/")
+  expect(pickerAbsoluteInput("Desktop", home, current)).toBe("C:/Users/boyanzh/Desktop/Programs/repos/Desktop")
 })
 
 test("returns absolute directories and relative files", () => {
