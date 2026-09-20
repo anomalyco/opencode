@@ -95,10 +95,12 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 | Grok Build 0.1                  | grok-build-0.1                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Muse Spark 1.3                  | muse-spark-1.3                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Muse Spark 1.2                  | muse-spark-1.2                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Qwen3.8 Flash                   | qwen3.8-flash                   | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max                     | qwen3.7-max                     | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                    | qwen3.7-plus                    | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus                    | qwen3.6-plus                    | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus                    | qwen3.5-plus                    | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| DeepSeek V4.1 Flash             | deepseek-v4.1-flash             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro                 | deepseek-v4-pro                 | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash               | deepseek-v4-flash               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp    | deepseek-v4-flash-vision-exp    | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -114,6 +116,8 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 | Kimi K2.6                       | kimi-k2.6                       | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code                  | kimi-k2.7-code                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Kimi K3                         | kimi-k3                         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Jev 1.13                        | jev-1.13                        | `https://opencode.ai/zen/v1/systemone`                    | -                           |
+| Jev 1.13 Free                   | jev-1.13-free                   | `https://opencode.ai/zen/v1/systemone`                    | -                           |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Ling 3.0 Flash Fin Free         | ling-3.0-flash-fin-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -135,6 +139,60 @@ https://opencode.ai/zen/v1/models
 
 ---
 
+### Jev
+
+Jev 是 TypeSafe AI 推出的一款 System One 模型，适用于快速、结构化的决策。它不会生成文本，而是根据带类型的问题评估 `state`，并返回可供代码直接使用的值和概率。它支持是/否问题（`noul`）、多项选择问题（`choice`）以及基于评分标准的问题（`score`）。
+
+将你的 OpenCode Zen API 密钥用于 `https://opencode.ai/zen/v1/systemone` 端点。以下示例会检查支持请求是否紧急：
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+你可以在一个请求中提出多个问题。Jev 会并行评估这些问题，并将每个答案返回到对应的问题 ID 下：
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+使用 `jev-1.13-free` 代替 `jev-1.13`，即可使用限时免费模型。有关问题类型和响应字段的详细信息，请参阅 [TypeSafe AI 文档](https://docs.typesafe.ai/)。
+
+---
+
 ## 定价
 
 我们支持按量付费模式。以下是**每 1M tokens** 的价格。
@@ -147,6 +205,8 @@ https://opencode.ai/zen/v1/models
 | Nemotron 3 Ultra Free             | Free   | Free    | Free     | -        |
 | Nemotron 3.5 Lightning Free       | Free   | Free    | Free     | -        |
 | Muse Spark 1.3 Contributor Free   | Free   | Free    | Free     | -        |
+| Jev 1.13 Free                     | 免费   | 免费    | -        | -        |
+| Jev 1.13                          | $0.042 | 免费    | -        | -        |
 | MiniMax M3                        | $0.30  | $1.20   | $0.06    | -        |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06    | -        |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06    | -        |
@@ -159,10 +219,12 @@ https://opencode.ai/zen/v1/models
 | Kimi K3                           | $3.00  | $15.00  | $0.30    | -        |
 | Kimi K2.6                         | $0.95  | $4.00   | $0.16    | -        |
 | Kimi K2.5                         | $0.60  | $3.00   | $0.10    | -        |
+| Qwen3.8 Flash                     | $0.15  | $0.47   | $0.016   | $0.20    |
 | Qwen3.7 Max                       | $2.50  | $7.50   | $0.50    | $3.125   |
 | Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04    | $0.50    |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05    | $0.625   |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02    | $0.25    |
+| DeepSeek V4.1 Flash               | $0.30  | $1.20   | $0.006   | -        |
 | DeepSeek V4 Pro                   | $1.74  | $3.48   | $0.145   | -        |
 | DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.028   | -        |
 | DeepSeek V4 Flash Vision Exp      | $0.14  | $0.28   | $0.028   | -        |
@@ -237,6 +299,7 @@ https://opencode.ai/zen/v1/models
 - Nemotron 3.5 Lightning Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - Big Pickle 是一个隐身模型，目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 - Muse Spark 1.3 Contributor Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
+- Jev 1.13 Free 目前在 OpenCode 上限时提供。
 
 如果你有任何问题，请<a href={email}>联系我们</a>。
 
