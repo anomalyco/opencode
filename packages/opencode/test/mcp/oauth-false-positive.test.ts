@@ -7,7 +7,7 @@ import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect } from "effect"
+import { Cause, Effect } from "effect"
 import { Config } from "../../src/config/config"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { McpAuth } from "../../src/mcp/auth"
@@ -282,11 +282,24 @@ mcpTest.instance("preserves exact redirect URI through OAuth flow", () =>
     const name = "test-gmail-redirect"
 
     // Mirror the real-world shape from the ticket: localhost with a custom path.
-    const callbackPort = yield* Effect.promise(getFreePort)
-    const redirectUri = `http://localhost:${callbackPort}/callback`
-
-    yield* mcp.add(name, remoteWithGmailScopes(server.url, { redirectUri }))
-    const started = yield* mcp.startAuth(name)
+    // The port is probed then released, so retry with a fresh one if another
+    // process claims it before the callback server binds.
+    let started: { authorizationUrl: string; oauthState: string } | undefined
+    let redirectUri = ""
+    for (let attempt = 0; attempt < 3 && !started; attempt++) {
+      const callbackPort = yield* Effect.promise(getFreePort)
+      redirectUri = `http://localhost:${callbackPort}/callback`
+      yield* mcp.add(name, remoteWithGmailScopes(server.url, { redirectUri }))
+      const outcome = yield* mcp.startAuth(name).pipe(
+        Effect.map((value) => ({ ok: true as const, value })),
+        Effect.catchCause((cause) =>
+          Effect.succeed({ ok: false as const, message: String(Cause.squash(cause)) }),
+        ),
+      )
+      if (outcome.ok) started = outcome.value
+      else if (!outcome.message.includes("EADDRINUSE")) throw new Error(outcome.message)
+    }
+    if (!started) throw new Error("callback port claimed 3 times in a row")
     const authorizationUrl = new URL(started.authorizationUrl)
     // The exact configured redirect URI is used for the authorization request.
     expect(authorizationUrl.searchParams.get("redirect_uri")).toBe(redirectUri)

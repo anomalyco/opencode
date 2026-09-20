@@ -869,10 +869,12 @@ const layer = Layer.effect(
             // must never be treated as authenticated without tokens.
             const pendingTokens = await authProvider.tokens()
             if (!pendingTokens?.access_token) throw new Error("OAuth flow completed without credentials")
+            // Commit before connecting so the fresh tokens survive even if
+            // the subsequent connect fails. No second commit is needed:
+            // connecting with fresh tokens saves nothing new.
             await authProvider.commit()
             const client = createClient(directory)
             await client.connect(transport)
-            await authProvider.commit()
             return { authorizationUrl: "", oauthState, client } satisfies AuthResult
           }
           if (!capturedUrl) throw new Error("OAuth flow did not produce an authorization URL")
