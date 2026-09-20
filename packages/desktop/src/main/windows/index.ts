@@ -7,7 +7,7 @@ import { DesktopPaths } from "../paths"
 import { DesktopStorage } from "../storage"
 import { getStore } from "../storage/store"
 import { WINDOW_IDS_KEY } from "../storage/keys"
-import { windowIDArgument } from "../../shared/window-bootstrap"
+import { windowArguments } from "./bootstrap"
 import {
   getBackgroundColor,
   getPinchZoomEnabled,
@@ -21,7 +21,8 @@ import {
   wireFullscreen,
   wireZoom,
 } from "./appearance"
-import { loadWindow, registerRendererProtocol } from "./protocol"
+import { registerRendererProtocol, setProtocolReporter } from "./protocol"
+import { loadWindow } from "./scheme"
 import { createWindowRegistry } from "./registry"
 import { makeWindowRecovery } from "./recovery"
 import { takeEarlyWindow, type EarlyWindow } from "./early"
@@ -48,6 +49,7 @@ export {
   getBackgroundColor,
   getPinchZoomEnabled,
   registerRendererProtocol,
+  setProtocolReporter,
   setBackgroundColor,
   setDockIcon,
   setPinchZoomEnabled,
@@ -115,18 +117,23 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
         ...appearance,
         webPreferences: {
           ...appearance.webPreferences,
-          additionalArguments: [windowIDArgument(id)],
+          additionalArguments: windowArguments(id),
         },
       })
 
-    allowRendererPermissions(win)
+    // The early window was secured and loaded when it was created; only its external-URL policy is
+    // upgraded to the logged one.
+    if (early) early.openExternal = (url) => runFork(openExternalURL(url))
+    if (!early) {
+      allowRendererPermissions(win)
+      wireNavigationPolicy(win, (url) => runFork(openExternalURL(url)))
+      wireRendererHeaders(win)
+      manageWindowState(win, stateFile, state, displays)
+    }
     wireWindowRecovery(win, id, () => relaunchHandler())
-    wireNavigationPolicy(win, (url) => runFork(openExternalURL(url)))
-    wireRendererHeaders(win)
-    if (!early) manageWindowState(win, stateFile, state, displays)
     register(win, id)
     wireFullscreen(win)
-    loadWindow(win, "index.html")
+    if (!early) loadWindow(win, "index.html")
     wireZoom(win)
     let contentReady = false
     let appliedTheme = false

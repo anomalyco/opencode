@@ -15,6 +15,8 @@ marks.bundle = Date.now()
 
 const runIpc = Effect.fn("Desktop.runIpc")(function* () {
   const lifecycle = yield* ApplicationLifecycle.Service
+  marks.layers = Date.now()
+  yield* Effect.logInfo("layers ready", { marks })
   const ipc = yield* Ipc.registerIpcHandlers
   if (lifecycle.restoreWindows().length) ipc.installMenu()
   yield* installContextMenu
@@ -36,3 +38,4 @@ runIpc().pipe(
   Effect.scoped,
   NodeRuntime.runMain,
 )
+

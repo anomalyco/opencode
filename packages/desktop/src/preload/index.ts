@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
-import { windowIDFromArguments } from "../shared/window-bootstrap"
+import { windowBootstrapFromArguments } from "../shared/window-bootstrap"
 
 ipcRenderer.on(IpcTransportPort, (event) => {
   const port = event.ports[0]
@@ -9,7 +9,10 @@ ipcRenderer.on(IpcTransportPort, (event) => {
 
 ipcRenderer.on(DragCancelEvent, () => window.dispatchEvent(new Event(DragCancelEvent)))
 
+const bootstrap = windowBootstrapFromArguments(process.argv)
+
 contextBridge.exposeInMainWorld("electron", {
-  windowID: windowIDFromArguments(process.argv),
+  windowID: bootstrap.id,
+  bootstrap,
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
 })

@@ -9,6 +9,7 @@ import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
 import { getLastFocusedWindow, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import { marks } from "./marks"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
 
@@ -157,6 +158,7 @@ export const layer = Layer.unwrap(
     // Decide first-launch state before the storage layer creates drafts.sqlite, which would
     // otherwise read as evidence of an earlier launch on a fresh install.
     yield* initializeFirstLaunchOnboarding(app.getPath("userData"))
+    marks.onboarding = Date.now()
     return runtime.pipe(Layer.provideMerge(platform))
   }),
 )

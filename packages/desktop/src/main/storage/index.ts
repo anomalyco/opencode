@@ -2,6 +2,7 @@ export * as DesktopStorage from "./index"
 
 import { app, BrowserWindow } from "electron"
 import { Context, Effect, Layer, Path } from "effect"
+import { marks } from "../lifecycle/marks"
 import { openDatabase } from "./database"
 import { createDraftStore } from "./drafts"
 import { importLegacyStores } from "./legacy"
@@ -40,6 +41,7 @@ export const layer = Layer.effect(
         storage.close()
       }),
     )
+    marks.storage = Date.now()
     return Service.of(storage)
   }),
 )
