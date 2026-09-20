@@ -504,8 +504,8 @@ describe("V1Migration.transformSession", () => {
           "The available tools have changed.",
           "The following tools were renamed and must be called by their new names: `bash` is now `shell`; `task` is now `subagent`; `apply_patch` is now `patch`.",
           "The `subagent` tool takes `agent` instead of `subagent_type` and `sessionID` instead of `task_id`.",
-          "The following tools now take `path` instead of `filePath`: `read`.",
-          "The following tools are no longer available and must not be called: `todowrite`.",
+          "The `read` tool now takes `path` instead of `filePath`.",
+          "The `todowrite` tool is no longer available and must not be called.",
         ].join("\n\n"),
         time: { created: 20 },
       },
@@ -541,6 +541,9 @@ describe("V1Migration.transformSession", () => {
         part("prt_3", summary.id, { type: "text", text: "summary" }),
         part("prt_4", later.id, { type: "text", text: "again" }),
         call("prt_5", answer.id, "skill"),
+        call("prt_6", answer.id, "bash"),
+        call("prt_7", answer.id, "edit"),
+        call("prt_8", answer.id, "write"),
       ],
     )
     expect(result.messages.map((row) => row.type)).toEqual([
@@ -552,7 +555,12 @@ describe("V1Migration.transformSession", () => {
       "system",
     ])
     expect(result.messages[5]?.data).toMatchObject({
-      text: "The available tools have changed.\n\nThe `skill` tool now takes `id` instead of `name`.",
+      text: [
+        "The available tools have changed.",
+        "The `bash` tool is now `shell` and must be called by that name.",
+        "The following tools now take `path` instead of `filePath`: `edit`, `write`.",
+        "The `skill` tool now takes `id` instead of `name`.",
+      ].join("\n\n"),
     })
   })
 

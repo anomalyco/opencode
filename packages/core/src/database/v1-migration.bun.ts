@@ -921,21 +921,29 @@ function legacyToolNotice(messages: ReadonlyArray<TransformResult["messages"][nu
   const paths = PATH_TOOLS.filter((name) => called.has(name))
   const removed = REMOVED_TOOLS.filter((name) => called.has(name))
   const parts = [
-    ...(renamed.length > 0
-      ? [
-          `The following tools were renamed and must be called by their new names: ${renamed
-            .map((name) => `\`${name}\` is now \`${RENAMED_TOOLS[name]}\``)
-            .join("; ")}.`,
-        ]
-      : []),
+    ...(renamed.length === 1
+      ? [`The \`${renamed[0]}\` tool is now \`${RENAMED_TOOLS[renamed[0]]}\` and must be called by that name.`]
+      : renamed.length > 1
+        ? [
+            `The following tools were renamed and must be called by their new names: ${renamed
+              .map((name) => `\`${name}\` is now \`${RENAMED_TOOLS[name]}\``)
+              .join("; ")}.`,
+          ]
+        : []),
     ...(called.has("task")
       ? ["The `subagent` tool takes `agent` instead of `subagent_type` and `sessionID` instead of `task_id`."]
       : []),
-    ...(paths.length > 0 ? [`The following tools now take \`path\` instead of \`filePath\`: ${list(paths)}.`] : []),
+    ...(paths.length === 1
+      ? [`The \`${paths[0]}\` tool now takes \`path\` instead of \`filePath\`.`]
+      : paths.length > 1
+        ? [`The following tools now take \`path\` instead of \`filePath\`: ${list(paths)}.`]
+        : []),
     ...(called.has("skill") ? ["The `skill` tool now takes `id` instead of `name`."] : []),
-    ...(removed.length > 0
-      ? [`The following tools are no longer available and must not be called: ${list(removed)}.`]
-      : []),
+    ...(removed.length === 1
+      ? [`The \`${removed[0]}\` tool is no longer available and must not be called.`]
+      : removed.length > 1
+        ? [`The following tools are no longer available and must not be called: ${list(removed)}.`]
+        : []),
   ]
   if (parts.length === 0) return undefined
   return ["The available tools have changed.", ...parts].join("\n\n")
