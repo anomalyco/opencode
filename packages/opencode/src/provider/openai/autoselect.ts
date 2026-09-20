@@ -1,4 +1,4 @@
-import { Model as ModelV2 } from "@opencode-ai/core/model"
+import { ModelV2 } from "@opencode-ai/core/model"
 import type { Model as CatalogModel, Provider as CatalogProvider } from "@opencode-ai/core/models-dev"
 import type { Model as ProviderModel } from "@/provider/provider"
 
