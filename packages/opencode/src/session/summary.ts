@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context, Schema, Semaphore } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "@/snapshot"
@@ -72,6 +72,9 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionSummary") {}
 
+// Count both active and queued calls; deleting on every completion would split a live queue.
+const pending = new Map<MessageID, { semaphore: Semaphore.Semaphore; users: number }>()
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -104,28 +107,46 @@ const layer = Layer.effect(
       sessionID: SessionID
       messageID: MessageID
     }) {
-      if ((yield* config.get()).snapshot === false) return
-      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      if (!all.length) return
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          const entry = pending.get(input.messageID) ?? { semaphore: Semaphore.makeUnsafe(1), users: 0 }
+          entry.users++
+          pending.set(input.messageID, entry)
+          return entry
+        }),
+        (entry) =>
+          entry.semaphore.withPermit(
+            Effect.gen(function* () {
+              if ((yield* config.get()).snapshot === false) return
+              const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+              if (!all.length) return
 
-      const messages = all.filter(
-        (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+              const messages = all.filter(
+                (m) =>
+                  m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+              )
+              const target = messages.find((m) => m.info.id === input.messageID)
+              if (!target || target.info.role !== "user") return
+              const msgDiffs = yield* computeDiff({ messages })
+              if (isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
+              yield* sessions.setSummary({
+                sessionID: input.sessionID,
+                summary: {
+                  additions: 0,
+                  deletions: 0,
+                  files: 0,
+                },
+              })
+              yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
+              target.info.summary = { ...target.info.summary, diffs: msgDiffs }
+              yield* sessions.updateMessage(target.info)
+            }),
+          ),
+        (entry) =>
+          Effect.sync(() => {
+            if (--entry.users === 0) pending.delete(input.messageID)
+          }),
       )
-      const target = messages.find((m) => m.info.id === input.messageID)
-      if (!target || target.info.role !== "user") return
-      const msgDiffs = yield* computeDiff({ messages })
-      if (isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
-      yield* sessions.setSummary({
-        sessionID: input.sessionID,
-        summary: {
-          additions: 0,
-          deletions: 0,
-          files: 0,
-        },
-      })
-      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
-      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
-      yield* sessions.updateMessage(target.info, { stripSummaryDiffs: true })
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {

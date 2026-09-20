@@ -448,7 +448,7 @@ export interface Interface {
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
-  readonly updateMessage: <T extends SessionV1.Info>(msg: T, opts?: { stripSummaryDiffs?: boolean }) => Effect.Effect<T>
+  readonly updateMessage: <T extends SessionV1.Info>(msg: T) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
   readonly removePart: (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) => Effect.Effect<PartID>
   readonly getPart: (input: {
@@ -626,35 +626,9 @@ const layer: Layer.Layer<
       }
     })
 
-    const updateMessage = <T extends SessionV1.Info>(
-      msg: T,
-      // Kept for existing callers; durable stripping is now unconditional in EventV2.
-      _opts?: { stripSummaryDiffs?: boolean },
-    ): Effect.Effect<T> =>
+    const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
       Effect.gen(function* () {
-        if (msg.role !== "user" || msg.summary?.diffs === undefined) {
-          yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg })
-          return msg
-        }
-        const user: SessionV1.User = msg
-        const summary = user.summary
-        // EventV2 strips summary only from durable/projector data; live consumers need it.
-        // Every summary write needs this hook, including callers without options, because
-        // merging the previous projection cannot supply first-time or replacement diffs.
-        // The hook runs after projection, in the same transaction as the event.
-        yield* events.publish(
-          SessionV1.Event.MessageUpdated,
-          { sessionID: msg.sessionID, info: msg },
-          {
-            commit: () =>
-              db
-                .update(MessageTable)
-                .set({ data: sql`json_set(${MessageTable.data}, '$.summary', json(${JSON.stringify(summary)}))` })
-                .where(and(eq(MessageTable.id, msg.id), eq(MessageTable.session_id, msg.sessionID)))
-                .run()
-                .pipe(Effect.orDie, Effect.asVoid),
-          },
-        )
+        yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: msg.sessionID, info: msg })
         return msg
       }).pipe(Effect.withSpan("Session.updateMessage"))
 

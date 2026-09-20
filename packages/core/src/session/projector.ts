@@ -263,19 +263,6 @@ const layer = Layer.effectDiscard(
         const id = event.data.info.id
         const sessionID = event.data.info.sessionID
         const data = messageData(event.data.info)
-        // Summary writers omit patches from events and replace the local summary
-        // in a commit hook. Other summary-less updates must retain that projection.
-        if (data.role === "user" && data.summary === undefined) {
-          const previous = yield* db
-            .select({ data: MessageTable.data })
-            .from(MessageTable)
-            .where(and(eq(MessageTable.id, id), eq(MessageTable.session_id, sessionID)))
-            .get()
-            .pipe(Effect.orDie)
-          if (previous?.data.role === "user" && typeof previous.data.summary === "object") {
-            data.summary = previous.data.summary
-          }
-        }
         yield* db
           .insert(MessageTable)
           .values({ id, session_id: sessionID, time_created, data })

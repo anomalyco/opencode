@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { Effect, Exit, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { and, eq, sql } from "drizzle-orm"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -19,7 +19,7 @@ import { Snapshot } from "@/snapshot"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { TestInstance } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -100,7 +100,7 @@ const fixture = Effect.gen(function* () {
       .orderBy(EventTable.seq)
       .all()
       .pipe(Effect.orDie)
-  return { input, user, finish, rows, directory: tmp.directory }
+  return { input, user, assistant, finish, rows, directory: tmp.directory }
 })
 
 it.instance(
@@ -153,7 +153,7 @@ it.instance(
 )
 
 it.instance(
-  "summary omission preserves the message projection and explicit empty diffs clear it",
+  "full user updates retain summary and agent changes, and explicit empty diffs clear the projection",
   () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
@@ -168,14 +168,17 @@ it.instance(
         },
       }
       yield* sessions.updateMessage(full)
-      yield* sessions.updateMessage({ ...f.user, agent: "changed" })
+      // Real callers always carry full info (prompt.ts, compaction.ts, summary.ts).
+      // User upserts without summary only insert new messages (compaction.ts:471/519),
+      // so they do not enter the conflict-update branch.
+      yield* sessions.updateMessage({ ...full, agent: "changed" })
       const { db } = yield* Database.Service
       const row = yield* db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get().pipe(Effect.orDie)
       expect(row?.data.summary).toEqual(full.summary)
       expect(row?.data.agent).toBe("changed")
       expect(yield* summary.diff(f.input)).toEqual(full.summary.diffs)
       const empty = { ...full, summary: { ...full.summary, diffs: [] } }
-      yield* sessions.updateMessage(empty, { stripSummaryDiffs: true })
+      yield* sessions.updateMessage(empty)
       expect(empty.summary.title).toBe("title")
       expect(yield* summary.diff(f.input)).toEqual([])
       const updated = yield* db
@@ -214,7 +217,7 @@ it.instance(
       ]
       for (const value of summaries) {
         const msg = { ...f.user, summary: value }
-        yield* sessions.updateMessage(msg, { stripSummaryDiffs: true })
+        yield* sessions.updateMessage(msg)
         expect(received.at(-1)).toEqual(msg)
         expect(msg.summary).toEqual(value)
         expect(yield* summary.diff(f.input)).toEqual(value.diffs)
@@ -228,7 +231,7 @@ it.instance(
 )
 
 it.instance(
-  "failed event insertion rolls back the local summary commit",
+  "failed event insertion rolls back the full message projection",
   () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
@@ -238,8 +241,8 @@ it.instance(
         ...f.user,
         summary: { diffs: [{ file: "old.txt", patch: "old patch", additions: 1, deletions: 0 }] },
       }
-      // Positive control: prove this same hook writes a new summary before testing rollback.
-      yield* sessions.updateMessage(full, { stripSummaryDiffs: true })
+      // Positive control: prove this same projector writes a new summary before testing rollback.
+      yield* sessions.updateMessage(full)
       expect(yield* summary.diff(f.input)).toEqual(full.summary.diffs)
       const { db } = yield* Database.Service
       const message = () =>
@@ -263,7 +266,7 @@ it.instance(
         )
         .pipe(Effect.orDie)
       const exit = yield* sessions
-        .updateMessage({ ...full, summary: { diffs: [] } }, { stripSummaryDiffs: true })
+        .updateMessage({ ...full, summary: { diffs: [] } })
         .pipe(Effect.exit, Effect.ensuring(db.run(sql`DROP TRIGGER reject_summary_event`).pipe(Effect.orDie)))
       expect(Exit.isFailure(exit)).toBe(true)
       expect(yield* summary.diff(f.input)).toEqual(full.summary.diffs)
@@ -332,25 +335,311 @@ it.instance(
 )
 
 it.instance(
-  "durable transform strips only user-message summary and leaves other events intact",
+  "durable transform strips only user summary and preserves complete assistant and session updates",
   () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
       const f = yield* fixture
-      const before = (yield* f.rows()).length
+      // Read every event type: a message-only helper cannot test transform scope.
+      const rows = () => db.select().from(EventTable).orderBy(EventTable.seq).all().pipe(Effect.orDie)
+      const received: unknown[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.sync(() => {
+          received.push(structuredClone(event.data))
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
       const full = {
         ...f.user,
         summary: { title: "t", body: "b", diffs: [{ file: "x.txt", patch: "+x", additions: 1, deletions: 0 }] },
       }
       yield* sessions.updateMessage(full)
-      const rows = yield* f.rows()
-      const userRow = rows.at(-1)!
-      expect(userRow.type).toBe("message.updated.1")
-      expect(userRow.data.info).not.toHaveProperty("summary")
-      // 该 session 的 part 事件不受 transform 影响(part.updated 的 part 字段完整)。
-      const partRow = rows.find((row) => row.type !== "message.updated.1")
-      if (partRow) expect(partRow.data).toBeDefined()
-      void before
+      const user = (yield* rows()).filter((row) => row.aggregate_id === f.input.sessionID).at(-1)!
+      expect(user.type).toBe("message.updated.1")
+      expect(user.data).toEqual({ sessionID: f.input.sessionID, info: f.user })
+      for (const output of [11, 23]) {
+        const next = { ...f.assistant, summary: true, tokens: { ...f.assistant.tokens, output } }
+        yield* sessions.updateMessage(next)
+        expect(received.at(-1)).toEqual({ sessionID: f.input.sessionID, info: next })
+        const row = (yield* rows()).filter((row) => row.aggregate_id === f.input.sessionID).at(-1)!
+        expect(row.type).toBe("message.updated.1")
+        expect(row.data).toEqual({ sessionID: f.input.sessionID, info: next })
+        const projected = yield* db
+          .select()
+          .from(MessageTable)
+          .where(eq(MessageTable.id, next.id))
+          .get()
+          .pipe(Effect.orDie)
+        const { id, sessionID, ...data } = next
+        expect(projected?.data).toEqual(data)
+      }
+      const counters = { additions: 17, deletions: 8, files: 2 }
+      yield* sessions.setSummary({ sessionID: f.input.sessionID, summary: counters })
+      const updated = (yield* rows()).filter((row) => row.aggregate_id === f.input.sessionID).at(-1)!
+      expect(updated.type).toBe("session.updated.1")
+      const info = yield* sessions.get(f.input.sessionID)
+      expect(info.summary).toEqual(counters)
+      expect(updated.data).toEqual({ sessionID: f.input.sessionID, info })
+      expect(received.at(-1)).toEqual(updated.data)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "incoming replay projects first, replacement, and empty summaries while durable rows stay small",
+  () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const summary = yield* SessionSummary.Service
+      const { db } = yield* Database.Service
+      const f = yield* fixture
+      const received: unknown[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === SessionV1.Event.MessageUpdated.type) received.push(structuredClone(event.data))
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const summaries = [
+        {
+          title: "incoming first",
+          diffs: [{ file: "first.txt", patch: "+first\n".repeat(2000), additions: 1, deletions: 0 }],
+        },
+        { title: "incoming replacement", diffs: [{ file: "next.txt", patch: "+next", additions: 2, deletions: 0 }] },
+        { title: "incoming empty", diffs: [] },
+      ]
+      const sizes: number[] = []
+      for (const value of summaries) {
+        const sequence = yield* db
+          .select()
+          .from(EventSequenceTable)
+          .where(eq(EventSequenceTable.aggregate_id, f.input.sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        expect(sequence).toBeDefined()
+        const data = { sessionID: f.input.sessionID, info: { ...f.user, summary: value } }
+        yield* events.replay(
+          {
+            id: EventV2.ID.create(),
+            type: "message.updated.1",
+            seq: sequence!.seq + 1,
+            aggregateID: f.input.sessionID,
+            data,
+          },
+          { publish: true },
+        )
+        expect(received.at(-1)).toEqual(data)
+        const projected = yield* db
+          .select()
+          .from(MessageTable)
+          .where(eq(MessageTable.id, f.user.id))
+          .get()
+          .pipe(Effect.orDie)
+        const { id, sessionID, ...info } = data.info
+        expect(projected?.data).toEqual(info)
+        expect(yield* summary.diff(f.input)).toEqual(value.diffs)
+        const stored = (yield* f.rows()).at(-1)!
+        expect(stored.data).toEqual({ sessionID: f.input.sessionID, info: f.user })
+        const bytes = Buffer.byteLength(JSON.stringify(stored.data))
+        sizes.push(bytes)
+        expect(bytes).toBeLessThan(1000)
+      }
+      expect(received).toHaveLength(3)
+      process.stdout.write(`INCOMING_DURABLE_BYTES ${JSON.stringify(sizes)}\n`)
+    }),
+  { git: true },
+)
+
+const legacyReplayFixture = Effect.gen(function* () {
+  const sessions = yield* Session.Service
+  const { db } = yield* Database.Service
+  const f = yield* fixture
+  const full = {
+    ...f.user,
+    summary: { title: "legacy", diffs: [{ file: "old.txt", patch: "+old", additions: 1, deletions: 0 }] },
+  }
+  yield* sessions.updateMessage(full)
+  const row = (yield* f.rows()).at(-1)!
+  const data = { sessionID: f.input.sessionID, info: full }
+  // Reproduce and read back a pre-transform row, rather than merely claiming legacy input.
+  yield* db.update(EventTable).set({ data }).where(eq(EventTable.id, row.id)).run().pipe(Effect.orDie)
+  const stored = (yield* f.rows()).at(-1)!
+  expect(stored.data).toEqual(data)
+  const message = () => db.select().from(MessageTable).where(eq(MessageTable.id, f.user.id)).get().pipe(Effect.orDie)
+  const sequence = () =>
+    db
+      .select()
+      .from(EventSequenceTable)
+      .where(eq(EventSequenceTable.aggregate_id, f.input.sessionID))
+      .get()
+      .pipe(Effect.orDie)
+  return {
+    f,
+    stored,
+    message,
+    sequence,
+    wire: { id: row.id, type: row.type, seq: row.seq, aggregateID: row.aggregate_id, data },
+  }
+})
+
+it.instance(
+  "exact legacy replay is idempotent for durable rows, projection, sequence, and live listeners",
+  () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { f, wire, message, sequence } = yield* legacyReplayFixture
+      const before = { rows: yield* f.rows(), message: yield* message(), sequence: yield* sequence() }
+      const received: unknown[] = []
+      const unsubscribe = yield* events.listen((event) =>
+        Effect.sync(() => {
+          received.push(event)
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const exit = yield* events.replay(wire, { publish: true }).pipe(Effect.exit)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      expect({ rows: yield* f.rows(), message: yield* message(), sequence: yield* sequence() }).toEqual(before)
+      expect(received).toEqual([])
+    }),
+  { git: true },
+)
+
+it.instance(
+  "legacy replay with a one-byte agent change still diverges",
+  () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { f, wire, message, sequence } = yield* legacyReplayFixture
+      const before = { rows: yield* f.rows(), message: yield* message(), sequence: yield* sequence() }
+      expect(wire.data.info.agent).toBe("build")
+      const incoming = structuredClone(wire)
+      incoming.data.info.agent = "builD"
+      const exit = yield* events.replay(incoming).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(String(exit)).toContain("Replay diverged")
+      expect({ rows: yield* f.rows(), message: yield* message(), sequence: yield* sequence() }).toEqual(before)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "legacy replay ignores transformed patch differences and retains the old projected patch",
+  () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { f, wire, message, sequence } = yield* legacyReplayFixture
+      const before = { rows: yield* f.rows(), message: yield* message(), sequence: yield* sequence() }
+      const incoming = structuredClone(wire)
+      expect(incoming.data.info.summary.diffs[0]!.patch).toBe("+old")
+      incoming.data.info.summary.diffs[0]!.patch = "+olD"
+      // Both patches map to the same durable data. The message projection is the diffs
+      // SSOT; durable replay does not provide patch idempotency or reproject exact retries.
+      const exit = yield* events.replay(incoming).pipe(Effect.exit)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      expect({ rows: yield* f.rows(), message: yield* message(), sequence: yield* sequence() }).toEqual(before)
+      expect((yield* message())?.data.summary).toEqual(wire.data.info.summary)
+      expect((yield* message())?.data.summary).not.toEqual(incoming.data.info.summary)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "concurrent summaries serialize the complete read-compute-publish cycle and retain newest diffs",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const summary = yield* SessionSummary.Service
+      const snapshot = yield* Snapshot.Service
+      const f = yield* fixture
+      yield* f.finish()
+      const oldReady = yield* Deferred.make<void>()
+      const oldRelease = yield* Deferred.make<void>()
+      const real = snapshot.diffFull
+      let calls = 0
+      Object.assign(snapshot, {
+        diffFull: (...args: Parameters<typeof real>) =>
+          Effect.gen(function* () {
+            const call = ++calls
+            const result = yield* real(...args)
+            if (call === 1) {
+              yield* Deferred.succeed(oldReady, undefined)
+              yield* Deferred.await(oldRelease)
+            }
+            return result
+          }),
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(() => Object.assign(snapshot, { diffFull: real })))
+      const old = yield* summary.summarize(f.input).pipe(Effect.forkScoped)
+      yield* awaitWithTimeout(Deferred.await(oldReady), "old diff did not reach its gate")
+      yield* Effect.promise(() => Bun.write(`${f.directory}/newest.txt`, "newest content\n"))
+      yield* f.finish()
+      const newest = yield* summary.computeDiff({
+        messages: yield* sessions.messages({ sessionID: f.input.sessionID }).pipe(Effect.orDie),
+      })
+      expect(newest).toHaveLength(2)
+      const newer = yield* summary.summarize(f.input).pipe(Effect.forkScoped)
+      // This bounded observation asserts exclusion, not readiness. With serialization
+      // disabled, the newer call completes while A is gated, then A overwrites it.
+      const overlapped = yield* Effect.race(
+        Fiber.join(newer).pipe(Effect.as(true)),
+        Effect.sleep("250 millis").pipe(Effect.as(false)),
+      )
+      const latest = yield* summary.summarize(f.input).pipe(Effect.forkScoped)
+      if (overlapped) yield* awaitWithTimeout(Fiber.join(latest), "latest unblocked call did not finish")
+      yield* Deferred.succeed(oldRelease, undefined)
+      yield* awaitWithTimeout(Fiber.join(old), "old summary did not finish")
+      yield* awaitWithTimeout(Fiber.join(newer), "newer summary did not finish")
+      yield* awaitWithTimeout(Fiber.join(latest), "latest summary did not finish")
+      const actual = yield* summary.diff(f.input)
+      process.stdout.write(
+        `SUMMARY_CONCURRENCY ${JSON.stringify({ overlapped, expected: newest.map((x) => x.file), actual: actual.map((x) => x.file) })}\n`,
+      )
+      expect(actual).toEqual(newest)
+      expect(overlapped).toBe(false)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "a blocked summary does not block another message and interruption releases its lock",
+  () =>
+    Effect.gen(function* () {
+      const summary = yield* SessionSummary.Service
+      const snapshot = yield* Snapshot.Service
+      const first = yield* fixture
+      yield* first.finish()
+      const second = yield* fixture
+      yield* Effect.promise(() => Bun.write(`${second.directory}/independent.txt`, "independent\n"))
+      yield* second.finish()
+      const ready = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const real = snapshot.diffFull
+      let calls = 0
+      Object.assign(snapshot, {
+        diffFull: (...args: Parameters<typeof real>) =>
+          Effect.gen(function* () {
+            const call = ++calls
+            const result = yield* real(...args)
+            if (call === 1) {
+              yield* Deferred.succeed(ready, undefined)
+              yield* Deferred.await(release)
+            }
+            return result
+          }),
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(() => Object.assign(snapshot, { diffFull: real })))
+      const blocked = yield* summary.summarize(first.input).pipe(Effect.forkScoped)
+      yield* awaitWithTimeout(Deferred.await(ready), "first message did not reach gate")
+      yield* awaitWithTimeout(summary.summarize(second.input), "independent message was blocked")
+      expect((yield* summary.diff(second.input)).map((x) => x.file)).toContain("independent.txt")
+      const waiting = yield* summary.summarize(first.input).pipe(Effect.forkScoped)
+      yield* Fiber.interrupt(blocked)
+      yield* awaitWithTimeout(Fiber.join(waiting), "interruption did not release first message lock")
+      expect((yield* summary.diff(first.input)).map((x) => x.file)).toContain("changed.txt")
+      // A fresh invocation after all prior users finish must still work.
+      yield* awaitWithTimeout(summary.summarize(first.input), "completed lock entry was not reusable")
     }),
   { git: true },
 )

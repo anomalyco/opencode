@@ -124,10 +124,10 @@ const durableTransforms = new Map<string, (data: Record<string, unknown>) => Rec
       if (!info || typeof info !== "object" || !("role" in info) || info.role !== "user" || !("summary" in info))
         return data
       const { summary, ...message } = info
-      // Diffs live durably in the message projection, written by the local commit hook.
+      // Diffs live durably in the message projection, written from the original payload.
       // Events intentionally omit summary (V1 requires diffs when summary is present).
-      // Replay preserves an existing projection's summary; rebuilding diffs by replaying
-      // events into another database is unsupported. Migrations must copy the projection.
+      // Normalized retries skip projection, including changes only to omitted patches.
+      // Stripped events cannot rebuild diffs; migrations must copy the projection.
       return { ...data, info: message }
     },
   ],
@@ -286,7 +286,7 @@ export const layerWith = (options?: LayerOptions) =>
                             if (
                               stored?.id === event.id &&
                               stored.type === versionedType(definition.type, durable.version) &&
-                              isDeepStrictEqual(stored.data, encoded)
+                              isDeepStrictEqual(transform ? transform(stored.data) : stored.data, encoded)
                             ) {
                               if (input.ownerID && row?.ownerID == null) {
                                 yield* db
@@ -332,7 +332,9 @@ export const layerWith = (options?: LayerOptions) =>
                             )
                           const committed = {
                             ...event,
-                            data,
+                            // Projectors and live listeners consume the full decoded payload.
+                            // Only the durable EventTable representation is transformed.
+                            data: event.data,
                             durable: { aggregateID, seq, version: durable.version },
                           } as Payload
                           for (const projector of list) {
