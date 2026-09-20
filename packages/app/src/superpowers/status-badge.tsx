@@ -57,9 +57,9 @@ export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () 
                 ? language.t("execution.status.detail.stale")
                 : language.t("execution.status.detail.connected")}
             </span>
-            <span>{language.t("execution.status.detail.needsInput", { count: attention().needsInput })}</span>
-            <span>{language.t("execution.status.detail.failed", { count: attention().failed })}</span>
-            <span>{language.t("execution.status.detail.blocked", { count: attention().blocked })}</span>
+            <span>{language.plural("execution.status.detail.needsInput", attention().needsInput)}</span>
+            <span>{language.plural("execution.status.detail.failed", attention().failed)}</span>
+            <span>{language.plural("execution.status.detail.blocked", attention().blocked)}</span>
             <Show when={props.model.progress()}>
               {(progress) => (
                 <span>
@@ -70,7 +70,7 @@ export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () 
                 </span>
               )}
             </Show>
-            <span>{language.t("execution.status.detail.agents", { count: activeAgents() })}</span>
+            <span>{language.plural("execution.status.detail.agents", activeAgents())}</span>
           </div>
         }
       >

@@ -1,14 +1,17 @@
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { DataProvider } from "@opencode/session-ui/context"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { Show, Suspense, createMemo } from "solid-js"
+import { Show, Suspense, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { LanguageProvider, UiI18nBridge } from "../src/runtime/i18n/language"
 import { ServerConnection, ServersProvider } from "../src/runtime/server/registry"
 import { GlobalProvider } from "../src/runtime/server/runtime"
-import { ServerProvider } from "../src/runtime/server/current"
+import { ServerProvider, useServer } from "../src/runtime/server/current"
 import { SettingsProvider } from "../src/settings/model"
+import { SettingsSurfaceProvider } from "../src/settings/surface"
+import { WslServersProvider } from "../src/servers/wsl/context"
+import { SshProvider } from "../src/servers/ssh/context"
 import { sessionHref } from "../src/shell/routes/session"
 import { SESSION_EXECUTION_TAB, closeSessionTab, openSessionTab } from "../src/shell/state/session-tabs"
 import { TabsProvider } from "../src/shell/tabs/tabs"
@@ -16,12 +19,15 @@ import { createOpenSessionFileTab, createSessionTabs } from "../src/session/help
 import { LazyExecutionPanel, SessionTabAddControl } from "../src/session/files/session-side-panel"
 import { BackgroundWorkSummary, type BackgroundTask } from "../src/session/summary/background"
 import { SessionSummaryPanel } from "../src/session/summary/panel"
+import { MessageTimeline } from "../src/session/timeline/message-timeline"
+import type { TimelineSessionSource } from "../src/session/timeline/controller"
 import { createExecutionModel, type ExecutionAttention, type ExecutionProgress } from "../src/superpowers/model"
 import { ExecutionStatusBadge } from "../src/superpowers/status-badge"
 import { agentFixture } from "../src/superpowers/fixtures"
 import type { ExecutionScope } from "../src/superpowers/identity"
 import type { ExecutionPresentation } from "../src/superpowers/panel"
 import type { Project } from "../src/runtime/server/types"
+import type { SessionInfo } from "@opencode/client/promise"
 
 type PendingRequest = { type: "permission" | "question"; owner: string }
 
@@ -71,6 +77,31 @@ const desktopProject: Project = {
   sandboxes: [],
   worktree: "/root/git/demo",
   worktrees: [],
+}
+
+const timelineSessionInfo = {
+  id: "root",
+  projectID: "demo",
+  title: "Root controller",
+  location: { directory: "/root/git/demo" },
+  time: { created: 0, updated: 0 },
+} as unknown as SessionInfo
+
+const timelineSource = {
+  identity: { params: { id: "root" }, sessionID: () => "root", sessionKey: () => "wsl::root" },
+  data: {
+    info: () => timelineSessionInfo,
+    parent: () => undefined,
+    parentID: () => undefined,
+    status: () => ({ type: "idle" as const }),
+  },
+  history: { messages: () => [] },
+} as unknown as TimelineSessionSource
+
+function SeedProject() {
+  const server = useServer()
+  createEffect(() => server.ctx.sync.set("project", [desktopProject]))
+  return null
 }
 
 export async function mountExecutionFixture(input: {
@@ -215,7 +246,7 @@ export async function mountExecutionFixture(input: {
         <div data-testid="prompt-count">{state.prompts}</div>
         <div data-testid="subagent-count">{state.subagents}</div>
         <div data-testid="interrupt-count">{state.interrupts}</div>
-        <Show when={tasks().length > 0 && scenario !== "desktop-summary"}>
+        <Show when={tasks().length > 0 && scenario !== "desktop-summary" && scenario !== "timeline-desktop"}>
           <BackgroundWorkSummary tasks={tasks()} onViewAgents={openExecution} />
         </Show>
         <Show when={scenario === "desktop-summary"}>
@@ -243,6 +274,51 @@ export async function mountExecutionFixture(input: {
                     </ServerProvider>
                   </GlobalProvider>
                 </TabsProvider>
+              </ServersProvider>
+            </SettingsProvider>
+          </QueryClientProvider>
+        </Show>
+        <Show when={scenario === "timeline-desktop"}>
+          <QueryClientProvider client={desktopQueryClient}>
+            <SettingsProvider>
+              <ServersProvider servers={[desktopServer]}>
+                <WslServersProvider>
+                  <SshProvider>
+                    <TabsProvider>
+                      <GlobalProvider>
+                        <ServerProvider conn={desktopServer}>
+                          <SettingsSurfaceProvider>
+                            <SeedProject />
+                            <MessageTimeline
+                              active
+                              session={timelineSource}
+                              background={{ blocking: () => [], tasks: () => tasks(), move: async () => undefined }}
+                              scroll={{ overflow: false, jump: false }}
+                              onResumeScroll={() => undefined}
+                              setScrollRef={() => undefined}
+                              onScheduleScrollState={() => undefined}
+                              onPin={() => undefined}
+                              onUnpin={() => undefined}
+                              onUserScroll={() => undefined}
+                              onHistoryScroll={() => undefined}
+                              onSelectionInteraction={() => undefined}
+                              pinned={false}
+                              centered={false}
+                              reserveReviewToggle={false}
+                              setContentRef={() => undefined}
+                              diffs={() => []}
+                              onReview={() => undefined}
+                              onViewAgents={openExecution}
+                              workspaceMoveEligible={false}
+                              onSummaryOpenChange={() => undefined}
+                              anchor={(id) => id}
+                            />
+                          </SettingsSurfaceProvider>
+                        </ServerProvider>
+                      </GlobalProvider>
+                    </TabsProvider>
+                  </SshProvider>
+                </WslServersProvider>
               </ServersProvider>
             </SettingsProvider>
           </QueryClientProvider>

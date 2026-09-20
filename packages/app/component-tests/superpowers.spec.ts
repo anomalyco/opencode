@@ -337,3 +337,13 @@ story("desktop summary composition opens agents", async ({ page }) => {
   await expect(page.getByTestId("execution-panel")).toBeVisible()
   await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
 })
+
+story("desktop timeline summary opens agents", async ({ page }) => {
+  await openExecutionFixture(page, "timeline-desktop")
+  await page.getByRole("button", { name: "Session details", exact: true }).click()
+  await page.getByRole("button", { name: "2 background tasks running", exact: true }).click()
+  await expect(page.getByRole("button", { name: "View all agents", exact: true })).toHaveCount(1)
+  await page.getByRole("button", { name: "View all agents", exact: true }).click()
+  await expect(page.getByTestId("execution-panel")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+})

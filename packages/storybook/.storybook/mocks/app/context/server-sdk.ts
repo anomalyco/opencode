@@ -48,8 +48,8 @@ const api = {
     cancel: async () => ({ data: true }),
   },
   worktree: {
-    list: async () => ({ data: [] }),
-    refresh: async () => ({ data: [] }),
+    list: async () => [],
+    refresh: async () => [],
   },
 }
 
@@ -58,8 +58,11 @@ const event = {
   location: () => ({ on: () => () => undefined }),
 }
 
+const server = { type: "http" as const, http: { url: "http://storybook.local" } }
+
 export function useServerSDK() {
   return {
+    server,
     scope: ServerScope.local,
     url: "http://storybook.local",
     api,

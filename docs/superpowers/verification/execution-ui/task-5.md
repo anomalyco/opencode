@@ -217,3 +217,37 @@ Out of scope (unchanged): `attention.failed` stays `0`; T11 wires the failure so
 Files changed in the fix round: `status-badge.tsx`, `en.ts`, `message-timeline.tsx`,
 `screen.tsx`, `superpowers.fixture.tsx`, `superpowers.spec.ts`,
 `packages/storybook/.storybook/mocks/app/context/server-sdk.ts`, and this record.
+
+## Review round 2 fixes
+
+Desktop summary regression boundary:
+
+- New `timeline-desktop` fixture scenario mounts the real `MessageTimeline` with a fabricated
+  session source, a `SeedProject` helper that seeds the server sync project store, and
+  `onViewAgents`. Story `desktop timeline summary opens agents` opens the real Session details
+  popover, opens the nested background-summary popover, clicks `View all agents`, and asserts
+  Execution → Agents. Removing `onViewAgents={props.onViewAgents}` from `message-timeline.tsx`
+  fails this story (verified by temporary removal and restore).
+- Additive Storybook mock extensions: `server-sdk` gained `event`, `api.worktree`, and `server`;
+  `layout` gained `route`. No existing field changed. `api.worktree.list`/`refresh` now resolve to
+  arrays (matching the real client contract).
+
+Small defects:
+
+- `status-badge.tsx` renders count-sensitive tooltip rows through `language.plural`
+  (`execution.status.detail.needsInput`/`.failed`/`.blocked`/`.agents`), with `.one`/`.other`
+  English variants.
+- Worktree mock shape corrected.
+
+### Round-2 verification
+
+| Command | Result |
+|---|---|
+| `bun test --conditions=solid --preload ./happydom.ts ./src/superpowers` | PASS: 55 pass, 0 fail, 184 expect() calls |
+| `bun run test:components component-tests/superpowers.spec.ts --workers=2` | PASS: 31 passed (3.4m) |
+| `bun run typecheck` (`tsgo -b`) | PASS (exit 0) |
+| `oxlint` on changed files | PASS: 0 warnings, 0 errors |
+
+Files changed in round 2: `status-badge.tsx`, `en.ts`, `superpowers.fixture.tsx`,
+`superpowers.spec.ts`, `packages/storybook/.storybook/mocks/app/context/server-sdk.ts`,
+`packages/storybook/.storybook/mocks/app/context/layout.ts`, and this record.

@@ -54,6 +54,7 @@ const view = {
 
 export function useLayout() {
   return {
+    route: () => ({ type: "home" as const }),
     tabs: () => tabs,
     view: () => view,
     fileTree: {
