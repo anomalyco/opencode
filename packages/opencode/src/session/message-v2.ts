@@ -31,7 +31,7 @@ import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
-import { isMedia } from "@/util/media"
+import { isMedia, isPdfAttachment } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
@@ -144,11 +144,22 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   //
   // Only apply this workaround if the model actually supports that media input -
   // otherwise unsupportedParts() will turn it into a user-visible error.
+  const bedrockHoistsToolMedia =
+    model.api.npm === "@ai-sdk/amazon-bedrock" &&
+    /(^|\.)(moonshotai|nvidia|openai|qwen|xai)\./.test(model.api.id.toLowerCase())
   const supportsMediaInToolResult = (attachment: { mime: string }) => {
+    const supportsMedia =
+      model.capabilities.attachment ||
+      (isPdfAttachment(attachment.mime) ? model.capabilities.input.pdf : model.capabilities.input.image)
+    if (isMedia(attachment.mime) && !supportsMedia) return false
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
-    if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
+    if (model.api.npm === "@ai-sdk/amazon-bedrock") {
+      // Converse accepts these families' images as user content but not inside tool results.
+      if (bedrockHoistsToolMedia) return false
+      return attachment.mime.startsWith("image/")
+    }
     if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
     if (model.api.npm === "@ai-sdk/google") {
