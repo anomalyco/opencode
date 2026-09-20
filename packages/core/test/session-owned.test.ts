@@ -177,6 +177,7 @@ describe("Session-owned handles", () => {
         assistantMessageID: messageID,
         agent: Agent.ID.make("build"),
         model: { ...model, id: Model.ID.make("initial-model") },
+        started: 0,
       })
       yield* fixture.bus.publish(SessionEvent.Step.Ended, {
         sessionID,

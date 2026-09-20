@@ -6,12 +6,12 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
 import { Effect } from "effect"
 
-export function identity(model: { readonly provider: string; readonly name: string; readonly ref: Model.Ref }) {
+export function identity(model: { readonly name: string; readonly ref: Model.Ref }) {
   return [
     "# Your Model",
-    `- Provider: ${model.provider}`,
     `- Name: ${model.name}`,
-    `- ID: ${model.ref.providerID}/${model.ref.id}`,
+    `- Provider ID: ${model.ref.providerID}`,
+    `- Model ID: ${model.ref.id}`,
   ].join("\n")
 }
 
@@ -24,14 +24,7 @@ export const Plugin = define({
           (yield* ctx.model.list()).data.find(
             (model) => model.providerID === event.model.providerID && model.id === event.model.id,
           ) ?? Model.Info.default(event.model.providerID, event.model.id)
-        const provider = (yield* ctx.provider.list()).data.find((provider) => provider.id === event.model.providerID)
-        event.system.splice(
-          1,
-          0,
-          SystemPart.make(
-            identity({ provider: provider?.name ?? event.model.providerID, name: model.name, ref: event.model }),
-          ),
-        )
+        event.system.splice(1, 0, SystemPart.make(identity({ name: model.name, ref: event.model })))
       }).pipe(Effect.catch(() => Effect.void))
     yield* ctx.session.hook("context", hook)
     yield* ctx.session.hook("compaction", hook)

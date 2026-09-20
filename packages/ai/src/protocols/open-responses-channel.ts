@@ -73,11 +73,6 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
           )
         if (event.type === "error") {
           terminal = true
-          yield* OpenResponses.decodeKnownErrorEvent(event).pipe(
-            Effect.mapError((cause) =>
-              ProviderShared.eventError(options.id, `${options.name} returned a malformed error event`, frame, cause),
-            ),
-          )
           return {
             type: "provider-failure",
             error: OpenResponses.providerFailure(event, `${options.name} stream error`, frame),

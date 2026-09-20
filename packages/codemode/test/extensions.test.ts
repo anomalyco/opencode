@@ -128,6 +128,34 @@ describe("values are converted at the boundary, never shared", () => {
     expect([...(held[0] as Set<{ z: number }>)][0]).toEqual({ z: 1 })
   })
 
+  test("Headers cross as copies in both directions", async () => {
+    const stored = new Headers({ "X-A": "1" })
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "http",
+          globals: {
+            headers: () => stored,
+            keep: (value: Headers) => {
+              held.push(value)
+              return value
+            },
+          },
+        }),
+      ],
+    })
+    held.length = 0
+    expect(
+      await value(
+        `const h = headers(); h.set("x-a", "2"); const back = keep(h); back.set("x-a", "3"); return [h instanceof Headers, h.get("x-a"), back === h, back.get("x-a"), [...back]]`,
+        target,
+      ),
+    ).toEqual([true, "2", false, "3", [["x-a", "3"]]])
+    expect(stored.get("x-a")).toBe("1")
+    expect(held[0]).toBeInstanceOf(Headers)
+    expect((held[0] as Headers).get("x-a")).toBe("2")
+  })
+
   test("bytes cross as copies in both directions; ArrayBuffer comes in as Uint8Array", async () => {
     const stored = new Uint8Array([1, 2, 3])
     const target = CodeMode.make({
@@ -163,12 +191,26 @@ describe("values are converted at the boundary, never shared", () => {
     expect(held[0]).toEqual({ a: 1 })
   })
 
-  test("a program Error crosses as a host Error with its name and message", async () => {
+  test("a program Error crosses as a host Error with its name, message, cause, and own data", async () => {
     held.length = 0
     await value(`keep(new TypeError("bad"))`)
     expect(held[0]).toBeInstanceOf(TypeError)
     expect((held[0] as Error).message).toBe("bad")
     expect(Object.keys(held[0] as object)).toEqual([])
+    held.length = 0
+    await value(`
+      const e = new Error("m", { cause: new RangeError("root") })
+      e.code = "ENOENT"; e.detail = { path: "x" }
+      e.stack = "chosen"; e.toString = 1; e.constructor = 2; e.fn = () => 1
+      keep(e)`)
+    const crossed = held[0] as Error & Record<string, unknown>
+    expect(crossed.cause).toBeInstanceOf(RangeError)
+    expect((crossed.cause as Error).message).toBe("root")
+    expect(Object.keys(crossed)).toEqual(["code", "detail"])
+    expect(crossed.detail).toEqual({ path: "x" })
+    expect(crossed.stack).not.toBe("chosen")
+    expect(String(crossed)).toBe("Error: m")
+    expect(crossed.constructor).toBe(Error)
   })
 
   test("an Error with an unknown name crosses as a plain Error", async () => {
@@ -178,8 +220,9 @@ describe("values are converted at the boundary, never shared", () => {
     expect(held[1]).toBeInstanceOf(Error)
   })
 
-  test("functions, promises, and symbols cannot be passed in", async () => {
+  test("functions, promises, iterators, and symbols cannot be passed in", async () => {
     expect((await failure(`keep(() => 1)`)).message).toContain("Argument 1 to keep contains a function")
+    expect((await failure(`keep([1].keys())`)).message).toContain("Argument 1 to keep contains an iterator")
     expect((await failure(`keep(later(1))`)).message).toContain("un-awaited Promise")
     expect((await failure(`keep(Symbol.iterator)`)).message).toContain("Argument 1 to keep contains a symbol")
   })
@@ -190,6 +233,16 @@ describe("values are converted at the boundary, never shared", () => {
     })
     expect((await failure(`sym()`, target)).message).toContain("sym produced a symbol")
     expect((await failure(`big()`, target)).message).toContain("big produced a bigint")
+  })
+
+  test("a value that cannot come out carries a location like any built-in error, sync or async", async () => {
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({ name: "odd", globals: { sym: () => Symbol("s"), later: async () => Symbol("s") } }),
+      ],
+    })
+    expect((await failure(`sym()`, target)).location).toEqual((await failure(`JSON.parse("{")`, target)).location)
+    expect((await failure(`await later()`, target)).location).toBeDefined()
   })
 
   test("a class instance cannot come out", async () => {
@@ -218,6 +271,49 @@ describe("host errors", () => {
     expect(await value(`try { fail() } catch (e) { return [e instanceof RangeError, e.message] }`, target)).toEqual([
       true,
       "boom",
+    ])
+  })
+
+  test("a host Error arrives with its cause and own data; what cannot cross is left behind", async () => {
+    class Handle {}
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "fs",
+          globals: {
+            open: () => {
+              const error = Object.assign(new Error("ENOENT: no such file or directory, open 'x'"), {
+                code: "ENOENT",
+                errno: -2,
+                path: "x",
+                detail: { retried: true },
+                handle: new Handle(),
+                retry: () => 1,
+              })
+              throw new Error("open failed", { cause: error })
+            },
+          },
+        }),
+      ],
+    })
+    expect(
+      await value(
+        `try { open() } catch (e) {
+          const c = e.cause
+          return [e.message, Object.keys(e), c instanceof Error, c.code, c.errno, c.path, c.detail, Object.keys(c), "stack" in c]
+        }`,
+        target,
+      ),
+    ).toEqual([
+      "open failed",
+      [],
+      true,
+      "ENOENT",
+      -2,
+      "x",
+      { retried: true },
+      ["code", "errno", "path", "detail"],
+      false,
     ])
   })
 

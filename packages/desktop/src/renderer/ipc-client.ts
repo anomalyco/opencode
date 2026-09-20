@@ -1,5 +1,5 @@
-import { Context, Effect, Layer, ManagedRuntime, Queue, Stream } from "effect"
-import { RpcClient, RpcMessage, RpcSerialization } from "effect/unstable/rpc"
+import { Context, Effect, Layer, ManagedRuntime, Queue, Schema, Stream } from "effect"
+import { RpcClient, RpcMessage } from "effect/unstable/rpc"
 import { DesktopRpcs, type DesktopRpcClient } from "../shared/ipc-rpc"
 import type { DesktopEvent } from "../shared/ipc-rpc/events"
 import { IpcTransportPort } from "../shared/ipc-transport"
@@ -79,22 +79,17 @@ export function listen<Tag extends EventTag>(tag: Tag, listener: (value: EventVa
   }
 }
 
+// Structured clone over the port, like Effect's worker protocol: no serialization layer, so binary
+// payloads stay binary. Buffers are cloned rather than transferred: Electron's MessagePortMain
+// drops transferred ArrayBuffers, so a request carrying one would never arrive.
 function clientProtocol(value: MessagePort) {
   return Layer.effect(
     RpcClient.Protocol,
     RpcClient.Protocol.make(
       Effect.fnUntraced(function* (writeResponse, clientIds) {
-        const serialization = yield* RpcSerialization.RpcSerialization
-        const parser = serialization.makeUnsafe()
         const inbound = yield* Queue.unbounded<RpcMessage.FromServerEncoded>()
         const onMessage = (event: MessageEvent) => {
-          try {
-            parser
-              .decode(event.data)
-              .forEach((message) => Queue.offerUnsafe(inbound, message as RpcMessage.FromServerEncoded))
-          } catch {
-            return
-          }
+          Queue.offerUnsafe(inbound, event.data as RpcMessage.FromServerEncoded)
         }
         value.addEventListener("message", onMessage)
         value.start()
@@ -111,16 +106,15 @@ function clientProtocol(value: MessagePort) {
           Effect.forkScoped,
         )
         return {
-          codecFor: serialization.codecFor,
+          codecFor: Schema.toCodecJson,
           send: (_clientId, request) =>
             Effect.sync(() => {
-              const encoded = parser.encode(request)
-              if (encoded !== undefined) value.postMessage(encoded)
+              value.postMessage(request)
             }),
           supportsAck: true,
           supportsTransferables: false,
         }
       }),
     ),
-  ).pipe(Layer.provide(RpcSerialization.layerMsgPack))
+  )
 }

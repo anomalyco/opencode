@@ -66,4 +66,4 @@ export const groupNames = {
 } as const
 
 export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.connect"])
-export const effectOmitEndpoints = new Set(["fs.read", "pty.connect", "persistentPty.connect"])
+export const effectOmitEndpoints = new Set(["fs.read", "fs.write", "pty.connect", "persistentPty.connect"])

@@ -78,7 +78,7 @@ export const make = Effect.fn("Session.make")(function* () {
     input: { permissions: Permission.Ruleset },
   ) {
     yield* get(sessionID)
-    yield* bus.publish(SessionEvent.PermissionsUpdated, { sessionID, permissions: input.permissions })
+    yield* bus.publish(SessionEvent.Permissions, { sessionID, permissions: input.permissions })
   })
   const switchAgent = Effect.fn("Session.switchAgent")(function* (
     sessionID: SessionSchema.ID,

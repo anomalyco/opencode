@@ -13,6 +13,7 @@ import {
   SetObj,
   URLObj,
   URLSearchParamsObj,
+  HeadersObj,
 } from "../interpreter/objects.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 
@@ -28,6 +29,7 @@ export const coerceToString = (value: unknown): string => {
   if (value instanceof SetObj) return "[object Set]"
   if (value instanceof URLObj) return value.url.href
   if (value instanceof URLSearchParamsObj) return value.params.toString()
+  if (value instanceof HeadersObj) return "[object Headers]"
   if (value instanceof Bytes) return value.bytes.join(",")
   if (value instanceof ErrorObj) {
     // Match Error.prototype.toString: "name: message", or just one when the other is empty.

@@ -134,7 +134,7 @@ const program = Effect.gen(function* () {
       HttpClient.mapRequest(httpClient, (request) => HttpClientRequest.setHeaders(request, Service.headers(endpoint))),
     ),
   )
-  return yield* client.server.status()
+  return yield* client.server.info()
 })
 
 const health = await Effect.runPromise(

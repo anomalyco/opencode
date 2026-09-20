@@ -3,17 +3,22 @@ import { EventEmitter } from "node:events"
 import { MessageChannel } from "node:worker_threads"
 import type { MessagePortMain, WebContents } from "electron"
 import { Context, Effect, Layer, ManagedRuntime, Option, Queue, Schema, Stream } from "effect"
-import { Rpc, RpcClient, RpcClientError, RpcGroup, RpcMessage, RpcSerialization, RpcServer } from "effect/unstable/rpc"
+import { Rpc, RpcClient, RpcClientError, RpcGroup, RpcMessage, RpcServer } from "effect/unstable/rpc"
+import { Transferable } from "effect/unstable/workers"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 
 describe("desktop RPC transport", () => {
   test("keeps multiple renderer ports independent", async () => {
+    let received: unknown
     const handlers = TestRpcs.toLayer(
       Effect.gen(function* () {
         const handoff = yield* IpcPortHandoff
         return TestRpcs.of({
           "test.focused": (_request, context) => Effect.succeed(handoff.sender(context.client.id)?.id === 1),
-          "test.blob.put": ({ data }) => Effect.succeed([...data].join(",")),
+          "test.blob.put": ({ data }) => {
+            received = data
+            return Effect.succeed([...data].join(","))
+          },
           "test.blob.get": () => Effect.succeed(new Uint8Array([3, 1, 4])),
           "test.events": () => Stream.make(new TestEvent({ value: "session.new" })),
         })
@@ -34,6 +39,8 @@ describe("desktop RPC transport", () => {
     expect(focused).toBe(true)
     expect(unfocused).toBe(false)
     expect(await putBlob(firstClient, new Uint8Array([2, 7, 1]))).toBe("2,7,1")
+    // Binary payloads arrive as bytes, not as base64 text.
+    expect(received).toBeInstanceOf(Uint8Array)
     expect(await getBlob(firstClient)).toEqual(new Uint8Array([3, 1, 4]))
     expect(await firstEvent(firstClient)).toEqual(new TestEvent({ value: "session.new" }))
 
@@ -54,8 +61,8 @@ describe("desktop RPC transport", () => {
 class TestEvent extends Schema.TaggedClass<TestEvent>()("TestEvent", { value: Schema.String }) {}
 const TestRpcs = RpcGroup.make(
   Rpc.make("test.focused", { success: Schema.Boolean }),
-  Rpc.make("test.blob.put", { payload: { data: Schema.Uint8Array }, success: Schema.String }),
-  Rpc.make("test.blob.get", { success: Schema.Uint8Array }),
+  Rpc.make("test.blob.put", { payload: { data: Transferable.Uint8Array }, success: Schema.String }),
+  Rpc.make("test.blob.get", { success: Transferable.Uint8Array }),
   Rpc.make("test.events", { success: TestEvent, stream: true }),
 )
 type TestRpcClient = RpcClient.FromGroup<typeof TestRpcs, RpcClientError.RpcClientError>
@@ -109,13 +116,9 @@ function clientProtocol(port: MessagePort) {
     RpcClient.Protocol,
     RpcClient.Protocol.make(
       Effect.fnUntraced(function* (writeResponse, clientIds) {
-        const serialization = yield* RpcSerialization.RpcSerialization
-        const parser = serialization.makeUnsafe()
         const inbound = yield* Queue.unbounded<RpcMessage.FromServerEncoded>()
         const onMessage = (event: MessageEvent) =>
-          parser
-            .decode(event.data)
-            .forEach((message) => Queue.offerUnsafe(inbound, message as RpcMessage.FromServerEncoded))
+          Queue.offerUnsafe(inbound, event.data as RpcMessage.FromServerEncoded)
         port.addEventListener("message", onMessage)
         port.start()
         yield* Effect.addFinalizer(() =>
@@ -131,18 +134,15 @@ function clientProtocol(port: MessagePort) {
           Effect.forkScoped,
         )
         return {
-          codecFor: serialization.codecFor,
+          codecFor: Schema.toCodecJson,
           send: (_clientId: number, request: RpcMessage.FromClientEncoded) =>
-            Effect.sync(() => {
-              const encoded = parser.encode(request)
-              if (encoded !== undefined) port.postMessage(encoded)
-            }),
+            Effect.sync(() => port.postMessage(request)),
           supportsAck: true,
           supportsTransferables: false,
         }
       }),
     ),
-  ).pipe(Layer.provide(RpcSerialization.layerMsgPack))
+  )
 }
 
 function sender(id: number) {

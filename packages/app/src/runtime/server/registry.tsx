@@ -8,11 +8,8 @@ import { ServerHttp, ServerHttpBase, ServerKey, serverState } from "./persistenc
 import type { SshItem } from "@/servers/ssh/types"
 
 type ServerState = ReturnType<typeof serverState>["current"]["Type"]
-// The store retains more history than is displayed. Consumers filter recently closed entries
-// against the live project list (dropping deleted projects) and then cap the visible count via
-// RECENTLY_CLOSED_DISPLAY_LIMIT. Retaining extra history ensures entries that are temporarily
-// filtered out do not evict still-visible ones from the persisted store.
-const RECENTLY_CLOSED_HISTORY_LIMIT = 16
+// Retain closed paths until reopened so settings can exclude them from the server inventory.
+// The Home page independently limits the visible recently closed entries.
 export const RECENTLY_CLOSED_DISPLAY_LIMIT = 5
 
 export function normalizeServerUrl(input: string) {
@@ -51,6 +48,7 @@ export function createServerProjects(input: {
   }
   return {
     list: current,
+    closed: currentClosed,
     recentlyClosed: currentClosed,
     remove,
     open(directory: string) {
@@ -72,10 +70,7 @@ export function createServerProjects(input: {
     close(directory: string) {
       remove(directory)
       const key = pathKey(directory)
-      const closed = [directory, ...currentClosed().filter((worktree) => pathKey(worktree) !== key)].slice(
-        0,
-        RECENTLY_CLOSED_HISTORY_LIMIT,
-      )
+      const closed = [directory, ...currentClosed().filter((worktree) => pathKey(worktree) !== key)]
       setStore("recentlyClosed", input.scope(), closed)
     },
     expand(directory: string) {

@@ -248,6 +248,21 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("keeps valid Chat options when a sibling option is malformed", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
+          prompt: "think",
+          providerOptions: { store: true, reasoningEffort: "max", topLogprobs: 25 },
+        }),
+      )
+
+      expect(prepared.body.store).toBe(true)
+      expect(prepared.body.reasoning_effort).toBe("max")
+    }),
+  )
+
   it.effect("maps the request prompt cache key when the compatibility flag is set", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

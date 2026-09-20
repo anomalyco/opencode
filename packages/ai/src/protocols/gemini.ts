@@ -14,12 +14,13 @@ import {
   type LLMRequest,
   type MediaPart,
   type ProviderMetadata,
+  type ProviderOptions,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
-import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { JsonObject, knownString, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
@@ -50,35 +51,8 @@ const omitsFunctionCallIds = (modelID: string) => {
   return match !== null && Number(match[1]) < 3
 }
 
-export interface OptionsInput {
-  readonly [key: string]: unknown
-  readonly cachedContent?: string
-  readonly safetySettings?: ReadonlyArray<{
-    readonly category:
-      | "HARM_CATEGORY_UNSPECIFIED"
-      | "HARM_CATEGORY_HATE_SPEECH"
-      | "HARM_CATEGORY_DANGEROUS_CONTENT"
-      | "HARM_CATEGORY_HARASSMENT"
-      | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
-      | "HARM_CATEGORY_CIVIC_INTEGRITY"
-      | (string & {})
-    readonly threshold:
-      | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
-      | "BLOCK_LOW_AND_ABOVE"
-      | "BLOCK_MEDIUM_AND_ABOVE"
-      | "BLOCK_ONLY_HIGH"
-      | "BLOCK_NONE"
-      | "OFF"
-      | (string & {})
-  }>
-  readonly serviceTier?: "standard" | "flex" | "priority" | (string & {})
-  readonly thinkingConfig?: {
-    readonly thinkingBudget?: number
-    readonly includeThoughts?: boolean
-    readonly thinkingLevel?: "minimal" | "low" | "medium" | "high" | (string & {})
-  }
-}
-
+/** Caller-facing provider options; unknown keys are accepted and ignored. */
+export type OptionsInput = ProviderOptions & typeof Options.Encoded
 export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
@@ -161,16 +135,49 @@ const GeminiToolConfig = Schema.Struct({
   }),
 })
 
+const GeminiThinkingLevel = knownString<"minimal" | "low" | "medium" | "high">()
 const GeminiThinkingConfig = Schema.Struct({
   thinkingBudget: Schema.optional(Schema.Number),
   includeThoughts: Schema.optional(Schema.Boolean),
-  thinkingLevel: Schema.optional(Schema.String),
+  thinkingLevel: Schema.optional(GeminiThinkingLevel),
 })
 
 const GeminiSafetySetting = Schema.Struct({
-  category: Schema.String,
-  threshold: Schema.String,
+  category: knownString<
+    | "HARM_CATEGORY_UNSPECIFIED"
+    | "HARM_CATEGORY_HATE_SPEECH"
+    | "HARM_CATEGORY_DANGEROUS_CONTENT"
+    | "HARM_CATEGORY_HARASSMENT"
+    | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+    | "HARM_CATEGORY_CIVIC_INTEGRITY"
+  >(),
+  threshold: knownString<
+    | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
+    | "BLOCK_LOW_AND_ABOVE"
+    | "BLOCK_MEDIUM_AND_ABOVE"
+    | "BLOCK_ONLY_HIGH"
+    | "BLOCK_NONE"
+    | "OFF"
+  >(),
 })
+
+// =============================================================================
+// Provider Options
+// =============================================================================
+// Malformed fields are dropped rather than failing the request; a `thinkingConfig`
+// object that omits `includeThoughts` asks for thoughts.
+const GeminiThinkingConfigInput = Schema.Struct({
+  thinkingBudget: lenient(Schema.Number),
+  includeThoughts: lenient(Schema.Boolean),
+  thinkingLevel: lenient(GeminiThinkingLevel),
+})
+const Options = Schema.Struct({
+  cachedContent: lenient(Schema.String),
+  safetySettings: lenient(Schema.Array(GeminiSafetySetting)),
+  serviceTier: lenient(knownString<"standard" | "flex" | "priority">()),
+  thinkingConfig: lenient(GeminiThinkingConfigInput),
+})
+const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))
 
 const GeminiGenerationConfig = Schema.Struct({
   maxOutputTokens: Schema.optional(Schema.Number),
@@ -431,44 +438,11 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
   return contents
 })
 
-const resolveOptions = (request: LLMRequest) => {
-  const input = request.providerOptions
-  const value = input?.thinkingConfig
-  const thinkingConfig = {
-    thinkingBudget:
-      ProviderShared.isRecord(value) && typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
-    includeThoughts:
-      ProviderShared.isRecord(value) && typeof value.includeThoughts === "boolean"
-        ? value.includeThoughts
-        : ProviderShared.isRecord(value)
-          ? true
-          : undefined,
-    thinkingLevel:
-      ProviderShared.isRecord(value) && typeof value.thinkingLevel === "string" ? value.thinkingLevel : undefined,
-  }
-  return {
-    cachedContent: typeof input?.cachedContent === "string" ? input.cachedContent : undefined,
-    safetySettings: mapSafetySettings(input?.safetySettings),
-    serviceTier: typeof input?.serviceTier === "string" ? input.serviceTier : undefined,
-    thinkingConfig: Object.values(thinkingConfig).some((item) => item !== undefined) ? thinkingConfig : undefined,
-  }
-}
-
-function mapSafetySettings(value: unknown) {
-  if (!Array.isArray(value)) return undefined
-  const settings = value.flatMap((item) =>
-    ProviderShared.isRecord(item) && typeof item.category === "string" && typeof item.threshold === "string"
-      ? [{ category: item.category, threshold: item.threshold }]
-      : [],
-  )
-  return settings
-}
-
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const flattened = ProviderShared.flattenToolRequest(request)
   const hasTools = flattened.tools.length > 0
   const generation = request.generation
-  const options = resolveOptions(request)
+  const options = yield* decodeOptions(request.providerOptions ?? {})
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const generationConfig = {
     maxOutputTokens: generation?.maxTokens,
@@ -479,7 +453,10 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     presencePenalty: generation?.presencePenalty,
     seed: generation?.seed,
     stopSequences: generation?.stop,
-    thinkingConfig: options.thinkingConfig,
+    thinkingConfig:
+      options.thinkingConfig === undefined
+        ? undefined
+        : { ...options.thinkingConfig, includeThoughts: options.thinkingConfig.includeThoughts ?? true },
   }
 
   return {

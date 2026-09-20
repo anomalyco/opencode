@@ -132,11 +132,16 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
-/** opencode transport settings consumed in aisdk.ts; native packages never receive them. */
-const TRANSPORT_KEYS = ["chunkTimeout", "fetch", "timeout"] as const
+/** opencode settings consumed in Core; native packages never receive them. */
+const CORE_KEYS = ["chunkTimeout", "compaction", "fetch", "timeout", "transport"] as const
+const PROVIDER_ONLY_KEYS = ["chunkTimeout", "timeout", "transport"] as const
 
 export function nativeSettings(settings: Settings): Settings {
-  return Struct.omit(settings, TRANSPORT_KEYS)
+  return Struct.omit(settings, CORE_KEYS)
+}
+
+export function modelSettings(settings: Settings | undefined) {
+  return settings && Struct.omit(settings, PROVIDER_ONLY_KEYS)
 }
 
 export function mergeOverlay(
@@ -176,6 +181,12 @@ export function mergeHeaders(
 
 export const Request = Provider.Request
 export type Request = Provider.Request
+
+export const Compaction = Provider.Compaction
+export type Compaction = Provider.Compaction
+
+export const Transport = Provider.Transport
+export type Transport = Provider.Transport
 
 export const Settings = Provider.Settings
 export type Settings = Provider.Settings
@@ -228,12 +239,18 @@ export interface Interface extends State.Transformable<Editor> {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
 
 // Every location references the same index for a shared immutable definition array.
-const definitions = new WeakMap<readonly Model.Info[], ReadonlyMap<Model.ID, Model.Info>>()
-function index(models: readonly Model.Info[]) {
-  const cached = definitions.get(models)
+const definitions = new WeakMap<readonly Model.Info[], Map<ID, ReadonlyMap<Model.ID, Model.Info>>>()
+function index(providerID: ID, models: readonly Model.Info[]) {
+  const indexes = definitions.get(models) ?? new Map<ID, ReadonlyMap<Model.ID, Model.Info>>()
+  const cached = indexes.get(providerID)
   if (cached) return cached
-  const result = freeze(new Map(models.map((model) => [model.id, model])), true)
-  definitions.set(models, result)
+  // Model shares these definitions without copying, so a foreign definition takes this provider's identity here.
+  const result = freeze(
+    new Map(models.map((model) => [model.id, model.providerID === providerID ? model : { ...model, providerID }])),
+    true,
+  )
+  indexes.set(providerID, result)
+  definitions.set(models, indexes)
   return result
 }
 
@@ -281,7 +298,7 @@ const layer = Layer.effect(
           add: (definition) => {
             records.set(definition.info.id, {
               provider: structuredClone(definition.info) as MutableInfo,
-              models: index(definition.models),
+              models: index(definition.info.id, definition.models),
               sourceConnection: definition.sourceConnection,
             })
           },
@@ -300,7 +317,7 @@ const layer = Layer.effect(
           },
           models: {
             set: (id, values) => {
-              entry(id).models = index(values)
+              entry(id).models = index(id, values)
             },
             update: (providerID, modelID, update) => {
               const record = entry(providerID)
@@ -338,7 +355,7 @@ const layer = Layer.effect(
     // Registrations may outlive a borrowed service layer; their later disposal must
     // not query dependencies that have already closed.
     yield* Effect.addFinalizer(() => State.shutdown(state.reload()))
-    let cached: { records: Snapshot["records"]; access: string; value: Snapshot } | undefined
+    let cached: { records: Snapshot["records"]; value: Snapshot } | undefined
     const snapshot = Effect.fn("Provider.snapshot")(function* () {
       while (true) {
         const revision = integrations.revision()
@@ -347,10 +364,6 @@ const layer = Layer.effect(
         const connections = yield* integrations.list()
         // Either fold can disable a plugin that also contributed to the other domain.
         if (revision !== integrations.revision() || records !== state.get()) continue
-        const access = JSON.stringify(
-          connections.map((integration) => [integration.id, integration.connections.map(IntegrationConnection.key)]),
-        )
-        if (cached?.records === records && cached.access === access) return cached.value
         const byID = new Map(connections.map((integration) => [integration.id, integration]))
         const available = Array.from(records.values()).filter((record) => {
           if (record.provider.activation === "disabled") return false
@@ -366,8 +379,15 @@ const layer = Layer.effect(
           if (integration?.connections.length) return true
           return record.provider.integrationID === undefined && !integration
         })
+        // A credential change that leaves the same definitions available is not a catalog change.
+        if (
+          cached?.records === records &&
+          cached.value.available.length === available.length &&
+          cached.value.available.every((record, index) => record === available[index])
+        )
+          return cached.value
         const value = freeze({ records, available, providers: available.map((record) => record.provider) }, true)
-        cached = { records, access, value }
+        cached = { records, value }
         return value
       }
     })

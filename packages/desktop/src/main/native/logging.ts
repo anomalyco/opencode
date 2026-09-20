@@ -5,6 +5,7 @@ import { app, crashReporter, netLog, shell } from "electron"
 import { Context, Effect, FileSystem, Layer, Logger, Option, Path, References, Stream } from "effect"
 import { homedir } from "node:os"
 import { VERSION } from "../constants"
+import { marks } from "../lifecycle/marks"
 
 const MAX_LOG_AGE_DAYS = 7
 const TAIL_LINES = 1000
@@ -34,6 +35,7 @@ const serviceLayer = Layer.effect(
       version: VERSION,
       packaged: app.isPackaged,
       onboardingTest: process.env.OPENCODE_TEST_ONBOARDING === "1",
+      marks,
     })
     const exportDebug = exportDebugLogsEffect(fs, path).pipe(Effect.orDie)
     return Service.of({

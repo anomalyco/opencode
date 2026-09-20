@@ -1,9 +1,4 @@
-import {
-  ACCEPTED_FILE_EXTENSIONS,
-  ServerConnection,
-  type Platform,
-  type UpdaterPlatform,
-} from "@opencode/app/desktop"
+import { ServerConnection, type Platform, type UpdaterPlatform } from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
@@ -29,7 +24,7 @@ export function createDesktopPlatform(
     os,
     version: windowState.version,
     windowID: windowState.id,
-    ...createDesktopFiles(api, os, ACCEPTED_FILE_EXTENSIONS),
+    ...createDesktopFiles(api, os),
     ...createDesktopStorage(api),
     browserPane: {
       register(target, onEvent) {

@@ -95,12 +95,13 @@ export const XAIPlugin = define({
       editor.method.update(device(ctx.app))
       editor.method.update({ integrationID: "xai", method: { type: "key", label: "Manually enter API Key" } })
     })
-    yield* ctx.model.transform((models) => {
-      for (const model of models.list(providerID)) {
-        models.update(providerID, model.id, (draft) => {
-          draft.transport = "websocket"
+    yield* ctx.provider.transform((providers) => {
+      if (!providers.get(providerID)) return
+      providers.update(providerID, (provider) => {
+        provider.settings = Provider.mergeOverlay(provider.settings, {
+          transport: provider.settings?.transport ?? "websocket",
         })
-      }
+      })
     })
   }),
 })

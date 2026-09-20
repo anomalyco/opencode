@@ -208,7 +208,6 @@ export const dict = {
   "dialog.provider.opencode.note": "Відібрані моделі, включаючи Claude, GPT, Gemini та інші",
   "dialog.provider.opencode.tagline": "Надійні оптимізовані моделі",
   "dialog.provider.opencodeGo.tagline": "Недорога підписка для всіх",
-  "dialog.provider.anthropic.note": "Прямий доступ до моделей Claude, включаючи Pro та Max",
   "dialog.provider.copilot.note": "Моделі ШІ для допомоги в кодуванні через GitHub Copilot",
   "dialog.provider.openai.note": "Моделі GPT для швидких і універсальних завдань ШІ",
   "dialog.provider.google.note": "Моделі Gemini для швидких структурованих відповідей",
@@ -229,7 +228,6 @@ export const dict = {
   "dialog.provider.viewAll": "Показати більше провайдерів",
 
   "provider.connect.title": "Підключити {{provider}}",
-  "provider.connect.title.anthropicProMax": "Увійти з Claude Pro/Max",
   "provider.connect.selectMethod": "Виберіть спосіб входу для {{provider}}.",
   "provider.connect.method.apiKey": "Ключ API",
   "provider.connect.method.browser": "Браузер",
@@ -404,9 +402,7 @@ export const dict = {
   "prompt.action.send": "Надіслати",
   "prompt.action.stop": "Зупинити",
 
-  "prompt.toast.pasteUnsupported.title": "Непідтримуване вкладення",
   "prompt.toast.attachmentDuplicate.title": "Цей файл уже завантажено",
-  "prompt.toast.pasteUnsupported.description": "Сюди можна прикріплювати лише зображення, PDF або текстові файли.",
   "prompt.toast.modelAgentRequired.title": "Виберіть агента та модель",
   "prompt.toast.modelAgentRequired.description": "Виберіть агента та модель перед надсиланням запиту.",
   "prompt.toast.worktreeCreateFailed.title": "Не вдалося створити робоче дерево",

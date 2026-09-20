@@ -9,12 +9,17 @@ for (const theme of ["light", "dark"]) {
       const reveal = logo.locator('[data-slot="wordmark-reveal"]')
       const shimmer = logo.locator(".wordmark-shimmer")
       const base = logo.locator("svg").first()
-      await expect(base).toHaveCSS("opacity", theme === "dark" ? "0.5" : "0.6")
+      await expect(base).toHaveCSS("opacity", "0.16")
       await expect(shimmer).toHaveCSS("animation-iteration-count", "1")
       await expect(logo.locator("g[mask]")).toHaveCount(0)
       await expect(shimmer).toHaveCSS("color", "rgb(255, 255, 255)")
       await expect(shimmer).toHaveCSS("mix-blend-mode", "screen")
-      await expect(base.locator("g[fill]")).toHaveAttribute("fill", "currentColor")
+      await expect(base.locator("path").nth(1)).toHaveAttribute("fill", "var(--icon-base)")
+      await expect(base.locator("path").nth(9)).toHaveCSS(
+        "fill",
+        await base.locator("path").nth(1).evaluate((element) => getComputedStyle(element).fill),
+      )
+      await expect(base.locator('path[fill="var(--icon-weak-base)"]')).toHaveCount(8)
 
       await logo.evaluate((element) => {
         element.getAnimations({ subtree: true }).forEach((animation) => {
@@ -77,7 +82,7 @@ for (const theme of ["light", "dark"]) {
     await page.setViewportSize({ width: 360, height: 640 })
     const component = await mount("app-new-session-wordmark--reveal", { globals: { theme } })
     const logo = component.locator('[data-component="new-session-wordmark"]')
-    await expect(logo.locator("svg").first()).toHaveCSS("opacity", theme === "dark" ? "0.5" : "0.6")
+    await expect(logo.locator("svg").first()).toHaveCSS("opacity", "0.16")
     await expect(logo.locator('[data-slot="wordmark-reveal"]')).toHaveCSS("opacity", "1")
     await expect(logo.locator(".wordmark-shimmer")).toHaveCSS("opacity", "0")
     expect(await logo.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0)

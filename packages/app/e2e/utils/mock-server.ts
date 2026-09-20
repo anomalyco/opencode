@@ -42,7 +42,7 @@ export interface MockServerConfig {
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
-  onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" }) => void
+  onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
 }
 
 type MockStreamWindow = Window & {
@@ -219,7 +219,13 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         }),
       )
       .handleAll({
-        status: () => Effect.succeed({ version: "2.0.0", pid: 1, urls: config.server ? [config.server] : [] }),
+        info: () =>
+          Effect.succeed({
+            version: "2.0.0",
+            pid: 1,
+            urls: config.server ? [config.server] : [],
+            paths: { tmp: "/tmp/opencode" },
+          }),
         config: () => Effect.succeed(configEntries),
         reference: () =>
           Effect.succeed({
@@ -454,9 +460,13 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
           Effect.sync(() =>
             config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "cancel" }),
           ).pipe(Effect.andThen(noContent)),
-        sessionInboxSteer: (ctx) =>
+        sessionInboxUpdate: (ctx) =>
           Effect.sync(() =>
-            config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "steer" }),
+            config.onInboxChange?.({
+              sessionID: ctx.params.sessionID,
+              inboxID: ctx.params.inboxID,
+              action: ctx.payload.delivery,
+            }),
           ).pipe(Effect.andThen(noContent)),
         sessionSwitchAgent: () => noContent,
         sessionSwitchModel: () => noContent,

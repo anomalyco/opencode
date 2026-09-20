@@ -7,9 +7,9 @@ import type {
   AgentInfo,
   CommandInfo,
   ConfigEntry,
-  FormCancelInput,
+  SessionFormCancelInput,
   FormInfo,
-  FormReplyInput,
+  SessionFormReplyInput,
   IntegrationInfo,
   LocationRef,
   LocationGetOutput,
@@ -296,7 +296,7 @@ export function createData(config: CreateDataInput) {
     return true
   }
 
-  function settleForm(input: FormCancelInput, ref: LocationRef | undefined, request: Promise<void>) {
+  function settleForm(input: SessionFormCancelInput, ref: LocationRef | undefined, request: Promise<void>) {
     return request
       .catch((error: unknown) => {
         if ((!isFormNotFoundError(error) && !isFormAlreadySettledError(error)) || error.id !== input.formID) throw error
@@ -697,7 +697,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       }
-      case "session.permissions.updated":
+      case "session.permissions":
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "permissions", event.data.permissions)
         return
@@ -847,6 +847,7 @@ export function createData(config: CreateDataInput) {
             existing.finish = undefined
             existing.rawFinish = undefined
             existing.providerState = undefined
+            existing.time.created = event.data.started
             existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
@@ -865,7 +866,7 @@ export function createData(config: CreateDataInput) {
             metadata: event.metadata,
             content: [],
             snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
-            time: { created: event.created },
+            time: { created: event.data.started },
           })
         })
         return
@@ -1042,6 +1043,18 @@ export function createData(config: CreateDataInput) {
                 : "interrupted",
           time: { created: event.created },
         })
+        if (
+          store.session.message[event.data.sessionID]?.some(
+            (item) =>
+              item.type === "assistant" &&
+              item.content.some(
+                (part) => part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
+              ),
+          )
+        ) {
+          sync.invalidate(`session.message:${event.data.sessionID}`)
+          refresh(() => result.session.message.sync(event.data.sessionID))
+        }
         // An event can overtake the first read; queue a revalidation when that read is still active.
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
@@ -1742,7 +1755,7 @@ export function createData(config: CreateDataInput) {
           const key = `session.form:${sessionID}:${sessionID === "global" ? locationKey(ref ?? defaultLocation()) : ""}`
           return sync.run(key, async () => {
             if (sessionID === "global") {
-              const response = await api().form.request.list({
+              const response = await api().form.list({
                 location: locationQuery(ref ?? defaultLocation()),
               })
               const location = {
@@ -1757,7 +1770,7 @@ export function createData(config: CreateDataInput) {
               ])
               return
             }
-            setStore("session", "form", sessionID, await api().form.list({ sessionID }))
+            setStore("session", "form", sessionID, await api().session.form.list({ sessionID }))
           })
         },
         invalidate(sessionID: string, ref?: LocationRef) {
@@ -1765,11 +1778,11 @@ export function createData(config: CreateDataInput) {
             `session.form:${sessionID}:${sessionID === "global" ? locationKey(ref ?? defaultLocation()) : ""}`,
           )
         },
-        reply(input: FormReplyInput, ref?: LocationRef) {
-          return settleForm(input, ref, api().form.reply(input, formRequestOptions(input.sessionID, ref)))
+        reply(input: SessionFormReplyInput, ref?: LocationRef) {
+          return settleForm(input, ref, api().session.form.reply(input, formRequestOptions(input.sessionID, ref)))
         },
-        cancel(input: FormCancelInput, ref?: LocationRef) {
-          return settleForm(input, ref, api().form.cancel(input, formRequestOptions(input.sessionID, ref)))
+        cancel(input: SessionFormCancelInput, ref?: LocationRef) {
+          return settleForm(input, ref, api().session.form.cancel(input, formRequestOptions(input.sessionID, ref)))
         },
       },
     },

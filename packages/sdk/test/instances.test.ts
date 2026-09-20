@@ -90,7 +90,7 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
   expect(setups).toEqual([])
   // Permission and form lists read instance services, so they acquire the Session's instance.
   expect(await first.permission.list({ sessionID })).toEqual([])
-  expect(await first.form.list({ sessionID })).toEqual([])
+  expect(await first.session.form.list({ sessionID })).toEqual([])
   expect(configured).toEqual(["first:alpha"])
 
   await Promise.all(

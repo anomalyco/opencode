@@ -257,7 +257,7 @@ const layer = () =>
         const invocation: ShellCreateBefore = {
           command: input.command,
           cwd: input.cwd ?? location.directory,
-          timeout: input.timeout,
+          timeout: input.timeout ?? 0,
           shell: input.shell ?? (yield* shell.resolve({ priority: "config" })),
           env: {
             ...(sessionEnvironment ?? process.env),

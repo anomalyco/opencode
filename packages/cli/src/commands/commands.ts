@@ -163,6 +163,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               Argument.optional,
             ),
             method: Flag.string("method").pipe(Flag.withDescription("Authentication method ID"), Flag.optional),
+            answer: Flag.string("answer").pipe(
+              Flag.withDescription("Provider form answer (key=value; repeat for multiple fields)"),
+              Flag.atMost(100),
+            ),
           },
         }),
         Spec.make("logout", {
@@ -483,6 +487,12 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           },
         }),
       ],
+    }),
+    Spec.make("reload", {
+      description: "Reload configuration",
+      params: {
+        ...ServerParams,
+      },
     }),
     Spec.make("pair", {
       description: "Show server pairing information",

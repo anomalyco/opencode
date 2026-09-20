@@ -23,7 +23,7 @@ import { PersistentPtyGroup } from "./groups/persistent-pty.js"
 import { ShellGroup } from "./groups/shell.js"
 import { ReferenceGroup } from "./groups/reference.js"
 import { Authorization } from "./middleware/authorization.js"
-import { LocationGroup } from "./groups/location.js"
+import { makeLocationGroup } from "./groups/location.js"
 import { IntegrationGroup } from "./groups/integration.js"
 import { WebSearchGroup } from "./groups/websearch.js"
 import { McpGroup } from "./groups/mcp.js"
@@ -35,7 +35,6 @@ import { MigrationGroup } from "./groups/migration.js"
 import { ConfigGroup } from "./groups/config.js"
 
 type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
-  | HttpApiGroup.AddMiddleware<typeof LocationGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof AgentGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof PluginGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ModelGroup, LocationId>
@@ -54,16 +53,22 @@ type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof VcsGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ConfigGroup, LocationId>
 
-type SessionGroups<SessionLocationId extends HttpApiMiddleware.AnyId, SessionLocationService> =
-  | ReturnType<typeof makeSessionGroup<SessionLocationId, SessionLocationService>>
-  | typeof MessageGroup
-
-type FormGroups<
-  LocationId extends HttpApiMiddleware.AnyId,
-  LocationService,
+type SessionGroups<
+  SessionLocationId extends HttpApiMiddleware.AnyId,
+  SessionLocationService,
   FormLocationId extends HttpApiMiddleware.AnyId,
   FormLocationService,
-> = ReturnType<typeof makeFormGroup<LocationId, LocationService, FormLocationId, FormLocationService>>
+> =
+  | ReturnType<typeof makeSessionGroup<SessionLocationId, SessionLocationService, FormLocationId, FormLocationService>>
+  | typeof MessageGroup
+
+type FormGroups<LocationId extends HttpApiMiddleware.AnyId, LocationService> = ReturnType<
+  typeof makeFormGroup<LocationId, LocationService>
+>
+
+type LocationGroup<LocationId extends HttpApiMiddleware.AnyId, LocationService> = ReturnType<
+  typeof makeLocationGroup<LocationId, LocationService>
+>
 
 type MixedMiddlewareGroups<
   LocationId extends HttpApiMiddleware.AnyId,
@@ -89,8 +94,9 @@ type ApiGroups<
   | typeof PersistentPtyGroup
   | typeof CredentialGroup
   | LocationGroups<LocationId>
-  | FormGroups<LocationId, LocationService, FormLocationId, FormLocationService>
-  | SessionGroups<SessionLocationId, SessionLocationService>
+  | LocationGroup<LocationId, LocationService>
+  | FormGroups<LocationId, LocationService>
+  | SessionGroups<SessionLocationId, SessionLocationService, FormLocationId, FormLocationService>
   | MixedMiddlewareGroups<LocationId, LocationService, SessionLocationId, SessionLocationService>
   | Event
 
@@ -148,10 +154,10 @@ const makeApiFromGroup = <
 > =>
   HttpApi.make("server")
     .add(ServerGroup)
-    .add(LocationGroup.middleware(locationMiddleware))
+    .add(makeLocationGroup(locationMiddleware))
     .add(AgentGroup.middleware(locationMiddleware))
     .add(PluginGroup.middleware(locationMiddleware))
-    .add(makeSessionGroup(sessionLocationMiddleware))
+    .add(makeSessionGroup(sessionLocationMiddleware, formLocationMiddleware))
     .add(MessageGroup)
     .add(ModelGroup.middleware(locationMiddleware))
     .add(GenerateGroup)
@@ -160,7 +166,7 @@ const makeApiFromGroup = <
     .add(McpGroup.middleware(locationMiddleware))
     .add(CredentialGroup)
     .add(ProjectGroup.middleware(locationMiddleware))
-    .add(makeFormGroup(locationMiddleware, formLocationMiddleware))
+    .add(makeFormGroup(locationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(FileSystemGroup.middleware(locationMiddleware))
     .add(CommandGroup.middleware(locationMiddleware))

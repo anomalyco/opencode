@@ -369,6 +369,7 @@
   min-width: 0;
 
   img {
+    cursor: zoom-in;
     display: block;
     max-width: 100%;
     height: auto;

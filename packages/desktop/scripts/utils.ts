@@ -1,7 +1,7 @@
 import { $ } from "bun"
 import { chmod, copyFile, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 
 const CLI_VERSION = "dev"
 
@@ -75,10 +75,7 @@ export async function downloadCliToResources(version = CLI_VERSION, dest = windo
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
   try {
     await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${version}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
-    await copyCliToResources(
-      join(directory, "node_modules", cli.package, "bin", cli.os === "win32" ? "opencode.exe" : "opencode"),
-      dest,
-    )
+    await copyCliToResources(join(directory, "node_modules", cli.package), dest)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
@@ -89,12 +86,23 @@ export async function downloadCliToResources(version = CLI_VERSION, dest = windo
 export async function copyBuiltCliToResources(root: string, dest = windowsify("resources/opencode-cli")) {
   const cli = getCurrentCli()
   const directory = cli.package.replace("@opencode/", "")
-  await copyCliToResources(join(root, directory, "bin", cli.os === "win32" ? "opencode.exe" : "opencode"), dest)
+  await copyCliToResources(join(root, directory), dest)
 }
 
-async function copyCliToResources(source: string, dest: string) {
-  await copyFile(source, dest)
+// The package directory is an npm package: its package.json version is the string the executable
+// prints for --version. Writing it next to the executable spares the desktop a ~400 ms spawn of the
+// 200 MB binary on first launch.
+async function copyCliToResources(pkg: string, dest: string) {
+  const cli = getCurrentCli()
+  await copyFile(join(pkg, "bin", cli.os === "win32" ? "opencode.exe" : "opencode"), dest)
   await prepareCli(dest)
+  const manifest = (await Bun.file(join(pkg, "package.json")).json()) as { version?: string }
+  if (!manifest.version) throw new Error(`Bundled CLI package has no version: ${pkg}`)
+  await Bun.write(versionFile(dest), manifest.version)
+}
+
+export function versionFile(cli: string) {
+  return join(dirname(cli), "opencode-cli.version")
 }
 
 async function prepareCli(dest: string) {

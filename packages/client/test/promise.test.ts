@@ -157,7 +157,7 @@ test("generate.text uses the locationless public contract", async () => {
   })
 
   expect(await client.generate.text({ prompt: "ping" })).toEqual({ text: "pong" })
-  expect(request?.url).toBe("http://localhost:3000/api/generate")
+  expect(request?.url).toBe("http://localhost:3000/api/experimental/generate")
   expect(await request?.json()).toEqual({ prompt: "ping" })
 })
 
@@ -192,19 +192,29 @@ test("websearch.query uses the public HTTP contract", async () => {
   expect(await request?.json()).toEqual({ query: "opencode", providerID: "exa" })
 })
 
-test("server.status uses the public HTTP contract", async () => {
+test("server.info uses the public HTTP contract", async () => {
   let request: Request | undefined
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async (input) => {
       request = input instanceof Request ? input : new Request(input)
-      return Response.json({ version: "2.0.0", pid: 1, urls: ["http://192.168.1.10:4096"] })
+      return Response.json({
+        version: "2.0.0",
+        pid: 1,
+        urls: ["http://192.168.1.10:4096"],
+        paths: { tmp: "/tmp/opencode" },
+      })
     },
   })
 
-  expect(await client.server.status()).toEqual({ version: "2.0.0", pid: 1, urls: ["http://192.168.1.10:4096"] })
+  expect(await client.server.info()).toEqual({
+    version: "2.0.0",
+    pid: 1,
+    urls: ["http://192.168.1.10:4096"],
+    paths: { tmp: "/tmp/opencode" },
+  })
   expect(request?.method).toBe("GET")
-  expect(request?.url).toBe("http://localhost:3000/api/status")
+  expect(request?.url).toBe("http://localhost:3000/api/info")
 })
 
 test("experimental wellknown integration add uses the public HTTP contract", async () => {
@@ -546,13 +556,13 @@ test("session.inbox mutations use the public HTTP contract", async () => {
   })
 
   await client.session.inbox.cancel({ sessionID: "ses_test", inboxID: "msg_cancel" })
-  await client.session.inbox.steer({ sessionID: "ses_test", inboxID: "msg_steer" })
-  await client.session.inbox.queue({ sessionID: "ses_test", inboxID: "msg_queue" })
+  await client.session.inbox.update({ sessionID: "ses_test", inboxID: "msg_steer", delivery: "steer" })
+  await client.session.inbox.update({ sessionID: "ses_test", inboxID: "msg_queue", delivery: "queue" })
 
   expect(requests).toEqual([
     { method: "DELETE", url: "http://localhost:3000/api/session/ses_test/inbox/msg_cancel" },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/msg_steer/steer" },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/msg_queue/queue" },
+    { method: "PATCH", url: "http://localhost:3000/api/session/ses_test/inbox/msg_steer" },
+    { method: "PATCH", url: "http://localhost:3000/api/session/ses_test/inbox/msg_queue" },
   ])
 })
 
@@ -686,7 +696,7 @@ test("event.subscribe reports heartbeat comments as stream activity", async () =
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
-test("event transport passes through ordinary status requests", async () => {
+test("event transport passes through ordinary info requests", async () => {
   const requests: string[] = []
   const event = { id: "evt_connected", created: 1, type: "server.connected", data: {} }
   const client = OpenCode.make({
@@ -699,16 +709,22 @@ test("event transport passes through ordinary status requests", async () => {
           headers: { "content-type": "text/event-stream" },
         })
       }
-      return Response.json({ version: "2.0.0", pid: 1, urls: ["http://localhost:3000"] })
+      return Response.json({
+        version: "2.0.0",
+        pid: 1,
+        urls: ["http://localhost:3000"],
+        paths: { tmp: "/tmp/opencode" },
+      })
     },
   })
   await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
-  await expect(client.server.status()).resolves.toEqual({
+  await expect(client.server.info()).resolves.toEqual({
     version: "2.0.0",
     pid: 1,
     urls: ["http://localhost:3000"],
+    paths: { tmp: "/tmp/opencode" },
   })
-  expect(requests).toEqual(["/api/event", "/api/status"])
+  expect(requests).toEqual(["/api/event", "/api/info"])
 })
 
 test("event.subscribe terminates on malformed Promise SSE data", async () => {

@@ -350,6 +350,16 @@ describe("Error values and instanceof", () => {
     expect(await value(`return new Error("e") instanceof TypeError`)).toBe(false)
   })
 
+  test("new Error(message, { cause }) installs a non-enumerable cause only when the option is present", async () => {
+    expect(
+      await value(`
+        const inner = new Error("root")
+        const e = new TypeError("m", { cause: inner })
+        const agg = new AggregateError([], "a", { cause: 3 })
+        return [e.cause === inner, Object.keys(e), "cause" in new Error("m"), "cause" in new Error("m", { cause: undefined }), agg.cause]`),
+    ).toEqual([true, [], false, true, 3])
+  })
+
   test("thrown errors keep instanceof through try/catch", async () => {
     expect(await value(`try { throw new Error("x") } catch (e) { return [e instanceof Error, e.message] }`)).toEqual([
       true,
@@ -492,9 +502,9 @@ describe("CodeMode-specific array behavior", () => {
     expect(err.message).toContain("circular")
   })
 
-  test("keys/values/entries return arrays usable with for...of and spread", async () => {
+  test("keys/values/entries return iterators usable with for...of and spread", async () => {
     expect(await value(`return [...["x","y","z"].keys()]`)).toEqual([0, 1, 2])
-    expect(await value(`return ["x","y"].values()`)).toEqual(["x", "y"])
+    expect(await value(`return [...["x","y"].values()]`)).toEqual(["x", "y"])
     expect(
       await value(`
       const out = []

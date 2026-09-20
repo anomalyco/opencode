@@ -42,13 +42,17 @@ that section.
 CLI and TUI preferences are separate from OpenCode's server and project
 configuration. They live in the global `~/.config/opencode/cli.json`, or
 `$XDG_CONFIG_HOME/opencode/cli.json` when `XDG_CONFIG_HOME` is set. There is no
-project-local CLI configuration. Most preferences can also be changed from the
-TUI by pressing `Ctrl+P` and selecting **Open settings**.
+project-local CLI configuration. Set `OPENCODE_CLI_CONFIG_CONTENT` to merge
+inline JSON over the global settings. Most preferences can also be changed from
+the TUI by pressing `Ctrl+P` and selecting **Open settings**.
 
-Fetch the full [CLI configuration guide](https://opencode.ai/v2/docs/cli/config)
-before editing `cli.json`. It covers terminal-only settings such as themes,
-keybindings, terminal plugins, scrolling, attention alerts, diff presentation,
-and terminal integration. Do not put these settings in `opencode.json(c)`.
+### [Settings](https://opencode.ai/v2/docs/cli/config)
+
+Fetch the full [CLI settings reference](https://opencode.ai/v2/docs/cli/config)
+before editing `cli.json`. It documents every terminal-only setting, accepted
+values, and examples, including themes, input, sessions, tabs, diffs, alerts,
+Mini, keybindings, terminal plugins, and debugging. Do not put these settings
+in `opencode.json(c)`.
 
 ### [Keybinds](https://opencode.ai/v2/docs/cli/keybinds)
 
@@ -92,7 +96,7 @@ Common configuration fields include `model`, `default_agent`, `permissions`,
 `references`, `formatter`, and `lsp`.
 
 This configuration is distinct from `cli.json`. Use the
-[CLI configuration guide](https://opencode.ai/v2/docs/cli/config) for terminal
+[CLI settings reference](https://opencode.ai/v2/docs/cli/config) for terminal
 preferences, especially themes and keybindings.
 
 Do not guess field names or shapes. Fetch the V2 configuration guide and its
@@ -190,7 +194,7 @@ HTTP method and path or an OpenAPI operation ID.
 Call an endpoint with an HTTP method and path:
 
 ```sh
-opencode api get /api/status
+opencode api get /api/info
 ```
 
 Pass a request body with `--data` or `-d`, and additional headers with
@@ -241,7 +245,7 @@ OpenCode runs a client and a background server. Start by determining whether a
 problem belongs to the client, the shared server, or one project.
 
 - Check the service with `opencode service status` and verify the API with
-  `opencode api get /api/status`.
+  `opencode api get /api/info`.
 - Compare with `opencode --standalone`, which runs the TUI with a private
   server, to isolate shared-service issues.
 - Inspect `~/.local/share/opencode/log/opencode.log`. Filter `role=cli` for

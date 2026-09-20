@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { constructor, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
-import { rangeError, syntaxError, typeError } from "../interpreter/model.js"
-import { defineAccessor, get, Arr, Bytes, Obj } from "../interpreter/objects.js"
+import { IteratorSymbol, rangeError, syntaxError, typeError } from "../interpreter/model.js"
+import { define, defineAccessor, get, hidden, Arr, Bytes, IteratorObj, Obj } from "../interpreter/objects.js"
 import { describeValue } from "../interpreter/references.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { coerceToNumber, coerceToString } from "./value.js"
@@ -173,15 +173,21 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     ["toString", 0, (thisValue) => self(thisValue, "toString").bytes.join(",")],
     ["toBase64", 0, (thisValue) => self(thisValue, "toBase64").bytes.toBase64()],
     ["toHex", 0, (thisValue) => self(thisValue, "toHex").bytes.toHex()],
-    ["keys", 0, (thisValue) => wrapAll(Array.from(self(thisValue, "keys").bytes.keys()))],
-    ["values", 0, (thisValue) => wrapAll(Array.from(self(thisValue, "values").bytes.values()))],
+    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").bytes.keys())],
+    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").bytes.values())],
     [
       "entries",
       0,
       (thisValue) =>
-        wrapAll(Array.from(self(thisValue, "entries").bytes.entries(), ([index, byte]) => wrapAll([index, byte]))),
+        new IteratorObj(
+          builtins.Iterator,
+          self(thisValue, "entries")
+            .bytes.entries()
+            .map(([index, byte]) => wrapAll([index, byte])),
+        ),
     ],
   ])
+  define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return uint8Array
 }
 

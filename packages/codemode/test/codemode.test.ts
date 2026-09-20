@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Schema } from "effect"
-import { CodeMode, Tool, toolError } from "../src/index.js"
+import { CodeMode, Extension, Tool, toolError } from "../src/index.js"
 
 const run = (tool: Tool.Tool<never>) =>
   Effect.runPromise(CodeMode.make({ tools: { host: { call: tool } } }).execute("return await tools.host.call({})"))
@@ -160,77 +160,154 @@ describe("CodeMode host failure boundary", () => {
   })
 })
 
-describe("CodeMode tool-call observation", () => {
-  test("reports the tools actually invoked with decoded input", async () => {
-    const calls: Array<unknown> = []
+describe("CodeMode call hooks", () => {
+  const ended = (result: CodeMode.CallResult) => {
+    if (result.status !== "failure") return result.status
+    return `failure:${result.error instanceof Error ? result.error.message : String(result.error)}`
+  }
+  // Every hook logs its event, so the order across tools and extensions is visible.
+  const observe = (events: Array<string>): CodeMode.Hooks => ({
+    "tool.before": (call) => Effect.sync(() => void events.push(`tool.before ${JSON.stringify(call)}`)),
+    "tool.after": (call, result) => Effect.sync(() => void events.push(`tool.after ${call.name} ${ended(result)}`)),
+    "extension.before": (call) => Effect.sync(() => void events.push(`extension.before ${JSON.stringify(call)}`)),
+    "extension.after": (call, result) =>
+      Effect.sync(() => void events.push(`extension.after ${call.name} ${ended(result)}`)),
+  })
+
+  test("surround the tools actually invoked, with decoded input", async () => {
+    const events: Array<string> = []
     const lookup = Tool.make({
       description: "Look up a value",
       input: Schema.Struct({ query: Schema.String }),
       output: Schema.String,
-      execute: ({ query }) => Effect.succeed(query),
+      execute: ({ query }) => (query === "boom" ? Effect.fail(toolError("Lookup refused")) : Effect.succeed(query)),
     })
+    const runtime = CodeMode.make({ tools: { context: { lookup } }, hooks: observe(events) })
 
-    const result = await Effect.runPromise(
-      CodeMode.make({
-        tools: { context: { lookup } },
-        onToolCallStart: (call) => Effect.sync(() => calls.push(call)),
-      }).execute(`
+    const success = await Effect.runPromise(
+      runtime.execute(`
         if (false) await tools.context.lookup({ query: "not called" })
         return await tools.context.lookup({ query: "deployment failure" })
       `),
     )
-
-    expect(result.ok).toBe(true)
-    expect(calls).toStrictEqual([{ index: 0, name: "context.lookup", input: { query: "deployment failure" } }])
-  })
-
-  test("observes settled calls with outcome and duration", async () => {
-    const events: Array<{ phase: string; index: number; name: string; outcome?: string; message?: string }> = []
-    const lookup = Tool.make({
-      description: "Look up a value",
-      input: Schema.Struct({ query: Schema.String }),
-      output: Schema.String,
-      execute: ({ query }) =>
-        query === "boom"
-          ? Effect.fail(toolError("Lookup refused"))
-          : query === "defect"
-            ? Effect.die("broken")
-            : Effect.succeed(query),
-    })
-
-    const runtime = CodeMode.make({
-      tools: { context: { lookup } },
-      onToolCallStart: (call) =>
-        Effect.sync(() => {
-          events.push({ phase: "start", index: call.index, name: call.name })
-        }),
-      onToolCallEnd: (call) =>
-        Effect.sync(() => {
-          expect(call.durationMs).toBeGreaterThanOrEqual(0)
-          events.push({
-            phase: "end",
-            index: call.index,
-            name: call.name,
-            outcome: call.outcome,
-            ...(call.message === undefined ? {} : { message: call.message }),
-          })
-        }),
-    })
-
-    const success = await Effect.runPromise(runtime.execute(`return await tools.context.lookup({ query: "ok" })`))
-    expect(success.ok).toBe(true)
+    expect(success).toMatchObject({ ok: true, value: "deployment failure" })
     const failure = await Effect.runPromise(runtime.execute(`return await tools.context.lookup({ query: "boom" })`))
     expect(failure.ok).toBe(false)
-    const defect = await Effect.runPromise(runtime.execute(`return await tools.context.lookup({ query: "defect" })`))
-    expect(defect.ok).toBe(false)
+    expect(events).toEqual([
+      'tool.before {"name":"context.lookup","input":{"query":"deployment failure"}}',
+      "tool.after context.lookup success",
+      'tool.before {"name":"context.lookup","input":{"query":"boom"}}',
+      "tool.after context.lookup failure:Lookup refused",
+    ])
+  })
 
-    expect(events).toStrictEqual([
-      { phase: "start", index: 0, name: "context.lookup" },
-      { phase: "end", index: 0, name: "context.lookup", outcome: "success" },
-      { phase: "start", index: 0, name: "context.lookup" },
-      { phase: "end", index: 0, name: "context.lookup", outcome: "failure", message: "Lookup refused" },
-      { phase: "start", index: 0, name: "context.lookup" },
-      { phase: "end", index: 0, name: "context.lookup", outcome: "failure", message: "broken" },
+  test("surround each call to an extension global, with its arguments, but not functions inside results", async () => {
+    const events: Array<string> = []
+    const runtime = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "web",
+          globals: {
+            fetch: async (url: string, init?: { method?: string }) => ({
+              url,
+              method: init?.method ?? "GET",
+              json: () => 1,
+            }),
+            fail: () => {
+              throw new RangeError("nope")
+            },
+          },
+        }),
+      ],
+      hooks: observe(events),
+    })
+    const result = await Effect.runPromise(
+      runtime.execute(`
+        const res = await fetch("https://a.test/", { method: "POST" })
+        res.json()
+        try { fail() } catch {}
+        return res.url
+      `),
+    )
+    expect(result).toMatchObject({ ok: true, value: "https://a.test/", toolCalls: [] })
+    expect(events).toEqual([
+      'extension.before {"extension":"web","name":"fetch","args":["https://a.test/",{"method":"POST"}]}',
+      "extension.after fetch success",
+      'extension.before {"extension":"web","name":"fail","args":[]}',
+      "extension.after fail failure:nope",
+    ])
+  })
+
+  test("a failing before hook denies the call; the program catches the host's error", async () => {
+    const runtime = CodeMode.make({
+      tools: {
+        lookup: Tool.make({
+          description: "Look up",
+          input: Schema.Struct({}),
+          output: Schema.String,
+          execute: () => Effect.succeed("ok"),
+        }),
+      },
+      extensions: [Extension.make({ name: "web", globals: { fetch: async (url: string) => url } })],
+      hooks: { "extension.before": (call) => Effect.fail(new Error(`${call.name} is not allowed`)) },
+    })
+    expect(
+      await Effect.runPromise(
+        runtime.execute(`
+          const denied = await fetch("https://a.test/").catch((e) => [e instanceof Error, e.message])
+          return [denied, await tools.lookup({})]
+        `),
+      ),
+    ).toMatchObject({ ok: true, value: [[true, "fetch is not allowed"], "ok"] })
+    expect(await Effect.runPromise(runtime.execute(`await fetch("https://a.test/")`))).toMatchObject({
+      ok: false,
+      error: { kind: "ExecutionFailure", message: "Error: fetch is not allowed" },
+    })
+    const refused = CodeMode.make({
+      tools: {
+        lookup: Tool.make({
+          description: "Look up",
+          input: Schema.Struct({}),
+          output: Schema.String,
+          execute: () => Effect.succeed("ok"),
+        }),
+      },
+      hooks: { "tool.before": () => Effect.fail(toolError("lookup is not allowed")) },
+    })
+    expect(
+      await Effect.runPromise(
+        refused.execute(`try { await tools.lookup({}) } catch (e) { return [e.name, e.message] }`),
+      ),
+    ).toMatchObject({ ok: true, value: ["Error", "lookup is not allowed"], toolCalls: [{ name: "lookup" }] })
+    expect(await Effect.runPromise(refused.execute(`await tools.lookup({})`))).toMatchObject({
+      ok: false,
+      error: { kind: "ToolFailure", message: "lookup is not allowed" },
+    })
+  })
+
+  test("see a tool defect as the failure the program gets, and an interrupted extension call", async () => {
+    const events: Array<string> = []
+    const broken = Tool.make({
+      description: "Broken",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.die("broken"),
+    })
+    const runtime = CodeMode.make({
+      tools: { broken },
+      extensions: [Extension.make({ name: "slow", globals: { forever: () => new Promise(() => {}) } })],
+      hooks: observe(events),
+    })
+    expect(await Effect.runPromise(runtime.execute(`await tools.broken({})`))).toMatchObject({ ok: false })
+    expect(await Effect.runPromise(runtime.execute(`forever(); return "done"`))).toMatchObject({
+      ok: true,
+      value: "done",
+    })
+    expect(events).toEqual([
+      'tool.before {"name":"broken","input":{}}',
+      "tool.after broken failure:broken",
+      'extension.before {"extension":"slow","name":"forever","args":[]}',
+      "extension.after forever interrupted",
     ])
   })
 
@@ -243,15 +320,11 @@ describe("CodeMode tool-call observation", () => {
       execute: () => Effect.interrupt,
     })
     const exit = await Effect.runPromiseExit(
-      CodeMode.make({
-        tools: { host: { call } },
-        onToolCallStart: () => Effect.sync(() => events.push("start")),
-        onToolCallEnd: (call) => Effect.sync(() => events.push(`end:${call.outcome}`)),
-      }).execute("return await tools.host.call({})"),
+      CodeMode.make({ tools: { host: { call } }, hooks: observe(events) }).execute("return await tools.host.call({})"),
     )
 
     expect(exit._tag).toBe("Failure")
-    expect(events).toEqual(["start", "end:interrupted"])
+    expect(events).toEqual(['tool.before {"name":"host.call","input":{}}', "tool.after host.call interrupted"])
   })
 
   test("observes running calls interrupted during completion", async () => {
@@ -263,39 +336,17 @@ describe("CodeMode tool-call observation", () => {
       execute: () => Effect.never,
     })
     const result = await Effect.runPromise(
-      CodeMode.make({
-        tools: { host: { call } },
-        onToolCallStart: () => Effect.sync(() => events.push("start")),
-        onToolCallEnd: (call) => Effect.sync(() => events.push(`end:${call.outcome}`)),
-      }).execute('tools.host.call({}); return "done"'),
+      CodeMode.make({ tools: { host: { call } }, hooks: observe(events) }).execute(
+        'tools.host.call({}); return "done"',
+      ),
     )
 
     expect(result).toMatchObject({ ok: true, value: "done" })
-    expect(events).toEqual(["start", "end:interrupted"])
-  })
-
-  test("ends calls interrupted during start observation", async () => {
-    const events: Array<string> = []
-    const call = Tool.make({
-      description: "Unused",
-      input: Schema.Struct({}),
-      output: Schema.String,
-      execute: () => Effect.succeed("unused"),
-    })
-    const exit = await Effect.runPromiseExit(
-      CodeMode.make({
-        tools: { host: { call } },
-        onToolCallStart: () => Effect.interrupt,
-        onToolCallEnd: (call) => Effect.sync(() => events.push(call.outcome)),
-      }).execute("return await tools.host.call({})"),
-    )
-
-    expect(exit._tag).toBe("Failure")
-    expect(events).toEqual(["interrupted"])
+    expect(events).toEqual(['tool.before {"name":"host.call","input":{}}', "tool.after host.call interrupted"])
   })
 
   test("observes calls interrupted by the execution timeout", async () => {
-    const outcomes: Array<string> = []
+    const events: Array<string> = []
     const call = Tool.make({
       description: "Pending",
       input: Schema.Struct({}),
@@ -303,15 +354,13 @@ describe("CodeMode tool-call observation", () => {
       execute: () => Effect.never,
     })
     const result = await Effect.runPromise(
-      CodeMode.make({
-        tools: { host: { call } },
-        limits: { timeoutMs: 10 },
-        onToolCallEnd: (call) => Effect.sync(() => outcomes.push(call.outcome)),
-      }).execute("return await tools.host.call({})"),
+      CodeMode.make({ tools: { host: { call } }, limits: { timeoutMs: 10 }, hooks: observe(events) }).execute(
+        "return await tools.host.call({})",
+      ),
     )
 
     expect(result).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" } })
-    expect(outcomes).toEqual(["interrupted"])
+    expect(events).toEqual(['tool.before {"name":"host.call","input":{}}', "tool.after host.call interrupted"])
   })
 })
 
@@ -840,20 +889,17 @@ describe("CodeMode public contract", () => {
     }
   })
 
-  test("search is a counted tool call: it burns maxToolCalls and fires the hooks", async () => {
-    const started: Array<string> = []
-    const ended: Array<string> = []
+  test("search is a counted tool call: it burns maxToolCalls and is observed", async () => {
+    const observed: Array<CodeMode.ToolInvocation> = []
     const limited = CodeMode.make({
       tools,
       limits: { maxToolCalls: 1 },
-      onToolCallStart: (call) => Effect.sync(() => void started.push(call.name)),
-      onToolCallEnd: (call) => Effect.sync(() => void ended.push(`${call.name}:${call.outcome}`)),
+      hooks: { "tool.before": (call) => Effect.sync(() => void observed.push(call)) },
     })
     const result = await Effect.runPromise(limited.execute(`search({}); return search({})`))
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error.kind).toBe("ToolCallLimitExceeded")
-    expect(started).toEqual(["search"])
-    expect(ended).toEqual(["search:success"])
+    expect(observed).toEqual([{ name: "search", input: {} }])
   })
 
   test("search is an opaque, shadowable global like other built-ins", async () => {
@@ -1089,7 +1135,7 @@ describe("CodeMode public contract", () => {
     })
     const runtime = CodeMode.make({
       tools: { math: { double: transformed } },
-      onToolCallStart: (call) => Effect.sync(() => observed.push(call.input)),
+      hooks: { "tool.before": (call) => Effect.sync(() => void observed.push(call.input)) },
     })
 
     const success = await Effect.runPromise(runtime.execute(`return await tools.math.double({ value: "21" })`))

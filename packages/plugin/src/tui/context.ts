@@ -1,9 +1,9 @@
 import type {
   AgentInfo,
   CommandInfo,
-  FormCancelInput,
+  SessionFormCancelInput,
   FormInfo,
-  FormReplyInput,
+  SessionFormReplyInput,
   IntegrationInfo,
   LocationRef,
   McpResource,
@@ -95,8 +95,8 @@ export interface Data {
       list(sessionID: string, location?: LocationRef): Array<FormInfo & { readonly location?: LocationRef }> | undefined
       sync(sessionID: string, location?: LocationRef): Promise<void>
       invalidate(sessionID: string, location?: LocationRef): void
-      reply(input: FormReplyInput, location?: LocationRef): Promise<void>
-      cancel(input: FormCancelInput, location?: LocationRef): Promise<void>
+      reply(input: SessionFormReplyInput, location?: LocationRef): Promise<void>
+      cancel(input: SessionFormCancelInput, location?: LocationRef): Promise<void>
     }
   }
   readonly project: {
@@ -273,6 +273,8 @@ export interface ToastOptions {
   readonly message: string
   readonly variant?: ToastVariant
   readonly duration?: number
+  /** When this session's family is not open, the title defaults to the session title and the toast offers to open it. */
+  readonly sessionID?: string
 }
 
 export interface Toast {

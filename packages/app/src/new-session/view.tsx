@@ -1,8 +1,10 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
-import { Show, Suspense, createMemo, createSignal, lazy } from "solid-js"
+import { Show, Suspense, createMemo, createSignal, lazy, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { debounce } from "@solid-primitives/scheduled"
 import { Schema } from "effect"
 import createPresence from "solid-presence"
 import { Composer } from "@/composer/composer"
@@ -48,7 +50,21 @@ export function NewSessionView(props: {
   workspace: NewSessionWorkspaceController
   mcp: DraftMcpControls
 }) {
-  const [store, setStore] = createStore({ summary: false })
+  const [store, setStore] = createStore({
+    summary: false,
+    content: undefined as HTMLDivElement | undefined,
+    summaryResizeTranslate: undefined as string | undefined,
+  })
+  const finishWindowResize = debounce(() => setStore("summaryResizeTranslate", undefined), 150)
+  onMount(() => {
+    makeEventListener(window, "resize", () => {
+      if (store.summaryResizeTranslate === undefined) {
+        // Freeze the painted offset, including an in-flight slide, until resizing settles.
+        setStore("summaryResizeTranslate", store.content ? getComputedStyle(store.content).translate : "none")
+      }
+      finishWindowResize()
+    })
+  })
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
     Persist.global("workspace-onboarding"),
     WorkspaceOnboardingSchema,
@@ -63,6 +79,9 @@ export function NewSessionView(props: {
     <div class="@container relative flex flex-col min-h-0 h-full flex-1">
       <div
         data-component="new-session"
+        data-summary-open={store.summary}
+        data-summary-resizing={store.summaryResizeTranslate !== undefined}
+        style={{ "--session-summary-resize-translate": store.summaryResizeTranslate }}
         class="relative flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
       >
         <ComposerDropzone
@@ -89,7 +108,11 @@ export function NewSessionView(props: {
           </SummaryPopover>
         </div>
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
-          <div class={NEW_SESSION_CONTENT_WIDTH}>
+          <div
+            ref={(element) => setStore("content", element)}
+            data-slot="new-session-content"
+            class={NEW_SESSION_CONTENT_WIDTH}
+          >
             <NewSessionWordmark />
             <div class="mt-8 flex flex-col gap-8">
               <Composer model={props.composer} />

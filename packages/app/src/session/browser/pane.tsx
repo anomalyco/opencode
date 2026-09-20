@@ -127,6 +127,12 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
       ],
       () => {
         layout = undefined
+        // Native views are not clipped by the retained panel's DOM. Hide before
+        // the next animation frame so closing the panel cannot leave its page above the app.
+        if (!props.visible || !store.visible || dialog.active || !state()) {
+          registration()?.setLayout()
+          return
+        }
         schedule(300)
       },
     ),

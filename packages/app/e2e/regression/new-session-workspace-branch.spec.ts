@@ -22,7 +22,7 @@ test("selects a base branch for a new workspace", async ({ page }) => {
     pageMessages: () => ({ items: [] }),
     vcsBranches: ["feature/api", "main", "origin/release"],
   })
-  await page.route("**/api/vcs/branches?*", (route) => {
+  await page.route("**/api/vcs/branch?*", (route) => {
     if (new URL(route.request().url()).searchParams.get("search") !== "feature") return route.fallback()
     return route.fulfill({ json: { location: { directory }, data: ["feature/api"] } })
   })

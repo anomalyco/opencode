@@ -17,6 +17,7 @@ import {
   record,
   SetObj,
   URLSearchParamsObj,
+  HeadersObj,
 } from "./interpreter/objects.js"
 import { typeofValue } from "./interpreter/references.js"
 
@@ -69,6 +70,7 @@ const walk = <R>(
         )
       }
       if (boundary && value instanceof URLSearchParamsObj) return value.params.toString()
+      if (value instanceof HeadersObj) return Object.fromEntries(value.headers)
       const target = boundary && value instanceof SetObj ? new Arr(ctx.builtins.Array, [...value.set]) : value
       if (stack.has(target)) throw typeError("Converting circular structure to JSON.")
       stack.add(target)

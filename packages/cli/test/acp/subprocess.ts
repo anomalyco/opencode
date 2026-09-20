@@ -46,6 +46,11 @@ type Waiter = {
 
 export type AcpProcess = {
   readonly request: <T>(method: string, params?: unknown) => Promise<JsonRpcResponse<T>>
+  readonly send: <T>(
+    method: string,
+    params?: unknown,
+  ) => { readonly id: number; readonly response: Promise<JsonRpcResponse<T>> }
+  readonly notify: (method: string, params: unknown) => Promise<void>
   readonly waitForNotification: <T>(
     method: string,
     predicate: (params: T) => boolean,
@@ -64,7 +69,9 @@ description: Verifier compatibility skill.
 # Verifier Skill
 `
 
-export async function createAcpFixture(options: { readonly skill?: string } = {}) {
+export async function createAcpFixture(
+  options: { readonly skill?: string; readonly respond?: (request: unknown) => string | Promise<string> } = {},
+) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-cli-acp-"))
   const home = path.join(root, "workspace")
   const config = path.join(root, "config")
@@ -84,8 +91,9 @@ export async function createAcpFixture(options: { readonly skill?: string } = {}
       if (request.method !== "POST" || new URL(request.url).pathname !== "/v1/chat/completions") {
         return new Response("Not found", { status: 404 })
       }
-      requests.push(await request.json().catch(() => undefined))
-      return new Response(completion("accepted"), {
+      const body: unknown = await request.json().catch(() => undefined)
+      requests.push(body)
+      return new Response(completion(await (options.respond?.(body) ?? "accepted")), {
         headers: { "content-type": "text/event-stream" },
       })
     },
@@ -294,18 +302,28 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
     })
   }
 
-  return {
-    async request<T>(method: string, params?: unknown) {
-      if (inputClosed) throw new Error("ACP stdin is closed")
-      const id = nextID++
-      const request: JsonRpcRequest =
-        params === undefined ? { jsonrpc: "2.0", id, method } : { jsonrpc: "2.0", id, method, params }
-      await child.stdin.write(encoder.encode(`${JSON.stringify(request)}\n`))
-      await child.stdin.flush()
+  const write = async (message: JsonRpcRequest | JsonRpcNotification<unknown>) => {
+    if (inputClosed) throw new Error("ACP stdin is closed")
+    await child.stdin.write(encoder.encode(`${JSON.stringify(message)}\n`))
+    await child.stdin.flush()
+  }
+
+  const send = <T>(method: string, params?: unknown) => {
+    const id = nextID++
+    const request: JsonRpcRequest =
+      params === undefined ? { jsonrpc: "2.0", id, method } : { jsonrpc: "2.0", id, method, params }
+    const response = write(request).then(async () => {
       const response = await take((message) => isResponse(message) && message.id === id, 20_000, `${method} response`)
       if (!isResponse<T>(response)) throw new Error(`Invalid ACP response: ${JSON.stringify(response)}`)
       return response
-    },
+    })
+    return { id, response }
+  }
+
+  return {
+    request: <T>(method: string, params?: unknown) => send<T>(method, params).response,
+    send,
+    notify: (method: string, params: unknown) => write({ jsonrpc: "2.0", method, params }),
     async waitForNotification<T>(method: string, predicate: (params: T) => boolean, timeoutMs = 20_000) {
       const notification = await take(
         (message) => isNotification<T>(message) && message.method === method && predicate(message.params),

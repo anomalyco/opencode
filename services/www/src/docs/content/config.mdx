@@ -328,18 +328,17 @@ automatic and manual requests with a provider or model policy:
 {
   "providers": {
     "openai": {
-      "compaction": { "mode": "provider", "threshold": 120000 },
+      "settings": { "compaction": { "type": "native" } },
       "models": {
-        "gpt-4.1": { "compaction": { "mode": "local" } },
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
       },
     },
   },
 }
 ```
 
-A model policy replaces the whole provider policy. The optional positive integer
-`threshold` defaults to the selected model's usable input budget and cannot exceed
-its safe ceiling. Provider checkpoints keep recent user messages within the same
+A model setting overrides the provider setting. Automatic compaction uses the
+selected model's usable input budget. Provider checkpoints keep recent user messages within the same
 `compaction.tokens` budget that local summaries use for their retained tail.
 Top-level `compaction.auto: false` disables new automatic compaction without
 discarding installed checkpoints. See the [compaction guide](/compaction) for
@@ -507,7 +506,6 @@ headers, and model variants.
 }
 ```
 
-`transport: "websocket"` on a provider or model selects its session
-WebSocket; a model value overrides the provider value.
+Provider `settings.transport: "websocket"` selects its session WebSocket.
 
 See the [providers guide](/providers) for credentials, custom endpoints, provider packages, the WebSocket transport, and model configuration.

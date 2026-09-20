@@ -249,10 +249,54 @@ describe("provider error classification", () => {
 
   test("classifies any remaining 4xx status as an invalid request", () => {
     expect(
-      [400, 402, 404, 418, 422, 451].map(
-        (status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag,
+      [400, 404, 418, 422, 451].map((status) => classifyProviderFailure({ message: `HTTP ${status}`, status })._tag),
+    ).toEqual(Array(5).fill("InvalidRequest"))
+  })
+
+  test("classifies 402 as exhausted quota", () => {
+    expect(classifyProviderFailure({ message: "Payment Required", status: 402 })._tag).toBe("QuotaExceeded")
+  })
+
+  test("classifies OpenCode Zen account limits as quota rather than throttling", () => {
+    const typed = (type: string, message: string) => ({ type: "error", error: { type, message } })
+    const substituted = (message: string) => ({
+      error: { type: "server_error", message: `Upstream request failed: ${message}` },
+    })
+    const cases: ReadonlyArray<[number, { error: { message: string } }]> = [
+      [429, typed("GoUsageLimitError", "Go usage limit exceeded")],
+      [429, typed("FreeUsageLimitError", "Rate limit exceeded. Please try again later.")],
+      [402, typed("CreditLimitExceeded", "Credit limit exceeded.")],
+      [402, substituted("Insufficient account funds")],
+      [402, substituted("Account invoice is overdue")],
+      [429, substituted("Account budget exceeded")],
+    ]
+    expect(
+      cases.map(
+        ([status, body]) =>
+          classifyProviderFailure({ message: body.error.message, status, rawBody: JSON.stringify(body) })._tag,
       ),
-    ).toEqual(Array(6).fill("InvalidRequest"))
+    ).toEqual(Array(6).fill("QuotaExceeded"))
+  })
+
+  test("does not let substituted server codes make a 4xx retryable", () => {
+    const openai = { error: { type: "server_error", message: "Upstream request failed: Model is unavailable." } }
+    const anthropic = {
+      type: "error",
+      error: { type: "api_error", message: "Upstream request failed: Model is unavailable." },
+    }
+    expect(
+      [openai, anthropic].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 400, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["InvalidRequest", "InvalidRequest"])
+    // Without a contradicting status the same codes still mark provider trouble.
+    expect(classifyProviderFailure({ message: openai.error.message, rawBody: JSON.stringify(openai) })._tag).toBe(
+      "ProviderInternal",
+    )
+    expect(
+      classifyProviderFailure({ message: openai.error.message, status: 200, rawBody: JSON.stringify(openai) })._tag,
+    ).toBe("ProviderInternal")
   })
 
   test("classifies nested provider codes when a top-level code is also present", () => {

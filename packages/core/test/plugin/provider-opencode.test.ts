@@ -113,6 +113,9 @@ describe("OpencodePlugin", () => {
           id: Integration.MethodID.make("device"),
           type: "oauth",
           label: "OpenCode Console account",
+          form: [
+            { key: "server", type: "string", format: "uri", hidden: true, default: "https://opencode.ai/console" },
+          ],
         },
         { type: "key", label: "API key (service account)" },
       ])
@@ -350,7 +353,7 @@ describe("OpencodePlugin", () => {
         })
         .pipe(Effect.flip)
       expect(error).toBeInstanceOf(Integration.AuthorizationError)
-      expect(String(error.cause)).toContain("Invalid OpenCode server URL: expected string")
+      expect(String(error.cause)).toContain("Expected string for form field: server")
     }),
   )
 
@@ -547,14 +550,15 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.effect("refreshes hosted search with Console config and skips unchanged snapshots", () =>
+  it.effect("refreshes hosted search with Console config, retains it on failure, and skips unchanged snapshots", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
-        const state = { advertised: false, requests: 0 }
+        const state = { advertised: false, failing: false, requests: 0 }
         const server = Bun.serve({
           port: 0,
           fetch: () => {
             state.requests++
+            if (state.failing) return new Response("Unavailable", { status: 502 })
             return Response.json({
               providers: {},
               ...(state.advertised ? { websearch: { providerID: "opencode" } } : {}),
@@ -586,28 +590,36 @@ describe("OpencodePlugin", () => {
           expect(yield* websearch.default()).toBeUndefined()
 
           state.advertised = true
-          yield* TestClock.adjust("9 minutes")
+          yield* TestClock.adjust("50 seconds")
           yield* drain
           expect(state.requests).toBe(1)
           expect(rebuilds).toEqual(initial)
           expect(yield* websearch.default()).toBeUndefined()
 
-          yield* TestClock.adjust("1 minute")
+          yield* TestClock.adjust("10 seconds")
           yield* drain
           expect(state.requests).toBe(2)
           expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
 
-          yield* TestClock.adjust("10 minutes")
+          yield* TestClock.adjust("1 minute")
           yield* drain
           expect(state.requests).toBe(3)
           expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
           expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
 
-          state.advertised = false
-          yield* TestClock.adjust("10 minutes")
+          state.failing = true
+          yield* TestClock.adjust("1 minute")
           yield* drain
           expect(state.requests).toBe(4)
+          expect(rebuilds).toEqual({ provider: initial.provider + 1, websearch: initial.websearch + 1 })
+          expect(yield* websearch.default()).toEqual({ id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" })
+
+          state.failing = false
+          state.advertised = false
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(state.requests).toBe(5)
           expect(rebuilds).toEqual({ provider: initial.provider + 2, websearch: initial.websearch + 2 })
           expect(yield* websearch.providers()).toEqual([])
           expect(yield* websearch.default()).toBeUndefined()

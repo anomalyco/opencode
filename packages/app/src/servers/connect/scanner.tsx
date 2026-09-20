@@ -4,6 +4,7 @@ import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
 import { useLanguage } from "@/runtime/i18n/language"
 import { decodePairingCode } from "./pairing"
+import "./scanner.css"
 
 export function PairingScanner(props: {
   onScan: (value: NonNullable<ReturnType<typeof decodePairingCode>>) => void

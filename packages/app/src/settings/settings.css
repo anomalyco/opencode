@@ -803,6 +803,78 @@
   padding-inline-end: 28px;
 }
 
+.settings-projects-search [data-component="text-input-v2"] {
+  height: 36px;
+  background: color-mix(in oklab, var(--v2-background-bg-layer-02) 60%, transparent);
+  box-shadow: none;
+}
+
+.settings-projects-search [data-component="text-input-v2"]:is(:hover, :focus-within):not([data-disabled]) {
+  background: var(--v2-background-bg-layer-02);
+}
+
+.settings-projects-search [data-slot="text-input-v2-input"] {
+  padding-inline-end: 0;
+}
+
+.settings-projects-search [data-slot="text-input-v2-leading-icon"] {
+  padding-inline-start: 16px;
+}
+
+.settings-projects-search [data-slot="text-input-v2-value"] {
+  gap: 12px;
+}
+
+.settings-projects-search [data-slot="text-input-v2-icon-button"][data-variant="clear"] {
+  margin-inline-end: -4px;
+}
+
+.settings-projects-empty {
+  width: 60%;
+  margin-inline: auto;
+}
+
+.settings-projects-empty .settings-search-empty {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.settings-projects-empty .settings-search-empty-quoted {
+  flex: 0 1 auto;
+}
+
+.settings-project-row {
+  position: relative;
+  margin-inline: 1px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+  box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+  transition: background-color 120ms;
+}
+
+.settings-project-row:hover {
+  background: var(--v2-background-bg-layer-02);
+}
+
+.settings-project-row-content {
+  display: flex;
+  width: 100%;
+  min-height: 73px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px;
+  border-radius: inherit;
+  text-align: start;
+}
+
+.settings-project-row-name {
+  font-size: 13px;
+  font-weight: 530;
+  line-height: var(--line-height-compact);
+  color: var(--v2-text-text-base);
+}
+
 .settings-tab-search-clear {
   position: absolute;
   top: 50%;
@@ -1443,6 +1515,12 @@
   font-weight: 440;
   line-height: 1;
   color: var(--v2-state-fg-danger);
+}
+
+.settings-server-dialog-hint {
+  font-size: 13px;
+  line-height: var(--line-height-base);
+  color: var(--v2-text-text-muted);
 }
 
 .settings-extensions-tabs[data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"] {

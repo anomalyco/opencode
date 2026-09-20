@@ -1,45 +1,43 @@
-import { For, Show, createEffect, createMemo, on, onCleanup, type Component } from "solid-js"
+import { Show, createEffect, createMemo, on, type Component } from "solid-js"
+import { Key } from "@solid-primitives/keyed"
 import { createStore } from "solid-js/store"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import { displayName } from "@/shell/layout/helpers"
-import { ProjectIcon } from "@/shell/layout/project-icon"
 import type { LocalProject } from "@/shell/state/layout"
+import { SettingsSearchEmpty } from "../search-empty"
 import { settingsProjects } from "../servers/inventory"
+import { SettingsProjectRow } from "./project-row"
+import "@/settings/search.css"
 import "@/settings/settings.css"
 
 export const SettingsProjects: Component<{
   server: ServerConnection.Any
-  active?: boolean
-  autofocus?: boolean
   onOpenProject: (project: LocalProject) => void
 }> = (props) => {
   const language = useLanguage()
   const global = useGlobal()
-  const [store, setStore] = createStore({ filter: "" })
+  const [store, setStore] = createStore({ filter: "", overflow: { start: false, end: false } })
   let search: HTMLInputElement | undefined
+  const updateOverflow = () => {
+    if (!search) return
+    const offset = Math.abs(search.scrollLeft)
+    setStore("overflow", {
+      start: offset > 1,
+      end: search.scrollWidth - search.clientWidth - offset > 1,
+    })
+  }
+  createEffect(on(() => store.filter, updateOverflow))
   const projects = createMemo(() => settingsProjects(global.ensureServerCtx(props.server)))
   const searchable = createMemo(() => projects().length > 7)
   const filtered = createMemo(() => {
     const query = searchable() ? store.filter.trim().toLowerCase() : ""
     return query ? projects().filter((project) => displayName(project).toLowerCase().includes(query)) : projects()
   })
-  createEffect(
-    on(
-      () => (props.active ?? true) && searchable(),
-      (active) => {
-        if (!active) return
-        const frame = requestAnimationFrame(() => {
-          if (props.active !== false && props.autofocus !== false && search?.isConnected)
-            search.focus({ preventScroll: true })
-        })
-        onCleanup(() => cancelAnimationFrame(frame))
-      },
-    ),
-  )
   createEffect(() => {
     if (!searchable()) setStore("filter", "")
   })
@@ -54,16 +52,24 @@ export const SettingsProjects: Component<{
           </div>
         </div>
         <Show when={searchable()}>
-          <div class="settings-tab-search">
+          <div class="settings-tab-search settings-projects-search">
             <TextInput
-              ref={search}
+              ref={(element) => {
+                search = element
+                createResizeObserver(element, updateOverflow)
+              }}
               type="search"
               appearance="base"
+              leadingIcon={<Icon name="magnifying-glass" size="small" />}
               value={store.filter}
+              data-overflow-start={store.overflow.start}
+              data-overflow-end={store.overflow.end}
+              onScroll={updateOverflow}
               onInput={(event) => setStore("filter", event.currentTarget.value)}
               placeholder={language.t("settings.projects.search.placeholder")}
               aria-label={language.t("settings.projects.search.placeholder")}
               showClearButton={!!store.filter}
+              clearIcon="circle-xmark"
               onClearClick={() => {
                 setStore("filter", "")
                 search?.focus({ preventScroll: true })
@@ -81,32 +87,26 @@ export const SettingsProjects: Component<{
         <Show
           when={filtered().length > 0}
           fallback={
-            <div class="py-12 text-center text-v2-text-text-muted text-13-regular">
-              {language.t("settings.projects.empty")}
-            </div>
+            <Show
+              when={store.filter.trim()}
+              fallback={
+                <div class="py-12 text-center text-v2-text-text-muted text-13-regular">
+                  {language.t("settings.projects.empty")}
+                </div>
+              }
+            >
+              <div class="settings-projects-empty">
+                <SettingsSearchEmpty query={store.filter} />
+              </div>
+            </Show>
           }
         >
           <div class="flex w-full flex-col gap-2">
-            <For each={filtered()}>
+            <Key each={filtered()} by="worktree">
               {(project) => (
-                <button
-                  type="button"
-                  aria-label={displayName(project)}
-                  class="group mx-px flex items-center justify-between gap-5 px-4 py-2.5 rounded-lg bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] transition-[background-color] hover:bg-v2-background-bg-layer-01 text-start"
-                  onClick={() => props.onOpenProject(project)}
-                >
-                  <span class="flex items-center gap-2.5 min-w-0 flex-1">
-                    <ProjectIcon project={project} class="shrink-0" />
-                    <bdi class="text-13-medium text-v2-text-text-base truncate">{displayName(project)}</bdi>
-                  </span>
-                  <Icon
-                    name="chevron-right"
-                    size="small"
-                    class="shrink-0 text-v2-icon-icon-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                  />
-                </button>
+                <SettingsProjectRow project={project()} server={props.server} onOpen={props.onOpenProject} />
               )}
-            </For>
+            </Key>
           </div>
         </Show>
       </div>

@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { constructor, fn, type Method, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
-import { invalidData, typeError } from "../interpreter/model.js"
+import { invalidData, IteratorSymbol, typeError } from "../interpreter/model.js"
 import {
   define,
   defineAccessor,
@@ -9,6 +9,7 @@ import {
   hidden,
   isWrapper,
   Arr,
+  IteratorObj,
   MapObj,
   Obj,
   PromiseObj,
@@ -153,12 +154,18 @@ export const mapGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ["keys", 0, (thisValue) => wrap(Array.from(self(thisValue, "keys").map.keys()))],
-    ["values", 0, (thisValue) => wrap(Array.from(self(thisValue, "values").map.values()))],
+    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").map.keys())],
+    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").map.values())],
     [
       "entries",
       0,
-      (thisValue) => wrap(Array.from(self(thisValue, "entries").map.entries(), ([key, item]) => wrap([key, item]))),
+      (thisValue) =>
+        new IteratorObj(
+          builtins.Iterator,
+          self(thisValue, "entries")
+            .map.entries()
+            .map(([key, item]) => wrap([key, item])),
+        ),
     ],
     [
       "forEach",
@@ -173,6 +180,7 @@ export const mapGlobal = <R>(ctx: Interpreter<R>) => {
       },
     ],
   ])
+  define(proto, IteratorSymbol, get(proto, "entries"), hidden)
   return map
 }
 
@@ -218,7 +226,8 @@ const loadSetRecord = <R>(
       size: Math.max(Math.trunc(size), 0),
       has: (item: unknown) => Effect.map(ctx.call(has, source, [item]), Boolean),
       keys: () =>
-        Effect.flatMap(ctx.call(keys, source, []), (result) => {
+        Effect.flatMap(ctx.call(keys, source, []), (result): Effect.Effect<Iterable<unknown>> => {
+          if (result instanceof IteratorObj) return Effect.succeed(result.iterator)
           if (result instanceof Arr) return Effect.succeed(result.items)
           throw typeError(`Set.${name} expected 'keys' to return an iterator.`)
         }),
@@ -338,12 +347,18 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ["keys", 0, (thisValue) => wrap(Array.from(self(thisValue, "keys").set.values()))],
-    ["values", 0, (thisValue) => wrap(Array.from(self(thisValue, "values").set.values()))],
+    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").set.values())],
+    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").set.values())],
     [
       "entries",
       0,
-      (thisValue) => wrap(Array.from(self(thisValue, "entries").set.values(), (item) => wrap([item, item]))),
+      (thisValue) =>
+        new IteratorObj(
+          builtins.Iterator,
+          self(thisValue, "entries")
+            .set.values()
+            .map((item) => wrap([item, item])),
+        ),
     ],
     [
       "forEach",
@@ -365,5 +380,6 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
     operation("isSupersetOf"),
     operation("isDisjointFrom"),
   ])
+  define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return set
 }

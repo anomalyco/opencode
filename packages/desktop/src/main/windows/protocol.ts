@@ -5,21 +5,7 @@ import { Effect, Path } from "effect"
 import { scoped } from "../native/logging"
 import { DesktopPaths } from "../paths"
 import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
-
-const rendererProtocol = "oc"
-const rendererHost = "renderer"
-
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: rendererProtocol,
-    privileges: {
-      secure: true,
-      standard: true,
-      supportFetchAPI: true,
-      stream: true,
-    },
-  },
-])
+import { rendererHost, rendererProtocol } from "./scheme"
 
 export const registerRendererProtocol = Effect.fn("Window.registerRendererProtocol")(function* () {
   const path = yield* Path.Path

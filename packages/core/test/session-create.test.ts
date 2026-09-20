@@ -709,6 +709,7 @@ describe("Session.create", () => {
         assistantMessageID,
         agent: Agent.ID.make("build"),
         model,
+        started: 0,
       })
       yield* bus.publish(SessionEvent.Tool.Input.Started, {
         sessionID: parent.id,
@@ -819,6 +820,7 @@ describe("Session.create", () => {
         assistantMessageID,
         agent: Agent.ID.make("build"),
         model,
+        started: 0,
       })
       yield* bus.publish(SessionEvent.Step.Ended, {
         sessionID: parent.id,
@@ -1230,6 +1232,7 @@ describe("SessionTransfer", () => {
         assistantMessageID: SessionMessage.ID.create(),
         agent: Agent.ID.make("build"),
         model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+        started: 0,
       })
       yield* bus.publish(SessionEvent.Shell.Started, {
         sessionID: source.id,

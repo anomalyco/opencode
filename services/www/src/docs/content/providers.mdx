@@ -61,12 +61,10 @@ The `providers` object is keyed by the provider ID used in model references, suc
 | `env` | Ordered environment variable names that can provide the credential. |
 | `package` | Runtime provider package. |
 | `canonical` | Built-in provider ID whose catalog defaults this provider inherits. |
-| `settings` | JSON options passed to the runtime package. |
+| `settings` | Typed OpenCode controls and JSON options passed to the runtime package. |
 | `headers` | String-valued HTTP headers added to requests. |
 | `body` | JSON fields merged into request bodies. |
 | `models` | Models to add or override, keyed by the OpenCode model ID. |
-| `transport` | Provider-level session transport, `"http"` or `"websocket"`. |
-| `compaction` | Local or provider [compaction](/compaction) policy. |
 
 ## Endpoint
 
@@ -222,7 +220,7 @@ ID sent to the provider.
 | `name` | Display name. |
 | `family` | Model family used for grouping related models. |
 | `package` | Runtime override for this model. |
-| `settings` | Package-specific JSON settings. |
+| `settings` | Model-level OpenCode controls and package-specific JSON settings. |
 | `headers` | Additional string-valued request headers. |
 | `body` | Additional JSON request body fields. |
 | `capabilities` | Tool support plus accepted input and output media types. |
@@ -231,8 +229,6 @@ ID sent to the provider.
 | `cost` | Input, output, and optional cache pricing per million tokens. |
 | `limit` | Context, input, and output token limits. |
 | `disabled` | Removes the model from selection when `true`. |
-| `transport` | Model-level session transport; overrides the provider value. |
-| `compaction` | Model-level [compaction](/compaction) policy; overrides the provider policy. |
 
 See [Models](/models) for selection, defaults, capabilities, limits, costs, and variants.
 
@@ -561,10 +557,7 @@ sessions.
   "$schema": "https://opencode.ai/config.json",
   "providers": {
     "openai": {
-      "transport": "http",
-      "models": {
-        "gpt-5.5": { "transport": "websocket" },
-      },
+      "settings": { "transport": "http" },
     },
   },
 }
@@ -572,9 +565,8 @@ sessions.
 
 WebSocket behavior follows these rules:
 
-- Built-in providers opt supported models in according to their own policy.
-- `transport: "websocket"` enables a provider or model; `"http"` disables it.
-- A model value overrides its provider value.
+- Built-in providers opt supported routes in according to their own policy.
+- Provider `settings.transport: "websocket"` enables it; `"http"` disables it.
 - `"websocket"` on a route without a WebSocket channel logs a warning and falls back to HTTP.
 - OpenAI provider compaction uses the same connection.
 - xAI continues from stored responses only. With its default `store: false`, each step is sent in full over the reused

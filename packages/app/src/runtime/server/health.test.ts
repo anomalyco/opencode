@@ -17,7 +17,12 @@ describe("checkServerHealth", () => {
     const headers: Array<string | null> = []
     const fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
       headers.push(new Headers(init?.headers).get("authorization"))
-      return Response.json({ version: "2.0.0", pid: 1, urls: [server.url] })
+      return Response.json({
+        version: "2.0.0",
+        pid: 1,
+        urls: [server.url],
+        paths: { tmp: "/tmp/opencode" },
+      })
     }) as typeof globalThis.fetch
 
     expect(await checkServerHealth({ ...server, password }, fetch)).toEqual({ healthy: true, version: "2.0.0" })
@@ -28,16 +33,19 @@ describe("checkServerHealth", () => {
     let request: URL | undefined
     const fetch = (async (input: RequestInfo | URL) => {
       request = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
-      return new Response(JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })
+      return new Response(
+        JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url], paths: { tmp: "/tmp/opencode" } }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
     }) as unknown as typeof globalThis.fetch
 
     const result = await checkServerHealth(server, fetch)
 
     expect(result).toEqual({ healthy: true, version: "1.2.3" })
-    expect(request?.pathname).toBe("/api/status")
+    expect(request?.pathname).toBe("/api/info")
   })
 
   test("allows slow servers thirty seconds by default", async () => {
@@ -52,7 +60,7 @@ describe("checkServerHealth", () => {
     })
 
     const fetch = (async () =>
-      new Response(JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url] }), {
+      new Response(JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url], paths: { tmp: "/tmp/opencode" } }), {
         status: 200,
         headers: { "content-type": "application/json" },
       })) as unknown as typeof globalThis.fetch
@@ -111,10 +119,13 @@ describe("checkServerHealth", () => {
     let signal: AbortSignal | undefined
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       signal = abortFromInput(input, init)
-      return new Response(JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })
+      return new Response(
+        JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url], paths: { tmp: "/tmp/opencode" } }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
     }) as unknown as typeof globalThis.fetch
 
     const abort = new AbortController()
@@ -130,10 +141,13 @@ describe("checkServerHealth", () => {
     const fetch = (async () => {
       count += 1
       if (count < 3) throw new TypeError("network")
-      return new Response(JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })
+      return new Response(
+        JSON.stringify({ version: "1.2.3", pid: 1, urls: [server.url], paths: { tmp: "/tmp/opencode" } }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      )
     }) as unknown as typeof globalThis.fetch
 
     const result = await checkServerHealth(server, fetch, {

@@ -892,6 +892,14 @@ interface StorageScanResult {
 
 ### Tools
 
+Read the tools currently registered, after every transform, outside of a transform callback. Each tool has an `id`
+containing its effective name.
+
+```ts
+const tools = await ctx.tool.list()
+const read = tools.find((tool) => tool.id === "read")
+```
+
 Register, update, and remove tools with a synchronous transform, including in Promise plugins. Load external data
 before registering or reloading. A later valid registration overrides the same effective tool name.
 
@@ -964,6 +972,7 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 
 ```ts
 interface ToolContext {
+  list(): Promise<readonly (ToolInfo & { readonly id: string })[]>
   transform(callback: (editor: ToolEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
@@ -1410,7 +1419,31 @@ await ctx.session.hook(
 )
 ```
 
-This hook is experimental and its name or shape may change.
+`experimental.ws.send` and `experimental.ws.receive` expose the frames themselves, the WebSocket counterpart of
+editing an HTTP request or response body. `send` runs after the provider driver builds an outbound frame and before it
+is written; `receive` runs on each inbound frame before the driver observes it. Both carry the frame as a string and
+send whatever `frame` holds when the hook returns.
+
+OpenCode does not validate rewritten frames. The driver tracks state from the provider's replies, so a rewrite that
+changes protocol meaning is the plugin's responsibility, just as a rewritten HTTP body is.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.send",
+  (event) => {
+    const body = JSON.parse(event.frame)
+    if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+    event.frame = JSON.stringify(body)
+  },
+  { providerID: "openai" },
+)
+
+await ctx.session.hook("experimental.ws.receive", (event) => {
+  if (event.frame.includes('"type":"error"')) console.error(event.frame)
+})
+```
+
+These hooks are experimental and their names or shapes may change.
 
 #### Retry policy
 
@@ -1458,6 +1491,8 @@ interface SessionHooks {
   "http.request": SessionHttpRequestHook
   "http.response": SessionHttpResponseHook
   "experimental.ws.handshake": SessionWebSocketHandshakeHook
+  "experimental.ws.send": SessionWebSocketSendHook
+  "experimental.ws.receive": SessionWebSocketReceiveHook
   retry: SessionRetryHook
 }
 
@@ -1468,6 +1503,22 @@ interface SessionWebSocketHandshakeHook {
   readonly kind: "primary" | "compaction" | "title" | "generate"
   url: string
   headers: Record<string, string>
+}
+
+interface SessionWebSocketSendHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+interface SessionWebSocketReceiveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
 }
 
 type RetryDecision = { retry: false } | { retry: true; delay: number }

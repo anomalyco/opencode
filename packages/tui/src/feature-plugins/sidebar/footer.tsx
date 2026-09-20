@@ -31,7 +31,7 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
           <FilePath
             value={value()}
             maxWidth={38}
-            fg={actions.hovered() ? props.context.theme.text.default : props.context.theme.text.subdued}
+            fg={actions.hovered() ? props.context.theme.text.base : props.context.theme.text.muted}
           />
         </box>
       )}

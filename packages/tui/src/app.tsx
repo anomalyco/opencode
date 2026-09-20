@@ -158,6 +158,7 @@ const appBindingCommands = [
   "opencode.update",
   "server.pair",
   "service.restart",
+  "location.reload",
   "opencode.debug",
   "theme.switch",
   "theme.switch_mode",
@@ -967,7 +968,8 @@ function App(props: { pair?: DialogPairCredentials }) {
             {
               name: "opencode.update",
               title: "Update OpenCode",
-              slash: { name: "update", aliases: ["upgrade"] },
+              description: "Update OpenCode (upgrade)",
+              slash: { name: "update" },
               run: () => updater.open?.("manual"),
               category: "System",
             },
@@ -1003,6 +1005,22 @@ function App(props: { pair?: DialogPairCredentials }) {
             },
           ]
         : []),
+      {
+        name: "location.reload",
+        title: "Reload configuration",
+        slash: { name: "reload" },
+        run: async () => {
+          dialog.clear()
+          toast.show({ variant: "info", message: "Reloading configuration…", duration: 30000 })
+          await client.api.location
+            .reload()
+            .then(() => {
+              toast.show({ variant: "success", message: "Configuration reloaded" })
+            })
+            .catch(toast.error)
+        },
+        category: "System",
+      },
       {
         name: "opencode.debug",
         title: "View debug info",
@@ -1293,7 +1311,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       width={dimensions().width}
       height={dimensions().height}
       flexDirection="column"
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.base}
       onMouseDown={(evt) => {
         if (copyOnSelectEnabled()) return
         if (evt.button !== MouseButton.RIGHT) return

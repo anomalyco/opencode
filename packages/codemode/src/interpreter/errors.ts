@@ -6,7 +6,7 @@ import { type AstNode, formatLocation, PendingThrow, Throw, sourceLocation, type
 import { containsRuntimeReference } from "./references.js"
 import { createErrorValue, type ErrorType, isErrorType } from "./intrinsics.js"
 import { constructor, methods, prototypeFrom, receiver } from "./native.js"
-import { type Callable, define, get, hidden, type Native, Arr, ErrorObj, Obj } from "./objects.js"
+import { type Callable, define, get, has, hidden, type Native, Arr, ErrorObj, Obj } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
 import { formatValue } from "../stdlib/console.js"
 import { coerceToString } from "../stdlib/value.js"
@@ -146,9 +146,17 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
   const prototype = builtins[type]
   const construct = (args: Array<unknown>, newTarget: Callable) => {
     const proto = prototypeFrom(newTarget, prototype)
-    return type === "AggregateError"
-      ? constructAggregateErrorValue(ctx, args, proto)
-      : Effect.sync(() => createErrorValue(proto, args[0] === undefined ? undefined : coerceToString(args[0])))
+    const created =
+      type === "AggregateError"
+        ? constructAggregateErrorValue(ctx, args, proto)
+        : Effect.sync(() => createErrorValue(proto, args[0] === undefined ? undefined : coerceToString(args[0])))
+    // ES2022 `new Error(message, { cause })`: installed only when the options object has the property at all.
+    const options = args[type === "AggregateError" ? 2 : 1]
+    if (!(options instanceof Obj) || !has(options, "cause")) return created
+    return Effect.map(created, (value) => {
+      define(value, "cause", get(options, "cause"), hidden)
+      return value
+    })
   }
   const ctor: Native<R> = constructor<R>(builtins, prototype, {
     name: type,

@@ -7,7 +7,7 @@ Every command accepts `--help` for its full flag list, for example `opencode run
 
 ## run
 
-`opencode run` sends a message and prints the reply without opening the interactive interface.
+Sends a message and prints the reply without opening the interactive interface.
 
 ```bash
 $ opencode run "Explain this repository"
@@ -70,7 +70,7 @@ $ opencode run --help
 
 ## mini
 
-`opencode mini` starts the minimal interactive interface instead of the full-screen TUI.
+Starts the minimal interactive interface instead of the full-screen TUI.
 
 ```bash
 $ opencode mini
@@ -96,7 +96,7 @@ $ opencode mini --help
 
 ## session
 
-`opencode session` manages sessions.
+Manages sessions.
 
 ```bash
 $ opencode session list
@@ -146,7 +146,7 @@ $ opencode session --help
 
 ## auth
 
-`opencode auth` manages AI providers and credentials.
+Manages AI providers and credentials.
 
 ```bash
 $ opencode auth list
@@ -190,7 +190,7 @@ $ opencode auth --help
 
 ## models
 
-`opencode models` lists every available model.
+Lists every available model.
 
 ```bash
 $ opencode models
@@ -204,7 +204,7 @@ $ opencode models --help
 
 ## mcp
 
-`opencode mcp` manages MCP (Model Context Protocol) servers.
+Manages MCP (Model Context Protocol) servers.
 
 ```bash
 $ opencode mcp list
@@ -254,7 +254,7 @@ $ opencode mcp --help
 
 ## plugin
 
-`opencode plugin` manages plugins.
+Manages plugins.
 
 ```bash
 $ opencode plugin list
@@ -298,7 +298,7 @@ $ opencode plugin --help
 
 ## stats
 
-`opencode stats` shows shareable usage statistics.
+Shows shareable usage statistics.
 
 ```bash
 $ opencode stats
@@ -336,7 +336,7 @@ $ opencode stats --help
 
 ## serve
 
-`opencode serve` starts the API and web server. See [Web](/cli/web).
+Starts the API and web server. See [Web](/cli/web).
 
 ```bash
 $ opencode serve
@@ -362,7 +362,7 @@ $ opencode serve --help
 
 ## pair
 
-`opencode pair` shows server pairing information, including URLs, credentials, and a QR code.
+Shows server pairing information, including URLs, credentials, and a QR code.
 
 ```bash
 $ opencode pair
@@ -382,7 +382,7 @@ $ opencode pair --help
 
 ## service
 
-`opencode service` manages the background server. See [Web](/cli/web).
+Manages the background server. See [Web](/cli/web).
 
 ```bash
 $ opencode service start
@@ -442,9 +442,17 @@ View all subcommands and flags.
 $ opencode service --help
 ```
 
+## reload
+
+Reloads configuration without restarting the server. Running sessions continue with fresh services at the next step boundary.
+
+```bash
+$ opencode reload
+```
+
 ## api
 
-`opencode api` makes a request to the running server.
+Makes a request to the running server.
 
 ```bash
 $ opencode api GET /api/session
@@ -476,7 +484,7 @@ $ opencode api --help
 
 ## acp
 
-`opencode acp` starts an Agent Client Protocol server over stdin and stdout for editor integrations. It runs until the client closes the connection.
+Starts an Agent Client Protocol server over stdin and stdout for editor integrations. It runs until the client closes the connection.
 
 ```bash
 $ opencode acp
@@ -490,7 +498,7 @@ $ opencode acp --help
 
 ## debug
 
-`opencode debug` provides debugging and troubleshooting tools.
+Provides debugging and troubleshooting tools.
 
 ```bash
 $ opencode debug agents
@@ -522,7 +530,7 @@ $ opencode debug --help
 
 ## upgrade
 
-`opencode upgrade` upgrades OpenCode to the latest or a specific version. Alias: `update`.
+Upgrades OpenCode to the latest or a specific version. Alias: `update`.
 
 ```bash
 $ opencode upgrade
@@ -542,7 +550,7 @@ $ opencode upgrade --help
 
 ## uninstall
 
-`opencode uninstall` removes OpenCode and all related files.
+Removes OpenCode and all related files.
 
 ```bash
 $ opencode uninstall

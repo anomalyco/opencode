@@ -147,6 +147,8 @@ const source = {
   "ui.promptInput.dropFiles.pdf": "Drop PDFs or files to add",
   "ui.promptInput.dropFiles.imagePdf": "Drop images, PDFs, or files to add",
   "ui.promptInput.removeAttachment": "Remove attachment",
+  "ui.promptInput.cancelUpload": "Cancel upload",
+  "ui.promptInput.uploading": "{{percent}}%",
   "ui.promptInput.label": "Prompt",
   "ui.promptInput.placeholder.shell": "Enter shell command…",
   "ui.promptInput.placeholder.normal": "Ask anything, {{slash}} for commands, {{at}} for context…",

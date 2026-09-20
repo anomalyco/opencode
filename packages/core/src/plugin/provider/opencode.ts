@@ -6,6 +6,7 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } fr
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
+import { IntegrationConnection } from "../../integration/connection.js"
 import { Provider } from "../../provider.js"
 import { WebSearch } from "../../websearch.js"
 import { ConfigProvider } from "@opencode/schema/config/provider"
@@ -45,6 +46,15 @@ function oauth(http: HttpClient.HttpClient) {
       id: methodID,
       type: "oauth",
       label: "OpenCode Console account",
+      form: [
+        {
+          key: "server",
+          type: "string",
+          format: "uri",
+          hidden: true,
+          default: defaultServer,
+        },
+      ],
     },
     authorize: (answer) =>
       Effect.gen(function* () {
@@ -122,7 +132,13 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       const config = credential
         ? yield* fetchConfig(http, credential).pipe(
             Effect.catch((cause) =>
-              Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(Effect.as(undefined)),
+              Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(
+                Effect.as(
+                  IntegrationConnection.key(snapshot.connection) === IntegrationConnection.key(connection)
+                    ? snapshot.config
+                    : undefined,
+                ),
+              ),
             ),
           )
         : undefined
@@ -311,7 +327,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.
-    yield* Effect.sleep(Duration.minutes(10)).pipe(
+    yield* Effect.sleep(Duration.minutes(1)).pipe(
       Effect.andThen(
         loading.withPermit(
           load().pipe(Effect.flatMap((next) => (Equal.equals(snapshot, next) ? Effect.void : apply(next)))),

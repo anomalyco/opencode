@@ -58,9 +58,9 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         },
       },
       externalizeDeps: {
-        // Bundle the Effect family together; native MessagePack acceleration stays optional and external.
+        // Bundle the Effect family together.
         exclude: ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"],
-        include: [nodePtyPkg, "msgpackr-extract"],
+        include: [nodePtyPkg],
       },
     },
     plugins: [
@@ -96,6 +96,9 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     define: {
       "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+      "import.meta.env.OPENCODE_TEST_ONBOARDING": JSON.stringify(
+        command === "serve" && process.env.OPENCODE_TEST_ONBOARDING === "1",
+      ),
     },
     plugins: [pickerPlugin(), appPlugin, sentry],
     publicDir: "../../../app/public",

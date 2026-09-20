@@ -36,6 +36,9 @@ export type Ref = typeof Ref.Type
 export const Info = Model.Info
 export type Info = Model.Info
 
+/** Effective provider and model settings used only while constructing a runtime model. */
+export type RuntimeInfo = Omit<Info, "settings"> & { readonly settings?: Provider.Settings }
+
 export type MutableInfo = DeepMutable<Info>
 
 export { Event } from "@opencode/schema/model"
@@ -68,7 +71,7 @@ export interface Interface extends State.Transformable<Editor> {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Model") {}
 
 type Data = {
-  models: Map<Provider.ID, Map<ID, MutableInfo>>
+  models: Map<Provider.ID, ReadonlyMap<ID, Info>>
   defaultModel?: { providerID: Provider.ID; modelID: ID }
 }
 
@@ -82,59 +85,73 @@ const layer = Layer.effect(
     const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
       name: "model",
       initial: () => ({
-        models: new Map(
-          (input?.available ?? []).map((record) => [
-            record.provider.id,
-            new Map(
-              Array.from(record.models, ([id, model]) => [
-                id,
-                {
-                  ...structuredClone(model),
-                  id,
-                  providerID: record.provider.id,
-                } as MutableInfo,
-              ]),
-            ),
-          ]),
-        ),
+        models: new Map((input?.available ?? []).map((record) => [record.provider.id, record.models])),
       }),
-      editor: (data) => ({
-        list: (providerID) =>
-          providerID === undefined
-            ? Array.from(data.models.values()).flatMap((models) => Array.from(models.values()))
-            : Array.from(data.models.get(providerID)?.values() ?? []),
-        get: (providerID, modelID) => data.models.get(providerID)?.get(modelID),
-        update: (providerID, modelID, update) => {
-          // Model edits cannot create/enable a provider or bypass its availability decision.
-          const models = data.models.get(providerID)
-          if (!models) return
-          const model = models.get(modelID) ?? (Info.default(providerID, modelID) as MutableInfo)
-          update(model)
-          model.id = modelID
-          model.providerID = providerID
-          const provider = input?.records.get(providerID)?.provider
-          AISDKNative.rewrite(model, {
-            specifier: model.package ?? provider?.package,
-            providerID,
-            canonical: model.canonical ?? provider?.canonical,
-            modelID: model.modelID ?? modelID,
-          })
-          models.set(modelID, model)
-        },
-        remove: (providerID, modelID) => {
-          data.models.get(providerID)?.delete(modelID)
-        },
-        default: {
-          get: () => data.defaultModel,
-          set: (providerID, modelID) => {
-            data.defaultModel = { providerID, modelID }
+      editor: (data) => {
+        // Definitions are shared across Locations; a provider's map and a model are copied before their first edit.
+        const owned = new WeakSet<ReadonlyMap<ID, Info>>()
+        const drafts = new WeakSet<Info>()
+        const writable = (providerID: Provider.ID) => {
+          const current = data.models.get(providerID)
+          if (!current) return undefined
+          if (owned.has(current)) return current as Map<ID, Info>
+          const copy = new Map(current)
+          owned.add(copy)
+          data.models.set(providerID, copy)
+          return copy
+        }
+        const draft = (providerID: Provider.ID, modelID: ID) => {
+          const models = writable(providerID)
+          if (!models) return undefined
+          const current = models.get(modelID)
+          if (!current) return undefined
+          if (drafts.has(current)) return current as MutableInfo
+          const copy = structuredClone(current) as MutableInfo
+          drafts.add(copy)
+          models.set(modelID, copy)
+          return copy
+        }
+        return {
+          list: (providerID) => {
+            const ids = providerID === undefined ? Array.from(data.models.keys()) : [providerID]
+            return ids.flatMap((id) =>
+              Array.from(data.models.get(id)?.keys() ?? []).flatMap((modelID) => draft(id, modelID) ?? []),
+            )
           },
-        },
-        provider: {
-          list: () => Array.from(input?.records.values() ?? []),
-          get: (providerID) => input?.records.get(providerID),
-        },
-      }),
+          get: draft,
+          update: (providerID, modelID, update) => {
+            // Model edits cannot create/enable a provider or bypass its availability decision.
+            const models = writable(providerID)
+            if (!models) return
+            const model = draft(providerID, modelID) ?? (Info.default(providerID, modelID) as MutableInfo)
+            update(model)
+            model.id = modelID
+            model.providerID = providerID
+            const provider = input?.records.get(providerID)?.provider
+            AISDKNative.rewrite(model, {
+              specifier: model.package ?? provider?.package,
+              providerID,
+              canonical: model.canonical ?? provider?.canonical,
+              modelID: model.modelID ?? modelID,
+            })
+            drafts.add(model)
+            models.set(modelID, model)
+          },
+          remove: (providerID, modelID) => {
+            writable(providerID)?.delete(modelID)
+          },
+          default: {
+            get: () => data.defaultModel,
+            set: (providerID, modelID) => {
+              data.defaultModel = { providerID, modelID }
+            },
+          },
+          provider: {
+            list: () => Array.from(input?.records.values() ?? []),
+            get: (providerID) => input?.records.get(providerID),
+          },
+        }
+      },
       // read() also refreshes dependencies changed inside a State.batch before notification.
       notify: () => notify,
     })
@@ -147,6 +164,8 @@ const layer = Layer.effect(
           byProvider: ReadonlyMap<Provider.ID, ReadonlyMap<ID, Info>>
         }
       | undefined
+    // An unedited model keeps its shared definition object across rebuilds, so its merged output is reusable.
+    const merged = new WeakMap<Info, { provider: Provider.Info | undefined; model: Info }>()
     const read = Effect.fn("Model.snapshot")(function* () {
       while (true) {
         const current = yield* providers.snapshot()
@@ -165,19 +184,23 @@ const layer = Layer.effect(
             return [
               providerID,
               new Map(
-                Array.from(models, ([id, model]) => [
-                  id,
-                  {
+                Array.from(models, ([id, model]) => {
+                  const reusable = merged.get(model)
+                  if (reusable && reusable.provider === provider) return [id, reusable.model]
+                  const value = {
                     ...model,
                     ...(provider?.canonical === undefined ? {} : { canonical: provider.canonical }),
                     package: model.package ?? provider?.package,
-                    compaction: model.compaction ?? provider?.compaction,
-                    transport: model.transport ?? provider?.transport,
-                    settings: Provider.mergeOverlay(provider?.settings, model.settings),
+                    settings: Provider.mergeOverlay(
+                      Provider.modelSettings(provider?.settings),
+                      Provider.modelSettings(model.settings),
+                    ),
                     headers: Provider.mergeHeaders(provider?.headers, model.headers),
                     body: Provider.mergeOverlay(provider?.body, model.body),
-                  } satisfies Info,
-                ]),
+                  } satisfies Info
+                  merged.set(model, { provider, model: value })
+                  return [id, value]
+                }),
               ),
             ]
           }),
