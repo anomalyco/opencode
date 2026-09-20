@@ -236,6 +236,17 @@ export type OutputFormatJsonSchema = {
 
 export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
 
+export type ModelSelection = {
+  type: "jev-openai-autoselect"
+  requested: {
+    providerID: string
+    modelID: string
+  }
+  source: "jev" | "fallback"
+  confidence?: number
+  selectorModel?: string
+}
+
 export type UserMessage = {
   id: string
   sessionID: string
@@ -255,6 +266,7 @@ export type UserMessage = {
     modelID: string
     variant?: string
   }
+  modelSelection?: ModelSelection
   system?: string
   tools?: {
     [key: string]: boolean
@@ -370,6 +382,7 @@ export type AssistantMessage = {
   }
   structured?: unknown
   variant?: string
+  modelSelection?: ModelSelection
   finish?: string
 }
 
