@@ -469,6 +469,85 @@ describe("V1Migration.transformSession", () => {
     })
   })
 
+  test("appends a legacy tool notice naming only the renamed or removed tools that were called", () => {
+    const parent = user("msg_000000000060aaaaaaaaaaaaaa")
+    const message = assistant("msg_000000000061aaaaaaaaaaaaaa", parent.id)
+    const call = (id: string, tool: string) =>
+      part(id, message.id, {
+        type: "tool",
+        callID: id,
+        tool,
+        state: { status: "completed", input: {}, output: "ok", title: tool, metadata: {}, time: { start: 1, end: 2 } },
+      })
+    const result = transform(
+      [parent, message],
+      [call("prt_1", "bash"), call("prt_2", "read"), call("prt_3", "glob"), call("prt_4", "todowrite")],
+    )
+    expect(result.messages.map((row) => [row.type, row.seq])).toEqual([
+      ["user", 0],
+      ["assistant", 1],
+      ["system", 2],
+    ])
+    expect(result.messages[2]).toMatchObject({
+      session_id: "ses_test",
+      time_created: 20,
+      time_updated: 21,
+      data: {
+        text: [
+          "The available tools have changed.",
+          "The following tools were renamed and must be called by their new names: `bash` is now `shell`.",
+          "The following tools now take `path` instead of `filePath`: `read`.",
+          "The following tools are no longer available and must not be called: `todowrite`.",
+        ].join("\n\n"),
+        time: { created: 20 },
+      },
+    })
+    expect(result.messages[2]?.id).toMatch(/^msg_/)
+    expect(result.watermark).toBe(2)
+  })
+
+  test("omits the legacy tool notice when no legacy tools were called or they precede a compaction", () => {
+    const parent = user("msg_000000000062aaaaaaaaaaaaaa")
+    const message = assistant("msg_000000000063aaaaaaaaaaaaaa", parent.id)
+    const call = (id: string, messageID: string, tool: string) =>
+      part(id, messageID, {
+        type: "tool",
+        callID: id,
+        tool,
+        state: { status: "completed", input: {}, output: "ok", title: tool, metadata: {}, time: { start: 1, end: 2 } },
+      })
+    expect(transform([parent, message], [call("prt_1", message.id, "glob")]).messages.map((row) => row.type)).toEqual([
+      "user",
+      "assistant",
+    ])
+
+    const compact = user("msg_000000000064aaaaaaaaaaaaaa", {}, 30)
+    const summary = assistant("msg_000000000065aaaaaaaaaaaaaa", compact.id, { summary: true }, 31)
+    const later = user("msg_000000000066aaaaaaaaaaaaaa", {}, 40)
+    const answer = assistant("msg_000000000067aaaaaaaaaaaaaa", later.id, {}, 41)
+    const result = transform(
+      [parent, message, compact, summary, later, answer],
+      [
+        call("prt_1", message.id, "bash"),
+        part("prt_2", compact.id, { type: "compaction", auto: true }),
+        part("prt_3", summary.id, { type: "text", text: "summary" }),
+        part("prt_4", later.id, { type: "text", text: "again" }),
+        call("prt_5", answer.id, "skill"),
+      ],
+    )
+    expect(result.messages.map((row) => row.type)).toEqual([
+      "user",
+      "assistant",
+      "compaction",
+      "user",
+      "assistant",
+      "system",
+    ])
+    expect(result.messages[5]?.data).toMatchObject({
+      text: "The available tools have changed.\n\nThe `skill` tool now takes `id` instead of `name`.",
+    })
+  })
+
   test("normalizes assistant errors and finish reasons", () => {
     const parent = user("msg_000000000010aaaaaaaaaaaaaa")
     const cases = [
