@@ -1286,6 +1286,36 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
   expect(setup.renderer.isDestroyed).toBe(false)
 })
 
+test("@ directory completion keeps a single trailing separator", async () => {
+  await using state = await tmpdir()
+  const folder = "sub1" + path.sep
+  await using setup = await createAppFixture({
+    state: state.path,
+    fetch: (url) => {
+      if (url.pathname === "/api/fs/find")
+        return json({
+          location: { directory, project: { id: "proj_test", directory, canonical: directory } },
+          data: [{ path: folder, type: "directory" }],
+        })
+      return undefined
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  await setup.mockInput.typeText("@sub1")
+  await setup.waitForFrame((frame) => frame.includes(folder))
+  setup.mockInput.pressTab()
+  const frame = await setup.waitForFrame((frame) => frame.includes("@sub1" + path.sep))
+  expect(frame).toContain("@sub1" + path.sep)
+  expect(frame).not.toContain("@sub1" + path.sep + "/")
+
+  // Clear the prompt so the shared draft stash does not leak into later fixtures.
+  setup.mockInput.pressKey("c", { ctrl: true })
+  await setup.renderOnce()
+  setup.mockInput.pressKey("c", { ctrl: true })
+  await setup.waitForFrame((frame) => !frame.includes("@sub1"))
+})
+
 test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
   "selection copy and pane management respect %s mode in the prompt and terminal pane",
   async (copy) => {

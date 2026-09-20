@@ -659,7 +659,7 @@ export function Autocomplete(props: {
     const endCursor = input.logicalCursor
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
-    input.insertText("@" + selectedPath + "/")
+    input.insertText("@" + selectedPath + (selectedPath.endsWith(path.sep) ? "" : "/"))
 
     setStore("selected", 0)
   }
