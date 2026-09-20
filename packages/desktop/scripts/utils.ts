@@ -26,30 +26,6 @@ export const CLI_BINARIES: Array<{ rustTarget: string; package: string; os: stri
     os: "darwin",
     cpu: "x64",
   },
-  {
-    rustTarget: "aarch64-pc-windows-msvc",
-    package: "@opencode-ai/cli-windows-arm64",
-    os: "win32",
-    cpu: "arm64",
-  },
-  {
-    rustTarget: "x86_64-pc-windows-msvc",
-    package: "@opencode-ai/cli-windows-x64-baseline",
-    os: "win32",
-    cpu: "x64",
-  },
-  {
-    rustTarget: "x86_64-unknown-linux-gnu",
-    package: "@opencode-ai/cli-linux-x64-baseline",
-    os: "linux",
-    cpu: "x64",
-  },
-  {
-    rustTarget: "aarch64-unknown-linux-gnu",
-    package: "@opencode-ai/cli-linux-arm64",
-    os: "linux",
-    cpu: "arm64",
-  },
 ]
 
 export const RUST_TARGET = Bun.env.RUST_TARGET

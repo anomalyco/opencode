@@ -98,13 +98,6 @@ async function read(sub: string, file: string) {
   return parse(await item.text())
 }
 
-function pick(list: Item[], exts: string[]) {
-  for (const ext of exts) {
-    const found = list.find((item) => item.url.split("?")[0]?.toLowerCase().endsWith(ext))
-    if (found) return found.url
-  }
-}
-
 function link(raw: string) {
   if (raw.startsWith("https://") || raw.startsWith("http://")) return raw
   return `https://github.com/${repo}/releases/download/v${version}/${raw}`
@@ -145,49 +138,22 @@ const alias = (data: Record<string, { url: string; signature: string }>, key: st
   data[key] = data[src]
 }
 
-const winx = await read("latest-yml-x86_64-pc-windows-msvc", "latest.yml")
-const wina = await read("latest-yml-aarch64-pc-windows-msvc", "latest.yml")
 const macx = await read("latest-yml-x86_64-apple-darwin", "latest-mac.yml")
 const maca = await read("latest-yml-aarch64-apple-darwin", "latest-mac.yml")
-const linx = await read("latest-yml-x86_64-unknown-linux-gnu", "latest-linux.yml")
-const lina = await read("latest-yml-aarch64-unknown-linux-gnu", "latest-linux-arm64.yml")
 
-const yver = winx?.version ?? wina?.version ?? macx?.version ?? maca?.version ?? linx?.version ?? lina?.version
+const yver = macx?.version ?? maca?.version
 if (yver && yver !== version) throw new Error(`latest.yml version mismatch: expected ${version}, got ${yver}`)
 
 const out: Record<string, { url: string; signature: string }> = {}
 
-const winxexe = pick(winx?.files ?? [], [".exe"])
-const winaexe = pick(wina?.files ?? [], [".exe"])
-
 const macxTarGz = "opencode-desktop-mac-x64.app.tar.gz"
 const macaTarGz = "opencode-desktop-mac-arm64.app.tar.gz"
 
-const linxDeb = pick(linx?.files ?? [], [".deb"])
-const linxRpm = pick(linx?.files ?? [], [".rpm"])
-const linxAppImage = pick(linx?.files ?? [], [".appimage"])
-const linaDeb = pick(lina?.files ?? [], [".deb"])
-const linaRpm = pick(lina?.files ?? [], [".rpm"])
-const linaAppImage = pick(lina?.files ?? [], [".appimage"])
-
-await add(out, "windows-x86_64-nsis", winxexe)
-await add(out, "windows-aarch64-nsis", winaexe)
 await add(out, "darwin-x86_64-app", macxTarGz)
 await add(out, "darwin-aarch64-app", macaTarGz)
 
-await add(out, "linux-x86_64-deb", linxDeb)
-await add(out, "linux-x86_64-rpm", linxRpm)
-await add(out, "linux-x86_64-appimage", linxAppImage)
-await add(out, "linux-aarch64-deb", linaDeb)
-await add(out, "linux-aarch64-rpm", linaRpm)
-await add(out, "linux-aarch64-appimage", linaAppImage)
-
-alias(out, "windows-x86_64", "windows-x86_64-nsis")
-alias(out, "windows-aarch64", "windows-aarch64-nsis")
 alias(out, "darwin-x86_64", "darwin-x86_64-app")
 alias(out, "darwin-aarch64", "darwin-aarch64-app")
-alias(out, "linux-x86_64", "linux-x86_64-deb")
-alias(out, "linux-aarch64", "linux-aarch64-deb")
 
 const platforms = Object.fromEntries(
   Object.keys(out)
