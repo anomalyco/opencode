@@ -7,7 +7,7 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useUpdaterAction } from "../updater-action"
+import { useUpdaterAction, useUpdaterAvailable } from "../updater-action"
 import { useSettings } from "@/context/settings"
 import { ExternalLink } from "../external-link"
 import { SettingsListV2 } from "./parts/list"
@@ -243,33 +243,6 @@ const SoundSetting: Component<{
   )
 }
 
-const LanguageSetting = () => {
-  const language = useLanguage()
-  const options = createMemo(() =>
-    language.locales.map((locale) => ({
-      value: locale,
-      label: language.label(locale),
-    })),
-  )
-  return (
-    <SettingsRowV2
-      title={language.t("settings.general.row.language.title")}
-      description={language.t("settings.general.row.language.description")}
-    >
-      <SelectV2
-        appearance="inline"
-        data-action="settings-language"
-        options={options()}
-        placement="bottom-end"
-        gutter={6}
-        current={options().find((option) => option.value === language.locale())}
-        value={(option) => option.value}
-        label={(option) => option.label}
-        onSelect={(option) => option && language.setLocale(option.value)}
-      />
-    </SettingsRowV2>
-  )
-}
 
 export const SettingsGeneralV2: Component<{
   sessionID?: string
@@ -280,6 +253,7 @@ export const SettingsGeneralV2: Component<{
   const settings = useSettings()
   const mobile = createMediaQuery("(max-width: 767px)")
   const updater = useUpdaterAction()
+  const updaterAvailable = useUpdaterAvailable()
   const permissionScope = createPermissionScopeController(() => props.sessionID)
   const shell = createShellSettingsController()
   const appearance = createAppearanceSettingsController()
@@ -327,7 +301,6 @@ export const SettingsGeneralV2: Component<{
   const GeneralSection = () => (
     <div class="settings-v2-section">
       <SettingsListV2>
-        <LanguageSetting />
 
         <PermissionScopeSetting controller={permissionScope} />
 
@@ -558,7 +531,7 @@ export const SettingsGeneralV2: Component<{
 
         <SoundsSection controller={sounds} />
 
-        <Show when={desktop()}>
+        <Show when={desktop() && updaterAvailable()}>
           <UpdatesSection />
         </Show>
 

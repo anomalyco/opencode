@@ -7,27 +7,15 @@ import { loadInitialLocale } from "@/context/language"
 import { type Platform, PlatformProvider } from "@/context/platform"
 import { createBrowserDraftStore } from "@/utils/draft-store"
 import { dict as en } from "@/i18n/en"
-import { dict as zh } from "@/i18n/zh"
 import { authFromToken } from "@/utils/server"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
-const getLocale = () => {
-  if (typeof navigator !== "object") return "en" as const
-  const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
-  for (const language of languages) {
-    if (!language) continue
-    if (language.toLowerCase().startsWith("zh")) return "zh" as const
-  }
-  return "en" as const
-}
-
 const getRootNotFoundError = () => {
   const key = "error.dev.rootNotFound" as const
-  const locale = getLocale()
-  return locale === "zh" ? (zh[key] ?? en[key]) : en[key]
+  return en[key]
 }
 
 const getStorage = (key: string) => {

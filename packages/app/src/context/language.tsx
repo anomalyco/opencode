@@ -20,7 +20,8 @@ import {
 export type Locale = DesktopNativeLocale
 export type Direction = "ltr" | "rtl"
 
-const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "ur", "pa", "fa", "dv"])
+// English is the only locale, so nothing is right-to-left.
+const RTL_LOCALES: ReadonlySet<Locale> = new Set()
 
 function localeDirection(locale: Locale): Direction {
   return RTL_LOCALES.has(locale) ? "rtl" : "ltr"
@@ -33,7 +34,6 @@ type PluralKey =
   | "session.question.pending"
   | "session.followupDock.summary"
   | "session.revertDock.summary"
-type Source = { dict: Record<string, string> }
 
 function cookie(locale: Locale) {
   return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
@@ -46,82 +46,8 @@ const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 const base = i18n.flatten({ ...en, ...uiEn })
 const dicts = new Map<Locale, Dictionary>([["en", base]])
 
-const merge = (app: Promise<Source>, ui: Promise<Source>) =>
-  Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...i18n.flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
-
-const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
-  zh: () => merge(import("@/i18n/zh"), import("@opencode-ai/ui/i18n/zh")),
-  zht: () => merge(import("@/i18n/zht"), import("@opencode-ai/ui/i18n/zht")),
-  ko: () => merge(import("@/i18n/ko"), import("@opencode-ai/ui/i18n/ko")),
-  de: () => merge(import("@/i18n/de"), import("@opencode-ai/ui/i18n/de")),
-  es: () => merge(import("@/i18n/es"), import("@opencode-ai/ui/i18n/es")),
-  fr: () => merge(import("@/i18n/fr"), import("@opencode-ai/ui/i18n/fr")),
-  da: () => merge(import("@/i18n/da"), import("@opencode-ai/ui/i18n/da")),
-  ja: () => merge(import("@/i18n/ja"), import("@opencode-ai/ui/i18n/ja")),
-  pl: () => merge(import("@/i18n/pl"), import("@opencode-ai/ui/i18n/pl")),
-  ru: () => merge(import("@/i18n/ru"), import("@opencode-ai/ui/i18n/ru")),
-  uk: () => merge(import("@/i18n/uk"), import("@opencode-ai/ui/i18n/uk")),
-  ar: () => merge(import("@/i18n/ar"), import("@opencode-ai/ui/i18n/ar")),
-  no: () => merge(import("@/i18n/no"), import("@opencode-ai/ui/i18n/no")),
-  br: () => merge(import("@/i18n/br"), import("@opencode-ai/ui/i18n/br")),
-  th: () => merge(import("@/i18n/th"), import("@opencode-ai/ui/i18n/th")),
-  bs: () => merge(import("@/i18n/bs"), import("@opencode-ai/ui/i18n/bs")),
-  tr: () => merge(import("@/i18n/tr"), import("@opencode-ai/ui/i18n/tr")),
-  hi: () => merge(import("@/i18n/hi"), import("@opencode-ai/ui/i18n/hi")),
-  nl: () => merge(import("@/i18n/nl"), import("@opencode-ai/ui/i18n/nl")),
-  id: () => merge(import("@/i18n/id"), import("@opencode-ai/ui/i18n/id")),
-  vi: () => merge(import("@/i18n/vi"), import("@opencode-ai/ui/i18n/vi")),
-  it: () => merge(import("@/i18n/it"), import("@opencode-ai/ui/i18n/it")),
-  ur: () => merge(import("@/i18n/ur"), import("@opencode-ai/ui/i18n/ur")),
-  pa: () => merge(import("@/i18n/pa"), import("@opencode-ai/ui/i18n/pa")),
-  az: () => merge(import("@/i18n/az"), import("@opencode-ai/ui/i18n/az")),
-  fi: () => merge(import("@/i18n/fi"), import("@opencode-ai/ui/i18n/fi")),
-  sv: () => merge(import("@/i18n/sv"), import("@opencode-ai/ui/i18n/sv")),
-  am: () => merge(import("@/i18n/am"), import("@opencode-ai/ui/i18n/am")),
-  bg: () => merge(import("@/i18n/bg"), import("@opencode-ai/ui/i18n/bg")),
-  bn: () => merge(import("@/i18n/bn"), import("@opencode-ai/ui/i18n/bn")),
-  ca: () => merge(import("@/i18n/ca"), import("@opencode-ai/ui/i18n/ca")),
-  cs: () => merge(import("@/i18n/cs"), import("@opencode-ai/ui/i18n/cs")),
-  dv: () => merge(import("@/i18n/dv"), import("@opencode-ai/ui/i18n/dv")),
-  dz: () => merge(import("@/i18n/dz"), import("@opencode-ai/ui/i18n/dz")),
-  el: () => merge(import("@/i18n/el"), import("@opencode-ai/ui/i18n/el")),
-  et: () => merge(import("@/i18n/et"), import("@opencode-ai/ui/i18n/et")),
-  fa: () => merge(import("@/i18n/fa"), import("@opencode-ai/ui/i18n/fa")),
-  fo: () => merge(import("@/i18n/fo"), import("@opencode-ai/ui/i18n/fo")),
-  hr: () => merge(import("@/i18n/hr"), import("@opencode-ai/ui/i18n/hr")),
-  hu: () => merge(import("@/i18n/hu"), import("@opencode-ai/ui/i18n/hu")),
-  hy: () => merge(import("@/i18n/hy"), import("@opencode-ai/ui/i18n/hy")),
-  is: () => merge(import("@/i18n/is"), import("@opencode-ai/ui/i18n/is")),
-  ka: () => merge(import("@/i18n/ka"), import("@opencode-ai/ui/i18n/ka")),
-  km: () => merge(import("@/i18n/km"), import("@opencode-ai/ui/i18n/km")),
-  lo: () => merge(import("@/i18n/lo"), import("@opencode-ai/ui/i18n/lo")),
-  lt: () => merge(import("@/i18n/lt"), import("@opencode-ai/ui/i18n/lt")),
-  lv: () => merge(import("@/i18n/lv"), import("@opencode-ai/ui/i18n/lv")),
-  mk: () => merge(import("@/i18n/mk"), import("@opencode-ai/ui/i18n/mk")),
-  mn: () => merge(import("@/i18n/mn"), import("@opencode-ai/ui/i18n/mn")),
-  ms: () => merge(import("@/i18n/ms"), import("@opencode-ai/ui/i18n/ms")),
-  my: () => merge(import("@/i18n/my"), import("@opencode-ai/ui/i18n/my")),
-  ne: () => merge(import("@/i18n/ne"), import("@opencode-ai/ui/i18n/ne")),
-  ro: () => merge(import("@/i18n/ro"), import("@opencode-ai/ui/i18n/ro")),
-  si: () => merge(import("@/i18n/si"), import("@opencode-ai/ui/i18n/si")),
-  sk: () => merge(import("@/i18n/sk"), import("@opencode-ai/ui/i18n/sk")),
-  sl: () => merge(import("@/i18n/sl"), import("@opencode-ai/ui/i18n/sl")),
-  sq: () => merge(import("@/i18n/sq"), import("@opencode-ai/ui/i18n/sq")),
-  sr: () => merge(import("@/i18n/sr"), import("@opencode-ai/ui/i18n/sr")),
-  tg: () => merge(import("@/i18n/tg"), import("@opencode-ai/ui/i18n/tg")),
-  tk: () => merge(import("@/i18n/tk"), import("@opencode-ai/ui/i18n/tk")),
-  uz: () => merge(import("@/i18n/uz"), import("@opencode-ai/ui/i18n/uz")),
-}
-
-function loadDict(locale: Locale) {
-  const hit = dicts.get(locale)
-  if (hit) return Promise.resolve(hit)
-  if (locale === "en") return Promise.resolve(base)
-  const load = loaders[locale]
-  return load().then((next: Dictionary) => {
-    dicts.set(locale, next)
-    return next
-  })
+function loadDict(_locale: Locale) {
+  return Promise.resolve(base)
 }
 
 export function loadLocaleDict(locale: Locale) {
