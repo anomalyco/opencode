@@ -5,7 +5,7 @@ import { Show, Suspense, createMemo, createSignal, lazy, onMount } from "solid-j
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { debounce } from "@solid-primitives/scheduled"
-import { Schema } from "effect"
+import { Codec } from "@/runtime/persistence/codec"
 import createPresence from "solid-presence"
 import { Composer } from "@/composer/composer"
 import { ComposerDropzone } from "@/composer/dropzone"
@@ -21,7 +21,6 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useProviders } from "@/providers/catalog/providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
 import { NewSessionWordmark } from "./wordmark"
 import { SummaryPopover } from "@/session/summary/popover"
@@ -34,12 +33,12 @@ const NewSessionSummary = lazy(async () => {
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
-export const WorkspaceOnboardingSchema = Persistence.struct({
-  used: Schema.Boolean,
+export const WorkspaceOnboardingSchema = Codec.struct({
+  used: Codec.boolean,
 })
 
-export const ProviderTipSchema = Persistence.struct({
-  dismissedAt: Schema.Finite,
+export const ProviderTipSchema = Codec.struct({
+  dismissedAt: Codec.number,
 })
 
 export const WorkspaceTipSchema = ProviderTipSchema
@@ -267,3 +266,4 @@ function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => 
     </Show>
   )
 }
+

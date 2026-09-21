@@ -5,8 +5,7 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextInput } from "@opencode/ui/text-input"
 import { type Component, createEffect, For, on, onCleanup, Show } from "solid-js"
-import { Schema } from "effect"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useModels } from "@/providers/models/models"
 import { useServerSDK } from "@/runtime/server/client"
@@ -20,8 +19,8 @@ type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 
 const PROVIDER_ICON_SIZE = 16
 
-export const ModelProvidersSchema = Schema.Struct({
-  collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
+export const ModelProvidersSchema = Codec.struct({
+  collapsed: Codec.lenientRecord(Codec.fallback(Codec.boolean, () => false)),
 })
 
 export const SettingsModels: Component<{ active?: boolean; autofocus?: boolean }> = (props) => {
@@ -211,3 +210,4 @@ export const SettingsModels: Component<{ active?: boolean; autofocus?: boolean }
     </>
   )
 }
+

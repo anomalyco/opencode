@@ -1,8 +1,7 @@
 import { createEffect, createRoot } from "solid-js"
 import { produce } from "solid-js/store"
-import { Schema } from "effect"
+import { Codec } from "@/runtime/persistence/codec"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
 import { createScopedCache } from "@/runtime/server/scoped-cache"
 import { SelectedLineRange } from "./types"
 import type { ServerScope } from "@/runtime/server/scope"
@@ -11,14 +10,14 @@ const WORKSPACE_KEY = "__workspace__"
 const MAX_FILE_VIEW_SESSIONS = 20
 const MAX_VIEW_FILES = 500
 
-const FileViewSchema = Persistence.struct({
-  scrollTop: Persistence.optional(Schema.Finite),
-  scrollLeft: Persistence.optional(Schema.Finite),
-  selectedLines: Persistence.optional(Schema.NullOr(SelectedLineRange)),
+const FileViewSchema = Codec.struct({
+  scrollTop: Codec.lenientOptional(Codec.number),
+  scrollLeft: Codec.lenientOptional(Codec.number),
+  selectedLines: Codec.lenientOptional(Codec.nullOr(SelectedLineRange)),
 })
 
-export const FileViewsSchema = Schema.Struct({
-  file: Persistence.record(Persistence.fallback(FileViewSchema, () => ({}))),
+export const FileViewsSchema = Codec.struct({
+  file: Codec.lenientRecord(Codec.fallback(FileViewSchema, () => ({}))),
 })
 
 function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
@@ -150,3 +149,4 @@ export function createFileViewCache(scope: ServerScope) {
     clear: () => cache.clear(),
   }
 }
+

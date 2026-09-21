@@ -11,15 +11,15 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createResource } from "solid-js"
-import { Schema } from "effect"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
+
 import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
-import { SessionTransfer } from "@opencode/schema/session-transfer"
+
 import { useSshAuthenticate } from "@/servers/ssh/authenticate"
 
-export const HomeServersSchema = Schema.Struct({
-  collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
+export const HomeServersSchema = Codec.struct({
+  collapsed: Codec.lenientRecord(Codec.fallback(Codec.boolean, () => false)),
 })
 
 export function createHomeProjectsController(home: HomeController) {
@@ -114,6 +114,11 @@ export function createHomeProjectsController(home: HomeController) {
               extensions: ["json"],
             },
             async (file) => {
+              // Validating an imported file is the one place the shared Effect schema is needed here.
+              const [{ Schema }, { SessionTransfer }] = await Promise.all([
+                import("effect"),
+                import("@opencode/schema/session-transfer"),
+              ])
               const data = await Schema.decodeUnknownPromise(Schema.fromJsonString(SessionTransfer.Data))(
                 await file.text(),
               )
@@ -184,3 +189,4 @@ export function createHomeProjectsController(home: HomeController) {
 }
 
 export type HomeProjectsController = ReturnType<typeof createHomeProjectsController>
+

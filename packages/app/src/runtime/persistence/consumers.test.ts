@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { WorkspaceOnboardingSchema, ProviderTipSchema, WorkspaceTipSchema } from "@/new-session/view"
 import { ModelSelectionSchema } from "@/providers/models/selection"
 import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 import { FileViewsSchema } from "@/workspaces/files/view-cache"
 import { languageSchema } from "@/runtime/i18n/language"
 import { HomeServersSchema } from "@/home/projects/controller"
@@ -10,9 +11,9 @@ import { ModelProvidersSchema } from "@/settings/models/models"
 
 describe("persisted consumer schemas", () => {
   test("onboarding and provider tip retain defaults and validate stored values", () => {
-    const onboarding = Schema.decodeUnknownSync(Persistence.withInitial(WorkspaceOnboardingSchema, { used: false }))
-    const tip = Schema.decodeUnknownSync(Persistence.withInitial(ProviderTipSchema, { dismissedAt: 0 }))
-    const workspaceTip = Schema.decodeUnknownSync(Persistence.withInitial(WorkspaceTipSchema, { dismissedAt: 0 }))
+    const onboarding = ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(WorkspaceOnboardingSchema, { used: false }), input))
+    const tip = ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(ProviderTipSchema, { dismissedAt: 0 }), input))
+    const workspaceTip = ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(WorkspaceTipSchema, { dismissedAt: 0 }), input))
     expect(onboarding({})).toEqual({ used: false })
     expect(onboarding({ used: "true" })).toEqual({ used: false })
     expect(onboarding({ used: true })).toEqual({ used: true })
@@ -25,7 +26,7 @@ describe("persisted consumer schemas", () => {
 
   test("collapse records recover malformed entries without losing valid siblings", () => {
     for (const schema of [HomeServersSchema, ModelProvidersSchema]) {
-      const decode = Schema.decodeUnknownSync(Persistence.withInitial(schema, { collapsed: {} }))
+      const decode = (input: unknown) => Codec.decodeOrThrow(Codec.withInitial(schema, { collapsed: {} }), input)
       expect(decode({})).toEqual({ collapsed: {} })
       expect(decode({ collapsed: [] })).toEqual({ collapsed: {} })
       expect(decode({ collapsed: { open: false, closed: true, invalid: "false" } })).toEqual({
@@ -76,7 +77,7 @@ describe("persisted consumer schemas", () => {
   })
 
   test("file views validate scroll positions and line sides independently", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(FileViewsSchema, { file: {} }))
+    const decode = ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(FileViewsSchema, { file: {} }), input))
     expect(decode({})).toEqual({ file: {} })
     const state = decode({
       file: {
@@ -111,3 +112,4 @@ describe("persisted consumer schemas", () => {
     expect(decode({ locale: "ar" })).toEqual({ locale: "ar" })
   })
 })
+

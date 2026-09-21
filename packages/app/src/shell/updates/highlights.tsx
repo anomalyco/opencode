@@ -1,18 +1,18 @@
 import { createEffect, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Schema } from "effect"
+import { Codec } from "@/runtime/persistence/codec"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useSettings } from "@/settings/model"
 import { persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
+
 import { DialogReleaseNotes, type Highlight } from "@/shell/updates/release-notes"
 
 const CHANGELOG_URL = "https://opencode.ai/changelog.json"
 
-export const HighlightsStore = Persistence.struct({
-  version: Schema.UndefinedOr(Schema.String),
+export const HighlightsStore = Codec.struct({
+  version: Codec.undefinedOr(Codec.string),
 })
 
 type ParsedRelease = {
@@ -233,3 +233,4 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
     }
   },
 })
+

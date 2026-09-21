@@ -1,6 +1,6 @@
 import { createStore, reconcile } from "solid-js/store"
-import { Schema } from "effect"
-import { SessionError } from "@opencode/schema/session-error"
+import { Codec } from "@/runtime/persistence/codec"
+import type { SessionError } from "@opencode/schema/session-error"
 import { type Accessor, batch, createEffect, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createSimpleContext } from "@opencode/ui/context"
 import type { ServerSDK } from "@/runtime/server/client"
@@ -10,7 +10,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { decode64 } from "@/runtime/persistence/base64"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
+
 import { playSoundById } from "@/shell/notifications/sound"
 import type { createNotificationCoordinator } from "@/shell/notifications/coordinator"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -21,18 +21,27 @@ import type { ServerScope } from "@/runtime/server/scope"
 import { useServer } from "@/runtime/server/current"
 
 const NotificationBase = {
-  directory: Schema.optional(Schema.String),
-  session: Schema.optional(Schema.String),
-  metadata: Schema.optional(Schema.Unknown),
-  time: Schema.Finite,
-  viewed: Schema.Boolean,
+  directory: Codec.optional(Codec.string),
+  session: Codec.optional(Codec.string),
+  metadata: Codec.optional(Codec.unknown),
+  time: Codec.number,
+  viewed: Codec.boolean,
 }
-export const Notification = Schema.Union([
-  Persistence.struct({ ...NotificationBase, type: Schema.Literal("turn-complete") }),
-  Persistence.struct({ ...NotificationBase, type: Schema.Literal("error"), error: SessionError.Error }),
+// The error payload is whatever the server reported; shape-checking it here would load the shared
+// Effect schema into the renderer's startup path for a value the server already validated.
+const StoredSessionError = Codec.make<SessionError.Error, unknown>(
+  (value) =>
+    typeof value === "object" && value !== null && "name" in value && "message" in value
+      ? (value as unknown as SessionError.Error)
+      : Codec.INVALID,
+  (value) => value,
+)
+export const Notification = Codec.union([
+  Codec.struct({ ...NotificationBase, type: Codec.literal("turn-complete") }),
+  Codec.struct({ ...NotificationBase, type: Codec.literal("error"), error: StoredSessionError }),
 ])
 export type Notification = typeof Notification.Type
-export const NotificationStore = Persistence.struct({ list: Persistence.array(Notification) })
+export const NotificationStore = Codec.struct({ list: Codec.lenientArray(Notification) })
 
 type NotificationIndex = {
   session: {
@@ -368,3 +377,5 @@ export const useNotification = () => {
   const server = useServer()
   return server.ctx.notification
 }
+
+

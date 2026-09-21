@@ -1,20 +1,19 @@
 import type { FileContent } from "@/runtime/server/types"
-import { Schema } from "effect"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 
-export const FileSelection = Persistence.struct({
-  startLine: Schema.Number,
-  startChar: Schema.Number,
-  endLine: Schema.Number,
-  endChar: Schema.Number,
+export const FileSelection = Codec.struct({
+  startLine: Codec.number,
+  startChar: Codec.number,
+  endLine: Codec.number,
+  endChar: Codec.number,
 })
 export type FileSelection = typeof FileSelection.Type
 
-export const SelectedLineRange = Persistence.struct({
-  start: Schema.Number,
-  end: Schema.Number,
-  side: Persistence.optional(Schema.Literals(["additions", "deletions"])),
-  endSide: Persistence.optional(Schema.Literals(["additions", "deletions"])),
+export const SelectedLineRange = Codec.struct({
+  start: Codec.number,
+  end: Codec.number,
+  side: Codec.lenientOptional(Codec.literals(["additions", "deletions"])),
+  endSide: Codec.lenientOptional(Codec.literals(["additions", "deletions"])),
 })
 export type SelectedLineRange = typeof SelectedLineRange.Type
 
@@ -44,3 +43,4 @@ export function selectionFromLines(range: SelectedLineRange): FileSelection {
     endChar: 0,
   }
 }
+

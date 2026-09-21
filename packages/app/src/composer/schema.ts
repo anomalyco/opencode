@@ -3,7 +3,19 @@ import { checksum } from "@opencode/util/encode"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Skill } from "@opencode/schema/skill"
 import { Persistence } from "@/runtime/persistence/schema"
-import { FileSelection, SelectedLineRange } from "@/workspaces/files/types"
+// Effect twins of workspaces/files/types until this module moves to plain codecs.
+const SelectedLineRange = Persistence.struct({
+  start: Schema.Number,
+  end: Schema.Number,
+  side: Persistence.optional(Schema.Literals(["additions", "deletions"])),
+  endSide: Persistence.optional(Schema.Literals(["additions", "deletions"])),
+})
+const FileSelection = Persistence.struct({
+  startLine: Schema.Number,
+  startChar: Schema.Number,
+  endLine: Schema.Number,
+  endChar: Schema.Number,
+})
 
 const PartBase = {
   content: Schema.String,
@@ -228,3 +240,5 @@ export const PromptHistoryEntry = Schema.Union([HistoryEntry, HistoryPrompt]).pi
 export type PromptHistoryEntry = typeof PromptHistoryEntry.Type
 
 export const PromptHistoryState = Persistence.struct({ entries: Persistence.array(PromptHistoryEntry) })
+
+

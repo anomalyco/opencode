@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
+import { Codec } from "@/runtime/persistence/codec"
 import {
   activeCommandRegistrations,
   addCommandRegistration,
@@ -10,12 +10,12 @@ import {
 } from "./command"
 
 test("command catalog persistence validates metadata and omits executable fields", () => {
-  const decode = Schema.decodeUnknownSync(CommandCatalog)
+  const decode = ((input: unknown) => Codec.decodeOrThrow(CommandCatalog, input))
   const catalog = decode({ open: { title: "Open", keybind: "mod+o", hidden: false, onSelect: "invalid" } })
   expect(catalog).toEqual({ open: { title: "Open", keybind: "mod+o", hidden: false } })
   expect(decode({})).toEqual({})
   expect(() => decode({ open: { title: 1 } })).toThrow()
-  expect(decode(Schema.encodeSync(CommandCatalog)(catalog))).toEqual(catalog)
+  expect(decode(CommandCatalog.encode(catalog))).toEqual(catalog)
 })
 
 const paletteOptions: CommandOption[] = [
@@ -79,3 +79,4 @@ describe("resolveKeybindOption", () => {
     expect(resolveKeybindOption([fallback, contextual], new KeyboardEvent("keydown"))).toBe(fallback)
   })
 })
+
