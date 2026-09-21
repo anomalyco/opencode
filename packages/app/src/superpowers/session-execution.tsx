@@ -51,6 +51,7 @@ export function createSessionExecutionModel(input: {
       rootSessionID: root,
     })
   })
+  const executionVisible = () => input.session.layout.tabs().active() === SESSION_EXECUTION_TAB
   const nativeExecution = createNativeExecutionOwner({
     scope: () => {
       const current = scope()
@@ -67,11 +68,15 @@ export function createSessionExecutionModel(input: {
   const agents = createMemo<ExecutionAgent[]>(() =>
     (nativeExecution.snapshot()?.nodes ?? []).map((record) => ({ ...record, state: nativeState(record) })),
   )
-  nativeExecution.refresh()
+  const refreshNative = () => {
+    if (!executionVisible()) return
+    nativeExecution.refresh()
+  }
+  refreshNative()
   createEffect(() => {
     input.session.identity.sessionID()
     scope()
-    nativeExecution.refresh()
+    refreshNative()
   })
   onCleanup(() => nativeExecution.dispose())
   const resolveEvidence: EvidenceResolver = async ({ sessionID, messageID, partID }) => {
@@ -97,7 +102,7 @@ export function createSessionExecutionModel(input: {
     api: () => sdk.api.rpc(ExecutionRpc),
     events: sdk.event,
     connection: () => sdk.connection.status() === "connected",
-    visible: () => input.session.layout.tabs().active() === SESSION_EXECUTION_TAB,
+    visible: executionVisible,
     narrow: () => !input.session.isDesktop(),
     preferences: createExecutionPreferences(),
     attention: input.attention,
