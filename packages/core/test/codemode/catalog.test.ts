@@ -6,14 +6,14 @@ const entry = (path: string, description: string, signature?: string, pinned = f
   type: "tool",
   name: path,
   description,
-  signature: signature ?? `tools.${path}(input: {\n  q: string,\n}): Promise<string>`,
+  signature: signature ?? `tools.${path}({\n  q: string,\n}): Promise<string>`,
   pinned,
 })
 
 const lookup = entry(
   "orders.lookup",
   "Look up an order by ID",
-  "tools.orders.lookup(input: {\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
+  "tools.orders.lookup({\n  id: string,\n}): Promise<{\n  id: string,\n  status: string,\n}>",
 )
 
 const render = (tools: CodeModeCatalog.Inventory["tools"], budget?: number) =>
@@ -133,7 +133,7 @@ describe("CodeModeInstructions.render", () => {
     expect(partial).toContain(
       "The catalog is partial. Inside `execute`, use `search(...)` to find a tool, then call it by the `path` in the result. `search` is synchronous. Call it without `await`; it does not return a Promise.",
     )
-    expect(partial).toContain("- search(input: {")
+    expect(partial).toContain("- search({")
     expect(partial).toContain("  /** @integer @exclusiveMinimum 0 */\n  limit?: number,")
     expect(partial).toContain("  /** @integer @minimum 0 */\n  offset?: number,")
     expect(partial).not.toContain("tools.orders.lookup(input:")
@@ -145,7 +145,7 @@ describe("CodeModeInstructions.render", () => {
     const expensive = entry(
       "alpha.expensive",
       "Expensive",
-      `tools.alpha.expensive(input: {\n  aVeryLongParameterName: string,\n  anotherEvenLongerParameterName: number,\n  yetAnotherExtremelyVerboseParameterName: string,\n}): Promise<string>`,
+      `tools.alpha.expensive({\n  aVeryLongParameterName: string,\n  anotherEvenLongerParameterName: number,\n  yetAnotherExtremelyVerboseParameterName: string,\n}): Promise<string>`,
     )
     // Round 1 places alpha.cheap and beta.cheap; in round 2 alpha.expensive does not fit,
     // which marks only alpha done - it must NOT prevent other namespaces from inlining.
@@ -166,7 +166,7 @@ describe("CodeModeInstructions.render", () => {
     const documented = entry(
       "records.lookup",
       "Look up a record",
-      `tools.records.lookup(input: {\n  /** ${"A detailed identifier description. ".repeat(20).trim()} */\n  id: string,\n}): Promise<string>`,
+      `tools.records.lookup({\n  /** ${"A detailed identifier description. ".repeat(20).trim()} */\n  id: string,\n}): Promise<string>`,
     )
     const instructions = render([documented], 40)
     expect(instructions).toContain("- records (1 tool, none shown)")
@@ -184,7 +184,7 @@ describe("CodeModeInstructions.update", () => {
   const echo = entry("notes.echo", "Echo text")
 
   test("renders additions, changes, and removals as a compact semantic delta", () => {
-    const changed = { ...echo, signature: "tools.notes.echo(input: {\n  text: string,\n}): Promise<string>" }
+    const changed = { ...echo, signature: "tools.notes.echo({\n  text: string,\n}): Promise<string>" }
     const added = entry("notes.list", "List notes")
     const unchanged = Array.from({ length: 5 }, (_, index) => entry(`stable.tool${index}`, `Stable ${index}`))
     const text = update([echo, lookup, ...unchanged], [changed, added, ...unchanged])
