@@ -69,6 +69,17 @@
 
 [data-component="collapsible"].thinking-state-collapsible [data-slot="basic-tool-tool-info-structured"] {
   min-width: 0;
+  /* Keep the measured header box as wide as its text: the steps subtitle opts out of truncation
+     (see below), so a shrinking box lets that text overlap the disclosure arrow. */
+  flex-shrink: 0;
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="basic-tool-tool-info-main"] {
+  flex-shrink: 0;
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="thinking-state-trigger-main"] {
+  flex-shrink: 0;
 }
 
 [data-component="collapsible"].thinking-state-collapsible [data-slot="basic-tool-tool-info-main"] {
@@ -153,9 +164,16 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  font-size: 11px;
-  line-height: 16px;
   color: var(--v2-icon-icon-muted);
+}
+
+/* Zero-width text so the marker keeps a real baseline for the row to align against. */
+[data-slot="thinking-item-status-anchor"] {
+  width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 16px;
+  visibility: hidden;
 }
 
 [data-component="collapsed-tool-group"][data-thinking="true"]
@@ -164,23 +182,8 @@
 }
 
 [data-component="collapsed-tool-group"][data-thinking="true"]
-  [data-slot="thinking-item-status"][data-status="completed"]::before {
-  content: "✓";
-}
-
-[data-component="collapsed-tool-group"][data-thinking="true"]
   [data-slot="thinking-item-status"][data-status="error"] {
   color: var(--v2-state-fg-danger);
-}
-
-[data-component="collapsed-tool-group"][data-thinking="true"]
-  [data-slot="thinking-item-status"][data-status="error"]::before {
-  content: "×";
-}
-
-[data-component="collapsed-tool-group"][data-thinking="true"]
-  [data-slot="thinking-item-status"][data-status="pending"]::before {
-  content: "○";
 }
 
 [data-component="collapsed-tool-group"][data-thinking="true"]
@@ -188,15 +191,25 @@
   color: var(--v2-icon-icon-base);
 }
 
+/* Pending and running share one drawn dot so the glyph column keeps a constant ink width. */
+[data-slot="thinking-item-dot"] {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+}
+
 [data-component="collapsed-tool-group"][data-thinking="true"]
-  [data-slot="thinking-item-status"][data-status="running"]::before {
-  content: "●";
-  animation: thinking-item-running 1s ease-in-out infinite;
+  [data-slot="thinking-item-status"][data-status="running"]
+  [data-slot="thinking-item-dot"] {
+  background: currentColor;
+  animation: thinking-item-running 1.2s ease-in-out infinite;
 }
 
 @keyframes thinking-item-running {
   50% {
-    opacity: 0.35;
+    opacity: 0.3;
   }
 }
 
@@ -213,6 +226,23 @@
   > :not([data-slot="thinking-item-status"]) {
   min-width: 0;
   flex: 1;
+}
+
+/* Tool cards centre their own leading icon, so baseline alignment leaves the row marker visibly
+   low. Centre only cards; prose, task rows, and chip rows keep their text baseline. */
+[data-component="collapsed-tool-group"][data-thinking="true"]
+  [data-slot="context-tool-group-item"]:has(> [data-component="tool-part-wrapper"]) {
+  align-items: center;
+}
+
+/* Error cards already render their own status icon, so the row marker would double it. Hide the
+   gutter mark and let the card icon sit in the gutter instead. */
+[data-component="collapsed-tool-group"][data-thinking="true"]
+  [data-slot="context-tool-group-item"]:has(
+    > [data-component="tool-part-wrapper"] [data-slot="basic-tool-tool-indicator"]
+  )
+  > [data-slot="thinking-item-status"] {
+  display: none;
 }
 
 [data-component="thinking-tool-chips"] {
@@ -236,6 +266,8 @@
   gap: 4px;
   max-width: 100%;
   min-height: 22px;
+  /* The pill aligns to the marker gutter on its own; its glyph is inset by this padding, which is
+     how a pill is meant to read. */
   padding: 2px 8px 2px 4px;
   border: 0.5px solid var(--v2-border-border-base);
   border-radius: var(--radius-md);
@@ -259,11 +291,13 @@
 
 [data-component="thinking-tool-chip"] [data-slot="thinking-item-status"] {
   display: inline-flex;
-  margin-top: 0;
   width: 12px;
   height: 12px;
-  font-size: 10px;
-  line-height: 12px;
+}
+
+[data-component="thinking-tool-chip"] [data-slot="thinking-item-status"] [data-slot="icon-svg"] {
+  width: 12px;
+  height: 12px;
 }
 
 [data-slot="thinking-tool-chip-title"] {

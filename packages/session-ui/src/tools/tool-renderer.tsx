@@ -690,11 +690,7 @@ export function CurrentContextToolGroup(props: {
                         <Show when={callback()}>
                           {(part) => (
                             <div data-slot="context-tool-group-item">
-                              <span
-                                data-slot="thinking-item-status"
-                                data-status={thinkingRowStatus(part())}
-                                aria-hidden="true"
-                              />
+                              <ThinkingStatusMark status={thinkingRowStatus(part())} />
                               {part().render()}
                             </div>
                           )}
@@ -703,11 +699,7 @@ export function CurrentContextToolGroup(props: {
                     >
                       {(part) => (
                         <div data-slot="context-tool-group-item">
-                          <span
-                            data-slot="thinking-item-status"
-                            data-status={thinkingRowStatus(part())}
-                            aria-hidden="true"
-                          />
+                          <ThinkingStatusMark status={thinkingRowStatus(part())} />
                           <AssistantReasoningContent
                             id={part().id}
                             content={part()}
@@ -745,11 +737,7 @@ export function CurrentContextToolGroup(props: {
                               when={thinking() && tool().state.status !== "error" && tool().name !== "subagent"}
                               fallback={
                                 <>
-                            <span
-                              data-slot="thinking-item-status"
-                              data-status={thinkingRowStatus(group())}
-                              aria-hidden="true"
-                            />
+                            <ThinkingStatusMark status={thinkingRowStatus(group())} />
                             <Show
                               when={
                                 tool().state.status !== "error" &&
@@ -1095,7 +1083,7 @@ function ThinkingTaskRow(props: {
             : undefined
         }
       >
-        <span data-slot="thinking-item-status" data-status={status()} aria-hidden="true" />
+        <ThinkingStatusMark status={status()} />
         <span data-slot="thinking-task-title">
           <TextShimmer text={copy().title} active={running()} />
         </span>
@@ -1150,7 +1138,7 @@ function ThinkingToolChips(props: {
                   props.onSizeChange?.()
                 }}
               >
-                <span data-slot="thinking-item-status" data-status={status()} aria-hidden="true" />
+                <ThinkingStatusMark status={status()} size="small" />
                 <span data-slot="thinking-tool-chip-title">
                   <TextShimmer
                     text={trigger.title}
@@ -1208,6 +1196,26 @@ function thinkingRowStatus(
   if (part.state.status === "running") return "running"
   if (currentToolFailed(part) || part.state.status === "error") return "error"
   return "completed"
+}
+
+// The gutter marker uses the product icon set rather than text glyphs: "✓" and "×" have very
+// different ink widths from "○"/"●" in any font, which made the column look uneven.
+function ThinkingStatusMark(props: {
+  status: "pending" | "running" | "completed" | "error"
+  size?: "small" | "normal"
+}) {
+  const icon = () =>
+    props.status === "completed" ? "check" : props.status === "error" ? "xmark-small" : undefined
+  return (
+    <span data-slot="thinking-item-status" data-status={props.status} aria-hidden="true">
+      {/* A non-breaking space keeps a real text baseline so the row can align the marker on the
+          first line; an SVG on its own would align by its bottom edge instead. */}
+      <span data-slot="thinking-item-status-anchor">{"\u00a0"}</span>
+      <Show when={icon()} fallback={<span data-slot="thinking-item-dot" />}>
+        {(name) => <Icon name={name()} size={props.size ?? "small"} />}
+      </Show>
+    </span>
+  )
 }
 
 export function CurrentFileToolGroup(props: {
