@@ -153,7 +153,6 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  margin-top: 6px;
   font-size: 11px;
   line-height: 16px;
   color: var(--v2-icon-icon-muted);
@@ -203,7 +202,9 @@
 
 [data-component="collapsed-tool-group"][data-thinking="true"] [data-slot="context-tool-group-item"] {
   flex-direction: row;
-  align-items: flex-start;
+  /* Baseline keeps the marker on the first text line of every row kind: prose, task rows, and
+     chip rows have different heights, so a fixed offset only ever lined up with one of them. */
+  align-items: baseline;
   gap: 6px;
 }
 
