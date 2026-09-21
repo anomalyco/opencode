@@ -218,6 +218,19 @@ describe("property deletion", () => {
     ).toEqual([true, true, { keep: 1 }])
   })
 
+  test("a non-reference operand is evaluated and the result is true; a variable cannot be deleted", async () => {
+    expect(
+      await value(`
+        let called = false
+        const results = [delete 0, delete null, delete { x: 1 }, delete void 0, delete (() => { called = true })()]
+        let variable = 1
+        let failure
+        try { delete variable } catch (error) { failure = error.constructor.name }
+        return [results, called, failure]
+      `),
+    ).toEqual([[true, true, true, true, true], true, "TypeError"])
+  })
+
   test("evaluates computed object and key expressions once", async () => {
     expect(
       await value(`

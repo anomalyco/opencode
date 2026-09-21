@@ -74,6 +74,7 @@ import {
   IteratorObj,
   type Cursor,
   has,
+  hidden,
   hasPrototype,
   keys,
   Native,
@@ -454,8 +455,9 @@ class Frame<R> {
     node: FunctionDeclaration | FunctionExpression | ArrowFunctionExpression,
     name = node.type === "ArrowFunctionExpression" ? "" : (node.id?.name ?? ""),
   ): Fn {
-    return new Fn(
-      this.ctx.builtins.Function,
+    const builtins = this.ctx.builtins
+    const fn = new Fn(
+      builtins.Function,
       name,
       node.params,
       node.body,
@@ -463,6 +465,14 @@ class Frame<R> {
       node.async,
       node.generator,
     )
+    // Each generator function gets its own prototype, so `g() instanceof g` holds as in JS.
+    if (node.generator)
+      define(fn, "prototype", new Obj(node.async ? builtins.AsyncGenerator : builtins.Generator), hidden)
+    // The body of a named function expression sees its own name, read-only.
+    if (node.type === "FunctionExpression" && node.id) {
+      fn.capturedScopes.push(new Map([[node.id.name, { mutable: false, value: fn, initialized: true }]]))
+    }
+    return fn
   }
 
   // NamedEvaluation: an anonymous function definition takes the name of what it is assigned to.
@@ -473,10 +483,11 @@ class Frame<R> {
     return this.evaluateExpression(node)
   }
 
+  // Repeated `function` declarations and `var` clashes are legal: the last declaration wins.
   private hoistFunctions(statements: ReadonlyArray<Statement | ModuleDeclaration>): void {
     for (const node of statements) {
       if (node.type !== "FunctionDeclaration") continue
-      this.scopes.declare(node.id.name, this.createFunction(node), true, node)
+      this.scopes.current().set(node.id.name, { mutable: true, value: this.createFunction(node), initialized: true })
     }
   }
 
@@ -1679,7 +1690,7 @@ class Frame<R> {
 
         return yield* invocation.evaluateExpression(fn.body)
       })
-      if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn.async))
+      if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn))
       if (!fn.async) return run
       return this.ctx.pending.createWithSelf((self) =>
         Effect.flatMap(run, (value) => resolvePromiseValue(invocation.ctx, value, self)),
@@ -1687,11 +1698,8 @@ class Frame<R> {
     })
   }
 
-  private createGenerator(
-    invocation: Frame<R>,
-    run: Effect.Effect<Value, unknown, R>,
-    asynchronous: boolean,
-  ): GeneratorObj {
+  private createGenerator(invocation: Frame<R>, run: Effect.Effect<Value, unknown, R>, fn: Fn): GeneratorObj {
+    const asynchronous = fn.async
     const state: GeneratorState = { started: false, completed: false, draining: false, pending: [], pendingIndex: 0 }
     invocation.generatorState = state
     invocation.generatorAsync = asynchronous
@@ -1759,12 +1767,8 @@ class Frame<R> {
       }
       return Deferred.await(request.response)
     }
-    const generator = new GeneratorObj(
-      asynchronous ? builtins.AsyncGenerator : builtins.Generator,
-      asynchronous,
-      request,
-    )
-    return generator
+    const proto = get(fn, "prototype")
+    return new GeneratorObj(proto instanceof Obj ? proto : builtins.Generator, asynchronous, request)
   }
 
   private completeGeneratorRequests(state: GeneratorState, asynchronous: boolean): Effect.Effect<void, never, R> {
@@ -2109,9 +2113,9 @@ class Frame<R> {
 
   private evaluateDeleteExpression(argument: Expression): Effect.Effect<boolean, unknown, R> {
     const target = argument.type === "ChainExpression" ? argument.expression : argument
-    if (target.type !== "MemberExpression") {
-      throw typeError("Only data fields may be deleted.", argument)
-    }
+    if (target.type === "Identifier") throw typeError("Only data fields may be deleted.", argument)
+    // `delete <non-reference>` evaluates the operand and is true, as in JS.
+    if (target.type !== "MemberExpression") return Effect.map(this.evaluateExpression(target), () => true)
     return Effect.map(this.getMemberReference(target), (reference) => {
       if (reference === OptionalShortCircuit) return true
       if (reference instanceof ToolReference || "value" in reference || reference.receiver !== reference.target) {

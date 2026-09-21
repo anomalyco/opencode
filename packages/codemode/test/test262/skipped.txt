@@ -336,11 +336,6 @@ language/statements/function/S13.2_A1_T1.js  # #1: __func.prototype !== undefine
 language/statements/function/S13.2_A1_T2.js  # #1: __func.prototype !== undefined
 language/statements/function/S13.2_A4_T1.js  # Unknown identifier '…'.
 language/statements/function/S13.2_A4_T2.js  # #1: typeof __gunc.prototype === '…'. Actual: typeof __gunc.prototype ===undefined
-language/statements/function/S13_A3_T1.js  # Unknown identifier '…'.
-language/statements/function/S13_A6_T1.js  # Identifier '…' has already been declared.
-language/statements/function/S14_A2.js  # Unknown identifier '…'.
-language/statements/function/S14_A5_T1.js  # Identifier '…' has already been declared.
-language/statements/function/S14_A5_T2.js  # Identifier '…' has already been declared.
 language/statements/function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -390,9 +385,6 @@ language/statements/generators/dstr/obj-ptrn-prop-id-init-throws.js  # Expected 
 language/statements/generators/dstr/obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/generators/has-instance.js  # The right-hand side of '…' has no '…' object.
-language/statements/generators/prototype-typeof.js  # Expected SameValue(«"undefined"», «"object"») to be true
-language/statements/generators/prototype-uniqueness.js  # Expected true but got false
 language/statements/labeled/value-await-non-module.js  # Failed to parse TypeScript: Expression expected.
 language/statements/let/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/return/S12.9_A1_T1.js  # expected SyntaxError but the program ran

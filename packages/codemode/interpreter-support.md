@@ -145,8 +145,11 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       assignments, object literal keys, and destructuring or parameter defaults.
 - [x] Built-in functions are objects too, with `name` and `length` (`Math.max.length === 2`,
       `Array.prototype.push.name === "push"`).
-- [ ] A named function expression's name is not bound inside its own body.
-- [ ] Redeclaring a function in the same scope is rejected; in JavaScript the last declaration wins.
+- [x] A named function expression's name is bound read-only inside its own body; assigning to it throws a
+      `TypeError`, as in strict mode.
+- [x] Redeclaring a function in the same scope, or alongside a `var`, is allowed: the last declaration wins.
+- [x] Generator functions have their own `prototype` (inheriting the shared generator prototype), so
+      `g() instanceof g` holds. Plain functions have none, since they cannot construct.
 - [ ] Generator and async generator functions evaluate parameter defaults and destructuring at the first `next()`
       rather than at the call, so their errors are not thrown synchronously.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
@@ -196,7 +199,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Plain, arithmetic, bitwise, and logical assignment operators.
 - [x] Property deletion on plain data objects and arrays, including computed and optional forms; deleting an array index
       creates a hole without changing its length. Deleting a non-configurable property (`length`) or
-      assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode.
+      assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode. `delete` of a
+      non-reference (`delete 0`, `delete f()`) evaluates the operand and is `true`; `delete x` on a variable throws.
 - [ ] Operators, `switch` discriminants, template interpolation, and coercion helpers such as `String` and `isNaN`
       applied to functions and namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
 - [ ] ToPrimitive on object operands: operators, `Error(message)`, `Date` arguments, and `parseInt` radix should call
@@ -239,7 +243,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       accepted, including `.then`/`.catch` handlers and collection callbacks, and vanish at the data boundary like
       any function.
 - [x] `Promise.withResolvers()`: the same promise and resolver callables as the constructor, as a `{ promise, resolve,
-    reject }` object.
+  reject }` object.
 - [x] `Promise.try(fn, ...args)`: calls `fn` synchronously; a throw rejects, a return fulfils, and a returned promise or
       thenable is adopted.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
@@ -437,6 +441,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Static `Map.groupBy` over finite collections and custom synchronous iterators/generators, preserving key identity.
 - [x] `new Map()` from synchronous iterables of entries.
 - [x] Map `get`, `set`, `has`, `delete`, `clear`, `size`, `forEach`, `getOrInsert`, and `getOrInsertComputed`.
+      `forEach` is live: entries deleted during the walk are skipped and entries added are visited, as in JS.
 - [x] `new Set()` from synchronous iterables.
 - [x] Set `add`, `has`, `delete`, `clear`, `size`, and `forEach`.
 - [x] Live `keys`, `values`, `entries`, and `[Symbol.iterator]` iterators for Map and Set; a Set-like operand's `keys()`
