@@ -1,4 +1,3 @@
-import { Effect, Fiber } from "effect"
 import { createEffect, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SshConfig, SshItem, SshPlatform } from "./types"
@@ -24,7 +23,8 @@ export function createSshController(input: {
       | undefined
     >
   >({})
-  const tasks = new Map<string, Fiber.Fiber<void>>()
+  // One in-flight request per server; cancelling settles it immediately and ignores its outcome.
+  const tasks = new Map<string, { cancelled: boolean }>()
   const item = (id: string) => input.items().find((item) => item.config.id === id)
   const settle = (id: string) => {
     const attempt = attempts[id]
@@ -33,31 +33,32 @@ export function createSshController(input: {
     setAttempts(id, { active: false, onConnected: undefined })
     if (item(id)?.stage === "ready" && onConnected) queueMicrotask(onConnected)
   }
-  const run = (id: string, effect: Effect.Effect<unknown, unknown>) => {
+  const finish = (id: string, task: { cancelled: boolean }) => {
+    if (task.cancelled) return
+    task.cancelled = true
+    if (tasks.get(id) === task) tasks.delete(id)
+    setAttempts(id, "submitting", false)
+  }
+  const interrupt = (id: string) => {
+    const task = tasks.get(id)
+    if (task) finish(id, task)
+  }
+  const run = (id: string, work: () => Promise<unknown>) => {
     setAttempts(id, { submitting: true, error: false })
-    tasks.set(
-      id,
-      Effect.runFork(
-        effect.pipe(
-          Effect.asVoid,
-          Effect.catch(() =>
-            Effect.sync(() => {
-              setAttempts(id, "error", true)
-              if (!attempts[id]?.prompted) input.error()
-            }),
-          ),
-          Effect.ensuring(
-            Effect.sync(() => {
-              tasks.delete(id)
-              setAttempts(id, "submitting", false)
-            }),
-          ),
-        ),
-      ),
+    const task = { cancelled: false }
+    tasks.set(id, task)
+    work().then(
+      () => finish(id, task),
+      () => {
+        if (task.cancelled) return
+        setAttempts(id, "error", true)
+        if (!attempts[id]?.prompted) input.error()
+        finish(id, task)
+      },
     )
   }
   onCleanup(() => {
-    Effect.runFork(Effect.forEach([...tasks.values()], Fiber.interrupt, { discard: true }))
+    for (const id of [...tasks.keys()]) interrupt(id)
   })
   createEffect(() => {
     for (const item of input.items()) {
@@ -114,40 +115,32 @@ export function createSshController(input: {
         error: false,
         onConnected: options?.onConnected ?? (options?.replace ? attempts[config.id]?.onConnected : undefined),
       })
-      run(
-        config.id,
-        Effect.gen(function* () {
-          yield* Effect.tryPromise(() => api.start({ ...config, replace: options?.replace }))
-          // Observe admission before treating an older disconnected snapshot as cancellation.
-          yield* Effect.tryPromise(input.refresh)
-        }),
-      )
+      run(config.id, async () => {
+        await api.start({ ...config, replace: options?.replace })
+        // Observe admission before treating an older disconnected snapshot as cancellation.
+        await input.refresh()
+      })
     },
     respond: (id: string, prompt: string, value: string) => {
       const api = input.api
       if (!api || item(id)?.prompt?.id !== prompt || attempts[id]?.submitting) return
       if (attempts[id]?.answered === prompt && !attempts[id]?.error) return
       setAttempts(id, "answered", prompt)
-      run(
-        id,
-        Effect.tryPromise(() => api.respond(id, prompt, value)),
-      )
+      run(id, () => api.respond(id, prompt, value))
     },
     cancel: (id: string) => {
-      const task = tasks.get(id)
       const api = input.api
-      Effect.runFork(
-        Effect.gen(function* () {
-          if (task) yield* Fiber.interrupt(task)
-          setAttempts(id, undefined)
-          if (!api) return
-          yield* Effect.tryPromise(() => api.cancel(id))
-          if (!item(id)?.saved) yield* Effect.tryPromise(() => api.forget(id))
-        }).pipe(Effect.ignore),
-      )
+      interrupt(id)
+      setAttempts(id, undefined)
+      if (!api) return
+      void api
+        .cancel(id)
+        .then(() => (item(id)?.saved ? undefined : api.forget(id)))
+        .catch(() => undefined)
     },
     restore: (config: SshConfig) => input.api?.start({ ...config, background: true }),
     disconnect: (id: string) => input.api?.disconnect(id),
     forget: (id: string) => input.api?.forget(id),
   }
 }
+

@@ -11,6 +11,7 @@
     "./updater": "./src/shell/updates/types.ts",
     "./wsl/types": "./src/servers/wsl/types.ts",
     "./ssh": "./src/servers/ssh/types.ts",
+    "./ssh/schema": "./src/servers/ssh/schema.ts",
     "./vite": "./vite.js",
     "./index.css": "./src/index.css"
   },
@@ -94,3 +95,4 @@
     "tailwindcss": "4.3.3"
   }
 }
+

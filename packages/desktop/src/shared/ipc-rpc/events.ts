@@ -3,7 +3,7 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc"
 import { BrowserPaneEventSchema, BrowserPaneRpc } from "./browser"
 import { UpdaterStateSchema } from "./updater"
 import { WslServersEventSchema } from "./wsl"
-import { SshState } from "@opencode/app/ssh"
+import { SshState } from "@opencode/app/ssh/schema"
 
 export class SshChanged extends Schema.TaggedClass<SshChanged>()("SshChanged", { state: SshState }) {}
 
@@ -64,3 +64,4 @@ export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 
 export const DesktopEvents = Rpc.make("DesktopEvents", { success: DesktopEvent, stream: true })
 export const EventRpcs = RpcGroup.make(DesktopEvents, BrowserPaneRpc)
+

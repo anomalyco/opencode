@@ -5,7 +5,7 @@ import { NodeChildProcessSpawner } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { app, shell, type WebContents } from "electron"
 import { homedir } from "node:os"
-import { SshConfig, type SshState } from "@opencode/app/ssh"
+import { SshConfig, type SshState } from "@opencode/app/ssh/schema"
 import { SshChanged } from "../../shared/ipc-rpc/events"
 import { DesktopCli } from "../service/desktop-cli"
 import { Shutdown } from "../lifecycle/shutdown"
@@ -88,3 +88,4 @@ export const layer = Layer.effect(
     return service
   }),
 ).pipe(Layer.provide(NodeChildProcessSpawner.layer), Layer.provide(FetchHttpClient.layer))
+
