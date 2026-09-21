@@ -254,6 +254,25 @@ export interface Hooks {
       options: Record<string, any>
     },
   ) => Promise<void>
+  /**
+   * Called before every provider turn of the session loop, including each
+   * tool-call continuation, so a plugin can pick a different model per step.
+   *
+   * - `model`: The model selected for the user message
+   * - `step`: 1-based provider turn within the current loop
+   * - `output.model`: If set, this model is used for the turn instead. Unknown
+   *   models are ignored and the selected model is kept.
+   */
+  "chat.model"?: (
+    input: {
+      sessionID: string
+      agent: string
+      step: number
+      model: { providerID: string; modelID: string }
+      messages: { info: Message; parts: Part[] }[]
+    },
+    output: { model?: { providerID: string; modelID: string } },
+  ) => Promise<void>
   "chat.headers"?: (
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { headers: Record<string, string> },

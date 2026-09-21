@@ -8,7 +8,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
@@ -847,6 +847,104 @@ it.instance("loop continues when finish is tool-calls", () =>
       expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
       expect(result.info.finish).toBe("stop")
     }
+  }),
+)
+
+// Registers the "test" provider with a second model and loads a plugin that
+// implements the chat.model hook from the given source.
+const useRouterPlugin = Effect.fn("test.useRouterPlugin")(function* (source: string) {
+  const { directory: dir } = yield* TestInstance
+  const llm = yield* TestLLMServer
+  const file = path.join(dir, "router.ts")
+  const base = providerCfg(llm.url)
+  yield* writeText(file, source)
+  yield* writeConfig(dir, {
+    ...base,
+    plugin: [pathToFileURL(file).href],
+    provider: {
+      test: {
+        ...base.provider.test,
+        models: {
+          ...base.provider.test.models,
+          "cheap-model": { ...base.provider.test.models["test-model"], id: "cheap-model", name: "Cheap Model" },
+        },
+      },
+    },
+  })
+  return llm
+})
+
+const requestedModels = Effect.fn("test.requestedModels")(function* (llm: TestLLMServer.Service) {
+  return (yield* llm.inputs).map((body) => body.model)
+})
+
+it.instance("chat.model hook routes later provider turns to another model", () =>
+  Effect.gen(function* () {
+    const llm = yield* useRouterPlugin(
+      [
+        "export default async () => ({",
+        '  "chat.model": async (input, output) => {',
+        '    if (input.step > 1) output.model = { providerID: "test", modelID: "cheap-model" }',
+        "  },",
+        "})",
+      ].join("\n"),
+    )
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Routed",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.tool("first", { value: "first" })
+    yield* llm.text("second")
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+
+    expect(yield* requestedModels(llm)).toEqual(["test-model", "cheap-model"])
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") {
+      expect(result.info.modelID).toBe(ModelV2.ID.make("cheap-model"))
+      expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+    }
+  }),
+)
+
+it.instance("chat.model hook keeps the selected model when it returns an unknown model", () =>
+  Effect.gen(function* () {
+    const llm = yield* useRouterPlugin(
+      [
+        "export default async () => ({",
+        '  "chat.model": async (_input, output) => {',
+        '    output.model = { providerID: "test", modelID: "does-not-exist" }',
+        "  },",
+        "})",
+      ].join("\n"),
+    )
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "Unknown route",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("done")
+
+    const result = yield* prompt.loop({ sessionID: session.id })
+
+    expect(yield* requestedModels(llm)).toEqual(["test-model"])
+    expect(result.info.role).toBe("assistant")
+    if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
   }),
 )
 

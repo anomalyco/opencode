@@ -1138,11 +1138,11 @@ const layer = Layer.effect(
               history: msgs,
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
-          const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+          const selected = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()
 
           if (task?.type === "subtask") {
-            yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
+            yield* handleSubtask({ task, model: selected, lastUser, sessionID, session, msgs })
             continue
           }
 
@@ -1157,6 +1157,21 @@ const layer = Layer.effect(
             if (result === "stop") break
             continue
           }
+
+          const override = (yield* plugin.trigger(
+            "chat.model",
+            { sessionID, agent: lastUser.agent, step, model: lastUser.model, messages: msgs },
+            {},
+          )).model
+          const model = override
+            ? yield* provider.getModel(override.providerID, override.modelID).pipe(
+                Effect.catch(() =>
+                  Effect.logWarning("chat.model returned an unknown model", { ...override }).pipe(
+                    Effect.as(selected),
+                  ),
+                ),
+              )
+            : selected
 
           if (
             lastFinished &&
