@@ -42,6 +42,7 @@ const description = (shell?: string) =>
     "Rely on automatic truncation unless filtering the output is more useful.",
     "Commands accept an optional timeout, background commands have no timeout by default.",
     "Background commands return immediately, and you will be notified when they complete.",
+    "Commands still running after five seconds move to the background automatically. Explicit timeouts still apply.",
   ].join(" ")
 
 export const Input = Schema.Struct({
@@ -249,11 +250,16 @@ export const Plugin = {
                 return backgroundResult(info.id, info.file)
               }
 
-              const result = yield* jobs
-                .block({ id: job.id, sessionID: context.sessionID })
-                .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
-              if (result?.type === "backgrounded") {
-                yield* shell.timeout(info.id, 0)
+              const result = yield* jobs.block({ id: job.id, sessionID: context.sessionID }).pipe(
+                Effect.timeoutOrElse({
+                  duration: "5 seconds",
+                  orElse: () => Effect.succeed({ type: "auto-backgrounded" as const }),
+                }),
+                Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)),
+              )
+              if (result?.type === "backgrounded" || result?.type === "auto-backgrounded") {
+                if (result.type === "auto-backgrounded") yield* jobs.background(job.id)
+                if (result.type === "backgrounded" || input.timeout === undefined) yield* shell.timeout(info.id, 0)
                 yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
                 return backgroundResult(info.id, info.file)
               }
