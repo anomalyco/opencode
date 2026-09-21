@@ -8,7 +8,7 @@ import {
   hidden,
   Arr,
   GeneratorObj,
-  IteratorObj,
+  hostIterator,
   Obj,
   coerceToNumber,
   coerceToString,
@@ -363,14 +363,14 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
           (parts) => parts.join(","),
         ),
     ],
-    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").items.keys())],
-    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").items.values())],
+    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").items.keys())],
+    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").items.values())],
     [
       "entries",
       0,
       (thisValue) =>
-        new IteratorObj(
-          builtins.Iterator,
+        hostIterator(
+          builtins,
           self(thisValue, "entries")
             .items.entries()
             .map(([index, item]) => wrap([index, item])),

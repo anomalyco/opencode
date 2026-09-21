@@ -9,7 +9,7 @@ import {
   hidden,
   Arr,
   Bytes,
-  IteratorObj,
+  hostIterator,
   Obj,
   coerceToNumber,
   coerceToString,
@@ -184,14 +184,14 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     ["toString", 0, (thisValue) => self(thisValue, "toString").bytes.join(",")],
     ["toBase64", 0, (thisValue) => self(thisValue, "toBase64").bytes.toBase64()],
     ["toHex", 0, (thisValue) => self(thisValue, "toHex").bytes.toHex()],
-    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").bytes.keys())],
-    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").bytes.values())],
+    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").bytes.keys())],
+    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").bytes.values())],
     [
       "entries",
       0,
       (thisValue) =>
-        new IteratorObj(
-          builtins.Iterator,
+        hostIterator(
+          builtins,
           self(thisValue, "entries")
             .bytes.entries()
             .map(([index, byte]) => wrapAll([index, byte])),

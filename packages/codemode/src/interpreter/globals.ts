@@ -70,6 +70,7 @@ const table: Record<string, Factory> = {
   console: (ctx) => consoleGlobal(ctx),
   Promise: (ctx) => promiseGlobal(ctx),
   Symbol: (ctx) => symbolGlobal(ctx),
+  Iterator: (ctx) => iteratorGlobals(ctx),
   Number: (ctx) => numberGlobal(ctx),
   String: (ctx) => stringGlobal(ctx),
   Boolean: (ctx) => booleanGlobal(ctx),
@@ -103,6 +104,5 @@ export const globalNames: ReadonlySet<string> = new Set(Object.keys(table))
 /** The immutable global bindings of every program, in declaration order. */
 export const globals = <R>(ctx: Interpreter<R>): ReadonlyArray<readonly [string, Value]> => {
   generatorGlobals(ctx)
-  iteratorGlobals(ctx)
   return Object.entries(table).map(([name, factory]) => [name, factory(ctx)] as const)
 }

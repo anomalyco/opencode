@@ -239,7 +239,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       accepted, including `.then`/`.catch` handlers and collection callbacks, and vanish at the data boundary like
       any function.
 - [x] `Promise.withResolvers()`: the same promise and resolver callables as the constructor, as a `{ promise, resolve,
-    reject }` object.
+  reject }` object.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
       constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
       first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
@@ -416,6 +416,20 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Match `indices` metadata for the `d` flag, including named groups on `exec`, `match`, and `matchAll` results.
 - [x] `RegExp.escape`.
 
+## Iterator
+
+- [x] `Iterator.prototype.map`, `filter`, `take`, `drop`, and `flatMap` on any iterator or generator: lazy, one source
+      step per result, closing the source when a callback throws, on early `return()`, or when `for...of` or
+      destructuring finishes with it early. Once done or closed a helper stays done, and a callback that re-enters its
+      own helper is a `TypeError`. `take`/`drop` coerce their count and reject `NaN` or negative counts with a
+      `RangeError`; `flatMap` callbacks must return an iterable or iterator, not a string.
+- [x] `Iterator.prototype.reduce`, `toArray`, `forEach`, `some`, `every`, and `find`, closing the source on early exit.
+- [x] `Iterator.from(value)` returns iterators and generators as they are, and wraps strings, iterables, and objects
+      with a `next` method. `Iterator` itself is abstract: calling or constructing it is a `TypeError`.
+- [x] Helpers and `Iterator.from` wrappers have `return()`; collection iterators (`array.values()`) do not, as in JS,
+      so an early exit from them leaves them where they were.
+- [ ] `Iterator.concat`, `Iterator.zip`, and `Iterator.zipKeyed` (stage 3 proposals).
+
 ## Map and Set
 
 - [x] Static `Map.groupBy` over finite collections and custom synchronous iterators/generators, preserving key identity.
@@ -424,7 +438,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `new Set()` from synchronous iterables.
 - [x] Set `add`, `has`, `delete`, `clear`, `size`, and `forEach`.
 - [x] Live `keys`, `values`, `entries`, and `[Symbol.iterator]` iterators for Map and Set; a Set-like operand's `keys()`
-      may return a built-in iterator or an array.
+      may return any iterator or an array.
 - [x] Spread, `for...of`, `Array.from`, and `Object.fromEntries` integration.
 - [x] Map and Set values serialize to `{}` at host/JSON boundaries.
 - [x] Set composition and relation methods: `union`, `intersection`, `difference`, `symmetricDifference`, `isSubsetOf`,

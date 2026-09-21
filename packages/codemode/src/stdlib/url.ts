@@ -8,7 +8,7 @@ import {
   get,
   hidden,
   Arr,
-  IteratorObj,
+  hostIterator,
   Obj,
   URLObj,
   URLSearchParamsObj,
@@ -269,9 +269,9 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").params.keys())],
-    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").params.values())],
-    ["entries", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "entries").iterator(builtins))],
+    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").params.keys())],
+    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").params.values())],
+    ["entries", 0, (thisValue) => hostIterator(builtins, self(thisValue, "entries").iterator(builtins))],
     ["toString", 0, (thisValue) => self(thisValue, "toString").params.toString()],
     [
       "forEach",
