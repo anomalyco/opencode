@@ -10,12 +10,34 @@ if (built) {
   process.env.PLAYWRIGHT_SERVER_HOST = url.hostname
   process.env.PLAYWRIGHT_SERVER_PORT = url.port || "80"
 }
-const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"
-const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
+const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? executionTargetHost() ?? "127.0.0.1"
+const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? executionTargetPort() ?? "4096"
 const command = built
   ? `bun run build && bun run serve -- --host 127.0.0.1 --port ${port} --strictPort`
   : `bun run dev -- --host 127.0.0.1 --port ${port} --strictPort`
 const workers = Number(process.env.PLAYWRIGHT_WORKERS ?? (process.env.CI ? 5 : 0)) || undefined
+
+function executionTarget() {
+  const raw = process.env.EXECUTION_E2E_TARGET
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as { port?: unknown; host?: unknown }
+    return parsed && typeof parsed === "object" ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function executionTargetPort() {
+  const port = executionTarget()?.port
+  return typeof port === "number" ? String(port) : undefined
+}
+
+function executionTargetHost() {
+  const host = executionTarget()?.host
+  return typeof host === "string" && host !== "" ? host : undefined
+}
+
 export default defineConfig({
   testDir: "./e2e",
   testIgnore: [
