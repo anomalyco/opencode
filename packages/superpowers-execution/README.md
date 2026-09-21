@@ -43,12 +43,14 @@ for the user-facing guide.
    resolves back inside this repository or is a symlink, so the printed directory is genuinely
    portable and can be copied or moved.
 
-   The output path is resolved to its physical path and validated before anything is deleted or
-   created: the repository root, the package source directory, any path inside the repository
-   (including through a symlinked ancestor alias), the filesystem root, and the home directory root
-   are rejected. The stager records the physical path and filesystem identity in its marker when it
-   creates the directory. An existing directory is replaced only when its marker and current
-   filesystem identity match; cleanup re-resolves and re-stats that exact target before deleting it.
+   The output path is resolved to its physical path and validated before anything is created: the
+   repository root, the package source directory, any path inside the repository (including through
+   a symlinked ancestor alias), the filesystem root, and the home directory root are rejected. Every
+   existing output path, including an empty directory or an output from an earlier run, is rejected
+   with instructions to remove it manually. The package is built in a unique working directory under
+   the physically resolved OS temporary directory and transferred into a newly claimed output directory.
+   Only that working directory is recursively removed, after its filesystem identity is rechecked. A
+   failed output transfer is left in place for manual inspection and removal.
 
 2. Merge **one entry** into the existing `plugins` array of your server config. This is an entry to
    merge, not a replacement for your full config; keep your existing Superpowers and other plugin

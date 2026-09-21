@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -6,9 +6,9 @@ import { pathToFileURL } from "node:url"
 import type { Plugin } from "@opencode/plugin/promise/plugin"
 import {
   buildStagedPackage,
-  createStagingDirectory,
+  createWorkingDirectory,
   importStagedContractInBrowser,
-  removeStagingDirectory,
+  removeWorkingDirectory,
   repositoryRoot,
   runDisposableHostGate,
 } from "../script/package-smoke"
@@ -17,6 +17,17 @@ import { fixtureStart, memoryStorage, pluginHarness } from "./fixtures"
 
 const root = { sessionID: "root" }
 const rootSession = { id: "root" }
+const temporaryRoots: string[] = []
+
+afterEach(() => {
+  temporaryRoots.splice(0).forEach((directory) => fs.rmSync(directory, { recursive: true, force: true }))
+})
+
+function temporaryOutput(): string {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-stager-output-"))
+  temporaryRoots.push(directory)
+  return path.join(directory, "package")
+}
 
 async function stagedPlugin(directory: string): Promise<Plugin> {
   const loaded = await import(pathToFileURL(path.join(directory, "index.js")).href)
@@ -24,17 +35,21 @@ async function stagedPlugin(directory: string): Promise<Plugin> {
 }
 
 test("staged contract is browser-safe and package is self-contained", async () => {
-  const artifact = await buildStagedPackage()
+  const artifact = await buildStagedPackage({ directory: temporaryOutput() })
+  const browserSentinel = path.join(artifact.directory, ".browser/keep.txt")
+  fs.mkdirSync(path.dirname(browserSentinel))
+  fs.writeFileSync(browserSentinel, "keep")
   expect(
     Object.values(artifact.manifest.dependencies).some((value) => /^(workspace:|catalog:)/.test(String(value))),
   ).toBe(false)
   const result = await importStagedContractInBrowser(artifact)
   expect(result.rpcID).toBe("superpowers.execution.v1")
   expect(result.serverModulesLoaded).toEqual([])
+  expect(fs.readFileSync(browserSentinel, "utf8")).toBe("keep")
 })
 
 test("staged runtime dependencies are self-contained copies outside the repository", async () => {
-  const artifact = await buildStagedPackage()
+  const artifact = await buildStagedPackage({ directory: temporaryOutput() })
   const staged = fs.realpathSync(artifact.directory)
   const repository = fs.realpathSync(repositoryRoot)
   const names = Object.keys(artifact.manifest.dependencies).sort()
@@ -54,26 +69,42 @@ test("the stager rejects unsafe targets before deleting anything", async () => {
   const pluginSource = path.join(repositoryRoot, "packages/superpowers-execution/src/plugin.ts")
   const repositoryManifest = path.join(repositoryRoot, "package.json")
   const nestedTarget = path.join(repositoryRoot, "packages/superpowers-execution/.stage-guard")
+  const homeSentinel = path.join(os.homedir(), `.opencode-stager-home-${crypto.randomUUID()}`)
+  fs.writeFileSync(homeSentinel, "keep")
 
-  await expect(buildStagedPackage({ directory: repositoryRoot })).rejects.toThrow(/inside the repository/)
-  await expect(buildStagedPackage({ directory: path.dirname(pluginSource) })).rejects.toThrow(/inside the repository/)
-  await expect(buildStagedPackage({ directory: nestedTarget })).rejects.toThrow(/inside the repository/)
-  await expect(buildStagedPackage({ directory: path.parse(repositoryRoot).root })).rejects.toThrow(/filesystem root/)
-  await expect(buildStagedPackage({ directory: os.homedir() })).rejects.toThrow(/home directory root/)
+  try {
+    await expect(buildStagedPackage({ directory: repositoryRoot })).rejects.toThrow(/inside the repository/)
+    await expect(buildStagedPackage({ directory: path.dirname(pluginSource) })).rejects.toThrow(/inside the repository/)
+    await expect(buildStagedPackage({ directory: nestedTarget })).rejects.toThrow(/inside the repository/)
+    await expect(buildStagedPackage({ directory: path.parse(repositoryRoot).root })).rejects.toThrow(/filesystem root/)
+    await expect(buildStagedPackage({ directory: os.homedir() })).rejects.toThrow(/home directory root/)
 
-  expect(fs.existsSync(pluginSource)).toBe(true)
-  expect(fs.existsSync(repositoryManifest)).toBe(true)
-  expect(fs.existsSync(nestedTarget)).toBe(false)
+    expect(fs.existsSync(pluginSource)).toBe(true)
+    expect(fs.existsSync(repositoryManifest)).toBe(true)
+    expect(fs.existsSync(nestedTarget)).toBe(false)
+    expect(fs.readFileSync(homeSentinel, "utf8")).toBe("keep")
+  } finally {
+    fs.rmSync(homeSentinel, { force: true })
+  }
 })
 
-test("the stager refuses to delete a directory it does not own", async () => {
-  const foreign = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-stager-guard-"))
+test("the stager refuses every pre-existing output without deleting it", async () => {
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-stager-empty-"))
+  const foreign = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-stager-foreign-"))
+  temporaryRoots.push(empty, foreign)
   fs.writeFileSync(path.join(foreign, "keep.txt"), "keep")
 
-  await expect(buildStagedPackage({ directory: foreign })).rejects.toThrow(/does not own/)
+  await expect(buildStagedPackage({ directory: empty })).rejects.toThrow(/remove it manually/)
+  await expect(buildStagedPackage({ directory: foreign })).rejects.toThrow(/remove it manually/)
+  expect(fs.readdirSync(empty)).toEqual([])
   expect(fs.readFileSync(path.join(foreign, "keep.txt"), "utf8")).toBe("keep")
 
-  fs.rmSync(foreign, { recursive: true, force: true })
+  const output = temporaryOutput()
+  await buildStagedPackage({ directory: output })
+  fs.writeFileSync(path.join(output, "keep.txt"), "keep")
+  await expect(buildStagedPackage({ directory: output })).rejects.toThrow(/remove it manually/)
+  expect(fs.readFileSync(path.join(output, "keep.txt"), "utf8")).toBe("keep")
+  expect(fs.existsSync(path.join(output, "dist/plugin.js"))).toBe(true)
 })
 
 test("the stager rejects a symlinked-ancestor alias into the repository without deleting", async () => {
@@ -91,52 +122,42 @@ test("the stager rejects a symlinked-ancestor alias into the repository without 
   }
 })
 
-test("a symlinked path to a marked staging directory inside the repository cannot cause deletion", async () => {
+test("a symlinked output alias into the repository is rejected without touching its target", async () => {
   const packageDirectory = path.join(repositoryRoot, "packages/superpowers-execution")
-  const name = (JSON.parse(fs.readFileSync(path.join(packageDirectory, "package.json"), "utf8")) as {
-    readonly name: string
-  }).name
   const inside = fs.mkdtempSync(path.join(packageDirectory, ".stage-alias-"))
   const aliasRoot = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-stager-alias-"))
   try {
-    fs.writeFileSync(path.join(inside, ".opencode-superpowers-execution-staging"), `${name}\n`)
+    fs.writeFileSync(path.join(inside, "keep.txt"), "keep")
     const alias = path.join(aliasRoot, "marked")
     fs.symlinkSync(inside, alias, "dir")
 
     await expect(buildStagedPackage({ directory: alias })).rejects.toThrow(/inside the repository/)
-    expect(fs.existsSync(path.join(inside, ".opencode-superpowers-execution-staging"))).toBe(true)
+    expect(fs.readFileSync(path.join(inside, "keep.txt"), "utf8")).toBe("keep")
   } finally {
     fs.rmSync(aliasRoot, { recursive: true, force: true })
     fs.rmSync(inside, { recursive: true, force: true })
   }
 })
 
-test("a repointed ancestor cannot redirect cleanup to an out-of-scope directory", async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-stager-repoint-"))
-  const originalParent = path.join(root, "original")
-  const movedParent = path.join(root, "moved")
-  const foreignParent = path.join(root, "foreign")
-  const target = path.join(originalParent, "stage")
-  const foreignTarget = path.join(foreignParent, "stage")
-  fs.mkdirSync(originalParent)
-  fs.mkdirSync(foreignTarget, { recursive: true })
-  fs.writeFileSync(path.join(foreignTarget, "keep.txt"), "keep")
-
+test("working directory cleanup is bound to the mkdtemp directory identity", async () => {
+  const working = await createWorkingDirectory()
+  const moved = `${working.directory}-moved`
   try {
-    const staging = await createStagingDirectory(target)
-    fs.renameSync(originalParent, movedParent)
-    fs.symlinkSync(foreignParent, originalParent, "dir")
+    fs.renameSync(working.directory, moved)
+    fs.mkdirSync(working.directory)
+    fs.writeFileSync(path.join(working.directory, "keep.txt"), "keep")
 
-    await expect(removeStagingDirectory(staging)).rejects.toThrow(/identity changed/)
-    expect(fs.readFileSync(path.join(foreignTarget, "keep.txt"), "utf8")).toBe("keep")
-    expect(fs.existsSync(path.join(movedParent, "stage"))).toBe(true)
+    await expect(removeWorkingDirectory(working)).rejects.toThrow(/identity changed/)
+    expect(fs.readFileSync(path.join(working.directory, "keep.txt"), "utf8")).toBe("keep")
+    expect(fs.existsSync(moved)).toBe(true)
   } finally {
-    fs.rmSync(root, { recursive: true, force: true })
+    fs.rmSync(working.directory, { recursive: true, force: true })
+    fs.rmSync(moved, { recursive: true, force: true })
   }
 })
 
 test("the staged package directory entry loads its built plugin and its dist-relative reporting skill", async () => {
-  const artifact = await buildStagedPackage()
+  const artifact = await buildStagedPackage({ directory: temporaryOutput() })
   const harness = await pluginHarness({ sessions: [rootSession], plugin: await stagedPlugin(artifact.directory) })
 
   expect(harness.definition.id).toBe("superpowers.execution.v1")
@@ -152,7 +173,7 @@ test("the staged package directory entry loads its built plugin and its dist-rel
 })
 
 test("the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state", async () => {
-  const artifact = await buildStagedPackage()
+  const artifact = await buildStagedPackage({ directory: temporaryOutput() })
   const plugin = await stagedPlugin(artifact.directory)
   const storage = memoryStorage()
   const sessions = [rootSession]
@@ -202,7 +223,7 @@ test("the staged built plugin installs, reports, serves getRun, unloads, reloads
 test.skipIf(process.env.EXECUTION_PACKAGE_HOST_SMOKE !== "1")(
   "the built package directory loads in a disposable 2.0.11 host and survives an isolated restart",
   async () => {
-    const artifact = await buildStagedPackage()
+    const artifact = await buildStagedPackage({ directory: temporaryOutput() })
     const result = await runDisposableHostGate(artifact)
     expect(result.first.pluginVersion).toBe("0.1.0")
     expect(result.first.runCount).toBe(0)

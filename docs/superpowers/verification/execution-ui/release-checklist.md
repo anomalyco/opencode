@@ -65,12 +65,14 @@ Self-containment is enforced by the stager and asserted by a test:
 - each installed dependency version equals the staged manifest's exact range.
 
 Caller-supplied output paths are resolved to their physical path (the deepest existing ancestor's
-real path plus the remaining segments) and validated before any deletion or creation: the repository
-root, the package source directory, any path inside the repository (including via a symlinked
-ancestor alias), the filesystem root, and the home directory root are rejected. The stager records
-the physical path and filesystem identity in its marker when it creates the directory. An existing
-directory is replaced only when its marker and current filesystem identity match; cleanup re-resolves
-and re-stats that exact target before deleting it.
+real path plus the remaining segments) and validated before creation. The repository root, the
+package source directory, any path inside the repository (including via a symlinked ancestor alias),
+the filesystem root, and the home directory root are rejected. Every existing output path is refused,
+including empty directories and outputs from earlier runs. The stager builds under a unique
+`mkdtemp` directory whose OS temporary parent is physically resolved and validated outside the
+repository, records that working directory's filesystem identity, and revalidates the trusted parent,
+path, type, device, and inode immediately before recursively removing only that working directory.
+The requested output is never recursively removed; a failed transfer is left for manual removal.
 
 Staging installs the published exact-version packages from the registry (`bun install --production
 --ignore-scripts`), so the first staging run needs registry access; later runs use the Bun cache.
@@ -126,18 +128,19 @@ plugin harness:
 
 ```text
 $ cd packages/superpowers-execution && bun run package:smoke
-(pass) staged contract is browser-safe and package is self-contained [2437.65ms]
-(pass) staged runtime dependencies are self-contained copies outside the repository [2207.37ms]
-(pass) the stager rejects unsafe targets before deleting anything [2.71ms]
-(pass) the stager refuses to delete a directory it does not own [1150.01ms]
-(pass) the stager rejects a symlinked-ancestor alias into the repository without deleting [1.66ms]
-(pass) a symlinked path to a marked staging directory inside the repository cannot cause deletion [1.87ms]
-(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2302.77ms]
-(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2196.64ms]
+(pass) staged contract is browser-safe and package is self-contained [2802.73ms]
+(pass) staged runtime dependencies are self-contained copies outside the repository [2442.15ms]
+(pass) the stager rejects unsafe targets before deleting anything [5.85ms]
+(pass) the stager refuses every pre-existing output without deleting it [2374.31ms]
+(pass) the stager rejects a symlinked-ancestor alias into the repository without deleting [1.77ms]
+(pass) a symlinked output alias into the repository is rejected without touching its target [1.79ms]
+(pass) working directory cleanup is bound to the mkdtemp directory identity [2.98ms]
+(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2535.11ms]
+(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2655.91ms]
 (skip) the built package directory loads in a disposable 2.0.11 host and survives an isolated restart
 
- 8 pass / 1 skip / 0 fail
- 50 expect() calls
+ 9 pass / 1 skip / 0 fail
+ 61 expect() calls
 ```
 
 The lifecycle case installs (`setup`), reports (`execution_report` → revision 1), reads `getRun`,
@@ -148,18 +151,19 @@ recovers the stored run plus its summary.
 
 ```text
 $ cd packages/superpowers-execution && bun run package:host-smoke
-(pass) staged contract is browser-safe and package is self-contained [2517.35ms]
-(pass) staged runtime dependencies are self-contained copies outside the repository [2115.60ms]
-(pass) the stager rejects unsafe targets before deleting anything [2.26ms]
-(pass) the stager refuses to delete a directory it does not own [1064.61ms]
-(pass) the stager rejects a symlinked-ancestor alias into the repository without deleting [1.58ms]
-(pass) a symlinked path to a marked staging directory inside the repository cannot cause deletion [1.84ms]
-(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2176.80ms]
-(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2272.36ms]
-(pass) the built package directory loads in a disposable 2.0.11 host and survives an isolated restart [9739.90ms]
+(pass) staged contract is browser-safe and package is self-contained [2694.26ms]
+(pass) staged runtime dependencies are self-contained copies outside the repository [3105.43ms]
+(pass) the stager rejects unsafe targets before deleting anything [2.81ms]
+(pass) the stager refuses every pre-existing output without deleting it [2596.55ms]
+(pass) the stager rejects a symlinked-ancestor alias into the repository without deleting [1.96ms]
+(pass) a symlinked output alias into the repository is rejected without touching its target [2.09ms]
+(pass) working directory cleanup is bound to the mkdtemp directory identity [3.19ms]
+(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2846.43ms]
+(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2658.76ms]
+(pass) the built package directory loads in a disposable 2.0.11 host and survives an isolated restart [10751.55ms]
 
- 9 pass / 0 fail
- 54 expect() calls
+ 10 pass / 0 fail
+ 65 expect() calls
 ```
 
 Raw gate result:

@@ -1,17 +1,17 @@
 import { chromium } from "@playwright/test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { repositoryRoot, type StagedPackage } from "./stage"
+import { createWorkingDirectory, removeWorkingDirectory, repositoryRoot, type StagedPackage } from "./stage"
 
 export {
   buildStagedPackage,
-  createStagingDirectory,
-  removeStagingDirectory,
+  createWorkingDirectory,
+  removeWorkingDirectory,
   repositoryRoot,
   stagedPackageDirectory,
 } from "./stage"
-export type { StagedManifest, StagedPackage, StagingDirectory } from "./stage"
+export type { StagedManifest, StagedPackage, WorkingDirectory } from "./stage"
 
 export interface BrowserContractResult {
   readonly rpcID: string
@@ -31,51 +31,54 @@ export interface HostGateResult {
 }
 
 export async function importStagedContractInBrowser(staged: StagedPackage): Promise<BrowserContractResult> {
-  const browserDirectory = path.join(staged.directory, ".browser")
-  await rm(browserDirectory, { recursive: true, force: true })
-  const bundle = await Bun.build({
-    entrypoints: [path.join(staged.directory, "dist/contract.js")],
-    outdir: browserDirectory,
-    target: "browser",
-    format: "esm",
-    packages: "bundle",
-    metafile: true,
-  })
-  if (!bundle.success) throw new AggregateError(bundle.logs, "staged contract browser bundle failed")
-  const output = bundle.outputs[0]
-  if (output === undefined) throw new Error("staged contract browser bundle produced no output")
-  if (bundle.metafile === undefined) throw new Error("staged contract browser bundle produced no metafile")
-
-  const serverModulesLoaded = serverModules(bundle.metafile.inputs)
-  const source = await Bun.file(output.path).text()
-  const server = Bun.serve({
-    port: 0,
-    fetch(request) {
-      const url = new URL(request.url)
-      if (url.pathname === "/contract.js") {
-        return new Response(source, { headers: { "content-type": "text/javascript" } })
-      }
-      return new Response(browserPage, { headers: { "content-type": "text/html" } })
-    },
-  })
-
-  const browser = await chromium.launch()
+  const working = await createWorkingDirectory()
   try {
-    const page = await browser.newPage()
-    const failures: string[] = []
-    page.on("pageerror", (error) => failures.push(String(error)))
-    page.on("console", (message) => {
-      if (message.type() === "error") failures.push(message.text())
+    const bundle = await Bun.build({
+      entrypoints: [path.join(staged.directory, "dist/contract.js")],
+      outdir: path.join(working.directory, "browser"),
+      target: "browser",
+      format: "esm",
+      packages: "bundle",
+      metafile: true,
     })
-    await page.goto(`http://127.0.0.1:${server.port}/`)
-    await page.waitForFunction(() => (globalThis as unknown as BrowserWindow).__executionContract !== undefined)
-    const result = await page.evaluate(() => (globalThis as unknown as BrowserWindow).__executionContract)
-    if (result === undefined) throw new Error("browser contract import produced no result")
-    if (failures.length > 0) throw new Error(`browser contract import failed: ${failures.join(" | ")}`)
-    return { rpcID: result.rpcID, serverModulesLoaded }
+    if (!bundle.success) throw new AggregateError(bundle.logs, "staged contract browser bundle failed")
+    const output = bundle.outputs[0]
+    if (output === undefined) throw new Error("staged contract browser bundle produced no output")
+    if (bundle.metafile === undefined) throw new Error("staged contract browser bundle produced no metafile")
+
+    const serverModulesLoaded = serverModules(bundle.metafile.inputs)
+    const source = await Bun.file(output.path).text()
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/contract.js") {
+          return new Response(source, { headers: { "content-type": "text/javascript" } })
+        }
+        return new Response(browserPage, { headers: { "content-type": "text/html" } })
+      },
+    })
+
+    const browser = await chromium.launch()
+    try {
+      const page = await browser.newPage()
+      const failures: string[] = []
+      page.on("pageerror", (error) => failures.push(String(error)))
+      page.on("console", (message) => {
+        if (message.type() === "error") failures.push(message.text())
+      })
+      await page.goto(`http://127.0.0.1:${server.port}/`)
+      await page.waitForFunction(() => (globalThis as unknown as BrowserWindow).__executionContract !== undefined)
+      const result = await page.evaluate(() => (globalThis as unknown as BrowserWindow).__executionContract)
+      if (result === undefined) throw new Error("browser contract import produced no result")
+      if (failures.length > 0) throw new Error(`browser contract import failed: ${failures.join(" | ")}`)
+      return { rpcID: result.rpcID, serverModulesLoaded }
+    } finally {
+      await browser.close()
+      server.stop(true)
+    }
   } finally {
-    await browser.close()
-    server.stop(true)
+    await removeWorkingDirectory(working)
   }
 }
 
