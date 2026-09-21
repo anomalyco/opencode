@@ -493,11 +493,91 @@ export function gateOrderRun(): RunSnapshot {
   })
 }
 
+export function taskGraphFixture(): Task[] {
+  return [
+    taskFixture({
+      id: "schema",
+      title: "Implement storage schema",
+      phase: "Implementation",
+      order: 0,
+      dependsOn: [],
+      state: "verified",
+      requiredGates: ["tests"],
+      finalReview: false,
+    }),
+    taskFixture({
+      id: "api",
+      title: "Implement RPC tools",
+      phase: "Implementation",
+      order: 1,
+      dependsOn: ["schema"],
+      state: "awaiting_review",
+      requiredGates: ["tests", "code_review"],
+      finalReview: false,
+    }),
+    taskFixture({
+      id: "cli",
+      title: "Wire the command-line interface, its generated client surface, and adapters",
+      phase: "Implementation",
+      order: 2,
+      dependsOn: ["schema"],
+      state: "running",
+      requiredGates: ["tests"],
+      finalReview: false,
+    }),
+    taskFixture({
+      id: "tests",
+      title: "Run the full suite",
+      phase: "Verification",
+      order: 3,
+      dependsOn: ["api", "cli"],
+      state: "pending",
+      requiredGates: ["tests"],
+      finalReview: false,
+    }),
+    taskFixture({
+      id: "final-review",
+      title: "Review the whole branch",
+      phase: "Review",
+      order: 4,
+      dependsOn: ["tests"],
+      state: "pending",
+      requiredGates: ["code_review"],
+      finalReview: true,
+    }),
+  ]
+}
+
+export function taskGraphRun(): RunSnapshot {
+  return runFixture({
+    tasks: taskGraphFixture(),
+    assignments: [
+      fixtureAssignment({ id: "g-schema", taskID: "schema", sessionID: "child", role: "implementer" }),
+      fixtureAssignment({ id: "g-api-impl", taskID: "api", sessionID: "child", role: "implementer" }),
+      fixtureAssignment({ id: "g-api-review", taskID: "api", sessionID: "idle-child", role: "code_reviewer" }),
+    ],
+  })
+}
+
+export function largeGraphRun(): RunSnapshot {
+  const tasks = Array.from({ length: 250 }, (_, index) =>
+    taskFixture({
+      id: `task-${String(index).padStart(3, "0")}`,
+      title: `Task ${String(index).padStart(3, "0")}`,
+      phase: index % 2 === 0 ? "Build" : "Verify",
+      order: index,
+    }),
+  )
+  return runFixture({ tasks })
+}
+
 export function taskRunFixture(scenario: string): RunSnapshot | undefined {
   if (scenario === "half-verified") return halfVerifiedRun()
   if (scenario === "tasks-detailed") return detailedTasksRun()
   if (scenario === "tasks-scope") return smallScopeRun()
   if (scenario === "tasks-stale") return halfVerifiedRun()
   if (scenario === "tasks-gate-order") return gateOrderRun()
+  if (scenario === "map") return taskGraphRun()
+  if (scenario === "map-large") return largeGraphRun()
   return undefined
 }

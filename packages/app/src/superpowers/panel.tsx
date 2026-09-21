@@ -2,6 +2,7 @@ import "./execution.css"
 import { For, Match, Show, Switch } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExecutionAgentList } from "./agent-list"
+import { ExecutionMap } from "./execution-map"
 import { ExecutionTaskDetails } from "./task-details"
 import { ExecutionTaskList } from "./task-list"
 import { EXECUTION_SUBVIEWS, structuredViewsEnabled, type ExecutionModel } from "./model"
@@ -71,9 +72,18 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
             </Show>
           </Match>
           <Match when={effectiveSubview() === "map"}>
-            <div data-slot="execution-graph" data-testid="execution-graph" class="execution-panel__graph">
-              <TrackingUnavailable model={props.model} />
-            </div>
+            <Show
+              when={props.model.run()}
+              fallback={
+                <div data-slot="execution-graph" data-testid="execution-graph" class="execution-panel__graph">
+                  <TrackingUnavailable model={props.model} />
+                </div>
+              }
+            >
+              <div data-slot="execution-graph" data-testid="execution-graph" class="execution-panel__graph-view">
+                <ExecutionMap model={props.model} />
+              </div>
+            </Show>
           </Match>
           <Match when={effectiveSubview() === "tasks"}>
             <div data-slot="execution-tasks-view" class="execution-tasks-view">

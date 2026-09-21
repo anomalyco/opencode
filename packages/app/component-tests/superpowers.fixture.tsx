@@ -297,7 +297,8 @@ export async function mountExecutionFixture(input: {
 
   function Fixture() {
     const taskScenario = scenario.startsWith("tasks") || scenario === "half-verified"
-    const executionInitiallyOpen = scenario.startsWith("agents") || taskScenario
+    const graphScenario = scenario === "map" || scenario === "map-large"
+    const executionInitiallyOpen = scenario.startsWith("agents") || taskScenario || graphScenario
     const [run, setRun] = createSignal<RunSnapshot | undefined>(taskRunFixture(scenario))
     const [state, setState] = createStore({
       active: executionInitiallyOpen ? (SESSION_EXECUTION_TAB as string | undefined) : undefined,
@@ -397,6 +398,27 @@ export async function mountExecutionFixture(input: {
           </button>
           <button type="button" onClick={() => setRun(increasedScopeRun())}>
             Show increased scope fixture
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setRun((current) =>
+                current
+                  ? {
+                      ...current,
+                      revision: current.revision + 1,
+                      updatedAt: current.updatedAt + 1,
+                      tasks: current.tasks.map((task, index) =>
+                        index === 0
+                          ? { ...task, state: task.state === "verified" ? ("running" as const) : ("verified" as const) }
+                          : task,
+                      ),
+                    }
+                  : current,
+              )
+            }
+          >
+            Advance task status
           </button>
           <button
             type="button"

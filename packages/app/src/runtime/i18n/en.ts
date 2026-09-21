@@ -955,6 +955,23 @@ export const dict = {
   "execution.task.assignments.native": "Native: {{state}}",
   "execution.task.assignments.sessionUnavailable": "Session unavailable",
 
+  "execution.map.label": "Task dependency map",
+  "execution.map.controls.label": "Map controls",
+  "execution.map.viewport.label": "Task dependency map",
+  "execution.map.node.label": "{{title}}, {{state}}, phase {{phase}}",
+  "execution.map.zoom.in": "Zoom in",
+  "execution.map.zoom.out": "Zoom out",
+  "execution.map.fit": "Fit to content",
+  "execution.map.reset": "Reset view",
+  "execution.map.center": "Center selected task",
+  "execution.map.phase.label": "Filter map by phase",
+  "execution.map.phase.all": "All phases",
+  "execution.map.empty": "No tasks to display.",
+  "execution.map.grouped.one":
+    "{{count}} visible task exceeds the {{threshold}}-task map limit, so the map switched to a grouped list. Filter by phase to narrow it.",
+  "execution.map.grouped.other":
+    "{{count}} visible tasks exceed the {{threshold}}-task map limit, so the map switched to a grouped list. Filter by phase to narrow it.",
+
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages…",
   "session.messages.loadEarlier": "Load earlier messages",
