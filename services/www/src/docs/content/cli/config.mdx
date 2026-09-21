@@ -40,7 +40,7 @@ while the TUI is running.
 Set `OPENCODE_CLI_CONFIG_CONTENT` to apply CLI settings from inline JSON:
 
 ```sh
-OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"enabled":false}}' opencode
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
 ```
 
 OpenCode merges the inline settings over the global `cli.json`. Nested objects are merged, while arrays and scalar
@@ -152,7 +152,7 @@ Configure the persistent session tab strip:
 ```json title="cli.json"
 {
   "tabs": {
-    "enabled": true,
+    "mode": "auto",
     "scope": "cwd",
     "layout": "horizontal",
     "indicators": "status"
@@ -160,11 +160,13 @@ Configure the persistent session tab strip:
 }
 ```
 
+The legacy boolean `tabs.enabled` setting remains supported: `true` is `on` and `false` is `off`. OpenCode reads it without rewriting the config file.
+
 <div class="docs-table-scroll" role="region" aria-label="Tab settings" tabIndex={0}>
 
 | Setting           | Values                      | Description                                                                   |
 | ----------------- | --------------------------- | ----------------------------------------------------------------------------- |
-| `tabs.enabled`    | boolean                     | Uses a persistent tab strip instead of pinned quick-switch sessions.          |
+| `tabs.mode`       | `auto`, `on`, or `off`      | Uses tabs automatically, always, or never. Auto hides them inside Herdr.       |
 | `tabs.scope`      | `cwd` or `global`           | Keeps separate tabs per working directory or shares them globally.            |
 | `tabs.layout`     | `horizontal` or `vertical`  | Places tabs in a horizontal strip or a vertical sidebar.                      |
 | `tabs.indicators` | `status` or `numbers`       | Shows status icons or always shows tab numbers.                               |

@@ -173,8 +173,11 @@ export const Info = Schema.Struct({
   ).annotate({ description: "Session transcript presentation settings" }),
   tabs: Schema.optional(
     Schema.Struct({
+      mode: Schema.optional(Schema.Literals(["auto", "on", "off"])).annotate({
+        description: "Use session tabs always, never, or when the terminal environment supports them",
+      }),
       enabled: Schema.optional(Schema.Boolean).annotate({
-        description: "Use a persistent tab strip instead of pinned quick-switch sessions",
+        description: "Legacy tab toggle; use mode instead",
       }),
       scope: Schema.optional(Schema.Literals(["global", "cwd"])).annotate({
         description: "Share tabs globally or keep a separate set for each working directory",
@@ -261,6 +264,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     tps: boolean
   }
   tabs: {
+    mode: "auto" | "on" | "off"
     enabled: boolean
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
@@ -268,7 +272,12 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   }
 }
 
-export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
+export function resolve(
+  input: Info,
+  options: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> },
+): Resolved {
+  const tabsMode =
+    input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
@@ -310,7 +319,8 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     },
     tabs: {
       ...input.tabs,
-      enabled: input.tabs?.enabled ?? true,
+      mode: tabsMode,
+      enabled: tabsMode === "on" || (tabsMode === "auto" && (options.environment ?? process.env).HERDR_ENV !== "1"),
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
       indicators: input.tabs?.indicators ?? "status",
@@ -327,7 +337,7 @@ const ConfigContext = createContext<{
 export function ConfigProvider(props: {
   config: Resolved
   service?: Interface
-  options?: { terminalSuspend: boolean }
+  options?: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> }
   children: JSX.Element
 }) {
   const [config, setConfig] = createStore(props.config)
