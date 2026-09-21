@@ -68,6 +68,12 @@ type FormRequest = Extract<V2Event, { type: "form.created" }>["data"]["form"]
 const GLOBAL_FORM_SESSION_ID = "global"
 
 export async function runNonInteractivePrompt(input: Input) {
+  const mentions = Array.from(input.message.matchAll(/(?:^|\s)@(\S+)/g), (match) => match[1])
+  const skills = mentions.length
+    ? (await input.client.skill.list({ location: input.location })).data
+        .filter((item) => mentions.includes(item.id))
+        .map((item) => ({ id: item.id }))
+    : []
   const controller = new AbortController()
   const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
   const connected = await stream.next()
@@ -676,6 +682,7 @@ export async function runNonInteractivePrompt(input: Input) {
           id: messageID,
           text: [input.message, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
           files: prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
+          skills: skills.length ? skills : undefined,
           delivery: "steer",
         },
         { signal: admission.signal },
