@@ -5,7 +5,9 @@ import { Context, Duration, Effect, FileSystem, Layer, Option, Ref, Schema } fro
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
+import { stripVTControlCharacters } from "node:util"
 import { action, parseReleaseVersion, type Policy } from "./updater-action"
+import { errorMessage } from "../util/error"
 
 export const methods = ["curl", "npm", "pnpm", "bun", "yarn", "vp", "brew"] as const
 
@@ -13,9 +15,81 @@ export type Method = (typeof methods)[number]
 export type RunResult = { readonly type: "available" | "installed"; readonly version: string }
 export type CheckResult = RunResult | { readonly type: "unavailable"; readonly message: string }
 
+export class UpgradeError extends Error {
+  readonly title: string
+  readonly detail: string
+  readonly command?: string
+  readonly retry: string
+
+  constructor(
+    input: {
+      readonly title: string
+      readonly detail: string
+      readonly command?: string
+      readonly retry: string
+    },
+    options?: ErrorOptions,
+  ) {
+    super(input.detail, options)
+    this.name = "UpgradeError"
+    this.title = input.title
+    this.detail = input.detail
+    this.command = input.command
+    this.retry = input.retry
+  }
+}
+
 const decodeVpPackages = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Array(Schema.Struct({ name: Schema.String }))),
 )
+
+const installNames: Record<Method, string> = {
+  curl: "The OpenCode installer",
+  npm: "npm",
+  pnpm: "pnpm",
+  bun: "Bun",
+  yarn: "Yarn",
+  vp: "Vite+",
+  brew: "Homebrew",
+}
+
+function conciseDetail(input: string) {
+  const lines = stripVTControlCharacters(input)
+    .trim()
+    .replaceAll("\r", "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+  const tail = lines.slice(-12).join("\n")
+  const clipped = tail.length > 2_000
+  const detail = clipped ? `…${tail.slice(-1_999)}` : tail
+  if (!detail) return
+  if (lines.length <= 12 && !clipped) return detail
+  return `${detail}\n\nOutput shortened to the last 12 lines.`
+}
+
+function errorDetail(cause: unknown): string {
+  if (cause instanceof AppProcess.AppProcessError) {
+    const stderr = conciseDetail(cause.stderr ?? "")
+    if (stderr) return stderr
+    if (cause.cause !== undefined) return errorDetail(cause.cause)
+    return cause.message
+  }
+  if (cause instanceof Error) {
+    const detail = cause.cause === undefined ? undefined : errorDetail(cause.cause)
+    if (!detail || detail === cause.message) return cause.message
+    return `${cause.message}: ${detail}`
+  }
+  return errorMessage(cause)
+}
+
+function resultDetail(result: { code: number; stdout: string; stderr: string }) {
+  return (
+    conciseDetail(result.stderr) ??
+    conciseDetail(result.stdout) ??
+    `The command exited with code ${result.code} without any error output.`
+  )
+}
 
 export interface Interface {
   readonly run: (onInstall?: (version: string) => void) => Effect.Effect<RunResult | undefined>
@@ -24,9 +98,9 @@ export interface Interface {
   readonly method: () => Effect.Effect<Method | undefined>
   readonly latest: () => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
-  readonly removal: (method: Method) =>
-    | { readonly command: ReadonlyArray<string>; readonly run: Effect.Effect<void, Error> }
-    | undefined
+  readonly removal: (
+    method: Method,
+  ) => { readonly command: ReadonlyArray<string>; readonly run: Effect.Effect<void, Error> } | undefined
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
@@ -89,7 +163,6 @@ const make = Effect.gen(function* () {
           stdout: result.stdout.toString("utf8"),
           stderr: result.stderr.toString("utf8"),
         })),
-        Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
       )
   })
 
@@ -119,7 +192,11 @@ const make = Effect.gen(function* () {
     ]
     const results = yield* Effect.forEach(
       checks,
-      (check) => exec(check.command).pipe(Effect.map((result) => ({ check, result }))),
+      (check) =>
+        exec(check.command).pipe(
+          Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
+          Effect.map((result) => ({ check, result })),
+        ),
       { concurrency: "unbounded" },
     )
     return results.find((result) => {
@@ -144,11 +221,7 @@ const make = Effect.gen(function* () {
     return {
       command,
       run: exec(command, "5 minutes").pipe(
-        Effect.flatMap((result) =>
-          result.code === 0
-            ? Effect.void
-            : Effect.fail(new Error(result.stderr.trim() || `Failed to uninstall with ${method}`)),
-        ),
+        Effect.flatMap((result) => (result.code === 0 ? Effect.void : Effect.fail(new Error(resultDetail(result))))),
       ),
     }
   }
@@ -163,14 +236,44 @@ const make = Effect.gen(function* () {
             signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
           },
         ),
-      catch: (cause) => new Error("Failed to check for updates", { cause }),
+      catch: (cause) =>
+        new UpgradeError(
+          {
+            title: "Could not check for OpenCode updates",
+            detail: errorDetail(cause),
+            retry: "Check your network, then run opencode upgrade again.",
+          },
+          { cause },
+        ),
     })
-    if (!response.ok) return yield* Effect.fail(new Error(`Update check failed with status ${response.status}`))
+    if (!response.ok)
+      return yield* Effect.fail(
+        new UpgradeError({
+          title: "Could not check for OpenCode updates",
+          detail: `The update service returned HTTP ${response.status}.`,
+          retry: "Try again in a few minutes.",
+        }),
+      )
     const data: { version: string; metadata?: { package?: string } } = yield* Effect.tryPromise({
       try: () => response.json(),
-      catch: (cause) => new Error("Failed to read update information", { cause }),
+      catch: (cause) =>
+        new UpgradeError(
+          {
+            title: "Could not read the OpenCode update information",
+            detail: errorDetail(cause),
+            retry: "Try again in a few minutes.",
+          },
+          { cause },
+        ),
     })
-    if (!data.metadata?.package) return yield* Effect.fail(new Error("Update information did not include a package"))
+    if (!data.metadata?.package)
+      return yield* Effect.fail(
+        new UpgradeError({
+          title: "Could not read the OpenCode update information",
+          detail: "The update service returned incomplete release information.",
+          retry: "Try again in a few minutes.",
+        }),
+      )
     return { package: data.metadata.package, version: data.version }
   })
 
@@ -184,6 +287,31 @@ const make = Effect.gen(function* () {
     Effect.acquireRelease(fs.makeTempDirectory({ directory: global.cache, prefix }), (directory) =>
       fs.remove(directory, { recursive: true, force: true }).pipe(Effect.ignore),
     )
+
+  const runUpgrade = (input: {
+    readonly method: Method
+    readonly command: string[]
+    readonly displayCommand?: string[]
+    readonly title?: string
+    readonly retry?: string
+  }) => {
+    const failure = (detail: string, cause?: unknown) =>
+      new UpgradeError(
+        {
+          title: input.title ?? `${installNames[input.method]} could not install OpenCode`,
+          detail,
+          command: (input.displayCommand ?? input.command).join(" "),
+          retry: input.retry ?? "Fix the issue above, then run opencode upgrade again.",
+        },
+        cause === undefined ? undefined : { cause },
+      )
+    return exec(input.command, "5 minutes").pipe(
+      Effect.flatMap((result) =>
+        result.code === 0 ? Effect.succeed(result) : Effect.fail(failure(resultDetail(result))),
+      ),
+      Effect.mapError((cause) => (cause instanceof UpgradeError ? cause : failure(errorDetail(cause), cause))),
+    )
+  }
 
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
@@ -212,31 +340,54 @@ const make = Effect.gen(function* () {
           ? ["vp", "install", "-g", "--force", target]
           : ["vp", "update", "-g", target],
     }
-    const result = yield* Effect.scoped(
+    yield* Effect.scoped(
       Effect.gen(function* () {
         if (method === "bun") {
           // Bun does not prune old versions from its shared package cache.
           yield* fs.makeDirectory(global.cache, { recursive: true })
           const cache = yield* temporaryDirectory("update-")
-          return yield* exec(["bun", "install", "--global", "--trust", "--cache-dir", cache, target], "5 minutes")
+          return yield* runUpgrade({
+            method,
+            command: ["bun", "install", "--global", "--trust", "--cache-dir", cache, target],
+            displayCommand: ["bun", "install", "--global", "--trust", target],
+          })
         }
         if (method === "curl") {
           yield* fs.makeDirectory(global.cache, { recursive: true })
           const directory = yield* temporaryDirectory("update-")
           const installer = path.join(directory, "install")
-          const download = yield* exec(
-            ["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"],
-            "5 minutes",
-          )
-          if (download.code !== 0) return download
-          return yield* exec(["bash", installer, "--version", version, "--no-modify-path"], "5 minutes")
+          yield* runUpgrade({
+            method,
+            command: ["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"],
+            displayCommand: ["curl", "-fsSL", "https://opencode.ai/v2/install"],
+            title: "Could not download the OpenCode installer",
+            retry: "Check your network, then run opencode upgrade again.",
+          })
+          return yield* runUpgrade({
+            method,
+            command: ["bash", installer, "--version", version, "--no-modify-path"],
+            displayCommand: ["opencode", "upgrade", version, "--method", "curl"],
+            title: "The OpenCode installer failed",
+          })
         }
-        if (method === "brew") return yield* exec(["brew", "upgrade", packageName], "5 minutes")
-        return yield* exec(commands[method], "5 minutes")
+        if (method === "brew") return yield* runUpgrade({ method, command: ["brew", "upgrade", packageName] })
+        return yield* runUpgrade({ method, command: commands[method] })
       }),
-    ).pipe(Effect.mapError((cause) => new Error(`Failed to update with ${method}`, { cause })))
-    if (result.code === 0) return
-    return yield* Effect.fail(new Error(result.stderr.trim() || `Failed to update with ${method}`))
+    ).pipe(
+      Effect.mapError((cause) =>
+        cause instanceof UpgradeError
+          ? cause
+          : new UpgradeError(
+              {
+                title: "Could not prepare the OpenCode upgrade",
+                detail: errorDetail(cause),
+                retry: "Fix the issue above, then run opencode upgrade again.",
+              },
+              { cause },
+            ),
+      ),
+      Effect.asVoid,
+    )
   })
 
   const inspect = Effect.fnUntraced(function* () {

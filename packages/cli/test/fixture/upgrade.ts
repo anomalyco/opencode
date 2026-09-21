@@ -25,13 +25,28 @@ await Effect.runPromise(
         Effect.suspend(() => {
           record("latest")
           return process.env.UPGRADE_TEST_LATEST_ERROR
-            ? Effect.fail(new Error("Update check failed"))
+            ? Effect.fail(
+                new Updater.UpgradeError({
+                  title: "Could not check for OpenCode updates",
+                  detail: "The update service returned HTTP 503.",
+                  retry: "Try again in a few minutes.",
+                }),
+              )
             : Effect.succeed("0.0.0-beta-new")
         }),
       upgrade: (method, version) =>
         Effect.suspend(() => {
           record({ method, version })
-          return process.env.UPGRADE_TEST_INSTALL_ERROR ? Effect.fail(new Error("Permission denied")) : Effect.void
+          return process.env.UPGRADE_TEST_INSTALL_ERROR
+            ? Effect.fail(
+                new Updater.UpgradeError({
+                  title: "npm could not install OpenCode",
+                  detail: "Permission denied",
+                  command: "npm install @opencode/cli@0.0.0-beta-new",
+                  retry: "Fix the issue above, then run opencode upgrade again.",
+                }),
+              )
+            : Effect.void
         }),
     }),
     Effect.provide(NodeServices.layer),
