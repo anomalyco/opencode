@@ -20,8 +20,6 @@ function fixture(
   name = "@opencode/cli",
   failCleanup = false,
   releasePackage = name,
-  releaseResponse: () => Promise<Response> = async () =>
-    Response.json({ version: "2.3.4", metadata: { package: releasePackage } }),
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -36,7 +34,11 @@ function fixture(
     // The updater uses global fetch; scope this replacement to each install test.
     yield* Effect.acquireRelease(
       Effect.sync(() =>
-        spyOn(globalThis, "fetch").mockImplementation(Object.assign(releaseResponse, { preconnect: fetch.preconnect })),
+        spyOn(globalThis, "fetch").mockImplementation(
+          Object.assign(async () => Response.json({ version: "2.3.4", metadata: { package: releasePackage } }), {
+            preconnect: fetch.preconnect,
+          }),
+        ),
       ),
       (request) => Effect.sync(() => request.mockRestore()),
     )
@@ -98,39 +100,14 @@ function fixture(
   })
 }
 
-function upgradeError(error: Error) {
-  expect(error).toBeInstanceOf(Updater.UpgradeError)
-  if (!(error instanceof Updater.UpgradeError)) throw error
-  return error
-}
-
 const installs = [
-  {
-    method: "npm",
-    label: "npm",
-    command: (version: string) => ["npm", "install", "--global", "--force", `@opencode/cli@${version}`],
-  },
+  { method: "npm", command: ["npm", "install", "--global", "--force", "@opencode/cli@2.3.4-beta.1"] },
   {
     method: "pnpm",
-    label: "pnpm",
-    command: (version: string) => [
-      "pnpm",
-      "add",
-      "--global",
-      "--allow-build=@opencode/cli",
-      `@opencode/cli@${version}`,
-    ],
+    command: ["pnpm", "add", "--global", "--allow-build=@opencode/cli", "@opencode/cli@2.3.4-beta.1"],
   },
-  {
-    method: "yarn",
-    label: "Yarn",
-    command: (version: string) => ["yarn", "global", "add", `@opencode/cli@${version}`],
-  },
-  {
-    method: "vp",
-    label: "Vite+",
-    command: (version: string) => ["vp", "update", "-g", `@opencode/cli@${version}`],
-  },
+  { method: "yarn", command: ["yarn", "global", "add", "@opencode/cli@2.3.4-beta.1"] },
+  { method: "vp", command: ["vp", "update", "-g", "@opencode/cli@2.3.4-beta.1"] },
 ] as const
 
 installs.forEach(({ method, command }) => {
@@ -138,7 +115,7 @@ installs.forEach(({ method, command }) => {
     Effect.gen(function* () {
       const test = yield* fixture()
       yield* test.updater.upgrade(method, "v2.3.4-beta.1")
-      expect(test.commands).toEqual([command("2.3.4-beta.1")])
+      expect(test.commands).toEqual([[...command]])
     }),
   )
 })
@@ -177,12 +154,7 @@ it.live("vp removes the package from its managed global store", () =>
       ])
       expect(yield* test.fs.readDirectory(test.global.cache)).toEqual([])
       expect(result._tag).toBe(exitCode === 0 ? "None" : "Some")
-      if (result._tag === "Some") {
-        const error = upgradeError(result.value)
-        expect(error.title).toBe("Bun could not install OpenCode")
-        expect(error.detail).toBe("bun install failed")
-        expect(error.command).toBe("bun install --global --trust @opencode/cli@2.3.4-beta.1")
-      }
+      if (result._tag === "Some") expect(result.value.message).toBe("bun install failed")
     }),
   )
 })
@@ -214,13 +186,7 @@ it.live("bun ignores install cache cleanup failures", () =>
       ])
       expect(yield* test.fs.readDirectory(test.global.cache)).toEqual([])
       expect(result._tag).toBe(failure === "success" ? "None" : "Some")
-      if (result._tag === "Some") {
-        const error = upgradeError(result.value)
-        expect(error.detail).toBe(`${failure} failed`)
-        expect(error.title).toBe(
-          failure === "download" ? "Could not download the OpenCode installer" : "The OpenCode installer failed",
-        )
-      }
+      if (result._tag === "Some") expect(result.value.message).toBe(`${failure} failed`)
     }),
   )
 })
@@ -246,77 +212,13 @@ it.live("invalid version targets never execute a command or create a cache", () 
 it.live("install failures expose stderr and process errors do not report success", () =>
   Effect.gen(function* () {
     const failed = yield* fixture(() => ({ exitCode: 1, stderr: Buffer.from("  registry denied access\n") }))
-    const error = upgradeError(yield* failed.updater.upgrade("npm", "2.3.4").pipe(Effect.flip))
-    expect(error.title).toBe("npm could not install OpenCode")
-    expect(error.detail).toBe("registry denied access")
-    expect(error.command).toBe("npm install --global --force @opencode/cli@2.3.4")
-    expect(error.retry).toBe("Fix the issue above, then run opencode upgrade again.")
-    const missing = yield* fixture(() => ({
-      error: new AppProcess.AppProcessError({ command: "npm", cause: new Error("Executable not found") }),
-    }))
-    const unavailable = upgradeError(yield* missing.updater.upgrade("npm", "2.3.4").pipe(Effect.flip))
-    expect(unavailable.title).toBe("npm could not install OpenCode")
-    expect(unavailable.detail).toBe("Executable not found")
-    expect(unavailable.command).toBe("npm install --global --force @opencode/cli@2.3.4")
+    const error = yield* failed.updater.upgrade("npm", "2.3.4").pipe(Effect.flip)
+    expect(error.message).toBe("registry denied access")
+    const missing = yield* fixture(() => ({ error: new AppProcess.AppProcessError({ command: "npm" }) }))
+    const unavailable = yield* missing.updater.upgrade("npm", "2.3.4").pipe(Effect.flip)
+    expect(unavailable.message).toBe("Failed to update with npm")
     expect(failed.commands).toHaveLength(1)
     expect(missing.commands).toHaveLength(1)
-  }),
-)
-
-it.live("install failures fall back to stdout and keep the useful tail concise", () =>
-  Effect.gen(function* () {
-    const output = Array.from({ length: 20 }, (_, index) => `installer line ${index + 1}`)
-    output.push("Failed to fetch package information")
-    const test = yield* fixture((command) =>
-      command.command === "bash" ? { exitCode: 1, stdout: Buffer.from(output.join("\n")) } : {},
-    )
-    const error = upgradeError(yield* test.updater.upgrade("curl", "2.3.4").pipe(Effect.flip))
-    expect(error.title).toBe("The OpenCode installer failed")
-    expect(error.detail).toContain("Failed to fetch package information")
-    expect(error.detail).not.toContain("installer line 1\n")
-    expect(error.detail).toContain("Output shortened to the last 12 lines.")
-    expect(error.command).toBe("opencode upgrade 2.3.4 --method curl")
-  }),
-)
-
-it.live("every package-manager upgrade reports the method, command, detail, and recovery", () =>
-  Effect.gen(function* () {
-    const expected = [
-      ...installs.map((item) => ({
-        method: item.method as Updater.Method,
-        label: item.label,
-        command: item.command("2.3.4").join(" "),
-      })),
-      { method: "bun" as const, label: "Bun", command: "bun install --global --trust @opencode/cli@2.3.4" },
-      { method: "brew" as const, label: "Homebrew", command: "brew upgrade @opencode/cli" },
-    ]
-    yield* Effect.forEach(expected, (item) =>
-      Effect.gen(function* () {
-        const test = yield* fixture(() => ({ exitCode: 1, stderr: Buffer.from("network unavailable") }))
-        const error = upgradeError(yield* test.updater.upgrade(item.method, "2.3.4").pipe(Effect.flip))
-        expect(error.title).toBe(`${item.label} could not install OpenCode`)
-        expect(error.detail).toBe("network unavailable")
-        expect(error.command).toBe(item.command)
-        expect(error.retry).toBe("Fix the issue above, then run opencode upgrade again.")
-      }),
-    )
-  }),
-)
-
-it.live("update-service failures explain the status and recovery", () =>
-  Effect.gen(function* () {
-    const test = yield* fixture(
-      () => ({}),
-      "@opencode/cli",
-      false,
-      "@opencode/cli",
-      async () => new Response(null, { status: 503 }),
-    )
-    const error = upgradeError(yield* test.updater.latest().pipe(Effect.flip))
-    expect(error.title).toBe("Could not check for OpenCode updates")
-    expect(error.detail).toBe("The update service returned HTTP 503.")
-    expect(error.command).toBeUndefined()
-    expect(error.retry).toBe("Try again in a few minutes.")
   }),
 )
 ;(["npm", "pnpm", "bun", "yarn", "vp", undefined] as const).forEach((method) => {

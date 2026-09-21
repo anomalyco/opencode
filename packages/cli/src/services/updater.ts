@@ -309,7 +309,16 @@ const make = Effect.gen(function* () {
       Effect.flatMap((result) =>
         result.code === 0 ? Effect.succeed(result) : Effect.fail(failure(resultDetail(result))),
       ),
-      Effect.mapError((cause) => (cause instanceof UpgradeError ? cause : failure(errorDetail(cause), cause))),
+      Effect.mapError((cause) =>
+        cause instanceof UpgradeError
+          ? cause
+          : failure(
+              cause instanceof AppProcess.AppProcessError && cause.stderr === undefined && cause.cause === undefined
+                ? `Failed to update with ${input.method}`
+                : errorDetail(cause),
+              cause,
+            ),
+      ),
     )
   }
 
