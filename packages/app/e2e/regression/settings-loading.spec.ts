@@ -99,6 +99,21 @@ test("settings has its own route and returns through app history", async ({ page
   await expect(home).toHaveAttribute("aria-pressed", "true")
 })
 
+test("settings page survives refresh", async ({ page }) => {
+  const settings = page.getByTestId("settings-screen")
+  const appearance = settings.getByRole("tab", { name: "Appearance", exact: true })
+
+  await appearance.click()
+  await expect(page).toHaveURL("/settings?tab=appearance")
+  await expect(appearance).toHaveAttribute("aria-selected", "true")
+
+  await page.reload()
+
+  await expect(settings).toBeVisible()
+  await expect(appearance).toHaveAttribute("aria-selected", "true")
+  await expect(page).toHaveURL("/settings?tab=appearance")
+})
+
 test("single-server settings expose scoped pages without a server picker", async ({ page }) => {
   const settings = page.getByTestId("settings-screen")
   await expect(settings.getByRole("tab", { name: "Server", exact: true })).toBeVisible()
@@ -201,6 +216,17 @@ test("project settings open as a nested autosaving view", async ({ page }) => {
 
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname === "/settings" &&
+      url.searchParams.get("server") === "http://127.0.0.1:4096" &&
+      url.searchParams.get("project") === directory &&
+      url.searchParams.get("tab") === "workspaces",
+  )
+
+  await page.reload()
+
+  await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
 })
@@ -269,7 +295,7 @@ test("recording a new session shortcut stays in settings until recording finishe
   await page.keyboard.press("Control+t")
 
   await expect(binding).toHaveText("Ctrl+T")
-  await expect(page).toHaveURL("/settings")
+  await expect(page).toHaveURL("/settings?tab=shortcuts")
   await expect(page.locator("[data-titlebar-tab]")).toHaveCount(0)
   await page.keyboard.press("Control+t")
   await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
