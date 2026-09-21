@@ -4,7 +4,7 @@ import { Session } from "../session/session"
 import DESCRIPTION from "./session-title.txt"
 
 export const Parameters = Schema.Struct({
-  title: Schema.NonEmptyString.annotations({
+  title: Schema.NonEmptyString.annotate({
     description: "The new session title. A single line of at most 50 characters.",
   }),
 })

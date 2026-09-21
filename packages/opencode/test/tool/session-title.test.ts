@@ -37,7 +37,7 @@ function makeCtx(sessionID = SessionID.descending()): Tool.Context {
 }
 
 describe("tool.session_title", () => {
-  it.effect("renames the session via Session.setTitle", () =>
+  it.instance("renames the session via Session.setTitle", () =>
     Effect.gen(function* () {
       calls.length = 0
       const info = yield* SessionTitleTool
@@ -50,7 +50,7 @@ describe("tool.session_title", () => {
     }),
   )
 
-  it.effect("truncates titles longer than 100 characters", () =>
+  it.instance("truncates titles longer than 100 characters", () =>
     Effect.gen(function* () {
       calls.length = 0
       const info = yield* SessionTitleTool
@@ -64,7 +64,7 @@ describe("tool.session_title", () => {
     }),
   )
 
-  it.effect("rejects whitespace-only titles without calling setTitle", () =>
+  it.instance("rejects whitespace-only titles without calling setTitle", () =>
     Effect.gen(function* () {
       calls.length = 0
       const info = yield* SessionTitleTool
