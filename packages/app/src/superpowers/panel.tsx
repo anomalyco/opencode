@@ -2,12 +2,14 @@ import "./execution.css"
 import { For, Match, Show, Switch } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExecutionAgentList } from "./agent-list"
-import { EXECUTION_SUBVIEWS, type ExecutionModel } from "./model"
+import { EXECUTION_SUBVIEWS, structuredViewsEnabled, type ExecutionModel } from "./model"
 
 export type ExecutionPresentation = "panel" | "expanded" | "mobile"
 
 export function ExecutionPanel(props: { model: ExecutionModel; presentation: ExecutionPresentation }) {
   const language = useLanguage()
+  const structuredEnabled = () => structuredViewsEnabled(props.model.mode())
+  const effectiveSubview = () => (structuredEnabled() ? props.model.subview() : "agents")
   return (
     <section
       data-slot="execution-panel"
@@ -27,9 +29,10 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
             <button
               type="button"
               data-subview={subview}
-              aria-pressed={props.model.subview() === subview}
-              class="execution-panel__subview"
-              classList={{ "execution-panel__subview--active": props.model.subview() === subview }}
+              disabled={subview !== "agents" && !structuredEnabled()}
+              aria-pressed={effectiveSubview() === subview}
+              class="execution-panel__subview disabled:opacity-60"
+              classList={{ "execution-panel__subview--active": effectiveSubview() === subview }}
               onClick={() => props.model.selectSubview(subview)}
             >
               {language.t(`execution.subview.${subview}`)}
@@ -53,7 +56,7 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
       </Show>
       <div data-slot="execution-body" class="execution-panel__body">
         <Switch>
-          <Match when={props.model.subview() === "agents"}>
+          <Match when={effectiveSubview() === "agents"}>
             <Show
               when={props.model.agents().length > 0}
               fallback={
@@ -65,16 +68,16 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
               <ExecutionAgentList model={props.model} />
             </Show>
           </Match>
-          <Match when={props.model.subview() === "map"}>
+          <Match when={effectiveSubview() === "map"}>
             <div data-slot="execution-graph" data-testid="execution-graph" class="execution-panel__graph">
-              <TrackingUnavailable />
+              <TrackingUnavailable model={props.model} />
             </div>
           </Match>
-          <Match when={props.model.subview() === "tasks"}>
-            <TrackingUnavailable />
+          <Match when={effectiveSubview() === "tasks"}>
+            <TrackingUnavailable model={props.model} />
           </Match>
-          <Match when={props.model.subview() === "activity"}>
-            <TrackingUnavailable />
+          <Match when={effectiveSubview() === "activity"}>
+            <TrackingUnavailable model={props.model} />
           </Match>
         </Switch>
       </div>
@@ -82,14 +85,20 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
   )
 }
 
-function TrackingUnavailable() {
+function TrackingUnavailable(props: { model: ExecutionModel }) {
   const language = useLanguage()
+  const description = () =>
+    props.model.reason() === "no_run"
+      ? language.t("execution.tracking.noRun")
+      : language.t("execution.tracking.unavailable.description")
   return (
-    <div data-slot="execution-tracking-unavailable" class="execution-panel__unavailable">
+    <div
+      data-slot="execution-tracking-unavailable"
+      data-reason={props.model.reason()}
+      class="execution-panel__unavailable"
+    >
       <p class="execution-panel__unavailable-title">{language.t("execution.tracking.unavailable.title")}</p>
-      <p class="execution-panel__unavailable-description">
-        {language.t("execution.tracking.unavailable.description")}
-      </p>
+      <p class="execution-panel__unavailable-description">{description()}</p>
     </div>
   )
 }

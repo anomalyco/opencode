@@ -12,7 +12,13 @@ import {
   type SessionTabState,
 } from "../shell/state/session-tabs"
 import { agentFixture, failedTaskFixture, runFixture } from "./fixtures"
-import { AGENT_ROWS_VIRTUALIZE_THRESHOLD, EXECUTION_SUBVIEWS, createExecutionModel } from "./model"
+import {
+  AGENT_ROWS_VIRTUALIZE_THRESHOLD,
+  EXECUTION_SUBVIEWS,
+  createExecutionModel,
+  structuredViewsEnabled,
+  type ExecutionMode,
+} from "./model"
 import type { ExecutionScope } from "./identity"
 
 type TabsInput = {
@@ -221,6 +227,53 @@ describe("createExecutionModel", () => {
       setSnapshot(undefined)
       expect(model.attention().failed).toBe(0)
       expect(model.progress()).toBeUndefined()
+    })
+  })
+
+  test("merges structured blocked tasks with native blocking", () => {
+    root(() => {
+      const blocked = runFixture({ tasks: [failedTaskFixture({ id: "task-blocked", state: "blocked" })] })
+      const numeric = createExecutionModel({ snapshot: () => blocked })
+      expect(numeric.attention().blocked).toBe(1)
+      const merged = createExecutionModel({
+        snapshot: () => blocked,
+        attention: () => ({ stale: false, needsInput: 0, failed: 0, blocked: 3 }),
+      })
+      expect(merged.attention().blocked).toBe(3)
+    })
+  })
+
+  test("defaults to the map when a structured snapshot is available and keeps a persisted choice", () => {
+    root(() => {
+      const initial = createExecutionModel({ snapshot: () => runFixture() })
+      expect(initial.subview()).toBe("map")
+      const persisted = createExecutionModel({ initialSubview: "tasks", snapshot: () => runFixture() })
+      expect(persisted.subview()).toBe("tasks")
+      const observer = createExecutionModel()
+      expect(observer.subview()).toBe("agents")
+    })
+  })
+
+  test("suppresses structured projections while the schema is incompatible", () => {
+    root(() => {
+      const [mode, setMode] = createSignal<ExecutionMode>("ready")
+      const model = createExecutionModel({
+        mode,
+        snapshot: () => runFixture({ tasks: [failedTaskFixture()] }),
+        attention: () => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 }),
+      })
+      expect(model.mode()).toBe("ready")
+      expect(model.structured()).toBe(true)
+      expect(model.run()).toBeDefined()
+      expect(model.progress()?.failed).toBe(1)
+      expect(model.attention().failed).toBe(1)
+      setMode("incompatible")
+      expect(model.mode()).toBe("incompatible")
+      expect(model.structured()).toBe(false)
+      expect(model.run()).toBeUndefined()
+      expect(model.progress()).toBeUndefined()
+      expect(model.attention().failed).toBe(0)
+      expect(structuredViewsEnabled("incompatible")).toBe(false)
     })
   })
 })

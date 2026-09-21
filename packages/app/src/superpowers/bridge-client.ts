@@ -1,9 +1,16 @@
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import { ClientError, type RpcCallOptions, type RpcClient } from "@opencode/client/promise"
 import { ChangedSchema, ExecutionRpc, type RunSnapshot } from "@bearmanser/opencode-superpowers-execution/contract"
-import { createEffect, createSignal, type Accessor } from "solid-js"
+import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
 import { runKey, scopeKey, type ExecutionScope } from "./identity"
-import type { ExecutionMode } from "./model"
+import {
+  createExecutionModel,
+  type ExecutionAgent,
+  type ExecutionAttention,
+  type ExecutionMode,
+  type ExecutionModel,
+  type ExecutionReason,
+} from "./model"
 
 export const EXECUTION_RECONCILE_INTERVAL = 15_000
 export const EXECUTION_RUN_CACHE_LIMIT = 20
@@ -20,7 +27,7 @@ export type ExecutionEventSource = {
 
 export type ExecutionBridgeInput = {
   scope: Accessor<ExecutionScope | undefined>
-  api: RpcClient<typeof ExecutionRpc, RpcCallOptions>
+  api: () => RpcClient<typeof ExecutionRpc, RpcCallOptions>
   events: ExecutionEventSource
   connection: Accessor<boolean>
   visible: Accessor<boolean>
@@ -29,9 +36,30 @@ export type ExecutionBridgeInput = {
 
 export type ExecutionBridge = {
   attach(runID: string): void
+  attachActive(): void
   getSnapshot(): RunSnapshot | undefined
   getMode(): ExecutionMode
+  getReason(): ExecutionReason | undefined
   reconcile(): void
+  dispose(): void
+}
+
+export type SessionExecutionInput = {
+  scope: Accessor<ExecutionScope | undefined>
+  api: () => RpcClient<typeof ExecutionRpc, RpcCallOptions>
+  events: ExecutionEventSource
+  connection: Accessor<boolean>
+  visible: Accessor<boolean>
+  agents?: Accessor<ExecutionAgent[]>
+  attention?: Accessor<ExecutionAttention>
+  openSession?: (sessionID: string) => void
+  reviewRequest?: () => void
+  clock?: ExecutionClock
+}
+
+export type SessionExecution = {
+  bridge: ExecutionBridge
+  model: ExecutionModel
   dispose(): void
 }
 
@@ -40,8 +68,6 @@ type Attachment = {
   runID: string
   generation: number
 }
-
-type FailureKind = "observer" | "unavailable" | "incompatible" | "transient"
 
 export function shouldApplySnapshot(input: {
   requestGeneration: number
@@ -56,6 +82,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
   const clock = input.clock ?? systemClock
   const [snapshot, setSnapshot] = createSignal<RunSnapshot | undefined>()
   const [mode, setMode] = createSignal<ExecutionMode>("observer")
+  const [reason, setReason] = createSignal<ExecutionReason | undefined>()
   const [attachmentVersion, setAttachmentVersion] = createSignal(0)
 
   let disposed = false
@@ -79,6 +106,11 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     setMode(next)
   }
 
+  function setReasonValue(next: ExecutionReason | undefined) {
+    if (reason() === next) return
+    setReason(next)
+  }
+
   function ensureListener() {
     if (unsubscribe) return
     unsubscribe = input.events.listen(onChanged)
@@ -87,8 +119,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
   function onChanged(event: OpenCodeEvent) {
     if (disposed || !attachment) return
     if (event.type !== "rpc.superpowers.execution.v1.changed") return
-    const directory = eventLocationDirectory(event)
-    if (directory !== undefined && directory !== attachment.scope.ownerDirectory) return
+    if (eventLocationDirectory(event) !== attachment.scope.ownerDirectory) return
     const parsed = ChangedSchema.safeParse(event.data)
     if (!parsed.success) return
     if (parsed.data.rootSessionID !== attachment.scope.rootSessionID) return
@@ -100,7 +131,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
 
   function startTimer() {
     if (timer !== undefined) return
-    timer = clock.setInterval(() => reconcile(), EXECUTION_RECONCILE_INTERVAL)
+    timer = clock.setInterval(() => (attachment ? reconcile() : attachActive()), EXECUTION_RECONCILE_INTERVAL)
   }
 
   function stopTimer() {
@@ -110,21 +141,27 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
   }
 
   function reconcile() {
-    if (disposed || !attachment) return
+    if (disposed) return
     if (!input.connection()) {
       online = false
       stopTimer()
+      setReasonValue("offline")
       if (snapshot()) setModeValue("stale")
       return
     }
     if (!online) {
       online = true
       capabilitiesLoaded = false
+      setReasonValue(undefined)
       if (currentMode === "incompatible" || currentMode === "unavailable") setModeValue("observer")
     }
     if (currentMode === "incompatible") return
     if (!input.visible()) {
       stopTimer()
+      return
+    }
+    if (!attachment) {
+      startTimer()
       return
     }
     startTimer()
@@ -143,18 +180,19 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     followUp = false
     try {
       if (!capabilitiesLoaded) {
-        const capabilities = await input.api.capabilities({}, callOptions(current))
+        const capabilities = await input.api().capabilities({}, locationOptions(current.scope))
         if (ignored(requestGeneration)) return
         capabilitiesLoaded = true
         const schemaVersion: number = capabilities.schemaVersion
         if (schemaVersion !== 1) {
           setModeValue("incompatible")
+          setReasonValue("incompatible_schema")
           return
         }
       }
-      const loaded = await input.api.getRun(
+      const loaded = await input.api().getRun(
         { rootSessionID: current.scope.rootSessionID, runID: current.runID },
-        callOptions(current),
+        locationOptions(current.scope),
       )
       if (ignored(requestGeneration)) return
       apply(loaded, requestGeneration)
@@ -167,6 +205,67 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       inFlight = false
       if (again) reconcile()
     }
+  }
+
+  async function attachActive() {
+    const scope = input.scope()
+    if (disposed || !scope) return
+    resetForScope(scope)
+    const requestGeneration = generation
+    ensureListener()
+    setAttachmentVersion((value) => value + 1)
+    if (!input.connection()) {
+      online = false
+      stopTimer()
+      setReasonValue("offline")
+      return
+    }
+    online = true
+    try {
+      const capabilities = await input.api().capabilities({}, locationOptions(scope))
+      if (ignoredDiscovery(requestGeneration)) return
+      capabilitiesLoaded = true
+      const schemaVersion: number = capabilities.schemaVersion
+      if (schemaVersion !== 1) {
+        setModeValue("incompatible")
+        setReasonValue("incompatible_schema")
+        return
+      }
+      const page = await input.api().getSummaries({ rootSessionIDs: [scope.rootSessionID] }, locationOptions(scope))
+      if (ignoredDiscovery(requestGeneration)) return
+      const preferred = page.items[0]
+      if (!preferred) {
+        setModeValue("observer")
+        setReasonValue("no_run")
+        reconcile()
+        return
+      }
+      attachment = { scope, runID: preferred.runID, generation: requestGeneration }
+      setReasonValue(undefined)
+      setAttachmentVersion((value) => value + 1)
+      reconcile()
+    } catch (error) {
+      if (ignoredDiscovery(requestGeneration)) return
+      handleFailure(error)
+      if (currentMode !== "incompatible") reconcile()
+    }
+  }
+
+  function resetForScope(scope: ExecutionScope) {
+    const nextScopeKey = scopeKey(scope)
+    if (cachedScopeKey !== nextScopeKey) {
+      cachedScopeKey = nextScopeKey
+      runCache.clear()
+    }
+    generation += 1
+    attachment = undefined
+    capabilitiesLoaded = false
+    followUp = false
+    revision = 0
+    highestRevision = 0
+    setSnapshot(undefined)
+    setModeValue("observer")
+    setReasonValue(undefined)
   }
 
   function apply(loaded: RunSnapshot, requestGeneration: number) {
@@ -183,6 +282,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     cacheRun(loaded)
     setSnapshot(loaded)
     setModeValue("ready")
+    setReasonValue(undefined)
   }
 
   function cacheRun(loaded: RunSnapshot) {
@@ -197,21 +297,27 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
   }
 
   function handleFailure(error: unknown) {
-    const kind = failureKind(error)
-    if (kind === "incompatible") {
+    const failure = failureReason(error)
+    if (failure === "incompatible_schema") {
       capabilitiesLoaded = true
       setModeValue("incompatible")
+      setReasonValue(failure)
       return
     }
+    setReasonValue(failure)
     if (snapshot()) {
       setModeValue("stale")
       return
     }
-    setModeValue(kind === "observer" ? "observer" : "unavailable")
+    setModeValue(failure === "plugin_absent" || failure === "no_run" ? "observer" : "unavailable")
   }
 
   function ignored(requestGeneration: number) {
     return disposed || attachment?.generation !== requestGeneration
+  }
+
+  function ignoredDiscovery(requestGeneration: number) {
+    return disposed || generation !== requestGeneration
   }
 
   function attach(runID: string) {
@@ -235,6 +341,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       highestRevision = cached?.revision ?? 0
       setSnapshot(cached)
       setModeValue(cached ? "ready" : "observer")
+      setReasonValue(cached ? undefined : "no_run")
     }
     ensureListener()
     setAttachmentVersion((value) => value + 1)
@@ -262,15 +369,62 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
 
   return {
     attach,
+    attachActive,
     getSnapshot: snapshot,
     getMode: mode,
+    getReason: reason,
     reconcile,
     dispose,
   }
 }
 
-function callOptions(attachment: Attachment): RpcCallOptions {
-  return { location: { directory: attachment.scope.ownerDirectory } }
+export function createSessionExecution(input: SessionExecutionInput): SessionExecution {
+  const bridge = createExecutionBridge({
+    scope: input.scope,
+    api: input.api,
+    events: input.events,
+    connection: input.connection,
+    visible: input.visible,
+    clock: input.clock,
+  })
+  const model = createExecutionModel({
+    scope: input.scope,
+    mode: () => bridge.getMode(),
+    reason: () => bridge.getReason(),
+    snapshot: () => bridge.getSnapshot(),
+    agents: input.agents,
+    attention: input.attention,
+    openSession: input.openSession,
+    reviewRequest: input.reviewRequest,
+    reconcile: () => bridge.reconcile(),
+  })
+  let attachedScopeKey: string | undefined
+  let disposed = false
+  const attach = () => {
+    const scope = input.scope()
+    if (!scope) return
+    const key = scopeKey(scope)
+    if (key === attachedScopeKey) return
+    attachedScopeKey = key
+    bridge.attachActive()
+  }
+  attach()
+  createEffect(() => {
+    input.scope()
+    attach()
+  })
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    attachedScopeKey = undefined
+    bridge.dispose()
+  }
+  onCleanup(dispose)
+  return { bridge, model, dispose }
+}
+
+function locationOptions(scope: ExecutionScope): RpcCallOptions {
+  return { location: { directory: scope.ownerDirectory } }
 }
 
 function eventLocationDirectory(event: OpenCodeEvent) {
@@ -278,23 +432,23 @@ function eventLocationDirectory(event: OpenCodeEvent) {
   return location?.directory
 }
 
-function failureKind(error: unknown): FailureKind {
+function failureReason(error: unknown): ExecutionReason {
   if (error instanceof ClientError) {
     const status = clientErrorStatus(error)
-    if (error.reason === "UnexpectedStatus" && (status === 401 || status === 403)) return "unavailable"
-    return "transient"
+    if (error.reason === "UnexpectedStatus" && (status === 401 || status === 403)) return "auth"
+    return "transport"
   }
-  if (!isRpcFailure(error)) return "transient"
-  if (error.type === "rpc.unavailable" || error.type === "rpc.method_not_found") return "observer"
+  if (!isRpcFailure(error)) return "transport"
+  if (error.type === "rpc.unavailable" || error.type === "rpc.method_not_found") return "plugin_absent"
   if (error.type === "rpc.invalid_output" || error.type === "rpc.internal" || error.type === "rpc.invalid_input") {
-    return "incompatible"
+    return "incompatible_schema"
   }
-  if (error.type !== "execution") return "transient"
+  if (error.type !== "execution") return "transport"
   const code = rpcFailureCode(error)
-  if (code === "incompatible_schema") return "incompatible"
-  if (code === "not_found") return "observer"
-  if (code === "forbidden") return "unavailable"
-  return "transient"
+  if (code === "incompatible_schema") return "incompatible_schema"
+  if (code === "not_found") return "no_run"
+  if (code === "forbidden") return "auth"
+  return "transport"
 }
 
 function clientErrorStatus(error: ClientError) {

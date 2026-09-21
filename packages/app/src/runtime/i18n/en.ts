@@ -817,6 +817,7 @@ export const dict = {
   "execution.tracking.unavailable.title": "Tracking not connected",
   "execution.tracking.unavailable.description":
     "Connect the Superpowers reporting plugin to show the plan map, tasks, and activity.",
+  "execution.tracking.noRun": "No execution run is registered for this session yet.",
   "execution.mode.stale": "Tracking paused — showing the last reported snapshot.",
   "execution.mode.incompatible": "This execution tracker uses an unsupported schema version.",
   "execution.mode.unavailable": "Execution tracking is unavailable on this server.",

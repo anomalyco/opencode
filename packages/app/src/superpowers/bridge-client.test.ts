@@ -1,17 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import { ClientError, type OpenCodeEvent, type RpcCallOptions, type RpcClient } from "@opencode/client/promise"
-import type { Changed, RunSnapshot } from "@bearmanser/opencode-superpowers-execution/contract"
+import type { Changed, RunSnapshot, RunSummary } from "@bearmanser/opencode-superpowers-execution/contract"
 import { ExecutionRpc, RunSnapshotSchema } from "@bearmanser/opencode-superpowers-execution/contract"
 import { createRoot, createSignal } from "solid-js"
 import {
   EXECUTION_RECONCILE_INTERVAL,
   createExecutionBridge,
+  createSessionExecution,
   shouldApplySnapshot,
   type ExecutionClock,
+  type SessionExecution,
 } from "./bridge-client"
 import { failedTaskFixture, runFixture } from "./fixtures"
 import type { ExecutionScope } from "./identity"
-import { createExecutionModel, type ExecutionModel } from "./model"
+import { createExecutionModel, structuredViewsEnabled, type ExecutionModel } from "./model"
 import { attentionState } from "./status-badge"
 
 const RPC_EVENT_TYPE = "rpc.superpowers.execution.v1.changed"
@@ -87,14 +89,42 @@ function localEvents() {
   }
 }
 
-function changedEvent(directory: string, data: Changed) {
+function changedEvent(directory: string | undefined, data: Changed) {
+  const location = directory === undefined ? undefined : { directory }
   return {
     id: "event-1",
     created: 1,
     type: RPC_EVENT_TYPE,
-    location: { directory },
+    location,
     data,
   } as unknown as OpenCodeEvent
+}
+
+function summaryFixture(scope: ExecutionScope, runID: string, revision = 1): RunSummary {
+  return {
+    runID,
+    rootSessionID: scope.rootSessionID,
+    ownerDirectory: scope.ownerDirectory,
+    title: `Run ${runID}`,
+    status: "active",
+    revision,
+    updatedAt: 1_700_000_000_000,
+    planRevision: 1,
+    progress: {
+      verified: 0,
+      total: 1,
+      skipped: 0,
+      failed: 0,
+      blocked: 0,
+      awaitingReview: 0,
+      percent: 0,
+      source: "controller_report",
+    },
+  }
+}
+
+async function flush() {
+  for (let index = 0; index < 25; index += 1) await Promise.resolve()
 }
 
 type BridgeHarness = {
@@ -102,7 +132,9 @@ type BridgeHarness = {
   clock: FakeClock
   getRunCalls: RequestCall[]
   attach(scope: ExecutionScope, runID: string): Reply
+  attachActive(scope: ExecutionScope, runID?: string): Reply | undefined
   next(scope: ExecutionScope, runID: string): Reply
+  setSummaries(items: RunSummary[]): void
   setScope(scope: ExecutionScope): void
   setConnected(connected: boolean): void
   setVisible(visible: boolean): void
@@ -110,6 +142,7 @@ type BridgeHarness = {
   failCapabilities(error: unknown): void
   clearCapabilitiesError(): void
   emit(data: Changed, directory?: string): void
+  emitUnlocated(data: Changed): void
   events: ReturnType<typeof localEvents>
   flush(): Promise<void>
   dispose(): void
@@ -125,6 +158,7 @@ function bridgeHarness(): BridgeHarness {
   const getRunCalls: RequestCall[] = []
   let capabilitiesVersion = 1
   let capabilitiesError: unknown
+  let summaries: RunSummary[] = []
 
   const key = (ownerDirectory: string | undefined, runID: string) => `${ownerDirectory ?? ""}\u0000${runID}`
   const enqueue = (target: ExecutionScope, runID: string): Reply => {
@@ -146,8 +180,8 @@ function bridgeHarness(): BridgeHarness {
       if (!reply) throw new Error(`unexpected getRun for ${ownerDirectory ?? "?"}/${input.runID}`)
       return reply.promise
     },
+    getSummaries: async () => ({ items: summaries }),
     listRuns: async () => ({ items: [] }),
-    getSummaries: async () => ({ items: [] }),
     events: {
       subscribe: () => {
         throw new Error("events.subscribe is not used by the bridge")
@@ -162,10 +196,18 @@ function bridgeHarness(): BridgeHarness {
 
   createRoot((dispose) => {
     disposeRoot = dispose
-    bridge = createExecutionBridge({ scope, api, events: events.source, connection: connected, visible, clock: clock.clock })
+    bridge = createExecutionBridge({
+      scope,
+      api: () => api,
+      events: events.source,
+      connection: connected,
+      visible,
+      clock: clock.clock,
+    })
     model = createExecutionModel({
       scope,
       mode: () => bridge.getMode(),
+      reason: () => bridge.getReason(),
       snapshot: () => bridge.getSnapshot(),
       reconcile: () => bridge.reconcile(),
     })
@@ -182,8 +224,18 @@ function bridgeHarness(): BridgeHarness {
       bridge.attach(runID)
       return reply
     },
+    attachActive(target, runID) {
+      setScope(target)
+      summaries = runID ? [summaryFixture(target, runID)] : []
+      const reply = runID ? enqueue(target, runID) : undefined
+      bridge.attachActive()
+      return reply
+    },
     next(target, runID) {
       return enqueue(target, runID)
+    },
+    setSummaries(items) {
+      summaries = items
     },
     setScope,
     setConnected(next) {
@@ -206,9 +258,10 @@ function bridgeHarness(): BridgeHarness {
     emit(data, directory) {
       events.emit(changedEvent(directory ?? (scope()?.ownerDirectory ?? "/"), data))
     },
-    async flush() {
-      for (let index = 0; index < 25; index += 1) await Promise.resolve()
+    emitUnlocated(data) {
+      events.emit(changedEvent(undefined, data))
     },
+    flush,
     dispose() {
       bridge.dispose()
       disposeRoot()
@@ -236,6 +289,14 @@ describe("shouldApplySnapshot", () => {
 test("the frontend run fixture is contract valid", () => {
   expect(RunSnapshotSchema.safeParse(runFixture()).success).toBe(true)
   expect(RunSnapshotSchema.safeParse(runFixture({ tasks: [failedTaskFixture()] })).success).toBe(true)
+})
+
+test("structured views are disabled only for an incompatible schema", () => {
+  expect(structuredViewsEnabled("ready")).toBe(true)
+  expect(structuredViewsEnabled("stale")).toBe(true)
+  expect(structuredViewsEnabled("observer")).toBe(true)
+  expect(structuredViewsEnabled("unavailable")).toBe(true)
+  expect(structuredViewsEnabled("incompatible")).toBe(false)
 })
 
 describe("createExecutionBridge", () => {
@@ -297,6 +358,19 @@ describe("createExecutionBridge", () => {
     harness.dispose()
   })
 
+  test("an unscoped event cannot trigger a fetch", async () => {
+    const harness = bridgeHarness()
+    const first = harness.attach(SCOPE, "run-1")
+    await harness.flush()
+    first.resolve(runFixture({ revision: 1 }))
+    await harness.flush()
+    harness.emitUnlocated({ rootSessionID: "root", runID: "run-1", revision: 2 })
+    await harness.flush()
+    expect(harness.getRunCalls).toHaveLength(1)
+    expect(harness.model.run()?.revision).toBe(1)
+    harness.dispose()
+  })
+
   test("a lost event is recovered by reconcile", async () => {
     const harness = bridgeHarness()
     const first = harness.attach(SCOPE, "run-1")
@@ -320,6 +394,7 @@ describe("createExecutionBridge", () => {
     await harness.flush()
     expect(harness.getRunCalls).toHaveLength(0)
     expect(harness.model.mode()).toBe("observer")
+    expect(harness.model.reason()).toBe("offline")
     harness.setConnected(true)
     await harness.flush()
     expect(harness.getRunCalls).toHaveLength(1)
@@ -339,6 +414,10 @@ describe("createExecutionBridge", () => {
     harness.attach(SCOPE, "run-1")
     await harness.flush()
     expect(harness.model.mode()).toBe("incompatible")
+    expect(harness.model.reason()).toBe("incompatible_schema")
+    expect(harness.model.run()).toBeUndefined()
+    expect(harness.model.progress()).toBeUndefined()
+    expect(harness.model.attention().failed).toBe(0)
     expect(harness.getRunCalls).toHaveLength(0)
     harness.model.reconcile()
     await harness.flush()
@@ -352,6 +431,7 @@ describe("createExecutionBridge", () => {
     harness.attach(SCOPE, "run-1")
     await harness.flush()
     expect(harness.model.mode()).toBe("incompatible")
+    expect(harness.model.reason()).toBe("incompatible_schema")
     expect(harness.getRunCalls).toHaveLength(0)
     harness.dispose()
   })
@@ -380,6 +460,7 @@ describe("createExecutionBridge", () => {
     unauthorized.attach(SCOPE, "run-1")
     await unauthorized.flush()
     expect(unauthorized.model.mode()).toBe("unavailable")
+    expect(unauthorized.model.reason()).toBe("auth")
     expect(unauthorized.getRunCalls).toHaveLength(0)
     unauthorized.dispose()
 
@@ -388,8 +469,59 @@ describe("createExecutionBridge", () => {
     absent.attach(SCOPE, "run-1")
     await absent.flush()
     expect(absent.model.mode()).toBe("observer")
+    expect(absent.model.reason()).toBe("plugin_absent")
     expect(absent.getRunCalls).toHaveLength(0)
     absent.dispose()
+  })
+
+  test("plugin absence and no registered run are distinct observer reasons", async () => {
+    const absent = bridgeHarness()
+    absent.failCapabilities({ type: "rpc.method_not_found", message: "Unknown RPC method" })
+    absent.attachActive(SCOPE, "run-1")
+    await absent.flush()
+    expect(absent.model.mode()).toBe("observer")
+    expect(absent.model.reason()).toBe("plugin_absent")
+    absent.dispose()
+
+    const empty = bridgeHarness()
+    empty.attachActive(SCOPE)
+    await empty.flush()
+    expect(empty.model.mode()).toBe("observer")
+    expect(empty.model.reason()).toBe("no_run")
+    expect(empty.getRunCalls).toHaveLength(0)
+    empty.dispose()
+  })
+
+  test("a run registered after an empty attach is discovered by the safety poll", async () => {
+    const harness = bridgeHarness()
+    harness.attachActive(SCOPE)
+    await harness.flush()
+    expect(harness.model.reason()).toBe("no_run")
+    const reply = harness.next(SCOPE, "run-9")
+    harness.setSummaries([summaryFixture(SCOPE, "run-9")])
+    harness.clock.advance(EXECUTION_RECONCILE_INTERVAL)
+    await harness.flush()
+    expect(harness.getRunCalls).toHaveLength(1)
+    expect(harness.getRunCalls[0]?.runID).toBe("run-9")
+    reply.resolve(runFixture({ runID: "run-9", revision: 2 }))
+    await harness.flush()
+    expect(harness.model.mode()).toBe("ready")
+    expect(harness.model.run()?.runID).toBe("run-9")
+    harness.dispose()
+  })
+
+  test("attachActive resolves the preferred summary and fetches that run", async () => {
+    const harness = bridgeHarness()
+    const reply = harness.attachActive(SCOPE, "run-7")
+    await harness.flush()
+    expect(harness.getRunCalls).toHaveLength(1)
+    expect(harness.getRunCalls[0]?.runID).toBe("run-7")
+    expect(harness.getRunCalls[0]?.ownerDirectory).toBe(SCOPE.ownerDirectory)
+    reply?.resolve(runFixture({ runID: "run-7", revision: 3 }))
+    await harness.flush()
+    expect(harness.model.run()?.runID).toBe("run-7")
+    expect(harness.model.run()?.revision).toBe(3)
+    harness.dispose()
   })
 
   test("a plugin unload keeps a stale snapshot and a reload recovers", async () => {
@@ -406,6 +538,7 @@ describe("createExecutionBridge", () => {
     unloaded.reject({ type: "rpc.unavailable", message: "RPC is unavailable: superpowers.execution.v1" })
     await harness.flush()
     expect(harness.model.mode()).toBe("stale")
+    expect(harness.model.reason()).toBe("plugin_absent")
     expect(harness.model.run()?.revision).toBe(1)
 
     const reloaded = harness.next(SCOPE, "run-1")
@@ -538,4 +671,65 @@ describe("createExecutionBridge", () => {
     expect(harness.model.attention().failed).toBe(1)
     harness.dispose()
   })
+
+  test("a bridge-reported blocked task merges into blocked attention", async () => {
+    const harness = bridgeHarness()
+    const first = harness.attach(SCOPE, "run-1")
+    await harness.flush()
+    first.resolve(
+      runFixture({ revision: 2, tasks: [failedTaskFixture({ id: "task-blocked", state: "blocked" })] }),
+    )
+    await harness.flush()
+    expect(harness.model.attention().blocked).toBe(1)
+    expect(harness.model.progress()?.blocked).toBe(1)
+    harness.dispose()
+  })
+})
+
+test("the production session composition enters failed attention from a bridge-reported failed task", async () => {
+  const calls: string[] = []
+  const getRun = deferred<RunSnapshot>()
+  const rpc = {
+    capabilities: async () => {
+      calls.push("capabilities")
+      return { schemaVersion: 1, pluginVersion: "0.1.0", maxTasks: 500, reporting: "controller" }
+    },
+    getSummaries: async () => {
+      calls.push("getSummaries")
+      return { items: [summaryFixture(SCOPE, "run-1")] }
+    },
+    getRun: async () => {
+      calls.push("getRun")
+      return getRun.promise
+    },
+    listRuns: async () => ({ items: [] }),
+    events: {
+      subscribe: () => {
+        throw new Error("events.subscribe is not used by the bridge")
+      },
+      on: () => () => {},
+    },
+  } as unknown as RpcClient<typeof ExecutionRpc, RpcCallOptions>
+  const events = localEvents()
+  const [scope] = createSignal<ExecutionScope | undefined>(SCOPE)
+  const [connected] = createSignal(true)
+  const [visible] = createSignal(true)
+  let execution!: SessionExecution
+  createRoot(() => {
+    execution = createSessionExecution({
+      scope,
+      api: () => rpc,
+      events: events.source,
+      connection: connected,
+      visible,
+      attention: () => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 }),
+    })
+  })
+  await flush()
+  expect(calls).toEqual(["capabilities", "getSummaries", "getRun"])
+  getRun.resolve(runFixture({ revision: 2, tasks: [failedTaskFixture()] }))
+  await flush()
+  expect(execution.model.attention().failed).toBe(1)
+  expect(attentionState(execution.model.attention())).toBe("failed")
+  execution.dispose()
 })

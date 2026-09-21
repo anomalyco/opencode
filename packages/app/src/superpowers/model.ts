@@ -10,6 +10,18 @@ export type ExecutionSubview = (typeof EXECUTION_SUBVIEWS)[number]
 
 export type ExecutionMode = "observer" | "ready" | "stale" | "incompatible" | "unavailable"
 
+export type ExecutionReason =
+  | "plugin_absent"
+  | "no_run"
+  | "incompatible_schema"
+  | "auth"
+  | "offline"
+  | "transport"
+
+export function structuredViewsEnabled(mode: ExecutionMode) {
+  return mode !== "incompatible"
+}
+
 export type ExecutionProgress = ProgressSummary
 
 export type ExecutionRun = RunSnapshot
@@ -63,6 +75,7 @@ export type ExecutionModelInput = {
   scope?: Accessor<ExecutionScope | undefined>
   run?: Accessor<ExecutionRun | undefined>
   snapshot?: Accessor<RunSnapshot | undefined>
+  reason?: Accessor<ExecutionReason | undefined>
   agents?: Accessor<ExecutionAgent[]>
   progress?: Accessor<ExecutionProgress | undefined>
   attention?: Accessor<ExecutionAttention>
@@ -82,6 +95,8 @@ export type ExecutionModel = {
   agentTree: Accessor<ExecutionAgentTree>
   agentRows: Accessor<ExecutionAgentRow[]>
   progress: Accessor<ExecutionProgress | undefined>
+  reason: Accessor<ExecutionReason | undefined>
+  structured: Accessor<boolean>
   subview: Accessor<ExecutionSubview>
   selectedTaskID: Accessor<string | undefined>
   expanded: Accessor<boolean>
@@ -105,33 +120,41 @@ const emptyAttention: ExecutionAttention = { stale: false, needsInput: 0, failed
 
 export function createExecutionModel(input: ExecutionModelInput = {}): ExecutionModel {
   const [subview, setSubview] = createSignal<ExecutionSubview>(
-    input.initialSubview ?? (input.run?.() ? "map" : "agents"),
+    input.initialSubview ?? defaultSubview(input),
   )
   const [selectedTaskID, setSelectedTaskID] = createSignal<string | undefined>()
   const [expanded, setExpanded] = createSignal(false)
   const [expandedNodes, setExpandedNodes] = createSignal<Record<string, boolean>>({})
   const [assignmentHistory, setAssignmentHistory] = createSignal<Record<string, boolean>>({})
 
-  const mode = () => input.mode?.() ?? (snapshot() ? "ready" : "observer")
+  const rawSnapshot = () => input.snapshot?.()
+  const mode = () => input.mode?.() ?? (rawSnapshot() ? "ready" : "observer")
+  const incompatible = () => mode() === "incompatible"
   const scope = () => input.scope?.()
-  const snapshot = () => input.snapshot?.()
-  const run = () => input.run?.() ?? snapshot()
+  const snapshot = () => (incompatible() ? undefined : rawSnapshot())
+  const run = () => {
+    if (incompatible()) return undefined
+    return input.run?.() ?? rawSnapshot()
+  }
   const agents = () => input.agents?.() ?? emptyAgents
+  const reason = () => input.reason?.()
+  const structured = () => !incompatible() && (mode() === "ready" || mode() === "stale")
   const progress = () => {
+    if (incompatible()) return undefined
     const explicit = input.progress?.()
     if (explicit) return explicit
-    const current = snapshot()
+    const current = rawSnapshot()
     return current ? summarizeProgress(current.tasks) : undefined
   }
   const attention = () => {
     const current = input.attention?.() ?? emptyAttention
-    const currentSnapshot = snapshot()
+    const currentSnapshot = incompatible() ? undefined : rawSnapshot()
     const derived = currentSnapshot ? summarizeProgress(currentSnapshot.tasks) : undefined
     return {
       stale: current.stale || mode() === "stale",
       needsInput: current.needsInput,
       failed: Math.max(current.failed, derived?.failed ?? 0),
-      blocked: current.blocked,
+      blocked: Math.max(current.blocked, derived?.blocked ?? 0),
     }
   }
 
@@ -221,6 +244,8 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     agentTree,
     agentRows,
     progress,
+    reason,
+    structured,
     subview,
     selectedTaskID,
     expanded,
@@ -242,6 +267,11 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
 
 function controllerRank(rootSessionID: string | undefined, agent: ExecutionAgent) {
   return rootSessionID === agent.id ? 0 : 1
+}
+
+function defaultSubview(input: ExecutionModelInput): ExecutionSubview {
+  if (input.mode?.() === "incompatible") return "agents"
+  return (input.run?.() ?? input.snapshot?.()) !== undefined ? "map" : "agents"
 }
 
 function compareAgents(a: ExecutionAgent, b: ExecutionAgent) {

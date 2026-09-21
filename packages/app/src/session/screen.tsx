@@ -39,7 +39,9 @@ import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
 import { SESSION_EXECUTION_TAB } from "@/shell/state/session-tabs"
-import { createExecutionModel } from "@/superpowers/model"
+import { ExecutionRpc } from "@bearmanser/opencode-superpowers-execution/contract"
+import { createSessionExecution } from "@/superpowers/bridge-client"
+import { createExecutionScope } from "@/superpowers/identity"
 
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
@@ -189,7 +191,32 @@ export function SessionScreen(props: { session: SessionModel }) {
     const dock = document.querySelector('[data-component="session-composer-dock"]')
     dock?.querySelector<HTMLElement>("button, textarea, input, [tabindex]")?.focus()
   }
-  const execution = createExecutionModel({
+  const executionRootSessionID = createMemo(() => {
+    const seen = new Set<string>()
+    let id = session.identity.sessionID()
+    while (id && !seen.has(id)) {
+      seen.add(id)
+      const parentID = session.shared.data.session.get(id)?.parentID
+      if (!parentID) return id
+      id = parentID
+    }
+    return id
+  })
+  const executionScope = createMemo(() => {
+    const rootSessionID = executionRootSessionID()
+    const info = rootSessionID ? session.shared.data.session.get(rootSessionID) : undefined
+    return createExecutionScope({
+      serverKey: server.key,
+      ownerDirectory: info?.location.directory ?? session.workspace.directory(),
+      rootSessionID,
+    })
+  })
+  const execution = createSessionExecution({
+    scope: executionScope,
+    api: () => server.ctx.sdk.api.rpc(ExecutionRpc),
+    events: server.ctx.sdk.event,
+    connection: () => server.ctx.sdk.connection.status() === "connected",
+    visible: () => session.layout.tabs().active() === SESSION_EXECUTION_TAB,
     attention: () => ({
       stale: server.ctx.sdk.connection.status() !== "connected",
       needsInput: [composer.requests.permissionRequest(), composer.requests.questionRequest()].filter(Boolean).length,
@@ -197,7 +224,7 @@ export function SessionScreen(props: { session: SessionModel }) {
       blocked: composer.requests.background.blocking().length,
     }),
     reviewRequest: reviewNativeRequest,
-  })
+  }).model
   const openExecutionOverview = () => {
     execution.selectSubview("agents")
     void session.layout.tabs().open(SESSION_EXECUTION_TAB)
