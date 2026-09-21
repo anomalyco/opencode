@@ -3,7 +3,7 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.unionAlpha": "Union Alpha er gratis i en begrenset periode",
+  "go.promo.deepseek": "DeepSeek V4.1 Flash får 4x bruksgrense i en begrenset periode",
   "go.graph.bonus": "{{count}}× bruk",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentasjon",
@@ -285,7 +285,6 @@ export const dict = {
   "go.graph.showLess": "Vis færre modeller",
   "go.graph.limitedRegions": "begrensede regioner",
   "go.graph.limitedTime": "begrenset periode",
-  "go.graph.unlimited": "ubegrenset",
   "go.graph.usageLimits": "Bruksgrenser",
   "go.graph.aria": "Forespørsler per 5t: {{free}} vs {{go}}",
 
