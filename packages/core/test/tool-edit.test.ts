@@ -434,7 +434,10 @@ describe("EditTool", () => {
     withTempDir((tmp) => {
       const edit = makeEditFixture()
       const target = path.join(tmp.path, "crlf.txt")
-      return Effect.promise(() => fs.writeFile(target, "before\r\nrest\r\n")).pipe(
+      const unix = path.join(tmp.path, "unix.txt")
+      return Effect.promise(() =>
+        Promise.all([fs.writeFile(target, "before\r\nrest\r\n"), fs.writeFile(unix, "before\nrest\n")]),
+      ).pipe(
         Effect.andThen(
           withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
@@ -450,7 +453,20 @@ describe("EditTool", () => {
                   message: "No changes to apply: oldString and newString are identical.",
                 },
               })
+              expect(
+                yield* executeTool(
+                  registry,
+                  call({ path: "unix.txt", oldString: "before\r\nrest", newString: "before\nrest" }),
+                ),
+              ).toEqual({
+                status: "error",
+                error: {
+                  type: "tool.execution",
+                  message: "No changes to apply: oldString and newString are identical.",
+                },
+              })
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("before\r\nrest\r\n")
+              expect(yield* Effect.promise(() => fs.readFile(unix, "utf8"))).toBe("before\nrest\n")
               expect(edit.assertions).toEqual([])
               expect(edit.writes).toEqual([])
             }),
