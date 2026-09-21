@@ -504,6 +504,18 @@ story("task evidence hands the message part to the destination session", async (
   await expect(page.getByTestId("revealed-target")).toHaveText("msg-api-1#part-api-1")
 })
 
+story("production evidence selection reveals a part in an already-ready timeline", async ({ page }) => {
+  await openExecutionFixture(page, "evidence-production")
+  await expect(page.getByTestId("production-timeline-ready")).toHaveText("true")
+  await expect(page.getByTestId("production-reveal-count")).toHaveText("0")
+  await page
+    .getByRole("button", { name: /Open evidence from/ })
+    .first()
+    .evaluate((element) => (element as HTMLElement).click())
+  await expect(page.getByTestId("production-revealed-target")).toHaveText("msg-api-1#part-api-1")
+  await expect(page.getByTestId("production-reveal-count")).toHaveText("1")
+})
+
 story("task progress shows a scope increase reducing the fraction", async ({ page }) => {
   await openExecutionFixture(page, "tasks-scope")
   await expect(page.getByTestId("execution-progress-count")).toHaveText("2/2")

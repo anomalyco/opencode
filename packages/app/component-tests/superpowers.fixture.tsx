@@ -19,13 +19,23 @@ import { createOpenSessionFileTab, createSessionTabs } from "../src/session/help
 import { LazyExecutionPanel, SessionTabAddControl } from "../src/session/files/session-side-panel"
 import { BackgroundWorkSummary, type BackgroundTask } from "../src/session/summary/background"
 import { SessionSummaryPanel } from "../src/session/summary/panel"
+import { createSessionTimelineInteraction } from "../src/session/timeline/interaction"
 import { MessageTimeline } from "../src/session/timeline/message-timeline"
 import type { TimelineSessionSource } from "../src/session/timeline/controller"
 import { createExecutionModel, type ExecutionAttention, type ExecutionModel, type ExecutionProgress } from "../src/superpowers/model"
 import { SessionExecutionProvider } from "../src/superpowers/session-execution"
+import { ExecutionTaskDetails } from "../src/superpowers/task-details"
+import { ExecutionTaskList } from "../src/superpowers/task-list"
 import { SessionReviewToggle } from "../src/session/header/session-header-actions"
 import { ExecutionStatusBadge } from "../src/superpowers/status-badge"
-import { agentFixture, failedTaskFixture, increasedScopeRun, runFixture, taskRunFixture } from "../src/superpowers/fixtures"
+import {
+  agentFixture,
+  failedTaskFixture,
+  halfVerifiedRun,
+  increasedScopeRun,
+  runFixture,
+  taskRunFixture,
+} from "../src/superpowers/fixtures"
 import { requestEvidenceReveal, revealPendingEvidence } from "../src/superpowers/evidence-reveal"
 import type { ExecutionScope } from "../src/superpowers/identity"
 import type { ExecutionPresentation } from "../src/superpowers/panel"
@@ -116,11 +126,26 @@ const liveSession = {
       session: {
         get: (id: string) =>
           id === "root" ? { parentID: undefined, location: { directory: "/root/git/demo" } } : undefined,
+        message: {
+          get: (sessionID: string, messageID: string) =>
+            sessionID === "child" && messageID === "msg-api-1"
+              ? { type: "assistant", content: [{ type: "tool", id: "part-api-1" }] }
+              : undefined,
+        },
       },
     },
   },
   workspace: { directory: () => "/root/git/demo" },
   layout: { tabs: () => ({ active: () => "review", all: () => ["review"] }) },
+} as unknown as SessionModel
+
+const evidenceTimelineSession = {
+  identity: { sessionID: () => undefined, sessionKey: () => "wsl::child", params: { id: "child" } },
+  history: { messages: () => [], visibleUserMessages: () => [], lastUserMessage: () => undefined },
+  ownership: {
+    key: () => "wsl::child",
+    capture: () => ({ key: "wsl::child", current: () => true, run: (run: () => void) => run() }),
+  },
 } as unknown as SessionModel
 
 const liveRunSummary: RunSummary = {
@@ -144,8 +169,7 @@ const liveRunSummary: RunSummary = {
   },
 }
 
-function installExecutionTransport() {
-  const snapshot = runFixture({ runID: "run-1", revision: 3, tasks: [failedTaskFixture()] })
+function installExecutionTransport(snapshot = runFixture({ runID: "run-1", revision: 3, tasks: [failedTaskFixture()] })) {
   const rpc = () => ({
     capabilities: async () => ({ schemaVersion: 1, pluginVersion: "0.1.0", maxTasks: 500, reporting: "controller" }),
     getSummaries: async () => ({ items: [liveRunSummary] }),
@@ -189,8 +213,39 @@ function LiveExecutionHeader() {
   )
 }
 
-function mountLiveSessionHeader() {
-  const restore = installExecutionTransport()
+function LiveEvidenceComposition() {
+  const [execution, setExecution] = createSignal<ExecutionModel>()
+  const [state, setState] = createStore({ target: "", reveals: 0 })
+  const timeline = createSessionTimelineInteraction(evidenceTimelineSession)
+  timeline.view.setRevealMessage((messageID, partID) => {
+    setState("target", `${messageID}#${partID ?? ""}`)
+    setState("reveals", (count) => count + 1)
+  })
+  return (
+    <>
+      <SessionExecutionProvider
+        session={liveSession}
+        attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
+        onModel={setExecution}
+      >
+        <Show when={execution()}>
+          {(model) => (
+            <>
+              <ExecutionTaskList model={model()} />
+              <ExecutionTaskDetails model={model()} />
+            </>
+          )}
+        </Show>
+      </SessionExecutionProvider>
+      <div data-testid="production-timeline-ready">{String(timeline.ready())}</div>
+      <div data-testid="production-revealed-target">{state.target}</div>
+      <div data-testid="production-reveal-count">{state.reveals}</div>
+    </>
+  )
+}
+
+function mountLiveSessionHeader(evidence = false) {
+  const restore = installExecutionTransport(evidence ? halfVerifiedRun() : undefined)
   const host = document.createElement("main")
   host.dataset.testid = "execution-fixture"
   host.style.cssText = "position:fixed;inset:0;background:#181818;color:#eee;padding:24px"
@@ -206,7 +261,7 @@ function mountLiveSessionHeader() {
                   <TabsProvider>
                     <GlobalProvider>
                       <ServerProvider conn={desktopServer}>
-                        <LiveExecutionHeader />
+                        {evidence ? <LiveEvidenceComposition /> : <LiveExecutionHeader />}
                       </ServerProvider>
                     </GlobalProvider>
                   </TabsProvider>
@@ -230,8 +285,8 @@ export async function mountExecutionFixture(input: {
   scenario?: string
 } = {}): Promise<ReturnType<typeof render>> {
   const scenario = input.scenario ?? "observer"
-  if (scenario === "session-execution-live") {
-    mountLiveSessionHeader()
+  if (scenario === "session-execution-live" || scenario === "evidence-production") {
+    mountLiveSessionHeader(scenario === "evidence-production")
     return undefined as unknown as ReturnType<typeof render>
   }
   const host = document.createElement("main")

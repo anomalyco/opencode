@@ -63,5 +63,8 @@ export function useLayout() {
     handoff: {
       setTabs() {},
     },
+    pendingMessage: {
+      consume() {},
+    },
   }
 }

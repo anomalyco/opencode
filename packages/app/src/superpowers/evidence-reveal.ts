@@ -1,19 +1,21 @@
+import { createStore } from "solid-js/store"
+
 export type EvidenceRevealTarget = {
   sessionID: string
   messageID: string
   partID?: string
 }
 
-const pending = new Map<string, EvidenceRevealTarget>()
+const [pending, setPending] = createStore<Record<string, EvidenceRevealTarget | undefined>>({})
 
 export function requestEvidenceReveal(target: EvidenceRevealTarget) {
-  pending.set(target.sessionID, target)
+  setPending(target.sessionID, target)
 }
 
 export function consumeEvidenceReveal(sessionID: string) {
-  const target = pending.get(sessionID)
+  const target = pending[sessionID]
   if (!target) return
-  pending.delete(sessionID)
+  setPending(sessionID, undefined)
   return target
 }
 
