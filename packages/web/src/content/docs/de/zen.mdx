@@ -90,6 +90,7 @@ Du kannst auch über die folgenden API-Endpunkte auf unsere Modelle zugreifen.
 | Gemini 3.5 Flash Lite           | gemini-3.5-flash-lite           | `https://opencode.ai/zen/v1/models/gemini-3.5-flash-lite` | `@ai-sdk/google`            |
 | Gemini 3.1 Pro                  | gemini-3.1-pro                  | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`        | `@ai-sdk/google`            |
 | Gemini 3 Flash                  | gemini-3-flash                  | `https://opencode.ai/zen/v1/models/gemini-3-flash`        | `@ai-sdk/google`            |
+| Grok 4.7                        | grok-4.7                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Grok 4.6                        | grok-4.6                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Grok 4.5                        | grok-4.5                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Grok Build 0.1                  | grok-build-0.1                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
@@ -119,6 +120,7 @@ Du kannst auch über die folgenden API-Endpunkte auf unsere Modelle zugreifen.
 | Jev 1.13                        | jev-1.13                        | `https://opencode.ai/zen/v1/systemone`                    | -                           |
 | Jev 1.13 Free                   | jev-1.13-free                   | `https://opencode.ai/zen/v1/systemone`                    | -                           |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Flash Free            | mimo-v2.6-flash-free            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Ling 3.0 Flash Fin Free         | ling-3.0-flash-fin-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -200,6 +202,7 @@ Wir unterstützen ein Pay-as-you-go-Modell. Unten findest du die Preise **pro 1M
 | Model                             | Input     | Output    | Cached Read | Cached Write |
 | --------------------------------- | --------- | --------- | ----------- | ------------ |
 | Big Pickle                        | Free      | Free      | Free        | -            |
+| MiMo-V2.6-Flash Free              | Free      | Free      | Free        | -            |
 | MiMo-V2.5 Free                    | Free      | Free      | Free        | -            |
 | Ling 3.0 Flash Fin Free           | Free      | Free      | Free        | -            |
 | Nemotron 3 Ultra Free             | Free      | Free      | Free        | -            |
@@ -248,6 +251,8 @@ Wir unterstützen ein Pay-as-you-go-Modell. Unten findest du die Preise **pro 1M
 | Gemini 3.1 Pro (≤ 200K tokens)    | $2.00     | $12.00    | $0.20       | -            |
 | Gemini 3.1 Pro (> 200K tokens)    | $4.00     | $18.00    | $0.40       | -            |
 | Gemini 3 Flash                    | $0.50     | $3.00     | $0.05       | -            |
+| Grok 4.7 (≤ 200K tokens)          | $2.00     | $6.00     | $0.50       | -            |
+| Grok 4.7 (> 200K tokens)          | $4.00     | $12.00    | $1.00       | -            |
 | Grok 4.6 (≤ 200K tokens)          | $2.00     | $6.00     | $0.50       | -            |
 | Grok 4.6 (> 200K tokens)          | $4.00     | $12.00    | $1.00       | -            |
 | Grok 4.5 (≤ 200K tokens)          | $2.00     | $6.00     | $0.30       | -            |
@@ -293,6 +298,7 @@ Kreditkartengebühren werden zum Selbstkostenpreis weitergegeben (4.4% + $0.30 p
 
 Die kostenlosen Modelle:
 
+- MiMo-V2.6-Flash Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 - MiMo-V2.5 Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 - Ling 3.0 Flash Fin Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
 - Nemotron 3 Ultra Free ist für begrenzte Zeit auf OpenCode verfügbar. Das Team nutzt diese Zeit, um Feedback zu sammeln und das Modell zu verbessern.
@@ -351,6 +357,7 @@ Angenommen, du setzt ein monatliches Nutzungslimit von $20, dann wird Zen in ein
 Alle unsere Modelle werden in den USA gehostet. Unsere Provider folgen einer Zero-Retention-Richtlinie und verwenden deine Daten nicht zum Trainieren von Modellen, mit den folgenden Ausnahmen:
 
 - Big Pickle: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
+- MiMo-V2.6-Flash Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
 - MiMo-V2.5 Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
 - Ling 3.0 Flash Fin Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
 - Nemotron 3 Ultra Free (kostenlose NVIDIA-Endpunkte): Nur für Testzwecke — übermitteln Sie keine personenbezogenen oder vertraulichen Daten. Ihre Nutzung wird zu Sicherheitszwecken und zur Verbesserung der Produkte und Dienste von NVIDIA protokolliert. Die zu Verbesserungszwecken protokollierten Sitzungsdaten sind nicht mit Ihrer Identität oder einem dauerhaften Identifikator verknüpft. Weitere Informationen zu unseren Datenverarbeitungspraktiken finden Sie in unserer [Datenschutzrichtlinie](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Durch die Interaktion mit diesem Endpunkt stimmen Sie unserer Erhebung, Aufzeichnung und Nutzung solcher Informationen sowie den [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) zu.
