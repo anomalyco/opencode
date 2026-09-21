@@ -2,6 +2,7 @@ import "./execution.css"
 import { For, Match, Show, Suspense, Switch, lazy } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExecutionAgentList } from "./agent-list"
+import { ExecutionActivityFeed } from "./activity-feed"
 import { ExecutionTaskDetails } from "./task-details"
 import { ExecutionTaskList } from "./task-list"
 import { EXECUTION_SUBVIEWS, structuredViewsEnabled, type ExecutionModel } from "./model"
@@ -103,7 +104,9 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
             </div>
           </Match>
           <Match when={effectiveSubview() === "activity"}>
-            <TrackingUnavailable model={props.model} />
+            <Show when={props.model.run()} fallback={<TrackingUnavailable model={props.model} />}>
+              <ExecutionActivityFeed model={props.model} />
+            </Show>
           </Match>
         </Switch>
       </div>

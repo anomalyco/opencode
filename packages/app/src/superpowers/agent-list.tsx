@@ -2,6 +2,8 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount }
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Icon } from "@opencode/ui/icon"
 import { useLanguage } from "@/runtime/i18n/language"
+import type { NativeUsage } from "./native-types"
+import { tokenTotal } from "./telemetry"
 import {
   AGENT_ROWS_VIRTUALIZE_THRESHOLD,
   type ExecutionAgent,
@@ -314,6 +316,7 @@ function AgentRow(props: {
             <span>{agent().model?.providerID}/{agent().model?.id}</span>
           </Show>
         </span>
+        <Show when={agent().usage}>{(usage) => <AgentUsage usage={usage()} />}</Show>
         <Show when={agent().activity}>
           <span class="execution-agent__activity">{agent().activity}</span>
         </Show>
@@ -386,6 +389,31 @@ function AgentRow(props: {
         </div>
       </Show>
     </li>
+  )
+}
+
+function AgentUsage(props: { usage: NativeUsage }) {
+  const language = useLanguage()
+  const text = () => {
+    const cost =
+      props.usage.cost === undefined
+        ? undefined
+        : new Intl.NumberFormat(language.intl(), { style: "currency", currency: "USD" }).format(props.usage.cost)
+    const tokens =
+      props.usage.tokens === undefined ? undefined : tokenTotal(props.usage.tokens).toLocaleString(language.intl())
+    if (cost !== undefined && tokens !== undefined) return language.t("execution.agent.usage.both", { cost, tokens })
+    if (cost !== undefined) return language.t("execution.agent.usage.costOnly", { cost })
+    if (tokens !== undefined) return language.t("execution.agent.usage.tokensOnly", { tokens })
+    return undefined
+  }
+  return (
+    <Show when={text()}>
+      {(value) => (
+        <span class="execution-agent__usage" data-testid="execution-agent-usage">
+          {value()}
+        </span>
+      )}
+    </Show>
   )
 }
 

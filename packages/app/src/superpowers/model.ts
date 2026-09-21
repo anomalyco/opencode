@@ -1,15 +1,18 @@
 import { createSignal, type Accessor } from "solid-js"
+import { createStore } from "solid-js/store"
 import {
   summarizeProgress,
   type Evidence,
   type Gate,
   type ProgressSummary,
+  type RunEvent,
   type RunSnapshot,
   type Task,
 } from "@bearmanser/opencode-superpowers-execution/contract"
 import { projectAgentTree } from "./agent-tree"
 import type { ExecutionScope } from "./identity"
 import type { NativeRecord } from "./native-types"
+import { ACCOUNTING_CURRENCY, sumUsageRecords, type UsageAggregate, type UsageRecord } from "./telemetry"
 
 export const EXECUTION_SUBVIEWS = ["map", "agents", "tasks", "activity"] as const
 export type ExecutionSubview = (typeof EXECUTION_SUBVIEWS)[number]
@@ -86,6 +89,22 @@ export type EvidenceReference = {
 }
 
 export type EvidenceResolution = "resolving" | "available" | "unavailable"
+
+export type ExecutionActivityEvent = RunEvent & {
+  taskTitle?: string
+  sessionID?: string
+  sessionTitle?: string
+}
+
+export type ExecutionActivityPage = {
+  events: ExecutionActivityEvent[]
+  total: number
+  visible: number
+  truncatedBeforeRevision?: number
+  hasMore: boolean
+}
+
+export const ACTIVITY_PAGE_SIZE = 100
 
 export type EvidenceResolver = (reference: Omit<EvidenceReference, "id">) => Promise<boolean> | boolean
 
@@ -199,6 +218,7 @@ export type ExecutionModelInput = {
   agents?: Accessor<ExecutionAgent[]>
   progress?: Accessor<ExecutionProgress | undefined>
   attention?: Accessor<ExecutionAttention>
+  usage?: Accessor<UsageRecord[]>
   initialSubview?: ExecutionSubview
   openSession?: (sessionID: string) => void
   resolveEvidence?: EvidenceResolver
@@ -222,6 +242,8 @@ export type ExecutionModel = {
   subview: Accessor<ExecutionSubview>
   selectedTaskID: Accessor<string | undefined>
   selectedTask: Accessor<Task | undefined>
+  activity: Accessor<ExecutionActivityPage>
+  activityUsage: Accessor<UsageAggregate>
   taskAssignments: (taskID: string, attempt: number) => ExecutionTaskAssignments
   taskEvidence: (taskID: string, attempt: number) => ExecutionTaskEvidence
   evidenceResolution: (evidenceID: string) => EvidenceResolution | undefined
@@ -232,6 +254,7 @@ export type ExecutionModel = {
   selectTask: (taskID: string | undefined) => void
   selectRun: (runID: string | undefined) => void
   setExpanded: (expanded: boolean) => void
+  loadMoreActivity: () => void
   isAgentExpanded: (sessionID: string) => boolean
   toggleAgentExpanded: (sessionID: string) => void
   isAssignmentHistoryExpanded: (sessionID: string) => boolean
@@ -254,6 +277,7 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
   const [expandedNodes, setExpandedNodes] = createSignal<Record<string, boolean>>({})
   const [assignmentHistory, setAssignmentHistory] = createSignal<Record<string, boolean>>({})
   const [evidenceStates, setEvidenceStates] = createSignal<Record<string, EvidenceResolution>>({})
+  const [activityPaging, setActivityPaging] = createStore({ key: "", count: ACTIVITY_PAGE_SIZE })
 
   const rawSnapshot = () => input.snapshot?.()
   const mode = () => input.mode?.() ?? (rawSnapshot() ? "ready" : "observer")
@@ -369,6 +393,65 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     return current?.tasks.find((task) => task.id === selectedTaskID())
   }
 
+  const activityKey = () =>
+    `${scope()?.serverKey ?? ""}\u0000${scope()?.rootSessionID ?? ""}\u0000${run()?.runID ?? ""}`
+
+  const activityVisibleCount = () =>
+    activityPaging.key === activityKey() ? activityPaging.count : ACTIVITY_PAGE_SIZE
+
+  const activityEvents = (): ExecutionActivityEvent[] => {
+    const current = run()
+    if (!current) return []
+    const agentsByID = new Map(agents().map((agent) => [agent.id, agent]))
+    const tasksByID = new Map(current.tasks.map((task) => [task.id, task]))
+    return current.events
+      .map((event) => {
+        const sessionID = activitySession(current, event)
+        return {
+          ...event,
+          taskTitle: event.taskID ? tasksByID.get(event.taskID)?.title : undefined,
+          sessionID,
+          sessionTitle: sessionID ? agentsByID.get(sessionID)?.title : undefined,
+        } satisfies ExecutionActivityEvent
+      })
+      .sort(compareActivityEvents)
+      .reverse()
+  }
+
+  const activity = (): ExecutionActivityPage => {
+    const events = activityEvents()
+    const visible = activityVisibleCount()
+    return {
+      events: events.slice(0, visible),
+      total: events.length,
+      visible: Math.min(visible, events.length),
+      truncatedBeforeRevision: run()?.historyTruncatedBeforeRevision,
+      hasMore: events.length > visible,
+    }
+  }
+
+  const loadMoreActivity = () =>
+    setActivityPaging({ key: activityKey(), count: activityVisibleCount() + ACTIVITY_PAGE_SIZE })
+
+  const activityUsage = (): UsageAggregate => {
+    const currentScope = scope()
+    const serverKey = currentScope?.serverKey ?? ""
+    const sessions = agents()
+      .filter((agent) => agent.usage !== undefined)
+      .map((agent) => ({
+        serverKey,
+        sessionID: agent.id,
+        parentSessionID: agent.parentID,
+        currency: ACCOUNTING_CURRENCY,
+        cost: agent.usage?.cost,
+        tokens: agent.usage?.tokens,
+      }) satisfies UsageRecord)
+    return sumUsageRecords([...sessions, ...(input.usage?.() ?? [])], {
+      serverKey,
+      currency: ACCOUNTING_CURRENCY,
+    })
+  }
+
   const taskAssignments = (taskID: string, attempt: number) => {
     const current = run()
     if (!current) return { current: [], history: [], uniqueSessions: 0 }
@@ -413,6 +496,8 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     subview,
     selectedTaskID,
     selectedTask,
+    activity,
+    activityUsage,
     taskAssignments,
     taskEvidence,
     evidenceResolution,
@@ -423,6 +508,7 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     selectTask: setSelectedTaskID,
     selectRun: (runID) => input.selectRun?.(runID),
     setExpanded,
+    loadMoreActivity,
     isAgentExpanded,
     toggleAgentExpanded,
     isAssignmentHistoryExpanded,
@@ -436,6 +522,22 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
 
 function controllerRank(rootSessionID: string | undefined, agent: ExecutionAgent) {
   return rootSessionID === agent.id ? 0 : 1
+}
+
+function activitySession(run: RunSnapshot, event: RunEvent) {
+  if (!event.taskID) return run.rootSessionID
+  const assignments = run.assignments.filter((item) => item.taskID === event.taskID)
+  if (event.type === "assignment.add" || event.type === "assignment.end") return assignments.at(-1)?.sessionID
+  const evidence = run.evidence.filter((item) => item.taskID === event.taskID).at(-1)
+  return evidence?.sessionID ?? assignments.at(-1)?.sessionID
+}
+
+function compareActivityEvents(left: RunEvent, right: RunEvent) {
+  if (left.revision !== right.revision) return left.revision - right.revision
+  if (left.createdAt !== right.createdAt) return left.createdAt - right.createdAt
+  if (left.type < right.type) return -1
+  if (left.type > right.type) return 1
+  return 0
 }
 
 function defaultSubview(input: ExecutionModelInput): ExecutionSubview {

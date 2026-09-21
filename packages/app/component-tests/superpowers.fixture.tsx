@@ -298,7 +298,8 @@ export async function mountExecutionFixture(input: {
   function Fixture() {
     const taskScenario = scenario.startsWith("tasks") || scenario === "half-verified"
     const graphScenario = scenario === "map" || scenario === "map-large"
-    const executionInitiallyOpen = scenario.startsWith("agents") || taskScenario || graphScenario
+    const activityScenario = scenario === "activity" || scenario === "activity-empty"
+    const executionInitiallyOpen = scenario.startsWith("agents") || taskScenario || graphScenario || activityScenario
     const [run, setRun] = createSignal<RunSnapshot | undefined>(taskRunFixture(scenario))
     const [state, setState] = createStore({
       active: executionInitiallyOpen ? (SESSION_EXECUTION_TAB as string | undefined) : undefined,
@@ -353,7 +354,7 @@ export async function mountExecutionFixture(input: {
     const model = createExecutionModel({
       mode: () => (run() ? "ready" : "observer"),
       scope,
-      initialSubview: taskScenario ? "tasks" : undefined,
+      initialSubview: taskScenario ? "tasks" : activityScenario ? "activity" : undefined,
       snapshot: () => run(),
       agents: () => agentFixture(scenario),
       attention: () => fixtureAttention(scenario),

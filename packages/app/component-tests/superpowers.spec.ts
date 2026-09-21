@@ -658,3 +658,46 @@ story("map controls stay reachable in a narrow panel", async ({ page }) => {
   await page.getByTestId("execution-map-zoom-in").click()
   await expect(page.getByTestId("execution-map-viewport")).toHaveAttribute("data-zoom", "1.25")
 })
+
+story("activity lists retained report events with a truncation boundary", async ({ page }) => {
+  await openExecutionFixture(page, "activity")
+  await expect(page.getByTestId("execution-activity")).toBeVisible()
+  const events = page.getByTestId("execution-activity-event")
+  await expect(events).toHaveCount(100)
+  await expect(events.first()).toHaveAttribute("data-revision", "1150")
+  await expect(events.nth(99)).toHaveAttribute("data-revision", "1051")
+  await expect(page.getByTestId("execution-activity-boundary")).toContainText("revision 1001")
+  await page
+    .getByTestId("execution-activity-more")
+    .evaluate((element) => (element as HTMLElement).click())
+  await expect(events).toHaveCount(150)
+  await expect(page.getByTestId("execution-activity-more")).toHaveCount(0)
+  await expect(page.getByTestId("execution-activity-boundary")).toBeVisible()
+})
+
+story("activity links report events to task details and referenced sessions", async ({ page }) => {
+  await openExecutionFixture(page, "activity")
+  await page.getByRole("button", { name: "Open task API contract", exact: true }).first().click()
+  await expect(page.getByTestId("execution-task-title")).toHaveText("API contract")
+  await expect(page.getByTestId("execution-activity")).toHaveCount(0)
+  await page.getByRole("button", { name: "Activity", exact: true }).click()
+  await page.getByRole("button", { name: "Open session Child implementer", exact: true }).first().click()
+  await expect(page.getByTestId("navigation-target")).toHaveText("wsl/child")
+})
+
+story("activity reports telemetry coverage from loaded sessions", async ({ page }) => {
+  await openExecutionFixture(page, "activity")
+  const usage = page.getByTestId("execution-activity-usage")
+  await expect(usage).toHaveAttribute("data-coverage", "complete")
+  await expect(usage).toContainText("Reported cost $2.00")
+  await expect(usage).toContainText("Reported tokens 2,350")
+  await expect(usage).toContainText("not a provider invoice")
+})
+
+story("agents show native usage telemetry only where the session reports it", async ({ page }) => {
+  await openExecutionFixture(page, "agents-telemetry")
+  const root = page.getByRole("treeitem", { name: /Root controller/ })
+  await expect(root.getByTestId("execution-agent-usage")).toHaveText("$1.25 · 1,750 tokens")
+  const idle = page.getByRole("treeitem", { name: /Idle reviewer/ })
+  await expect(idle.getByTestId("execution-agent-usage")).toHaveCount(0)
+})

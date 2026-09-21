@@ -450,6 +450,12 @@
   line-height: var(--line-height-compact);
 }
 
+.execution-agent__usage {
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
 .execution-agent__error {
   display: flex;
   align-items: center;
@@ -666,4 +672,109 @@
 
 .execution-map__group-node {
   height: auto;
+}
+
+.execution-activity {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+}
+
+.execution-activity__empty {
+  margin: 0;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.execution-activity__note {
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.execution-activity__list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.execution-activity__event {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--v2-border-border-base);
+}
+
+.execution-activity__revision,
+.execution-activity__time,
+.execution-activity__type {
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-activity__summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-activity__link,
+.execution-activity__more {
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-activity__link:hover,
+.execution-activity__more:hover {
+  color: var(--v2-text-text-muted);
+}
+
+.execution-activity__boundary {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--v2-background-bg-deep);
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.execution-activity__usage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+.execution-activity__usage-partial {
+  color: var(--v2-text-text-base);
+}
+
+.execution-activity__usage-source,
+.execution-activity__usage-unavailable {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
 }

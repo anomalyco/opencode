@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { RunSnapshot } from "@bearmanser/opencode-superpowers-execution/contract"
+import type { RunEvent, RunSnapshot } from "@bearmanser/opencode-superpowers-execution/contract"
 import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSessionTabs, getTabReorderIndex } from "../session/helpers"
@@ -13,6 +13,7 @@ import {
 } from "../shell/state/session-tabs"
 import { summarizeProgress } from "@bearmanser/opencode-superpowers-execution/contract"
 import {
+  activityRun,
   agentFixture,
   detailedTasksRun,
   failedTaskFixture,
@@ -21,6 +22,7 @@ import {
   increasedScopeRun,
   runFixture,
   smallScopeRun,
+  taskFixture,
 } from "./fixtures"
 import { requestEvidenceReveal, revealPendingEvidence } from "./evidence-reveal"
 import {
@@ -455,6 +457,111 @@ describe("createExecutionModel tasks", () => {
       source: "controller_report",
     })
   })
+})
+
+describe("createExecutionModel activity", () => {
+  test("pages retained report events newest first and exposes the truncation boundary", () =>
+    root(() => {
+      const model = createExecutionModel({ snapshot: () => activityRun() })
+      const page = model.activity()
+      expect(page.total).toBe(150)
+      expect(page.visible).toBe(100)
+      expect(page.events).toHaveLength(100)
+      expect(page.events[0]?.revision).toBe(1150)
+      expect(page.events[99]?.revision).toBe(1051)
+      expect(page.truncatedBeforeRevision).toBe(1001)
+      expect(page.hasMore).toBe(true)
+      model.loadMoreActivity()
+      expect(model.activity().events).toHaveLength(150)
+      expect(model.activity().hasMore).toBe(false)
+      expect(model.activity().events.at(-1)?.revision).toBe(1001)
+    }))
+
+  test("never presents a partial retained window as complete history", () =>
+    root(() => {
+      const events: RunEvent[] = Array.from({ length: 1000 }, (_, index) => ({
+        revision: index + 1,
+        type: "task.state",
+        taskID: "task-1",
+        summary: `Event ${index + 1}`,
+        createdAt: index,
+      }))
+      const model = createExecutionModel({
+        snapshot: () =>
+          runFixture({ revision: 1000, tasks: [taskFixture()], events, historyTruncatedBeforeRevision: 1 }),
+      })
+      expect(model.activity().total).toBe(1000)
+      expect(model.activity().visible).toBe(100)
+      expect(model.activity().truncatedBeforeRevision).toBe(1)
+      expect(model.activity().hasMore).toBe(true)
+    }))
+
+  test("resolves a report event to its task and referenced session", () =>
+    root(() => {
+      const model = createExecutionModel({
+        snapshot: () => activityRun(),
+        agents: () => agentFixture("activity"),
+      })
+      const newest = model.activity().events[0]!
+      expect(newest.taskID).toBe("task-api")
+      expect(newest.taskTitle).toBe("API contract")
+      expect(newest.sessionID).toBe("child")
+      expect(newest.sessionTitle).toBe("Child implementer")
+    }))
+
+  test("sums only non-overlapping native usage and reports unavailable without records", () =>
+    root(() => {
+      const withAgents = createExecutionModel({
+        snapshot: () => activityRun(),
+        agents: () => agentFixture("activity"),
+      })
+      expect(withAgents.activityUsage().cost).toEqual({ value: 2, coverage: "complete" })
+      expect(withAgents.activityUsage().tokens).toEqual({ value: 2350, coverage: "complete" })
+      const withoutAgents = createExecutionModel({ snapshot: () => activityRun() })
+      expect(withoutAgents.activityUsage().cost).toEqual({ value: undefined, coverage: "unavailable" })
+      expect(withoutAgents.activityUsage().tokens).toEqual({ value: undefined, coverage: "unavailable" })
+    }))
+
+  test("merges injected message accounting without double counting a session summary", () =>
+    root(() => {
+      const scope = (): ExecutionScope => ({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: "root" })
+      const model = createExecutionModel({
+        scope,
+        snapshot: () => activityRun(),
+        agents: () => agentFixture("activity"),
+        usage: () => [
+          {
+            serverKey: "wsl",
+            sessionID: "root",
+            messageID: "msg-a",
+            cost: 99,
+            tokens: { input: 9900, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          },
+          {
+            serverKey: "wsl",
+            sessionID: "root",
+            messageID: "msg-a",
+            cost: 99,
+            tokens: { input: 9900, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          },
+        ],
+      })
+      expect(model.activityUsage().cost).toEqual({ value: 2, coverage: "complete" })
+      expect(model.activityUsage().duplicates).toBe(1)
+      expect(model.activityUsage().rejected.inclusive).toBe(1)
+    }))
+
+  test("resets activity pagination when the run changes", () =>
+    root(() => {
+      const [snapshot, setSnapshot] = createSignal<RunSnapshot | undefined>(activityRun())
+      const model = createExecutionModel({ snapshot })
+      model.loadMoreActivity()
+      expect(model.activity().visible).toBe(150)
+      setSnapshot(runFixture({ runID: "run-other", revision: 1, events: [] }))
+      expect(model.activity().visible).toBe(0)
+      expect(model.activity().total).toBe(0)
+      expect(model.activity().hasMore).toBe(false)
+    }))
 })
 
 describe("createExecutionModel agents", () => {

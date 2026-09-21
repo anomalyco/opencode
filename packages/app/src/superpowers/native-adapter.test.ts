@@ -549,6 +549,28 @@ test("the native boundary follows the session list cursor", async () => {
   ])
 })
 
+test("native session accounting is carried only when the schema provides it", async () => {
+  const details = new Map<string, NativeSessionInfo>([
+    [
+      "root",
+      sessionInfo("root", {
+        cost: 1.5,
+        tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+      }),
+    ],
+    ["child", sessionInfo("child", { parentID: "root" })],
+  ])
+  const pages = new Map<string, FakePage[]>([["root", [{ data: [sessionInfo("child", { parentID: "root" })] }]]])
+  const fake = fakeBoundary({ details, pages })
+  const adapter = createNativeExecutionAdapter({
+    target: () => target({ selectedSessionID: "root" }),
+    boundary: fake.boundary,
+  })
+  const snapshot = await adapter.hydrate()
+  expect(snapshot.nodes.find((node) => node.id === "root")?.usage?.cost).toBe(1.5)
+  expect(snapshot.nodes.find((node) => node.id === "child")?.usage).toBeUndefined()
+})
+
 test("attention comes only from permissions and question forms", async () => {
   const build = (permissions: unknown[], forms: unknown[]) =>
     createNativeBoundary({

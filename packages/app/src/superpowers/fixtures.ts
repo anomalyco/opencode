@@ -1,4 +1,4 @@
-import type { Assignment, Evidence, RunSnapshot, Task } from "@bearmanser/opencode-superpowers-execution/contract"
+import type { Assignment, Evidence, RunEvent, RunSnapshot, Task } from "@bearmanser/opencode-superpowers-execution/contract"
 import type { ExecutionAssignment, ExecutionAgent } from "./model"
 import { nativeState } from "./native-adapter"
 import type { NativeRecord } from "./native-types"
@@ -48,9 +48,11 @@ export const AGENT_FIXTURE_SCENARIOS = [
   "agents-deleted",
   "agents-assignments",
   "agents-many",
+  "agents-telemetry",
 ] as const
 
 export function agentFixture(scenario: string): ExecutionAgent[] {
+  if (scenario === "agents-telemetry" || scenario === "activity") return usageAgents().map(toAgent)
   const base = nativeFixture().map(toAgent)
   if (scenario === "agents-foreground") {
     return base.concat(
@@ -129,6 +131,21 @@ const assignmentFixture: Record<string, ExecutionAssignment[]> = {
 
 function toAgent(record: NativeRecord): ExecutionAgent {
   return { ...record, state: nativeState(record) }
+}
+
+const FIXTURE_TOKENS = (input: number, output: number, read = 0) => ({
+  input,
+  output,
+  reasoning: 0,
+  cache: { read, write: 0 },
+})
+
+function usageAgents(): NativeRecord[] {
+  return nativeFixture().map((record) => {
+    if (record.id === "root") return { ...record, usage: { cost: 1.25, tokens: FIXTURE_TOKENS(1000, 250, 500) } }
+    if (record.id === "child") return { ...record, usage: { cost: 0.75, tokens: FIXTURE_TOKENS(500, 100) } }
+    return record
+  })
 }
 
 const FIXTURE_PLAN_HASH = "a".repeat(64)
@@ -579,5 +596,69 @@ export function taskRunFixture(scenario: string): RunSnapshot | undefined {
   if (scenario === "tasks-gate-order") return gateOrderRun()
   if (scenario === "map") return taskGraphRun()
   if (scenario === "map-large") return largeGraphRun()
+  if (scenario === "activity") return activityRun()
+  if (scenario === "activity-empty") return runFixture({ runID: "run-activity-empty" })
   return undefined
+}
+
+const ACTIVITY_EPOCH = 1_700_001_000_000
+
+export function activityRun(): RunSnapshot {
+  const events: RunEvent[] = Array.from({ length: 150 }, (_, index) => ({
+    revision: 1001 + index,
+    type: index % 3 === 0 ? "task.state" : index % 3 === 1 ? "evidence.add" : "assignment.add",
+    taskID: index % 5 === 0 ? "task-review" : "task-api",
+    summary: `Reported event ${1001 + index}`,
+    createdAt: ACTIVITY_EPOCH + index * 1_000,
+  }))
+  return runFixture({
+    runID: "run-activity",
+    revision: 1150,
+    updatedAt: ACTIVITY_EPOCH + 150_000,
+    status: "active",
+    tasks: [
+      taskFixture({ id: "task-api", title: "API contract", phase: "Build", order: 0, state: "verified" }),
+      taskFixture({
+        id: "task-review",
+        title: "Final review",
+        phase: "Review",
+        order: 1,
+        state: "awaiting_review",
+        requiredGates: ["spec_review"],
+        finalReview: true,
+      }),
+    ],
+    assignments: [
+      fixtureAssignment({ id: "a-activity-api", taskID: "task-api", sessionID: "child", role: "implementer" }),
+      fixtureAssignment({
+        id: "a-activity-review",
+        taskID: "task-review",
+        sessionID: "idle-child",
+        role: "code_reviewer",
+      }),
+    ],
+    evidence: [
+      fixtureEvidence({
+        id: "e-activity-api",
+        taskID: "task-api",
+        gate: "tests",
+        outcome: "passed",
+        sessionID: "child",
+        messageID: "msg-activity-1",
+        summary: "Tests passed",
+      }),
+      fixtureEvidence({
+        id: "e-activity-review",
+        taskID: "task-review",
+        gate: "spec_review",
+        outcome: "passed",
+        sessionID: "idle-child",
+        messageID: "msg-activity-2",
+        summary: "Spec review passed",
+        createdAt: ACTIVITY_EPOCH + 200_000,
+      }),
+    ],
+    events,
+    historyTruncatedBeforeRevision: 1001,
+  })
 }

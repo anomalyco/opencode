@@ -3,7 +3,8 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { sessionHref } from "@/shell/routes/session"
 import { projectAgentTree, type AgentTree } from "./agent-tree"
 import { scopeKey, type ExecutionScope } from "./identity"
-import type { NativeRecord } from "./native-types"
+import type { NativeRecord, NativeUsage } from "./native-types"
+import type { TokenUsage } from "./telemetry"
 
 export type NativeScope = ExecutionScope & { serverKey: ServerConnection.Key }
 
@@ -18,6 +19,8 @@ export type NativeSessionInfo = {
   title?: string
   directory: string
   model?: { id: string; providerID: string }
+  cost?: number
+  tokens?: TokenUsage
 }
 
 export type NativeDetail = {
@@ -73,6 +76,7 @@ export function nativeRecord(
     status,
     needsInput,
     model: info.model ? { id: info.model.id, providerID: info.model.providerID } : undefined,
+    usage: nativeUsage(info),
   }
 }
 
@@ -102,7 +106,14 @@ function nativeInfo(session: SessionInfo): NativeSessionInfo {
     title: session.title,
     directory: session.location.directory,
     model: session.model ? { id: session.model.id, providerID: session.model.providerID } : undefined,
+    cost: session.cost,
+    tokens: session.tokens,
   }
+}
+
+function nativeUsage(info: NativeSessionInfo): NativeUsage | undefined {
+  if (info.cost === undefined && info.tokens === undefined) return undefined
+  return { cost: info.cost, tokens: info.tokens }
 }
 
 function isAttentionForm(form: FormInfo) {
