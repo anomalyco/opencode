@@ -151,8 +151,12 @@ type LiveExecutionState = {
   connected: boolean
   resolutionAvailable: boolean
   running: boolean
+  runningSessionID: string
   needsInput: boolean
+  requestSessionID: string
+  requestsLoaded: boolean
   descendantIDs: string[]
+  sharedDescendantIDs: string[]
   visible: boolean
   ownerMounted: boolean
   messageFetches: number
@@ -186,10 +190,10 @@ function liveNativeSession(sessionID: string) {
   return { id: sessionID, parentID: "root", title: sessionID, location: { directory: "/root/git/demo" } }
 }
 
-function livePermission() {
+function livePermission(sessionID = "root") {
   return {
     id: "permission-1",
-    sessionID: "root",
+    sessionID,
     action: "shell",
     resources: ["bun test"],
     save: ["bun test"],
@@ -203,12 +207,19 @@ function createLiveSession(state: LiveExecutionState) {
     shared: {
       data: {
         session: {
-          list: () => [liveNativeSession("root"), ...state.descendantIDs.map(liveNativeSession)],
+          list: () => [liveNativeSession("root"), ...state.sharedDescendantIDs.map(liveNativeSession)],
           get: (id: string) =>
-            id === "root" || state.descendantIDs.includes(id) ? liveNativeSession(id) : undefined,
-          status: (id: string) => (id === "root" && state.running ? "running" : "idle"),
-          permission: { list: (id: string) => (id === "root" && state.needsInput ? [{ id: "permission-1" }] : []) },
-          form: { list: () => [] },
+            id === "root" || state.sharedDescendantIDs.includes(id) ? liveNativeSession(id) : undefined,
+          status: (id: string) => (id === state.runningSessionID && state.running ? "running" : "idle"),
+          permission: {
+            list: (id: string) =>
+              state.requestsLoaded
+                ? id === state.requestSessionID && state.needsInput
+                  ? [{ id: "permission-1" }]
+                  : []
+                : undefined,
+          },
+          form: { list: () => (state.requestsLoaded ? [] : undefined) },
           message: {
             list: () => [],
             get: (sessionID: string, messageID: string) =>
@@ -277,7 +288,7 @@ function installExecutionTransport(
   const pendingMessages: Array<(value: { data: never[] }) => void> = []
   ;(globalThis as { __opencodeExecutionTransport?: unknown }).__opencodeExecutionTransport = {
     rpc,
-    pendingPermission: () => (state.needsInput ? [livePermission()] : []),
+    pendingPermission: () => (state.needsInput ? [livePermission(state.requestSessionID)] : []),
     listen: (handler: (event: unknown) => void) => {
       listeners.add(handler)
       return () => listeners.delete(handler)
@@ -292,13 +303,13 @@ function installExecutionTransport(
         parentID === "root"
           ? { data: state.descendantIDs.map(liveNativeSession), cursor: {} }
           : { data: [], cursor: {} },
-      active: async () => (state.running ? { root: { type: "running" } } : {}),
+      active: async () => (state.running ? { [state.runningSessionID]: { type: "running" } } : {}),
       form: { list: async () => [] },
     },
     permission: {
       list: async ({ sessionID }: { sessionID: string }) =>
-        sessionID === "root" && state.needsInput
-          ? [livePermission()]
+        sessionID === state.requestSessionID && state.needsInput
+          ? [livePermission(state.requestSessionID)]
           : [],
       reply: async () => {
         incrementNativeReplies()
@@ -378,6 +389,7 @@ function LiveAgentsComposition(props: {
   state: LiveExecutionState
   setRunning: () => void
   showRequest: () => void
+  loadEmptyRequests: () => void
   addDescendant: () => void
   reconnect: () => void
   recover: () => void
@@ -390,6 +402,7 @@ function LiveAgentsComposition(props: {
     <>
       <button type="button" onClick={props.setRunning}>Set agents idle</button>
       <button type="button" onClick={props.showRequest}>Show agent request</button>
+      <button type="button" onClick={props.loadEmptyRequests}>Load empty agent requests</button>
       <button type="button" onClick={props.addDescendant}>Add descendant</button>
       <button type="button" onClick={() => execution()?.setExpanded(true)}>Expand execution state</button>
       <button type="button" onClick={props.reconnect}>Reconnect native transport</button>
@@ -451,14 +464,20 @@ function ProductionMobileSession(props: { state: LiveExecutionState }) {
 function mountLiveSessionHeader(mode: string) {
   const activity = mode === "session-execution-activity"
   const productionMobile = mode === "session-screen-mobile-pending"
+  const uncachedDescendant = mode === "session-execution-uncached-descendant"
+  const unloadedRequest = mode === "session-execution-unloaded-request"
   const [state, setState] = createStore<LiveExecutionState>({
     connected: mode !== "session-execution-offline",
     resolutionAvailable: mode !== "session-execution-resolution-retry",
     running: true,
-    needsInput: productionMobile,
+    runningSessionID: uncachedDescendant ? "child" : "root",
+    needsInput: productionMobile || unloadedRequest,
+    requestSessionID: unloadedRequest ? "child" : "root",
+    requestsLoaded: !unloadedRequest,
     descendantIDs: activity
       ? ["child", "idle-child", "activity-1", "activity-2", "activity-3", "activity-4"]
       : ["child", "idle-child"],
+    sharedDescendantIDs: uncachedDescendant ? [] : ["child", "idle-child"],
     visible: true,
     ownerMounted: true,
     messageFetches: 0,
@@ -515,7 +534,14 @@ function mountLiveSessionHeader(mode: string) {
                                 state={state}
                                 setRunning={() => setState("running", false)}
                                 showRequest={() => setState("needsInput", true)}
-                                addDescendant={() => setState("descendantIDs", (ids) => [...ids, "new-descendant"])}
+                                loadEmptyRequests={() => {
+                                  setState("needsInput", false)
+                                  setState("requestsLoaded", true)
+                                }}
+                                addDescendant={() => {
+                                  setState("descendantIDs", (ids) => [...ids, "new-descendant"])
+                                  setState("sharedDescendantIDs", (ids) => [...ids, "new-descendant"])
+                                }}
                                 reconnect={() => setState("connected", true)}
                                 recover={() => setState("resolutionAvailable", true)}
                                 hide={() => setState("visible", false)}

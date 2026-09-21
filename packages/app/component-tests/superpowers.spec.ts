@@ -805,6 +805,14 @@ story("production session agents transition from running to idle without rehydra
   await expect(root.getByText("Idle", { exact: true })).toBeVisible()
 })
 
+story("uncached native descendants join live status without rehydration", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-uncached-descendant")
+  const child = page.getByRole("treeitem", { name: /Child implementer/ })
+  await expect(child.getByText("Running", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Set agents idle", exact: true }).click()
+  await expect(child.getByText("Idle", { exact: true })).toBeVisible()
+})
+
 story("production session agents observe pending native requests without rehydration", async ({ page }) => {
   await openExecutionFixture(page, "session-execution-agents")
   const root = page.getByRole("treeitem", { name: /Root controller/ })
@@ -812,6 +820,14 @@ story("production session agents observe pending native requests without rehydra
   await expect(page.getByRole("treeitem", { name: /Idle reviewer/ })).toBeVisible()
   await page.getByRole("button", { name: "Show agent request", exact: true }).click()
   await expect(root.getByText("Needs input", { exact: true })).toBeVisible()
+})
+
+story("unloaded request selectors preserve hydrated pending input until confirmed empty", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-unloaded-request")
+  const child = page.getByRole("treeitem", { name: /Child implementer/ })
+  await expect(child.getByText("Needs input", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Load empty agent requests", exact: true }).click()
+  await expect(child.getByText("Idle", { exact: true })).toBeVisible()
 })
 
 story("new native descendants do not collapse expanded execution", async ({ page }) => {

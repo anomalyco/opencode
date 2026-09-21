@@ -23,6 +23,7 @@ import {
   type NativeResolvedTarget,
 } from "./native-adapter"
 import { createNativeExecutionOwner } from "./native-execution"
+import type { NativeRecord } from "./native-types"
 import type {
   EvidenceNavigator,
   EvidenceResolver,
@@ -133,15 +134,20 @@ export function createSessionExecutionModel(input: {
       const info = input.session.shared.data.session.get(record.id)
       const messages = input.session.shared.data.session.message.list(record.id)
       const activity = latestNativeActivity(messages) ?? native.activity[record.id] ?? record.activity
-      if (!info) return { ...record, activity, state: nativeState(record) }
-      const live = nativeRecord(
-        nativeSessionInfo(info),
-        input.session.shared.data.session.status(record.id) === "running" ? "running" : "idle",
-        (input.session.shared.data.session.permission.list(record.id)?.length ?? 0) > 0 ||
-          (input.session.shared.data.session.form.list(record.id) ?? []).some(
-            (form) => form.metadata?.kind === "question" || form.metadata?.kind === "websearch.provider",
-          ),
-      )
+      const status: NativeRecord["status"] =
+        input.session.shared.data.session.status(record.id) === "running" ? "running" : "idle"
+      const permissions = input.session.shared.data.session.permission.list(record.id)
+      const forms = input.session.shared.data.session.form.list(record.id)
+      const pending =
+        (permissions?.length ?? 0) > 0 ||
+        (forms?.some(
+          (form) => form.metadata?.kind === "question" || form.metadata?.kind === "websearch.provider",
+        ) ??
+          false)
+      const needsInput = pending ? true : permissions !== undefined && forms !== undefined ? false : record.needsInput
+      const live = info
+        ? nativeRecord(nativeSessionInfo(info), status, needsInput)
+        : { ...record, status, needsInput }
       const merged = { ...record, ...live, title: live.title || record.title, activity }
       return { ...merged, state: nativeState(merged) }
     }),
