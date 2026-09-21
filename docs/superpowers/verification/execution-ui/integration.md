@@ -50,15 +50,15 @@ Authentication is injected as a request header on the browser context
 navigation URL. The password is generated per run, cached in `EXECUTION_E2E_PASSWORD` so the config, the
 worker, and the reporter agree, and passed to the child by environment only.
 
-Two layers assert the credential never reaches a retained artifact:
+Two layers cover the credential:
 
-- In-test: every request URL and the page URL are checked against the plaintext password and its
-  `opencode:<password>` base64 form; the child log is checked; and the artifacts this test writes (an attached
-  page screenshot and its finalized `testInfo.outputDir` files) are scanned immediately after they are
-  written.
+- In-test assertions (no artifact scanning): every request URL and the page URL are checked against the
+  plaintext password and its `opencode:<password>` base64 form, the child log is checked, and a page
+  screenshot is attached so this run retains a real artifact for the post-run scan.
 - Post-run: `e2e/superpowers/credential-reporter.ts` runs in `onEnd`, after Playwright finalizes the run's
   artifacts and the HTML report, and recursively scans `e2e/test-results` and `e2e/playwright-report` for the
-  plaintext password and its encoded form, throwing (failing the run) on any hit.
+  plaintext password and its encoded form, throwing (failing the run) on any hit and failing if it found no
+  retained artifact to verify.
 
 The execution suite sets `trace: "off"` and is not run with retries, so no interactive trace is retained for
 authenticated requests: a Playwright trace records request headers verbatim, including the `Authorization`
