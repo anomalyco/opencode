@@ -129,7 +129,7 @@ const readPair = <R>(ctx: Interpreter<R>, value: Value, label: string): Effect.E
       if (step.done) return items
       items.push(
         yield* preserveConsumerError(
-          cursor,
+          cursor.close,
           Effect.sync(() => coerceToString(step.value)),
         ),
       )
@@ -155,7 +155,7 @@ export const readPairs = <R>(
         if (pairs.some((entry) => entry.length !== 2)) throw typeError(`${label} expects iterable [name, value] pairs.`)
         return pairs as Array<[string, string]>
       }
-      pairs.push(yield* preserveConsumerError(cursor, readPair(ctx, step.value, label)))
+      pairs.push(yield* preserveConsumerError(cursor.close, readPair(ctx, step.value, label)))
     }
   })
 

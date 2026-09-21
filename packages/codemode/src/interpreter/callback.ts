@@ -1,24 +1,35 @@
-import { Effect, Exit } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import type { Interpreter } from "./interpreter.js"
 import { primitivePrototype } from "./intrinsics.js"
-import { typeError } from "./model.js"
-import { Callable, get, Native, DateObj, Obj, coerceToNumber, coerceToString, type Value } from "./objects.js"
+import { GeneratorReturn, typeError } from "./model.js"
+import {
+  Callable,
+  get,
+  Native,
+  DateObj,
+  Obj,
+  coerceToNumber,
+  coerceToString,
+  type Cursor,
+  type Value,
+} from "./objects.js"
 import { typeofValue } from "./references.js"
 
-export type IteratorCursor<R> = {
-  readonly next: Effect.Effect<{ readonly done: boolean; readonly value: Value }, unknown, R>
-  readonly close: Effect.Effect<void, unknown, R>
-}
-
+/** IteratorClose: a consumer failure closes the iterator and wins over any close failure, except that a generator's
+ * return() is a return completion, so a failing close wins over it, as after `break`. */
 export const preserveConsumerError = <A, R>(
-  cursor: IteratorCursor<R>,
+  close: Cursor<R>["close"],
   effect: Effect.Effect<A, unknown, R>,
 ): Effect.Effect<A, unknown, R> =>
-  Effect.flatMap(Effect.exit(effect), (exit) =>
-    Exit.isSuccess(exit)
-      ? Effect.succeed(exit.value)
-      : Effect.andThen(Effect.exit(cursor.close), Effect.failCause(exit.cause)),
-  )
+  Effect.flatMap(Effect.exit(effect), (exit) => {
+    if (Exit.isSuccess(exit)) return Effect.succeed(exit.value)
+    return Effect.flatMap(Effect.exit(close), (closed) => {
+      if (!Exit.isSuccess(closed) && Cause.squash(exit.cause) instanceof GeneratorReturn) {
+        return Effect.failCause(closed.cause)
+      }
+      return Effect.failCause(exit.cause)
+    })
+  })
 
 /**
  * ToPrimitive: calls `valueOf`/`toString` in hint order and returns the first primitive result. Dates treat the

@@ -136,7 +136,7 @@ export const resolvePromise = <R>(ctx: Interpreter<R>, value: Value): Effect.Eff
   return ctx.pending.createWithSelf((self) => resolvePromiseValue(ctx, value, self))
 }
 
-const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject", "withResolvers"] as const
+const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject", "withResolvers", "try"] as const
 
 const invokePromiseMethod = <R>(
   ctx: Interpreter<R>,
@@ -153,6 +153,16 @@ const invokePromiseMethod = <R>(
     return Effect.map(promiseCapability(ctx), (made) =>
       record(ctx.builtins.Object, { promise: made.promise, resolve: made.resolve, reject: made.reject }),
     )
+  }
+  if (name === "try") {
+    if (typeofValue(args[0]) !== "function") {
+      throw typeError(`Promise.try expects a function, received ${describeValue(args[0])}.`)
+    }
+    return Effect.flatMap(Effect.exit(ctx.call(args[0], undefined, args.slice(1))), (called) => {
+      if (Exit.isSuccess(called)) return resolvePromise(ctx, called.value)
+      if (Cause.hasInterruptsOnly(called.cause)) return Effect.failCause(called.cause)
+      return ctx.pending.create(Effect.fail(Cause.squash(called.cause)))
+    })
   }
 
   return ctx.pending.create(

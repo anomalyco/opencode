@@ -55,7 +55,9 @@ const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Va
     while (true) {
       const step = yield* cursor.next
       if (step.done) return new Arr(proto, values)
-      values.push(apply === undefined ? step.value : yield* preserveConsumerError(cursor, apply([step.value, index])))
+      values.push(
+        apply === undefined ? step.value : yield* preserveConsumerError(cursor.close, apply([step.value, index])),
+      )
       index += 1
     }
   })

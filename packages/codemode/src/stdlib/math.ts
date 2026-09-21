@@ -105,7 +105,7 @@ export const mathGlobal = <R>(ctx: Interpreter<R>) => {
             const step = yield* cursor.next
             if (step.done) return Math.sumPrecise(numbers)
             yield* preserveConsumerError(
-              cursor,
+              cursor.close,
               Effect.sync(() => {
                 if (typeof step.value !== "number") {
                   throw typeError("Math.sumPrecise expects an iterable of numbers.")

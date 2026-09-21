@@ -87,7 +87,6 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Destructuring reads through the prototype chain like member access: `const { constructor } = error` and
       `const { slice } = values` find the inherited built-in.
 - [ ] Member expressions as `for...in` targets (`for (x.y in obj)`).
-- [ ] `IteratorClose` during destructuring should throw a `TypeError` when `return()` yields a non-object.
 
 ## Statements and control flow
 
@@ -162,7 +161,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       rejected by every synchronous consumer.
 - [x] Synchronous iterator acquisition and result validation follow `IteratorClose` boundaries: consumer errors and
       intentional early stops invoke `return()`, acquisition/`next()` failures do not, and an original consumer error
-      wins over a cleanup failure. Async iterator consumption remains limited to `for await...of` and async `yield*`.
+      wins over a cleanup failure. A generator's `return()` is an intentional stop, so a `return()` that throws or
+      yields a non-object surfaces from it as a `TypeError`. Async iterator consumption remains limited to `for await...of` and async `yield*`.
 - [x] Portable generator protocol coverage is adapted from pinned Test262 cases for suspended-start, suspended-yield,
       and completed states; sync and async `next`/`return`/`throw`; finally yields and completion overrides; rejected
       yielded promises; mixed async request queues; sync and async `yield*` forwarding; malformed methods/results;
@@ -239,7 +239,9 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       accepted, including `.then`/`.catch` handlers and collection callbacks, and vanish at the data boundary like
       any function.
 - [x] `Promise.withResolvers()`: the same promise and resolver callables as the constructor, as a `{ promise, resolve,
-  reject }` object.
+    reject }` object.
+- [x] `Promise.try(fn, ...args)`: calls `fn` synchronously; a throw rejects, a return fulfils, and a returned promise or
+      thenable is adopted.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
       constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
       first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields

@@ -56,7 +56,7 @@ export const groupBy = <R>(ctx: Interpreter<R>, namespace: "Map" | "Object") =>
           const step = yield* cursor.next
           if (step.done) return result
           const item = step.value
-          const key = yield* preserveConsumerError(cursor, apply([item, index]))
+          const key = yield* preserveConsumerError(cursor.close, apply([item, index]))
           const group = result.map.get(key)
           if (group === undefined) result.map.set(key, new Arr(builtins.Array, [item]))
           else (group as Arr).items.push(item)
@@ -72,7 +72,7 @@ export const groupBy = <R>(ctx: Interpreter<R>, namespace: "Map" | "Object") =>
         if (step.done) return result
         const item = step.value
         const key = yield* preserveConsumerError(
-          cursor,
+          cursor.close,
           Effect.flatMap(apply([item, index]), (value) => coerceGroupByPropertyKey(ctx, value)),
         )
         const group = getOwn(result, key)
@@ -95,7 +95,7 @@ const constructMap = <R>(ctx: Interpreter<R>, init: Value, proto: Obj) => {
       const step = yield* cursor.next
       if (step.done) return target
       yield* preserveConsumerError(
-        cursor,
+        cursor.close,
         Effect.sync(() => {
           if (!(step.value instanceof Obj)) {
             throw typeError("new Map(...) expects [key, value] pairs as entry objects.")
