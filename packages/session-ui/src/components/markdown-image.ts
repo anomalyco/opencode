@@ -13,6 +13,16 @@ export function localImagePath(source: string) {
   return decodePath(value)
 }
 
+/**
+ * A link is local when it names a file on disk instead of a web resource. Fragment-only and
+ * query-only hrefs stay in-page; mailto and other schemes stay external.
+ */
+export function localLinkPath(href: string) {
+  const value = href.trim()
+  if (!value || value.startsWith("#") || value.startsWith("?")) return
+  return localImagePath(value.split(/[?#]/, 1)[0] ?? "")
+}
+
 function decodePath(value: string) {
   try {
     const path = decodeURIComponent(value)

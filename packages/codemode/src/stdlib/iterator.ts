@@ -11,7 +11,7 @@ export const iteratorGlobals = <R>(ctx: Interpreter<R>): void => {
       "next",
       0,
       (thisValue) => {
-        const step = receiver(IteratorObj, thisValue, "Iterator.prototype.next").iterator.next()
+        const step = receiver(IteratorObj, thisValue, "Iterator.prototype.next").source.next()
         return record(builtins.Object, { value: step.value, done: Boolean(step.done) })
       },
     ],

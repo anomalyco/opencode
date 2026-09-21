@@ -137,6 +137,7 @@ export function useSessionModel() {
       tabs: layout.tabs,
       view: layout.view,
       tabKey: layout.tabKey,
+      sessionKey: layout.sessionKey,
     },
     ownership: createSessionOwnership(layout.sessionKey),
     tabs: {

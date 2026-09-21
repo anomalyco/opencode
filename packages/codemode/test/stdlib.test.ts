@@ -20,9 +20,9 @@ import { CodeMode, Tool } from "../src/index.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
-// values, while at the host boundary (final result, tool arguments, JSON.stringify) they
-// serialize exactly as JSON.stringify would: Date -> ISO string (invalid -> null),
-// URL -> href, and RegExp/Map/Set/URLSearchParams -> {}.
+// values. JSON.stringify keeps Date -> ISO string (invalid -> null), URL -> href, and
+// RegExp/Map/Set/URLSearchParams -> {}. The host boundary matches that except URLSearchParams,
+// which cross as their query string, and Set, which crosses as an array.
 const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
 const value = async (code: string) => {
   const result = await run(code)
@@ -1264,6 +1264,39 @@ describe("built-in iterators", () => {
     expect((await error(`const it = [1].keys(); const next = it.next; return next()`)).message).toContain(
       "Iterator.prototype.next called on incompatible receiver undefined",
     )
+  })
+})
+
+describe("Object.prototype.toString", () => {
+  test("reports the built-in kind it is inherited by, as JS does through Symbol.toStringTag", async () => {
+    expect(
+      await value(`
+      return [
+        new Map().toString(), new Set().toString(), new Headers().toString(), Promise.resolve(1).toString(),
+        [1].values().toString(), ({}).toString(), String(new Map()), String(Promise.resolve(1)),
+        \`\${new Set([1])}\`, [new Map()] + "", new Map() == "[object Map]",
+      ]
+    `),
+    ).toEqual([
+      "[object Map]",
+      "[object Set]",
+      "[object Headers]",
+      "[object Promise]",
+      "[object Iterator]",
+      "[object Object]",
+      "[object Map]",
+      "[object Promise]",
+      "[object Set]",
+      "[object Map]",
+      true,
+    ])
+  })
+})
+
+describe("console.log of errors", () => {
+  test("prints name and message, nested too", async () => {
+    const result = await run(`console.log(new Error("boom"), { e: new RangeError("r") })`)
+    expect(result.logs).toEqual(['Error: boom {"e":RangeError: r}'])
   })
 })
 

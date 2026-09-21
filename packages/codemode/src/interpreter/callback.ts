@@ -1,13 +1,12 @@
 import { Effect, Exit } from "effect"
-import { coerceToNumber, coerceToString } from "../stdlib/value.js"
 import type { Interpreter } from "./interpreter.js"
 import { primitivePrototype } from "./intrinsics.js"
 import { typeError } from "./model.js"
-import { Callable, get, Native, DateObj, Obj } from "./objects.js"
+import { Callable, get, Native, DateObj, Obj, coerceToNumber, coerceToString, type Value } from "./objects.js"
 import { typeofValue } from "./references.js"
 
 export type IteratorCursor<R> = {
-  readonly next: Effect.Effect<{ readonly done: boolean; readonly value: unknown }, unknown, R>
+  readonly next: Effect.Effect<{ readonly done: boolean; readonly value: Value }, unknown, R>
   readonly close: Effect.Effect<void, unknown, R>
 }
 
@@ -27,9 +26,9 @@ export const preserveConsumerError = <A, R>(
  */
 export const toPrimitive = <R>(
   ctx: Interpreter<R>,
-  value: unknown,
+  value: Value,
   hint: "number" | "string" | "default",
-): Effect.Effect<unknown, unknown, R> => {
+): Effect.Effect<Value, unknown, R> => {
   if (!(value instanceof Obj)) return Effect.succeed(value)
   const asString = hint === "string" || (hint === "default" && value instanceof DateObj)
   const order = asString ? ["toString", "valueOf"] : ["valueOf", "toString"]
@@ -45,30 +44,30 @@ export const toPrimitive = <R>(
 }
 
 /** Invoke(value, name): calls the method the value would find through its prototype. */
-export const invoke = <R>(ctx: Interpreter<R>, value: unknown, name: string, label: string) => {
+export const invoke = <R>(ctx: Interpreter<R>, value: Value, name: string, label: string) => {
   const target = value instanceof Obj ? value : primitivePrototype(ctx.builtins, value)
   if (target === undefined) throw typeError(`${label} called on null or undefined.`)
   return ctx.call(get(target, name), value, [])
 }
 
-export const toPrimitiveString = <R>(ctx: Interpreter<R>, value: unknown) =>
+export const toPrimitiveString = <R>(ctx: Interpreter<R>, value: Value) =>
   Effect.map(toPrimitive(ctx, value, "string"), coerceToString)
 
-export const toPrimitiveNumber = <R>(ctx: Interpreter<R>, value: unknown) =>
+export const toPrimitiveNumber = <R>(ctx: Interpreter<R>, value: Value) =>
   Effect.map(toPrimitive(ctx, value, "number"), coerceToNumber)
 
 // The single acceptance list for callbacks: collections, sort, string replacers,
 // Array.from mappers, and promise reactions all admit exactly these callables.
 // Admission means dispatchable, not necessarily invocable: new-requiring
 // constructors pass the gate and throw a TypeError on call, like JS.
-export const isSupportedCallback = (value: unknown): value is Callable =>
+export const isSupportedCallback = (value: Value): value is Callable =>
   value instanceof Callable && !(value instanceof Native && !value.callback)
 
 export const applyCollectionCallback = <R>(
   ctx: Interpreter<R>,
-  callback: unknown,
+  callback: Value,
   name: string,
-): ((args: Array<unknown>) => Effect.Effect<unknown, unknown, R>) => {
+): ((args: Array<Value>) => Effect.Effect<Value, unknown, R>) => {
   if (!isSupportedCallback(callback)) {
     if (typeofValue(callback) === "function") {
       throw typeError(
