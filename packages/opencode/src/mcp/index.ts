@@ -227,7 +227,7 @@ const layer = Layer.effect(
             },
             catch: (e) => (e instanceof Error ? e : new Error(String(e))),
           }),
-        (t, exit) => (Exit.isFailure(exit) ? Effect.tryPromise(() => t.close()).pipe(Effect.ignore) : Effect.void),
+        (t, exit) => (Exit.isFailure(exit) ? terminateTree(t, () => t.close()) : Effect.void),
       )
     })
 
@@ -439,6 +439,27 @@ const layer = Layer.effect(
       Effect.catch(() => Effect.succeed([] as number[])),
     )
 
+    /**
+     * Terminate the process tree a stdio server's launcher spawned, then close it.
+     *
+     * `StdioClientTransport.close()` signals only its own direct child, so a
+     * launcher that execs the real server (`npx -y <server>`) leaves that server
+     * and everything below it running. Signal the descendants first: while the
+     * launcher is still alive they can be found by pid, and once it exits they
+     * are re-parented away from it.
+     */
+    const terminateTree = Effect.fnUntraced(function* (transport: MCPClient["transport"], close: () => Promise<void>) {
+      if (transport instanceof StdioClientTransport && typeof transport.pid === "number") {
+        const pids = yield* descendants(transport.pid)
+        for (const dpid of pids) {
+          try {
+            process.kill(dpid, "SIGTERM")
+          } catch {}
+        }
+      }
+      yield* Effect.tryPromise(close).pipe(Effect.ignore)
+    })
+
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       client.onclose = () => {
         if (s.clients[name] !== client) return
@@ -534,23 +555,9 @@ const layer = Layer.effect(
             s.clients = {}
             s.defs = {}
             s.instructions = {}
-            yield* Effect.forEach(
-              clients,
-              (client) =>
-                Effect.gen(function* () {
-                  const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
-                  if (typeof pid === "number") {
-                    const pids = yield* descendants(pid)
-                    for (const dpid of pids) {
-                      try {
-                        process.kill(dpid, "SIGTERM")
-                      } catch {}
-                    }
-                  }
-                  yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
-                }),
-              { concurrency: "unbounded" },
-            )
+            yield* Effect.forEach(clients, (client) => terminateTree(client.transport, () => client.close()), {
+              concurrency: "unbounded",
+            })
             pendingOAuthTransports.clear()
           }),
         )
@@ -565,7 +572,7 @@ const layer = Layer.effect(
       delete s.defs[name]
       delete s.instructions[name]
       if (!client) return Effect.void
-      return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      return terminateTree(client.transport, () => client.close())
     }
 
     const storeClient = Effect.fnUntraced(function* (
@@ -584,7 +591,7 @@ const layer = Layer.effect(
       if (instructions) s.instructions[name] = instructions
       else delete s.instructions[name]
       watch(s, name, client, bridge, timeout)
-      if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
+      if (previous) yield* terminateTree(previous.transport, () => previous.close())
       return s.status[name]
     })
 
