@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test"
-import type { OpenCodeClient } from "@opencode/client/promise"
+import type { OpenCodeClient, SessionMessageInfo } from "@opencode/client/promise"
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionHref } from "@/shell/routes/session"
 import { scopeKey } from "./identity"
 import {
   createNativeBoundary,
   createNativeExecutionAdapter,
+  messageHasPart,
   nativeState,
   type NativeBoundary,
   type NativeDetail,
@@ -510,6 +511,20 @@ test("native state distinguishes needs input, error, running, idle, and unknown"
   expect(nativeState(base({ status: "idle" }))).toBe("idle")
   expect(nativeState(base({ status: "unknown" }))).toBe("unknown")
   expect(nativeState(base({ needsInput: true, error: "unavailable", status: "running" }))).toBe("needs_input")
+})
+
+test("a message part resolves only for a tool part in an assistant message", () => {
+  const assistant = {
+    type: "assistant",
+    content: [
+      { type: "tool", id: "part-1" },
+      { type: "text", text: "summary" },
+    ],
+  } as unknown as SessionMessageInfo
+  expect(messageHasPart(assistant, "part-1")).toBe(true)
+  expect(messageHasPart(assistant, "part-2")).toBe(false)
+  const user = { type: "user", text: "prompt" } as unknown as SessionMessageInfo
+  expect(messageHasPart(user, "part-1")).toBe(false)
 })
 
 test("the native boundary follows the session list cursor", async () => {

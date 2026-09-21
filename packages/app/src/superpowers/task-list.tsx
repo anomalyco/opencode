@@ -1,4 +1,5 @@
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
+import { For, Show, createEffect, createMemo } from "solid-js"
+import { createStore } from "solid-js/store"
 import type { Task } from "@bearmanser/opencode-superpowers-execution/contract"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExecutionProgress } from "./progress"
@@ -8,16 +9,14 @@ const TASK_STATES = ["pending", "running", "blocked", "awaiting_review", "verifi
 
 export function ExecutionTaskList(props: { model: ExecutionModel }) {
   const language = useLanguage()
-  const [query, setQuery] = createSignal("")
-  const [state, setState] = createSignal("all")
-  const [phase, setPhase] = createSignal("all")
+  const [filters, setFilters] = createStore({ query: "", state: "all", phase: "all" })
 
   const tasks = createMemo(() => props.model.run()?.tasks ?? [])
   const phases = createMemo(() => [...new Set(tasks().map((task) => task.phase))].sort())
   const filtered = createMemo(() => {
-    const needle = query().trim().toLowerCase()
-    const selectedState = state()
-    const selectedPhase = phase()
+    const needle = filters.query.trim().toLowerCase()
+    const selectedState = filters.state
+    const selectedPhase = filters.phase
     return tasks()
       .filter((task) => selectedState === "all" || task.state === selectedState)
       .filter((task) => selectedPhase === "all" || task.phase === selectedPhase)
@@ -61,14 +60,14 @@ export function ExecutionTaskList(props: { model: ExecutionModel }) {
           class="execution-tasks__search"
           aria-label={language.t("execution.tasks.search.label")}
           placeholder={language.t("execution.tasks.search.placeholder")}
-          value={query()}
-          onInput={(event) => setQuery(event.currentTarget.value)}
+          value={filters.query}
+          onInput={(event) => setFilters("query", event.currentTarget.value)}
         />
         <select
           class="execution-tasks__filter"
           aria-label={language.t("execution.tasks.filter.state.label")}
-          value={state()}
-          onChange={(event) => setState(event.currentTarget.value)}
+          value={filters.state}
+          onChange={(event) => setFilters("state", event.currentTarget.value)}
         >
           <option value="all">{language.t("execution.tasks.filter.state.all")}</option>
           <For each={TASK_STATES}>
@@ -78,8 +77,8 @@ export function ExecutionTaskList(props: { model: ExecutionModel }) {
         <select
           class="execution-tasks__filter"
           aria-label={language.t("execution.tasks.filter.phase.label")}
-          value={phase()}
-          onChange={(event) => setPhase(event.currentTarget.value)}
+          value={filters.phase}
+          onChange={(event) => setFilters("phase", event.currentTarget.value)}
         >
           <option value="all">{language.t("execution.tasks.filter.phase.all")}</option>
           <For each={phases()}>{(option) => <option value={option}>{option}</option>}</For>

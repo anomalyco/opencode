@@ -11,11 +11,12 @@ import {
   sessionBrowserTab,
   type SessionTabState,
 } from "../shell/state/session-tabs"
-import { summarizeProgress } from "@bearmanser/opencode-superpowers-execution/progress"
+import { summarizeProgress } from "@bearmanser/opencode-superpowers-execution/contract"
 import {
   agentFixture,
   detailedTasksRun,
   failedTaskFixture,
+  gateOrderRun,
   halfVerifiedRun,
   increasedScopeRun,
   runFixture,
@@ -27,6 +28,7 @@ import {
   createExecutionModel,
   joinTaskAssignments,
   joinTaskEvidence,
+  latestEvidenceForGate,
   structuredViewsEnabled,
   type ExecutionMode,
 } from "./model"
@@ -62,6 +64,25 @@ function root(assert: () => void) {
     dispose()
   })
 }
+
+function rootAsync(assert: () => Promise<void>) {
+  return new Promise<void>((resolve, reject) => {
+    createRoot((dispose) => {
+      assert().then(
+        () => {
+          dispose()
+          resolve()
+        },
+        (error) => {
+          dispose()
+          reject(error)
+        },
+      )
+    })
+  })
+}
+
+const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 function state(all: string[], active?: string, preview?: string): SessionTabState {
   return { tabs: { all, active }, preview }
@@ -322,6 +343,39 @@ describe("createExecutionModel tasks", () => {
     expect(ghost?.summary).toBe("Spec review reported from a deleted session")
     expect(ghost?.outcome).toBe("passed")
     expect(ghost?.sessionID).toBe("ghost")
+  })
+
+  test("keeps the latest gate report in ledger order when ids and timestamps tie", () => {
+    const run = gateOrderRun()
+    const agents = agentFixture("agents")
+    const join = joinTaskEvidence({ run, taskID: "task-gate", attempt: 1, agents })
+    expect(join.current.map((row) => row.id)).toEqual(["z-pass", "a-fail"])
+    expect(latestEvidenceForGate(join.current, "tests")?.id).toBe("a-fail")
+    expect(latestEvidenceForGate(join.current, "tests")?.outcome).toBe("failed")
+  })
+
+  test("resolves evidence lazily and marks a failed resolution unavailable", async () => {
+    await rootAsync(async () => {
+      const model = createExecutionModel({
+        snapshot: () => halfVerifiedRun(),
+        agents: () => agentFixture("agents"),
+        resolveEvidence: ({ messageID }) => messageID === "msg-api-1",
+      })
+      const reference = {
+        id: "e-api-review",
+        sessionID: "idle-child",
+        messageID: "msg-api-2",
+      }
+      expect(model.evidenceResolution(reference.id)).toBeUndefined()
+      model.openEvidence(reference)
+      expect(model.evidenceResolution(reference.id)).toBe("resolving")
+      await settle()
+      expect(model.evidenceResolution(reference.id)).toBe("unavailable")
+      const resolved = { id: "e-api-tests", sessionID: "child", messageID: "msg-api-1" }
+      model.openEvidence(resolved)
+      await settle()
+      expect(model.evidenceResolution(resolved.id)).toBe("available")
+    })
   })
 
   test("exposes the selected task and joins through the model", () => {

@@ -281,6 +281,16 @@ export async function mountExecutionFixture(input: {
       setActive: (tab) => setState("active", tab),
     })
     const scope = (): ExecutionScope => ({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: "root" })
+    const resolvableEvidence = new Set([
+      "msg-api-1",
+      "msg-api-2",
+      "msg-v-1",
+      "msg-v-2",
+      "msg-f-1",
+      "msg-f-2",
+      "msg-gate-1",
+      "msg-gate-2",
+    ])
     const model = createExecutionModel({
       mode: () => (run() ? "ready" : "observer"),
       scope,
@@ -289,6 +299,7 @@ export async function mountExecutionFixture(input: {
       agents: () => agentFixture(scenario),
       attention: () => fixtureAttention(scenario),
       progress: () => fixtureProgress(scenario),
+      resolveEvidence: async ({ messageID }) => resolvableEvidence.has(messageID),
       reviewRequest: () => requestRegion?.focus(),
       openSession: (sessionID) => {
         setState("navigationTarget", `${scope().serverKey}/${sessionID}`)

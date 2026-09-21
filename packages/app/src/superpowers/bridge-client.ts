@@ -5,6 +5,7 @@ import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
 import { runKey, scopeKey, type ExecutionScope } from "./identity"
 import {
   createExecutionModel,
+  type EvidenceResolver,
   type ExecutionAgent,
   type ExecutionAttention,
   type ExecutionMode,
@@ -53,6 +54,7 @@ export type SessionExecutionInput = {
   agents?: Accessor<ExecutionAgent[]>
   attention?: Accessor<ExecutionAttention>
   openSession?: (sessionID: string) => void
+  resolveEvidence?: EvidenceResolver
   reviewRequest?: () => void
   clock?: ExecutionClock
 }
@@ -403,6 +405,7 @@ export function createSessionExecution(input: SessionExecutionInput): SessionExe
     agents: input.agents,
     attention: input.attention,
     openSession: input.openSession,
+    resolveEvidence: input.resolveEvidence,
     reviewRequest: input.reviewRequest,
     reconcile: () => bridge.reconcile(),
   })

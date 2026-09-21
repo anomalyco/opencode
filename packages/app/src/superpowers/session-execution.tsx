@@ -6,7 +6,8 @@ import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { createSessionExecution } from "./bridge-client"
 import { createExecutionScope } from "./identity"
-import type { ExecutionAttention, ExecutionModel } from "./model"
+import { messageHasPart } from "./native-adapter"
+import type { EvidenceResolver, ExecutionAttention, ExecutionModel } from "./model"
 
 export function createSessionExecutionModel(input: {
   session: SessionModel
@@ -36,6 +37,16 @@ export function createSessionExecutionModel(input: {
       rootSessionID: root,
     })
   })
+  const resolveEvidence: EvidenceResolver = async ({ sessionID, messageID, partID }) => {
+    const loaded = input.session.shared.data.session.message.get(sessionID, messageID)
+    if (loaded) return partID === undefined || messageHasPart(loaded, partID)
+    try {
+      const message = await sdk.api.session.message.get({ sessionID, messageID })
+      return partID === undefined || messageHasPart(message, partID)
+    } catch {
+      return false
+    }
+  }
   return createSessionExecution({
     scope,
     api: () => sdk.api.rpc(ExecutionRpc),
@@ -45,6 +56,7 @@ export function createSessionExecutionModel(input: {
     attention: input.attention,
     reviewRequest: input.reviewRequest,
     openSession: input.openSession,
+    resolveEvidence,
   }).model
 }
 

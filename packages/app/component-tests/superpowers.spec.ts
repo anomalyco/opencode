@@ -428,6 +428,27 @@ story("task details keep an unavailable evidence reference without erasing the r
   await expect(evidence.getByText("Evidence session unavailable", { exact: true })).toBeVisible()
 })
 
+story("task evidence marks an unresolvable message unavailable without erasing the report", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-detailed")
+  await page.getByRole("button", { name: /Awaiting review, Awaiting review/ }).click()
+  const evidence = page.getByTestId("execution-evidence-e-review-missing")
+  await expect(evidence).toHaveAttribute("data-available", "true")
+  await evidence
+    .getByRole("button", { name: /Open evidence from/ })
+    .evaluate((element) => (element as HTMLElement).click())
+  await expect(evidence).toHaveAttribute("data-available", "false")
+  await expect(evidence).toContainText("Spec review reported from an unloaded native message")
+  await expect(evidence.getByText("Reported evidence not found", { exact: true })).toBeVisible()
+})
+
+story("task details use the latest ledger gate report", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-gate-order")
+  await expect(page.getByTestId("execution-gate-tests")).toHaveAttribute("data-outcome", "failed")
+  const current = page.getByTestId("execution-task-evidence-current")
+  await expect(current.locator("li").first()).toContainText("Earlier pass appended first")
+  await expect(current.locator("li").last()).toContainText("Later failure appended second")
+})
+
 story("task details count a reused child once and show an inline root assignment", async ({ page }) => {
   await openExecutionFixture(page, "tasks-detailed")
   await page.getByRole("button", { name: /Verified work, Verified/ }).click()

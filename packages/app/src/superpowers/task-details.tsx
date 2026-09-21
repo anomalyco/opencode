@@ -2,7 +2,13 @@ import { For, Show, createMemo } from "solid-js"
 import type { Gate, Outcome, Task } from "@bearmanser/opencode-superpowers-execution/contract"
 import { useLanguage } from "@/runtime/i18n/language"
 import { agentRoleKey, taskStateKey } from "./task-list"
-import type { ExecutionAgentState, ExecutionAssignmentJoin, ExecutionEvidenceJoin, ExecutionModel } from "./model"
+import {
+  latestEvidenceForGate,
+  type ExecutionAgentState,
+  type ExecutionAssignmentJoin,
+  type ExecutionEvidenceJoin,
+  type ExecutionModel,
+} from "./model"
 
 export function ExecutionTaskDetails(props: { model: ExecutionModel }) {
   const language = useLanguage()
@@ -24,7 +30,7 @@ export function ExecutionTaskDetails(props: { model: ExecutionModel }) {
     const currentEvidence = evidence()?.current ?? []
     return current.requiredGates.map((gate) => ({
       gate,
-      latest: latestForGate(currentEvidence, gate),
+      latest: latestEvidenceForGate(currentEvidence, gate),
     }))
   })
 
@@ -203,11 +209,18 @@ export function ExecutionTaskDetails(props: { model: ExecutionModel }) {
 
 function EvidenceRow(props: { model: ExecutionModel; item: ExecutionEvidenceJoin }) {
   const language = useLanguage()
+  const resolution = () => props.model.evidenceResolution(props.item.id)
+  const available = () => props.item.available && resolution() !== "unavailable"
+  const unavailableReason = () =>
+    props.item.available
+      ? "execution.task.evidence.notFound"
+      : "execution.task.evidence.unavailable"
   return (
     <li
       class="execution-evidence"
       data-testid={`execution-evidence-${props.item.id}`}
-      data-available={String(props.item.available)}
+      data-available={String(available())}
+      data-resolving={resolution() === "resolving" ? "true" : undefined}
       data-outcome={props.item.outcome}
       data-message-id={props.item.messageID}
       data-part-id={props.item.partID}
@@ -216,17 +229,22 @@ function EvidenceRow(props: { model: ExecutionModel; item: ExecutionEvidenceJoin
       <span class="execution-evidence__outcome">{language.t(gateOutcomeKey(props.item.outcome))}</span>
       <span class="execution-evidence__summary">{props.item.summary}</span>
       <Show
-        when={props.item.available}
+        when={available()}
         fallback={
-          <span class="execution-evidence__unavailable">
-            {language.t("execution.task.evidence.unavailable")}
-          </span>
+          <span class="execution-evidence__unavailable">{language.t(unavailableReason())}</span>
         }
       >
         <button
           type="button"
           class="execution-evidence__open"
-          onClick={() => props.model.openSession(props.item.sessionID)}
+          onClick={() =>
+            props.model.openEvidence({
+              id: props.item.id,
+              sessionID: props.item.sessionID,
+              messageID: props.item.messageID,
+              partID: props.item.partID,
+            })
+          }
         >
           {language.t("execution.task.evidence.open", {
             session: props.item.sessionTitle ?? props.item.sessionID,
@@ -289,15 +307,6 @@ function AssignmentRow(props: { item: ExecutionAssignmentJoin }) {
       </Show>
     </li>
   )
-}
-
-function latestForGate(evidence: ExecutionEvidenceJoin[], gate: Gate): ExecutionEvidenceJoin | undefined {
-  return evidence
-    .filter((item) => item.gate === gate)
-    .reduce<ExecutionEvidenceJoin | undefined>(
-      (latest, item) => (!latest || item.createdAt >= latest.createdAt ? item : latest),
-      undefined,
-    )
 }
 
 function gateNameKey(gate: Gate) {

@@ -1,10 +1,11 @@
 import { createSignal, type Accessor } from "solid-js"
-import { summarizeProgress } from "@bearmanser/opencode-superpowers-execution/progress"
-import type {
-  Evidence,
-  ProgressSummary,
-  RunSnapshot,
-  Task,
+import {
+  summarizeProgress,
+  type Evidence,
+  type Gate,
+  type ProgressSummary,
+  type RunSnapshot,
+  type Task,
 } from "@bearmanser/opencode-superpowers-execution/contract"
 import { projectAgentTree } from "./agent-tree"
 import type { ExecutionScope } from "./identity"
@@ -78,6 +79,21 @@ export type ExecutionTaskEvidence = {
   superseded: ExecutionEvidenceJoin[]
 }
 
+export type EvidenceReference = {
+  id: string
+  sessionID: string
+  messageID: string
+  partID?: string
+}
+
+export type EvidenceResolution = "resolving" | "available" | "unavailable"
+
+export type EvidenceResolver = (reference: Omit<EvidenceReference, "id">) => Promise<boolean> | boolean
+
+export function latestEvidenceForGate(evidence: ExecutionEvidenceJoin[], gate: Gate) {
+  return evidence.filter((item) => item.gate === gate).at(-1)
+}
+
 export function joinTaskAssignments(input: {
   run: RunSnapshot
   taskID: string
@@ -128,7 +144,6 @@ export function joinTaskEvidence(input: {
         sessionTitle: agent?.title,
       } satisfies ExecutionEvidenceJoin
     })
-    .sort(compareByCreatedAt)
   return {
     current: rows.filter((row) => row.attempt === input.attempt),
     superseded: rows.filter((row) => row.attempt !== input.attempt),
@@ -180,6 +195,7 @@ export type ExecutionModelInput = {
   attention?: Accessor<ExecutionAttention>
   initialSubview?: ExecutionSubview
   openSession?: (sessionID: string) => void
+  resolveEvidence?: EvidenceResolver
   retry?: (sessionID: string) => void
   reviewRequest?: () => void
   selectRun?: (runID: string | undefined) => void
@@ -201,6 +217,8 @@ export type ExecutionModel = {
   selectedTask: Accessor<Task | undefined>
   taskAssignments: (taskID: string, attempt: number) => ExecutionTaskAssignments
   taskEvidence: (taskID: string, attempt: number) => ExecutionTaskEvidence
+  evidenceResolution: (evidenceID: string) => EvidenceResolution | undefined
+  openEvidence: (reference: EvidenceReference) => void
   expanded: Accessor<boolean>
   attention: Accessor<ExecutionAttention>
   selectSubview: (subview: ExecutionSubview) => void
@@ -228,6 +246,7 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
   const [expanded, setExpanded] = createSignal(false)
   const [expandedNodes, setExpandedNodes] = createSignal<Record<string, boolean>>({})
   const [assignmentHistory, setAssignmentHistory] = createSignal<Record<string, boolean>>({})
+  const [evidenceStates, setEvidenceStates] = createSignal<Record<string, EvidenceResolution>>({})
 
   const rawSnapshot = () => input.snapshot?.()
   const mode = () => input.mode?.() ?? (rawSnapshot() ? "ready" : "observer")
@@ -355,6 +374,25 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     return joinTaskEvidence({ run: current, taskID, attempt, agents: agents() })
   }
 
+  const evidenceResolution = (evidenceID: string) => evidenceStates()[evidenceID]
+
+  const openEvidence = (reference: EvidenceReference) => {
+    const resolver = input.resolveEvidence
+    if (!resolver) {
+      input.openSession?.(reference.sessionID)
+      return
+    }
+    if (evidenceStates()[reference.id] === "resolving") return
+    setEvidenceStates({ ...evidenceStates(), [reference.id]: "resolving" })
+    Promise.resolve(resolver({ sessionID: reference.sessionID, messageID: reference.messageID, partID: reference.partID })).then(
+      (resolved) => {
+        setEvidenceStates((current) => ({ ...current, [reference.id]: resolved ? "available" : "unavailable" }))
+        if (resolved) input.openSession?.(reference.sessionID)
+      },
+      () => setEvidenceStates((current) => ({ ...current, [reference.id]: "unavailable" })),
+    )
+  }
+
   return {
     mode,
     scope,
@@ -370,6 +408,8 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     selectedTask,
     taskAssignments,
     taskEvidence,
+    evidenceResolution,
+    openEvidence,
     expanded,
     attention,
     selectSubview: setSubview,

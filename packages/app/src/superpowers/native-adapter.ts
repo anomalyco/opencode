@@ -1,4 +1,4 @@
-import type { FormInfo, OpenCodeClient, SessionInfo } from "@opencode/client/promise"
+import type { FormInfo, OpenCodeClient, SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { ServerConnection } from "@/runtime/server/registry"
 import { sessionHref } from "@/shell/routes/session"
 import { projectAgentTree, type AgentTree } from "./agent-tree"
@@ -45,6 +45,11 @@ export type NativeExecutionAdapter = {
   hydrate(): Promise<NativeSnapshot>
   openSession(sessionID: string): string
   dispose(): void
+}
+
+export function messageHasPart(message: SessionMessageInfo, partID: string) {
+  if (message.type !== "assistant") return false
+  return message.content.some((part) => part.type === "tool" && part.id === partID)
 }
 
 export function nativeState(record: NativeRecord) {

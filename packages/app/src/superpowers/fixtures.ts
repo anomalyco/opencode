@@ -372,6 +372,16 @@ export function detailedTasksRun(): RunSnapshot {
         summary: "Spec review reported from a deleted session",
       }),
       fixtureEvidence({
+        id: "e-review-missing",
+        taskID: "task-review",
+        gate: "spec_review",
+        outcome: "passed",
+        sessionID: "idle-child",
+        messageID: "msg-missing",
+        summary: "Spec review reported from an unloaded native message",
+        createdAt: FIXTURE_EPOCH + 500,
+      }),
+      fixtureEvidence({
         id: "e-failed-old",
         taskID: "task-failed",
         gate: "tests",
@@ -446,10 +456,48 @@ export function increasedScopeRun(): RunSnapshot {
   })
 }
 
+export function gateOrderRun(): RunSnapshot {
+  return runFixture({
+    status: "active",
+    tasks: [
+      taskFixture({
+        id: "task-gate",
+        title: "Gate order",
+        phase: "Build",
+        order: 0,
+        state: "awaiting_review",
+        requiredGates: ["tests"],
+        finalReview: false,
+      }),
+    ],
+    evidence: [
+      fixtureEvidence({
+        id: "z-pass",
+        taskID: "task-gate",
+        gate: "tests",
+        outcome: "passed",
+        sessionID: "child",
+        messageID: "msg-gate-1",
+        summary: "Earlier pass appended first",
+      }),
+      fixtureEvidence({
+        id: "a-fail",
+        taskID: "task-gate",
+        gate: "tests",
+        outcome: "failed",
+        sessionID: "child",
+        messageID: "msg-gate-2",
+        summary: "Later failure appended second",
+      }),
+    ],
+  })
+}
+
 export function taskRunFixture(scenario: string): RunSnapshot | undefined {
   if (scenario === "half-verified") return halfVerifiedRun()
   if (scenario === "tasks-detailed") return detailedTasksRun()
   if (scenario === "tasks-scope") return smallScopeRun()
   if (scenario === "tasks-stale") return halfVerifiedRun()
+  if (scenario === "tasks-gate-order") return gateOrderRun()
   return undefined
 }
