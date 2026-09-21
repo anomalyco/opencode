@@ -68,6 +68,14 @@ type FormRequest = Extract<V2Event, { type: "form.created" }>["data"]["form"]
 const GLOBAL_FORM_SESSION_ID = "global"
 
 export async function runNonInteractivePrompt(input: Input) {
+  const slash = input.message.match(/^\/(\S+)(?:\s([\s\S]*))?$/)
+  const command = slash
+    ? (await input.client.command.list({ location: input.location })).data.find((item) => item.name === slash[1])
+    : undefined
+  // Commands choose their own prompt IDs and can emit more than one message.
+  const boundary = command
+    ? (await input.client.message.list({ sessionID: input.sessionID, limit: 1, order: "desc" })).data[0]?.id
+    : undefined
   const controller = new AbortController()
   const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
   const connected = await stream.next()
@@ -515,11 +523,11 @@ export async function runNonInteractivePrompt(input: Input) {
           : { sessionID: input.sessionID, limit: 200, order: "desc" },
       )
       for (const message of page.data) {
-        if (message.id === messageID) return { found: true, messages: messages.toReversed() }
+        if (message.id === (command ? boundary : messageID)) return { found: true, messages: messages.toReversed() }
         messages.push(message)
       }
       cursor = page.cursor.next ?? undefined
-      if (!cursor) return { found: false, messages: [] }
+      if (!cursor) return { found: !!command, messages: command ? messages.toReversed() : [] }
     }
   }
 
@@ -667,19 +675,22 @@ export async function runNonInteractivePrompt(input: Input) {
     const prepared = await Promise.all(input.files.map(prepareFile))
     if (interrupted) return
     submitted = true
+    promoted = !!command
     completed = consume()
     admission = new AbortController()
-    const response = await input.client.session
-      .prompt(
-        {
-          sessionID: input.sessionID,
-          id: messageID,
-          text: [input.message, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
-          files: prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
-          delivery: "steer",
-        },
-        { signal: admission.signal },
-      )
+    const payload = {
+      sessionID: input.sessionID,
+      text: [
+        command ? (slash?.[2] ?? "") : input.message,
+        ...prepared.flatMap((file) => (file.text ? [file.text] : [])),
+      ].join("\n\n"),
+      files: prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
+      delivery: "steer" as const,
+    }
+    const response = await (command
+      ? input.client.session.command({ ...payload, name: command.name }, { signal: admission.signal })
+      : input.client.session.prompt({ ...payload, id: messageID }, { signal: admission.signal }))
+      .then(() => true)
       .catch(async (error) => {
         if (interrupted) {
           await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
@@ -722,6 +733,7 @@ export async function runNonInteractivePrompt(input: Input) {
     const projected = await reconcile()
     if (
       !projected.responded &&
+      !command &&
       !interrupted &&
       !permissionRejected &&
       !formCancelled &&

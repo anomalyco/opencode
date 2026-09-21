@@ -33,6 +33,14 @@ other workflows that need model output directly in the terminal.
 opencode run "Explain this repository"
 ```
 
+Start the prompt with `/command` to invoke a registered command:
+
+```bash
+opencode run "/review check the latest changes"
+```
+
+Unrecognized commands are sent as ordinary prompt text.
+
 ## Mini
 
 Use `opencode mini` to start OpenCode's minimal interactive interface instead of the full-screen TUI.
