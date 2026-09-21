@@ -6,6 +6,7 @@ import { expect, test } from "bun:test"
 import { onCleanup } from "solid-js"
 import { TuiKeybind } from "../src/config/keybind"
 import { getOpencodeModeStack, OPENCODE_BASE_MODE, OpencodeKeymapProvider, registerOpencodeKeymap } from "../src/keymap"
+import { appBindingCommands, appGlobalBindingCommands } from "../src/app"
 
 function createResolvedKeymapConfig(input: TuiKeybind.KeybindOverrides = {}) {
   const keybinds = TuiKeybind.parse(input)
@@ -134,6 +135,66 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
         "session.first": 2,
         "model.list": 0,
       },
+    })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("session directory filter toggle stays active while a dialog modal is open", async () => {
+  const counts: Record<string, Record<string, number>> = {}
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    const config = createResolvedKeymapConfig({
+      app_toggle_session_directory_filter: "ctrl+g",
+      app_toggle_file_context: "ctrl+h",
+    })
+    const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
+    const offGlobal = keymap.registerLayer({
+      commands: appGlobalBindingCommands.map((name) => ({ name, run() {} })),
+      bindings: config.keybinds.gather("app.global", appGlobalBindingCommands),
+    })
+    const offBase = keymap.registerLayer({
+      mode: OPENCODE_BASE_MODE,
+      commands: appBindingCommands.map((name) => ({ name, run() {} })),
+      bindings: config.keybinds.gather("app", appBindingCommands),
+    })
+    const activeCounts = () =>
+      Object.fromEntries(
+        Array.from(
+          keymap.getCommandBindings({
+            visibility: "active",
+            commands: ["app.toggle.session_directory_filter", "app.toggle.file_context"],
+          }),
+          ([command, bindings]) => [command, bindings.length],
+        ),
+      )
+
+    counts.base = activeCounts()
+    const popModal = getOpencodeModeStack(keymap).push("modal")
+    counts.modal = activeCounts()
+    popModal()
+
+    onCleanup(() => {
+      offBase()
+      offGlobal()
+      offKeymap()
+    })
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <box />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(() => <Harness />)
+  try {
+    expect(counts).toEqual({
+      base: { "app.toggle.session_directory_filter": 1, "app.toggle.file_context": 1 },
+      modal: { "app.toggle.session_directory_filter": 1, "app.toggle.file_context": 0 },
     })
   } finally {
     app.renderer.destroy()
