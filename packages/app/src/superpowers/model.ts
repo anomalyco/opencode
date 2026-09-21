@@ -1,6 +1,11 @@
 import { createSignal, type Accessor } from "solid-js"
 import { summarizeProgress } from "@bearmanser/opencode-superpowers-execution/progress"
-import type { ProgressSummary, RunSnapshot } from "@bearmanser/opencode-superpowers-execution/contract"
+import type {
+  Evidence,
+  ProgressSummary,
+  RunSnapshot,
+  Task,
+} from "@bearmanser/opencode-superpowers-execution/contract"
 import { projectAgentTree } from "./agent-tree"
 import type { ExecutionScope } from "./identity"
 import type { NativeRecord } from "./native-types"
@@ -41,6 +46,100 @@ export type ExecutionAssignment = {
 export type ExecutionAgent = NativeRecord & {
   state: ExecutionAgentState
   assignments?: ExecutionAssignment[]
+}
+
+export type ExecutionAssignmentJoin = {
+  id: string
+  taskID: string
+  attempt: number
+  sessionID: string
+  role: ExecutionAgentRole
+  createdAt: number
+  endedAt?: number
+  active: boolean
+  available: boolean
+  sessionState?: ExecutionAgentState
+  sessionTitle?: string
+}
+
+export type ExecutionTaskAssignments = {
+  current: ExecutionAssignmentJoin[]
+  history: ExecutionAssignmentJoin[]
+  uniqueSessions: number
+}
+
+export type ExecutionEvidenceJoin = Evidence & {
+  available: boolean
+  sessionTitle?: string
+}
+
+export type ExecutionTaskEvidence = {
+  current: ExecutionEvidenceJoin[]
+  superseded: ExecutionEvidenceJoin[]
+}
+
+export function joinTaskAssignments(input: {
+  run: RunSnapshot
+  taskID: string
+  attempt: number
+  agents: ExecutionAgent[]
+}): ExecutionTaskAssignments {
+  const index = new Map(input.agents.map((agent) => [agent.id, agent]))
+  const rows = input.run.assignments
+    .filter((assignment) => assignment.taskID === input.taskID)
+    .map((assignment) => {
+      const agent = index.get(assignment.sessionID)
+      return {
+        id: assignment.id,
+        taskID: assignment.taskID,
+        attempt: assignment.attempt,
+        sessionID: assignment.sessionID,
+        role: assignment.role,
+        createdAt: assignment.createdAt,
+        endedAt: assignment.endedAt,
+        active: assignment.endedAt === undefined,
+        available: agent !== undefined,
+        sessionState: agent?.state,
+        sessionTitle: agent?.title,
+      } satisfies ExecutionAssignmentJoin
+    })
+    .sort(compareByCreatedAt)
+  return {
+    current: rows.filter((row) => row.attempt === input.attempt),
+    history: rows.filter((row) => row.attempt !== input.attempt),
+    uniqueSessions: new Set(rows.map((row) => row.sessionID)).size,
+  }
+}
+
+export function joinTaskEvidence(input: {
+  run: RunSnapshot
+  taskID: string
+  attempt: number
+  agents: ExecutionAgent[]
+}): ExecutionTaskEvidence {
+  const index = new Map(input.agents.map((agent) => [agent.id, agent]))
+  const rows = input.run.evidence
+    .filter((evidence) => evidence.taskID === input.taskID)
+    .map((evidence) => {
+      const agent = index.get(evidence.sessionID)
+      return {
+        ...evidence,
+        available: agent !== undefined,
+        sessionTitle: agent?.title,
+      } satisfies ExecutionEvidenceJoin
+    })
+    .sort(compareByCreatedAt)
+  return {
+    current: rows.filter((row) => row.attempt === input.attempt),
+    superseded: rows.filter((row) => row.attempt !== input.attempt),
+  }
+}
+
+function compareByCreatedAt(left: { createdAt: number; id: string }, right: { createdAt: number; id: string }) {
+  if (left.createdAt !== right.createdAt) return left.createdAt - right.createdAt
+  if (left.id < right.id) return -1
+  if (left.id > right.id) return 1
+  return 0
 }
 
 export type ExecutionAgentTree = {
@@ -99,6 +198,9 @@ export type ExecutionModel = {
   structured: Accessor<boolean>
   subview: Accessor<ExecutionSubview>
   selectedTaskID: Accessor<string | undefined>
+  selectedTask: Accessor<Task | undefined>
+  taskAssignments: (taskID: string, attempt: number) => ExecutionTaskAssignments
+  taskEvidence: (taskID: string, attempt: number) => ExecutionTaskEvidence
   expanded: Accessor<boolean>
   attention: Accessor<ExecutionAttention>
   selectSubview: (subview: ExecutionSubview) => void
@@ -236,6 +338,23 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     return rows
   }
 
+  const selectedTask = () => {
+    const current = run()
+    return current?.tasks.find((task) => task.id === selectedTaskID())
+  }
+
+  const taskAssignments = (taskID: string, attempt: number) => {
+    const current = run()
+    if (!current) return { current: [], history: [], uniqueSessions: 0 }
+    return joinTaskAssignments({ run: current, taskID, attempt, agents: agents() })
+  }
+
+  const taskEvidence = (taskID: string, attempt: number) => {
+    const current = run()
+    if (!current) return { current: [], superseded: [] }
+    return joinTaskEvidence({ run: current, taskID, attempt, agents: agents() })
+  }
+
   return {
     mode,
     scope,
@@ -248,6 +367,9 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     structured,
     subview,
     selectedTaskID,
+    selectedTask,
+    taskAssignments,
+    taskEvidence,
     expanded,
     attention,
     selectSubview: setSubview,

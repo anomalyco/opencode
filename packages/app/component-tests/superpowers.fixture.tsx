@@ -25,13 +25,13 @@ import { createExecutionModel, type ExecutionAttention, type ExecutionModel, typ
 import { SessionExecutionProvider } from "../src/superpowers/session-execution"
 import { SessionReviewToggle } from "../src/session/header/session-header-actions"
 import { ExecutionStatusBadge } from "../src/superpowers/status-badge"
-import { agentFixture, failedTaskFixture, runFixture } from "../src/superpowers/fixtures"
+import { agentFixture, failedTaskFixture, increasedScopeRun, runFixture, taskRunFixture } from "../src/superpowers/fixtures"
 import type { ExecutionScope } from "../src/superpowers/identity"
 import type { ExecutionPresentation } from "../src/superpowers/panel"
 import type { SessionModel } from "../src/session/model"
 import type { Project } from "../src/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
-import type { RunSummary } from "@bearmanser/opencode-superpowers-execution/contract"
+import type { RunSnapshot, RunSummary } from "@bearmanser/opencode-superpowers-execution/contract"
 
 type PendingRequest = { type: "permission" | "question"; owner: string }
 
@@ -46,7 +46,7 @@ function pendingRequest(scenario: string): PendingRequest | undefined {
 
 function fixtureAttention(scenario: string): ExecutionAttention {
   return {
-    stale: scenario === "offline-pending",
+    stale: scenario === "offline-pending" || scenario === "tasks-stale",
     needsInput: pendingRequest(scenario) ? 1 : 0,
     failed: scenario === "failed-pending" ? 1 : 0,
     blocked: scenario === "blocked-pending" ? 1 : 0,
@@ -240,7 +240,9 @@ export async function mountExecutionFixture(input: {
   document.body.appendChild(host)
 
   function Fixture() {
-    const executionInitiallyOpen = scenario.startsWith("agents")
+    const taskScenario = scenario.startsWith("tasks") || scenario === "half-verified"
+    const executionInitiallyOpen = scenario.startsWith("agents") || taskScenario
+    const [run, setRun] = createSignal<RunSnapshot | undefined>(taskRunFixture(scenario))
     const [state, setState] = createStore({
       active: executionInitiallyOpen ? (SESSION_EXECUTION_TAB as string | undefined) : undefined,
       all: executionInitiallyOpen ? [SESSION_EXECUTION_TAB] : ([] as string[]),
@@ -280,8 +282,10 @@ export async function mountExecutionFixture(input: {
     })
     const scope = (): ExecutionScope => ({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: "root" })
     const model = createExecutionModel({
-      mode: () => "observer",
+      mode: () => (run() ? "ready" : "observer"),
       scope,
+      initialSubview: taskScenario ? "tasks" : undefined,
+      snapshot: () => run(),
       agents: () => agentFixture(scenario),
       attention: () => fixtureAttention(scenario),
       progress: () => fixtureProgress(scenario),
@@ -311,6 +315,15 @@ export async function mountExecutionFixture(input: {
           </button>
           <button type="button" onClick={() => apply(closeSessionTab(current(), SESSION_EXECUTION_TAB))}>
             Close Execution
+          </button>
+          <button
+            type="button"
+            onClick={() => setRun((current) => (current ? { ...current, status: "cancelled" } : current))}
+          >
+            Show cancelled fixture
+          </button>
+          <button type="button" onClick={() => setRun(increasedScopeRun())}>
+            Show increased scope fixture
           </button>
         </div>
         <div

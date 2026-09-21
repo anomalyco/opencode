@@ -353,3 +353,124 @@ story("desktop timeline summary opens agents", async ({ page }) => {
   await expect(page.getByTestId("execution-panel")).toBeVisible()
   await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
 })
+
+story("progress distinguishes review, cancellation, and provenance", async ({ page }) => {
+  await openExecutionFixture(page, "half-verified")
+  await expect(page.getByTestId("execution-progress-count")).toHaveText("1/2")
+  await page.getByRole("button", { name: "Progress information", exact: true }).click()
+  await expect(page.getByText("Verification is reported by the controller.", { exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "Show cancelled fixture", exact: true }).click()
+  await expect(page.getByTestId("execution-run-state")).toHaveText("Cancelled")
+  await expect(page.getByTestId("execution-run-state")).not.toHaveText("Complete")
+})
+
+story("cancelled task progress keeps its historical fraction", async ({ page }) => {
+  await openExecutionFixture(page, "half-verified")
+  await page.getByRole("button", { name: "Show cancelled fixture", exact: true }).click()
+  await expect(page.getByTestId("execution-run-state")).toHaveText("Cancelled")
+  await expect(page.getByTestId("execution-progress-count")).toHaveText("1/2")
+  await expect(page.getByText("Complete", { exact: true })).toHaveCount(0)
+})
+
+story("task progress is absent without a registered run", async ({ page }) => {
+  await openExecutionFixture(page, "observer")
+  await openExecutionFromMenu(page)
+  await page.getByRole("button", { name: "Tasks", exact: true }).click()
+  await expect(page.getByTestId("execution-progress-count")).toHaveCount(0)
+  await expect(page.getByTestId("execution-progress-percent")).toHaveCount(0)
+  await expect(page.getByTestId("execution-progress-none")).toBeVisible()
+})
+
+story("task list shows every task state and filters without a fabricated percent field", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-detailed")
+  const list = page.getByTestId("execution-tasks-list")
+  await expect(list.getByRole("button", { name: /Pending work, Pending/ })).toBeVisible()
+  await expect(list.getByRole("button", { name: /Blocked work, Blocked/ })).toBeVisible()
+  await expect(list.getByRole("button", { name: /Verified work, Verified/ })).toBeVisible()
+  await expect(list.getByRole("button", { name: /Failed work, Failed/ })).toBeVisible()
+  await expect(list.getByRole("button", { name: /Skipped work, Skipped/ })).toBeVisible()
+  await expect(page.getByTestId("execution-progress-skipped")).toHaveText("1 skipped task")
+  await expect(page.getByTestId("execution-progress-count")).toHaveText("1/7")
+  await expect(page.getByTestId("execution-plan-revision")).toHaveText("Plan revision 1")
+  await page.getByRole("combobox", { name: "Filter by state", exact: true }).selectOption("blocked")
+  await expect(list.getByRole("button", { name: /Blocked work/ })).toBeVisible()
+  await expect(list.getByRole("button", { name: /Verified work/ })).toHaveCount(0)
+  await page.getByRole("combobox", { name: "Filter by state", exact: true }).selectOption("all")
+  await page.getByRole("searchbox", { name: "Search tasks", exact: true }).fill("final")
+  await expect(list.getByRole("button", { name: /Final review/ })).toBeVisible()
+  await expect(list.getByRole("button", { name: /Verified work/ })).toHaveCount(0)
+})
+
+story("task details show the blocked reason and unrun gates", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-detailed")
+  await page.getByRole("button", { name: /Blocked work, Blocked/ }).click()
+  await expect(page.getByTestId("execution-task-title")).toHaveText("Blocked work")
+  await expect(page.getByTestId("execution-task-reason")).toHaveText("Waiting on a decision")
+  await expect(page.getByTestId("execution-task-dependencies")).toContainText("Running work")
+  await expect(page.getByTestId("execution-gate-tests")).toHaveAttribute("data-outcome", "unrun")
+  await expect(page.getByTestId("execution-task-evidence-none")).toBeVisible()
+})
+
+story("task details separate current-attempt evidence from superseded attempts", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-detailed")
+  await page.getByRole("button", { name: /Failed work, Failed/ }).click()
+  await expect(page.getByTestId("execution-gate-tests")).toHaveAttribute("data-outcome", "failed")
+  await expect(page.getByTestId("execution-task-evidence-current")).toContainText("Second attempt failed")
+  await expect(page.getByTestId("execution-task-evidence-superseded")).toContainText("First attempt failed")
+})
+
+story("task details keep an unavailable evidence reference without erasing the report", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-detailed")
+  await page.getByRole("button", { name: /Awaiting review, Awaiting review/ }).click()
+  const evidence = page.getByTestId("execution-evidence-e-review-ghost")
+  await expect(evidence).toHaveAttribute("data-available", "false")
+  await expect(evidence).toContainText("Spec review reported from a deleted session")
+  await expect(evidence.getByText("Evidence session unavailable", { exact: true })).toBeVisible()
+})
+
+story("task details count a reused child once and show an inline root assignment", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-detailed")
+  await page.getByRole("button", { name: /Verified work, Verified/ }).click()
+  await expect(page.getByTestId("execution-task-agent-count")).toHaveText("3 agents")
+  await expect(page.getByTestId("execution-assignment-a-inline")).toHaveAttribute("data-session-id", "root")
+  await expect(page.getByTestId("execution-assignment-a-impl")).toHaveAttribute("data-session-id", "child")
+  await expect(page.getByTestId("execution-assignment-a-review")).toHaveAttribute("data-session-id", "child")
+})
+
+story("task details separate native idle state from the reported outcome", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-detailed")
+  await page.getByRole("button", { name: /Verified work, Verified/ }).click()
+  await expect(page.getByTestId("execution-assignment-a-idle")).toHaveAttribute("data-native-state", "idle")
+  await expect(page.getByTestId("execution-task-outcome")).toHaveText("Verified")
+})
+
+story("task details keep the final review pending", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-detailed")
+  await page.getByRole("button", { name: /Final review, Pending/ }).click()
+  await expect(page.getByTestId("execution-task-final-review")).toHaveText("Final review is still pending")
+})
+
+story("task progress marks a stale snapshot as stale while keeping counts", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-stale")
+  await expect(page.getByTestId("execution-progress-stale")).toBeVisible()
+  await expect(page.getByTestId("execution-progress-count")).toHaveText("1/2")
+})
+
+story("task evidence resolves the native session link only on selection", async ({ page }) => {
+  await openExecutionFixture(page, "half-verified")
+  await expect(page.getByTestId("navigation-target")).toHaveText("")
+  await page
+    .getByRole("button", { name: /Open evidence from/ })
+    .first()
+    .evaluate((element) => (element as HTMLElement).click())
+  await expect(page.getByTestId("navigation-target")).toHaveText("wsl/child")
+})
+
+story("task progress shows a scope increase reducing the fraction", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-scope")
+  await expect(page.getByTestId("execution-progress-count")).toHaveText("2/2")
+  await expect(page.getByTestId("execution-plan-revision")).toHaveText("Plan revision 1")
+  await page.getByRole("button", { name: "Show increased scope fixture", exact: true }).click()
+  await expect(page.getByTestId("execution-progress-count")).toHaveText("2/4")
+  await expect(page.getByTestId("execution-plan-revision")).toHaveText("Plan revision 2")
+})

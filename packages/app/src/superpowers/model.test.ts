@@ -11,11 +11,22 @@ import {
   sessionBrowserTab,
   type SessionTabState,
 } from "../shell/state/session-tabs"
-import { agentFixture, failedTaskFixture, runFixture } from "./fixtures"
+import { summarizeProgress } from "@bearmanser/opencode-superpowers-execution/progress"
+import {
+  agentFixture,
+  detailedTasksRun,
+  failedTaskFixture,
+  halfVerifiedRun,
+  increasedScopeRun,
+  runFixture,
+  smallScopeRun,
+} from "./fixtures"
 import {
   AGENT_ROWS_VIRTUALIZE_THRESHOLD,
   EXECUTION_SUBVIEWS,
   createExecutionModel,
+  joinTaskAssignments,
+  joinTaskEvidence,
   structuredViewsEnabled,
   type ExecutionMode,
 } from "./model"
@@ -274,6 +285,91 @@ describe("createExecutionModel", () => {
       expect(model.progress()).toBeUndefined()
       expect(model.attention().failed).toBe(0)
       expect(structuredViewsEnabled("incompatible")).toBe(false)
+    })
+  })
+})
+
+describe("createExecutionModel tasks", () => {
+  test("joins assignments by task and attempt without collapsing a reused session", () => {
+    const run = detailedTasksRun()
+    const agents = agentFixture("agents")
+    const join = joinTaskAssignments({ run, taskID: "task-verified", attempt: 1, agents })
+    expect(join.current.map((row) => row.id)).toEqual(["a-inline", "a-impl", "a-review", "a-idle"])
+    expect(join.history).toEqual([])
+    expect(join.uniqueSessions).toBe(3)
+    expect(join.current.find((row) => row.id === "a-review")?.sessionID).toBe("child")
+    expect(join.current.find((row) => row.id === "a-inline")?.role).toBe("controller")
+    expect(join.current.find((row) => row.id === "a-idle")?.active).toBe(false)
+    const failed = joinTaskAssignments({ run, taskID: "task-failed", attempt: 2, agents })
+    expect(failed.current).toEqual([])
+    expect(failed.history.map((row) => row.id)).toEqual(["a-old"])
+  })
+
+  test("joins current-attempt evidence separately from superseded attempts", () => {
+    const run = detailedTasksRun()
+    const agents = agentFixture("agents")
+    const evidence = joinTaskEvidence({ run, taskID: "task-failed", attempt: 2, agents })
+    expect(evidence.current.map((row) => row.id)).toEqual(["e-failed-new"])
+    expect(evidence.superseded.map((row) => row.id)).toEqual(["e-failed-old"])
+    expect(evidence.current[0]?.outcome).toBe("failed")
+  })
+
+  test("marks an evidence reference unavailable while keeping the report", () => {
+    const run = detailedTasksRun()
+    const agents = agentFixture("agents")
+    const ghost = joinTaskEvidence({ run, taskID: "task-review", attempt: 1, agents }).current[0]
+    expect(ghost?.available).toBe(false)
+    expect(ghost?.summary).toBe("Spec review reported from a deleted session")
+    expect(ghost?.outcome).toBe("passed")
+    expect(ghost?.sessionID).toBe("ghost")
+  })
+
+  test("exposes the selected task and joins through the model", () => {
+    root(() => {
+      const model = createExecutionModel({ snapshot: () => detailedTasksRun(), agents: () => agentFixture("agents") })
+      model.selectTask("task-verified")
+      expect(model.selectedTask()?.title).toBe("Verified work")
+      expect(model.taskAssignments("task-verified", 1).uniqueSessions).toBe(3)
+      expect(model.taskEvidence("task-verified", 1).current).toHaveLength(2)
+    })
+  })
+
+  test("summarizes every task state without an arbitrary percent field", () => {
+    const run = detailedTasksRun()
+    expect(new Set(run.tasks.map((task) => task.state))).toEqual(
+      new Set(["pending", "running", "blocked", "awaiting_review", "verified", "failed", "skipped"]),
+    )
+    expect(summarizeProgress(run.tasks)).toEqual({
+      verified: 1,
+      total: 7,
+      skipped: 1,
+      failed: 1,
+      blocked: 1,
+      awaitingReview: 1,
+      percent: 14,
+      source: "controller_report",
+    })
+  })
+
+  test("reduces the fraction when a new plan revision increases scope", () => {
+    expect(summarizeProgress(smallScopeRun().tasks).percent).toBe(100)
+    expect(summarizeProgress(increasedScopeRun().tasks).percent).toBe(50)
+    expect(smallScopeRun().plan.revision).toBe(1)
+    expect(increasedScopeRun().plan.revision).toBe(2)
+  })
+
+  test("keeps a cancelled run's historical fraction while reporting cancellation", () => {
+    const cancelled = { ...halfVerifiedRun(), status: "cancelled" as const }
+    expect(cancelled.status).toBe("cancelled")
+    expect(summarizeProgress(cancelled.tasks)).toEqual({
+      verified: 1,
+      total: 2,
+      skipped: 0,
+      failed: 0,
+      blocked: 0,
+      awaitingReview: 1,
+      percent: 50,
+      source: "controller_report",
     })
   })
 })
