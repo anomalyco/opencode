@@ -250,12 +250,18 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     name: info.name,
     env: info.env,
     package: info.npm ? Provider.aisdk(info.npm) : undefined,
-    settings: info.api ? { ...options.settings, baseURL: info.api } : info.options ? options.settings : undefined,
+    settings: info.api
+      ? { ...options.settings, baseURL: info.options?.baseURL || info.api }
+      : info.options
+        ? options.settings
+        : undefined,
     headers: info.options && options.headers,
     body: info.options && options.body,
     models:
       info.models &&
-      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model)])),
+      Object.fromEntries(
+        Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.options?.baseURL)]),
+      ),
   }
 }
 
@@ -301,7 +307,7 @@ export function providerID(input: string) {
   return input
 }
 
-function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
+function migrateModel(info: typeof ConfigProviderV1.Model.Type, baseURL?: string) {
   const settings = info.options && ConfigProviderOptionsV1.model(info.options)
   const costs = info.cost && [
     {
@@ -335,7 +341,7 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     name: info.name,
     compatibility: Model.compatibility(info.interleaved),
     package: info.provider?.npm ? Provider.aisdk(info.provider.npm) : undefined,
-    settings: info.provider?.api ? { ...settings, baseURL: info.provider.api } : settings,
+    settings: info.provider?.api ? { ...settings, baseURL: baseURL || info.provider.api } : settings,
     capabilities,
     headers: info.headers,
     variants:
