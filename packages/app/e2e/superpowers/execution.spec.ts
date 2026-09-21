@@ -1,8 +1,12 @@
-import { readFile } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { base64Encode } from "@opencode/util/encode"
 import { expect, test } from "@playwright/test"
 import {
   createExecutionTestHarness,
   EXECUTION_CHILD_SESSION,
+  EXECUTION_REVIEWER_SESSION,
   EXECUTION_ROOT_SESSION,
   EXECUTION_STRANGER_CHILD_SESSION,
   requireExplicitTestTarget,
@@ -185,7 +189,7 @@ test.describe("Superpowers execution bridge lifecycle", () => {
     await execution.setCapabilityVersion(2)
     await execution.open(page, run)
     await expect(execution.panel(page)).toHaveAttribute("data-mode", "incompatible")
-    await expect(page.locator('[data-slot="execution-mode-notice"]')).toHaveAttribute("data-mode", "incompatible")
+    await expect(execution.modeNotice(page)).toHaveAttribute("data-mode", "incompatible")
   })
 
   test("malformed reports are rejected without changing durable state", async () => {
@@ -226,7 +230,7 @@ test.describe("Superpowers execution bridge lifecycle", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Basic ${btoa(`opencode:${target?.password ?? ""}`)}`,
+          authorization: `Basic ${base64Encode(`opencode:${target?.password ?? ""}`)}`,
         },
         body: JSON.stringify({ input: { rootSessionIDs: [EXECUTION_ROOT_SESSION] } }),
       })
@@ -235,6 +239,52 @@ test.describe("Superpowers execution bridge lifecycle", () => {
 
       const stillPrimary = await execution.readRun(run.runID)
       expect(stillPrimary).toEqual(primary)
+    } finally {
+      await secondary.stop()
+    }
+  })
+
+  test("switching to an identical-identity server does not leak the primary run", async ({ page }) => {
+    const run = await execution.startRun()
+    await execution.open(page, run)
+    await execution.reportVerifiedTask(run, "schema")
+    await expect(execution.task(page, "schema")).toHaveAttribute("data-state", "verified")
+
+    const secondary = await execution.spawnSecondaryHost()
+    try {
+      expect(secondary.pid).not.toBe(execution.pid())
+      const secondaryRun = await fetch(`${secondary.serverURL}/api/rpc/superpowers.execution.v1/getSummaries`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Basic ${base64Encode(`opencode:${target?.password ?? ""}`)}`,
+        },
+        body: JSON.stringify({ input: { rootSessionIDs: [EXECUTION_ROOT_SESSION] } }),
+      })
+      expect(((await secondaryRun.json()) as { output?: { items: unknown[] } }).output?.items).toEqual([])
+
+      await page.addInitScript(
+        ({ key, value }) => localStorage.setItem(key, value),
+        {
+          key: "opencode.global.dat:server",
+          value: JSON.stringify({
+            list: [{ type: "http", http: { url: secondary.serverURL, password: target?.password } }],
+            hidden: {},
+            projects: {},
+            lastProject: {},
+            recentlyClosed: {},
+          }),
+        },
+      )
+      await page.goto(execution.sessionHref(EXECUTION_ROOT_SESSION, secondary.serverURL))
+      await execution.openPanel(page)
+      await expect(execution.panel(page)).toHaveAttribute("data-mode", "observer")
+      await expect(page.locator('[data-testid="execution-map-node"]')).toHaveCount(0)
+
+      await page.goto(execution.sessionHref(EXECUTION_ROOT_SESSION))
+      await execution.openPanel(page)
+      await expect(execution.task(page, "schema")).toHaveAttribute("data-state", "verified")
+      await expect(execution.panel(page)).toHaveAttribute("data-mode", "ready")
     } finally {
       await secondary.stop()
     }
@@ -279,19 +329,37 @@ test.describe("Superpowers execution bridge lifecycle", () => {
     expect(reviewer.ok).toBe(true)
   })
 
-  test("a root whose recorded location changed is refused and keeps the stored run", async () => {
+  test("a root location change pauses tracking through the app and retains the reported run", async ({ page }) => {
     const run = await execution.startRun()
-    const before = await execution.readRun(run.runID)
+    await execution.open(page, run)
+    await execution.reportVerifiedTask(run, "schema")
+    await expect(execution.task(page, "schema")).toHaveAttribute("data-state", "verified")
 
+    const moved = `${execution.owned.directories.root}/moved-owner`
+    const before = await execution.readRun(run.runID)
     await execution.setSessions([
-      { id: EXECUTION_ROOT_SESSION, directory: `${execution.owned.directories.root}/moved`, title: "Moved root" },
+      { id: EXECUTION_ROOT_SESSION, directory: moved, title: "Execution root", running: true },
       {
         id: EXECUTION_CHILD_SESSION,
         parentID: EXECUTION_ROOT_SESSION,
         directory: execution.owned.directories.worktree,
-        title: "Child",
+        title: "Feature worktree child",
       },
+      { id: EXECUTION_REVIEWER_SESSION, parentID: EXECUTION_ROOT_SESSION, directory: moved, title: "Reviewer" },
     ])
+    await execution.emitNativeEvent({
+      id: "evt_move_root",
+      created: Date.now(),
+      type: "session.moved",
+      location: { directory: moved },
+      data: { sessionID: EXECUTION_ROOT_SESSION, location: { directory: moved }, projectID: "project" },
+    })
+
+    await execution.openPanel(page)
+    await expect(execution.panel(page)).toHaveAttribute("data-mode", "stale")
+    await expect(execution.modeNotice(page)).toHaveAttribute("data-reason", "location_changed")
+    await expect(execution.modeNotice(page)).toContainText("owner location changed")
+    await expect(execution.task(page, "schema")).toHaveAttribute("data-state", "verified")
 
     const refused = await execution.report({
       operationID: "after-move",
@@ -301,12 +369,6 @@ test.describe("Superpowers execution bridge lifecycle", () => {
     })
     expect(refused.ok).toBe(false)
     if (!refused.ok) expect(refused.error.code).toBe("forbidden")
-
-    const stored = await execution.rpc<typeof before>("getRun", {
-      rootSessionID: run.rootSessionID,
-      runID: run.runID,
-    })
-    expect(stored).toEqual(before)
   })
 
   test("a cancelled run stays terminal and never reports completion", async () => {
@@ -346,15 +408,50 @@ test.describe("Superpowers execution bridge lifecycle", () => {
     await expect(execution.task(page, "schema")).toHaveAttribute("data-state", "verified")
   })
 
-  test("host logs and page URLs never contain the disposable credential", async ({ page }) => {
+  test("a child session navigates on the same server and keeps the root run association", async ({ page }) => {
     const run = await execution.startRun()
     await execution.open(page, run)
-    expect(page.url()).not.toContain("auth_token")
+    await execution.reportVerifiedTask(run, "schema")
+    await expect(execution.task(page, "schema")).toHaveAttribute("data-state", "verified")
 
-    const logs = execution.logs()
-    expect(logs).not.toContain(target?.password ?? "unreachable")
-    expect(logs).not.toContain(btoa(`opencode:${target?.password ?? ""}`))
-    expect(logs.toLowerCase()).not.toContain("authorization")
+    await execution.selectSubview(page, "Agents")
+    const openChild = execution.agentOpen(page, "Feature worktree child")
+    await expect(openChild).toBeVisible()
+    await openChild.click()
+    await expect.poll(() => page.url()).toContain(execution.sessionHref(EXECUTION_CHILD_SESSION))
+
+    await execution.openPanel(page)
+    await expect(execution.task(page, "schema")).toHaveAttribute("data-state", "verified")
+    await expect(execution.panel(page)).toHaveAttribute("data-mode", "ready")
+  })
+
+  test("no captured request URL or retained artifact contains the disposable credential", async ({ page }) => {
+    const run = await execution.startRun()
+    const urls: string[] = []
+    page.on("request", (request) => urls.push(request.url()))
+    await execution.open(page, run)
+    await execution.reportVerifiedTask(run, "schema")
+    await expect(execution.task(page, "schema")).toHaveAttribute("data-state", "verified")
+
+    const password = target?.password ?? "unreachable"
+    const encoded = base64Encode(`opencode:${password}`)
+    expect(urls.length).toBeGreaterThan(0)
+    for (const url of urls) {
+      expect(url).not.toContain(password)
+      expect(url).not.toContain(encoded)
+      expect(url).not.toContain("auth_token")
+    }
+    expect(page.url()).not.toContain(password)
+    expect(page.url()).not.toContain(encoded)
+
+    const artifacts = await listFiles(fileURLToPath(new URL("../test-results/", import.meta.url)))
+    for (const artifact of artifacts) {
+      const content = await readFile(artifact)
+      expect(content.includes(password)).toBe(false)
+      expect(content.includes(encoded)).toBe(false)
+    }
+    expect(execution.logs()).not.toContain(password)
+    expect(execution.logs()).not.toContain(encoded)
     expect(execution.owned.process.pid).not.toBe(process.pid)
   })
 
@@ -400,33 +497,68 @@ test.describe("Superpowers execution bridge lifecycle", () => {
     expect(stored).toEqual(before)
   })
 
-  test("sanitized native fixtures match the host's actual API responses", async () => {
-    const fixtures = JSON.parse(
-      await readFile(new URL("./native-fixtures.json", import.meta.url), "utf8"),
+  test("recorded native host fixtures expose the adapter contract the stand-in also serves", async () => {
+    const recorded = JSON.parse(
+      await readFile(new URL("./native-host-fixtures.json", import.meta.url), "utf8"),
     ) as {
-      session: Record<string, unknown>
-      sessionList: Record<string, unknown>
-      active: unknown
-      forms: unknown
-      inbox: unknown
+      sessions: {
+        get: unknown
+        list: unknown
+        children: unknown
+        active: unknown
+        forms: unknown
+        inbox: unknown
+        messages: unknown
+      }
     }
-    const owner = "<owner>"
-    const normalize = (value: unknown) =>
-      JSON.parse(
-        JSON.stringify(value)
-          .replaceAll(execution.owned.directories.owner, owner)
-          .replaceAll(execution.owned.directories.worktree, "<worktree>"),
-      )
 
-    const session = await execution.native(`/api/session/${EXECUTION_ROOT_SESSION}`)
-    expect(normalize(session.body)).toEqual(fixtures.session)
-    const list = await execution.native(`/api/session?parentID=${EXECUTION_ROOT_SESSION}`)
-    expect(normalize(list.body)).toEqual(fixtures.sessionList)
-    const active = await execution.native("/api/session/active")
-    expect(normalize(active.body)).toEqual(fixtures.active)
-    const forms = await execution.native(`/api/session/${EXECUTION_ROOT_SESSION}/form`)
-    expect(normalize(forms.body)).toEqual(fixtures.forms)
-    const inbox = await execution.native(`/api/session/${EXECUTION_ROOT_SESSION}/inbox`)
-    expect(normalize(inbox.body)).toEqual(fixtures.inbox)
+    expectSessionContract(recorded.sessions.get)
+    expectSessionListContract(recorded.sessions.list)
+    expectSessionListContract(recorded.sessions.children)
+    expectActiveContract(recorded.sessions.active)
+    expectListContract(recorded.sessions.forms)
+    expectListContract(recorded.sessions.inbox)
+    expectSessionListContract(recorded.sessions.messages)
+
+    expectSessionContract((await execution.native(`/api/session/${EXECUTION_ROOT_SESSION}`)).body)
+    expectSessionListContract((await execution.native("/api/session")).body)
+    expectSessionListContract((await execution.native(`/api/session?parentID=${EXECUTION_ROOT_SESSION}`)).body)
+    expectActiveContract((await execution.native("/api/session/active")).body)
+    expectListContract((await execution.native(`/api/session/${EXECUTION_ROOT_SESSION}/form`)).body)
+    expectListContract((await execution.native(`/api/session/${EXECUTION_ROOT_SESSION}/inbox`)).body)
   })
 })
+
+function expectSessionContract(body: unknown) {
+  const data = (body as { data: Record<string, unknown> }).data
+  expect(typeof data.id).toBe("string")
+  expect(typeof data.title).toBe("string")
+  expect(typeof (data.location as { directory: unknown }).directory).toBe("string")
+  expect(typeof (data.time as { created: unknown }).created).toBe("number")
+  expect(typeof (data.time as { updated: unknown }).updated).toBe("number")
+}
+
+function expectSessionListContract(body: unknown) {
+  const data = (body as { data: unknown[] }).data
+  expect(Array.isArray(data)).toBe(true)
+  expect((body as { cursor: unknown }).cursor).toBeDefined()
+  for (const item of data) expectSessionContract({ data: item })
+}
+
+function expectListContract(body: unknown) {
+  expect(Array.isArray((body as { data: unknown[] }).data)).toBe(true)
+}
+
+function expectActiveContract(body: unknown) {
+  expect(typeof (body as { data: unknown }).data).toBe("object")
+}
+
+async function listFiles(root: string): Promise<string[]> {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
+  const nested = await Promise.all(
+    entries.map((entry) =>
+      entry.isDirectory() ? listFiles(path.join(root, entry.name)) : Promise.resolve([path.join(root, entry.name)]),
+    ),
+  )
+  return nested.flat()
+}

@@ -111,6 +111,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
   let followUp = false
   let capabilitiesLoaded = false
   let currentMode: ExecutionMode = "observer"
+  let locationPaused = false
   let online = input.connection()
   let timer: unknown
   let unsubscribe: (() => void) | undefined
@@ -165,6 +166,12 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
 
   function reconcile() {
     if (disposed) return
+    if (locationPaused && attachment) {
+      stopTimer()
+      setModeValue("stale")
+      setReasonValue("location_changed")
+      return
+    }
     if (!input.connection()) {
       online = false
       stopTimer()
@@ -227,6 +234,18 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
   async function attachActive() {
     const scope = input.scope()
     if (disposed || !scope) return
+    const previous = attachment
+    if (
+      previous !== undefined &&
+      previous.scope.rootSessionID === scope.rootSessionID &&
+      previous.scope.ownerDirectory !== scope.ownerDirectory
+    ) {
+      locationPaused = true
+      stopTimer()
+      setModeValue("stale")
+      setReasonValue("location_changed")
+      return
+    }
     resetForScope(scope)
     const requestGeneration = generation
     ensureListener()
@@ -257,8 +276,14 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
         reconcile()
         return
       }
-      attachment = { scope, runID: preferred.runID, generation: requestGeneration }
-      setReasonValue(undefined)
+      const ownerChanged = preferred.ownerDirectory !== scope.ownerDirectory
+      locationPaused = ownerChanged
+      attachment = {
+        scope: ownerChanged ? { ...scope, ownerDirectory: preferred.ownerDirectory } : scope,
+        runID: preferred.runID,
+        generation: requestGeneration,
+      }
+      setReasonValue(ownerChanged ? "location_changed" : undefined)
       setAttachmentVersion((value) => value + 1)
       reconcile()
     } catch (error) {
@@ -275,6 +300,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       runCache.clear()
     }
     generation += 1
+    locationPaused = false
     attachment = undefined
     capabilitiesLoaded = false
     followUp = false
@@ -300,6 +326,11 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     setSnapshot(loaded)
     setModeValue("ready")
     setReasonValue(undefined)
+    if (locationPaused) {
+      stopTimer()
+      setModeValue("stale")
+      setReasonValue("location_changed")
+    }
   }
 
   function cacheRun(loaded: RunSnapshot) {
@@ -349,6 +380,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       runCache.clear()
     }
     generation += 1
+    locationPaused = false
     attachment = { scope, runID, generation }
     capabilitiesLoaded = false
     followUp = false

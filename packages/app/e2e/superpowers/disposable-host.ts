@@ -47,18 +47,20 @@ const configuration = (() => {
   const dataDirectory = process.env.EXECUTION_HOST_DATA
   const port = Number(process.env.EXECUTION_HOST_PORT)
   const password = process.env.EXECUTION_HOST_PASSWORD
+  const nonce = process.env.EXECUTION_HOST_NONCE ?? ""
   if (!directory || !dataDirectory || !Number.isInteger(port) || port <= 0) {
     throw new Error(
       "disposable host requires EXECUTION_HOST_DIRECTORY, EXECUTION_HOST_DATA, and EXECUTION_HOST_PORT",
     )
   }
-  return { directory, dataDirectory, port, password }
+  return { directory, dataDirectory, port, password, nonce }
 })()
 
 const directory = configuration.directory
 const dataDirectory = configuration.dataDirectory
 const port = configuration.port
 const password = configuration.password
+const nonce = configuration.nonce
 
 const baseSessions: HostSession[] = JSON.parse(process.env.EXECUTION_HOST_SESSIONS ?? "[]")
 const sessions = new Map<string, HostSession>(baseSessions.map((session) => [session.id, session]))
@@ -335,7 +337,7 @@ function applySessions(next: readonly HostSession[]) {
 
 const cors = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "*",
+  "access-control-allow-headers": "authorization, content-type",
   "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "access-control-expose-headers": "x-next-cursor",
 }
@@ -355,7 +357,7 @@ function json(value: unknown, status = 200) {
 async function control(action: string, payload: Record<string, unknown>) {
   switch (action) {
     case "health":
-      return json({ ok: true, pid: process.pid, port, pluginLoaded: loaded, location: directory })
+      return json({ ok: true, pid: process.pid, port, nonce, pluginLoaded: loaded, location: directory })
     case "report":
       return json(await invokeTool("execution_report", payload.command, String(payload.sessionID ?? "")))
     case "read":
@@ -380,6 +382,10 @@ async function control(action: string, payload: Record<string, unknown>) {
     case "events":
       suppressEvents = payload.suppress === true
       return json({ ok: true, suppressEvents })
+    case "emit": {
+      for (const subscriber of subscribers) subscriber(payload.event)
+      return json({ ok: true })
+    }
     case "capabilities":
       capabilityVersion = Number(payload.schemaVersion ?? 1)
       return json({ ok: true, capabilityVersion })

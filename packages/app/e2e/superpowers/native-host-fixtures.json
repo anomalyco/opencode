@@ -1,0 +1,46 @@
+{
+  "capturedFrom": "real disposable OpenCode 2.0.11 server (POST /api/session then GET reads); sanitized",
+  "sessions": {
+    "get": {
+      "data": {
+        "id": "ses_exec_root",
+        "projectID": "<projectID>",
+        "cost": 0,
+        "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+        "time": { "created": 1700000000000, "updated": 1700000000000 },
+        "title": "Execution root",
+        "subpath": "packages/cli",
+        "location": { "directory": "<owner>" }
+      }
+    },
+    "list": {
+      "data": [
+        {
+          "id": "ses_exec_child",
+          "projectID": "<projectID>",
+          "cost": 0,
+          "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+          "time": { "created": 1700000000000, "updated": 1700000000001 },
+          "title": "Feature worktree child",
+          "location": { "directory": "<worktree>" }
+        },
+        {
+          "id": "ses_exec_root",
+          "projectID": "<projectID>",
+          "cost": 0,
+          "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } },
+          "time": { "created": 1700000000000, "updated": 1700000000002 },
+          "title": "Execution root",
+          "subpath": "packages/cli",
+          "location": { "directory": "<owner>" }
+        }
+      ],
+      "cursor": { "previous": "<cursor>", "next": "<cursor>" }
+    },
+    "children": { "data": [], "cursor": { "previous": null, "next": null } },
+    "active": { "data": {} },
+    "forms": { "data": [] },
+    "inbox": { "data": [] },
+    "messages": { "data": [], "cursor": { "previous": null, "next": null } }
+  }
+}

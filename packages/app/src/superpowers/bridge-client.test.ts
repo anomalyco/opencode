@@ -578,6 +578,27 @@ describe("createExecutionBridge", () => {
     harness.dispose()
   })
 
+  test("a same-root owner location change pauses tracking and retains the snapshot", async () => {
+    const harness = bridgeHarness()
+    const first = harness.attach(SCOPE, "run-1")
+    await harness.flush()
+    first.resolve(runFixture({ revision: 3, ownerDirectory: SCOPE.ownerDirectory }))
+    await harness.flush()
+    expect(harness.model.mode()).toBe("ready")
+
+    harness.attachActive({
+      serverKey: SCOPE.serverKey,
+      ownerDirectory: "/root/git/demo/moved",
+      rootSessionID: SCOPE.rootSessionID,
+    })
+    await harness.flush()
+    expect(harness.model.mode()).toBe("stale")
+    expect(harness.model.reason()).toBe("location_changed")
+    expect(harness.model.run()?.revision).toBe(3)
+    expect(harness.getRunCalls.every((call) => call.ownerDirectory === SCOPE.ownerDirectory)).toBe(true)
+    harness.dispose()
+  })
+
   test("recently observed runs stay cached within one scope", async () => {
     const harness = bridgeHarness()
     const first = harness.attach(SCOPE, "run-1")

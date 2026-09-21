@@ -18,6 +18,8 @@ import { debounce } from "@solid-primitives/scheduled"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
+import { useNavigate } from "@solidjs/router"
+import { sessionHref } from "@/shell/routes/session"
 import { projectForSession } from "@/shell/layout/helpers"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { SessionModel } from "@/session/model"
@@ -64,6 +66,7 @@ const SessionSummaryPanel = lazy(async () => {
 export function SessionScreen(props: { session: SessionModel }) {
   const session = props.session
   const server = useServer()
+  const navigate = useNavigate()
   const detailsProject = createMemo(() => {
     const info = session.data.info()
     return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
@@ -398,6 +401,7 @@ export function SessionScreen(props: { session: SessionModel }) {
       session={session}
       attention={executionAttention}
       reviewRequest={reviewNativeRequest}
+      openSession={(sessionID) => void navigate(sessionHref(server.key, sessionID))}
       mobile={review.mobile}
       onModel={setExecution}
     >

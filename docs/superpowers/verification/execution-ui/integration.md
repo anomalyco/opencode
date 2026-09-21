@@ -1,42 +1,106 @@
 # Execution UI Integration Verification (T18)
 
 Task: T18 Exercise real bridge lifecycle and recovery end to end.
-Spec coverage: AC06, AC07, AC08, AC11, AC19 (spec §9, §9.3, §12, §13, §14).
+Spec coverage: AC06, AC07, AC08, AC11 (plugin/bridge/host integration) and the T18 portion of AC19
+(lifecycle survives an isolated restart of the disposable stand-in host). AC19's "built companion package
+loads outside the monorepo on the tested host" and AC20 remain T20 gates.
 Branch: `execution-ui`. Host: Ubuntu 24.04.2 LTS, Bun 1.4.2, Playwright Chromium.
 
-## 1. What was built
+## 1. What was built, and what the host is not
 
 | File | Purpose |
 |---|---|
-| `packages/app/e2e/superpowers/execution-fixtures.ts` | Explicit disposable-target validation and `createExecutionTestHarness` (manifest + child-process handle + report/read/restart/plugin controls + page helpers). |
-| `packages/app/e2e/superpowers/disposable-host.ts` | The disposable host process: real `@bearmanser/opencode-superpowers-execution` plugin setup over HTTP RPC, file-backed storage, SSE invalidations, synthetic native session API, and test-only controls. |
-| `packages/app/e2e/superpowers/execution.spec.ts` | Guard tests plus 15 lifecycle/durability/scope/security cases. |
-| `packages/app/e2e/superpowers/native-fixtures.json` | Sanitized native API responses captured from the running host, so T01's adapter mapping is checkable. |
-| `packages/app/playwright.config.ts` | When `EXECUTION_E2E_TARGET` is set, the app under test targets that target's loopback host/port instead of the default local server. |
+| `packages/app/e2e/superpowers/execution-target.ts` | Shared strict disposable-target parser used by both `playwright.config.ts` and the fixtures. |
+| `packages/app/e2e/superpowers/execution-fixtures.ts` | `requireExplicitTestTarget` + `createExecutionTestHarness` (nonce-verified manifest, owned child-process handle, controls, page helpers). |
+| `packages/app/e2e/superpowers/disposable-host.ts` | The disposable stand-in host: real `@bearmanser/opencode-superpowers-execution` plugin **source** setup over HTTP RPC, file-backed storage, SSE invalidations, synthetic native sessions, test-only controls. |
+| `packages/app/e2e/superpowers/native-host-fixtures.json` | Sanitized native API responses captured from a **real** disposable OpenCode 2.0.11 server. |
+| `packages/app/e2e/superpowers/execution.spec.ts` | Guard tests plus 17 lifecycle/durability/scope/security cases. |
+| `packages/app/playwright.config.ts` | Parses `EXECUTION_E2E_TARGET` with the shared parser (throws before applying host/port) and points the app under test at that loopback target. |
 
-The host runs the real plugin entrypoint (`executionPlugin.setup`) with real reporting tools, the real
-repository/reducer, and real RPC handlers, so reporting, idempotency, revision checks, ancestry validation
-and storage round-trips are exercised as shipped. Native session data is synthetic (no paid model calls);
-reports are produced by direct captured-tool invocation inside the isolated host.
+**The disposable host is a stand-in, not the built companion package and not AC19 evidence.** It imports the
+plugin entrypoint from source (`@bearmanser/opencode-superpowers-execution/plugin` → `src/plugin.ts`) and
+therefore does not exercise `index.js` → `dist/plugin.js`, package staging, or a real OpenCode server
+plugin-loader. Those are T20's explicit gates. The stand-in is used to drive the real bridge, the real app,
+and the real plugin repository/reducer over real HTTP.
 
 ## 2. Safety guards (spec §12)
 
-`requireExplicitTestTarget(raw)`:
+`parseExecutionTarget(raw)` (shared by the config and the fixtures):
 
-- Missing/empty/whitespace `EXECUTION_E2E_TARGET` returns `undefined`; the suite is then UNRUN (skipped) per test, never pointed at a discovered service.
-- Requires `"disposable": true`; otherwise it throws `Execution E2E requires an explicitly disposable target`.
-- Requires an absolute directory under `os.tmpdir()`, and refuses the filesystem root, `$HOME`, the repository cwd and its parent.
-- Requires an explicit integer port in 1024-65535 and refuses the managed service port `4096` and the app dev port `3000`; there is no implicit default.
-- Requires a loopback host (`127.0.0.1`/`localhost`); a non-loopback host is refused.
-- Generates a disposable Basic-auth password when the target does not supply one. The password is passed to the host by environment only; it is never written to source, URLs, the manifest, or logs (asserted by a test).
+- Missing/empty/whitespace `EXECUTION_E2E_TARGET` returns `undefined`; the suite is then UNRUN (skipped) per test.
+- Requires `"disposable": true`; otherwise throws.
+- Requires an absolute directory under `os.tmpdir()`, refusing the filesystem root, `$HOME`, the repo cwd and its parent.
+- Requires an explicit integer port in 1024-65535; refuses the managed service port `4096` and the app dev port `3000`.
+- Requires a loopback host; refuses non-loopback.
+- Generates a disposable Basic-auth password when none is supplied.
+- `playwright.config.ts` calls the parser at load time, so an invalid target throws before any host/port override is applied.
 
-The harness only ever creates and talks to the child process it spawned on the target port. It never runs
-service discovery, never stops or restarts the user's managed service, and removes only its own
-`mkdtemp` directory (under the target temp directory) on stop. `EXECUTION_E2E_KEEP=1` retains artifacts.
+The harness spawns its own child process with a random startup nonce. Readiness accepts a health response only
+when `{ ok, pid, nonce, pluginLoaded }` matches the spawned child; a response from another process, an early
+child exit, or a port occupied by another service fails immediately with the conflicting pid. The harness never
+runs service discovery, never stops/restarts the user's service, and removes only its own `mkdtemp` directory.
 
-Manifest: `{ disposable, executable, script, host, port, serverURL, pid, process (child handle), directories { root, owner, worktree, data, logs } }`.
+## 3. Credential handling (spec §12)
 
-## 3. Coverage
+Authentication is injected as a request header on the browser context
+(`context.setExtraHTTPHeaders({ authorization })`); no `?auth_token=` or other credential appears in any
+navigation URL. The suite captures every request URL and scans retained `e2e/test-results` artifacts, the
+page URL, and the host log for the plaintext password and its `opencode:<password>` base64 form, asserting
+none appear. The password itself is generated per run and passed to the child by environment only.
+
+## 4. Real disposable OpenCode host — recorded UNRUN (deferred to T20)
+
+A genuine attempt was made to run the real server with the companion configured:
+
+```text
+$ mkdir -p /tmp/opencode/t18-real/config3/opencode
+$ cat /tmp/opencode/t18-real/config3/opencode/opencode.json
+{ "plugins": ["/root/git/opencode/.worktrees/execution-ui/packages/superpowers-execution"] }
+$ cd /root/git/opencode/.worktrees/execution-ui
+$ XDG_DATA_HOME=/tmp/opencode/t18-real/data3 XDG_CONFIG_HOME=/tmp/opencode/t18-real/config3 \
+  XDG_CACHE_HOME=/tmp/opencode/t18-real/cache3 XDG_STATE_HOME=/tmp/opencode/t18-real/state3 \
+  OPENCODE_PASSWORD=<disposable> bun run dev serve --port 4611 --hostname 127.0.0.1
+server listening on http://127.0.0.1:4611
+
+$ curl -u opencode:<disposable> -X POST http://127.0.0.1:4611/api/rpc/superpowers.execution.v1/capabilities \
+    -H 'content-type: application/json' -d '{"input":{}}'
+{"_tag":"RpcError","type":"rpc.unavailable","message":"RPC is unavailable: superpowers.execution.v1"}
+```
+
+Server log (`/tmp/opencode/t18-real/data3/opencode/log/opencode-local.log`):
+
+```text
+msg="loading plugin" id=.../packages/superpowers-execution entrypoint=file:///.../packages/superpowers-execution/index.js
+level=WARN message="failed to load plugin" target=.../packages/superpowers-execution
+  cause="Cause([Die(ResolveMessage: Cannot find module './dist/plugin.js' imported from .../packages/superpowers-execution/index.js)])"
+```
+
+The server starts and serves the native API, but the companion cannot load because the built
+`dist/plugin.js` does not exist yet. Building and staging the package is exactly T20's packaging gate, so this
+lifecycle/native-integration gate is recorded **UNRUN** here and deferred to T20 rather than worked around.
+
+## 5. Real native API capture (feasible, captured)
+
+Because the real server's native API works without the companion, native responses were captured from it and
+sanitized into `native-host-fixtures.json`:
+
+```text
+$ curl -u opencode:<disposable> -X POST http://127.0.0.1:4611/api/session \
+    -H 'content-type: application/json' -d '{"id":"ses_exec_root","title":"Execution root"}'
+$ curl -u opencode:<disposable> http://127.0.0.1:4611/api/session/ses_exec_root
+$ curl -u opencode:<disposable> http://127.0.0.1:4611/api/session
+$ curl -u opencode:<disposable> http://127.0.0.1:4611/api/session/active
+$ curl -u opencode:<disposable> http://127.0.0.1:4611/api/session/ses_exec_root/form
+$ curl -u opencode:<disposable> http://127.0.0.1:4611/api/session/ses_exec_root/inbox
+```
+
+The recorded shapes (directories → `<owner>`/`<worktree>`, project ids and cursors masked, timestamps fixed)
+include the fields T01's adapter reads: session `id`/`title`/`time`/`location.directory`, a `data` array plus
+`cursor` for lists, a status map for `active`, and arrays for `form`/`inbox`. The suite asserts the recorded
+contract and the stand-in host responses against the same field checks, so the stand-in stays a faithful
+substitute for the fields the adapter consumes.
+
+## 6. Coverage
 
 | Requirement | Case |
 |---|---|
@@ -47,90 +111,77 @@ Manifest: `{ disposable, executable, script, host, port, serverURL, pid, process
 | Forced network interruption keeps last snapshot | `a forced network interruption keeps the last snapshot instead of zeroing progress` |
 | Schema mismatch is distinct | `an incompatible schema stays distinct and is not retried as an absent run` |
 | Malformed reports | `malformed reports are rejected without changing durable state` |
-| Second independent server, identical IDs | `two independent hosts with identical identities never share state` |
+| Two independent hosts, storage/RPC isolation | `two independent hosts with identical identities never share state` |
+| App-level server switch with identical identities | `switching to an identical-identity server does not leak the primary run` |
 | Cross-worktree children | `a child in another worktree is accepted while the owner location is unchanged` |
-| Root location migration | `a root whose recorded location changed is refused and keeps the stored run` |
+| Root location change pauses tracking (app + copy) | `a root location change pauses tracking through the app and retains the reported run` |
 | Terminal runs | `a cancelled run stays terminal and never reports completion` |
 | Plugin unload/reload | `unloading and reloading the plugin returns to observer mode and recovers the stored run` |
-| No credentials in logs/URLs | `host logs and page URLs never contain the disposable credential` |
+| Native child-session navigation | `a child session navigates on the same server and keeps the root run association` |
+| No credentials in URLs/artifacts/logs | `no captured request URL or retained artifact contains the disposable credential` |
 | Reference-session ancestry rejection | `a report referencing a session outside the run is refused` |
-| Sanitized native fixtures / T01 mapping | `sanitized native fixtures match the host's actual API responses` |
+| Sanitized native fixtures / T01 mapping | `recorded native host fixtures expose the adapter contract the stand-in also serves` |
 | Guard rejection of implicit production target | `disposable execution target guards` (3 cases) |
 
-`native-fixtures.json` records `session`, `sessionList` (by `parentID`), `active`, `form` and `inbox`
-responses with owner/worktree directories replaced by `<owner>`/`<worktree>`. The test normalizes the live
-host directories and deep-equals the recorded shapes, so a change to the pinned native session contract
-fails here. `time.updated` fixtures are deterministic functions of the fixed synthetic session IDs.
+The location-change pause is additionally locked by a bridge unit test
+(`a same-root owner location change pauses tracking and retains the snapshot`) in
+`packages/app/src/superpowers/bridge-client.test.ts`.
 
-## 4. Gates (actual outcomes)
-
-RED before implementation (fixtures absent):
-
-```text
-$ cd packages/app && bun run test:e2e e2e/superpowers/execution.spec.ts
-Error: Cannot find module '.../packages/app/e2e/superpowers/execution-fixtures'
-Error: No tests found.
-error: script "test:e2e" exited with code 1
-```
-
-GREEN with an explicitly supplied disposable target (loopback port, owned temp directory):
+## 7. Gates (actual outcomes)
 
 ```text
 $ cd packages/app && EXECUTION_E2E_TARGET='{"disposable":true,"directory":"/tmp/opencode/execution-e2e","port":4601}' \
     bun run test:e2e e2e/superpowers/execution.spec.ts --workers=1
-  18 passed (2.8m)
+  20 passed (56.7s)
 ```
-
-UNRUN form without a target (the brief's literal command), recorded honestly — the lifecycle cases are
-skipped with a reason; only the target guards run:
 
 ```text
 $ cd packages/app && env -u EXECUTION_E2E_TARGET bun run test:e2e e2e/superpowers/execution.spec.ts --workers=1
-  15 skipped
-  3 passed (2.3s)
+  17 skipped  3 passed
 ```
 
-Typechecks:
-
 ```text
-$ cd packages/app && bun run typecheck       # tsgo -b
+$ cd packages/app && bun run typecheck        # tsgo -b
 exit 0
 
-$ cd packages/app && bun run typecheck:e2e   # tsgo -p e2e/tsconfig.json
+$ cd packages/app && bun test --conditions=solid --preload ./happydom.ts ./src/superpowers
+ 179 pass / 0 fail
+
+$ cd packages/app && bun run test:unit
+ 1040 pass / 1 skip / 0 fail
+
+$ cd packages/app && bun run typecheck:e2e    # tsgo -p e2e/tsconfig.json
 e2e/performance/terminals/probe.ts(54,24): error TS2345 ...
 e2e/performance/timeline/session-timeline-stream-probe.ts(139,32): error TS2345 ...
 e2e/regression/session-queue.spec.ts(78,46): error TS2322 ...
+
+$ bun x oxlint <changed files>
+Found 0 warnings and 0 errors.
 ```
 
-The three `typecheck:e2e` errors are pre-existing: re-running the command with this task's new files moved
-aside and `playwright.config.ts` stashed produces the identical three errors, none in
-`e2e/superpowers/**`.
+The three `typecheck:e2e` errors are pre-existing: re-running with this task's files moved aside and
+`playwright.config.ts` stashed produces the identical three errors, none in `e2e/superpowers/**`.
 
-Lint: `bun x oxlint packages/app/e2e/superpowers packages/app/playwright.config.ts` → `Found 0 warnings and 0 errors.`
+## 8. Environment notes / unrun items
 
-## 5. Environment notes / unrun items
+- The stand-in host is not the built companion package and not a real OpenCode server plugin load; AC19's
+  outside-monorepo package gate is UNRUN here (exact evidence in §4) and deferred to T20.
+- The plugin lifecycle was verified against the plugin source, real HTTP transport, real file storage, and the
+  real app bridge/UI; the real server process, when started, serves the native API and rejects the
+  unbuilt companion exactly as recorded.
+- Windows Desktop smoke (AC20) is unrun and remains T20.
 
-- The target above was supplied by the executor for verification. The harness refuses non-temp directories,
-  ports `4096`/`3000`, and non-loopback hosts, so this does not touch the user's managed service even if a
-  target is misconfigured. No service-discovery command is executed by the suite.
-- The disposable host emulates the plugin host surface (RPC transport, storage port, session lookup) but is
-  not the full OpenCode server. Loading the packaged companion directory into a real OpenCode server
-  process, and the Windows Desktop smoke, remain T20 gates.
-- The root-location migration case asserts the plugin's refusal and that the stored run is retained; the
-  spec §7.1 "tracking paused by location change" UI wording is not implemented in this fork and is not
-  claimed here.
-- The brief's illustrative `execution.connection()` text ("Connected") is adapted to the shipped UI: the
-  panel's `data-mode` (`ready`/`stale`/`incompatible`/`observer`/`unavailable`) and the status badge are
-  the observable connection states; the product has no literal "Connected" copy (its tooltip reads
-  "Connection: live"). The invariant (reconnected and showing a current snapshot) is unchanged.
+## 9. Files changed
 
-## 6. Files changed
-
-- `packages/app/e2e/superpowers/execution.spec.ts` (new)
-- `packages/app/e2e/superpowers/execution-fixtures.ts` (new)
-- `packages/app/e2e/superpowers/disposable-host.ts` (new)
-- `packages/app/e2e/superpowers/native-fixtures.json` (new)
-- `packages/app/playwright.config.ts` (disposable-target host/port override)
-- `docs/superpowers/verification/execution-ui/integration.md` (this record)
+- `packages/app/e2e/superpowers/execution.spec.ts`
+- `packages/app/e2e/superpowers/execution-fixtures.ts`
+- `packages/app/e2e/superpowers/execution-target.ts`
+- `packages/app/e2e/superpowers/disposable-host.ts`
+- `packages/app/e2e/superpowers/native-host-fixtures.json`
+- `packages/app/playwright.config.ts`
+- `packages/app/src/superpowers/bridge-client.ts`, `model.ts`, `panel.tsx`, `bridge-client.test.ts`
+- `packages/app/src/session/screen.tsx`
+- `packages/app/src/runtime/i18n/en.ts`
+- `docs/superpowers/verification/execution-ui/integration.md`
 
 No code comments were added (R-F3). No `any`. Core, Protocol, HttpApi and generated clients were not touched.

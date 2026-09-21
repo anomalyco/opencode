@@ -1,24 +1,14 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
-import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { base64Encode } from "@opencode/util/encode"
 import { expect, type Locator, type Page } from "@playwright/test"
 import type { ReportCommand, RunSnapshot, Task, TaskDefinition } from "@bearmanser/opencode-superpowers-execution/contract"
+import { parseExecutionTarget, type ExecutionTestTarget } from "./execution-target"
 
-export const MANAGED_SERVICE_PORT = 4096
-export const APP_DEV_PORT = 3000
-const LOOPBACK_HOST = "127.0.0.1"
-
-export type ExecutionTestTarget = {
-  readonly disposable: true
-  readonly directory: string
-  readonly port: number
-  readonly host: string
-  readonly password: string
-  readonly executable: string
-}
+export { APP_DEV_PORT, MANAGED_SERVICE_PORT, parseExecutionTarget } from "./execution-target"
+export { parseExecutionTarget as requireExplicitTestTarget }
 
 export type ExecutionHostManifest = {
   readonly disposable: true
@@ -27,6 +17,7 @@ export type ExecutionHostManifest = {
   readonly host: string
   readonly port: number
   readonly serverURL: string
+  readonly nonce: string
   readonly pid: number
   readonly process: ChildProcess
   readonly directories: {
@@ -85,72 +76,6 @@ export const executionTaskDefinitions: readonly TaskDefinition[] = [
 ]
 
 const PLAN = { path: "docs/plan.md", sha256: "0".repeat(64) }
-
-export function requireExplicitTestTarget(raw: string | undefined): ExecutionTestTarget | undefined {
-  if (raw === undefined || raw.trim() === "") return undefined
-  const parsed = parseTarget(raw)
-  if (parsed.disposable !== true) {
-    throw new Error("Execution E2E requires an explicitly disposable target: set \"disposable\": true")
-  }
-  const directory = requireOwnedDirectory(parsed.directory)
-  const port = requireDisposablePort(parsed.port)
-  const host = typeof parsed.host === "string" && parsed.host !== "" ? parsed.host : LOOPBACK_HOST
-  if (host !== LOOPBACK_HOST && host !== "localhost") {
-    throw new Error(`Execution E2E requires a loopback disposable host, received ${host}`)
-  }
-  const executable =
-    typeof parsed.executable === "string" && parsed.executable !== ""
-      ? parsed.executable
-      : process.versions.bun
-        ? process.execPath
-        : "bun"
-  const password = typeof parsed.password === "string" && parsed.password !== "" ? parsed.password : crypto.randomUUID()
-  return { disposable: true, directory, port, host, password, executable }
-}
-
-function parseTarget(raw: string): Record<string, unknown> {
-  let value: unknown
-  try {
-    value = JSON.parse(raw)
-  } catch (error) {
-    throw new Error(`EXECUTION_E2E_TARGET must be a JSON object: ${(error as Error).message}`)
-  }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("EXECUTION_E2E_TARGET must be a JSON object")
-  }
-  return value as Record<string, unknown>
-}
-
-function requireOwnedDirectory(value: unknown) {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error("Execution E2E requires an explicit owned temporary directory; refusing an implicit production path")
-  }
-  if (!path.isAbsolute(value)) {
-    throw new Error("Execution E2E requires an absolute owned temporary directory")
-  }
-  const resolved = path.resolve(value)
-  const temporaryRoot = path.resolve(os.tmpdir())
-  if (resolved !== temporaryRoot && !resolved.startsWith(`${temporaryRoot}${path.sep}`)) {
-    throw new Error(`Execution E2E requires an owned directory under ${temporaryRoot}, received ${resolved}`)
-  }
-  for (const forbidden of [path.parse(resolved).root, os.homedir(), process.cwd(), path.resolve(process.cwd(), "..")]) {
-    if (resolved === forbidden) throw new Error(`Execution E2E refuses to own ${resolved}`)
-  }
-  return resolved
-}
-
-function requireDisposablePort(value: unknown) {
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new Error("Execution E2E requires an explicit disposable port; refusing an implicit default")
-  }
-  if (value < 1024 || value > 65535) throw new Error(`Execution E2E requires a port in 1024-65535, received ${value}`)
-  if (value === MANAGED_SERVICE_PORT) {
-    throw new Error(`Execution E2E refuses the managed service port ${MANAGED_SERVICE_PORT}`)
-  }
-  if (value === APP_DEV_PORT) throw new Error(`Execution E2E refuses the app development port ${APP_DEV_PORT}`)
-  return value
-}
-
 const hostScript = fileURLToPath(new URL("./disposable-host.ts", import.meta.url))
 
 export function createExecutionTestHarness(target: ExecutionTestTarget) {
@@ -188,12 +113,16 @@ export class ExecutionTestHarness {
     return `${this.stdout}${this.stderr}`
   }
 
-  sessionHref(rootSessionID: string) {
-    return `/server/${base64Encode(this.serverURL)}/session/${rootSessionID}`
+  sessionHref(rootSessionID: string, serverURL = this.serverURL) {
+    return `/server/${base64Encode(serverURL)}/session/${rootSessionID}`
   }
 
-  authQuery() {
-    return `?auth_token=${base64Encode(`opencode:${this.target.password}`)}`
+  authorization() {
+    return `Basic ${base64Encode(`opencode:${this.target.password}`)}`
+  }
+
+  private authHeaders() {
+    return { authorization: this.authorization() }
   }
 
   async start() {
@@ -206,7 +135,16 @@ export class ExecutionTestHarness {
       data: path.join(root, "data"),
       logs: path.join(root, "logs"),
     }
-    await Promise.all([directories.owner, directories.worktree, directories.data, directories.logs].map((dir) => mkdir(dir, { recursive: true })))
+    await Promise.all(
+      [directories.owner, directories.worktree, directories.data, directories.logs].map((dir) =>
+        mkdir(dir, { recursive: true }),
+      ),
+    )
+    const nonce = crypto.randomUUID()
+    const process = spawnHost(this.target, hostScript, directories, nonce, (chunk, stream) => {
+      if (stream === "stdout") this.stdout += chunk
+      else this.stderr += chunk
+    })
     this.manifest = {
       disposable: true,
       executable: this.target.executable,
@@ -214,15 +152,12 @@ export class ExecutionTestHarness {
       host: this.target.host,
       port: this.target.port,
       serverURL: `http://${this.target.host}:${this.target.port}`,
-      pid: 0,
-      process: spawnHost(this.target, hostScript, directories, (chunk, stream) => {
-        if (stream === "stdout") this.stdout += chunk
-        else this.stderr += chunk
-      }),
+      nonce,
+      pid: process.pid ?? 0,
+      process,
       directories,
     }
-    this.manifest = { ...this.manifest, pid: this.manifest.process.pid ?? 0 }
-    await this.waitForReady()
+    await this.waitForReady(this.manifest, process, nonce)
     await this.writeLogs()
     return this.manifest
   }
@@ -231,25 +166,39 @@ export class ExecutionTestHarness {
     return defaultSessions(this.owned.directories.owner, this.owned.directories.worktree)
   }
 
-  private async waitForReady() {
+  private async waitForReady(manifest: ExecutionHostManifest, child: ChildProcess, nonce: string) {
+    let exitCode: number | null | undefined
+    child.once("exit", (code) => {
+      exitCode = code
+    })
     const deadline = Date.now() + 30_000
     for (;;) {
-      try {
-        const response = await fetch(`${this.serverURL}/__test/health`, { headers: this.authHeaders() })
-        if (response.ok) {
-          const body = (await response.json()) as { ok?: boolean }
-          if (body.ok === true) return
+      const response = await fetch(`${manifest.serverURL}/__test/health`, { headers: this.authHeaders() }).catch(
+        () => undefined,
+      )
+      if (response !== undefined) {
+        const body = (await response.json().catch(() => undefined)) as
+          | { ok?: boolean; pid?: number; nonce?: string; pluginLoaded?: boolean }
+          | undefined
+        if (body === undefined || body.ok !== true) {
+          throw new Error(`port ${manifest.port} is already served by another service (status ${response.status})`)
         }
-      } catch {}
+        if (body.pid !== child.pid || body.nonce !== nonce) {
+          throw new Error(`port ${manifest.port} is already served by another execution host (pid ${body.pid})`)
+        }
+        if (body.pluginLoaded === true) return
+      }
+      if (exitCode !== undefined) {
+        throw new Error(`disposable execution host exited before ready (code ${exitCode}): ${this.logs()}`)
+      }
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new Error(`disposable execution host exited before ready: ${this.logs()}`)
+      }
       if (Date.now() > deadline) {
         throw new Error(`disposable execution host did not become ready: ${this.logs()}`)
       }
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
-  }
-
-  private authHeaders() {
-    return { authorization: `Basic ${base64Encode(`opencode:${this.target.password}`)}` }
   }
 
   private async control<T>(action: string, payload: Record<string, unknown> = {}) {
@@ -289,6 +238,10 @@ export class ExecutionTestHarness {
     await this.control("reset")
   }
 
+  async emitNativeEvent(event: unknown) {
+    await this.control("emit", { event })
+  }
+
   async report<T = { run: RunSnapshot; appliedRevision: number; duplicate: boolean }>(
     command: ReportCommand,
     sessionID = EXECUTION_ROOT_SESSION,
@@ -296,7 +249,10 @@ export class ExecutionTestHarness {
     return this.control<ExecutionHarnessResult<T>>("report", { sessionID, command })
   }
 
-  async reportRaw<T = { run: RunSnapshot; appliedRevision: number; duplicate: boolean }>(command: unknown, sessionID = EXECUTION_ROOT_SESSION) {
+  async reportRaw<T = { run: RunSnapshot; appliedRevision: number; duplicate: boolean }>(
+    command: unknown,
+    sessionID = EXECUTION_ROOT_SESSION,
+  ) {
     return this.control<ExecutionHarnessResult<T>>("report", { sessionID, command })
   }
 
@@ -343,7 +299,13 @@ export class ExecutionTestHarness {
         operationID: `state-${taskID}-${task.attempt}-${state}-${current.revision}`,
         runID: run.runID,
         expectedRevision: current.revision,
-        operation: { type: "task.state", taskID, attempt: task.attempt, state, ...(reason === undefined ? {} : { reason }) },
+        operation: {
+          type: "task.state",
+          taskID,
+          attempt: task.attempt,
+          state,
+          ...(reason === undefined ? {} : { reason }),
+        },
       },
       run.rootSessionID,
     )
@@ -351,7 +313,12 @@ export class ExecutionTestHarness {
     return result.value
   }
 
-  async addGateEvidence(run: ExecutionRunRef, taskID: string, gate: Task["requiredGates"][number], sessionID = EXECUTION_CHILD_SESSION) {
+  async addGateEvidence(
+    run: ExecutionRunRef,
+    taskID: string,
+    gate: Task["requiredGates"][number],
+    sessionID = EXECUTION_CHILD_SESSION,
+  ) {
     const current = await this.readRun(run.runID, run.rootSessionID)
     const task = taskFor(current, taskID)
     const result = await this.report(
@@ -434,18 +401,21 @@ export class ExecutionTestHarness {
   async restartDisposableHost() {
     const previous = this.owned
     await stopProcess(previous.process)
-    const process = spawnHost(this.target, hostScript, previous.directories, (chunk, stream) => {
+    const nonce = crypto.randomUUID()
+    const process = spawnHost(this.target, hostScript, previous.directories, nonce, (chunk, stream) => {
       if (stream === "stdout") this.stdout += chunk
       else this.stderr += chunk
     })
-    this.manifest = { ...previous, pid: process.pid ?? 0, process }
-    await this.waitForReady()
+    this.manifest = { ...previous, nonce, pid: process.pid ?? 0, process }
+    await this.waitForReady(this.owned, process, nonce)
     await this.writeLogs()
     return this.manifest
   }
 
   async spawnSecondaryHost() {
-    const port = requireDisposablePort(this.target.port + 1)
+    const port = parseExecutionTarget(
+      JSON.stringify({ ...this.target, disposable: true, port: this.target.port + 1 }),
+    )!.port
     const existing = this.owned
     const secondaryRoot = path.join(existing.directories.root, "secondary")
     const directories = {
@@ -455,31 +425,37 @@ export class ExecutionTestHarness {
       data: path.join(secondaryRoot, "data"),
       logs: secondaryRoot,
     }
-    await Promise.all([directories.owner, directories.worktree, directories.data].map((dir) => mkdir(dir, { recursive: true })))
+    await Promise.all(
+      [directories.owner, directories.worktree, directories.data].map((dir) => mkdir(dir, { recursive: true })),
+    )
+    const nonce = crypto.randomUUID()
     const process = spawnHost(
       { ...this.target, port },
       hostScript,
       directories,
+      nonce,
       () => {},
       defaultSessions(directories.owner, directories.worktree),
     )
     const serverURL = `http://${this.target.host}:${port}`
-    const deadline = Date.now() + 30_000
-    for (;;) {
-      try {
-        const response = await fetch(`${serverURL}/__test/health`, { headers: this.authHeaders() })
-        if (response.ok && ((await response.json()) as { ok?: boolean }).ok === true) break
-      } catch {}
-      if (Date.now() > deadline) {
-        await stopProcess(process)
-        throw new Error("secondary disposable execution host did not become ready")
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100))
+    const manifest: ExecutionHostManifest = {
+      disposable: true,
+      executable: this.target.executable,
+      script: hostScript,
+      host: this.target.host,
+      port,
+      serverURL,
+      nonce,
+      pid: process.pid ?? 0,
+      process,
+      directories,
     }
+    await this.waitForReady(manifest, process, nonce)
     return {
       serverURL,
       port,
-      pid: process.pid ?? 0,
+      pid: manifest.pid,
+      nonce,
       process,
       stop: () => stopProcess(process),
     }
@@ -489,16 +465,32 @@ export class ExecutionTestHarness {
     return page.locator(`[data-testid="execution-map-node"][data-task-id="${taskID}"]`)
   }
 
+  agentOpen(page: Page, title: string): Locator {
+    return page.getByRole("button", { name: `Open ${title} session`, exact: true })
+  }
+
   panel(page: Page): Locator {
     return page.getByTestId("execution-panel")
+  }
+
+  modeNotice(page: Page): Locator {
+    return page.locator('[data-slot="execution-mode-notice"]')
   }
 
   connection(page: Page): Locator {
     return page.getByTestId("execution-status-badge")
   }
 
-  async open(page: Page, run: ExecutionRunRef) {
-    await page.goto(`${this.sessionHref(run.rootSessionID)}${this.authQuery()}`)
+  async authenticate(page: Page) {
+    await page.context().setExtraHTTPHeaders({ authorization: this.authorization() })
+  }
+
+  async selectSubview(page: Page, name: string) {
+    await page.getByRole("tab", { name, exact: true }).click()
+  }
+
+  async openPanel(page: Page) {
+    await this.authenticate(page)
     await expect(page.locator("[data-session-title]")).toBeVisible()
     const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
     if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click()
@@ -507,6 +499,12 @@ export class ExecutionTestHarness {
     await expect(this.panel(page)).toBeVisible()
     const map = page.getByRole("tab", { name: "Map", exact: true })
     if (await map.isEnabled()) await map.click()
+  }
+
+  async open(page: Page, run: ExecutionRunRef) {
+    await this.authenticate(page)
+    await page.goto(this.sessionHref(run.rootSessionID))
+    await this.openPanel(page)
   }
 
   async disconnectDashboard(page: Page) {
@@ -554,6 +552,7 @@ function spawnHost(
   target: ExecutionTestTarget,
   script: string,
   directories: ExecutionHostManifest["directories"],
+  nonce: string,
   onData: (chunk: string, stream: "stdout" | "stderr") => void,
   sessions?: readonly unknown[],
 ) {
@@ -564,6 +563,7 @@ function spawnHost(
       EXECUTION_HOST_DATA: directories.data,
       EXECUTION_HOST_PORT: String(target.port),
       EXECUTION_HOST_PASSWORD: target.password,
+      EXECUTION_HOST_NONCE: nonce,
       EXECUTION_HOST_SESSIONS: JSON.stringify(sessions ?? defaultSessions(directories.owner, directories.worktree)),
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -576,10 +576,20 @@ function spawnHost(
 function defaultSessions(owner: string, worktree: string) {
   return [
     { id: EXECUTION_ROOT_SESSION, directory: owner, title: "Execution root", running: true },
-    { id: EXECUTION_CHILD_SESSION, parentID: EXECUTION_ROOT_SESSION, directory: worktree, title: "Feature worktree child" },
+    {
+      id: EXECUTION_CHILD_SESSION,
+      parentID: EXECUTION_ROOT_SESSION,
+      directory: worktree,
+      title: "Feature worktree child",
+    },
     { id: EXECUTION_REVIEWER_SESSION, parentID: EXECUTION_ROOT_SESSION, directory: owner, title: "Reviewer" },
     { id: EXECUTION_STRANGER_SESSION, directory: worktree, title: "Stranger root" },
-    { id: EXECUTION_STRANGER_CHILD_SESSION, parentID: EXECUTION_STRANGER_SESSION, directory: owner, title: "Stranger child" },
+    {
+      id: EXECUTION_STRANGER_CHILD_SESSION,
+      parentID: EXECUTION_STRANGER_SESSION,
+      directory: owner,
+      title: "Stranger child",
+    },
   ]
 }
 

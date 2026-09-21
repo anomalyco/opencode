@@ -26,6 +26,7 @@ export type ExecutionReason =
   | "auth"
   | "offline"
   | "transport"
+  | "location_changed"
 
 export function structuredViewsEnabled(mode: ExecutionMode) {
   return mode !== "incompatible"

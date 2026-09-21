@@ -104,11 +104,16 @@ export function ExecutionPanel(props: {
         <p
           data-slot="execution-mode-notice"
           data-mode={props.model.mode()}
+          data-reason={props.model.reason()}
           class="execution-panel__unavailable-description px-3 py-1.5"
           role="status"
         >
           <Switch>
-            <Match when={props.model.mode() === "stale"}>{language.t("execution.mode.stale")}</Match>
+            <Match when={props.model.mode() === "stale"}>
+              {props.model.reason() === "location_changed"
+                ? language.t("execution.mode.locationChanged")
+                : language.t("execution.mode.stale")}
+            </Match>
             <Match when={props.model.mode() === "incompatible"}>{language.t("execution.mode.incompatible")}</Match>
             <Match when={props.model.mode() === "unavailable"}>{language.t("execution.mode.unavailable")}</Match>
           </Switch>
