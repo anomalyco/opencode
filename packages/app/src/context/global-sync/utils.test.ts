@@ -22,7 +22,7 @@ describe("normalizeAgentList", () => {
         system: "Build software",
         permissions: [{ action: "read", resource: "*", effect: "allow" }],
       },
-    ] as AgentListOutput["data"])
+    ] as unknown as AgentListOutput["data"])
 
     expect(result).toEqual([
       {
