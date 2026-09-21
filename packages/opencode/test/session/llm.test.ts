@@ -902,6 +902,77 @@ describe("session.llm.stream", () => {
     },
   )
 
+  // Regression test for https://github.com/anomalyco/opencode/issues/50338:
+  // a dynamically loaded provider whose runtime model implements AI SDK
+  // LanguageModelV2 (rather than V3) must still report token usage. Before
+  // the fix, unconditionally routing every model through wrapLanguageModel()
+  // labelled the result "v3" and skipped AI SDK's own V2->V3 compat layer,
+  // so finish-step usage came back undefined and auto-compaction could never
+  // trigger for these providers.
+  it.instance(
+    "preserves usage from a dynamically loaded AI SDK V2 provider",
+    () =>
+      Effect.gen(function* () {
+        const resolved = yield* Provider.use.getModel(ProviderV2.ID.make("fake-v2"), ModelV2.ID.make("gpt-5.2"))
+        const sessionID = SessionID.make("session-fake-v2")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-fake-v2"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make("fake-v2"), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        const events: any[] = []
+        yield* LLM.Service.use((svc) =>
+          svc
+            .stream({
+              user,
+              sessionID,
+              model: resolved,
+              agent,
+              system: ["You are a helpful assistant."],
+              messages: [{ role: "user", content: "Hello" }],
+              tools: {},
+            })
+            .pipe(
+              Stream.runForEach((event) =>
+                Effect.sync(() => {
+                  events.push(event)
+                }),
+              ),
+            ),
+        )
+
+        const finish = events.find((e) => e.type === "step-finish")
+        expect(finish).toBeDefined()
+        expect(finish.usage).toMatchObject({ inputTokens: 14, outputTokens: 4, totalTokens: 18 })
+      }),
+    {
+      config: () => {
+        const fixture = loadFixture("openai", "gpt-5.2")
+        return {
+          enabled_providers: ["fake-v2"],
+          provider: {
+            "fake-v2": {
+              name: "Fake V2",
+              npm: `file://${path.join(import.meta.dir, "fixtures", "fake-v2-provider.ts")}`,
+              models: { [fixture.model.id]: configModel(fixture.model) as ConfigModel },
+              options: {},
+            },
+          },
+        }
+      },
+    },
+  )
+
   it.instance(
     "surfaces network_error finish reasons as retryable stream failures",
     () =>
