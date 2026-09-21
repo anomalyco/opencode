@@ -12,6 +12,7 @@ import type {
   IssueCommentEvent,
   IssuesEvent,
   PullRequestReviewCommentEvent,
+  PullRequestReviewEvent,
   WorkflowDispatchEvent,
   WorkflowRunEvent,
   PullRequestEvent,
@@ -33,7 +34,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
+import { extractResponseText, formatPromptTooLargeError, resolveTriggerBody } from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -147,7 +148,13 @@ const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 // Event categories for routing
 // USER_EVENTS: triggered by user actions, have actor/issueId, support reactions/comments
 // REPO_EVENTS: triggered by automation, no actor/issueId, output to logs/PR only
-const USER_EVENTS = ["issue_comment", "pull_request_review_comment", "issues", "pull_request"] as const
+const USER_EVENTS = [
+  "issue_comment",
+  "pull_request_review_comment",
+  "pull_request_review",
+  "issues",
+  "pull_request",
+] as const
 const REPO_EVENTS = ["schedule", "workflow_dispatch"] as const
 const SUPPORTED_EVENTS = [...USER_EVENTS, ...REPO_EVENTS] as const
 
@@ -343,6 +350,8 @@ on:
     types: [created]
   pull_request_review_comment:
     types: [created]
+  pull_request_review:
+    types: [submitted]
 
 jobs:
   opencode:
@@ -350,7 +359,11 @@ jobs:
       contains(github.event.comment.body, ' /oc') ||
       startsWith(github.event.comment.body, '/oc') ||
       contains(github.event.comment.body, ' /opencode') ||
-      startsWith(github.event.comment.body, '/opencode')
+      startsWith(github.event.comment.body, '/opencode') ||
+      contains(github.event.review.body, ' /oc') ||
+      startsWith(github.event.review.body, '/oc') ||
+      contains(github.event.review.body, ' /opencode') ||
+      startsWith(github.event.review.body, '/opencode')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -400,6 +413,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     const isUserEvent = USER_EVENTS.includes(context.eventName as UserEvent)
     const isRepoEvent = REPO_EVENTS.includes(context.eventName as RepoEvent)
     const isCommentEvent = ["issue_comment", "pull_request_review_comment"].includes(context.eventName)
+    const isReviewEvent = context.eventName === "pull_request_review"
     const isIssuesEvent = context.eventName === "issues"
     const isScheduleEvent = context.eventName === "schedule"
     const isWorkflowDispatchEvent = context.eventName === "workflow_dispatch"
@@ -415,6 +429,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       | IssueCommentEvent
       | IssuesEvent
       | PullRequestReviewCommentEvent
+      | PullRequestReviewEvent
       | WorkflowDispatchEvent
       | WorkflowRunEvent
       | PullRequestEvent
@@ -426,7 +441,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       ? undefined
       : context.eventName === "issue_comment" || context.eventName === "issues"
         ? (payload as IssueCommentEvent | IssuesEvent).issue.number
-        : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
+        : (payload as PullRequestEvent | PullRequestReviewCommentEvent | PullRequestReviewEvent).pull_request.number
     const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
     const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
 
@@ -522,7 +537,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
 
       // Handle event types:
       // REPO_EVENTS (schedule, workflow_dispatch): no issue/PR context, output to logs/PR only
-      // USER_EVENTS on PR (pull_request, pull_request_review_comment, issue_comment on PR): work on PR branch
+      // USER_EVENTS on PR (pull_request, pull_request_review_comment, pull_request_review, issue_comment on PR): work on PR branch
       // USER_EVENTS on Issue (issue_comment on issue, issues): create new branch, may create PR
       if (isRepoEvent) {
         // Repo event - no issue/PR context, output goes to logs
@@ -558,7 +573,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
           console.log("Response:", response)
         }
       } else if (
-        ["pull_request", "pull_request_review_comment"].includes(context.eventName) ||
+        ["pull_request", "pull_request_review_comment", "pull_request_review"].includes(context.eventName) ||
         issueEvent?.issue.pull_request
       ) {
         const prData = await fetchPR()
@@ -704,6 +719,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         | IssueCommentEvent
         | IssuesEvent
         | PullRequestReviewCommentEvent
+        | PullRequestReviewEvent
         | WorkflowDispatchEvent
         | WorkflowRunEvent
         | PullRequestEvent,
@@ -749,10 +765,13 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         .map((m) => m.trim().toLowerCase())
         .filter(Boolean)
       let prompt = (() => {
-        if (!isCommentEvent) {
+        if (!isCommentEvent && !isReviewEvent) {
           return "Review this pull request"
         }
-        const body = (payload as IssueCommentEvent | PullRequestReviewCommentEvent).comment.body.trim()
+        const body = resolveTriggerBody(context.eventName, payload)
+        if (body === undefined) {
+          throw new Error(`${context.eventName} payload has no body to read the instruction from`)
+        }
         const bodyLower = body.toLowerCase()
         if (mentions.some((m) => bodyLower === m)) {
           if (reviewContext) {

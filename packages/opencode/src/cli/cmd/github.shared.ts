@@ -18,6 +18,24 @@ export function extractResponseText(parts: SessionV1.Part[]): string | null {
 }
 
 /**
+ * Reads the triggering instruction out of an event payload.
+ *
+ * Comment events carry it in `comment.body`. A submitted review is not a comment and has no
+ * `comment` field at all, so its equivalent is `review.body` (which GitHub sends as null when the
+ * review was submitted without text). Returns undefined only when the event has no body source at
+ * all, so an empty body can be reported as a missing mention rather than as a malformed payload.
+ */
+export function resolveTriggerBody(eventName: string, payload: unknown): string | undefined {
+  const source = payload as
+    | { comment?: { body?: string | null } | null; review?: { body?: string | null } | null }
+    | null
+    | undefined
+  const container = eventName === "pull_request_review" ? source?.review : source?.comment
+  if (!container || typeof container !== "object") return undefined
+  return (container.body ?? "").trim()
+}
+
+/**
  * Formats a PROMPT_TOO_LARGE error message with details about files in the prompt.
  * Content is base64 encoded, so we calculate original size by multiplying by 0.75.
  */

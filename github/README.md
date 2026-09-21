@@ -71,12 +71,16 @@ This will walk you through installing the GitHub app, creating the workflow, and
        types: [created]
      pull_request_review_comment:
        types: [created]
+     pull_request_review:
+       types: [submitted]
 
    jobs:
      opencode:
        if: |
          contains(github.event.comment.body, '/oc') ||
-         contains(github.event.comment.body, '/opencode')
+         contains(github.event.comment.body, '/opencode') ||
+         contains(github.event.review.body, '/oc') ||
+         contains(github.event.review.body, '/opencode')
        runs-on: ubuntu-latest
        permissions:
          id-token: write
