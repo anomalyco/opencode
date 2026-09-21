@@ -3,12 +3,11 @@ import { base64Encode } from "@opencode/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Schema, SchemaGetter } from "effect"
+import { Codec } from "@/runtime/persistence/codec"
 import { useModels } from "@/providers/models/models"
 import { useSettings } from "@/settings/model"
 import { useProviders } from "@/providers/catalog/providers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
 import { hasCustomAgent, resolveAgent } from "./agent"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./variant"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -18,46 +17,45 @@ import { useServerSDK } from "@/runtime/server/client"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 import { useConfiguredModel } from "./configured"
 
-const ModelKeySchema = Schema.Struct({
-  providerID: Schema.String,
-  modelID: Schema.String,
-  variant: Schema.optional(Schema.String),
+const ModelKeySchema = Codec.struct({
+  providerID: Codec.string,
+  modelID: Codec.string,
+  variant: Codec.optional(Codec.string),
 })
 export type ModelKey = typeof ModelKeySchema.Type
 
-const ChoiceSchema = Schema.Struct({
-  model: Persistence.optional(ModelKeySchema),
-  variant: Persistence.optional(Schema.NullOr(Schema.String)),
+const ChoiceSchema = Codec.struct({
+  model: Codec.lenientOptional(ModelKeySchema),
+  variant: Codec.lenientOptional(Codec.nullOr(Codec.string)),
 })
-const StateSchema = Schema.Struct({
+const StateSchema = Codec.struct({
   ...ChoiceSchema.fields,
-  agent: Persistence.optional(Schema.String),
-  choices: Persistence.optional(Schema.Record(Schema.String, ChoiceSchema)),
+  agent: Codec.lenientOptional(Codec.string),
+  choices: Codec.lenientOptional(Codec.record(ChoiceSchema)),
 })
 type State = typeof StateSchema.Type
 
-const SessionsSchema = Schema.Record(
-  Schema.String,
-  Schema.mutableKey(Persistence.fallback(Schema.UndefinedOr(StateSchema), () => undefined)),
+const SessionsSchema = Codec.record(Codec.fallback(Codec.undefinedOr(StateSchema), () => undefined))
+
+const Current = Codec.struct({ session: SessionsSchema })
+const StoredSelection = Codec.struct(
+  {
+    session: Codec.lenientOptional(Codec.record(Codec.unknown)),
+    pick: Codec.lenientOptional(Codec.record(Codec.unknown)),
+  },
+  { preserve: true },
 )
 
-const Current = Persistence.struct({ session: SessionsSchema })
-
-export const ModelSelectionSchema = Persistence.migrate(
+export const ModelSelectionSchema = Codec.migrate(
   Current,
-  Schema.Struct({
-    session: Persistence.optional(Schema.Record(Schema.String, Schema.Unknown)),
-    pick: Persistence.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  }).pipe(
-    Schema.decode({
-      decode: SchemaGetter.transform((value) => ({
-        session:
-          value.session ??
-          Object.fromEntries(Object.entries(value.pick ?? {}).filter(([key]) => key !== WORKSPACE_KEY)),
-      })),
-      encode: SchemaGetter.transform((value) => value),
+  Codec.transform(StoredSelection, {
+    decode: (value) => ({
+      ...value,
+      session:
+        value.session ?? Object.fromEntries(Object.entries(value.pick ?? {}).filter(([key]) => key !== WORKSPACE_KEY)),
     }),
-  ),
+    encode: (value) => value,
+  }),
 )
 
 const WORKSPACE_KEY = "__workspace__"

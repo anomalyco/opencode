@@ -36,21 +36,19 @@ describe("persisted consumer schemas", () => {
   })
 
   test("model selection migrates legacy picks and omits workspace state", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))
+    const decode = (input: unknown) => Codec.decodeOrThrow(Codec.withInitial(ModelSelectionSchema, { session: {} }), input)
     expect(decode({})).toEqual({ session: {} })
     const state = decode({ pick: { __workspace__: { agent: "plan" }, session1: { agent: "build" } } })
     expect(state.session.session1?.agent).toBe("build")
     expect(state.session.__workspace__).toBeUndefined()
-    const encoded = Schema.encodeSync(
-      Schema.fromJsonString(Persistence.withInitial(ModelSelectionSchema, { session: {} })),
-    )(state)
+    const encoded = Codec.fromJsonString(Codec.withInitial(ModelSelectionSchema, { session: {} })).encode(state)
     expect(JSON.parse(encoded)).toEqual({ session: { session1: { agent: "build" } } })
     expect(decode(JSON.parse(encoded))).toEqual(state)
   })
 
   test("current model selections take precedence over legacy picks", () => {
     expect(
-      Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))({
+      Codec.decodeOrThrow(Codec.withInitial(ModelSelectionSchema, { session: {} }), {
         session: {},
         pick: { session1: { agent: "plan" } },
       }),
@@ -58,7 +56,7 @@ describe("persisted consumer schemas", () => {
   })
 
   test("model selection validates nested model keys and preserves explicit null variants", () => {
-    const state = Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))({
+    const state = Codec.decodeOrThrow(Codec.withInitial(ModelSelectionSchema, { session: {} }), {
       session: {
         good: { agent: "build", model: { providerID: "provider", modelID: "model", variant: "high" }, variant: null },
         partial: { agent: "plan", model: { providerID: "provider", modelID: 42 }, variant: false },
@@ -112,5 +110,6 @@ describe("persisted consumer schemas", () => {
     expect(decode({ locale: "ar" })).toEqual({ locale: "ar" })
   })
 })
+
 
 

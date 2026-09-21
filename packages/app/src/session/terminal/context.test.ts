@@ -2,9 +2,8 @@ import { beforeAll, describe, expect, mock, test } from "bun:test"
 import { ServerScope } from "@/runtime/server/scope"
 import { base64Encode } from "@opencode/util/encode"
 import { Persist } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 import type { Platform } from "@/runtime/platform/platform"
-import { Schema } from "effect"
 
 let getWorkspaceTerminalCacheKey: typeof import("./context").getWorkspaceTerminalCacheKey
 let clearWorkspaceTerminals: typeof import("./context").clearWorkspaceTerminals
@@ -21,10 +20,10 @@ beforeAll(async () => {
   const mod = await import("./context")
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
   clearWorkspaceTerminals = mod.clearWorkspaceTerminals
-  const schema = Persistence.withInitial(mod.TerminalState, { all: [] })
-  decodeTerminalState = Schema.decodeUnknownSync(schema)
+  const schema = Codec.withInitial(mod.TerminalState, { all: [] })
+  decodeTerminalState = ((input: unknown) => Codec.decodeOrThrow(schema, input))
   roundTripTerminalState = (value) =>
-    Schema.decodeUnknownSync(schema)(Schema.encodeSync(schema)(Schema.decodeUnknownSync(schema)(value)))
+    Codec.decodeOrThrow(schema, schema.encode(Codec.decodeOrThrow(schema, value)))
 })
 
 describe("getWorkspaceTerminalCacheKey", () => {
@@ -141,3 +140,4 @@ describe("TerminalState", () => {
     expect(roundTripTerminalState(value)).toEqual(value)
   })
 })
+

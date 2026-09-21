@@ -8,18 +8,20 @@ import { base64Encode } from "@opencode/util/encode"
 import { defaultTitle, titleNumber } from "./title"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
-import { Persistence } from "@/runtime/persistence/schema"
-import { Schema, SchemaGetter } from "effect"
+import { Codec } from "@/runtime/persistence/codec"
 
-const PTY = Persistence.struct({
-  id: Schema.NonEmptyString,
-  title: Persistence.fallback(Schema.String, () => ""),
-  titleNumber: Persistence.fallback(Schema.Finite, () => 0),
-  rows: Persistence.optional(Schema.Finite),
-  cols: Persistence.optional(Schema.Finite),
-  buffer: Persistence.optional(Schema.String),
-  scrollY: Persistence.optional(Schema.Finite),
-  cursor: Persistence.optional(Schema.Finite),
+const PTY = Codec.struct({
+  id: Codec.make<string, string>(
+    (v) => (typeof v === "string" && v.length > 0 ? v : Codec.INVALID),
+    (v) => v,
+  ),
+  title: Codec.fallback(Codec.string, () => ""),
+  titleNumber: Codec.fallback(Codec.number, () => 0),
+  rows: Codec.lenientOptional(Codec.number),
+  cols: Codec.lenientOptional(Codec.number),
+  buffer: Codec.lenientOptional(Codec.string),
+  scrollY: Codec.lenientOptional(Codec.number),
+  cursor: Codec.lenientOptional(Codec.number),
 })
 
 export type LocalPTY = typeof PTY.Type
@@ -31,28 +33,26 @@ function numberFromTitle(title: string) {
   return titleNumber(title, MAX_TERMINAL_SESSIONS)
 }
 
-const State = Persistence.struct({
-  active: Persistence.optional(Schema.String),
-  all: Persistence.array(PTY),
+const State = Codec.struct({
+  active: Codec.lenientOptional(Codec.string),
+  all: Codec.lenientArray(PTY),
 })
 
-export const TerminalState = State.pipe(
-  Schema.decodeTo(Schema.toType(State), {
-    decode: SchemaGetter.transform((value) => {
-      const seen = new Set<string>()
-      const all = value.all.flatMap((pty) => {
-        if (seen.has(pty.id)) return []
-        seen.add(pty.id)
-        return [{ ...pty, titleNumber: pty.titleNumber > 0 ? pty.titleNumber : (numberFromTitle(pty.title) ?? 0) }]
-      })
-      return {
-        active: value.active && seen.has(value.active) ? value.active : all[0]?.id,
-        all,
-      }
-    }),
-    encode: SchemaGetter.transform((value) => value),
-  }),
-)
+export const TerminalState = Codec.transform(State, {
+  decode: (value): typeof State.Type => {
+    const seen = new Set<string>()
+    const all = value.all.flatMap((pty) => {
+      if (seen.has(pty.id)) return []
+      seen.add(pty.id)
+      return [{ ...pty, titleNumber: pty.titleNumber > 0 ? pty.titleNumber : (numberFromTitle(pty.title) ?? 0) }]
+    })
+    return {
+      active: value.active && seen.has(value.active) ? value.active : all[0]?.id,
+      all,
+    }
+  },
+  encode: (value) => value,
+})
 
 export function getWorkspaceTerminalCacheKey(dir: string, scope: ServerScope = ServerScope.local) {
   return ScopedKey.from(scope, dir, WORKSPACE_KEY)
@@ -458,3 +458,5 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     }
   },
 })
+
+
