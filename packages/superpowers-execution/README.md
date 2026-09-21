@@ -46,8 +46,9 @@ for the user-facing guide.
    The output path is resolved to its physical path and validated before anything is deleted or
    created: the repository root, the package source directory, any path inside the repository
    (including through a symlinked ancestor alias), the filesystem root, and the home directory root
-   are rejected, the target is re-resolved physically immediately before the recursive delete, and
-   an existing non-empty directory is replaced only when its marker names this package.
+   are rejected. The stager records the physical path and filesystem identity in its marker when it
+   creates the directory. An existing directory is replaced only when its marker and current
+   filesystem identity match; cleanup re-resolves and re-stats that exact target before deleting it.
 
 2. Merge **one entry** into the existing `plugins` array of your server config. This is an entry to
    merge, not a replacement for your full config; keep your existing Superpowers and other plugin

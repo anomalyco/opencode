@@ -6,7 +6,9 @@ import { pathToFileURL } from "node:url"
 import type { Plugin } from "@opencode/plugin/promise/plugin"
 import {
   buildStagedPackage,
+  createStagingDirectory,
   importStagedContractInBrowser,
+  removeStagingDirectory,
   repositoryRoot,
   runDisposableHostGate,
 } from "../script/package-smoke"
@@ -56,6 +58,7 @@ test("the stager rejects unsafe targets before deleting anything", async () => {
   await expect(buildStagedPackage({ directory: repositoryRoot })).rejects.toThrow(/inside the repository/)
   await expect(buildStagedPackage({ directory: path.dirname(pluginSource) })).rejects.toThrow(/inside the repository/)
   await expect(buildStagedPackage({ directory: nestedTarget })).rejects.toThrow(/inside the repository/)
+  await expect(buildStagedPackage({ directory: path.parse(repositoryRoot).root })).rejects.toThrow(/filesystem root/)
   await expect(buildStagedPackage({ directory: os.homedir() })).rejects.toThrow(/home directory root/)
 
   expect(fs.existsSync(pluginSource)).toBe(true)
@@ -105,6 +108,30 @@ test("a symlinked path to a marked staging directory inside the repository canno
   } finally {
     fs.rmSync(aliasRoot, { recursive: true, force: true })
     fs.rmSync(inside, { recursive: true, force: true })
+  }
+})
+
+test("a repointed ancestor cannot redirect cleanup to an out-of-scope directory", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-stager-repoint-"))
+  const originalParent = path.join(root, "original")
+  const movedParent = path.join(root, "moved")
+  const foreignParent = path.join(root, "foreign")
+  const target = path.join(originalParent, "stage")
+  const foreignTarget = path.join(foreignParent, "stage")
+  fs.mkdirSync(originalParent)
+  fs.mkdirSync(foreignTarget, { recursive: true })
+  fs.writeFileSync(path.join(foreignTarget, "keep.txt"), "keep")
+
+  try {
+    const staging = await createStagingDirectory(target)
+    fs.renameSync(originalParent, movedParent)
+    fs.symlinkSync(foreignParent, originalParent, "dir")
+
+    await expect(removeStagingDirectory(staging)).rejects.toThrow(/identity changed/)
+    expect(fs.readFileSync(path.join(foreignTarget, "keep.txt"), "utf8")).toBe("keep")
+    expect(fs.existsSync(path.join(movedParent, "stage"))).toBe(true)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
   }
 })
 

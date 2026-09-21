@@ -4,8 +4,14 @@ import os from "node:os"
 import path from "node:path"
 import { repositoryRoot, type StagedPackage } from "./stage"
 
-export { buildStagedPackage, repositoryRoot, stagedPackageDirectory } from "./stage"
-export type { StagedManifest, StagedPackage } from "./stage"
+export {
+  buildStagedPackage,
+  createStagingDirectory,
+  removeStagingDirectory,
+  repositoryRoot,
+  stagedPackageDirectory,
+} from "./stage"
+export type { StagedManifest, StagedPackage, StagingDirectory } from "./stage"
 
 export interface BrowserContractResult {
   readonly rpcID: string

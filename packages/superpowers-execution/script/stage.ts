@@ -1,4 +1,4 @@
-import { cp, mkdir, lstat, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises"
+import { cp, mkdir, lstat, realpath, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { buildPackage, packageRoot } from "./build"
@@ -24,19 +24,25 @@ export interface StagedPackage {
   readonly dependencyPaths: Record<string, string>
 }
 
+export interface StagingDirectory {
+  readonly directory: string
+  readonly name: string
+  readonly dev: string
+  readonly ino: string
+}
+
 export async function buildStagedPackage(options: { readonly directory?: string } = {}): Promise<StagedPackage> {
   const requested = path.resolve(options.directory ?? stagedPackageDirectory)
-  const name = await packageName()
   await assertSafeStagingTarget(requested)
   await buildPackage()
-  const directory = await claimStagingDirectory(requested, name)
+  const staging = await claimStagingDirectory(requested)
 
   const manifest = await composeManifest()
-  await copyPackageFiles(directory)
-  await writeFile(path.join(directory, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
-  await installRuntimeDependencies(directory)
-  const dependencyPaths = await verifySelfContained(directory, manifest)
-  return { directory, manifest, dependencyPaths }
+  await copyPackageFiles(staging.directory)
+  await writeFile(path.join(staging.directory, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
+  await installRuntimeDependencies(staging.directory)
+  const dependencyPaths = await verifySelfContained(staging.directory, manifest)
+  return { directory: staging.directory, manifest, dependencyPaths }
 }
 
 const stagingMarker = ".opencode-superpowers-execution-staging"
@@ -74,25 +80,97 @@ async function assertOutsideRepository(target: string): Promise<void> {
   }
 }
 
-async function claimStagingDirectory(target: string, name: string): Promise<string> {
-  const physical = await physicalPath(target)
-  await assertOutsideRepository(physical)
+async function claimStagingDirectory(target: string): Promise<StagingDirectory> {
+  const existing = await existingStagingDirectory(target)
+  if (existing !== undefined) await removeStagingDirectory(existing)
+  return createStagingDirectory(target)
+}
 
-  const existing = await lstat(physical).catch(() => undefined)
-  if (existing !== undefined) {
-    if (existing.isSymbolicLink()) throw new Error(`refusing to replace a symlink: ${physical}`)
-    if (!existing.isDirectory()) throw new Error(`refusing to replace a non-directory: ${physical}`)
-    const marker = await readFile(path.join(physical, stagingMarker), "utf8").catch(() => undefined)
-    if (marker?.trim() !== name && (await readdir(physical)).length > 0) {
-      throw new Error(`refusing to replace a directory the stager does not own: ${physical}`)
-    }
+export async function createStagingDirectory(target: string): Promise<StagingDirectory> {
+  const requested = await physicalPath(target)
+  await assertOutsideRepository(requested)
+  await mkdir(path.dirname(requested), { recursive: true })
+  const directory = await physicalPath(target)
+  await assertOutsideRepository(directory)
+  if ((await lstat(directory).catch(() => undefined)) !== undefined) {
+    throw new Error(`refusing to create an existing staging directory: ${directory}`)
   }
+  await mkdir(directory)
+  const physical = await realpath(directory)
+  await assertOutsideRepository(physical)
+  const identity = await directoryIdentity(physical)
+  const staging = { directory: physical, name: await packageName(), ...identity }
+  await writeFile(path.join(physical, stagingMarker), `${JSON.stringify(staging)}\n`)
+  return staging
+}
 
-  await assertOutsideRepository(await physicalPath(physical))
-  await rm(physical, { recursive: true, force: true })
-  await mkdir(physical, { recursive: true })
-  await writeFile(path.join(physical, stagingMarker), `${name}\n`)
-  return physical
+export async function removeStagingDirectory(staging: StagingDirectory): Promise<void> {
+  const directory = await physicalPath(staging.directory)
+  await assertOutsideRepository(directory)
+  const marker = await readStagingMarker(directory)
+  if (marker === undefined || !sameStagingDirectory(staging, marker)) {
+    throw new Error(`refusing to remove a staging directory whose identity changed: ${directory}`)
+  }
+  const current = await directoryIdentity(directory).catch(() => undefined)
+  if (directory !== staging.directory || current === undefined || !sameIdentity(staging, current)) {
+    throw new Error(`refusing to remove a staging directory whose identity changed: ${directory}`)
+  }
+  await rm(directory, { recursive: true })
+}
+
+async function existingStagingDirectory(target: string): Promise<StagingDirectory | undefined> {
+  const directory = await physicalPath(target)
+  await assertOutsideRepository(directory)
+  const existing = await lstat(directory).catch(() => undefined)
+  if (existing === undefined) return
+  if (existing.isSymbolicLink()) throw new Error(`refusing to replace a symlink: ${directory}`)
+  if (!existing.isDirectory()) throw new Error(`refusing to replace a non-directory: ${directory}`)
+  const marker = await readStagingMarker(directory)
+  const identity = await directoryIdentity(directory)
+  if (
+    marker === undefined ||
+    marker.name !== (await packageName()) ||
+    marker.directory !== directory ||
+    !sameIdentity(marker, identity)
+  ) {
+    throw new Error(`refusing to replace a directory the stager does not own: ${directory}`)
+  }
+  return marker
+}
+
+async function readStagingMarker(directory: string): Promise<StagingDirectory | undefined> {
+  const file = path.join(directory, stagingMarker)
+  const info = await lstat(file).catch(() => undefined)
+  if (info === undefined || !info.isFile() || info.isSymbolicLink()) return
+  const value: unknown = await Bun.file(file).json().catch(() => undefined)
+  if (typeof value !== "object" || value === null) return
+  if (!("directory" in value) || typeof value.directory !== "string") return
+  if (!("name" in value) || typeof value.name !== "string") return
+  if (!("dev" in value) || typeof value.dev !== "string") return
+  if (!("ino" in value) || typeof value.ino !== "string") return
+  return { directory: value.directory, name: value.name, dev: value.dev, ino: value.ino }
+}
+
+async function directoryIdentity(directory: string): Promise<Pick<StagingDirectory, "dev" | "ino">> {
+  const info = await stat(directory, { bigint: true })
+  if (!info.isDirectory()) throw new Error(`staging target is no longer a directory: ${directory}`)
+  return { dev: String(info.dev), ino: String(info.ino) }
+}
+
+function sameIdentity(
+  expected: Pick<StagingDirectory, "dev" | "ino">,
+  actual: Pick<StagingDirectory, "dev" | "ino">,
+): boolean {
+  return expected.dev === actual.dev && expected.ino === actual.ino
+}
+
+function sameStagingDirectory(expected: StagingDirectory, actual: StagingDirectory): boolean {
+  return (
+    expected.directory === actual.directory &&
+    expected.name === actual.name &&
+    expected.dev === actual.dev &&
+    expected.ino === actual.ino
+  )
 }
 
 async function composeManifest(): Promise<StagedManifest> {

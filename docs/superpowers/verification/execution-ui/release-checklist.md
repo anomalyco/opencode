@@ -67,9 +67,10 @@ Self-containment is enforced by the stager and asserted by a test:
 Caller-supplied output paths are resolved to their physical path (the deepest existing ancestor's
 real path plus the remaining segments) and validated before any deletion or creation: the repository
 root, the package source directory, any path inside the repository (including via a symlinked
-ancestor alias), the filesystem root, and the home directory root are rejected. The target is
-re-resolved physically immediately before the recursive delete, and an existing non-empty directory
-is replaced only when its ownership marker names this package.
+ancestor alias), the filesystem root, and the home directory root are rejected. The stager records
+the physical path and filesystem identity in its marker when it creates the directory. An existing
+directory is replaced only when its marker and current filesystem identity match; cleanup re-resolves
+and re-stats that exact target before deleting it.
 
 Staging installs the published exact-version packages from the registry (`bun install --production
 --ignore-scripts`), so the first staging run needs registry access; later runs use the Bun cache.
