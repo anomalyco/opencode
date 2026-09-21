@@ -1039,6 +1039,32 @@ describe("CodeMode public contract", () => {
     }
   })
 
+  test("a query term that is a whole word of the path outranks a substring of it", async () => {
+    const simple = (description: string) =>
+      Tool.make({
+        description,
+        input: Schema.Struct({}),
+        output: Schema.String,
+        execute: () => Effect.succeed("ok"),
+      })
+    const runtime = CodeMode.make({
+      tools: {
+        // Declared so that alphabetical order would put the substring match first.
+        cloudflare: { get_timezones: simple("List timezones"), get_zones: simple("List zones") },
+      },
+    })
+
+    const ranked = await Effect.runPromise(runtime.execute(`return search({ query: "zones" })`))
+    expect(ranked.ok).toBe(true)
+    if (ranked.ok) {
+      const value = ranked.value as { items: Array<{ path: string }> }
+      expect(value.items.map((item) => item.path)).toStrictEqual([
+        "tools.cloudflare.get_zones",
+        "tools.cloudflare.get_timezones",
+      ])
+    }
+  })
+
   test("a plural query term matches singular-only tool text", async () => {
     const simple = (description: string) =>
       Tool.make({

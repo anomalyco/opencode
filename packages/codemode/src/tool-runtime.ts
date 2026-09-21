@@ -192,6 +192,8 @@ export type Prepared<R = never> = {
 
 export type SearchEntry = {
   readonly description: ToolDescription
+  /** The path split into words, so `zones` matches `get_zones` as a word rather than as a substring of `timezones`. */
+  readonly pathWords: ReadonlyArray<string>
   readonly searchText: string
 }
 
@@ -247,6 +249,7 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
                   (total, forms) =>
                     total +
                     (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
+                    (forms.some((form) => entry.pathWords.includes(form)) ? 12 : 0) +
                     (forms.some((form) => path.includes(form)) ? 8 : 0) +
                     (forms.some((form) => description.includes(form)) ? 4 : 0) +
                     (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
@@ -281,6 +284,7 @@ export const searchSignature = (() => {
 
 const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => ({
   description: describeTool(visible),
+  pathWords: tokenize(visible.path),
   searchText: [
     visible.path,
     visible.tool.description,
