@@ -60,14 +60,32 @@ const event = {
 
 const server = { type: "http" as const, http: { url: "http://storybook.local" } }
 
+type ExecutionTransportOverride = {
+  rpc: (...args: unknown[]) => unknown
+  listen: (handler: (event: unknown) => void) => () => void
+  status: () => string
+}
+
+function executionTransport() {
+  return (globalThis as { __opencodeExecutionTransport?: ExecutionTransportOverride }).__opencodeExecutionTransport
+}
+
 export function useServerSDK() {
+  const override = executionTransport()
   return {
     server,
     scope: ServerScope.local,
     url: "http://storybook.local",
-    api,
+    api: override ? { ...api, rpc: override.rpc } : api,
     client,
-    event,
+    event: override
+      ? {
+          on: () => () => undefined,
+          listen: override.listen,
+          location: () => ({ on: () => () => undefined, listen: () => () => undefined }),
+        }
+      : event,
+    connection: { status: override ? override.status : () => "connected" },
   }
 }
 import { ServerScope } from "@/runtime/server/scope"

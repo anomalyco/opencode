@@ -1,7 +1,7 @@
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { DataProvider } from "@opencode/session-ui/context"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { Show, Suspense, createEffect, createMemo } from "solid-js"
+import { Show, Suspense, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { LanguageProvider, UiI18nBridge } from "../src/runtime/i18n/language"
@@ -21,13 +21,17 @@ import { BackgroundWorkSummary, type BackgroundTask } from "../src/session/summa
 import { SessionSummaryPanel } from "../src/session/summary/panel"
 import { MessageTimeline } from "../src/session/timeline/message-timeline"
 import type { TimelineSessionSource } from "../src/session/timeline/controller"
-import { createExecutionModel, type ExecutionAttention, type ExecutionProgress } from "../src/superpowers/model"
+import { createExecutionModel, type ExecutionAttention, type ExecutionModel, type ExecutionProgress } from "../src/superpowers/model"
+import { SessionExecutionProvider } from "../src/superpowers/session-execution"
+import { SessionReviewToggle } from "../src/session/header/session-header-actions"
 import { ExecutionStatusBadge } from "../src/superpowers/status-badge"
-import { agentFixture } from "../src/superpowers/fixtures"
+import { agentFixture, failedTaskFixture, runFixture } from "../src/superpowers/fixtures"
 import type { ExecutionScope } from "../src/superpowers/identity"
 import type { ExecutionPresentation } from "../src/superpowers/panel"
+import type { SessionModel } from "../src/session/model"
 import type { Project } from "../src/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
+import type { RunSummary } from "@bearmanser/opencode-superpowers-execution/contract"
 
 type PendingRequest = { type: "permission" | "question"; owner: string }
 
@@ -104,11 +108,131 @@ function SeedProject() {
   return null
 }
 
+const liveSession = {
+  identity: { sessionID: () => "root", sessionKey: () => "wsl::root", params: { id: "root" } },
+  shared: {
+    data: {
+      session: {
+        get: (id: string) =>
+          id === "root" ? { parentID: undefined, location: { directory: "/root/git/demo" } } : undefined,
+      },
+    },
+  },
+  workspace: { directory: () => "/root/git/demo" },
+  layout: { tabs: () => ({ active: () => "review", all: () => ["review"] }) },
+} as unknown as SessionModel
+
+const liveRunSummary: RunSummary = {
+  runID: "run-1",
+  rootSessionID: "root",
+  ownerDirectory: "/root/git/demo",
+  title: "Failed fixture run",
+  status: "active",
+  revision: 3,
+  updatedAt: 1_700_000_000_000,
+  planRevision: 1,
+  progress: {
+    verified: 0,
+    total: 1,
+    skipped: 0,
+    failed: 1,
+    blocked: 0,
+    awaitingReview: 0,
+    percent: 0,
+    source: "controller_report",
+  },
+}
+
+function installExecutionTransport() {
+  const snapshot = runFixture({ runID: "run-1", revision: 3, tasks: [failedTaskFixture()] })
+  const rpc = () => ({
+    capabilities: async () => ({ schemaVersion: 1, pluginVersion: "0.1.0", maxTasks: 500, reporting: "controller" }),
+    getSummaries: async () => ({ items: [liveRunSummary] }),
+    getRun: async () => snapshot,
+    listRuns: async () => ({ items: [] }),
+    events: {
+      subscribe: () => {
+        throw new Error("events.subscribe is not used by the bridge")
+      },
+      on: () => () => undefined,
+    },
+  })
+  const listeners = new Set<(event: unknown) => void>()
+  ;(globalThis as { __opencodeExecutionTransport?: unknown }).__opencodeExecutionTransport = {
+    rpc,
+    listen: (handler: (event: unknown) => void) => {
+      listeners.add(handler)
+      return () => listeners.delete(handler)
+    },
+    status: () => "connected",
+  }
+  return () => {
+    listeners.clear()
+    delete (globalThis as { __opencodeExecutionTransport?: unknown }).__opencodeExecutionTransport
+  }
+}
+
+function LiveExecutionHeader() {
+  const [execution, setExecution] = createSignal<ExecutionModel>()
+  return (
+    <>
+      <div data-testid="execution-tab-active">{liveSession.layout.tabs().active()}</div>
+      <SessionExecutionProvider
+        session={liveSession}
+        attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
+        onModel={setExecution}
+      >
+        <Show when={execution()}>{(model) => <SessionReviewToggle execution={model()} />}</Show>
+      </SessionExecutionProvider>
+    </>
+  )
+}
+
+function mountLiveSessionHeader() {
+  const restore = installExecutionTransport()
+  const host = document.createElement("main")
+  host.dataset.testid = "execution-fixture"
+  host.style.cssText = "position:fixed;inset:0;background:#181818;color:#eee;padding:24px"
+  document.body.appendChild(host)
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <UiI18nBridge>
+          <DialogProvider>
+            <QueryClientProvider client={desktopQueryClient}>
+              <SettingsProvider>
+                <ServersProvider servers={[desktopServer]}>
+                  <TabsProvider>
+                    <GlobalProvider>
+                      <ServerProvider conn={desktopServer}>
+                        <LiveExecutionHeader />
+                      </ServerProvider>
+                    </GlobalProvider>
+                  </TabsProvider>
+                </ServersProvider>
+              </SettingsProvider>
+            </QueryClientProvider>
+          </DialogProvider>
+        </UiI18nBridge>
+      </LanguageProvider>
+    ),
+    host,
+  )
+  return () => {
+    dispose()
+    restore()
+  }
+}
+
 export async function mountExecutionFixture(input: {
   surface?: ExecutionPresentation
   scenario?: string
 } = {}): Promise<ReturnType<typeof render>> {
   const scenario = input.scenario ?? "observer"
+  if (scenario === "session-execution-live") {
+    mountLiveSessionHeader()
+    return undefined as unknown as ReturnType<typeof render>
+  }
   const host = document.createElement("main")
   host.dataset.testid = "execution-fixture"
   host.dir = scenario === "rtl" ? "rtl" : "ltr"

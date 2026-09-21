@@ -8,6 +8,7 @@ import {
   createMemo,
   createEffect,
   createComputed,
+  createSignal,
   on,
   onMount,
 } from "solid-js"
@@ -39,9 +40,8 @@ import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
 import { SESSION_EXECUTION_TAB } from "@/shell/state/session-tabs"
-import { ExecutionRpc } from "@bearmanser/opencode-superpowers-execution/contract"
-import { createSessionExecution } from "@/superpowers/bridge-client"
-import { createExecutionScope } from "@/superpowers/identity"
+import { SessionExecutionProvider } from "@/superpowers/session-execution"
+import type { ExecutionModel } from "@/superpowers/model"
 
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
@@ -191,42 +191,15 @@ export function SessionScreen(props: { session: SessionModel }) {
     const dock = document.querySelector('[data-component="session-composer-dock"]')
     dock?.querySelector<HTMLElement>("button, textarea, input, [tabindex]")?.focus()
   }
-  const executionRootSessionID = createMemo(() => {
-    const seen = new Set<string>()
-    let id = session.identity.sessionID()
-    while (id && !seen.has(id)) {
-      seen.add(id)
-      const parentID = session.shared.data.session.get(id)?.parentID
-      if (!parentID) return id
-      id = parentID
-    }
-    return id
+  const executionAttention = () => ({
+    stale: server.ctx.sdk.connection.status() !== "connected",
+    needsInput: [composer.requests.permissionRequest(), composer.requests.questionRequest()].filter(Boolean).length,
+    failed: 0,
+    blocked: composer.requests.background.blocking().length,
   })
-  const executionScope = createMemo(() => {
-    const rootSessionID = executionRootSessionID()
-    const info = rootSessionID ? session.shared.data.session.get(rootSessionID) : undefined
-    return createExecutionScope({
-      serverKey: server.key,
-      ownerDirectory: info?.location.directory ?? session.workspace.directory(),
-      rootSessionID,
-    })
-  })
-  const execution = createSessionExecution({
-    scope: executionScope,
-    api: () => server.ctx.sdk.api.rpc(ExecutionRpc),
-    events: server.ctx.sdk.event,
-    connection: () => server.ctx.sdk.connection.status() === "connected",
-    visible: () => session.layout.tabs().active() === SESSION_EXECUTION_TAB,
-    attention: () => ({
-      stale: server.ctx.sdk.connection.status() !== "connected",
-      needsInput: [composer.requests.permissionRequest(), composer.requests.questionRequest()].filter(Boolean).length,
-      failed: 0,
-      blocked: composer.requests.background.blocking().length,
-    }),
-    reviewRequest: reviewNativeRequest,
-  }).model
+  const [execution, setExecution] = createSignal<ExecutionModel>()
   const openExecutionOverview = () => {
-    execution.selectSubview("agents")
+    execution()?.selectSubview("agents")
     void session.layout.tabs().open(SESSION_EXECUTION_TAB)
   }
 
@@ -380,7 +353,12 @@ export function SessionScreen(props: { session: SessionModel }) {
   )
 
   return (
-    <>
+    <SessionExecutionProvider
+      session={session}
+      attention={executionAttention}
+      reviewRequest={reviewNativeRequest}
+      onModel={setExecution}
+    >
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
           {/* Keep the control outside panel animations; the terminal's 52px header includes a 1px divider. */}
@@ -392,7 +370,7 @@ export function SessionScreen(props: { session: SessionModel }) {
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
             >
-              <SessionReviewToggle execution={execution} />
+              <SessionReviewToggle execution={execution()} />
             </div>
           </Show>
           <div
@@ -487,12 +465,16 @@ export function SessionScreen(props: { session: SessionModel }) {
                         setStore("sideReviewPresent", false)
                       }}
                     >
-                      <SessionDesktopReview
-                        review={review}
-                        browser={browser}
-                        execution={execution}
-                        present={store.sideReviewPresent}
-                      />
+                      <Show when={execution()}>
+                        {(model) => (
+                          <SessionDesktopReview
+                            review={review}
+                            browser={browser}
+                            execution={model()}
+                            present={store.sideReviewPresent}
+                          />
+                        )}
+                      </Show>
                     </div>
                   </Show>
                 </div>
@@ -593,6 +575,6 @@ export function SessionScreen(props: { session: SessionModel }) {
           </div>
         </Show>
       </div>
-    </>
+    </SessionExecutionProvider>
   )
 }

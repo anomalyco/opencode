@@ -329,6 +329,12 @@ story("execution shortcut tooltip preserves full detail", async ({ page }) => {
   await expect(detail).toContainText("Active agents: 2")
 })
 
+story("session execution badge reports bridge failures while the execution tab is closed", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-live")
+  await expect(page.getByTestId("execution-tab-active")).toHaveText("review")
+  await expect(page.getByTestId("execution-status-badge")).toHaveAttribute("data-attention", "failed")
+})
+
 story("desktop summary composition opens agents", async ({ page }) => {
   await openExecutionFixture(page, "desktop-summary")
   await page.getByRole("button", { name: "2 background tasks running", exact: true }).click()
