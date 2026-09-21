@@ -7,6 +7,7 @@ import {
   EXECUTION_RECONCILE_INTERVAL,
   createExecutionBridge,
   createSessionExecution,
+  preferredRun,
   shouldApplySnapshot,
   type ExecutionClock,
   type SessionExecution,
@@ -297,6 +298,15 @@ test("structured views are disabled only for an incompatible schema", () => {
   expect(structuredViewsEnabled("observer")).toBe(true)
   expect(structuredViewsEnabled("unavailable")).toBe(true)
   expect(structuredViewsEnabled("incompatible")).toBe(false)
+})
+
+test("preferredRun chooses the active run and then the latest update", () => {
+  const completedOlder = { ...summaryFixture(SCOPE, "run-old"), status: "completed" as const, updatedAt: 5 }
+  const completedNewer = { ...summaryFixture(SCOPE, "run-new"), status: "completed" as const, updatedAt: 9 }
+  const active = { ...summaryFixture(SCOPE, "run-active"), updatedAt: 1 }
+  expect(preferredRun([completedOlder, completedNewer])?.runID).toBe("run-new")
+  expect(preferredRun([completedNewer, active])?.runID).toBe("run-active")
+  expect(preferredRun([])).toBeUndefined()
 })
 
 describe("createExecutionBridge", () => {
@@ -686,9 +696,9 @@ describe("createExecutionBridge", () => {
   })
 })
 
-test("the production session composition enters failed attention from a bridge-reported failed task", async () => {
+test("the production session composition tracks failures while the execution tab is closed", async () => {
   const calls: string[] = []
-  const getRun = deferred<RunSnapshot>()
+  const pending: Array<{ resolve: (snapshot: RunSnapshot) => void }> = []
   const rpc = {
     capabilities: async () => {
       calls.push("capabilities")
@@ -696,11 +706,16 @@ test("the production session composition enters failed attention from a bridge-r
     },
     getSummaries: async () => {
       calls.push("getSummaries")
-      return { items: [summaryFixture(SCOPE, "run-1")] }
+      return {
+        items: [
+          { ...summaryFixture(SCOPE, "run-completed"), status: "completed" as const, updatedAt: 9 },
+          summaryFixture(SCOPE, "run-active"),
+        ],
+      }
     },
     getRun: async () => {
       calls.push("getRun")
-      return getRun.promise
+      return new Promise<RunSnapshot>((resolve) => pending.push({ resolve }))
     },
     listRuns: async () => ({ items: [] }),
     events: {
@@ -711,9 +726,10 @@ test("the production session composition enters failed attention from a bridge-r
     },
   } as unknown as RpcClient<typeof ExecutionRpc, RpcCallOptions>
   const events = localEvents()
+  const clock = fakeClock()
   const [scope] = createSignal<ExecutionScope | undefined>(SCOPE)
   const [connected] = createSignal(true)
-  const [visible] = createSignal(true)
+  const [visible, setVisible] = createSignal(false)
   let execution!: SessionExecution
   createRoot(() => {
     execution = createSessionExecution({
@@ -722,14 +738,32 @@ test("the production session composition enters failed attention from a bridge-r
       events: events.source,
       connection: connected,
       visible,
+      clock: clock.clock,
       attention: () => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 }),
     })
   })
   await flush()
+  expect(visible()).toBe(false)
   expect(calls).toEqual(["capabilities", "getSummaries", "getRun"])
-  getRun.resolve(runFixture({ revision: 2, tasks: [failedTaskFixture()] }))
+  pending[0]!.resolve(runFixture({ runID: "run-active", revision: 2, tasks: [failedTaskFixture()] }))
   await flush()
   expect(execution.model.attention().failed).toBe(1)
   expect(attentionState(execution.model.attention())).toBe("failed")
+  expect(clock.active()).toBe(0)
+
+  events.emit(changedEvent(SCOPE.ownerDirectory, { rootSessionID: "root", runID: "run-active", revision: 3 }))
+  await flush()
+  expect(calls.filter((call) => call === "getRun")).toHaveLength(2)
+  pending[1]!.resolve(
+    runFixture({ runID: "run-active", revision: 3, tasks: [failedTaskFixture(), failedTaskFixture({ id: "task-failed-2" })] }),
+  )
+  await flush()
+  expect(execution.model.attention().failed).toBe(2)
+  expect(clock.active()).toBe(0)
+
+  setVisible(true)
+  execution.bridge.reconcile()
+  expect(clock.active()).toBe(1)
   execution.dispose()
+  expect(clock.active()).toBe(0)
 })

@@ -1,6 +1,6 @@
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import { ClientError, type RpcCallOptions, type RpcClient } from "@opencode/client/promise"
-import { ChangedSchema, ExecutionRpc, type RunSnapshot } from "@bearmanser/opencode-superpowers-execution/contract"
+import { ChangedSchema, ExecutionRpc, type RunSnapshot, type RunSummary } from "@bearmanser/opencode-superpowers-execution/contract"
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
 import { runKey, scopeKey, type ExecutionScope } from "./identity"
 import {
@@ -78,6 +78,14 @@ export function shouldApplySnapshot(input: {
   return input.requestGeneration === input.activeGeneration && input.incomingRevision >= input.currentRevision
 }
 
+export function preferredRun(items: RunSummary[]) {
+  return items.reduce<RunSummary | undefined>((best, item) => {
+    if (!best) return item
+    if ((item.status === "active") !== (best.status === "active")) return item.status === "active" ? item : best
+    return item.updatedAt > best.updatedAt ? item : best
+  }, undefined)
+}
+
 export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBridge {
   const clock = input.clock ?? systemClock
   const [snapshot, setSnapshot] = createSignal<RunSnapshot | undefined>()
@@ -117,12 +125,18 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
   }
 
   function onChanged(event: OpenCodeEvent) {
-    if (disposed || !attachment) return
+    if (disposed) return
     if (event.type !== "rpc.superpowers.execution.v1.changed") return
-    if (eventLocationDirectory(event) !== attachment.scope.ownerDirectory) return
+    const scope = attachment?.scope ?? input.scope()
+    if (!scope) return
+    if (eventLocationDirectory(event) !== scope.ownerDirectory) return
     const parsed = ChangedSchema.safeParse(event.data)
     if (!parsed.success) return
-    if (parsed.data.rootSessionID !== attachment.scope.rootSessionID) return
+    if (parsed.data.rootSessionID !== scope.rootSessionID) return
+    if (!attachment) {
+      if (currentMode !== "incompatible") void attachActive()
+      return
+    }
     if (parsed.data.runID !== attachment.runID) return
     if (parsed.data.revision <= highestRevision) return
     highestRevision = parsed.data.revision
@@ -156,15 +170,9 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       if (currentMode === "incompatible" || currentMode === "unavailable") setModeValue("observer")
     }
     if (currentMode === "incompatible") return
-    if (!input.visible()) {
-      stopTimer()
-      return
-    }
-    if (!attachment) {
-      startTimer()
-      return
-    }
-    startTimer()
+    if (input.visible()) startTimer()
+    else stopTimer()
+    if (!attachment) return
     if (inFlight) {
       followUp = true
       return
@@ -233,7 +241,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       }
       const page = await input.api().getSummaries({ rootSessionIDs: [scope.rootSessionID] }, locationOptions(scope))
       if (ignoredDiscovery(requestGeneration)) return
-      const preferred = page.items[0]
+      const preferred = preferredRun(page.items)
       if (!preferred) {
         setModeValue("observer")
         setReasonValue("no_run")
