@@ -43,7 +43,7 @@ const State = Codec.struct({
   recentlyClosed: Codec.record(Codec.lenientArray(Codec.string)),
 })
 
-const StoredState = Codec.struct({ projects: Projects, lastProject: LastProject })
+const StoredState = Codec.struct({ projects: Projects, lastProject: LastProject }, { preserve: true })
 
 // Projects and last-opened entries recorded under the canonical local server's URL move under
 // "local" when that URL is known, so they survive the server changing address.
@@ -124,3 +124,4 @@ export const ProjectState = Codec.struct({
 export const IconState = Codec.struct({
   value: Codec.optional(Codec.string),
 })
+

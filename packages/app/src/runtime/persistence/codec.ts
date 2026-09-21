@@ -46,6 +46,13 @@ export function decodeOrThrow<T>(codec: Of<T>, input: unknown): T {
   return value
 }
 
+/** Encodes and checks the result decodes, so an invalid in-memory value fails loudly instead of persisting. */
+export function encodeOrThrow<T, E>(codec: Of<T, E>, value: T): E {
+  const encoded = codec.encode(value)
+  if (codec.decode(encoded) === INVALID) throw new Error("Value does not match its codec")
+  return encoded
+}
+
 const identity = <T>(value: T) => value
 
 export const string: Of<string, string> = make((v) => (typeof v === "string" ? v : INVALID), identity)
@@ -120,20 +127,23 @@ export interface Struct<F extends Fields> extends Of<StructType<F>, StructEncode
   readonly fields: F
 }
 
-export function struct<const F extends Fields>(fields: F): Struct<F> {
+// `preserve` keeps keys the struct does not declare, for migration shapes that only describe the
+// fields they rewrite (Effect's `onExcessProperty: "preserve"`); the current schema then decides.
+export function struct<const F extends Fields>(fields: F, options?: { preserve?: boolean }): Struct<F> {
   const entries = Object.entries(fields)
   return {
     ...make<StructType<F>, StructEncoded<F>>(
       (input) => {
         if (typeof input !== "object" || input === null || Array.isArray(input)) return INVALID
         const record = input as Record<string, unknown>
-        const out: Record<string, unknown> = {}
+        const out: Record<string, unknown> = options?.preserve ? { ...record } : {}
         for (const [key, codec] of entries) {
           const present = Object.hasOwn(record, key)
           if (!present && codec.optional) continue
           const value = codec.decode(record[key])
           if (value === INVALID) return INVALID
           if (value !== undefined || present) out[key] = value
+          else delete out[key]
         }
         return out as StructType<F>
       },
@@ -317,10 +327,8 @@ export function withInitial<C extends Any>(definition: C | Migrated<C>, initial:
   const read = isMigrated(definition) ? definition.read : unknown
   return make(
     (input) => {
-      const migrated = read.decode(input)
-      if (migrated === INVALID) return INVALID
-      // A migration only describes the fields it rewrites; everything else stored stays as it was.
-      const stored = isObject(input) && isObject(migrated) ? { ...input, ...migrated } : migrated
+      const stored = read.decode(input)
+      if (stored === INVALID) return INVALID
       return merge(initial, recover(codec, stored, initial))
     },
     (value) => codec.encode(value),

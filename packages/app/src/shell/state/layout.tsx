@@ -188,7 +188,7 @@ const storedLayout = Codec.struct({
   ),
   sessionTabs: layoutSchema.fields.sessionTabs,
   sessionView: layoutSchema.fields.sessionView,
-})
+}, { preserve: true })
 
 export const layoutPersistence = Codec.migrate(
   layoutSchema,
@@ -765,4 +765,5 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
   },
 })
+
 

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 import {
   settingsSchema,
   settingsPersistence,
@@ -13,9 +12,9 @@ import {
   terminalFontFamily,
 } from "./model"
 
-const schema = Persistence.withInitial(settingsPersistence, defaultSettings)
-const decode = Schema.decodeUnknownSync(schema)
-const encode = Schema.encodeSync(schema)
+const schema = Codec.withInitial(settingsPersistence, defaultSettings)
+const decode = (input: unknown) => Codec.decodeOrThrow(schema, input)
+const encode = (value: typeof settingsSchema.Type) => schema.encode(value)
 
 describe("settings timeline detail migration", () => {
   test("migrates saved switches and round trips the current settings", () => {
@@ -51,14 +50,14 @@ describe("settings schema", () => {
       general: { ...defaultSettings.general, timelineDetail: timelinePresets[4].value, autoSave: false },
       appearance: { ...defaultSettings.appearance, fontSize: 20 },
     }
-    const restore = Schema.decodeUnknownSync(Persistence.withInitial(settingsPersistence, initial))
+    const restore = (input: unknown) => Codec.decodeOrThrow(Codec.withInitial(settingsPersistence, initial), input)
     expect(restore({})).toEqual(initial)
     expect(restore({ general: { reasoningMode: "invalid", showReasoningSummaries: true } })).toEqual(initial)
     expect(restore({ general: { showReasoningSummaries: true } }).general.timelineDetail.thinking).toEqual({
       placement: "separate",
       details: "expanded",
     })
-    expect(() => Schema.decodeUnknownSync(settingsSchema)({})).toThrow()
+    expect(() => Codec.decodeOrThrow(settingsSchema, {})).toThrow()
   })
 
   test("supplies the existing defaults for an empty document", () => {
@@ -171,7 +170,7 @@ describe("settings schema", () => {
 
   test("does not silently repair invalid values during encoding", () => {
     expect(() =>
-      Schema.encodeUnknownSync(settingsSchema)({ ...decode({}), appearance: { fontSize: "large" } }),
+      Codec.encodeOrThrow(settingsSchema, { ...decode({}), appearance: { fontSize: "large" } } as never),
     ).toThrow()
   })
 })
@@ -203,3 +202,6 @@ describe("settings font families", () => {
     expect(terminalFontFamily(undefined)).toStartWith('"JetBrainsMono Nerd Font Mono", ')
   })
 })
+
+
+

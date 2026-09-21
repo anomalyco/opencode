@@ -1,10 +1,9 @@
 import { reconcile, unwrap } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
-import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
 export type Settings = typeof settingsSchema.Type
@@ -68,20 +67,20 @@ export function terminalFontFamily(font: string | undefined) {
   return stack(font, terminalBase)
 }
 
-const placementSchema = Schema.Literals(["separate", "grouped", "hidden"])
-const detailsSchema = Schema.Literals(["collapsed", "expanded"])
-const activitySchema = Persistence.struct({ placement: placementSchema, details: detailsSchema })
-const placementOnlySchema = Persistence.struct({ placement: placementSchema })
+const placementSchema = Codec.literals(["separate", "grouped", "hidden"])
+const detailsSchema = Codec.literals(["collapsed", "expanded"])
+const activitySchema = Codec.struct({ placement: placementSchema, details: detailsSchema })
+const placementOnlySchema = Codec.struct({ placement: placementSchema })
 
-const generalSchema = Persistence.struct({
-  autoSave: Schema.Boolean,
-  releaseNotes: Schema.Boolean,
-  showFileTree: Schema.Boolean,
-  showNavigation: Schema.Boolean,
-  showSearch: Schema.Boolean,
-  showProjectIcon: Schema.Boolean,
-  showTerminal: Schema.Boolean,
-  timelineDetail: Persistence.struct({
+const generalSchema = Codec.struct({
+  autoSave: Codec.boolean,
+  releaseNotes: Codec.boolean,
+  showFileTree: Codec.boolean,
+  showNavigation: Codec.boolean,
+  showSearch: Codec.boolean,
+  showProjectIcon: Codec.boolean,
+  showTerminal: Codec.boolean,
+  timelineDetail: Codec.struct({
     shell: activitySchema,
     edit: activitySchema,
     thinking: activitySchema,
@@ -89,91 +88,87 @@ const generalSchema = Persistence.struct({
     notices: placementOnlySchema,
     tools: placementOnlySchema,
   }),
-  showCustomAgents: Schema.Boolean,
-  mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
-  mobileDiffWrap: Schema.Boolean,
-  terminalPlacement: Schema.Literals(["side", "bottom"]),
-  followUpBehavior: Schema.Literals(["queue", "steer"]),
-  experimentalBrowser: Schema.Boolean,
+  showCustomAgents: Codec.boolean,
+  mobileTitlebarPosition: Codec.literals(["top", "bottom"]),
+  mobileDiffWrap: Codec.boolean,
+  terminalPlacement: Codec.literals(["side", "bottom"]),
+  followUpBehavior: Codec.literals(["queue", "steer"]),
+  experimentalBrowser: Codec.boolean,
 })
 
-const appearanceSchema = Persistence.struct({
-  fontSize: Schema.Number,
-  mono: Schema.String,
-  sans: Schema.String,
-  terminal: Schema.String,
-  tabLayout: Schema.Literals(["horizontal", "vertical"]),
-  showProjectName: Schema.Boolean,
+const appearanceSchema = Codec.struct({
+  fontSize: Codec.number,
+  mono: Codec.string,
+  sans: Codec.string,
+  terminal: Codec.string,
+  tabLayout: Codec.literals(["horizontal", "vertical"]),
+  showProjectName: Codec.boolean,
 })
 
-const permissionsSchema = Persistence.struct({
-  autoApprove: Schema.Boolean,
+const permissionsSchema = Codec.struct({
+  autoApprove: Codec.boolean,
 })
 
-const workspacesSchema = Persistence.struct({
-  defaultDestination: Schema.Literals(["last-used", "local", "new"]),
-  lastUsed: Persistence.record(
-    Schema.Literals(["local", "workspace"]).pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
-  ),
+const workspacesSchema = Codec.struct({
+  defaultDestination: Codec.literals(["last-used", "local", "new"]),
+  lastUsed: Codec.fallback(Codec.sparseRecord(Codec.literals(["local", "workspace"])), () => ({})),
 })
 
-const notificationsSchema = Persistence.struct({
-  agent: Schema.Boolean,
-  permissions: Schema.Boolean,
-  errors: Schema.Boolean,
+const notificationsSchema = Codec.struct({
+  agent: Codec.boolean,
+  permissions: Codec.boolean,
+  errors: Codec.boolean,
 })
 
-const soundsSchema = Persistence.struct({
-  agentEnabled: Schema.Boolean,
-  agent: Schema.String,
-  permissionsEnabled: Schema.Boolean,
-  permissions: Schema.String,
-  errorsEnabled: Schema.Boolean,
-  errors: Schema.String,
+const soundsSchema = Codec.struct({
+  agentEnabled: Codec.boolean,
+  agent: Codec.string,
+  permissionsEnabled: Codec.boolean,
+  permissions: Codec.string,
+  errorsEnabled: Codec.boolean,
+  errors: Codec.string,
 })
 
-export const settingsSchema = Persistence.struct({
+export const settingsSchema = Codec.struct({
   general: generalSchema,
-  sessionSummary: Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
+  sessionSummary: Codec.struct({ projectExpanded: Codec.boolean, serverExpanded: Codec.boolean }),
   appearance: appearanceSchema,
-  keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
+  keybinds: Codec.fallback(Codec.sparseRecord(Codec.string), () => ({})),
   permissions: permissionsSchema,
   workspaces: workspacesSchema,
   notifications: notificationsSchema,
   sounds: soundsSchema,
 })
 
+const storedActivity = Codec.struct({
+  placement: Codec.lenientOptional(placementSchema),
+  details: Codec.lenientOptional(detailsSchema),
+})
+const storedActivityWord = Codec.literals(["expanded", "collapsed", "hidden", "visible"])
+
 function storedTimelineCategory(category: TimelineCategory) {
-  return Persistence.optional(
-    Schema.Union([
-      Schema.Struct({
-        placement: Persistence.optional(placementSchema),
-        details: Persistence.optional(detailsSchema),
-      }),
-      Schema.Literals(["expanded", "collapsed", "hidden", "visible"]),
-    ]).pipe(
-      Schema.decode({
-        decode: SchemaGetter.transform((value) => {
-          if (typeof value !== "string") return value
-          return {
-            placement:
-              value === "hidden"
-                ? "hidden"
-                : category === "subagents"
-                  ? "separate"
-                  : category === "tools"
-                    ? "grouped"
-                    : value === "expanded"
-                      ? "separate"
-                      : value === "collapsed"
-                        ? "grouped"
-                        : undefined,
-            details: value === "expanded" ? "expanded" : "collapsed",
-          }
-        }),
-        encode: SchemaGetter.passthrough(),
-      }),
-    ),
+  return Codec.lenientOptional(
+    Codec.transform(Codec.union([storedActivity, storedActivityWord]), {
+      decode: (value) => {
+        if (typeof value !== "string") return value
+        return {
+          placement:
+            value === "hidden"
+              ? ("hidden" as const)
+              : category === "subagents"
+                ? ("separate" as const)
+                : category === "tools"
+                  ? ("grouped" as const)
+                  : value === "expanded"
+                    ? ("separate" as const)
+                    : value === "collapsed"
+                      ? ("grouped" as const)
+                      : undefined,
+          details: value === "expanded" ? ("expanded" as const) : ("collapsed" as const),
+        }
+      },
+      encode: (value) => value,
+    }),
   )
 }
 
@@ -186,54 +181,52 @@ function legacyTimelineActivity(value: boolean | "hidden" | "compact" | "full" |
   } as const
 }
 
-export const settingsPersistence = Persistence.migrate(
+// An explicit but invalid value decodes to null, distinct from absent, so a legacy preference
+// cannot replace a setting the user did set.
+const explicitOrNull = <T, E>(codec: Codec.Of<T, E>) => Codec.optional(Codec.fallback(Codec.nullOr(codec), () => null))
+
+const storedTimelineDetail = Codec.struct({
+  shell: storedTimelineCategory("shell"),
+  edit: storedTimelineCategory("edit"),
+  thinking: storedTimelineCategory("thinking"),
+  subagents: storedTimelineCategory("subagents"),
+  notices: storedTimelineCategory("notices"),
+  tools: storedTimelineCategory("tools"),
+})
+const storedGeneral = Codec.struct(
+  {
+  timelineDetail: explicitOrNull(storedTimelineDetail),
+  reasoningMode: explicitOrNull(Codec.literals(["hidden", "compact", "full"])),
+  showReasoningSummaries: Codec.lenientOptional(Codec.boolean),
+  shellToolPartsExpanded: Codec.lenientOptional(Codec.boolean),
+  editToolPartsExpanded: Codec.lenientOptional(Codec.boolean),
+  },
+  { preserve: true },
+)
+const storedSettings = Codec.struct({ general: Codec.lenientOptional(storedGeneral) }, { preserve: true })
+
+export const settingsPersistence = Codec.migrate(
   settingsSchema,
-  Schema.Struct({
-    general: Persistence.optional(
-      Schema.Struct({
-        // Keep invalid explicit values distinct from absent values so legacy preferences cannot replace them.
-        timelineDetail: Schema.optional(
-          Schema.NullOr(
-            Schema.Struct({
-              shell: storedTimelineCategory("shell"),
-              edit: storedTimelineCategory("edit"),
-              thinking: storedTimelineCategory("thinking"),
-              subagents: storedTimelineCategory("subagents"),
-              notices: storedTimelineCategory("notices"),
-              tools: storedTimelineCategory("tools"),
-            }),
-          ),
-        ).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(null)))),
-        reasoningMode: Schema.optional(Schema.NullOr(Schema.Literals(["hidden", "compact", "full"]))).pipe(
-          Schema.catchDecoding(() => Effect.succeed(Option.some(null))),
-        ),
-        showReasoningSummaries: Persistence.optional(Schema.Boolean),
-        shellToolPartsExpanded: Persistence.optional(Schema.Boolean),
-        editToolPartsExpanded: Persistence.optional(Schema.Boolean),
-      }),
-    ),
-  }).pipe(
-    Schema.decode({
-      decode: SchemaGetter.transform((value) => {
-        const general = value.general
-        if (!general || general.timelineDetail !== undefined) return value
-        return {
-          ...value,
-          general: {
-            ...general,
-            timelineDetail: {
-              shell: legacyTimelineActivity(general.shellToolPartsExpanded),
-              edit: legacyTimelineActivity(general.editToolPartsExpanded),
-              thinking: legacyTimelineActivity(
-                general.reasoningMode === undefined ? general.showReasoningSummaries : general.reasoningMode,
-              ),
-            },
+  Codec.transform(storedSettings, {
+    decode: (value) => {
+      const general = value.general
+      if (!general || general.timelineDetail !== undefined) return value
+      return {
+        ...value,
+        general: {
+          ...general,
+          timelineDetail: {
+            shell: legacyTimelineActivity(general.shellToolPartsExpanded),
+            edit: legacyTimelineActivity(general.editToolPartsExpanded),
+            thinking: legacyTimelineActivity(
+              general.reasoningMode === undefined ? general.showReasoningSummaries : general.reasoningMode,
+            ),
           },
-        }
-      }),
-      encode: SchemaGetter.transform((value) => value),
-    }),
-  ),
+        },
+      }
+    },
+    encode: (value) => value,
+  }),
 )
 
 export const defaultSettings: Settings = {
@@ -509,3 +502,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     }
   },
 })
+
+
+

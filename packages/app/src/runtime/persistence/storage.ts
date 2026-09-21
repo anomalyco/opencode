@@ -490,8 +490,8 @@ function serializer<S extends Schema.ConstraintCodec<object, unknown> | Codec.An
     return {
       decode: (raw: string) => Codec.decodeOption(json, raw) as S["Type"] | undefined,
       deserialize: (raw: unknown) => Codec.decodeOrThrow(json, raw) as S["Type"],
-      serialize: (value: S["Type"]) => json.encode(value),
-      encode: (value: S["Type"]) => codec.encode(value),
+      serialize: (value: S["Type"]) => Codec.encodeOrThrow(json, value),
+      encode: (value: S["Type"]) => Codec.encodeOrThrow(codec, value),
       initial: Codec.decodeOrThrow(codec, codec.encode(initial)) as S["Type"],
     }
   }
