@@ -1559,6 +1559,57 @@ function sanitizeOpenAISchema(value: unknown): unknown {
   return result
 }
 
+// Meta's Model API counts the tool parameter root as the first nesting level and
+// rejects anything deeper ("JSON schema exceeds the maximum nesting depth of 10
+// levels"), failing the whole request instead of the offending tool. It serves
+// Muse Spark directly and through the opencode gateways, so one deep MCP tool
+// takes down every request for those models.
+const META_SCHEMA_MAX_DEPTH = 9
+
+// Node members that nest a schema one level deeper, split by how they hold it:
+// `properties`/`$defs`/`definitions` map names to schemas, the rest are schemas.
+const META_SCHEMA_SCHEMA_MEMBERS = ["items", "additionalProperties", "anyOf", "oneOf", "allOf"]
+const META_SCHEMA_SCHEMA_MAPS = ["properties", "$defs", "definitions"]
+const META_SCHEMA_MEMBERS = [...META_SCHEMA_SCHEMA_MEMBERS, ...META_SCHEMA_SCHEMA_MAPS]
+
+function isMetaSchemaModel(model: Provider.Model): boolean {
+  return model.providerID === "meta" || model.api.id.toLowerCase().includes("muse")
+}
+
+// Keeps a schema within Meta's nesting limit by dropping the members that would
+// nest too deep. Every other keyword stays on the node, so a lowered tool keeps
+// its shape instead of failing the request.
+function boundMetaSchemaDepth(value: unknown, depth: number): unknown {
+  if (Array.isArray(value)) return value.map((item) => boundMetaSchemaDepth(item, depth))
+  if (!isPlainObject(value)) return value
+  const entries = Object.entries(value)
+
+  if (depth >= META_SCHEMA_MAX_DEPTH) {
+    // `required` without `properties` is rejected by strict validators.
+    const dropped = [...META_SCHEMA_MEMBERS, "required"]
+    return Object.fromEntries(entries.filter(([key]) => !dropped.includes(key)))
+  }
+
+  return Object.fromEntries(
+    entries.map(([key, member]) => [
+      key,
+      META_SCHEMA_SCHEMA_MAPS.includes(key)
+        ? boundMetaSchemaMemberMap(member, depth)
+        : META_SCHEMA_SCHEMA_MEMBERS.includes(key)
+          ? boundMetaSchemaDepth(member, depth + 1)
+          : member,
+    ]),
+  )
+}
+
+// `properties: { name: schema }` holds its schemas one level below this node.
+function boundMetaSchemaMemberMap(value: unknown, depth: number): unknown {
+  if (!isPlainObject(value)) return value
+  return Object.fromEntries(
+    Object.entries(value).map(([name, member]) => [name, boundMetaSchemaDepth(member, depth + 1)]),
+  )
+}
+
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {
   /*
   if (["openai", "azure"].includes(providerID)) {
@@ -1696,6 +1747,10 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
     }
 
     schema = sanitizeGemini(schema)
+  }
+
+  if (isMetaSchemaModel(model)) {
+    schema = boundMetaSchemaDepth(schema, 0) as JSONSchema7
   }
 
   return schema

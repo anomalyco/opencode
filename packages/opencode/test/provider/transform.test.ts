@@ -2145,6 +2145,141 @@ describe("ProviderTransform.schema - moonshot $ref siblings", () => {
   })
 })
 
+describe("ProviderTransform.schema - meta nesting depth", () => {
+  const goModel = {
+    providerID: "opencode-go",
+    api: { id: "muse-spark-1.3-contributor", npm: "@ai-sdk/openai-compatible" },
+  } as any
+
+  // Mirrors the measurement in the issue: the tool parameter root is depth 0 and
+  // every schema member step below it adds one level.
+  function maxDepth(value: unknown, depth = 0): number {
+    if (Array.isArray(value)) return value.reduce((max, item) => Math.max(max, maxDepth(item, depth)), depth)
+    if (typeof value !== "object" || value === null) return depth
+    const schemaMembers = ["items", "additionalProperties", "anyOf", "oneOf", "allOf"]
+    const schemaMaps = ["properties", "$defs", "definitions"]
+    const children = Object.entries(value as Record<string, unknown>).flatMap(([key, member]) => {
+      if (schemaMembers.includes(key)) return [member]
+      if (!schemaMaps.includes(key) || typeof member !== "object" || member === null) return []
+      return Object.values(member)
+    })
+    return children.reduce((max: number, child) => Math.max(max, maxDepth(child, depth + 1)), depth)
+  }
+
+  function nest(levels: number, leaf: any = { type: "string", description: "deepest value" }): any {
+    return Array.from({ length: levels }, (_, index) => levels - index).reduce(
+      (inner: any, level) => ({ type: "object", properties: { [`level${level}`]: inner } }),
+      leaf,
+    )
+  }
+
+  function descend(schema: any, levels: number): any {
+    return Array.from({ length: levels }, (_, index) => index + 1).reduce(
+      (node: any, level) => node.properties[`level${level}`],
+      schema,
+    )
+  }
+
+  test.each([
+    ["meta", "muse-spark-1.1", "@ai-sdk/openai"],
+    ["opencode", "muse-spark-1.3", "@ai-sdk/openai-compatible"],
+    ["opencode-go", "muse-spark-1.3-contributor", "@ai-sdk/openai-compatible"],
+  ])("bounds deep tool schemas for %s/%s", (providerID, id, npm) => {
+    const schema = nest(12)
+
+    const result = ProviderTransform.schema({ providerID, api: { id, npm } } as any, schema) as any
+
+    expect(maxDepth(result)).toBe(9)
+    expect(maxDepth(schema)).toBe(12)
+  })
+
+  test("drops the members that would nest past the limit", () => {
+    const result = ProviderTransform.schema(goModel, nest(14)) as any
+
+    expect(result.properties.level1.properties.level2.properties.level3.type).toBe("object")
+    expect(descend(result, 9)).toEqual({ type: "object" })
+    expect(descend(result, 8).properties.level9.type).toBe("object")
+  })
+
+  test("bounds combiner, array and additionalProperties branches", () => {
+    const result = ProviderTransform.schema(goModel, {
+      type: "object",
+      properties: {
+        requestBody: {
+          oneOf: [
+            {
+              type: "object",
+              additionalProperties: {
+                type: "object",
+                properties: {
+                  rules: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        conditions: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              rhs: { anyOf: [{ type: "object", properties: { deep: { type: "string" } } }] },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    } as any) as any
+
+    expect(maxDepth(result)).toBe(9)
+    expect(result.properties.requestBody.oneOf[0].additionalProperties.properties.rules.items.properties.conditions.items
+      .properties.rhs.anyOf[0]).toEqual({ type: "object" })
+  })
+
+  test("bounds deep $defs subtrees", () => {
+    const result = ProviderTransform.schema(goModel, {
+      type: "object",
+      properties: { value: { $ref: "#/$defs/Deep" } },
+      $defs: { Deep: nest(12) },
+    } as any) as any
+
+    expect(maxDepth(result)).toBe(9)
+    expect(result.properties.value).toEqual({ $ref: "#/$defs/Deep" })
+  })
+
+  test("drops required alongside the properties it constrains", () => {
+    const result = ProviderTransform.schema(
+      goModel,
+      nest(9, {
+        type: "object",
+        description: "at the limit",
+        required: ["deep"],
+        properties: { deep: { type: "string" } },
+      }),
+    ) as any
+
+    expect(descend(result, 9)).toEqual({ type: "object", description: "at the limit" })
+  })
+
+  test("leaves schemas within the limit and other providers untouched", () => {
+    const schema = nest(9)
+
+    expect(ProviderTransform.schema(goModel, schema)).toEqual(schema)
+    expect(
+      ProviderTransform.schema(
+        { providerID: "anthropic", api: { id: "claude-sonnet-4", npm: "@ai-sdk/anthropic" } } as any,
+        nest(14),
+      ),
+    ).toEqual(nest(14))
+  })
+})
+
 describe("ProviderTransform.message - Mistral tool call IDs", () => {
   test.each(["codestral-latest", "pixtral-large-latest", "open-mixtral-8x22b"])(
     "normalizes IDs for custom OpenAI-compatible %s models",
