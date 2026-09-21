@@ -2,6 +2,7 @@ import { createEffect, on, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { createPromptInputV2Attachments, type PromptInputV2AttachmentConfig } from "./attachments"
+import { promptInputV2Cursor } from "./cursor"
 import { createPromptInputV2Store, type PromptInputV2StoreInput } from "./store"
 import type {
   PromptInputV2Attachment,
@@ -261,7 +262,7 @@ export function createPromptInputV2Controller(input: {
     const selection = window.getSelection()
     if (!selection?.isCollapsed || !editor.contains(selection.anchorNode)) return false
     const text = draft.state.prompt.map((part) => ("content" in part ? part.content : "")).join("")
-    if (!canNavigateHistory(direction, text, editorCursor(editor), state.historyIndex >= 0)) return false
+    if (!canNavigateHistory(direction, text, promptInputV2Cursor(editor), state.historyIndex >= 0)) return false
     const entries = input.history.entries(state.mode)
     if (direction === "up") {
       if (entries.length === 0 || state.historyIndex >= entries.length - 1) return false
@@ -449,15 +450,6 @@ function clonePrompt(prompt: PromptInputV2PersistedState["prompt"]): PromptInput
 
 function promptLength(prompt: PromptInputV2PersistedState["prompt"]) {
   return prompt.reduce((length, part) => length + ("content" in part ? part.content.length : 0), 0)
-}
-
-function editorCursor(editor: HTMLElement) {
-  const selection = window.getSelection()
-  if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return editor.textContent?.length ?? 0
-  const range = selection.getRangeAt(0).cloneRange()
-  range.selectNodeContents(editor)
-  range.setEnd(selection.anchorNode!, selection.anchorOffset)
-  return range.toString().length
 }
 
 function setEditorCursor(editor: HTMLElement | undefined, cursor: number) {
