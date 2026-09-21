@@ -171,24 +171,35 @@ export const layoutSchema = Codec.struct({
 })
 
 // The shapes older versions stored, read before the current schema recovers field by field.
-const storedLayout = Codec.struct({
-  sidebar: Codec.lenientOptional(
-    Codec.struct({
-      workspaces: Codec.lenientOptional(Codec.union([Codec.boolean, Codec.record(Codec.boolean)])),
-      workspacesDefault: Codec.lenientOptional(Codec.boolean),
-    }),
-  ),
-  review: Codec.lenientOptional(Codec.struct({ panelOpened: Codec.lenientOptional(Codec.boolean) })),
-  fileTree: Codec.lenientOptional(
-    Codec.struct({
-      opened: Codec.lenientOptional(Codec.boolean),
-      width: Codec.lenientOptional(Codec.number),
-      tab: Codec.lenientOptional(Codec.literals(["changes", "all"])),
-    }),
-  ),
-  sessionTabs: layoutSchema.fields.sessionTabs,
-  sessionView: layoutSchema.fields.sessionView,
-}, { preserve: true })
+const storedLayout = Codec.struct(
+  {
+    sidebar: Codec.lenientOptional(
+      Codec.struct(
+        {
+          workspaces: Codec.lenientOptional(Codec.union([Codec.boolean, Codec.record(Codec.boolean)])),
+          workspacesDefault: Codec.lenientOptional(Codec.boolean),
+        },
+        { preserve: true },
+      ),
+    ),
+    review: Codec.lenientOptional(
+      Codec.struct({ panelOpened: Codec.lenientOptional(Codec.boolean) }, { preserve: true }),
+    ),
+    fileTree: Codec.lenientOptional(
+      Codec.struct(
+        {
+          opened: Codec.lenientOptional(Codec.boolean),
+          width: Codec.lenientOptional(Codec.number),
+          tab: Codec.lenientOptional(Codec.literals(["changes", "all"])),
+        },
+        { preserve: true },
+      ),
+    ),
+    sessionTabs: layoutSchema.fields.sessionTabs,
+    sessionView: layoutSchema.fields.sessionView,
+  },
+  { preserve: true },
+)
 
 export const layoutPersistence = Codec.migrate(
   layoutSchema,
@@ -765,5 +776,3 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
   },
 })
-
-

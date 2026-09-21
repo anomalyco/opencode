@@ -114,17 +114,11 @@ export function createHomeProjectsController(home: HomeController) {
               extensions: ["json"],
             },
             async (file) => {
-              // Validating an imported file is the one place the shared Effect schema is needed here.
-              const [{ Schema }, { SessionTransfer }] = await Promise.all([
-                import("effect"),
-                import("@opencode/schema/session-transfer"),
-              ])
-              const data = await Schema.decodeUnknownPromise(Schema.fromJsonString(SessionTransfer.Data))(
-                await file.text(),
-              )
+              const { decodeSessionTransfer } = await import("./import-session")
+              const data = await decodeSessionTransfer(await file.text())
               const api = home.server.context(conn).sdk.api.session
               const imported = await api.import({
-                ...Schema.encodeSync(SessionTransfer.Data)(data),
+                ...data,
                 location: { directory: project.worktree },
               } as Parameters<typeof api.import>[0])
               home.project.openProjectSession(conn, project.worktree, imported)
@@ -189,4 +183,8 @@ export function createHomeProjectsController(home: HomeController) {
 }
 
 export type HomeProjectsController = ReturnType<typeof createHomeProjectsController>
+
+
+
+
 

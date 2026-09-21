@@ -1,7 +1,6 @@
 import type { SshItem, SshPlatform, SshState } from "@opencode/app/ssh"
 import { isSshConnecting, sshHostname, sshName } from "@opencode/app/ssh"
 import { createStore } from "solid-js/store"
-import { Effect, Schedule } from "effect"
 
 // Routes key on the connection object. Preserve it across progress/endpoint
 // changes so reconnecting never unmounts an open conversation or composer.
@@ -57,14 +56,26 @@ function connection(item: SshItem, api: Pick<SshPlatform, "resolve">, label: str
       get http() {
         return state.current.http ?? { url: "http://127.0.0.1:0" }
       },
-      reconnect: (signal: AbortSignal) =>
-        Effect.runPromise(
-          Effect.tryPromise(() => api.resolve(item.config.id)).pipe(
-            Effect.repeat({ until: (http) => http !== null, schedule: Schedule.spaced(3000) }),
-            Effect.flatMap((http) => (http === null ? Effect.interrupt : Effect.succeed(http))),
-          ),
-          { signal },
-        ),
+      // Poll every 3 s until the host reports an address, or the caller aborts.
+      reconnect: async (signal: AbortSignal) => {
+        while (true) {
+          signal.throwIfAborted()
+          const http = await api.resolve(item.config.id)
+          if (http !== null) return http
+          await new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(() => {
+              signal.removeEventListener("abort", abort)
+              resolve()
+            }, 3000)
+            const abort = () => {
+              clearTimeout(timer)
+              reject(signal.reason)
+            }
+            signal.addEventListener("abort", abort, { once: true })
+          })
+        }
+      },
     },
   }
 }
+

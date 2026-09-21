@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
 import { WorkspaceOnboardingSchema, ProviderTipSchema, WorkspaceTipSchema } from "@/new-session/view"
 import { ModelSelectionSchema } from "@/providers/models/selection"
-import { Persistence } from "@/runtime/persistence/schema"
 import { Codec } from "@/runtime/persistence/codec"
 import { FileViewsSchema } from "@/workspaces/files/view-cache"
 import { languageSchema } from "@/runtime/i18n/language"
@@ -110,6 +108,7 @@ describe("persisted consumer schemas", () => {
     expect(decode({ locale: "ar" })).toEqual({ locale: "ar" })
   })
 })
+
 
 
 

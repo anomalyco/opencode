@@ -142,7 +142,8 @@ export function struct<const F extends Fields>(fields: F, options?: { preserve?:
           if (!present && codec.optional) continue
           const value = codec.decode(record[key])
           if (value === INVALID) return INVALID
-          if (value !== undefined || present) out[key] = value
+          // An optional field that decodes to undefined is absent, as with Effect's optional keys.
+          if (value !== undefined || (present && !codec.optional)) out[key] = value
           else delete out[key]
         }
         return out as StructType<F>
@@ -329,7 +330,8 @@ export function withInitial<C extends Any>(definition: C | Migrated<C>, initial:
     (input) => {
       const stored = read.decode(input)
       if (stored === INVALID) return INVALID
-      return merge(initial, recover(codec, stored, initial))
+      // Re-decoding validates the merged value and copies it, so the store never aliases `initial`.
+      return codec.decode(codec.encode(merge(initial, recover(codec, stored, initial)) as Type<C>))
     },
     (value) => codec.encode(value),
   )
@@ -363,4 +365,5 @@ function merge(initial: unknown, value: unknown): unknown {
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
+
 

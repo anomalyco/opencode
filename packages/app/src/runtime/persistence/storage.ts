@@ -3,12 +3,10 @@ import { messageSync, type AsyncStorage, type SyncStorage } from "@solid-primiti
 import { checksum } from "@opencode/util/encode"
 import { createResource, onCleanup, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
-import { Option, Schema } from "effect"
 import { pathKey } from "@/workspaces/path-key"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
 import { Codec } from "./codec"
 import { persistStore } from "./persist"
-import { Persistence } from "./schema"
 
 type InitType = Promise<string | null> | string | null
 type PersistedWithReady<T> = [
@@ -473,57 +471,31 @@ export function removePersisted(
   }
 }
 
-type Definition<S extends Schema.ConstraintCodec<object, unknown> | Codec.Any> =
-  | S
-  | Persistence.Migrated<Extract<S, Schema.ConstraintCodec<object, unknown>>>
-  | Codec.Migrated<Extract<S, Codec.Any>>
-
-// Persisted stores are moving from Effect Schema to the plain codecs in ./codec so the renderer
-// stops paying for Effect at startup; both are accepted while the migration is underway.
-function serializer<S extends Schema.ConstraintCodec<object, unknown> | Codec.Any>(
-  definition: Definition<S>,
-  initial: S["Type"],
-) {
-  if (Codec.isCodec(definition) || (!("current" in definition) ? false : Codec.isCodec(definition.current))) {
-    const codec = Codec.withInitial(definition as Codec.Any | Codec.Migrated<Codec.Any>, initial)
-    const json = Codec.fromJsonString(codec)
-    return {
-      decode: (raw: string) => Codec.decodeOption(json, raw) as S["Type"] | undefined,
-      deserialize: (raw: unknown) => Codec.decodeOrThrow(json, raw) as S["Type"],
-      serialize: (value: S["Type"]) => Codec.encodeOrThrow(json, value),
-      encode: (value: S["Type"]) => Codec.encodeOrThrow(codec, value),
-      initial: Codec.decodeOrThrow(codec, codec.encode(initial)) as S["Type"],
-    }
-  }
-  const schema = definition as Schema.ConstraintCodec<object, unknown> | Persistence.Migrated<Schema.ConstraintCodec<object, unknown>>
-  const initialized = Persistence.withInitial(schema, initial as object)
-  const json = Schema.fromJsonString(initialized)
-  const decode = Schema.decodeUnknownOption(json)
-  return {
-    decode: (raw: string) => Option.getOrUndefined(decode(raw)) as S["Type"] | undefined,
-    deserialize: Schema.decodeUnknownSync(json) as (raw: unknown) => S["Type"],
-    serialize: Schema.encodeSync(json) as (value: S["Type"]) => string,
-    encode: Schema.encodeSync(initialized) as (value: S["Type"]) => unknown,
-    initial: Schema.decodeUnknownSync(Schema.toType(initialized))(initial as object) as S["Type"],
-  }
-}
-
-export function persisted<S extends Schema.ConstraintCodec<object, unknown> | Codec.Any>(
+export function persisted<C extends Codec.Any>(
   target: string | PersistTarget,
-  schema: Definition<S>,
-  initial: NoInfer<S["Type"]>,
+  definition: C | Codec.Migrated<C>,
+  initial: NoInfer<Codec.Type<C>>,
   platformOverride?: Platform,
-): PersistedWithReady<S["Type"]> {
+): PersistedWithReady<Codec.Type<C>> {
+  type T = Codec.Type<C>
+  const initialized = Codec.withInitial(definition, initial)
+  const json = Codec.fromJsonString(initialized)
+  const codec = {
+    decode: (raw: string) => Codec.decodeOption(json, raw),
+    deserialize: (raw: unknown) => Codec.decodeOrThrow(json, raw),
+    serialize: (value: T) => Codec.encodeOrThrow(json, value),
+    encode: (value: T) => Codec.encodeOrThrow(initialized, value),
+    initial: Codec.decodeOrThrow(initialized, initialized.encode(initial)),
+  }
   const platform = platformOverride ?? usePlatform()
   const config = resolveTarget(typeof target === "string" ? { key: target } : target, platform)
 
-  const codec = serializer<S>(schema, initial)
   const { encode, serialize } = codec
   const normalize = (raw: string) => {
     const value = codec.decode(raw)
     if (value !== undefined) return serialize(value)
   }
-  const store = createStore<S["Type"]>(codec.initial)
+  const store = createStore<T>(codec.initial)
   const isDesktop = platform.platform === "desktop" && !!platform.storage
   const draft = config.draft ? platform.draftStore : undefined
   const prefix = `${config.storage ?? "default"}:`
@@ -672,3 +644,4 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown> | Co
     }),
   ]
 }
+

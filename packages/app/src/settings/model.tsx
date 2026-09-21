@@ -140,10 +140,13 @@ export const settingsSchema = Codec.struct({
   sounds: soundsSchema,
 })
 
-const storedActivity = Codec.struct({
-  placement: Codec.lenientOptional(placementSchema),
-  details: Codec.lenientOptional(detailsSchema),
-})
+const storedActivity = Codec.struct(
+  {
+    placement: Codec.lenientOptional(placementSchema),
+    details: Codec.lenientOptional(detailsSchema),
+  },
+  { preserve: true },
+)
 const storedActivityWord = Codec.literals(["expanded", "collapsed", "hidden", "visible"])
 
 function storedTimelineCategory(category: TimelineCategory) {
@@ -185,21 +188,24 @@ function legacyTimelineActivity(value: boolean | "hidden" | "compact" | "full" |
 // cannot replace a setting the user did set.
 const explicitOrNull = <T, E>(codec: Codec.Of<T, E>) => Codec.optional(Codec.fallback(Codec.nullOr(codec), () => null))
 
-const storedTimelineDetail = Codec.struct({
-  shell: storedTimelineCategory("shell"),
-  edit: storedTimelineCategory("edit"),
-  thinking: storedTimelineCategory("thinking"),
-  subagents: storedTimelineCategory("subagents"),
-  notices: storedTimelineCategory("notices"),
-  tools: storedTimelineCategory("tools"),
-})
+const storedTimelineDetail = Codec.struct(
+  {
+    shell: storedTimelineCategory("shell"),
+    edit: storedTimelineCategory("edit"),
+    thinking: storedTimelineCategory("thinking"),
+    subagents: storedTimelineCategory("subagents"),
+    notices: storedTimelineCategory("notices"),
+    tools: storedTimelineCategory("tools"),
+  },
+  { preserve: true },
+)
 const storedGeneral = Codec.struct(
   {
-  timelineDetail: explicitOrNull(storedTimelineDetail),
-  reasoningMode: explicitOrNull(Codec.literals(["hidden", "compact", "full"])),
-  showReasoningSummaries: Codec.lenientOptional(Codec.boolean),
-  shellToolPartsExpanded: Codec.lenientOptional(Codec.boolean),
-  editToolPartsExpanded: Codec.lenientOptional(Codec.boolean),
+    timelineDetail: explicitOrNull(storedTimelineDetail),
+    reasoningMode: explicitOrNull(Codec.literals(["hidden", "compact", "full"])),
+    showReasoningSummaries: Codec.lenientOptional(Codec.boolean),
+    shellToolPartsExpanded: Codec.lenientOptional(Codec.boolean),
+    editToolPartsExpanded: Codec.lenientOptional(Codec.boolean),
   },
   { preserve: true },
 )
@@ -502,6 +508,3 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     }
   },
 })
-
-
-
