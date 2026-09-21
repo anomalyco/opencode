@@ -1,10 +1,11 @@
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { DataProvider } from "@opencode/session-ui/context"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { Match, Show, Suspense, Switch, createEffect, createMemo, createSignal, onMount } from "solid-js"
+import { MemoryRouter, Route, useParams } from "@solidjs/router"
+import { Match, Show, Suspense, Switch, createEffect, createMemo, createSignal, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
-import { LanguageProvider, UiI18nBridge, useLanguage } from "../src/runtime/i18n/language"
+import { LanguageProvider, UiI18nBridge } from "../src/runtime/i18n/language"
 import { ServerConnection, ServersProvider } from "../src/runtime/server/registry"
 import { GlobalProvider } from "../src/runtime/server/runtime"
 import { ServerProvider, useServer } from "../src/runtime/server/current"
@@ -37,11 +38,12 @@ import { ExecutionTaskDetails } from "../src/superpowers/task-details"
 import { ExecutionTaskList } from "../src/superpowers/task-list"
 import { SessionReviewToggle } from "../src/session/header/session-header-actions"
 import { ExecutionStatusBadge } from "../src/superpowers/status-badge"
-import { createHomeExecutionSummaries, requestExecutionOverview } from "../src/superpowers/home-summary"
-import type { ExecutionEventSource } from "../src/superpowers/bridge-client"
-import { HomeSessionsView } from "../src/home/sessions/view"
-import { buildHomeSessionRecords } from "../src/home/sessions/records"
-import type { HomeSessionGroup } from "../src/home/sessions/controller"
+import { openExecutionOverview } from "../src/superpowers/home-summary"
+import { HomeSessions } from "../src/home/sessions/region"
+import { createHomeSessionsController } from "../src/home/sessions/controller"
+import { createHomeSessionSearchController } from "../src/home/sessions/search"
+import { createHomeScrollController } from "../src/home/scroll"
+import type { HomeController } from "../src/home/model"
 import type { LocalProject } from "../src/shell/state/layout"
 import {
   agentFixture,
@@ -137,8 +139,6 @@ function SeedProject() {
   return null
 }
 
-const [liveTabs, setLiveTabs] = createStore({ active: "review", all: ["review"] })
-
 const liveSession = {
   identity: { sessionID: () => "root", sessionKey: () => "wsl::root", params: { id: "root" } },
   shared: {
@@ -157,16 +157,7 @@ const liveSession = {
   },
   workspace: { directory: () => "/root/git/demo" },
   isDesktop: () => true,
-  layout: {
-    tabs: () => ({
-      active: () => liveTabs.active,
-      all: () => liveTabs.all,
-      open: async (tab: string) => {
-        setLiveTabs("active", tab)
-        if (!liveTabs.all.includes(tab)) setLiveTabs("all", (all) => [...all, tab])
-      },
-    }),
-  },
+  layout: { tabs: () => ({ active: () => "review", all: () => ["review"] }) },
 } as unknown as SessionModel
 
 const evidenceTimelineSession = {
@@ -270,14 +261,7 @@ function LiveExecutionHeader() {
         attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
         onModel={setExecution}
       >
-        <Show when={execution()}>
-          {(model) => (
-            <>
-              <div data-testid="execution-subview">{model().subview()}</div>
-              <SessionReviewToggle execution={model()} />
-            </>
-          )}
-        </Show>
+        <Show when={execution()}>{(model) => <SessionReviewToggle execution={model()} />}</Show>
       </SessionExecutionProvider>
     </>
   )
@@ -336,7 +320,6 @@ function LiveAgentsComposition() {
 
 function mountLiveSessionHeader(mode: string) {
   const restore = installExecutionTransport(mode === "evidence-production" ? halfVerifiedRun() : undefined)
-  if (mode === "session-execution-handoff") requestExecutionOverview("root")
   const host = document.createElement("main")
   host.dataset.testid = "execution-fixture"
   host.style.cssText = "position:fixed;inset:0;background:#181818;color:#eee;padding:24px"
@@ -542,6 +525,10 @@ function mountTrackedFixture(input: { rtl: boolean; lateRun: boolean }) {
 }
 
 const homeFixtureProject: LocalProject = { id: "demo", worktree: "/root/git/demo", expanded: false }
+const homeFixtureSessions = [
+  homeFixtureSession("root-tracked", "Tracked controller"),
+  homeFixtureSession("root-ordinary", "Ordinary session"),
+]
 
 function homeFixtureSession(id: string, title: string): SessionInfo {
   return {
@@ -578,69 +565,69 @@ function homeFixtureSummary(input: { status: RunSummary["status"]; verified: num
   }
 }
 
-function HomeExecutionFixture(props: { scenario: string }) {
-  const language = useLanguage()
-  const [state, setState] = createStore({
-    navigationTarget: "",
-    fullRunFetches: 0,
-    verified: 1,
-    connection: true,
-  })
-  const sessions = [homeFixtureSession("root-tracked", "Tracked controller"), homeFixtureSession("root-ordinary", "Ordinary session")]
-  const records = buildHomeSessionRecords({
-    sessions: () => sessions,
-    projectDirectories: () => undefined,
-    projects: () => [homeFixtureProject],
-  })
-  const groups: HomeSessionGroup[] = [{ id: "today", title: "Today", sessions: records }]
-  const roots = records.map((record) => ({
-    serverKey: "wsl",
-    ownerDirectory: record.session.location.directory,
-    rootSessionID: record.session.id,
-  }))
+function homeFakeContext(input: {
+  scenario: string
+  connected: () => boolean
+  verified: () => number
+  onFullRun: () => void
+}) {
   const listeners = new Set<(event: OpenCodeEvent) => void>()
-  const api = {
-    getSummaries: async (input: { rootSessionIDs: string[] }) => {
-      if (props.scenario === "home-missing-plugin") throw { type: "rpc.method_not_found", message: "Unknown RPC method" }
-      if (!input.rootSessionIDs.includes("root-tracked")) return { items: [] }
+  const rpc = {
+    getSummaries: async (request: { rootSessionIDs: string[] }) => {
+      if (input.scenario === "home-missing-plugin") throw { type: "rpc.method_not_found", message: "Unknown RPC method" }
+      if (!request.rootSessionIDs.includes("root-tracked")) return { items: [] }
       return {
         items: [
           homeFixtureSummary({
-            status: props.scenario === "home-cancelled" ? "cancelled" : "active",
-            verified: state.verified,
+            status: input.scenario === "home-cancelled" ? "cancelled" : "active",
+            verified: input.verified(),
             total: 2,
           }),
         ],
       }
     },
     getRun: async () => {
-      setState("fullRunFetches", (count) => count + 1)
+      input.onFullRun()
       throw new Error("Home summaries must not load a full run")
     },
     listRuns: async () => ({ items: [] }),
     capabilities: async () => ({ schemaVersion: 1, pluginVersion: "0.1.0", maxTasks: 500, reporting: "controller" }),
     events: { subscribe: () => ({}) as never, on: () => () => undefined },
   } as unknown as RpcClient<typeof ExecutionRpc, RpcCallOptions>
-  const events: ExecutionEventSource = {
-    listen: (handler) => {
-      listeners.add(handler)
-      return () => listeners.delete(handler)
+  const ctx = {
+    sdk: {
+      api: {
+        session: {
+          list: async () => ({ data: [], cursor: {} }),
+          get: async ({ sessionID }: { sessionID: string }) =>
+            homeFixtureSessions.find((session) => session.id === sessionID),
+          update: async () => ({}),
+        },
+        rpc: () => rpc,
+      },
+      event: {
+        listen: (handler: (event: OpenCodeEvent) => void) => {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+        on: () => () => undefined,
+      },
+      connection: { status: () => (input.connected() ? "connected" : "disconnected") },
     },
+    data: {
+      session: {
+        list: () => homeFixtureSessions,
+        get: (id: string) => homeFixtureSessions.find((session) => session.id === id),
+        apply: (value: SessionInfo[]) => value,
+        remember: () => undefined,
+        invalidate: () => undefined,
+        sync: async () => undefined,
+        message: { sync: async () => undefined },
+      },
+    },
+    projects: { list: () => [homeFixtureProject], open: () => undefined, touch: () => undefined },
   }
-  const summaries = createHomeExecutionSummaries({
-    serverKey: () => "wsl",
-    roots: () => roots,
-    api: () => api,
-    events: () => events,
-    connection: () => state.connection,
-  })
-  let homeRoot: HTMLDivElement | undefined
-  onMount(() => annotateHomeRows())
-  function annotateHomeRows() {
-    homeRoot?.querySelector('[data-session-id="root-tracked"]')?.setAttribute("data-testid", "home-root-tracked")
-    homeRoot?.querySelector('[data-session-id="root-ordinary"]')?.setAttribute("data-testid", "home-root-ordinary")
-  }
-  const emitChanged = () => {
+  const emit = () => {
     const event = {
       id: "event-home",
       created: 1,
@@ -650,16 +637,70 @@ function HomeExecutionFixture(props: { scenario: string }) {
     } as unknown as OpenCodeEvent
     for (const handler of [...listeners]) handler(event)
   }
+  return { ctx, emit }
+}
+
+function homeFakeController(ctx: unknown): HomeController {
+  return {
+    selection: {
+      value: () => ({ server: ServerConnection.key(desktopServer), directory: homeFixtureProject.worktree }),
+      set: () => undefined,
+      focusServer: () => undefined,
+    },
+    project: {
+      list: () => [homeFixtureProject],
+      recentlyClosed: () => [],
+      homedir: () => "",
+      selected: () => homeFixtureProject,
+      newSession: () => homeFixtureProject,
+      forServer: () => [homeFixtureProject],
+      select: () => undefined,
+      add: () => undefined,
+      openNewSession: () => undefined,
+      openProjectNewSession: () => undefined,
+      openProjectSession: () => undefined,
+    },
+    server: {
+      list: () => [desktopServer],
+      health: () => undefined,
+      context: () => ctx,
+      focused: () => desktopServer,
+      focusedContext: () => ctx,
+      focusedSync: () => undefined,
+    },
+  } as unknown as HomeController
+}
+
+function HomeDirectRoute(props: { scenario: string }) {
+  const [state, setState] = createStore({ fullRunFetches: 0, verified: 1, connection: true })
+  const fake = homeFakeContext({
+    scenario: props.scenario,
+    connected: () => state.connection,
+    verified: () => state.verified,
+    onFullRun: () => setState("fullRunFetches", (count) => count + 1),
+  })
+  const home = homeFakeController(fake.ctx)
+  const sessions = createHomeSessionsController(home)
+  const search = createHomeSessionSearchController(home, sessions)
+  const scroll = createHomeScrollController(sessions.data.groups)
+  let content: HTMLDivElement | undefined
+  createEffect(() => {
+    sessions.data.loading()
+    sessions.data.groups()
+    queueMicrotask(() => {
+      content?.querySelector('[data-session-id="root-tracked"]')?.setAttribute("data-testid", "home-root-tracked")
+      content?.querySelector('[data-session-id="root-ordinary"]')?.setAttribute("data-testid", "home-root-ordinary")
+    })
+  })
   return (
     <>
-      <div data-testid="navigation-target">{state.navigationTarget}</div>
       <div data-testid="full-run-fetch-count">{state.fullRunFetches}</div>
       <button
         type="button"
         data-testid="advance-summary"
         onClick={() => {
           setState("verified", (value) => value + 1)
-          emitChanged()
+          fake.emit()
         }}
       >
         Advance summary
@@ -667,50 +708,92 @@ function HomeExecutionFixture(props: { scenario: string }) {
       <button type="button" data-testid="lose-connection" onClick={() => setState("connection", false)}>
         Lose connection
       </button>
-      <div ref={homeRoot}>
-        <HomeSessionsView
-          language={language}
-          groups={groups}
-          loading={false}
-          showProjectName={false}
-          server={ServerConnection.Key.make("wsl")}
-          canCreateSession={false}
-          searchValue=""
-          searchPlaceholder="Search sessions"
-          searchOpen={false}
-          searchLoading={false}
-          searchResults={[]}
-          searchActive=""
-          searchNoResultsLabel="No results"
-          titleOpacity={() => 1}
-          isOpenTab={() => false}
-          onCreateSession={() => undefined}
-          onOpenSession={() => undefined}
-          onArchiveSession={async () => undefined}
-          onRenameSession={async () => true}
-          onExportSession={async () => undefined}
-          onDeleteSession={() => undefined}
-          onSetHoverTarget={() => undefined}
-          onSetThumbTrack={() => undefined}
-          onSetContent={() => undefined}
-          onSetHeader={() => undefined}
-          onWheel={() => undefined}
-          onSetSearchRoot={() => undefined}
-          onSetSearchInput={() => undefined}
-          onSetSearchList={() => undefined}
-          onSearchFocus={() => undefined}
-          onSearchInput={() => undefined}
-          onSearchClose={() => undefined}
-          onSearchMove={() => undefined}
-          onSearchSelectActive={() => undefined}
-          onSearchHighlight={() => undefined}
-          onSearchSelect={() => undefined}
-          executionSummary={(record) => summaries.summary(record.session.id)}
-          executionSummaryStale={summaries.stale()}
-          onOpenExecution={(record) => setState("navigationTarget", `wsl/${record.session.id}/execution`)}
-        />
+      <div ref={content}>
+        <HomeSessions sessions={sessions} search={search} scroll={scroll} />
       </div>
     </>
+  )
+}
+
+function destinationSession(input: { id: () => string; narrow: () => boolean; tabs: () => { active: string } }): SessionModel {
+  return {
+    identity: {
+      sessionID: input.id,
+      sessionKey: () => `${ServerConnection.key(desktopServer)}::${input.id()}`,
+      params: { id: input.id() },
+    },
+    shared: { data: { session: { get: () => undefined, message: { get: () => undefined } } } },
+    workspace: { directory: () => homeFixtureProject.worktree },
+    isDesktop: () => !input.narrow(),
+    layout: {
+      tabs: () => ({
+        active: () => input.tabs().active,
+        all: () => [input.tabs().active],
+        open: async () => undefined,
+      }),
+    },
+  } as unknown as SessionModel
+}
+
+function DestinationRoute(props: { scenario: string }) {
+  const params = useParams<{ id: string }>()
+  const narrow = () => props.scenario === "home-narrow"
+  const [tabs, setTabs] = createStore({ active: "review" })
+  const [mobileTab, setMobileTab] = createSignal("session")
+  const [execution, setExecution] = createSignal<ExecutionModel>()
+  const session = destinationSession({ id: () => params.id, narrow, tabs: () => tabs })
+  return (
+    <>
+      <div data-testid="destination-session">{params.id}</div>
+      <div data-testid="destination-mobile-tab">{mobileTab()}</div>
+      <SessionExecutionProvider
+        session={session}
+        attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
+        onOverviewRequested={(model) =>
+          openExecutionOverview({
+            execution: model,
+            openTab: () => setTabs("active", "execution"),
+            showMobile: () => {
+              if (narrow()) setMobileTab("execution")
+            },
+          })
+        }
+        onModel={setExecution}
+      >
+        <Show when={execution()}>
+          {(model) => (
+            <>
+              <div data-testid="destination-subview">{model().subview()}</div>
+              <Show when={tabs.active === "execution"}>
+                <ExecutionPanel model={model()} presentation={narrow() ? "mobile" : "panel"} />
+              </Show>
+            </>
+          )}
+        </Show>
+      </SessionExecutionProvider>
+    </>
+  )
+}
+
+function HomeFixtureRoot(props: ParentProps) {
+  return (
+    <LanguageProvider locale="en">
+      <UiI18nBridge>
+        <DialogProvider>
+          <QueryClientProvider client={desktopQueryClient}>
+            <SettingsProvider>
+              <ServersProvider servers={[desktopServer]}>
+                <TabsProvider>
+                  <GlobalProvider>
+                    <ServerProvider conn={desktopServer}>{props.children}</ServerProvider>
+                  </GlobalProvider>
+                </TabsProvider>
+              </ServersProvider>
+            </SettingsProvider>
+          </QueryClientProvider>
+        </DialogProvider>
+      </UiI18nBridge>
+    </LanguageProvider>
   )
 }
 
@@ -721,25 +804,10 @@ function mountHomeFixture(scenario: string) {
   document.body.appendChild(host)
   render(
     () => (
-      <LanguageProvider locale="en">
-        <UiI18nBridge>
-          <DialogProvider>
-            <QueryClientProvider client={desktopQueryClient}>
-              <SettingsProvider>
-                <ServersProvider servers={[desktopServer]}>
-                  <TabsProvider>
-                    <GlobalProvider>
-                      <ServerProvider conn={desktopServer}>
-                        <HomeExecutionFixture scenario={scenario} />
-                      </ServerProvider>
-                    </GlobalProvider>
-                  </TabsProvider>
-                </ServersProvider>
-              </SettingsProvider>
-            </QueryClientProvider>
-          </DialogProvider>
-        </UiI18nBridge>
-      </LanguageProvider>
+      <MemoryRouter root={HomeFixtureRoot}>
+        <Route path="/" component={() => <HomeDirectRoute scenario={scenario} />} />
+        <Route path="/server/:serverKey/session/:id" component={() => <DestinationRoute scenario={scenario} />} />
+      </MemoryRouter>
     ),
     host,
   )
@@ -761,8 +829,7 @@ export async function mountExecutionFixture(input: {
   if (
     scenario === "session-execution-live" ||
     scenario === "evidence-production" ||
-    scenario === "session-execution-agents" ||
-    scenario === "session-execution-handoff"
+    scenario === "session-execution-agents"
   ) {
     mountLiveSessionHeader(scenario)
     return undefined as unknown as ReturnType<typeof render>

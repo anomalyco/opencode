@@ -26,6 +26,7 @@ export function createSessionExecutionModel(input: {
   attention: Accessor<ExecutionAttention>
   reviewRequest?: () => void
   openSession?: (sessionID: string) => void
+  onOverviewRequested?: (model: ExecutionModel) => void
 }): ExecutionModel {
   const server = useServer()
   const sdk = useServerSDK()
@@ -110,8 +111,7 @@ export function createSessionExecutionModel(input: {
   })
   onMount(() => {
     if (!consumeExecutionOverview(input.session.identity.sessionID())) return
-    execution.model.selectSubview("agents")
-    void input.session.layout.tabs().open(SESSION_EXECUTION_TAB)
+    input.onOverviewRequested?.(execution.model)
   })
   return execution.model
 }
@@ -122,6 +122,7 @@ export function SessionExecutionProvider(
     attention: Accessor<ExecutionAttention>
     reviewRequest?: () => void
     openSession?: (sessionID: string) => void
+    onOverviewRequested?: (model: ExecutionModel) => void
     onModel: (model: ExecutionModel) => void
   }>,
 ) {
@@ -130,6 +131,7 @@ export function SessionExecutionProvider(
     attention: props.attention,
     reviewRequest: props.reviewRequest,
     openSession: props.openSession,
+    onOverviewRequested: props.onOverviewRequested,
   })
   createEffect(() => props.onModel(execution))
   return props.children

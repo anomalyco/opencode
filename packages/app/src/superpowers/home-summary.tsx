@@ -1,10 +1,11 @@
 import type { OpenCodeEvent, RpcCallOptions, RpcClient } from "@opencode/client/promise"
 import { ChangedSchema, ExecutionRpc, type RunSummary } from "@bearmanser/opencode-superpowers-execution/contract"
-import { Show, createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Show, createEffect, onCleanup, type Accessor } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { eventLocationDirectory, preferredRun, type ExecutionEventSource } from "./bridge-client"
 import { scopeKey, type ExecutionScope } from "./identity"
+import type { ExecutionModel } from "./model"
 
 const CHANGED_EVENT = "rpc.superpowers.execution.v1.changed"
 
@@ -37,6 +38,11 @@ export function homeSummaryRequests(scopes: ExecutionScope[]): HomeSummaryReques
   })
 }
 
+export type HomeSummaryEntry = {
+  summary: RunSummary
+  stale: boolean
+}
+
 export function createHomeExecutionSummaries(input: {
   serverKey: Accessor<string | undefined>
   roots: Accessor<ExecutionScope[]>
@@ -45,9 +51,10 @@ export function createHomeExecutionSummaries(input: {
   connection: Accessor<boolean>
 }) {
   const [summaries, setSummaries] = createStore<Record<string, RunSummary | undefined>>({})
-  const [failed, setFailed] = createSignal(false)
+  const [failures, setFailures] = createStore<Record<string, boolean | undefined>>({})
   let generation = 0
   let loadedKey: string | undefined
+  let activeServerKey: string | undefined
   let controller: AbortController | undefined
   let listener: ExecutionEventSource | undefined
   let unsubscribe: (() => void) | undefined
@@ -66,9 +73,16 @@ export function createHomeExecutionSummaries(input: {
     })
   }
 
-  function stale() {
-    const any = selected().some((root) => summaries[root.rootSessionID] !== undefined)
-    return any && (!input.connection() || failed())
+  function entry(scope: ExecutionScope): HomeSummaryEntry | undefined {
+    const key = scopeKey(scope)
+    if (!selected().some((root) => scopeKey(root) === key)) return
+    const summary = summaries[key]
+    if (!summary) return
+    return { summary, stale: !input.connection() || !!failures[key] }
+  }
+
+  function batchScope(request: HomeSummaryRequest, rootSessionID: string): ExecutionScope {
+    return { serverKey: request.serverKey, ownerDirectory: request.ownerDirectory, rootSessionID }
   }
 
   async function load(requests: HomeSummaryRequest[], requestGeneration: number) {
@@ -88,15 +102,18 @@ export function createHomeExecutionSummaries(input: {
       })),
     )
     if (disposed || generation !== requestGeneration) return
-    setFailed(results.some((result) => result.page === undefined))
     for (const { batch, page } of results) {
-      if (!page) continue
+      if (!page) {
+        for (const rootSessionID of batch.rootSessionIDs) setFailures(scopeKey(batchScope(batch, rootSessionID)), true)
+        continue
+      }
       const items = new Map<string, RunSummary[]>()
       for (const item of page.items) {
         items.set(item.rootSessionID, [...(items.get(item.rootSessionID) ?? []), item])
       }
       for (const rootSessionID of batch.rootSessionIDs) {
-        setSummaries(rootSessionID, preferredRun(items.get(rootSessionID) ?? []))
+        setFailures(scopeKey(batchScope(batch, rootSessionID)), false)
+        setSummaries(scopeKey(batchScope(batch, rootSessionID)), preferredRun(items.get(rootSessionID) ?? []))
       }
     }
   }
@@ -107,11 +124,12 @@ export function createHomeExecutionSummaries(input: {
     if (!directory) return
     const parsed = ChangedSchema.safeParse(event.data)
     if (!parsed.success) return
-    const roots = selected()
-    if (!roots.some((root) => root.ownerDirectory === directory)) return
-    if (!roots.some((root) => root.rootSessionID === parsed.data.rootSessionID)) return
+    const tracked = selected().some(
+      (root) => root.ownerDirectory === directory && root.rootSessionID === parsed.data.rootSessionID,
+    )
+    if (!tracked) return
     loadedKey = undefined
-    reconcile()
+    refresh()
   }
 
   function ensureListener() {
@@ -122,9 +140,19 @@ export function createHomeExecutionSummaries(input: {
     listener = events
   }
 
-  function reconcile() {
+  function clearIdentity(serverKey: string | undefined) {
+    if (serverKey === activeServerKey) return
+    activeServerKey = serverKey
+    loadedKey = undefined
+    controller?.abort()
+    setSummaries(reconcile({}))
+    setFailures(reconcile({}))
+  }
+
+  function refresh() {
     if (disposed) return
     ensureListener()
+    clearIdentity(input.serverKey())
     if (!input.connection()) {
       loadedKey = undefined
       controller?.abort()
@@ -145,7 +173,7 @@ export function createHomeExecutionSummaries(input: {
     void load(requests, generation)
   }
 
-  createEffect(reconcile)
+  createEffect(refresh)
 
   onCleanup(() => {
     disposed = true
@@ -155,9 +183,8 @@ export function createHomeExecutionSummaries(input: {
   })
 
   return {
-    summary: (rootSessionID: string) => summaries[rootSessionID],
-    stale,
-    reconcile,
+    entry,
+    reconcile: refresh,
   }
 }
 
@@ -171,6 +198,16 @@ export function consumeExecutionOverview(sessionID: string | undefined) {
   if (!sessionID || !pendingOverview[sessionID]) return false
   setPendingOverview(sessionID, undefined)
   return true
+}
+
+export function openExecutionOverview(input: {
+  execution: ExecutionModel
+  openTab: () => void
+  showMobile: () => void
+}) {
+  input.execution.selectSubview("agents")
+  input.openTab()
+  input.showMobile()
 }
 
 export function ExecutionHomeSummary(props: { summary: RunSummary; stale?: boolean; onOpen: () => void }) {

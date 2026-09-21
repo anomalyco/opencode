@@ -92,6 +92,15 @@ export function createHomeSessionsController(home: HomeController) {
   )
   const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
   const groups = createMemo(() => groupSessions(records(), language))
+  const executionScope = (record: HomeSessionRecord) => {
+    const serverKey = home.selection.value().server
+    if (!serverKey) return
+    return {
+      serverKey,
+      ownerDirectory: record.session.location.directory,
+      rootSessionID: record.session.id,
+    }
+  }
   const openSession = (session: SessionInfo, options?: OpenSessionOptions) => {
     const project = homeProjectForSession(session, home.project.list())
     const conn = home.server.focused()
@@ -316,19 +325,13 @@ export function createHomeSessionsController(home: HomeController) {
       api: () => home.server.focusedContext()?.sdk.api.rpc(ExecutionRpc),
       events: () => home.server.focusedContext()?.sdk.event,
       connection: () => home.server.focusedContext()?.sdk.connection.status() === "connected",
+      scope: executionScope,
       roots: () =>
         groups().flatMap((group) =>
-          group.sessions.flatMap((record) =>
-            record.session.parentID
-              ? []
-              : [
-                  {
-                    serverKey: home.selection.value().server ?? "",
-                    ownerDirectory: record.session.location.directory,
-                    rootSessionID: record.session.id,
-                  },
-                ],
-          ),
+          group.sessions.flatMap((record) => {
+            const scope = record.session.parentID ? undefined : executionScope(record)
+            return scope ? [scope] : []
+          }),
         ),
       open: (record: HomeSessionRecord) => {
         openSession(record.session)

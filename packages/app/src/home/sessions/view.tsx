@@ -1,5 +1,4 @@
 import type { SessionInfo } from "@opencode/client/promise"
-import type { RunSummary } from "@bearmanser/opencode-superpowers-execution/contract"
 import { Key } from "@solid-primitives/keyed"
 import { createMemo, For, Index, onCleanup, Show } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
@@ -15,7 +14,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { sessionLabel } from "@/session/title"
-import { ExecutionHomeSummary } from "@/superpowers/home-summary"
+import { ExecutionHomeSummary, type HomeSummaryEntry } from "@/superpowers/home-summary"
 import { shouldOpenSessionInBackground } from "./open"
 import "./view.css"
 import {
@@ -81,8 +80,7 @@ export type HomeSessionsViewProps = {
   onSearchSelectActive: () => void
   onSearchHighlight: (record: HomeSessionRecord) => void
   onSearchSelect: (record: HomeSessionRecord, options?: OpenSessionOptions) => void
-  executionSummary?: (record: HomeSessionRecord) => RunSummary | undefined
-  executionSummaryStale?: boolean
+  executionSummary?: (record: HomeSessionRecord) => HomeSummaryEntry | undefined
   onOpenExecution?: (record: HomeSessionRecord) => void
 }
 
@@ -663,10 +661,10 @@ function HomeSessionRow(
         </button>
       </Show>
       <Show when={!editor() ? props.executionSummary?.(props.record) : undefined}>
-        {(summary) => (
+        {(entry) => (
           <ExecutionHomeSummary
-            summary={summary()}
-            stale={props.executionSummaryStale}
+            summary={entry().summary}
+            stale={entry().stale}
             onOpen={() => props.onOpenExecution?.(props.record)}
           />
         )}

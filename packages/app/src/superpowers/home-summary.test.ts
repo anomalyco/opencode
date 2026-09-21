@@ -67,14 +67,25 @@ function deferred(): { promise: Promise<unknown>; resolve(value: unknown): void;
 
 function fakeApi() {
   const calls: Call[] = []
+  const failing = new Set<string | undefined>()
   let fullRunFetches = 0
   const api = {
     getSummaries: (input: { rootSessionIDs: string[] }, options?: RpcCallOptions) => {
+      const directory = options?.location?.directory
+      if (failing.has(directory)) {
+        calls.push({
+          rootSessionIDs: input.rootSessionIDs,
+          directory,
+          resolve: () => undefined,
+          reject: () => undefined,
+        })
+        return Promise.reject({ type: "rpc.unavailable", message: "RPC is unavailable" })
+      }
       const next = deferred()
       options?.signal?.addEventListener("abort", () => next.reject(new Error("aborted")))
       calls.push({
         rootSessionIDs: input.rootSessionIDs,
-        directory: options?.location?.directory,
+        directory,
         resolve: (items) => next.resolve({ items }),
         reject: (error) => next.reject(error),
       })
@@ -88,7 +99,13 @@ function fakeApi() {
     capabilities: async () => ({ schemaVersion: 1, pluginVersion: "0.1.0", maxTasks: 500, reporting: "controller" }),
     events: { subscribe: () => ({}) as never, on: () => () => undefined },
   } as unknown as RpcClient<typeof ExecutionRpc, RpcCallOptions>
-  return { api, calls, fullRunFetches: () => fullRunFetches }
+  return {
+    api,
+    calls,
+    fullRunFetches: () => fullRunFetches,
+    failFor: (directory: string | undefined) => failing.add(directory),
+    recover: () => failing.clear(),
+  }
 }
 
 function localEvents() {
@@ -193,8 +210,8 @@ test("the loader fetches summaries per location and never loads a full run", () 
     local.calls[0]?.resolve([summary({ rootSessionID: "root-a", runID: "run-a" })])
     local.calls[1]?.resolve([])
     await settle()
-    expect(loader.summary("root-a")?.runID).toBe("run-a")
-    expect(loader.summary("root-b")).toBeUndefined()
+    expect(loader.entry(scope("wsl", "/a", "root-a"))?.summary.runID).toBe("run-a")
+    expect(loader.entry(scope("wsl", "/b", "root-b"))).toBeUndefined()
     expect(local.fullRunFetches()).toBe(0)
   }))
 
@@ -238,11 +255,11 @@ test("a late response from the previous server is ignored", () =>
     expect(local.calls).toHaveLength(2)
     local.calls[1]?.resolve([summary({ rootSessionID: "root-b", runID: "run-b" })])
     await settle()
-    expect(loader.summary("root-b")?.runID).toBe("run-b")
+    expect(loader.entry(scope("ssh", "/a", "root-b"))?.summary.runID).toBe("run-b")
     local.calls[0]?.resolve([summary({ rootSessionID: "root-a", runID: "run-a" })])
     await settle()
-    expect(loader.summary("root-a")).toBeUndefined()
-    expect(loader.summary("root-b")?.runID).toBe("run-b")
+    expect(loader.entry(scope("wsl", "/a", "root-a"))).toBeUndefined()
+    expect(loader.entry(scope("ssh", "/a", "root-b"))?.summary.runID).toBe("run-b")
   }))
 
 test("the preferred summary keeps the active run over a newer cancelled run", () =>
@@ -265,15 +282,15 @@ test("the preferred summary keeps the active run over a newer cancelled run", ()
       summary({ rootSessionID: "root-a", runID: "run-active", updatedAt: 10 }),
     ])
     await settle()
-    expect(loader.summary("root-a")?.runID).toBe("run-active")
+    expect(loader.entry(scope("wsl", "/a", "root-a"))?.summary.runID).toBe("run-active")
   }))
 
-test("a failed refetch keeps the previous summary and marks it stale", () =>
+test("identical root IDs in different locations never share a summary", () =>
   run(async () => {
     const local = fakeApi()
     const events = localEvents()
     const [serverKey] = createSignal("wsl")
-    const [roots] = createSignal([scope("wsl", "/a", "root-a")])
+    const [roots] = createSignal([scope("wsl", "/a", "shared"), scope("wsl", "/b", "shared")])
     const loader = createHomeExecutionSummaries({
       serverKey,
       roots,
@@ -283,23 +300,20 @@ test("a failed refetch keeps the previous summary and marks it stale", () =>
     })
     loader.reconcile()
     await settle()
-    local.calls[0]?.resolve([summary({ rootSessionID: "root-a", runID: "run-a" })])
+    expect(local.calls.map((call) => call.directory)).toEqual(["/a", "/b"])
+    local.calls[0]?.resolve([summary({ rootSessionID: "shared", runID: "run-a" })])
+    local.calls[1]?.resolve([summary({ rootSessionID: "shared", runID: "run-b" })])
     await settle()
-    expect(loader.stale()).toBe(false)
-    events.emit({ rootSessionID: "root-a", runID: "run-a", revision: 2 }, "/a")
-    await settle()
-    local.calls[1]?.reject({ type: "rpc.unavailable", message: "RPC is unavailable: superpowers.execution.v1" })
-    await settle()
-    expect(loader.summary("root-a")?.runID).toBe("run-a")
-    expect(loader.stale()).toBe(true)
+    expect(loader.entry(scope("wsl", "/a", "shared"))?.summary.runID).toBe("run-a")
+    expect(loader.entry(scope("wsl", "/b", "shared"))?.summary.runID).toBe("run-b")
   }))
 
-test("an invalidation for a tracked root refetches and applies the newer summary", () =>
+test("changing the selected server excludes the previous server's summaries immediately", () =>
   run(async () => {
     const local = fakeApi()
     const events = localEvents()
-    const [serverKey] = createSignal("wsl")
-    const [roots] = createSignal([scope("wsl", "/a", "root-a")])
+    const [serverKey, setServerKey] = createSignal("wsl")
+    const [roots, setRoots] = createSignal([scope("wsl", "/a", "shared")])
     const loader = createHomeExecutionSummaries({
       serverKey,
       roots,
@@ -309,14 +323,43 @@ test("an invalidation for a tracked root refetches and applies the newer summary
     })
     loader.reconcile()
     await settle()
-    local.calls[0]?.resolve([summary({ rootSessionID: "root-a", runID: "run-a", verified: 0, total: 2 })])
+    local.calls[0]?.resolve([summary({ rootSessionID: "shared", runID: "run-a" })])
     await settle()
-    events.emit({ rootSessionID: "root-a", runID: "run-a", revision: 2 }, "/a")
+    expect(loader.entry(scope("wsl", "/a", "shared"))?.summary.runID).toBe("run-a")
+    setServerKey("ssh")
+    setRoots([scope("ssh", "/a", "shared")])
+    loader.reconcile()
+    await settle()
+    expect(loader.entry(scope("wsl", "/a", "shared"))).toBeUndefined()
+    expect(loader.entry(scope("ssh", "/a", "shared"))).toBeUndefined()
+    expect(local.calls).toHaveLength(2)
+  }))
+
+test("an invalidation must match one scope's location and root together", () =>
+  run(async () => {
+    const local = fakeApi()
+    const events = localEvents()
+    const [serverKey] = createSignal("wsl")
+    const [roots] = createSignal([scope("wsl", "/a", "root-a"), scope("wsl", "/b", "root-b")])
+    const loader = createHomeExecutionSummaries({
+      serverKey,
+      roots,
+      api: () => local.api,
+      events: () => events.source,
+      connection: () => true,
+    })
+    loader.reconcile()
+    await settle()
+    local.calls[0]?.resolve([])
+    local.calls[1]?.resolve([])
+    await settle()
+    events.emit({ rootSessionID: "root-a", runID: "run-a", revision: 2 }, "/b")
+    events.emit({ rootSessionID: "root-b", runID: "run-b", revision: 2 }, "/a")
     await settle()
     expect(local.calls).toHaveLength(2)
-    local.calls[1]?.resolve([summary({ rootSessionID: "root-a", runID: "run-a", verified: 1, total: 2 })])
+    events.emit({ rootSessionID: "root-a", runID: "run-a", revision: 2 }, "/a")
     await settle()
-    expect(loader.summary("root-a")?.progress.verified).toBe(1)
+    expect(local.calls).toHaveLength(4)
   }))
 
 test("an invalidation for another location or root is ignored", () =>
@@ -341,6 +384,61 @@ test("an invalidation for another location or root is ignored", () =>
     events.emit({ rootSessionID: "root-a", runID: "run-a", revision: 2 }, undefined)
     await settle()
     expect(local.calls).toHaveLength(1)
+  }))
+
+test("only the failed scope is marked stale", () =>
+  run(async () => {
+    const local = fakeApi()
+    const events = localEvents()
+    const [serverKey] = createSignal("wsl")
+    const [roots] = createSignal([scope("wsl", "/a", "root-a"), scope("wsl", "/b", "root-b")])
+    const loader = createHomeExecutionSummaries({
+      serverKey,
+      roots,
+      api: () => local.api,
+      events: () => events.source,
+      connection: () => true,
+    })
+    loader.reconcile()
+    await settle()
+    local.calls[0]?.resolve([summary({ rootSessionID: "root-a", runID: "run-a" })])
+    local.calls[1]?.resolve([summary({ rootSessionID: "root-b", runID: "run-b" })])
+    await settle()
+    expect(loader.entry(scope("wsl", "/a", "root-a"))?.stale).toBe(false)
+    expect(loader.entry(scope("wsl", "/b", "root-b"))?.stale).toBe(false)
+    local.failFor("/b")
+    events.emit({ rootSessionID: "root-a", runID: "run-a", revision: 2 }, "/a")
+    await settle()
+    local.calls[2]?.resolve([summary({ rootSessionID: "root-a", runID: "run-a", verified: 1, total: 2 })])
+    await settle()
+    expect(loader.entry(scope("wsl", "/a", "root-a"))?.stale).toBe(false)
+    expect(loader.entry(scope("wsl", "/b", "root-b"))?.summary.runID).toBe("run-b")
+    expect(loader.entry(scope("wsl", "/b", "root-b"))?.stale).toBe(true)
+  }))
+
+test("a failed refetch keeps the previous summary and marks it stale", () =>
+  run(async () => {
+    const local = fakeApi()
+    const events = localEvents()
+    const [serverKey] = createSignal("wsl")
+    const [roots] = createSignal([scope("wsl", "/a", "root-a")])
+    const loader = createHomeExecutionSummaries({
+      serverKey,
+      roots,
+      api: () => local.api,
+      events: () => events.source,
+      connection: () => true,
+    })
+    loader.reconcile()
+    await settle()
+    local.calls[0]?.resolve([summary({ rootSessionID: "root-a", runID: "run-a" })])
+    await settle()
+    expect(loader.entry(scope("wsl", "/a", "root-a"))?.stale).toBe(false)
+    local.failFor("/a")
+    events.emit({ rootSessionID: "root-a", runID: "run-a", revision: 2 }, "/a")
+    await settle()
+    expect(loader.entry(scope("wsl", "/a", "root-a"))?.summary.runID).toBe("run-a")
+    expect(loader.entry(scope("wsl", "/a", "root-a"))?.stale).toBe(true)
   }))
 
 test("no roots and no connection make no requests", () =>
@@ -397,10 +495,10 @@ test("losing the connection keeps loaded summaries and marks them stale", () =>
     await settle()
     local.calls[0]?.resolve([summary({ rootSessionID: "root-a", runID: "run-a" })])
     await settle()
-    expect(loader.stale()).toBe(false)
+    expect(loader.entry(scope("wsl", "/a", "root-a"))?.stale).toBe(false)
     setConnection(false)
     loader.reconcile()
     await settle()
-    expect(loader.summary("root-a")?.runID).toBe("run-a")
-    expect(loader.stale()).toBe(true)
+    expect(loader.entry(scope("wsl", "/a", "root-a"))?.summary.runID).toBe("run-a")
+    expect(loader.entry(scope("wsl", "/a", "root-a"))?.stale).toBe(true)
   }))

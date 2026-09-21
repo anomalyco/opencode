@@ -42,6 +42,7 @@ import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
 import { SESSION_EXECUTION_TAB } from "@/shell/state/session-tabs"
 import { SessionExecutionProvider } from "@/superpowers/session-execution"
+import { openExecutionOverview } from "@/superpowers/home-summary"
 import { createExecutionExpansion, executionPresentation } from "@/superpowers/expanded"
 import type { ExecutionModel } from "@/superpowers/model"
 
@@ -216,10 +217,15 @@ export function SessionScreen(props: { session: SessionModel }) {
     panelWidth: () => session.layout.view().reviewPanel.width(),
     resizePanel: (width) => session.layout.view().reviewPanel.resize(width),
   })
-  const openExecutionOverview = () => {
-    execution()?.selectSubview("agents")
-    void session.layout.tabs().open(SESSION_EXECUTION_TAB)
-    if (!isDesktop()) review.mobile.setTab("execution")
+  const showExecutionOverview = (model = execution()) => {
+    if (!model) return
+    openExecutionOverview({
+      execution: model,
+      openTab: () => void session.layout.tabs().open(SESSION_EXECUTION_TAB),
+      showMobile: () => {
+        if (!isDesktop()) review.mobile.setTab("execution")
+      },
+    })
   }
   const selectMobileView = (view: SessionMobileView) => {
     if (view === "execution") {
@@ -277,7 +283,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                           session.layout.view().terminal.close()
                         }}
                         backgroundTasks={composer.requests.background.tasks()}
-                        onViewAgents={openExecutionOverview}
+                        onViewAgents={showExecutionOverview}
                       />
                     )}
                   </Show>
@@ -313,7 +319,7 @@ export function SessionScreen(props: { session: SessionModel }) {
         setContentRef={timeline.view.setContentRef}
         diffs={review.details.diffs}
         onReview={review.open}
-        onViewAgents={openExecutionOverview}
+        onViewAgents={showExecutionOverview}
         workspaceMoveEligible={composer.workspaceMoveEligible()}
         onSummaryOpenChange={review.details.setOpen}
         anchor={timeline.view.anchor}
@@ -391,6 +397,7 @@ export function SessionScreen(props: { session: SessionModel }) {
       session={session}
       attention={executionAttention}
       reviewRequest={reviewNativeRequest}
+      onOverviewRequested={showExecutionOverview}
       onModel={setExecution}
     >
       <div class="relative flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">

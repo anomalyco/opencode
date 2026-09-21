@@ -341,7 +341,20 @@ story("home leaves ordinary sessions unchanged", async ({ page }) => {
   await expect(page.getByTestId("home-root-ordinary").getByTestId("execution-summary")).toHaveCount(0)
   await expect(page.getByTestId("full-run-fetch-count")).toHaveText("0")
   await page.getByTestId("home-root-tracked").getByRole("button", { name: "Open execution overview" }).click()
-  await expect(page.getByTestId("navigation-target")).toHaveText("wsl/root-tracked/execution")
+  await expect(page.getByTestId("destination-session")).toHaveText("root-tracked")
+  await expect(page.getByTestId("destination-subview")).toHaveText("agents")
+  await expect(page.getByTestId("execution-panel")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+})
+
+story("home direct action selects the mobile execution view", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 })
+  await openExecutionFixture(page, "home-narrow")
+  await page.getByTestId("home-root-tracked").getByRole("button", { name: "Open execution overview" }).click()
+  await expect(page.getByTestId("destination-session")).toHaveText("root-tracked")
+  await expect(page.getByTestId("destination-subview")).toHaveText("agents")
+  await expect(page.getByTestId("destination-mobile-tab")).toHaveText("execution")
+  await expect(page.getByTestId("execution-panel")).toHaveAttribute("data-presentation", "mobile")
 })
 
 story("home summary shows a cancelled run without hiding its fraction", async ({ page }) => {
@@ -385,11 +398,6 @@ story("home rows stay editable while summaries update", async ({ page }) => {
   await page.keyboard.press("Escape")
   await expect(row.getByText("2/2", { exact: true })).toBeVisible()
   await expect(row.getByTestId("execution-summary")).toBeVisible()
-})
-
-story("execution shortcut opens agents through the one-shot home handoff", async ({ page }) => {
-  await openExecutionFixture(page, "session-execution-handoff")
-  await expect(page.getByTestId("execution-tab-active")).toHaveText("execution")
 })
 
 story("desktop summary composition opens agents", async ({ page }) => {

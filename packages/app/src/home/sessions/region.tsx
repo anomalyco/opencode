@@ -36,8 +36,10 @@ export function HomeSessions(props: {
           searchNoResultsLabel={props.search.result.noResultsLabel()}
           titleOpacity={props.scroll.header.titleOpacity}
           isOpenTab={props.sessions.tab.isOpen}
-          executionSummary={(record) => execution.summary(record.session.id)}
-          executionSummaryStale={execution.stale()}
+          executionSummary={(record) => {
+            const scope = props.sessions.execution.scope(record)
+            return scope ? execution.entry(scope) : undefined
+          }}
           onOpenExecution={props.sessions.execution.open}
           onCreateSession={props.sessions.session.create}
           onOpenSession={props.sessions.session.open}
