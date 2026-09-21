@@ -29,6 +29,7 @@ type Input = {
   sessionID: string
   location: LocationRef
   message: string
+  command?: string
   files: File[]
   agent?: string
   model?: Model
@@ -68,10 +69,7 @@ type FormRequest = Extract<V2Event, { type: "form.created" }>["data"]["form"]
 const GLOBAL_FORM_SESSION_ID = "global"
 
 export async function runNonInteractivePrompt(input: Input) {
-  const slash = input.message.match(/^\/(\S+)(?:\s([\s\S]*))?$/)
-  const command = slash
-    ? (await input.client.command.list({ location: input.location })).data.find((item) => item.name === slash[1])
-    : undefined
+  const command = input.command
   // Commands choose their own prompt IDs and can emit more than one message.
   const boundary = command
     ? (await input.client.message.list({ sessionID: input.sessionID, limit: 1, order: "desc" })).data[0]?.id
@@ -680,15 +678,12 @@ export async function runNonInteractivePrompt(input: Input) {
     admission = new AbortController()
     const payload = {
       sessionID: input.sessionID,
-      text: [
-        command ? (slash?.[2] ?? "") : input.message,
-        ...prepared.flatMap((file) => (file.text ? [file.text] : [])),
-      ].join("\n\n"),
+      text: [input.message, ...prepared.flatMap((file) => (file.text ? [file.text] : []))].join("\n\n"),
       files: prepared.flatMap((file) => (file.attachment ? [file.attachment] : [])),
       delivery: "steer" as const,
     }
     const response = await (command
-      ? input.client.session.command({ ...payload, name: command.name }, { signal: admission.signal })
+      ? input.client.session.command({ ...payload, name: command }, { signal: admission.signal })
       : input.client.session.prompt({ ...payload, id: messageID }, { signal: admission.signal }))
       .then(() => true)
       .catch(async (error) => {

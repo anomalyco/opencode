@@ -219,7 +219,7 @@ async function run(input: {
   wait?: () => Promise<void>
   terminalDelay?: number
   message?: string
-  commands?: { name: string }[]
+  command?: string
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
@@ -242,7 +242,6 @@ async function run(input: {
     }
   })()
   spyOn(sdk.event, "subscribe").mockImplementation(() => stream)
-  spyOn(sdk.command, "list").mockImplementation(() => ok({ location, data: input.commands ?? [] }) as never)
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.session.form, "list").mockImplementation(
     (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
@@ -283,6 +282,7 @@ async function run(input: {
     sessionID: "ses_1",
     location,
     message: input.message ?? "hello",
+    command: input.command,
     files: [],
     thinking: false,
     format: input.format ?? "default",
@@ -322,10 +322,10 @@ afterEach(() => {
 })
 
 describe("runNonInteractivePrompt", () => {
-  test("runs slash commands using server-owned prompt IDs", async () => {
+  test("runs explicit commands using server-owned prompt IDs", async () => {
     const sdk = await run({
-      message: "/review some arguments",
-      commands: [{ name: "review" }],
+      message: "some arguments",
+      command: "review",
       turn: (id) => [prompted(id), settled()],
     })
     expect(sdk.session.command).toHaveBeenCalledWith(
@@ -337,8 +337,8 @@ describe("runNonInteractivePrompt", () => {
 
   test("streams command output even though the server assigns the prompt ID", async () => {
     const output = await capture({
-      message: "/review",
-      commands: [{ name: "review" }],
+      message: "",
+      command: "review",
       format: "json",
       turn: successfulGrep,
     })
@@ -346,7 +346,7 @@ describe("runNonInteractivePrompt", () => {
     expect(output.exitCode ?? 0).toBe(0)
   })
 
-  test("preserves unknown slash names as prompt text", async () => {
+  test("preserves slash names as prompt text without a command flag", async () => {
     const sdk = await run({ message: "/unknown text", turn: (id) => [prompted(id), settled()] })
     expect(sdk.session.prompt).toHaveBeenCalledWith(
       expect.objectContaining({ text: "/unknown text" }),
@@ -355,7 +355,7 @@ describe("runNonInteractivePrompt", () => {
   })
 
   test("finishes commands that do not submit a prompt", async () => {
-    const sdk = await run({ message: "/noop", commands: [{ name: "noop" }], turn: () => [], wait: async () => {} })
+    const sdk = await run({ message: "", command: "noop", turn: () => [], wait: async () => {} })
     expect(sdk.session.command).toHaveBeenCalled()
   })
 

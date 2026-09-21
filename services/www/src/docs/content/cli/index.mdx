@@ -33,13 +33,15 @@ other workflows that need model output directly in the terminal.
 opencode run "Explain this repository"
 ```
 
-Start the prompt with `/command` to invoke a registered command:
+Use `--command` to invoke a registered command. The message and any piped input become its arguments:
 
 ```bash
-opencode run "/review check the latest changes"
+opencode run --command review "check the latest changes"
+opencode run --command review
 ```
 
-Unrecognized commands are sent as ordinary prompt text.
+Unknown commands fail with an error. Without `--command`, the message is sent as ordinary prompt text, including any
+leading `/name`.
 
 ## Mini
 
