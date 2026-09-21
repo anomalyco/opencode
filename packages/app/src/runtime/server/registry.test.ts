@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { canRemoveServer, createServerProjects, resolveServerList, ServerConnection } from "./registry"
-import { Schema } from "effect"
 import { serverState } from "./persistence"
 import { createStore } from "solid-js/store"
 import { ServerScope } from "./scope"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 
 function serverSchema() {
-  return Persistence.withInitial(serverState(), {
+  return Codec.withInitial(serverState(), {
     list: [],
     hidden: {},
     projects: {},
@@ -19,7 +18,7 @@ function serverSchema() {
 describe("resolveServerList", () => {
   test("lets startup auth_token credentials override a persisted same-url server", () => {
     const list = resolveServerList({
-      stored: Schema.decodeUnknownSync(serverSchema())({ list: [{ url: "https://server.example.test" }] }).list,
+      stored: Codec.decodeOrThrow(serverSchema(), { list: [{ url: "https://server.example.test" }] }).list,
       props: [
         {
           type: "http",
@@ -44,7 +43,7 @@ describe("resolveServerList", () => {
 
   test("keeps persisted credentials when startup has no auth_token", () => {
     const list = resolveServerList({
-      stored: Schema.decodeUnknownSync(serverSchema())({
+      stored: Codec.decodeOrThrow(serverSchema(), {
         list: [{ url: "https://server.example.test", password: "saved" }],
       }).list,
       props: [{ type: "http", http: { url: "https://server.example.test" } }],
@@ -77,7 +76,7 @@ test("treats WSL sidecars as remote server connections", () => {
 })
 
 test("keeps exact persisted server identities and prevents removing provided servers", () => {
-  const stored = Schema.decodeUnknownSync(serverSchema())({
+  const stored = Codec.decodeOrThrow(serverSchema(), {
     list: ["http://localhost:4096", "http://localhost:4096/", "http://127.0.0.1:4096"],
   }).list
   expect(resolveServerList({ stored }).map((server) => String(ServerConnection.key(server)))).toEqual([
@@ -91,7 +90,7 @@ test("keeps exact persisted server identities and prevents removing provided ser
 })
 
 test("project actions update schema-derived state and follow dynamic server scopes", () => {
-  const [store, setStore] = createStore(Schema.decodeUnknownSync(serverSchema())({}))
+  const [store, setStore] = createStore(Codec.decodeOrThrow(serverSchema(), {}))
   const props: { server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key } = {
     server: ServerConnection.Key.make("https://remote.example"),
   }
@@ -115,3 +114,4 @@ test("project actions update schema-derived state and follow dynamic server scop
   expect(store.projects.local).toEqual([{ worktree: "/local", expanded: true }])
   expect(store.projects[props.server]).toEqual([{ worktree: "/remote", expanded: false }])
 })
+

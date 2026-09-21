@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
 import { IconState, ModelState, ProjectState, VcsState, serverState } from "./persistence"
 import { createRoot } from "solid-js"
 import { isServer } from "solid-js/web"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 
 const initial = { list: [], hidden: {}, projects: {}, lastProject: {}, recentlyClosed: {} }
 
 function serverSchema(canonical?: () => string | undefined) {
-  return Persistence.withInitial(serverState(canonical), initial)
+  return Codec.withInitial(serverState(canonical), initial)
 }
 
 describe("server persistence schema", () => {
@@ -29,7 +28,7 @@ describe("server persistence schema", () => {
       ],
       projects: { local: [{ worktree: "/project", expanded: true }] },
     }
-    const state = Schema.decodeUnknownSync(schema)(input)
+    const state = Codec.decodeOrThrow(schema, input)
     expect(state).toEqual({
       list: [
         { type: "http", http: { url: "http://localhost:4096" } },
@@ -48,13 +47,13 @@ describe("server persistence schema", () => {
       recentlyClosed: {},
     })
     expect(input.list[1]).toHaveProperty("username", "legacy")
-    const encoded = Schema.encodeSync(schema)(state)
+    const encoded = schema.encode(state)
     expect(encoded).toEqual(state)
-    expect(Schema.decodeUnknownSync(schema)(encoded)).toEqual(state)
+    expect(Codec.decodeOrThrow(schema, encoded)).toEqual(state)
   })
 
   test("defaults missing or malformed fields and drops invalid entries independently", () => {
-    const decode = Schema.decodeUnknownSync(serverSchema())
+    const decode = ((input: unknown) => Codec.decodeOrThrow(serverSchema(), input))
     const empty = { list: [], hidden: {}, projects: {}, lastProject: {}, recentlyClosed: {} }
     expect(decode({})).toEqual(empty)
     expect(decode({ list: null, hidden: [], projects: false, lastProject: 1, recentlyClosed: "bad" })).toEqual(empty)
@@ -74,7 +73,7 @@ describe("server persistence schema", () => {
 
   test("moves canonical project buckets without changing server keys or unrelated scopes", () => {
     const schema = serverSchema(() => "https://opencode.example.com")
-    const state = Schema.decodeUnknownSync(schema)({
+    const state = Codec.decodeOrThrow(schema, {
       list: ["https://opencode.example.com"],
       hidden: { "https://opencode.example.com": true },
       projects: {
@@ -100,14 +99,14 @@ describe("server persistence schema", () => {
     expect(state.list[0]?.http.url).toBe("https://opencode.example.com")
     expect(state.hidden).toEqual({ "https://opencode.example.com": true })
     expect(state.recentlyClosed).toEqual({ local: ["/closed"], "https://opencode.example.com": ["/old-closed"] })
-    expect(Schema.encodeSync(schema)(state)).toEqual(state)
-    expect(Schema.decodeUnknownSync(schema)(state)).toEqual(state)
+    expect(schema.encode(state)).toEqual(state)
+    expect(Codec.decodeOrThrow(schema, state)).toEqual(state)
   })
 
   test("reads the latest canonical local prop on each decode", () => {
     const props: { canonicalLocalServer?: string } = {}
     const schema = serverSchema(() => props.canonicalLocalServer)
-    const decode = Schema.decodeUnknownSync(schema)
+    const decode = ((input: unknown) => Codec.decodeOrThrow(schema, input))
     const input = {
       projects: { remote: [{ worktree: "/project", expanded: true }] },
       lastProject: { remote: "/project" },
@@ -122,7 +121,7 @@ describe("server persistence schema", () => {
   })
 
   test("migrates a last project without a project list", () => {
-    expect(Schema.decodeUnknownSync(serverSchema(() => "remote"))({ lastProject: { remote: "/project" } })).toEqual({
+    expect(Codec.decodeOrThrow(serverSchema(() => "remote"), { lastProject: { remote: "/project" } })).toEqual({
       list: [],
       hidden: {},
       projects: {},
@@ -134,7 +133,7 @@ describe("server persistence schema", () => {
 
 describe("model persistence schema", () => {
   test("defaults missing state and keeps valid entries beside malformed entries", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(ModelState, { user: [], recent: [], variant: {} }))
+    const decode = ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(ModelState, { user: [], recent: [], variant: {} }), input))
     expect(decode({})).toEqual({ user: [], recent: [], variant: {} })
     expect(decode({ user: null, recent: 1, variant: [] })).toEqual({ user: [], recent: [], variant: {} })
     const state = decode({
@@ -155,24 +154,24 @@ describe("model persistence schema", () => {
       recent: [{ providerID: "provider", modelID: "model" }],
       variant: { model: "high" },
     })
-    expect(Schema.encodeSync(ModelState)(state)).toEqual(state)
+    expect(ModelState.encode(state)).toEqual(state)
   })
 })
 
 describe("directory cache schemas", () => {
   test("defaults missing and malformed VCS caches but retains optional branch metadata", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(VcsState, { value: undefined }))
+    const decode = ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(VcsState, { value: undefined }), input))
     expect(decode({})).toEqual({ value: undefined })
     expect(decode({ value: null })).toEqual({ value: undefined })
     expect(decode({ value: { branch: 1 } })).toEqual({ value: undefined })
     expect(decode({ value: { default_branch: "main" } })).toEqual({ value: { default_branch: "main" } })
     const state = decode({ value: { branch: "feature", default_branch: "main", obsolete: true } })
     expect(state).toEqual({ value: { branch: "feature", default_branch: "main" } })
-    expect(Schema.encodeSync(VcsState)(state)).toEqual(state)
+    expect(VcsState.encode(state)).toEqual(state)
   })
 
   test("validates project name, icon overrides and startup commands", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(ProjectState, { value: undefined }))
+    const decode = ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(ProjectState, { value: undefined }), input))
     expect(decode({})).toEqual({ value: undefined })
     expect(decode({ value: [] })).toEqual({ value: undefined })
     expect(decode({ value: { icon: { override: 1 } } })).toEqual({ value: undefined })
@@ -185,7 +184,7 @@ describe("directory cache schemas", () => {
         commands: { start: "bun dev" },
       },
     })
-    expect(Schema.encodeSync(ProjectState)(state)).toEqual(state)
+    expect(ProjectState.encode(state)).toEqual(state)
     expect(state.value).toEqual({
       name: "Project",
       icon: { override: "data:image/png;base64,abc", color: "blue" },
@@ -194,12 +193,12 @@ describe("directory cache schemas", () => {
   })
 
   test("validates optional icon strings", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(IconState, { value: undefined }))
+    const decode = ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(IconState, { value: undefined }), input))
     expect(decode({})).toEqual({ value: undefined })
     expect(decode({ value: 42 })).toEqual({ value: undefined })
     expect(decode({ value: null })).toEqual({ value: undefined })
     expect(decode({ value: "" })).toEqual({ value: "" })
-    expect(Schema.encodeSync(IconState)(decode({ value: "data:image/png;base64,abc" }))).toEqual({
+    expect(IconState.encode(decode({ value: "data:image/png;base64,abc" }))).toEqual({
       value: "data:image/png;base64,abc",
     })
   })
@@ -255,7 +254,7 @@ test.skipIf(isServer)(
       const stored = values.get("opencode.global.dat:server")
       expect(stored).toBeDefined()
       if (!stored) throw new Error("server state was not written")
-      const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(serverSchema()))(stored)
+      const decoded = Codec.decodeOrThrow(Codec.fromJsonString(serverSchema()), stored)
       expect(decoded.projects.local).toEqual([{ worktree: "/project", expanded: true }])
       expect(stored).not.toContain("username")
       expect(decoded.list).toEqual(root.state[0].list)
@@ -264,3 +263,4 @@ test.skipIf(isServer)(
     }
   },
 )
+

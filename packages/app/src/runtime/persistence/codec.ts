@@ -197,6 +197,22 @@ export function record<T, E>(codec: Of<T, E>): Of<Record<string, T>, Record<stri
   )
 }
 
+/** A record that drops entries whose values are invalid, the replacement for `catchDecoding` to none. */
+export function sparseRecord<T, E>(codec: Of<T, E>): Of<Record<string, T>, Record<string, E>> {
+  return make(
+    (input) => {
+      if (typeof input !== "object" || input === null || Array.isArray(input)) return INVALID
+      const out: Record<string, T> = {}
+      for (const [key, item] of Object.entries(input)) {
+        const value = codec.decode(item)
+        if (value !== INVALID) out[key] = value
+      }
+      return out
+    },
+    (value) => Object.fromEntries(Object.entries(value).map(([key, item]) => [key, codec.encode(item)])),
+  )
+}
+
 /** An invalid record becomes empty rather than failing the whole store, like `Persistence.record`. */
 export function lenientRecord<T, E>(codec: Of<T, E>): Of<Record<string, T>, Record<string, E>> {
   const strict = record(codec)
@@ -237,6 +253,21 @@ export function transform<T, E, T2>(
       return value === INVALID ? INVALID : options.decode(value)
     },
     (value) => codec.encode(options.encode(value)),
+  )
+}
+
+/** Decodes with `source`, maps, then validates with `target`: Effect's `decodeTo` with a transform. */
+export function decodeTo<T, E, T2, E2>(
+  source: Of<T, E>,
+  target: Of<T2, E2>,
+  options: { decode: (value: T) => E2; encode: (value: T2) => T },
+): Of<T2, E> {
+  return make(
+    (input) => {
+      const value = source.decode(input)
+      return value === INVALID ? INVALID : target.decode(options.decode(value))
+    },
+    (value) => source.encode(options.encode(value)),
   )
 }
 
@@ -286,8 +317,10 @@ export function withInitial<C extends Any>(definition: C | Migrated<C>, initial:
   const read = isMigrated(definition) ? definition.read : unknown
   return make(
     (input) => {
-      const stored = read.decode(input)
-      if (stored === INVALID) return INVALID
+      const migrated = read.decode(input)
+      if (migrated === INVALID) return INVALID
+      // A migration only describes the fields it rewrites; everything else stored stays as it was.
+      const stored = isObject(input) && isObject(migrated) ? { ...input, ...migrated } : migrated
       return merge(initial, recover(codec, stored, initial))
     },
     (value) => codec.encode(value),
