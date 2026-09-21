@@ -1,4 +1,4 @@
-import { cp, mkdir, lstat, readdir, realpath, rm, writeFile } from "node:fs/promises"
+import { cp, mkdir, lstat, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { buildPackage, packageRoot } from "./build"
@@ -26,9 +26,10 @@ export interface StagedPackage {
 
 export async function buildStagedPackage(options: { readonly directory?: string } = {}): Promise<StagedPackage> {
   const requested = path.resolve(options.directory ?? stagedPackageDirectory)
-  assertSafeStagingTarget(requested)
+  const name = await packageName()
+  await assertSafeStagingTarget(requested)
   await buildPackage()
-  const directory = await claimStagingDirectory(requested)
+  const directory = await claimStagingDirectory(requested, name)
 
   const manifest = await composeManifest()
   await copyPackageFiles(directory)
@@ -40,32 +41,58 @@ export async function buildStagedPackage(options: { readonly directory?: string 
 
 const stagingMarker = ".opencode-superpowers-execution-staging"
 
-function assertSafeStagingTarget(target: string): void {
-  if (within(repositoryRoot, target)) {
-    throw new Error(`refusing to stage inside the repository: ${target}`)
+async function packageName(): Promise<string> {
+  const manifest = (await Bun.file(path.join(packageRoot, "package.json")).json()) as { readonly name: string }
+  return manifest.name
+}
+
+async function physicalPath(target: string): Promise<string> {
+  const remainder: string[] = []
+  let current = path.resolve(target)
+  while (true) {
+    try {
+      return path.join(await realpath(current), ...remainder)
+    } catch {
+      const parent = path.dirname(current)
+      if (parent === current) return path.join(current, ...remainder)
+      remainder.unshift(path.basename(current))
+      current = parent
+    }
   }
-  if (target === path.parse(target).root) {
-    throw new Error(`refusing to stage at the filesystem root: ${target}`)
-  }
-  if (target === path.resolve(os.homedir())) {
+}
+
+async function assertSafeStagingTarget(target: string): Promise<void> {
+  await assertOutsideRepository(await physicalPath(target))
+}
+
+async function assertOutsideRepository(target: string): Promise<void> {
+  const repository = await realpath(repositoryRoot)
+  if (within(repository, target)) throw new Error(`refusing to stage inside the repository: ${target}`)
+  if (target === path.parse(target).root) throw new Error(`refusing to stage at the filesystem root: ${target}`)
+  if (target === (await realpath(os.homedir()))) {
     throw new Error(`refusing to stage at the home directory root: ${target}`)
   }
 }
 
-async function claimStagingDirectory(target: string): Promise<string> {
-  const existing = await lstat(target).catch(() => undefined)
+async function claimStagingDirectory(target: string, name: string): Promise<string> {
+  const physical = await physicalPath(target)
+  await assertOutsideRepository(physical)
+
+  const existing = await lstat(physical).catch(() => undefined)
   if (existing !== undefined) {
-    if (existing.isSymbolicLink()) throw new Error(`refusing to replace a symlink: ${target}`)
-    if (!existing.isDirectory()) throw new Error(`refusing to replace a non-directory: ${target}`)
-    const marker = await lstat(path.join(target, stagingMarker)).catch(() => undefined)
-    if (marker === undefined && (await readdir(target)).length > 0) {
-      throw new Error(`refusing to replace a directory the stager does not own: ${target}`)
+    if (existing.isSymbolicLink()) throw new Error(`refusing to replace a symlink: ${physical}`)
+    if (!existing.isDirectory()) throw new Error(`refusing to replace a non-directory: ${physical}`)
+    const marker = await readFile(path.join(physical, stagingMarker), "utf8").catch(() => undefined)
+    if (marker?.trim() !== name && (await readdir(physical)).length > 0) {
+      throw new Error(`refusing to replace a directory the stager does not own: ${physical}`)
     }
   }
-  await rm(target, { recursive: true, force: true })
-  await mkdir(target, { recursive: true })
-  await writeFile(path.join(target, stagingMarker), "")
-  return target
+
+  await assertOutsideRepository(await physicalPath(physical))
+  await rm(physical, { recursive: true, force: true })
+  await mkdir(physical, { recursive: true })
+  await writeFile(path.join(physical, stagingMarker), `${name}\n`)
+  return physical
 }
 
 async function composeManifest(): Promise<StagedManifest> {

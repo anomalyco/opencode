@@ -73,6 +73,41 @@ test("the stager refuses to delete a directory it does not own", async () => {
   fs.rmSync(foreign, { recursive: true, force: true })
 })
 
+test("the stager rejects a symlinked-ancestor alias into the repository without deleting", async () => {
+  const aliasRoot = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-stager-alias-"))
+  try {
+    const packageSource = fs.realpathSync(path.join(repositoryRoot, "packages/superpowers-execution"))
+    fs.symlinkSync(packageSource, path.join(aliasRoot, "into-repo"), "dir")
+    const target = path.join(aliasRoot, "into-repo", ".stage-alias-guard")
+
+    await expect(buildStagedPackage({ directory: target })).rejects.toThrow(/inside the repository/)
+    expect(fs.existsSync(path.join(packageSource, "src/plugin.ts"))).toBe(true)
+    expect(fs.existsSync(target)).toBe(false)
+  } finally {
+    fs.rmSync(aliasRoot, { recursive: true, force: true })
+  }
+})
+
+test("a symlinked path to a marked staging directory inside the repository cannot cause deletion", async () => {
+  const packageDirectory = path.join(repositoryRoot, "packages/superpowers-execution")
+  const name = (JSON.parse(fs.readFileSync(path.join(packageDirectory, "package.json"), "utf8")) as {
+    readonly name: string
+  }).name
+  const inside = fs.mkdtempSync(path.join(packageDirectory, ".stage-alias-"))
+  const aliasRoot = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-stager-alias-"))
+  try {
+    fs.writeFileSync(path.join(inside, ".opencode-superpowers-execution-staging"), `${name}\n`)
+    const alias = path.join(aliasRoot, "marked")
+    fs.symlinkSync(inside, alias, "dir")
+
+    await expect(buildStagedPackage({ directory: alias })).rejects.toThrow(/inside the repository/)
+    expect(fs.existsSync(path.join(inside, ".opencode-superpowers-execution-staging"))).toBe(true)
+  } finally {
+    fs.rmSync(aliasRoot, { recursive: true, force: true })
+    fs.rmSync(inside, { recursive: true, force: true })
+  }
+})
+
 test("the staged package directory entry loads its built plugin and its dist-relative reporting skill", async () => {
   const artifact = await buildStagedPackage()
   const harness = await pluginHarness({ sessions: [rootSession], plugin: await stagedPlugin(artifact.directory) })
