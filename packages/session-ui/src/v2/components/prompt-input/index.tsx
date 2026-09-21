@@ -12,6 +12,7 @@ import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { AttachmentCardV2 } from "../attachment-card-v2"
 import { CommentCardV2 } from "../comment-card-v2"
+import { swallowBackspacePill } from "./backspace"
 import { typeLabel } from "../../../components/message-file"
 import type {
   PromptInputV2Attachment,
@@ -168,6 +169,20 @@ export function PromptInputV2(props: PromptInputV2Props) {
               const images = props.controller.parts().filter((part) => part.type === "image")
               localInput = true
               props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
+            }}
+            onBeforeInput={(event) => {
+              // Swallow backspace over the trailing atomic pill (see ./backspace.ts):
+              // one backspace removes the pill and its trailing whitespace instead of
+              // deleting the whitespace first and falling into the no-caret state where
+              // the pill is the last node.
+              if (event.inputType !== "deleteContentBackward" || event.isComposing) return
+              if (!swallowBackspacePill(event.currentTarget, "[data-mention]")) return
+              event.preventDefault()
+              // Programmatic DOM mutations do not fire input events; dispatch a synthetic
+              // one so the regular parse-and-write-back path runs (same as onPaste).
+              event.currentTarget.dispatchEvent(
+                new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }),
+              )
             }}
             onKeyDown={(event) => {
               if (props.controller.onKeyDown(event)) return
