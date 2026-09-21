@@ -150,6 +150,60 @@ https://opencode.ai/zen/v1/models
 
 ---
 
+### Jev
+
+Jev er en System One-model fra TypeSafe AI til hurtige, strukturerede beslutninger. I stedet for at generere tekst evaluerer den en `state` ud fra typebestemte spørgsmål og returnerer værdier og sandsynligheder, som din kode kan bruge direkte. Den understøtter ja/nej-spørgsmål (`noul`), multiple choice-spørgsmål (`choice`) og kriteriebaserede spørgsmål (`score`).
+
+Brug din OpenCode Zen API-nøgle med endpointet `https://opencode.ai/zen/v1/systemone`. Dette eksempel kontrollerer, om en supportanmodning haster:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+Du kan stille flere spørgsmål i én anmodning. Jev evaluerer dem parallelt og returnerer hvert svar under det tilsvarende spørgsmåls-ID:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+Brug `jev-1.13-free` i stedet for `jev-1.13` for at bruge den tidsbegrænsede gratis model. Se [TypeSafe AI-dokumentationen](https://docs.typesafe.ai/) for oplysninger om spørgsmålstyper og svarfelter.
+
+---
+
 ## Priser
 
 Vi understøtter en pay-as-you-go-model. Nedenfor er priserne **pr. 1M tokens**.

@@ -141,6 +141,60 @@ https://opencode.ai/zen/v1/models
 
 ---
 
+### Jev
+
+Jev เป็นโมเดล System One จาก TypeSafe AI สำหรับการตัดสินใจที่รวดเร็วและมีโครงสร้าง แทนที่จะสร้างข้อความ โมเดลจะประเมิน `state` เทียบกับคำถามที่กำหนดชนิดไว้ แล้วส่งคืนค่าและความน่าจะเป็นที่โค้ดของคุณนำไปใช้ได้โดยตรง รองรับคำถามแบบใช่/ไม่ใช่ (`noul`) แบบหลายตัวเลือก (`choice`) และแบบให้คะแนนตามเกณฑ์ (`score`)
+
+ใช้ API key ของ OpenCode Zen กับ endpoint `https://opencode.ai/zen/v1/systemone` ตัวอย่างนี้ตรวจสอบว่า request ที่ส่งถึงฝ่าย support เป็นเรื่องเร่งด่วนหรือไม่:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+คุณสามารถถามหลายคำถามได้ใน request เดียว Jev จะประเมินคำถามเหล่านั้นพร้อมกัน และส่งคืนคำตอบแต่ละรายการภายใต้ ID ของคำถามที่ตรงกัน:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+ใช้ `jev-1.13-free` แทน `jev-1.13` เพื่อใช้โมเดลฟรีในช่วงเวลาจำกัด ดูรายละเอียดเกี่ยวกับชนิดคำถามและฟิลด์ใน response ได้ใน[เอกสาร TypeSafe AI](https://docs.typesafe.ai/)
+
+---
+
 ## ราคา
 
 เรารองรับรูปแบบจ่ายตามการใช้งาน ด้านล่างคือราคา **ต่อ 1M tokens**

@@ -150,6 +150,60 @@ https://opencode.ai/zen/v1/models
 
 ---
 
+### Jev
+
+Jev je System One model kompanije TypeSafe AI za brzo donošenje strukturiranih odluka. Umjesto generisanja teksta, procjenjuje `state` prema tipiziranim pitanjima i vraća vrijednosti i vjerovatnoće koje vaš kod može direktno koristiti. Podržava da/ne (`noul`), pitanja s višestrukim izborom (`choice`) i pitanja zasnovana na kriterijima ocjenjivanja (`score`).
+
+Koristite svoj OpenCode Zen API ključ s endpointom `https://opencode.ai/zen/v1/systemone`. Ovaj primjer provjerava da li je zahtjev za podršku hitan:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+Možete postaviti više pitanja u jednom zahtjevu. Jev ih procjenjuje paralelno i vraća svaki odgovor pod odgovarajućim ID-om pitanja:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+Koristite `jev-1.13-free` umjesto `jev-1.13` za korištenje besplatnog modela dostupnog ograničeno vrijeme. Pogledajte [TypeSafe AI dokumentaciju](https://docs.typesafe.ai/) za detalje o tipovima pitanja i poljima odgovora.
+
+---
+
 ## Cijene
 
 Podržavamo pay-as-you-go model. Ispod su cijene **po 1M tokena**.
