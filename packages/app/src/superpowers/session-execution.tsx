@@ -68,15 +68,11 @@ export function createSessionExecutionModel(input: {
   const agents = createMemo<ExecutionAgent[]>(() =>
     (nativeExecution.snapshot()?.nodes ?? []).map((record) => ({ ...record, state: nativeState(record) })),
   )
-  const refreshNative = () => {
-    if (!executionVisible()) return
-    nativeExecution.refresh()
-  }
-  refreshNative()
+  nativeExecution.refresh()
   createEffect(() => {
     input.session.identity.sessionID()
     scope()
-    refreshNative()
+    nativeExecution.refresh()
   })
   onCleanup(() => nativeExecution.dispose())
   const resolveEvidence: EvidenceResolver = async ({ sessionID, messageID, partID }) => {
