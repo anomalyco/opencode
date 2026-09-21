@@ -222,7 +222,7 @@ export function ExecutionHomeSummary(props: { summary: RunSummary; stale?: boole
       class={`
         flex h-6 shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[12px] leading-4
         text-v2-text-text-muted [font-weight:530] transition-[background-color,color] duration-[120ms]
-        ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base
+        ease-in-out motion-reduce:transition-none hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base
         focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
       `}
       onClick={() => props.onOpen()}

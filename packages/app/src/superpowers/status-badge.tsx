@@ -43,6 +43,14 @@ export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () 
     if (activeAgents() > 0) return language.plural("execution.status.activeAgents", activeAgents())
     return language.t("execution.status.normal")
   }
+  const liveMessage = () => {
+    const current = state()
+    if (current === "stale") return language.t("execution.status.stale")
+    if (current === "needs_input") return language.t("execution.status.needs_input")
+    if (current === "failed") return language.t("execution.status.failed")
+    if (current === "blocked") return language.t("execution.status.blocked")
+    return ""
+  }
 
   return (
     <div class="flex items-center gap-1">
@@ -99,8 +107,8 @@ export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () 
           {language.t("execution.status.reviewRequest")}
         </button>
       </Show>
-      <span role="status" class="sr-only">
-        {summary()}
+      <span role="status" data-testid="execution-status-live" class="sr-only">
+        {liveMessage()}
       </span>
     </div>
   )

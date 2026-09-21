@@ -381,6 +381,13 @@ function TrackedFixture(props: { host: HTMLElement; lateRun: boolean }) {
   const scope = (): ExecutionScope => ({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: root() })
   const run = () => (root() === "root" && runAvailable() ? trackedRun() : undefined)
   let requestRegion: HTMLDivElement | undefined
+  let composer: HTMLDivElement | undefined
+  const selectMobileView = (view: SessionMobileView) => {
+    setState("mobileTab", view)
+    if (view === "session" && typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => composer?.focus())
+    }
+  }
   trackedModelSequence += 1
   const modelInstance = trackedModelSequence
   const model = createExecutionModel({
@@ -439,6 +446,9 @@ function TrackedFixture(props: { host: HTMLElement; lateRun: boolean }) {
         <button type="button" onClick={() => setRunAvailable(true)}>
           Register run
         </button>
+        <button type="button" onClick={() => selectMobileView("session")}>
+          Return to conversation
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -485,9 +495,16 @@ function TrackedFixture(props: { host: HTMLElement; lateRun: boolean }) {
             <SessionMobileViewTabs
               current={state.mobileTab}
               executionAvailable={true}
-              onSelect={(view) => setState("mobileTab", view)}
+              onSelect={(view) => selectMobileView(view)}
             />
-            <Show when={state.mobileTab === "execution"}>
+            <Show
+              when={state.mobileTab === "execution"}
+              fallback={
+                <div data-testid="native-composer" tabindex="0" ref={(element) => (composer = element)}>
+                  Message composer
+                </div>
+              }
+            >
               <ExecutionPanel model={model} presentation="mobile" />
             </Show>
           </div>

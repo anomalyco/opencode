@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url"
-import type { Page } from "@playwright/test"
+import { readFileSync } from "node:fs"
+import type { Locator, Page, TestInfo } from "@playwright/test"
 import { expect, story } from "../../storybook/playwright/story"
 
 const fixture = `/@fs/${fileURLToPath(new URL("./superpowers.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
@@ -15,6 +16,22 @@ export async function openExecutionFixture(page: Page, scenario = "observer") {
     { fixture, scenario },
   )
   await expect(page.getByTestId("execution-fixture")).toBeVisible()
+}
+
+async function focusWithKeyboard(page: Page, target: Locator, limit = 100) {
+  for (let index = 0; index < limit; index += 1) {
+    await page.keyboard.press("Tab")
+    if (await target.evaluate((element) => element === document.activeElement)) return
+  }
+  throw new Error("keyboard focus never reached the target control")
+}
+
+async function captureFixtureScreenshot(page: Page, testInfo: TestInfo, name: string) {
+  const path = testInfo.outputPath(`${name}.png`)
+  await page.screenshot({ path })
+  const bytes = readFileSync(path)
+  expect(bytes.byteLength).toBeGreaterThan(1_000)
+  expect(bytes.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a")
 }
 
 async function openAddTabMenu(page: Page) {
@@ -77,9 +94,9 @@ story("execution tab mounts the graph only while open", async ({ page }) => {
   await expect(page.locator('[data-testid="execution-graph"]')).toHaveCount(0)
   await openExecutionFromMenu(page)
   await expect(page.getByTestId("execution-panel")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(page.locator('[data-testid="execution-graph"]')).toHaveCount(0)
-  await page.getByRole("button", { name: "Map", exact: true }).click()
+  await page.getByRole("tab", { name: "Map", exact: true }).click()
   await expect(page.locator('[data-testid="execution-graph"]')).toHaveCount(1)
   await expect(page.getByText("Tracking not connected", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "Close Execution", exact: true }).click()
@@ -268,7 +285,7 @@ story("execution shortcut opens execution while review stays closed", async ({ p
   await expect(page.getByTestId("review-state")).toHaveText("false")
   await page.getByRole("button", { name: "Open execution overview", exact: true }).click()
   await expect(page.getByTestId("execution-panel")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(page.getByTestId("review-state")).toHaveText("false")
 })
 
@@ -276,8 +293,8 @@ story("execution shortcut never replies, prompts, or interrupts", async ({ page 
   await openExecutionFixture(page, "permission-pending")
   await page.getByRole("button", { name: "Open execution overview", exact: true }).click()
   await page.getByRole("button", { name: "Review pending request", exact: true }).click()
-  await page.getByRole("button", { name: "Map", exact: true }).click()
-  await page.getByRole("button", { name: "Agents", exact: true }).click()
+  await page.getByRole("tab", { name: "Map", exact: true }).click()
+  await page.getByRole("tab", { name: "Agents", exact: true }).click()
   await expect(page.getByTestId("permission-reply-count")).toHaveText("0")
   await expect(page.getByTestId("question-reply-count")).toHaveText("0")
   await expect(page.getByTestId("prompt-count")).toHaveText("0")
@@ -292,7 +309,7 @@ story("background summary keeps shell jobs and adds one view all agents action",
   await expect(page.getByRole("button", { name: "View all agents", exact: true })).toHaveCount(1)
   await page.getByRole("button", { name: "View all agents", exact: true }).click()
   await expect(page.getByTestId("execution-panel")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
 story("background summary stays empty without running work", async ({ page }) => {
@@ -344,7 +361,7 @@ story("home leaves ordinary sessions unchanged", async ({ page }) => {
   await expect(page.getByTestId("destination-session")).toHaveText("root-tracked")
   await expect(page.getByTestId("destination-subview")).toHaveText("agents")
   await expect(page.getByTestId("execution-panel")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
 story("home direct action selects the mobile execution view", async ({ page }) => {
@@ -406,7 +423,7 @@ story("desktop summary composition opens agents", async ({ page }) => {
   await expect(page.getByRole("button", { name: "View all agents", exact: true })).toHaveCount(1)
   await page.getByRole("button", { name: "View all agents", exact: true }).click()
   await expect(page.getByTestId("execution-panel")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
 story("desktop timeline summary opens agents", async ({ page }) => {
@@ -416,7 +433,7 @@ story("desktop timeline summary opens agents", async ({ page }) => {
   await expect(page.getByRole("button", { name: "View all agents", exact: true })).toHaveCount(1)
   await page.getByRole("button", { name: "View all agents", exact: true }).click()
   await expect(page.getByTestId("execution-panel")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Agents", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
 story("progress distinguishes review, cancellation, and provenance", async ({ page }) => {
@@ -440,7 +457,7 @@ story("cancelled task progress keeps its historical fraction", async ({ page }) 
 story("task progress is absent without a registered run", async ({ page }) => {
   await openExecutionFixture(page, "observer")
   await openExecutionFromMenu(page)
-  await page.getByRole("button", { name: "Tasks", exact: true }).click()
+  await page.getByRole("tab", { name: "Tasks", exact: true }).click()
   await expect(page.getByTestId("execution-progress-count")).toHaveCount(0)
   await expect(page.getByTestId("execution-progress-percent")).toHaveCount(0)
   await expect(page.getByTestId("execution-progress-none")).toBeVisible()
@@ -617,9 +634,9 @@ story("map selects a node with the keyboard", async ({ page }) => {
 story("map mounts only while the Map subview is selected", async ({ page }) => {
   await openExecutionFixture(page, "map")
   await expect(page.getByTestId("execution-map")).toBeVisible()
-  await page.getByRole("button", { name: "Tasks", exact: true }).click()
+  await page.getByRole("tab", { name: "Tasks", exact: true }).click()
   await expect(page.getByTestId("execution-map")).toHaveCount(0)
-  await page.getByRole("button", { name: "Map", exact: true }).click()
+  await page.getByRole("tab", { name: "Map", exact: true }).click()
   await expect(page.getByTestId("execution-map")).toBeVisible()
 })
 
@@ -745,7 +762,7 @@ story("activity links report events to task details and referenced sessions", as
   await page.getByRole("button", { name: "Open task API contract", exact: true }).first().click()
   await expect(page.getByTestId("execution-task-title")).toHaveText("API contract")
   await expect(page.getByTestId("execution-activity")).toHaveCount(0)
-  await page.getByRole("button", { name: "Activity", exact: true }).click()
+  await page.getByRole("tab", { name: "Activity", exact: true }).click()
   await page.getByRole("button", { name: "Open session Child implementer", exact: true }).first().click()
   await expect(page.getByTestId("navigation-target")).toHaveText("wsl/child")
 })
@@ -924,13 +941,13 @@ story("mobile execution controls stay reachable at 200% zoom", async ({ page }) 
   await page.getByRole("tab", { name: "Execution", exact: true }).click()
   await expect(page.getByTestId("execution-panel")).toHaveAttribute("data-presentation", "mobile")
   for (const name of ["Map", "Agents", "Tasks", "Activity"]) {
-    const control = page.getByRole("button", { name, exact: true })
+    const control = page.getByRole("tab", { name, exact: true })
     await expect(control).toBeVisible()
     const box = await control.boundingBox()
     expect(box!.x).toBeGreaterThanOrEqual(0)
     expect(box!.x + box!.width).toBeLessThanOrEqual(195)
   }
-  await page.getByRole("button", { name: "Tasks", exact: true }).click()
+  await page.getByRole("tab", { name: "Tasks", exact: true }).click()
   await expect(page.getByTestId("execution-tasks-list")).toBeVisible()
   const search = page.getByRole("searchbox", { name: "Search tasks", exact: true })
   await expect(search).toBeVisible()
@@ -953,7 +970,7 @@ story("mobile execution adopts a run that arrives after the view opens", async (
   await expect(page.getByRole("tree", { name: "Agent tree" })).toBeVisible()
   await page.getByRole("button", { name: "Register run", exact: true }).click()
   await expect(page.getByTestId("execution-tasks-list")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Tasks", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("tab", { name: "Tasks", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(page.getByRole("tree", { name: "Agent tree" })).toHaveCount(0)
 })
 
@@ -965,4 +982,232 @@ story("mobile execution keeps one panel and works in rtl", async ({ page }) => {
   await expect(page.getByTestId("execution-panel")).toHaveAttribute("data-presentation", "mobile")
   await expect(page.getByTestId("execution-tasks-list")).toBeVisible()
   await expect(page.getByTestId("native-pane-hidden")).toHaveText("false")
+})
+
+story("execution keyboard path reaches tasks and returns to chat", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 })
+  await openExecutionFixture(page, "tracked")
+  await page.getByRole("tab", { name: "Execution", exact: true }).focus()
+  await page.keyboard.press("Enter")
+  await page.getByRole("tab", { name: "Tasks", exact: true }).focus()
+  await page.keyboard.press("Enter")
+  await page.getByRole("button", { name: "Select API task", exact: true }).focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByTestId("selected-task")).toHaveText("api")
+  await page.getByRole("button", { name: "Return to conversation", exact: true }).click()
+  await expect(page.getByTestId("native-composer")).toBeFocused()
+})
+
+story("execution subview toolbar follows the tabs pattern", async ({ page }) => {
+  await openExecutionFixture(page, "tracked")
+  const tablist = page.getByRole("tablist", { name: "Execution views", exact: true })
+  await expect(tablist).toBeVisible()
+  await expect(tablist.getByRole("tab")).toHaveCount(4)
+  await expect(page.getByRole("tab", { name: "Map", exact: true })).toHaveAttribute("aria-selected", "true")
+  await page.getByRole("tab", { name: "Map", exact: true }).focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(page.getByRole("tab", { name: "Agents", exact: true })).toBeFocused()
+  await expect(page.getByRole("tab", { name: "Agents", exact: true })).toHaveAttribute("aria-selected", "false")
+  await page.keyboard.press("End")
+  await expect(page.getByRole("tab", { name: "Activity", exact: true })).toBeFocused()
+  await page.keyboard.press("Home")
+  await expect(page.getByRole("tab", { name: "Map", exact: true })).toBeFocused()
+  await page.keyboard.press("ArrowLeft")
+  await expect(page.getByRole("tab", { name: "Activity", exact: true })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("tab", { name: "Activity", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByTestId("execution-activity")).toBeVisible()
+  await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "execution-subview-tab-activity")
+})
+
+story("execution controls show focus for keyboard users", async ({ page }) => {
+  await openExecutionFixture(page, "tracked")
+  const subview = page.getByRole("tab", { name: "Map", exact: true })
+  await focusWithKeyboard(page, subview)
+  const outline = await subview.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { style: style.outlineStyle, width: Number.parseFloat(style.outlineWidth) }
+  })
+  expect(outline.style).not.toBe("none")
+  expect(outline.width).toBeGreaterThanOrEqual(2)
+})
+
+story("expanded execution never traps keyboard focus", async ({ page }) => {
+  await openExecutionFixture(page, "tracked")
+  await page.getByRole("button", { name: "Expand execution", exact: true }).click()
+  const expanded = page.getByTestId("execution-expanded")
+  await expect(expanded).toBeVisible()
+  await page.getByTestId("execution-collapse").focus()
+  for (let index = 0; index < 80; index += 1) {
+    await page.keyboard.press("Tab")
+    const trapped = await expanded.evaluate((element) => element.contains(document.activeElement))
+    if (!trapped) return
+  }
+  throw new Error("focus stayed trapped inside the expanded execution overlay")
+})
+
+story("execution status states pair text with an icon and a stable live message", async ({ page }) => {
+  const attentionStates = [
+    ["observer", "2 active agents", ""],
+    ["offline-pending", "Execution status stale", "Execution status stale"],
+    ["permission-pending", "Waiting for your input", "Waiting for your input"],
+    ["blocked-pending", "Execution blocked", "Execution blocked"],
+  ] as const
+  for (const [scenario, label, live] of attentionStates) {
+    await openExecutionFixture(page, scenario)
+    await expect(page.getByTestId("execution-status-label")).toHaveText(label)
+    await expect(page.getByTestId("execution-status-icon")).toBeVisible()
+    await expect(page.getByTestId("execution-status-live")).toHaveText(live)
+  }
+  await openExecutionFixture(page, "tracked-progress")
+  await expect(page.getByTestId("execution-status-label")).toHaveText("3 of 5 verified")
+  await expect(page.getByTestId("execution-status-live")).toHaveText("")
+})
+
+story("execution surfaces render localized copy without missing keys", async ({ page }) => {
+  for (const scenario of ["observer", "tracked", "tasks-detailed", "map-large", "activity", "permission-pending"]) {
+    await openExecutionFixture(page, scenario)
+    if (scenario === "observer" || scenario === "permission-pending") {
+      await page.getByRole("button", { name: "Open execution overview", exact: true }).click()
+    }
+    const text = await page.getByTestId("execution-fixture").innerText()
+    expect(text).not.toMatch(/execution\.[a-z]/)
+    expect(text).not.toContain("{{")
+  }
+})
+
+story("execution compact copy keeps the shared line height", async ({ page }) => {
+  await openExecutionFixture(page, "tasks-detailed")
+  const violations = await page.getByTestId("execution-panel").evaluate((element) =>
+    [...element.querySelectorAll<HTMLElement>("*")].flatMap((node) => {
+      const size = Number.parseFloat(getComputedStyle(node).fontSize)
+      const line = Number.parseFloat(getComputedStyle(node).lineHeight)
+      if (!Number.isFinite(size) || !Number.isFinite(line)) return []
+      if (size <= 13 && line + 0.01 < 16) return [node.getAttribute("class") ?? node.tagName]
+      return []
+    }),
+  )
+  expect(violations).toEqual([])
+  await openExecutionFixture(page, "map")
+  const mapLineHeight = await page
+    .getByTestId("execution-map")
+    .evaluate((element) => Number.parseFloat(getComputedStyle(element).lineHeight))
+  expect(mapLineHeight).toBeGreaterThanOrEqual(16)
+})
+
+story("execution agent indentation follows the document direction", async ({ page }) => {
+  await openExecutionFixture(page, "agents-assignments")
+  const assignments = page.getByTestId("execution-agents").locator(".execution-agent__assignments").first()
+  await expect(assignments).toBeVisible()
+  const ltr = await assignments.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { left: style.paddingLeft, right: style.paddingRight }
+  })
+  expect(ltr.left).toBe("24px")
+  expect(ltr.right).toBe("0px")
+  await page.getByTestId("execution-fixture").evaluate((element) => {
+    element.setAttribute("dir", "rtl")
+  })
+  const rtl = await assignments.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { left: style.paddingLeft, right: style.paddingRight, direction: style.direction }
+  })
+  expect(rtl.right).toBe("24px")
+  expect(rtl.left).toBe("0px")
+  expect(rtl.direction).toBe("rtl")
+})
+
+story("execution surfaces respect reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await openExecutionFixture(page, "home-mixed")
+  const summary = page.getByTestId("home-root-tracked").getByTestId("execution-summary")
+  await expect(summary).toBeVisible()
+  expect(await summary.evaluate((element) => getComputedStyle(element).transitionProperty)).toBe("none")
+  await openExecutionFixture(page, "tracked")
+  await page.getByRole("button", { name: "Expand execution", exact: true }).click()
+  const animated = await page.getByTestId("execution-expanded").evaluate(
+    (element) =>
+      [...element.querySelectorAll("*")].filter((node) => {
+        const style = getComputedStyle(node)
+        return style.animationName !== "none" && style.animationDuration !== "0s"
+      }).length,
+  )
+  expect(animated).toBe(0)
+})
+
+story("execution surfaces avoid horizontal overflow at 200 percent zoom", async ({ page }) => {
+  await page.setViewportSize({ width: 195, height: 380 })
+  await openExecutionFixture(page, "tracked")
+  await page.getByRole("tab", { name: "Execution", exact: true }).click()
+  const panel = page.getByTestId("execution-panel")
+  await expect(panel).toHaveAttribute("data-presentation", "mobile")
+  expect(await panel.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+  for (const name of ["Map", "Agents", "Tasks", "Activity"]) {
+    await expect(page.getByRole("tab", { name, exact: true })).toBeVisible()
+  }
+  await page.getByRole("tab", { name: "Tasks", exact: true }).click()
+  await expect(page.getByTestId("execution-tasks-list")).toBeVisible()
+})
+
+story("execution panel renders in light and dark color schemes", async ({ page }) => {
+  await openExecutionFixture(page, "tracked")
+  const host = page.getByTestId("execution-fixture")
+  const panel = page.getByTestId("execution-panel")
+  await host.evaluate((element) => {
+    element.setAttribute("data-color-scheme", "dark")
+  })
+  const dark = await panel.evaluate((element) => getComputedStyle(element).backgroundColor)
+  await host.evaluate((element) => {
+    element.setAttribute("data-color-scheme", "light")
+  })
+  const light = await panel.evaluate((element) => getComputedStyle(element).backgroundColor)
+  expect(dark).toMatch(/^rgb/)
+  expect(light).toMatch(/^rgb/)
+  expect(dark).not.toBe(light)
+})
+
+story("execution visual fixture captures the observer surface", async ({ page }, testInfo) => {
+  await openExecutionFixture(page, "observer")
+  await page.getByRole("button", { name: "Open execution overview", exact: true }).click()
+  await expect(page.getByTestId("execution-panel")).toBeVisible()
+  await captureFixtureScreenshot(page, testInfo, "observer")
+})
+
+story("execution visual fixture captures an active run", async ({ page }, testInfo) => {
+  await openExecutionFixture(page, "tracked")
+  await expect(page.getByTestId("execution-map")).toBeVisible()
+  await captureFixtureScreenshot(page, testInfo, "active-run")
+})
+
+story("execution visual fixture captures a failed bridge", async ({ page }, testInfo) => {
+  await openExecutionFixture(page, "session-execution-live")
+  await expect(page.getByTestId("execution-status-badge")).toHaveAttribute("data-attention", "failed")
+  await captureFixtureScreenshot(page, testInfo, "error")
+})
+
+story("execution visual fixture captures a stale snapshot", async ({ page }, testInfo) => {
+  await openExecutionFixture(page, "tasks-stale")
+  await expect(page.getByTestId("execution-progress-stale")).toBeVisible()
+  await captureFixtureScreenshot(page, testInfo, "stale")
+})
+
+story("execution visual fixture captures a pending permission", async ({ page }, testInfo) => {
+  await openExecutionFixture(page, "permission-pending")
+  await page.getByRole("button", { name: "Open execution overview", exact: true }).click()
+  await expect(page.getByTestId("execution-status-badge")).toHaveAttribute("data-attention", "needs_input")
+  await captureFixtureScreenshot(page, testInfo, "permission-pending")
+})
+
+story("execution visual fixture captures the grouped large graph", async ({ page }, testInfo) => {
+  await openExecutionFixture(page, "map-large")
+  await expect(page.getByTestId("execution-map-grouped")).toBeVisible()
+  await captureFixtureScreenshot(page, testInfo, "large-graph")
+})
+
+story("execution visual fixture captures the mobile presentation", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 760 })
+  await openExecutionFixture(page, "tracked")
+  await page.getByRole("tab", { name: "Execution", exact: true }).click()
+  await expect(page.getByTestId("execution-panel")).toHaveAttribute("data-presentation", "mobile")
+  await captureFixtureScreenshot(page, testInfo, "mobile")
 })

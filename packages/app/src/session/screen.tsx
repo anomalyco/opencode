@@ -198,6 +198,13 @@ export function SessionScreen(props: { session: SessionModel }) {
     const dock = document.querySelector('[data-component="session-composer-dock"]')
     dock?.querySelector<HTMLElement>("button, textarea, input, [tabindex]")?.focus()
   }
+  const restoreConversationFocus = () => {
+    if (typeof requestAnimationFrame !== "function") {
+      reviewNativeRequest()
+      return
+    }
+    requestAnimationFrame(() => requestAnimationFrame(reviewNativeRequest))
+  }
   const executionAttention = () => ({
     stale: server.ctx.sdk.connection.status() !== "connected",
     needsInput: [composer.requests.permissionRequest(), composer.requests.questionRequest()].filter(Boolean).length,
@@ -231,6 +238,7 @@ export function SessionScreen(props: { session: SessionModel }) {
     }
     review.mobile.setTab(view)
     session.layout.view().terminal.close()
+    if (view === "session") restoreConversationFocus()
   }
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {

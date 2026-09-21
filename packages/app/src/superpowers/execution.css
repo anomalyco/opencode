@@ -16,6 +16,13 @@
   border-bottom: 1px solid var(--v2-border-border-base);
 }
 
+.execution-panel__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
 .execution-panel__subview {
   flex: 0 0 auto;
   height: 28px;
@@ -24,6 +31,27 @@
   color: var(--v2-text-text-muted);
   font-size: 13px;
   line-height: var(--line-height-compact);
+}
+
+.execution-panel__subview:focus-visible,
+.execution-panel__expand:focus-visible,
+.execution-map__control:focus-visible,
+.execution-map__phase-select:focus-visible,
+.execution-progress__info:focus-visible,
+.execution-tasks__search:focus-visible,
+.execution-tasks__filter:focus-visible,
+.execution-task:focus-visible,
+.execution-evidence__open:focus-visible,
+.execution-agent__toggle:focus-visible,
+.execution-agent__open:focus-visible,
+.execution-agent__retry:focus-visible,
+.execution-agent__history-toggle:focus-visible,
+.execution-activity__link:focus-visible,
+.execution-activity__more:focus-visible,
+.execution-expanded__action:focus-visible,
+.execution-map__group-node:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
 }
 
 .execution-panel__subview:hover {
@@ -471,7 +499,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-left: 24px;
+  padding-inline-start: 24px;
 }
 
 .execution-agent__assignments-current,
@@ -507,7 +535,7 @@
   min-height: 0;
   flex: 1;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: max(var(--line-height-compact), 1.4em);
 }
 
 .execution-map__controls {
