@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX, type ParentProps } from "solid-js"
+import { createEffect, createMemo, onCleanup, type Accessor, type JSX, type ParentProps } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { ExecutionRpc } from "@bearmanser/opencode-superpowers-execution/contract"
 import type { SessionModel } from "@/session/model"
@@ -8,17 +8,9 @@ import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { createSessionExecution } from "./bridge-client"
 import { requestEvidenceReveal } from "./evidence-reveal"
-import { createExecutionScope, scopeKey } from "./identity"
-import {
-  createNativeBoundary,
-  createNativeExecutionAdapter,
-  messageHasPart,
-  nativeState,
-  type NativeExecutionAdapter,
-  type NativeScope,
-  type NativeSnapshot,
-  type NativeTarget,
-} from "./native-adapter"
+import { createExecutionScope } from "./identity"
+import { createNativeBoundary, createNativeExecutionAdapter, messageHasPart, nativeState } from "./native-adapter"
+import { createNativeExecutionOwner } from "./native-execution"
 import type {
   EvidenceNavigator,
   EvidenceResolver,
@@ -47,57 +39,38 @@ export function createSessionExecutionModel(input: {
     }
     return id
   })
-  const scope = createMemo<NativeScope | undefined>(() => {
+  const scope = createMemo(() => {
     const root = rootSessionID()
     const info = root ? input.session.shared.data.session.get(root) : undefined
-    const scoped = createExecutionScope({
+    return createExecutionScope({
       serverKey: server.key,
       ownerDirectory: info?.location.directory ?? input.session.workspace.directory(),
       rootSessionID: root,
     })
-    if (!scoped) return undefined
-    return { serverKey: server.key, ownerDirectory: scoped.ownerDirectory, rootSessionID: scoped.rootSessionID }
   })
-  const [nativeSnapshot, setNativeSnapshot] = createSignal<NativeSnapshot | undefined>()
-  let nativeAdapter: NativeExecutionAdapter | undefined
-  let nativeAdapterKey: string | undefined
-  const hydrateNative = () => {
-    const current = scope()
-    const selected = input.session.identity.sessionID()
-    if (!current || !selected) {
-      nativeAdapter?.dispose()
-      nativeAdapter = undefined
-      nativeAdapterKey = undefined
-      setNativeSnapshot(undefined)
-      return
-    }
-    const key = `${scopeKey(current)}::${selected}`
-    if (key !== nativeAdapterKey) {
-      nativeAdapter?.dispose()
-      nativeAdapter = createNativeExecutionAdapter({
-        target: (): NativeTarget => ({ scope: current, selectedSessionID: selected }),
+  const nativeExecution = createNativeExecutionOwner({
+    scope: () => {
+      const current = scope()
+      if (!current) return undefined
+      return { serverKey: server.key, ownerDirectory: current.ownerDirectory, rootSessionID: current.rootSessionID }
+    },
+    selectedSessionID: () => input.session.identity.sessionID(),
+    createAdapter: (target) =>
+      createNativeExecutionAdapter({
+        target: () => target,
         boundary: createNativeBoundary({ api: sdk.api }),
-      })
-      nativeAdapterKey = key
-      setNativeSnapshot(undefined)
-    }
-    const adapter = nativeAdapter
-    if (!adapter) return
-    void adapter.hydrate().then(
-      (snapshot) => setNativeSnapshot(snapshot),
-      () => setNativeSnapshot(undefined),
-    )
-  }
+      }),
+  })
   const agents = createMemo<ExecutionAgent[]>(() =>
-    (nativeSnapshot()?.nodes ?? []).map((record) => ({ ...record, state: nativeState(record) })),
+    (nativeExecution.snapshot()?.nodes ?? []).map((record) => ({ ...record, state: nativeState(record) })),
   )
-  hydrateNative()
+  nativeExecution.refresh()
   createEffect(() => {
     input.session.identity.sessionID()
     scope()
-    hydrateNative()
+    nativeExecution.refresh()
   })
-  onCleanup(() => nativeAdapter?.dispose())
+  onCleanup(() => nativeExecution.dispose())
   const resolveEvidence: EvidenceResolver = async ({ sessionID, messageID, partID }) => {
     const loaded = input.session.shared.data.session.message.get(sessionID, messageID)
     if (loaded) return partID === undefined || messageHasPart(loaded, partID)
@@ -128,7 +101,8 @@ export function createSessionExecutionModel(input: {
     resolveEvidence,
     navigateEvidence,
     agents: () => agents(),
-    retry: hydrateNative,
+    nativeComplete: () => nativeExecution.snapshot()?.complete,
+    retry: nativeExecution.refresh,
   }).model
 }
 

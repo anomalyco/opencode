@@ -53,6 +53,7 @@ export type SessionExecutionInput = {
   connection: Accessor<boolean>
   visible: Accessor<boolean>
   agents?: Accessor<ExecutionAgent[]>
+  nativeComplete?: Accessor<boolean | undefined>
   attention?: Accessor<ExecutionAttention>
   openSession?: (sessionID: string) => void
   resolveEvidence?: EvidenceResolver
@@ -406,6 +407,7 @@ export function createSessionExecution(input: SessionExecutionInput): SessionExe
     reason: () => bridge.getReason(),
     snapshot: () => bridge.getSnapshot(),
     agents: input.agents,
+    nativeComplete: input.nativeComplete,
     attention: input.attention,
     openSession: input.openSession,
     resolveEvidence: input.resolveEvidence,

@@ -544,6 +544,18 @@ describe("createExecutionModel activity", () => {
       expect(model.activityUsage().tokens).toEqual({ value: 2350, coverage: "partial" })
     }))
 
+  test("uses the adapter's authoritative completeness over the recomputed tree", () =>
+    root(() => {
+      const model = createExecutionModel({
+        snapshot: () => activityRun(),
+        agents: () => agentFixture("activity"),
+        nativeComplete: () => false,
+      })
+      expect(model.agentTree().complete).toBe(true)
+      expect(model.activityUsage().cost).toEqual({ value: 2.5, coverage: "partial" })
+      expect(model.activityUsage().tokens).toEqual({ value: 2425, coverage: "partial" })
+    }))
+
   test("links an assignment event to the assignment that event created, not a later worker", () =>
     root(() => {
       const history = runFixture({

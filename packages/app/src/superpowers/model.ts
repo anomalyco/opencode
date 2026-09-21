@@ -216,6 +216,7 @@ export type ExecutionModelInput = {
   snapshot?: Accessor<RunSnapshot | undefined>
   reason?: Accessor<ExecutionReason | undefined>
   agents?: Accessor<ExecutionAgent[]>
+  nativeComplete?: Accessor<boolean | undefined>
   progress?: Accessor<ExecutionProgress | undefined>
   attention?: Accessor<ExecutionAttention>
   usage?: Accessor<UsageRecord[]>
@@ -447,7 +448,7 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     return sumUsageRecords([...sessions, ...(input.usage?.() ?? [])], {
       serverKey,
       currency: ACCOUNTING_CURRENCY,
-      complete: agentTree().complete,
+      complete: input.nativeComplete?.() ?? agentTree().complete,
     })
   }
 
