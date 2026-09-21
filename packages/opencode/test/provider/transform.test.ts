@@ -938,6 +938,21 @@ describe("ProviderTransform.providerOptions", () => {
           ).toEqual({ [sdk.key]: { [sdk.option]: { type: "enabled", budgetTokens: 4000 } } })
         })
 
+        test.each(["claude-fable-5-1", "claude-opus-5"])("honors explicit binding controls for %s", (id) => {
+          const model = claude(sdk.npm, id)
+          const options = Object.freeze({
+            [sdk.option]: Object.freeze({ type: "adaptive", blockBinding: false }),
+          })
+          expect(ProviderTransform.providerOptions(model, options)).toEqual({
+            [sdk.key]: { [sdk.option]: { type: "adaptive" } },
+          })
+          expect(ProviderTransform.providerOptions(model, { [sdk.option]: { blockBinding: false } })).toEqual({
+            [sdk.key]: {},
+          })
+          const custom = { [sdk.option]: { type: "adaptive", blockBinding: { prefixMismatchBehavior: "error" } } }
+          expect(ProviderTransform.providerOptions(model, custom)).toEqual({ [sdk.key]: custom })
+        })
+
         test.each([
           ["claude-opus-5", "default"],
           ["claude-opus-5", "high"],
@@ -3783,10 +3798,11 @@ describe("ProviderTransform sampling defaults - DeepSeek", () => {
 
 describe("ProviderTransform.reasoningVariants", () => {
   const model = (reasoning_options: ModelsDev.Model["reasoning_options"]) => ({ reasoning_options }) as ModelsDev.Model
-  const target = (npm: string, id = "test-model") =>
+  const target = (npm: string, id = "test-model", family = "") =>
     ({
       id,
       providerID: "test",
+      family,
       api: { id, npm, url: "" },
       capabilities: { reasoning: true },
       limit: { output: 64_000 },
@@ -3933,6 +3949,19 @@ describe("ProviderTransform.reasoningVariants", () => {
       low: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
       high: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
       max: { thinking: { type: "adaptive", display: "summarized" }, effort: "max" },
+    })
+  })
+
+  test("maps GitLab model efforts to provider-specific options", () => {
+    const options = model([{ type: "effort", values: ["max"] }])
+    const openai = target("gitlab-ai-provider", "duo-chat-gpt-5-6-sol", "gpt-sol")
+    const anthropic = target("gitlab-ai-provider", "duo-chat-opus-4-8", "claude-opus")
+
+    expect(ProviderTransform.reasoningVariants(options, openai)).toEqual({
+      max: { reasoningEffort: "max" },
+    })
+    expect(ProviderTransform.reasoningVariants(options, anthropic)).toEqual({
+      max: { thinking: { type: "adaptive", effort: "max" } },
     })
   })
 
@@ -4135,7 +4164,7 @@ describe("ProviderTransform.reasoningVariants", () => {
     expect(ProviderTransform.reasoningVariants(effort, target("@ai-sdk/github-copilot", "gemini-3-pro"))).toEqual({})
   })
 
-  test.each(["@ai-sdk/cohere", "@ai-sdk/perplexity", "@ai-sdk/vercel", "@ai-sdk/alibaba", "gitlab-ai-provider"])(
+  test.each(["@ai-sdk/cohere", "@ai-sdk/perplexity", "@ai-sdk/vercel", "@ai-sdk/alibaba"])(
     "does not invent effort controls for %s",
     (npm) => {
       expect(ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target(npm))).toEqual(

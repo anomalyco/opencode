@@ -2,7 +2,6 @@ import { createMiddleware } from "@solidjs/start/middleware"
 import { LOCALE_HEADER, cookie, fromPathname, strip } from "~/lib/language"
 import { normalizeReferralCode, referralCookie } from "~/lib/referral-invite"
 import { sanitizeServerActionRequest } from "~/lib/server-action"
-import { proxyInference } from "~/lib/inference-proxy"
 
 export default createMiddleware({
   async onRequest(event) {
@@ -20,12 +19,5 @@ export default createMiddleware({
 
     const referralCode = normalizeReferralCode(url.searchParams.get("ref"))
     if (referralCode) event.response.headers.append("set-cookie", referralCookie(referralCode))
-
-    return proxyInference(event.request, event.clientAddress).catch(() =>
-      Response.json(
-        { error: { type: "api_error", message: "Inference routing is unavailable. Please retry later." } },
-        { status: 503, headers: { "Cache-Control": "no-store" } },
-      ),
-    )
   },
 })

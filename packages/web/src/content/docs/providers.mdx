@@ -874,6 +874,54 @@ Selecting a router model is a drop-in replacement for any other model — OpenCo
 
 ---
 
+### Eden AI
+
+[Eden AI](https://www.edenai.co/) is an EU-based gateway that serves models from many vendors over a single OpenAI-compatible API, with a separate EU endpoint for teams that need inference to stay in the EU.
+
+1. Head over to the [Eden AI platform](https://app.edenai.run/user/register) to create an account and generate an API key.
+
+2. Run the `/connect` command and search for **Eden AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Eden AI API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _Mistral Large 3_ or _Claude Sonnet 5_.
+
+   ```txt
+   /models
+   ```
+
+   Eden AI model ids are themselves in `vendor/model` form, so a full reference has three segments, for example `edenai/anthropic/claude-sonnet-5`.
+
+5. To keep requests on Eden AI's EU gateway, set its base URL.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "edenai": {
+         "options": {
+           "baseURL": "https://api.eu.edenai.run/v3"
+         }
+       }
+     }
+   }
+   ```
+
+   The default is `https://api.edenai.run/v3`, so this swaps the global endpoint for the EU one. The EU endpoint serves the subset of the catalog that is available in the EU, so a model chosen in step 4 may not be reachable through it.
+
+---
+
 ### FrogBot
 
 1. Head over to the [FrogBot dashboard](https://app.frogbot.ai/signup), create an account, and generate an API key.
