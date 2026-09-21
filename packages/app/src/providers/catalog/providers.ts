@@ -1,7 +1,6 @@
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { normalizeProviderList } from "@/runtime/server/global-sync/utils"
-import { Iterable, pipe } from "effect"
 import { createEffect, createMemo, type Accessor } from "solid-js"
 import type { ProviderListResponse } from "@/runtime/server/types"
 import { useIntegrations } from "./integrations"
@@ -53,34 +52,24 @@ export function useProviders(directory: Accessor<string | undefined>) {
         .filter((integration) => popularProviderSet.has(integration.id))
         .map((integration) => ({ id: integration.id, name: integration.name }))
       const seen = new Set(catalog.map((integration) => integration.id))
-      return pipe(
-        providers().all,
-        Iterable.map(([, p]) => p),
-        Iterable.filter((p) => popularProviderSet.has(p.id) && !seen.has(p.id)),
-        Iterable.map((p) => ({ id: p.id, name: p.name })),
-        (v) => [...catalog, ...v],
-      )
+      const more = [...providers().all.values()]
+        .filter((p) => popularProviderSet.has(p.id) && !seen.has(p.id))
+        .map((p) => ({ id: p.id, name: p.name }))
+      return [...catalog, ...more]
     },
     connected: () => {
       const connected = new Set(providers().connected)
-      return pipe(
-        providers().all,
-        Iterable.map(([, p]) => p),
-        Iterable.filter((p) => connected.has(p.id)),
-        (v) => Array.from(v),
-      )
+      return [...providers().all.values()].filter((p) => connected.has(p.id))
     },
     paid: () => {
       const connected = new Set(providers().connected)
-      const paid = [
-        ...Iterable.filter(
-          providers().all,
-          ([id]) =>
-            connected.has(id) &&
-            (id !== "opencode" || Object.values(providers().all.get(id)?.models ?? {}).some((m) => m.cost?.input)),
-        ),
-      ]
+      const paid = [...providers().all].filter(
+        ([id]) =>
+          connected.has(id) &&
+          (id !== "opencode" || Object.values(providers().all.get(id)?.models ?? {}).some((m) => m.cost?.input)),
+      )
       return paid
     },
   }
 }
+

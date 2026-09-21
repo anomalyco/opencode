@@ -1,11 +1,11 @@
-import { Option, Schema } from "effect"
+import { Codec } from "@/runtime/persistence/codec"
 import { normalizeServerUrl } from "@/runtime/server/registry"
 
-const pairing = Schema.fromJsonString(
-  Schema.Struct({
-    urls: Schema.Array(Schema.String),
-    username: Schema.Literal("opencode"),
-    password: Schema.String,
+const pairing = Codec.fromJsonString(
+  Codec.struct({
+    urls: Codec.array(Codec.string),
+    username: Codec.literal("opencode"),
+    password: Codec.string,
   }),
 )
 
@@ -20,9 +20,10 @@ export function serverAddress(value: string) {
 }
 
 export function decodePairingCode(value: string) {
-  const result = Schema.decodeUnknownOption(pairing)(value)
-  if (Option.isNone(result)) return
-  const urls = [...new Set(result.value.urls.map(serverAddress).filter((url) => url !== undefined))]
+  const result = Codec.decodeOption(pairing, value)
+  if (!result) return
+  const urls = [...new Set(result.urls.map(serverAddress).filter((url) => url !== undefined))]
   if (!urls.length) return
-  return { urls, password: result.value.password }
+  return { urls, password: result.password }
 }
+

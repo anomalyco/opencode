@@ -1,5 +1,5 @@
 import type { AsyncStorage } from "@solid-primitives/storage"
-import { Option, Schema } from "effect"
+import { Codec } from "./codec"
 
 export type BlobReference = { id: string; url: string }
 
@@ -312,12 +312,12 @@ export function createDraftStore(driver: Driver, options: { grace?: number } = {
     getItem: async (key) => {
       const value = await driver.get(key)
       if (value === null) return null
-      const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(value)
+      const parsed = Codec.fromJsonString(Codec.unknown).decode(value)
       // Let the owning persistence codec apply its invalid-document policy.
-      if (Option.isNone(parsed)) return value
+      if (parsed === Codec.INVALID) return value
       // A loaded document is live in the composer: pin its images before decode mints their URLs.
-      retain(key, imageIDs(parsed.value), grace)
-      return JSON.stringify(await decode(parsed.value))
+      retain(key, imageIDs(parsed), grace)
+      return JSON.stringify(await decode(parsed))
     },
     setItem: (key, value) => setDocument(key, JSON.parse(value)),
     setDocument,
@@ -455,3 +455,4 @@ export async function blobDataUrl(blob: BlobReference, mime: string) {
 export function createLegacyBlobReference(dataUrl: string): BlobReference {
   return { id: dataUrl, url: dataUrl }
 }
+

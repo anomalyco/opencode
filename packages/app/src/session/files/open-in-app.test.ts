@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
 import { OPEN_APPS, OpenAppPreferences } from "./open-in-app"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 
-const decode = Schema.decodeUnknownSync(Persistence.withInitial(OpenAppPreferences, { app: "finder" }))
+const decode = ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(OpenAppPreferences, { app: "finder" }), input))
 
 describe("open app preferences", () => {
   test.each([...OPEN_APPS])("preserves the %s preference", (app) => {
@@ -18,3 +17,4 @@ describe("open app preferences", () => {
     expect(decode({})).toEqual({ app: "finder" })
   })
 })
+

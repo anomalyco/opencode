@@ -5,17 +5,20 @@ import {
   type SessionReviewExpandMode,
 } from "@opencode/session-ui/v2/session-review-v2"
 import { createSignal } from "solid-js"
-import { Schema } from "effect"
+import { Codec } from "@/runtime/persistence/codec"
 import type { Platform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
 
-const ReviewPanel = Persistence.struct({
-  sidebarOpened: Schema.Boolean,
-  sidebarWidth: Schema.Finite.check(
-    Schema.isBetween({ minimum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN, maximum: SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX }),
+const ReviewPanel = Codec.struct({
+  sidebarOpened: Codec.boolean,
+  sidebarWidth: Codec.make<number, number>(
+    (v) =>
+      typeof v === "number" && v >= SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN && v <= SESSION_REVIEW_V2_SIDEBAR_WIDTH_MAX
+        ? v
+        : Codec.INVALID,
+    (v) => v,
   ),
-  expandMode: Schema.Literals(["expand", "collapse"]),
+  expandMode: Codec.literals(["expand", "collapse"]),
 })
 
 export function createReviewPanelState(platform?: Platform) {
@@ -47,3 +50,4 @@ export function createReviewPanelState(platform?: Platform) {
 }
 
 export type ReviewPanelState = ReturnType<typeof createReviewPanelState>
+

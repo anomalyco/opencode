@@ -5,8 +5,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useServer } from "@/runtime/server/current"
-import { Schema } from "effect"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 import { fileManagerApp } from "@/home/projects/file-manager"
 import { openInAppParentPath } from "@/session/files/open-in-app-path"
 
@@ -30,8 +29,8 @@ export const OPEN_APPS = [
 export type OpenApp = (typeof OPEN_APPS)[number]
 export type OpenAppOS = "macos" | "windows" | "linux" | "unknown"
 
-export const OpenAppPreferences = Persistence.struct({
-  app: Schema.Literals(OPEN_APPS),
+export const OpenAppPreferences = Codec.struct({
+  app: Codec.literals(OPEN_APPS),
 })
 
 const appExistence = new Map<string, Promise<boolean>>()
@@ -242,3 +241,4 @@ function checkAppExists(platform: ReturnType<typeof usePlatform>, app: string) {
   appExistence.set(app, request)
   return request
 }
+

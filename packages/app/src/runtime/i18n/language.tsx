@@ -1,7 +1,7 @@
 import { flatten, resolveTemplate, translator, type Flatten } from "@solid-primitives/i18n"
 import { createEffect, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Option, Schema, SchemaGetter } from "effect"
+import { Codec } from "@/runtime/persistence/codec"
 import { createSimpleContext } from "@opencode/ui/context"
 import {
   I18nProvider,
@@ -12,7 +12,6 @@ import {
   type UiPluralCategory,
 } from "@opencode/ui/context/i18n"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
 import en from "@/runtime/i18n/en"
 import { dict } from "@opencode/ui/i18n/en"
 import {
@@ -56,14 +55,9 @@ function cookie(locale: Locale) {
 
 const LOCALES: readonly Locale[] = DESKTOP_NATIVE_LOCALES
 
-const LocaleSchema = Schema.Literals(DESKTOP_NATIVE_LOCALES)
-const StoredLocaleSchema = Schema.Struct({
-  locale: Schema.String.pipe(
-    Schema.decodeTo(LocaleSchema, {
-      decode: SchemaGetter.transform(normalizeLocale),
-      encode: SchemaGetter.transform((locale) => locale),
-    }),
-  ),
+const LocaleSchema = Codec.literals(DESKTOP_NATIVE_LOCALES)
+const StoredLocaleSchema = Codec.struct({
+  locale: Codec.transform(Codec.string, { decode: normalizeLocale, encode: (locale) => locale }),
 })
 
 const INTL = DESKTOP_NATIVE_LOCALE_TAGS
@@ -160,10 +154,10 @@ function detectLocale(): Locale {
 }
 
 export function normalizeLocale(value: string): Locale {
-  return Option.getOrElse(Schema.decodeUnknownOption(LocaleSchema)(value), () => "en")
+  return Codec.decodeOption(LocaleSchema, value) ?? "en"
 }
 
-export const languageSchema = Persistence.struct({
+export const languageSchema = Codec.struct({
   locale: StoredLocaleSchema.fields.locale,
 })
 
@@ -172,9 +166,7 @@ function readStoredLocale() {
   try {
     const raw = localStorage.getItem("opencode.global.dat:language")
     if (!raw) return
-    const next = Schema.decodeUnknownOption(Schema.fromJsonString(StoredLocaleSchema))(raw)
-    if (Option.isNone(next)) return
-    return next.value.locale
+    return Codec.decodeOption(Codec.fromJsonString(StoredLocaleSchema), raw)?.locale
   } catch {
     return
   }
@@ -296,3 +288,4 @@ export function UiI18nBridge(props: { children?: JSX.Element }) {
     </I18nProvider>
   )
 }
+

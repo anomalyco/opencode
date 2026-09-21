@@ -104,7 +104,7 @@ describe("persisted consumer schemas", () => {
   })
 
   test("language preserves runtime defaults and normalizes unsupported locales to English", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(languageSchema, { locale: "fr" }))
+    const decode = (input: unknown) => Codec.decodeOrThrow(Codec.withInitial(languageSchema, { locale: "fr" }), input)
     expect(decode({})).toEqual({ locale: "fr" })
     expect(decode({ locale: undefined })).toEqual({ locale: "fr" })
     expect(decode({ locale: 42 })).toEqual({ locale: "fr" })
@@ -112,4 +112,5 @@ describe("persisted consumer schemas", () => {
     expect(decode({ locale: "ar" })).toEqual({ locale: "ar" })
   })
 })
+
 

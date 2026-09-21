@@ -2,8 +2,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import type { SessionStatus } from "@opencode/client/promise"
 import { onCleanup } from "solid-js"
-import { Schema } from "effect"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 import { useSessionLayout } from "./session-layout"
 import { useDialog, useI18n } from "@opencode/ui/context"
 import { DialogUsageExceeded } from "@/providers/connect/usage-exceeded"
@@ -15,11 +14,11 @@ const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_don
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
 
-export const GoUpsellState = Persistence.struct({
-  [GO_UPSELL_FREE_TIER_LAST_SEEN_AT]: Schema.NullOr(Schema.Finite),
-  [GO_UPSELL_FREE_TIER_DONT_SHOW]: Schema.NullOr(Schema.Finite),
-  [GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT]: Schema.NullOr(Schema.Finite),
-  [GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW]: Schema.NullOr(Schema.Finite),
+export const GoUpsellState = Codec.struct({
+  [GO_UPSELL_FREE_TIER_LAST_SEEN_AT]: Codec.nullOr(Codec.number),
+  [GO_UPSELL_FREE_TIER_DONT_SHOW]: Codec.nullOr(Codec.number),
+  [GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT]: Codec.nullOr(Codec.number),
+  [GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW]: Codec.nullOr(Codec.number),
 })
 
 function goUpsellKeys(status: SessionStatus) {
@@ -106,3 +105,4 @@ export function useUsageExceededDialogs() {
     }),
   )
 }
+

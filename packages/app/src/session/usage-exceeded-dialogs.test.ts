@@ -1,16 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
 import { GoUpsellState } from "./usage-exceeded-dialogs"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 
-const decode = Schema.decodeUnknownSync(
-  Persistence.withInitial(GoUpsellState, {
-    go_upsell_last_seen_at: null,
-    go_upsell_dont_show: null,
-    go_upsell_account_rate_limit_last_seen_at: null,
-    go_upsell_account_rate_limit_dont_show: null,
-  }),
-)
+const schema = Codec.withInitial(GoUpsellState, {
+  go_upsell_last_seen_at: null,
+  go_upsell_dont_show: null,
+  go_upsell_account_rate_limit_last_seen_at: null,
+  go_upsell_account_rate_limit_dont_show: null,
+})
+const decode = (input: unknown) => Codec.decodeOrThrow(schema, input)
 
 describe("usage exceeded preferences", () => {
   test("defaults unseen prompts", () => {
@@ -38,3 +36,5 @@ describe("usage exceeded preferences", () => {
     })
   })
 })
+
+
