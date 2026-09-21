@@ -90,6 +90,7 @@ Modellerimize aşağıdaki API uç noktaları aracılığıyla da erişebilirsin
 | Gemini 3.5 Flash Lite           | gemini-3.5-flash-lite           | `https://opencode.ai/zen/v1/models/gemini-3.5-flash-lite` | `@ai-sdk/google`            |
 | Gemini 3.1 Pro                  | gemini-3.1-pro                  | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`        | `@ai-sdk/google`            |
 | Gemini 3 Flash                  | gemini-3-flash                  | `https://opencode.ai/zen/v1/models/gemini-3-flash`        | `@ai-sdk/google`            |
+| Grok 4.7                        | grok-4.7                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Grok 4.6                        | grok-4.6                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Grok 4.5                        | grok-4.5                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Grok Build 0.1                  | grok-build-0.1                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
@@ -119,6 +120,7 @@ Modellerimize aşağıdaki API uç noktaları aracılığıyla da erişebilirsin
 | Jev 1.13                        | jev-1.13                        | `https://opencode.ai/zen/v1/systemone`                    | -                           |
 | Jev 1.13 Free                   | jev-1.13-free                   | `https://opencode.ai/zen/v1/systemone`                    | -                           |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Flash Free            | mimo-v2.6-flash-free            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Ling 3.0 Flash Fin Free         | ling-3.0-flash-fin-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -200,6 +202,7 @@ Kullandıkça öde modelini destekliyoruz. Aşağıda **1M token başına** fiya
 | Model                             | Input    | Output   | Cached Read | Cached Write |
 | --------------------------------- | -------- | -------- | ----------- | ------------ |
 | Big Pickle                        | Free     | Free     | Free        | -            |
+| MiMo-V2.6-Flash Free              | Free     | Free     | Free        | -            |
 | MiMo-V2.5 Free                    | Free     | Free     | Free        | -            |
 | Ling 3.0 Flash Fin Free           | Free     | Free     | Free        | -            |
 | Nemotron 3 Ultra Free             | Free     | Free     | Free        | -            |
@@ -248,6 +251,8 @@ Kullandıkça öde modelini destekliyoruz. Aşağıda **1M token başına** fiya
 | Gemini 3.1 Pro (≤ 200K tokens)    | $2.00    | $12.00   | $0.20       | -            |
 | Gemini 3.1 Pro (> 200K tokens)    | $4.00    | $18.00   | $0.40       | -            |
 | Gemini 3 Flash                    | $0.50    | $3.00    | $0.05       | -            |
+| Grok 4.7 (≤ 200K tokens)          | $2.00    | $6.00    | $0.50       | -            |
+| Grok 4.7 (> 200K tokens)          | $4.00    | $12.00   | $1.00       | -            |
 | Grok 4.6 (≤ 200K tokens)          | $2.00    | $6.00    | $0.50       | -            |
 | Grok 4.6 (> 200K tokens)          | $4.00    | $12.00   | $1.00       | -            |
 | Grok 4.5 (≤ 200K tokens)          | $2.00    | $6.00    | $0.30       | -            |
@@ -293,6 +298,7 @@ Kredi kartı ücretleri maliyet üzerinden yansıtılır (%4.4 + işlem başına
 
 Ücretsiz modeller:
 
+- MiMo-V2.6-Flash Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
 - MiMo-V2.5 Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
 - Ling 3.0 Flash Fin Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
 - Nemotron 3 Ultra Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
@@ -351,6 +357,7 @@ Ayrıca tüm çalışma alanı için ve ekibinizdeki her üye için aylık kulla
 Tüm modellerimiz US'de barındırılıyor. Sağlayıcılarımız zero-retention politikası uygular ve aşağıdaki istisnalar dışında verilerinizi model eğitimi için kullanmaz:
 
 - Big Pickle: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
+- MiMo-V2.6-Flash Free: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
 - MiMo-V2.5 Free: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
 - Ling 3.0 Flash Fin Free: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
 - Nemotron 3 Ultra Free (ücretsiz NVIDIA uç noktaları): Yalnızca deneme amaçlıdır — kişisel veya gizli veri göndermeyin. Kullanımınız güvenlik amacıyla ve NVIDIA ürünlerini ve hizmetlerini geliştirmek için kaydedilir. Geliştirme amacıyla kaydedilen oturum verileri kimliğinizle veya herhangi bir kalıcı tanımlayıcıyla ilişkilendirilmez. Veri işleme uygulamalarımız hakkında daha fazla bilgi için [Gizlilik Politikamıza](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) bakın. Bu uç noktayla etkileşime geçerek, bu tür bilgileri toplamamıza, kaydetmemize ve kullanmamıza ve [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) koşullarına onay vermiş olursunuz.
