@@ -10,7 +10,7 @@ const prompt = (hasMoreTools: boolean) => `# Code Mode
 
 Use the \`execute\` tool to call the tools listed below. They cannot be called directly${hasMoreTools ? ", and neither can \`search\`. Both" : ". They"} only work inside code you pass to \`execute\`.
 
-${hasMoreTools ? `The catalog is partial. Inside \`execute\`, use \`search(...)\` to find a tool, then call it by the \`path\` in the result. Do not guess tool names.
+${hasMoreTools ? `The catalog is partial. Inside \`execute\`, use \`search(...)\` to find a tool, then call it by the \`path\` in the result. \`search\` is synchronous. Call it without \`await\`; it does not return a Promise. Do not guess tool names.
 
 - ${searchSignature}` : "The catalog is complete. Do not guess tool names."}
 
