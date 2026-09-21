@@ -357,6 +357,7 @@ export function SessionScreen(props: { session: SessionModel }) {
       session={session}
       attention={executionAttention}
       reviewRequest={reviewNativeRequest}
+      revealEvidence={(reference) => timeline.actions.revealMessage(reference.messageID, reference.partID)}
       onModel={setExecution}
     >
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">

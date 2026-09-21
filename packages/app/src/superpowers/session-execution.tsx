@@ -1,22 +1,26 @@
 import { createEffect, createMemo, type Accessor, type JSX, type ParentProps } from "solid-js"
+import { useNavigate } from "@solidjs/router"
 import { ExecutionRpc } from "@bearmanser/opencode-superpowers-execution/contract"
 import type { SessionModel } from "@/session/model"
 import { SESSION_EXECUTION_TAB } from "@/shell/state/session-tabs"
+import { sessionHref } from "@/shell/routes/session"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { createSessionExecution } from "./bridge-client"
 import { createExecutionScope } from "./identity"
 import { messageHasPart } from "./native-adapter"
-import type { EvidenceResolver, ExecutionAttention, ExecutionModel } from "./model"
+import type { EvidenceNavigator, EvidenceResolver, ExecutionAttention, ExecutionModel } from "./model"
 
 export function createSessionExecutionModel(input: {
   session: SessionModel
   attention: Accessor<ExecutionAttention>
   reviewRequest?: () => void
   openSession?: (sessionID: string) => void
+  revealEvidence?: EvidenceNavigator
 }): ExecutionModel {
   const server = useServer()
   const sdk = useServerSDK()
+  const navigate = useNavigate()
   const rootSessionID = createMemo(() => {
     const seen = new Set<string>()
     let id = input.session.identity.sessionID()
@@ -47,6 +51,10 @@ export function createSessionExecutionModel(input: {
       return false
     }
   }
+  const navigateEvidence: EvidenceNavigator = (reference) => {
+    void navigate(`${sessionHref(server.key, reference.sessionID)}#message-${reference.messageID}`)
+    if (reference.sessionID === input.session.identity.sessionID()) input.revealEvidence?.(reference)
+  }
   return createSessionExecution({
     scope,
     api: () => sdk.api.rpc(ExecutionRpc),
@@ -57,6 +65,7 @@ export function createSessionExecutionModel(input: {
     reviewRequest: input.reviewRequest,
     openSession: input.openSession,
     resolveEvidence,
+    navigateEvidence,
   }).model
 }
 
@@ -66,6 +75,7 @@ export function SessionExecutionProvider(
     attention: Accessor<ExecutionAttention>
     reviewRequest?: () => void
     openSession?: (sessionID: string) => void
+    revealEvidence?: EvidenceNavigator
     onModel: (model: ExecutionModel) => void
   }>,
 ) {
@@ -74,6 +84,7 @@ export function SessionExecutionProvider(
     attention: props.attention,
     reviewRequest: props.reviewRequest,
     openSession: props.openSession,
+    revealEvidence: props.revealEvidence,
   })
   createEffect(() => props.onModel(execution))
   return props.children

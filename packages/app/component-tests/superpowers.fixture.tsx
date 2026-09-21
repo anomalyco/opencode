@@ -252,6 +252,7 @@ export async function mountExecutionFixture(input: {
       reviewOpen: false,
       navigationTarget: "",
       navigationHref: "",
+      evidenceTarget: "",
       retryTarget: "",
       permissionReplies: 0,
       questionReplies: 0,
@@ -300,6 +301,8 @@ export async function mountExecutionFixture(input: {
       attention: () => fixtureAttention(scenario),
       progress: () => fixtureProgress(scenario),
       resolveEvidence: async ({ messageID }) => resolvableEvidence.has(messageID),
+      navigateEvidence: ({ sessionID, messageID, partID }) =>
+        setState("evidenceTarget", `${sessionID}#${messageID}#${partID ?? ""}`),
       reviewRequest: () => requestRegion?.focus(),
       openSession: (sessionID) => {
         setState("navigationTarget", `${scope().serverKey}/${sessionID}`)
@@ -359,6 +362,7 @@ export async function mountExecutionFixture(input: {
         <div data-testid="execution-load-log">{state.loaded.join(",")}</div>
         <div data-testid="navigation-target">{state.navigationTarget}</div>
         <div data-testid="navigation-href">{state.navigationHref}</div>
+        <div data-testid="evidence-target">{state.evidenceTarget}</div>
         <div data-testid="retry-target">{state.retryTarget}</div>
         <div data-testid="execution-scope-root">{model.scope()?.rootSessionID ?? ""}</div>
         <Show when={request()}>

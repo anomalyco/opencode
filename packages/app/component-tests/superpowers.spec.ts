@@ -419,20 +419,25 @@ story("task details separate current-attempt evidence from superseded attempts",
   await expect(page.getByTestId("execution-task-evidence-superseded")).toContainText("First attempt failed")
 })
 
-story("task details keep an unavailable evidence reference without erasing the report", async ({ page }) => {
+story("task evidence stays neutral until a deleted session lookup fails", async ({ page }) => {
   await openExecutionFixture(page, "tasks-detailed")
   await page.getByRole("button", { name: /Awaiting review, Awaiting review/ }).click()
   const evidence = page.getByTestId("execution-evidence-e-review-ghost")
+  await expect(evidence).toHaveAttribute("data-available", "unknown")
+  await expect(evidence).toContainText("Spec review reported from a deleted session")
+  await evidence
+    .getByRole("button", { name: /Open evidence from/ })
+    .evaluate((element) => (element as HTMLElement).click())
   await expect(evidence).toHaveAttribute("data-available", "false")
   await expect(evidence).toContainText("Spec review reported from a deleted session")
-  await expect(evidence.getByText("Evidence session unavailable", { exact: true })).toBeVisible()
+  await expect(evidence.getByText("Reported evidence not found", { exact: true })).toBeVisible()
 })
 
-story("task evidence marks an unresolvable message unavailable without erasing the report", async ({ page }) => {
+story("task evidence marks an unresolvable message unavailable only after lookup fails", async ({ page }) => {
   await openExecutionFixture(page, "tasks-detailed")
   await page.getByRole("button", { name: /Awaiting review, Awaiting review/ }).click()
   const evidence = page.getByTestId("execution-evidence-e-review-missing")
-  await expect(evidence).toHaveAttribute("data-available", "true")
+  await expect(evidence).toHaveAttribute("data-available", "unknown")
   await evidence
     .getByRole("button", { name: /Open evidence from/ })
     .evaluate((element) => (element as HTMLElement).click())
@@ -477,14 +482,14 @@ story("task progress marks a stale snapshot as stale while keeping counts", asyn
   await expect(page.getByTestId("execution-progress-count")).toHaveText("1/2")
 })
 
-story("task evidence resolves the native session link only on selection", async ({ page }) => {
+story("task evidence opens the specific message and part only on selection", async ({ page }) => {
   await openExecutionFixture(page, "half-verified")
-  await expect(page.getByTestId("navigation-target")).toHaveText("")
+  await expect(page.getByTestId("evidence-target")).toHaveText("")
   await page
     .getByRole("button", { name: /Open evidence from/ })
     .first()
     .evaluate((element) => (element as HTMLElement).click())
-  await expect(page.getByTestId("navigation-target")).toHaveText("wsl/child")
+  await expect(page.getByTestId("evidence-target")).toHaveText("child#msg-api-1#part-api-1")
 })
 
 story("task progress shows a scope increase reducing the fraction", async ({ page }) => {

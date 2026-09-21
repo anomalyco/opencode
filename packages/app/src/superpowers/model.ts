@@ -70,7 +70,6 @@ export type ExecutionTaskAssignments = {
 }
 
 export type ExecutionEvidenceJoin = Evidence & {
-  available: boolean
   sessionTitle?: string
 }
 
@@ -89,6 +88,8 @@ export type EvidenceReference = {
 export type EvidenceResolution = "resolving" | "available" | "unavailable"
 
 export type EvidenceResolver = (reference: Omit<EvidenceReference, "id">) => Promise<boolean> | boolean
+
+export type EvidenceNavigator = (reference: EvidenceReference) => void
 
 export function latestEvidenceForGate(evidence: ExecutionEvidenceJoin[], gate: Gate) {
   return evidence.filter((item) => item.gate === gate).at(-1)
@@ -140,7 +141,6 @@ export function joinTaskEvidence(input: {
       const agent = index.get(evidence.sessionID)
       return {
         ...evidence,
-        available: agent !== undefined,
         sessionTitle: agent?.title,
       } satisfies ExecutionEvidenceJoin
     })
@@ -196,6 +196,7 @@ export type ExecutionModelInput = {
   initialSubview?: ExecutionSubview
   openSession?: (sessionID: string) => void
   resolveEvidence?: EvidenceResolver
+  navigateEvidence?: EvidenceNavigator
   retry?: (sessionID: string) => void
   reviewRequest?: () => void
   selectRun?: (runID: string | undefined) => void
@@ -377,17 +378,17 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
   const evidenceResolution = (evidenceID: string) => evidenceStates()[evidenceID]
 
   const openEvidence = (reference: EvidenceReference) => {
+    if (evidenceStates()[reference.id] === "resolving") return
     const resolver = input.resolveEvidence
     if (!resolver) {
-      input.openSession?.(reference.sessionID)
+      input.navigateEvidence?.(reference)
       return
     }
-    if (evidenceStates()[reference.id] === "resolving") return
     setEvidenceStates({ ...evidenceStates(), [reference.id]: "resolving" })
     Promise.resolve(resolver({ sessionID: reference.sessionID, messageID: reference.messageID, partID: reference.partID })).then(
       (resolved) => {
         setEvidenceStates((current) => ({ ...current, [reference.id]: resolved ? "available" : "unavailable" }))
-        if (resolved) input.openSession?.(reference.sessionID)
+        if (resolved) input.navigateEvidence?.(reference)
       },
       () => setEvidenceStates((current) => ({ ...current, [reference.id]: "unavailable" })),
     )

@@ -210,16 +210,13 @@ export function ExecutionTaskDetails(props: { model: ExecutionModel }) {
 function EvidenceRow(props: { model: ExecutionModel; item: ExecutionEvidenceJoin }) {
   const language = useLanguage()
   const resolution = () => props.model.evidenceResolution(props.item.id)
-  const available = () => props.item.available && resolution() !== "unavailable"
-  const unavailableReason = () =>
-    props.item.available
-      ? "execution.task.evidence.notFound"
-      : "execution.task.evidence.unavailable"
+  const availability = () =>
+    resolution() === undefined ? "unknown" : resolution() === "available" ? "true" : "false"
   return (
     <li
       class="execution-evidence"
       data-testid={`execution-evidence-${props.item.id}`}
-      data-available={String(available())}
+      data-available={availability()}
       data-resolving={resolution() === "resolving" ? "true" : undefined}
       data-outcome={props.item.outcome}
       data-message-id={props.item.messageID}
@@ -229,9 +226,11 @@ function EvidenceRow(props: { model: ExecutionModel; item: ExecutionEvidenceJoin
       <span class="execution-evidence__outcome">{language.t(gateOutcomeKey(props.item.outcome))}</span>
       <span class="execution-evidence__summary">{props.item.summary}</span>
       <Show
-        when={available()}
+        when={resolution() !== "unavailable"}
         fallback={
-          <span class="execution-evidence__unavailable">{language.t(unavailableReason())}</span>
+          <span class="execution-evidence__unavailable">
+            {language.t("execution.task.evidence.notFound")}
+          </span>
         }
       >
         <button

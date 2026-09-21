@@ -335,11 +335,11 @@ describe("createExecutionModel tasks", () => {
     expect(evidence.current[0]?.outcome).toBe("failed")
   })
 
-  test("marks an evidence reference unavailable while keeping the report", () => {
+  test("does not infer evidence availability from the agent list", () => {
     const run = detailedTasksRun()
     const agents = agentFixture("agents")
     const ghost = joinTaskEvidence({ run, taskID: "task-review", attempt: 1, agents }).current[0]
-    expect(ghost?.available).toBe(false)
+    expect(ghost && "available" in ghost).toBe(false)
     expect(ghost?.summary).toBe("Spec review reported from a deleted session")
     expect(ghost?.outcome).toBe("passed")
     expect(ghost?.sessionID).toBe("ghost")
@@ -354,27 +354,28 @@ describe("createExecutionModel tasks", () => {
     expect(latestEvidenceForGate(join.current, "tests")?.outcome).toBe("failed")
   })
 
-  test("resolves evidence lazily and marks a failed resolution unavailable", async () => {
+  test("resolves evidence lazily and navigates the specific resolved target", async () => {
     await rootAsync(async () => {
+      const navigated: string[] = []
       const model = createExecutionModel({
         snapshot: () => halfVerifiedRun(),
         agents: () => agentFixture("agents"),
         resolveEvidence: ({ messageID }) => messageID === "msg-api-1",
+        navigateEvidence: (reference) =>
+          navigated.push(`${reference.sessionID}#${reference.messageID}#${reference.partID ?? ""}`),
       })
-      const reference = {
-        id: "e-api-review",
-        sessionID: "idle-child",
-        messageID: "msg-api-2",
-      }
-      expect(model.evidenceResolution(reference.id)).toBeUndefined()
-      model.openEvidence(reference)
-      expect(model.evidenceResolution(reference.id)).toBe("resolving")
+      const missing = { id: "e-api-review", sessionID: "idle-child", messageID: "msg-api-2" }
+      expect(model.evidenceResolution(missing.id)).toBeUndefined()
+      model.openEvidence(missing)
+      expect(model.evidenceResolution(missing.id)).toBe("resolving")
       await settle()
-      expect(model.evidenceResolution(reference.id)).toBe("unavailable")
-      const resolved = { id: "e-api-tests", sessionID: "child", messageID: "msg-api-1" }
+      expect(model.evidenceResolution(missing.id)).toBe("unavailable")
+      expect(navigated).toEqual([])
+      const resolved = { id: "e-api-tests", sessionID: "child", messageID: "msg-api-1", partID: "part-api-1" }
       model.openEvidence(resolved)
       await settle()
       expect(model.evidenceResolution(resolved.id)).toBe("available")
+      expect(navigated).toEqual(["child#msg-api-1#part-api-1"])
     })
   })
 

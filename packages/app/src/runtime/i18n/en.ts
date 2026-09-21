@@ -940,7 +940,6 @@ export const dict = {
   "execution.task.evidence.superseded": "Superseded attempt evidence",
   "execution.task.evidence.none": "No evidence reported for the current attempt.",
   "execution.task.evidence.open": "Open evidence from {{session}}",
-  "execution.task.evidence.unavailable": "Evidence session unavailable",
   "execution.task.evidence.notFound": "Reported evidence not found",
   "execution.task.evidence.reported": "Reported by {{session}} at {{time}}",
   "execution.task.assignments.label": "Assignments",
