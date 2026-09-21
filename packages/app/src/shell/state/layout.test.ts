@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { Schema } from "effect"
 import { ServerConnection } from "@/runtime/server/registry"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 import { currentRoute, initialLayout, layoutPersistence, layoutSchema } from "./layout"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 
@@ -11,21 +10,21 @@ test("settings has its own layout route", () => {
 })
 
 describe("layout persistence", () => {
-  const schema = Persistence.withInitial(layoutPersistence, initialLayout(ServerConnection.Key.make("local")))
-  const decode = Schema.decodeUnknownSync(schema)
+  const schema = Codec.withInitial(layoutPersistence, initialLayout(ServerConnection.Key.make("local")))
+  const decode = (input: unknown) => Codec.decodeOrThrow(schema, input)
 
   test("uses supplied initial preferences after legacy migration", () => {
     const initial = initialLayout(ServerConnection.Key.make("remote"))
     initial.sidebar.width = 420
     initial.fileTree.width = 300
     initial.review.panelOpened = true
-    const restore = Schema.decodeUnknownSync(Persistence.withInitial(layoutPersistence, initial))
+    const restore = (input: unknown) => Codec.decodeOrThrow(Codec.withInitial(layoutPersistence, initial), input)
     expect(restore({})).toEqual(initial)
     expect(restore({ sidebar: { width: "bad" } }).sidebar.width).toBe(420)
     expect(restore({ fileTree: { width: 260 } }).fileTree.width).toBe(200)
     expect(restore({ fileTree: {} }).fileTree.width).toBe(300)
     expect(restore({ review: {}, fileTree: { opened: false } }).review.panelOpened).toBe(false)
-    expect(() => Schema.decodeUnknownSync(layoutSchema)({})).toThrow()
+    expect(() => Codec.decodeOrThrow(layoutSchema, {})).toThrow()
   })
 
   test("restores shipped defaults for missing and invalid fields", () => {
@@ -56,8 +55,8 @@ describe("layout persistence", () => {
     expect(value.sidebar).toEqual({ opened: false, width: 344, workspaces: {}, workspacesDefault: true })
     expect(value.review).toEqual({ diffStyle: "split", panelOpened: true })
     expect(value.fileTree).toEqual({ opened: true, width: 200, tab: "changes" })
-    expect(Schema.encodeSync(schema)(value)).toEqual(value)
-    expect(decode(Schema.encodeSync(schema)(value))).toEqual(value)
+    expect(schema.encode(value)).toEqual(value)
+    expect(decode(schema.encode(value))).toEqual(value)
     expect(decode({ fileTree: { opened: true } }).review.panelOpened).toBe(false)
   })
 
@@ -169,3 +168,4 @@ describe("pruneSessionKeys", () => {
     expect(drop).toEqual([])
   })
 })
+

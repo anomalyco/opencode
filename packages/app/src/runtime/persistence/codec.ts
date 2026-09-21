@@ -241,7 +241,7 @@ export function transform<T, E, T2>(
 }
 
 /** Invalid and missing values become `value()`, like `Persistence.fallback`. */
-export function fallback<T, E>(codec: Of<T, E>, value: () => T): Of<T, E> {
+export function fallback<T, E>(codec: Of<T, E>, value: () => NoInfer<T>): Of<T, E> {
   return make(
     (input) => {
       if (input === undefined) return value()
@@ -266,10 +266,11 @@ export function fromJsonString<T, E>(codec: Of<T, E>): Of<T, string> {
   )
 }
 
-export type Migrated<C extends Any> = { readonly current: C; readonly read: Of<unknown> }
+export type Decoder = Pick<Of<unknown>, "decode">
+export type Migrated<C extends Any> = { readonly current: C; readonly read: Decoder }
 
 /** Older stored shapes go through `read` first; `current` describes what the store holds today. */
-export function migrate<C extends Any>(current: C, read: Of<unknown>): Migrated<C> {
+export function migrate<C extends Any>(current: C, read: Decoder): Migrated<C> {
   return { current, read }
 }
 

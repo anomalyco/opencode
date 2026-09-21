@@ -1,5 +1,4 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Schema, SchemaGetter } from "effect"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode/ui/context"
@@ -8,8 +7,8 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { Project } from "@/runtime/server/types"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
-import { ServerKey } from "@/runtime/server/persistence"
+import { Codec } from "@/runtime/persistence/codec"
+import { ServerKey } from "@/runtime/server/key"
 import { decode64 } from "@/runtime/persistence/base64"
 import { same } from "@/runtime/persistence/equality"
 import { createScrollPersistence, type SessionScroll } from "./scroll"
@@ -129,98 +128,99 @@ export const useCurrentRoute = () => {
   return createMemo(() => currentRoute(location.pathname, location.search))
 }
 
-const sessionTabsSchema = Persistence.struct({
-  all: Persistence.array(Schema.String),
-  active: Persistence.optional(Schema.String),
+const sessionTabsSchema = Codec.struct({
+  all: Codec.lenientArray(Codec.string),
+  active: Codec.lenientOptional(Codec.string),
 })
-const sessionViewSchema = Persistence.struct({
-  scroll: Persistence.record(Schema.Struct({ x: Schema.Finite, y: Schema.Finite })),
-  reviewOpen: Schema.optional(Persistence.array(Schema.String)),
-  reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
-  reviewFile: Schema.optional(Schema.String),
-  pendingMessage: Schema.optional(Schema.String),
-  pendingMessageAt: Schema.optional(Schema.Finite),
+const sessionViewSchema = Codec.struct({
+  scroll: Codec.lenientRecord(Codec.struct({ x: Codec.number, y: Codec.number })),
+  reviewOpen: Codec.optional(Codec.lenientArray(Codec.string)),
+  reviewMode: Codec.optional(Codec.literals(["git", "branch", "turn"])),
+  reviewFile: Codec.optional(Codec.string),
+  pendingMessage: Codec.optional(Codec.string),
+  pendingMessageAt: Codec.optional(Codec.number),
 })
 
-export const layoutSchema = Persistence.struct({
-  sidebar: Persistence.struct({
-    opened: Schema.Boolean,
-    width: Schema.Finite,
-    workspaces: Persistence.record(Schema.Boolean),
-    workspacesDefault: Schema.Boolean,
+export const layoutSchema = Codec.struct({
+  sidebar: Codec.struct({
+    opened: Codec.boolean,
+    width: Codec.number,
+    workspaces: Codec.lenientRecord(Codec.boolean),
+    workspacesDefault: Codec.boolean,
   }),
-  terminal: Persistence.struct({ height: Schema.Finite, opened: Schema.Boolean }),
-  review: Persistence.struct({
-    diffStyle: Schema.Literals(["unified", "split"]),
-    panelOpened: Schema.Boolean,
+  terminal: Codec.struct({ height: Codec.number, opened: Codec.boolean }),
+  review: Codec.struct({
+    diffStyle: Codec.literals(["unified", "split"]),
+    panelOpened: Codec.boolean,
   }),
-  fileTree: Persistence.struct({
-    opened: Schema.Boolean,
-    width: Schema.Finite,
-    tab: Schema.Literals(["changes", "all"]),
+  fileTree: Codec.struct({
+    opened: Codec.boolean,
+    width: Codec.number,
+    tab: Codec.literals(["changes", "all"]),
   }),
-  session: Persistence.struct({ width: Schema.Finite }),
-  mobileSidebar: Persistence.struct({ opened: Schema.Boolean }),
-  sessionTabs: Persistence.record(Persistence.fallback(sessionTabsSchema, () => ({ all: [] }))),
-  sessionView: Persistence.record(Persistence.fallback(sessionViewSchema, () => ({ scroll: {} }))),
-  home: Persistence.struct({
-    selection: Persistence.struct({
-      server: Schema.optional(ServerKey),
-      directory: Schema.optional(Schema.String),
+  session: Codec.struct({ width: Codec.number }),
+  mobileSidebar: Codec.struct({ opened: Codec.boolean }),
+  sessionTabs: Codec.lenientRecord(Codec.fallback(sessionTabsSchema, () => ({ all: [] }))),
+  sessionView: Codec.lenientRecord(Codec.fallback(sessionViewSchema, () => ({ scroll: {} }))),
+  home: Codec.struct({
+    selection: Codec.struct({
+      server: Codec.optional(ServerKey),
+      directory: Codec.optional(Codec.string),
     }),
   }),
 })
 
-export const layoutPersistence = Persistence.migrate(
-  layoutSchema,
-  Schema.Struct({
-    sidebar: Persistence.optional(
-      Schema.Struct({
-        workspaces: Persistence.optional(Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Schema.Boolean)])),
-        workspacesDefault: Persistence.optional(Schema.Boolean),
-      }),
-    ),
-    review: Persistence.optional(Schema.Struct({ panelOpened: Persistence.optional(Schema.Boolean) })),
-    fileTree: Persistence.optional(
-      Schema.Struct({
-        opened: Persistence.optional(Schema.Boolean),
-        width: Persistence.optional(Schema.Finite),
-        tab: Persistence.optional(Schema.Literals(["changes", "all"])),
-      }),
-    ),
-    sessionTabs: layoutSchema.fields.sessionTabs,
-    sessionView: layoutSchema.fields.sessionView,
-  }).pipe(
-    Schema.decode({
-      decode: SchemaGetter.transform((value) => ({
-        ...value,
-        sidebar:
-          typeof value.sidebar?.workspaces === "boolean"
-            ? { ...value.sidebar, workspaces: {}, workspacesDefault: value.sidebar.workspaces }
-            : value.sidebar,
-        // Only an existing review section inherits the old file-tree panel flag.
-        review: value.review
-          ? { ...value.review, panelOpened: value.review.panelOpened ?? value.fileTree?.opened }
-          : value.review,
-        fileTree:
-          value.fileTree && !value.fileTree.tab
-            ? {
-                ...value.fileTree,
-                opened: true,
-                width: value.fileTree.width === 260 ? DEFAULT_FILE_TREE_WIDTH : value.fileTree.width,
-                tab: "changes" as const,
-              }
-            : value.fileTree,
-        sessionTabs: Object.fromEntries(
-          Object.entries(value.sessionTabs)
-            .filter(([key]) => SessionStateKey.is(key))
-            .map(([key, tabs]) => [key, normalizeStoredSessionTabs(key, tabs)]),
-        ),
-        sessionView: Object.fromEntries(Object.entries(value.sessionView).filter(([key]) => SessionStateKey.is(key))),
-      })),
-      encode: SchemaGetter.transform((value) => value),
+// The shapes older versions stored, read before the current schema recovers field by field.
+const storedLayout = Codec.struct({
+  sidebar: Codec.lenientOptional(
+    Codec.struct({
+      workspaces: Codec.lenientOptional(Codec.union([Codec.boolean, Codec.record(Codec.boolean)])),
+      workspacesDefault: Codec.lenientOptional(Codec.boolean),
     }),
   ),
+  review: Codec.lenientOptional(Codec.struct({ panelOpened: Codec.lenientOptional(Codec.boolean) })),
+  fileTree: Codec.lenientOptional(
+    Codec.struct({
+      opened: Codec.lenientOptional(Codec.boolean),
+      width: Codec.lenientOptional(Codec.number),
+      tab: Codec.lenientOptional(Codec.literals(["changes", "all"])),
+    }),
+  ),
+  sessionTabs: layoutSchema.fields.sessionTabs,
+  sessionView: layoutSchema.fields.sessionView,
+})
+
+export const layoutPersistence = Codec.migrate(
+  layoutSchema,
+  Codec.transform(storedLayout, {
+    decode: (value) => ({
+      ...value,
+      sidebar:
+        typeof value.sidebar?.workspaces === "boolean"
+          ? { ...value.sidebar, workspaces: {}, workspacesDefault: value.sidebar.workspaces }
+          : value.sidebar,
+      // Only an existing review section inherits the old file-tree panel flag.
+      review: value.review
+        ? { ...value.review, panelOpened: value.review.panelOpened ?? value.fileTree?.opened }
+        : value.review,
+      fileTree:
+        value.fileTree && !value.fileTree.tab
+          ? {
+              ...value.fileTree,
+              opened: true,
+              width: value.fileTree.width === 260 ? DEFAULT_FILE_TREE_WIDTH : value.fileTree.width,
+              tab: "changes" as const,
+            }
+          : value.fileTree,
+      sessionTabs: Object.fromEntries(
+        Object.entries(value.sessionTabs)
+          .filter(([key]) => SessionStateKey.is(key))
+          .map(([key, tabs]) => [key, normalizeStoredSessionTabs(key, tabs)]),
+      ),
+      sessionView: Object.fromEntries(Object.entries(value.sessionView).filter(([key]) => SessionStateKey.is(key))),
+    }),
+    encode: (value) => value,
+  }),
 )
 
 export function initialLayout(server?: ServerConnection.Key): typeof layoutSchema.Type {
@@ -765,3 +765,4 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
   },
 })
+
