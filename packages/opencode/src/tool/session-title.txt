@@ -1,0 +1,15 @@
+Rename the current session so the user can find this conversation later.
+
+## When to use
+Use ONLY when the user explicitly asks to rename, retitle, or change the session/conversation name
+(e.g. "rename this session to X", "muda o título da sessão para X", "chama essa conversa de X").
+
+## When NOT to use
+Do NOT use proactively or on every turn. The session already gets an automatic title once after the
+first message - never invent a new title on your own.
+
+## Rules
+- Use the exact title the user asked for, unless they asked you to suggest one.
+- When suggesting a title yourself, write it in the same language the user is speaking, keep it a
+  single line of at most 50 characters, and keep technical terms, filenames, and identifiers exact.
+- Never include tool names in the title.
