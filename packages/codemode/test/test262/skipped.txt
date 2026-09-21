@@ -295,7 +295,6 @@ language/statements/for-await-of/async-func-decl-dstr-obj-empty-num.js  # TypeEr
 language/statements/for-await-of/async-func-decl-dstr-obj-empty-string.js  # TypeError: Object destructuring requires a data object or array value, received a string.
 language/statements/for-await-of/async-func-decl-dstr-obj-rest-number.js  # TypeError: Object destructuring requires a data object or array value, received a number.
 language/statements/for-await-of/async-func-decl-dstr-obj-rest-str-val.js  # TypeError: Object destructuring requires a data object or array value, received a string.
-language/statements/for-await-of/async-gen-decl-dstr-array-elem-iter-rtrn-close-null.js  # "Promise incorrectly fulfilled."
 language/statements/for-await-of/async-gen-decl-dstr-obj-empty-bool.js  # TypeError: Object destructuring requires a data object or array value, received a boolean.
 language/statements/for-await-of/async-gen-decl-dstr-obj-empty-num.js  # TypeError: Object destructuring requires a data object or array value, received a number.
 language/statements/for-await-of/async-gen-decl-dstr-obj-empty-string.js  # TypeError: Object destructuring requires a data object or array value, received a string.
@@ -303,10 +302,7 @@ language/statements/for-await-of/async-gen-decl-dstr-obj-rest-number.js  # TypeE
 language/statements/for-await-of/async-gen-decl-dstr-obj-rest-str-val.js  # TypeError: Object destructuring requires a data object or array value, received a string.
 language/statements/for-in/head-lhs-member.js  # Unsupported for...in binding.
 language/statements/for-of/dstr/array-elem-iter-rtrn-close-err.js  # Iterator next must be a function.
-language/statements/for-of/dstr/array-elem-iter-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/for-of/dstr/array-elem-iter-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
-language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
-language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/for-of/dstr/array-elem-trlg-iter-list-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
 language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all

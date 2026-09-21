@@ -713,10 +713,8 @@ class Frame<R> {
         const bodyExit = yield* Effect.exit(evaluateBody(step.value))
         if (!Exit.isSuccess(bodyExit)) {
           // Process interruption must remain prompt; user cleanup cannot extend a timeout.
-          if (!Cause.hasInterruptsOnly(bodyExit.cause)) {
-            yield* Effect.exit(close())
-          }
-          return yield* Effect.failCause(bodyExit.cause)
+          if (Cause.hasInterruptsOnly(bodyExit.cause)) return yield* Effect.failCause(bodyExit.cause)
+          return yield* preserveConsumerError(close(), Effect.failCause(bodyExit.cause))
         }
         const exit = loopExit(bodyExit.value, labels)
         if (exit !== undefined) {
@@ -1223,7 +1221,7 @@ class Frame<R> {
           return
         }
         const consumed = consume(element, step.done ? undefined : step.value, pattern)
-        yield* step.done ? consumed : preserveConsumerError(cursor, consumed)
+        yield* step.done ? consumed : preserveConsumerError(cursor.close, consumed)
       }
       if (!done) yield* cursor.close
     })

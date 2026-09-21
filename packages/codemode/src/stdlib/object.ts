@@ -82,7 +82,7 @@ const objectFromEntries = <R>(ctx: Interpreter<R>, source: Value): Effect.Effect
       const step = yield* cursor.next
       if (step.done) return out
       yield* preserveConsumerError(
-        cursor,
+        cursor.close,
         Effect.sync(() => {
           if (!(step.value instanceof Obj) || containsOpaqueReference(step.value)) {
             throw typeError("Object.fromEntries expects [key, value] entry objects.")
