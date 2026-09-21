@@ -49,6 +49,7 @@ export function createSessionExecutionModel(input: {
   }>({ activity: {} })
   const scope = () => native.target?.scope
   const executionVisible = input.visible ?? (() => input.session.layout.tabs().active() === SESSION_EXECUTION_TAB)
+  const connected = () => sdk.connection.status() === "connected"
   const ancestry = createMemo(() =>
     JSON.stringify(
       input.session.shared.data.session.list().map((session) => [session.id, session.parentID, session.location.directory]),
@@ -56,31 +57,54 @@ export function createSessionExecutionModel(input: {
   )
   let resolutionGeneration = 0
   let resolutionController: AbortController | undefined
+  let resolvedSessionID: string | undefined
   let activityGeneration = 0
   let activityActive = 0
+  let activityDisposed = false
+  let activityController = new AbortController()
   const activityLoaded = new Set<string>()
   const activityQueued = new Set<string>()
   const activityQueue: string[] = []
 
+  const cancelActivity = (reset: boolean) => {
+    activityGeneration += 1
+    activityController.abort()
+    if (!activityDisposed) activityController = new AbortController()
+    activityQueued.clear()
+    activityQueue.length = 0
+    if (!reset) return
+    activityLoaded.clear()
+    setNative("activity", {})
+  }
+
   const resolveTarget = () => {
     const selectedSessionID = input.session.identity.sessionID()
     resolutionGeneration += 1
-    activityGeneration += 1
     const current = resolutionGeneration
     resolutionController?.abort()
-    resolutionController = new AbortController()
-    activityLoaded.clear()
-    activityQueued.clear()
-    activityQueue.length = 0
-    setNative({ target: undefined, activity: {} })
-    if (!selectedSessionID) return
+    const identityChanged = resolvedSessionID !== selectedSessionID
+    resolvedSessionID = selectedSessionID
+    if (identityChanged) {
+      cancelActivity(true)
+      setNative("target", undefined)
+    }
+    if (!selectedSessionID || !connected()) return
+    const controller = new AbortController()
+    resolutionController = controller
     void resolveNativeTarget({
       serverKey: server.key,
       selectedSessionID,
       boundary,
-      signal: resolutionController.signal,
+      signal: controller.signal,
     }).then((target) => {
-      if (current !== resolutionGeneration || resolutionController?.signal.aborted) return
+      if (current !== resolutionGeneration || controller.signal.aborted || !target) return
+      const previous = native.target
+      const sameTarget =
+        previous?.selectedSessionID === target.selectedSessionID &&
+        previous.scope.serverKey === target.scope.serverKey &&
+        previous.scope.ownerDirectory === target.scope.ownerDirectory &&
+        previous.scope.rootSessionID === target.scope.rootSessionID
+      if (!sameTarget) cancelActivity(true)
       setNative("target", target)
     })
   }
@@ -88,6 +112,7 @@ export function createSessionExecutionModel(input: {
   createEffect(() => {
     input.session.identity.sessionID()
     ancestry()
+    connected()
     resolveTarget()
   })
   const nativeExecution = createNativeExecutionOwner({
@@ -111,8 +136,11 @@ export function createSessionExecutionModel(input: {
       if (!info) return { ...record, activity, state: nativeState(record) }
       const live = nativeRecord(
         nativeSessionInfo(info),
-        input.session.shared.data.session.status(record.id) === "running" ? "running" : record.status,
-        record.needsInput,
+        input.session.shared.data.session.status(record.id) === "running" ? "running" : "idle",
+        (input.session.shared.data.session.permission.list(record.id)?.length ?? 0) > 0 ||
+          (input.session.shared.data.session.form.list(record.id) ?? []).some(
+            (form) => form.metadata?.kind === "question" || form.metadata?.kind === "websearch.provider",
+          ),
       )
       const merged = { ...record, ...live, title: live.title || record.title, activity }
       return { ...merged, state: nativeState(merged) }
@@ -120,22 +148,24 @@ export function createSessionExecutionModel(input: {
   )
 
   const pumpActivity = () => {
+    if (activityDisposed || !executionVisible()) return
     while (activityActive < 4 && activityQueue.length > 0) {
       const sessionID = activityQueue.shift()
       if (!sessionID) continue
       const current = activityGeneration
+      const signal = activityController.signal
       activityActive += 1
       void sdk.api.message
-        .list({ sessionID, order: "desc", limit: 20 })
+        .list({ sessionID, order: "desc", limit: 20 }, { signal })
         .then((page) => {
-          if (current !== activityGeneration) return
+          if (current !== activityGeneration || activityDisposed || signal.aborted || !executionVisible()) return
           setNative("activity", sessionID, latestNativeActivity([...page.data].reverse()))
           activityLoaded.add(sessionID)
         })
         .catch(() => undefined)
         .finally(() => {
           activityActive -= 1
-          activityQueued.delete(sessionID)
+          if (current === activityGeneration) activityQueued.delete(sessionID)
           pumpActivity()
         })
     }
@@ -155,10 +185,15 @@ export function createSessionExecutionModel(input: {
     })
     pumpActivity()
   }
+  createEffect(() => {
+    if (executionVisible()) return
+    cancelActivity(false)
+  })
   onCleanup(() => {
+    activityDisposed = true
     resolutionGeneration += 1
-    activityGeneration += 1
     resolutionController?.abort()
+    cancelActivity(false)
     nativeExecution.dispose()
   })
   const resolveEvidence: EvidenceResolver = async ({ sessionID, messageID, partID }) => {
@@ -183,7 +218,7 @@ export function createSessionExecutionModel(input: {
     scope,
     api: () => sdk.api.rpc(ExecutionRpc),
     events: sdk.event,
-    connection: () => sdk.connection.status() === "connected",
+    connection: connected,
     visible: executionVisible,
     narrow: () => !input.session.isDesktop(),
     preferences: createExecutionPreferences(),
@@ -194,7 +229,10 @@ export function createSessionExecutionModel(input: {
     navigateEvidence,
     agents: () => agents(),
     nativeComplete: () => nativeExecution.snapshot()?.complete,
-    retry: nativeExecution.refresh,
+    retry: () => {
+      resolveTarget()
+      nativeExecution.refresh()
+    },
     loadAgentActivity,
   })
   onMount(() => {

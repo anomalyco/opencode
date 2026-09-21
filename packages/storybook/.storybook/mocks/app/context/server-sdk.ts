@@ -66,6 +66,7 @@ type ExecutionTransportOverride = {
   status: () => string
   session?: Record<string, unknown>
   permission?: Record<string, unknown>
+  message?: Record<string, unknown>
 }
 
 function executionTransport() {
@@ -84,6 +85,7 @@ export function useServerSDK() {
           rpc: override.rpc,
           ...(override.session ? { session: override.session } : {}),
           ...(override.permission ? { permission: override.permission } : {}),
+          ...(override.message ? { message: override.message } : {}),
         }
       : api,
     client,
@@ -97,4 +99,5 @@ export function useServerSDK() {
     connection: { status: override ? override.status : () => "connected" },
   }
 }
+
 import { ServerScope } from "@/runtime/server/scope"

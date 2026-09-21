@@ -1,7 +1,7 @@
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { DataProvider } from "@opencode/session-ui/context"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { MemoryRouter, Route, useParams } from "@solidjs/router"
+import { MemoryRouter, Route, createMemoryHistory, useParams } from "@solidjs/router"
 import { Match, Show, Suspense, Switch, createEffect, createMemo, createSignal, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
@@ -66,6 +66,11 @@ import type { SessionInfo } from "@opencode/client/promise"
 import type { OpenCodeEvent, RpcCallOptions, RpcClient } from "@opencode/client/promise"
 import type { RunSnapshot, RunSummary } from "@bearmanser/opencode-superpowers-execution/contract"
 import { ExecutionRpc } from "@bearmanser/opencode-superpowers-execution/contract"
+import { SessionScreen } from "../src/session/screen"
+import { useSessionModel } from "../src/session/model"
+import { BrowserAttachmentsProvider } from "../src/session/browser/attachments"
+import { ComposerPersistenceProvider } from "../src/composer/persistence"
+import { TerminalProvider } from "../src/session/terminal/context"
 
 type PendingRequest = { type: "permission" | "question"; owner: string }
 
@@ -142,48 +147,83 @@ function SeedProject() {
   return null
 }
 
-const liveSession = {
-  identity: { sessionID: () => "root", sessionKey: () => "wsl::root", params: { id: "root" } },
-  shared: {
-    data: {
-      session: {
-        list: () => [
-          {
-            id: "root",
-            title: "Root controller",
-            location: { directory: "/root/git/demo" },
-            model: { id: "gpt-5-codex", providerID: "openai" },
-            cost: 1.5,
-            tokens: { input: 1000, output: 250, reasoning: 0, cache: { read: 500, write: 0 } },
+type LiveExecutionState = {
+  connected: boolean
+  resolutionAvailable: boolean
+  running: boolean
+  needsInput: boolean
+  descendantIDs: string[]
+  visible: boolean
+  ownerMounted: boolean
+  messageFetches: number
+  nativeReplies: number
+}
+
+function liveNativeSession(sessionID: string) {
+  if (sessionID === "root") {
+    return {
+      id: "root",
+      title: "Root controller",
+      location: { directory: "/root/git/demo" },
+      model: { id: "gpt-5-codex", providerID: "openai" },
+      cost: 1.5,
+      tokens: { input: 1000, output: 250, reasoning: 0, cache: { read: 500, write: 0 } },
+    }
+  }
+  if (sessionID === "child") {
+    return {
+      id: "child",
+      parentID: "root",
+      title: "Child implementer",
+      location: { directory: "/root/git/demo/.worktrees/feature" },
+      cost: 0.5,
+      tokens: { input: 500, output: 100, reasoning: 0, cache: { read: 0, write: 0 } },
+    }
+  }
+  if (sessionID === "idle-child") {
+    return { id: sessionID, parentID: "root", title: "Idle reviewer", location: { directory: "/root/git/demo" } }
+  }
+  return { id: sessionID, parentID: "root", title: sessionID, location: { directory: "/root/git/demo" } }
+}
+
+function livePermission() {
+  return {
+    id: "permission-1",
+    sessionID: "root",
+    action: "shell",
+    resources: ["bun test"],
+    save: ["bun test"],
+    source: { type: "tool" as const, messageID: "message-1", id: "tool-1" },
+  }
+}
+
+function createLiveSession(state: LiveExecutionState) {
+  return {
+    identity: { sessionID: () => "root", sessionKey: () => "wsl::root", params: { id: "root" } },
+    shared: {
+      data: {
+        session: {
+          list: () => [liveNativeSession("root"), ...state.descendantIDs.map(liveNativeSession)],
+          get: (id: string) =>
+            id === "root" || state.descendantIDs.includes(id) ? liveNativeSession(id) : undefined,
+          status: (id: string) => (id === "root" && state.running ? "running" : "idle"),
+          permission: { list: (id: string) => (id === "root" && state.needsInput ? [{ id: "permission-1" }] : []) },
+          form: { list: () => [] },
+          message: {
+            list: () => [],
+            get: (sessionID: string, messageID: string) =>
+              sessionID === "child" && messageID === "msg-api-1"
+                ? { type: "assistant", content: [{ type: "tool", id: "part-api-1" }] }
+                : undefined,
           },
-        ],
-        get: (id: string) =>
-          id === "root"
-            ? {
-                id: "root",
-                title: "Root controller",
-                parentID: undefined,
-                location: { directory: "/root/git/demo" },
-                model: { id: "gpt-5-codex", providerID: "openai" },
-                cost: 1.5,
-                tokens: { input: 1000, output: 250, reasoning: 0, cache: { read: 500, write: 0 } },
-              }
-            : undefined,
-        status: (id: string) => (id === "root" ? "running" : "idle"),
-        message: {
-          list: () => [],
-          get: (sessionID: string, messageID: string) =>
-            sessionID === "child" && messageID === "msg-api-1"
-              ? { type: "assistant", content: [{ type: "tool", id: "part-api-1" }] }
-              : undefined,
         },
       },
     },
-  },
-  workspace: { directory: () => "/root/git/demo" },
-  isDesktop: () => true,
-  layout: { tabs: () => ({ active: () => "review", all: () => ["review"] }) },
-} as unknown as SessionModel
+    workspace: { directory: () => "/root/git/demo" },
+    isDesktop: () => true,
+    layout: { tabs: () => ({ active: () => "review", all: () => ["review"] }) },
+  } as unknown as SessionModel
+}
 
 const evidenceTimelineSession = {
   identity: { sessionID: () => undefined, sessionKey: () => "wsl::child", params: { id: "child" } },
@@ -215,7 +255,12 @@ const liveRunSummary: RunSummary = {
   },
 }
 
-function installExecutionTransport(snapshot = runFixture({ runID: "run-1", revision: 3, tasks: [failedTaskFixture()] })) {
+function installExecutionTransport(
+  state: LiveExecutionState,
+  incrementMessageFetches: () => void,
+  incrementNativeReplies: () => void,
+  snapshot = runFixture({ runID: "run-1", revision: 3, tasks: [failedTaskFixture()] }),
+) {
   const rpc = () => ({
     capabilities: async () => ({ schemaVersion: 1, pluginVersion: "0.1.0", maxTasks: 500, reporting: "controller" }),
     getSummaries: async () => ({ items: [liveRunSummary] }),
@@ -229,60 +274,65 @@ function installExecutionTransport(snapshot = runFixture({ runID: "run-1", revis
     },
   })
   const listeners = new Set<(event: unknown) => void>()
-  const nativeSession = (sessionID: string) => {
-    if (sessionID === "root") {
-      return {
-        id: "root",
-        title: "Root controller",
-        location: { directory: "/root/git/demo" },
-        model: { id: "gpt-5-codex", providerID: "openai" },
-        cost: 1.5,
-        tokens: { input: 1000, output: 250, reasoning: 0, cache: { read: 500, write: 0 } },
-      }
-    }
-    if (sessionID === "child") {
-      return {
-        id: "child",
-        parentID: "root",
-        title: "Child implementer",
-        location: { directory: "/root/git/demo/.worktrees/feature" },
-        cost: 0.5,
-        tokens: { input: 500, output: 100, reasoning: 0, cache: { read: 0, write: 0 } },
-      }
-    }
-    return { id: sessionID, parentID: "root", title: "Idle reviewer", location: { directory: "/root/git/demo" } }
-  }
+  const pendingMessages: Array<(value: { data: never[] }) => void> = []
   ;(globalThis as { __opencodeExecutionTransport?: unknown }).__opencodeExecutionTransport = {
     rpc,
+    pendingPermission: () => (state.needsInput ? [livePermission()] : []),
     listen: (handler: (event: unknown) => void) => {
       listeners.add(handler)
       return () => listeners.delete(handler)
     },
-    status: () => "connected",
+    status: () => (state.connected ? "connected" : "disconnected"),
     session: {
-      get: async ({ sessionID }: { sessionID: string }) => nativeSession(sessionID),
+      get: async ({ sessionID }: { sessionID: string }) => {
+        if (!state.connected || !state.resolutionAvailable) throw new Error("native session unavailable")
+        return liveNativeSession(sessionID)
+      },
       list: async ({ parentID }: { parentID?: string }) =>
         parentID === "root"
-          ? { data: [nativeSession("child"), nativeSession("idle-child")], cursor: {} }
+          ? { data: state.descendantIDs.map(liveNativeSession), cursor: {} }
           : { data: [], cursor: {} },
-      active: async () => ({ root: { type: "running" } }),
+      active: async () => (state.running ? { root: { type: "running" } } : {}),
       form: { list: async () => [] },
     },
-    permission: { list: async () => [] },
+    permission: {
+      list: async ({ sessionID }: { sessionID: string }) =>
+        sessionID === "root" && state.needsInput
+          ? [livePermission()]
+          : [],
+      reply: async () => {
+        incrementNativeReplies()
+        return { data: true }
+      },
+    },
+    message: {
+      list: async (_input: unknown, options?: { signal?: AbortSignal }) => {
+        incrementMessageFetches()
+        return new Promise<{ data: never[] }>((resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true })
+          pendingMessages.push(resolve)
+        })
+      },
+    },
   }
-  return () => {
-    listeners.clear()
-    delete (globalThis as { __opencodeExecutionTransport?: unknown }).__opencodeExecutionTransport
+  return {
+    releaseMessages() {
+      pendingMessages.splice(0).forEach((resolve) => resolve({ data: [] }))
+    },
+    dispose() {
+      listeners.clear()
+      delete (globalThis as { __opencodeExecutionTransport?: unknown }).__opencodeExecutionTransport
+    },
   }
 }
 
-function LiveExecutionHeader() {
+function LiveExecutionHeader(props: { session: SessionModel }) {
   const [execution, setExecution] = createSignal<ExecutionModel>()
   return (
     <>
-      <div data-testid="execution-tab-active">{liveSession.layout.tabs().active()}</div>
+      <div data-testid="execution-tab-active">{props.session.layout.tabs().active()}</div>
       <SessionExecutionProvider
-        session={liveSession}
+        session={props.session}
         attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
         onModel={setExecution}
       >
@@ -292,7 +342,7 @@ function LiveExecutionHeader() {
   )
 }
 
-function LiveEvidenceComposition() {
+function LiveEvidenceComposition(props: { session: SessionModel }) {
   const [execution, setExecution] = createSignal<ExecutionModel>()
   const [state, setState] = createStore({ target: "", reveals: 0 })
   const timeline = createSessionTimelineInteraction(evidenceTimelineSession)
@@ -303,7 +353,7 @@ function LiveEvidenceComposition() {
   return (
     <>
       <SessionExecutionProvider
-        session={liveSession}
+        session={props.session}
         attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
         onModel={setExecution}
       >
@@ -323,28 +373,106 @@ function LiveEvidenceComposition() {
   )
 }
 
-function LiveAgentsComposition() {
+function LiveAgentsComposition(props: {
+  session: SessionModel
+  state: LiveExecutionState
+  setRunning: () => void
+  showRequest: () => void
+  addDescendant: () => void
+  reconnect: () => void
+  recover: () => void
+  hide: () => void
+  dispose: () => void
+  releaseMessages: () => void
+}) {
   const [execution, setExecution] = createSignal<ExecutionModel>()
   return (
-    <SessionExecutionProvider
-      session={liveSession}
-      attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
-      onModel={setExecution}
-    >
-      <Show when={execution()}>
-        {(model) => (
-          <>
-            <ExecutionAgentList model={model()} />
-            <ExecutionActivityFeed model={model()} />
-          </>
-        )}
+    <>
+      <button type="button" onClick={props.setRunning}>Set agents idle</button>
+      <button type="button" onClick={props.showRequest}>Show agent request</button>
+      <button type="button" onClick={props.addDescendant}>Add descendant</button>
+      <button type="button" onClick={() => execution()?.setExpanded(true)}>Expand execution state</button>
+      <button type="button" onClick={props.reconnect}>Reconnect native transport</button>
+      <button type="button" onClick={props.recover}>Recover native transport</button>
+      <button type="button" onClick={() => execution()?.retryAgent("root")}>Retry native agents</button>
+      <button type="button" onClick={props.hide}>Hide execution agents</button>
+      <button type="button" onClick={props.dispose}>Dispose execution owner</button>
+      <button type="button" onClick={props.releaseMessages}>Release transcript requests</button>
+      <div data-testid="live-execution-expanded">{String(execution()?.expanded() ?? false)}</div>
+      <div data-testid="live-execution-root">{execution()?.scope()?.rootSessionID ?? ""}</div>
+      <div data-testid="live-message-fetches">{props.state.messageFetches}</div>
+      <Show when={props.state.ownerMounted}>
+        <SessionExecutionProvider
+          session={props.session}
+          attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
+          visible={() => props.state.visible}
+          onModel={setExecution}
+        >
+          <Show when={execution()}>
+            {(model) => (
+              <>
+                <ExecutionAgentList model={model()} />
+                <ExecutionActivityFeed model={model()} />
+              </>
+            )}
+          </Show>
+        </SessionExecutionProvider>
       </Show>
-    </SessionExecutionProvider>
+    </>
+  )
+}
+
+function ProductionMobileSession(props: { state: LiveExecutionState }) {
+  const server = useServer()
+  server.ctx.data.session.remember({
+    id: "root",
+    projectID: "demo",
+    title: "Root controller",
+    location: { directory: "/root/git/demo" },
+    time: { created: 1_700_000_000_000, updated: 1_700_000_000_000 },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  } as SessionInfo)
+  const session = useSessionModel()
+  return (
+    <>
+      <div data-testid="production-native-replies">{props.state.nativeReplies}</div>
+      <DataProvider
+        data={{ session: [], session_status: {}, session_diff: {} }}
+        directory="/root/git/demo"
+        onSessionHref={(id) => `#${id}`}
+      >
+        <SessionScreen session={session} />
+      </DataProvider>
+    </>
   )
 }
 
 function mountLiveSessionHeader(mode: string) {
-  const restore = installExecutionTransport(mode === "evidence-production" ? halfVerifiedRun() : undefined)
+  const activity = mode === "session-execution-activity"
+  const productionMobile = mode === "session-screen-mobile-pending"
+  const [state, setState] = createStore<LiveExecutionState>({
+    connected: mode !== "session-execution-offline",
+    resolutionAvailable: mode !== "session-execution-resolution-retry",
+    running: true,
+    needsInput: productionMobile,
+    descendantIDs: activity
+      ? ["child", "idle-child", "activity-1", "activity-2", "activity-3", "activity-4"]
+      : ["child", "idle-child"],
+    visible: true,
+    ownerMounted: true,
+    messageFetches: 0,
+    nativeReplies: 0,
+  })
+  const session = createLiveSession(state)
+  const history = createMemoryHistory()
+  history.set({ value: sessionHref(ServerConnection.key(desktopServer), "root"), replace: true, scroll: false })
+  const transport = installExecutionTransport(
+    state,
+    () => setState("messageFetches", (value) => value + 1),
+    () => setState("nativeReplies", (value) => value + 1),
+    mode === "evidence-production" ? halfVerifiedRun() : undefined,
+  )
   const host = document.createElement("main")
   host.dataset.testid = "execution-fixture"
   host.style.cssText = "position:fixed;inset:0;background:#181818;color:#eee;padding:24px"
@@ -362,14 +490,41 @@ function mountLiveSessionHeader(mode: string) {
                       <GlobalProvider>
                         <ServerProvider conn={desktopServer}>
                           <Switch>
-                            <Match when={mode === "evidence-production"}>
-                              <LiveEvidenceComposition />
+                            <Match when={productionMobile}>
+                              <MemoryRouter history={history}>
+                                <Route
+                                  path="/server/:serverKey/session/:id"
+                                  component={() => (
+                                    <BrowserAttachmentsProvider>
+                                      <TerminalProvider>
+                                        <ComposerPersistenceProvider>
+                                          <ProductionMobileSession state={state} />
+                                        </ComposerPersistenceProvider>
+                                      </TerminalProvider>
+                                    </BrowserAttachmentsProvider>
+                                  )}
+                                />
+                              </MemoryRouter>
                             </Match>
-                            <Match when={mode === "session-execution-agents"}>
-                              <LiveAgentsComposition />
+                            <Match when={mode === "evidence-production"}>
+                              <LiveEvidenceComposition session={session} />
+                            </Match>
+                            <Match when={mode.startsWith("session-execution-") && mode !== "session-execution-live"}>
+                              <LiveAgentsComposition
+                                session={session}
+                                state={state}
+                                setRunning={() => setState("running", false)}
+                                showRequest={() => setState("needsInput", true)}
+                                addDescendant={() => setState("descendantIDs", (ids) => [...ids, "new-descendant"])}
+                                reconnect={() => setState("connected", true)}
+                                recover={() => setState("resolutionAvailable", true)}
+                                hide={() => setState("visible", false)}
+                                dispose={() => setState("ownerMounted", false)}
+                                releaseMessages={transport.releaseMessages}
+                              />
                             </Match>
                             <Match when={true}>
-                              <LiveExecutionHeader />
+                              <LiveExecutionHeader session={session} />
                             </Match>
                           </Switch>
                         </ServerProvider>
@@ -387,7 +542,7 @@ function mountLiveSessionHeader(mode: string) {
   )
   return () => {
     dispose()
-    restore()
+    transport.dispose()
   }
 }
 
@@ -920,7 +1075,8 @@ export async function mountExecutionFixture(input: {
   if (
     scenario === "session-execution-live" ||
     scenario === "evidence-production" ||
-    scenario === "session-execution-agents"
+    scenario === "session-screen-mobile-pending" ||
+    scenario.startsWith("session-execution-")
   ) {
     mountLiveSessionHeader(scenario)
     return undefined as unknown as ReturnType<typeof render>

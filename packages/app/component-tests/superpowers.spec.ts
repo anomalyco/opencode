@@ -796,6 +796,66 @@ story("production session owner loads native telemetry for agents", async ({ pag
   await expect(usage).toContainText("Reported tokens 2,350")
 })
 
+story("production session agents transition from running to idle without rehydration", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-agents")
+  const root = page.getByRole("treeitem", { name: /Root controller/ })
+  await expect(root.getByText("Running", { exact: true })).toBeVisible()
+  await expect(page.getByRole("treeitem", { name: /Idle reviewer/ })).toBeVisible()
+  await page.getByRole("button", { name: "Set agents idle", exact: true }).click()
+  await expect(root.getByText("Idle", { exact: true })).toBeVisible()
+})
+
+story("production session agents observe pending native requests without rehydration", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-agents")
+  const root = page.getByRole("treeitem", { name: /Root controller/ })
+  await expect(root.getByText("Running", { exact: true })).toBeVisible()
+  await expect(page.getByRole("treeitem", { name: /Idle reviewer/ })).toBeVisible()
+  await page.getByRole("button", { name: "Show agent request", exact: true }).click()
+  await expect(root.getByText("Needs input", { exact: true })).toBeVisible()
+})
+
+story("new native descendants do not collapse expanded execution", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-agents")
+  await expect(page.getByRole("treeitem", { name: /Root controller/ })).toBeVisible()
+  await page.getByRole("button", { name: "Expand execution state", exact: true }).click()
+  await expect(page.getByTestId("live-execution-expanded")).toHaveText("true")
+  await page.getByRole("button", { name: "Add descendant", exact: true }).click()
+  await expect(page.getByRole("treeitem", { name: /new-descendant/ })).toBeVisible()
+  await expect(page.getByTestId("live-execution-expanded")).toHaveText("true")
+})
+
+story("native ancestry resolution retries after reconnect", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-offline")
+  await expect(page.getByTestId("live-execution-root")).toHaveText("")
+  await page.getByRole("button", { name: "Reconnect native transport", exact: true }).click()
+  await expect(page.getByTestId("live-execution-root")).toHaveText("root")
+  await expect(page.getByRole("treeitem", { name: /Root controller/ })).toBeVisible()
+})
+
+story("native ancestry resolution retries from the agent retry action", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-resolution-retry")
+  await expect(page.getByTestId("live-execution-root")).toHaveText("")
+  await page.getByRole("button", { name: "Recover native transport", exact: true }).click()
+  await page.getByRole("button", { name: "Retry native agents", exact: true }).click()
+  await expect(page.getByTestId("live-execution-root")).toHaveText("root")
+})
+
+story("hidden native agents do not drain queued transcript requests", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-activity")
+  await expect(page.getByTestId("live-message-fetches")).toHaveText("4")
+  await page.getByRole("button", { name: "Hide execution agents", exact: true }).click()
+  await page.getByRole("button", { name: "Release transcript requests", exact: true }).click()
+  await expect(page.getByTestId("live-message-fetches")).toHaveText("4")
+})
+
+story("disposed native agents do not drain queued transcript requests", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-activity")
+  await expect(page.getByTestId("live-message-fetches")).toHaveText("4")
+  await page.getByRole("button", { name: "Dispose execution owner", exact: true }).click()
+  await page.getByRole("button", { name: "Release transcript requests", exact: true }).click()
+  await expect(page.getByTestId("live-message-fetches")).toHaveText("4")
+})
+
 story("expanded execution preserves task selection and restores focus", async ({ page }) => {
   await openExecutionFixture(page, "tracked")
   await page.getByRole("button", { name: "Select API task", exact: true }).click()
@@ -924,16 +984,15 @@ story("mobile execution view is selectable and defaults to the task list at 390 
 
 story("mobile execution returns to a pending request without replying", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 760 })
-  await openExecutionFixture(page, "tracked")
-  await page.getByRole("button", { name: "Show pending question", exact: true }).click()
+  await openExecutionFixture(page, "session-screen-mobile-pending")
+  await expect(page.getByRole("button", { name: "Deny", exact: true })).toBeVisible()
   await page.getByRole("tab", { name: "Execution", exact: true }).click()
   const banner = page.getByTestId("execution-pending-banner")
   await expect(banner).toBeVisible()
   await banner.getByRole("button", { name: "Return to request", exact: true }).click()
   await expect(page.getByTestId("execution-panel")).toHaveCount(0)
-  await expect(page.getByTestId("native-composer")).toBeVisible()
-  await expect(page.getByTestId("native-request-region")).toBeFocused()
-  await expect(page.getByTestId("question-reply-count")).toHaveText("0")
+  await expect(page.getByRole("button", { name: "Deny", exact: true })).toBeFocused()
+  await expect(page.getByTestId("production-native-replies")).toHaveText("0")
 })
 
 story("execution presentation switches at the 768 px boundary and expands at 1440 px", async ({ page }) => {

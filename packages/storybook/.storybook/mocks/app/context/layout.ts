@@ -24,6 +24,9 @@ export function getProjectAvatarVariant(key?: string) {
 const [all, setAll] = createSignal<string[]>([])
 const [active, setActive] = createSignal<string | undefined>(undefined)
 const [reviewOpen, setReviewOpen] = createSignal(false)
+const [terminalOpen, setTerminalOpen] = createSignal(false)
+const [reviewWidth, setReviewWidth] = createSignal(600)
+const [terminalHeight, setTerminalHeight] = createSignal(280)
 
 export function useCurrentRoute() {
   return () => ({ type: "home" as const })
@@ -49,7 +52,24 @@ const view = {
     open() {
       setReviewOpen(true)
     },
+    width: reviewWidth,
+    resize: setReviewWidth,
   },
+  terminal: {
+    opened: terminalOpen,
+    open: () => setTerminalOpen(true),
+    close: () => setTerminalOpen(false),
+    height: terminalHeight,
+    resize: setTerminalHeight,
+  },
+  review: {
+    mode: () => "git" as const,
+    setMode() {},
+    file: () => undefined,
+    setFile() {},
+    openPath() {},
+  },
+  setScroll() {},
 }
 
 export function useLayout() {
@@ -58,8 +78,16 @@ export function useLayout() {
     tabs: () => tabs,
     view: () => view,
     fileTree: {
+      opened: () => false,
+      width: () => 200,
+      tab: () => "all" as const,
       setTab() {},
     },
+    review: {
+      diffStyle: () => "unified" as const,
+      setDiffStyle() {},
+    },
+    ready: () => true,
     handoff: {
       setTabs() {},
     },

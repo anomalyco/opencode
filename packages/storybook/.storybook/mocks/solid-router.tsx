@@ -34,8 +34,22 @@ export function useLocation() {
   return { pathname: router.location(), search: "", hash: "" }
 }
 
-export function MemoryRouter(props: ParentProps & { root?: Component<ParentProps>; initialEntries?: string[] }) {
-  const [location, setLocation] = createSignal(props.initialEntries?.[0] ?? "/")
+export function createMemoryHistory() {
+  let value = "/"
+  return {
+    get: () => value,
+    set(input: { value: string }) {
+      value = input.value
+    },
+  }
+}
+
+export function MemoryRouter(props: ParentProps & {
+  root?: Component<ParentProps>
+  initialEntries?: string[]
+  history?: ReturnType<typeof createMemoryHistory>
+}) {
+  const [location, setLocation] = createSignal(props.history?.get() ?? props.initialEntries?.[0] ?? "/")
   const [params, setParams] = createSignal<Record<string, string | undefined>>({})
   const state: RouterState = {
     location,

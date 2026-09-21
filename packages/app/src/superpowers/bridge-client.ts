@@ -101,7 +101,6 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
   const [snapshot, setSnapshot] = createSignal<RunSnapshot | undefined>()
   const [mode, setMode] = createSignal<ExecutionMode>("observer")
   const [reason, setReason] = createSignal<ExecutionReason | undefined>()
-  const [attachmentVersion, setAttachmentVersion] = createSignal(0)
 
   let disposed = false
   let attachment: Attachment | undefined
@@ -199,8 +198,11 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     if (currentMode === "incompatible") return
     if (input.visible()) startTimer()
     else stopTimer()
+    if (reconnected && automatic) {
+      void attachActive()
+      return
+    }
     if (!attachment) {
-      if (reconnected && automatic) void attachActive()
       return
     }
     if (inFlight) {
@@ -266,7 +268,6 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     const requestGeneration = generation
     if (discovering === requestGeneration) return
     ensureListener()
-    setAttachmentVersion((value) => value + 1)
     if (!input.connection()) {
       online = false
       stopTimer()
@@ -315,7 +316,6 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       }
       setModeValue(cached ? "ready" : "observer")
       setReasonValue(ownerChanged ? "location_changed" : undefined)
-      setAttachmentVersion((value) => value + 1)
       reconcile()
     } catch (error) {
       if (ignoredDiscovery(requestGeneration)) return
@@ -428,7 +428,6 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       setReasonValue(cached ? undefined : "no_run")
     }
     ensureListener()
-    setAttachmentVersion((value) => value + 1)
     reconcile()
   }
 
@@ -441,11 +440,9 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     stopTimer()
     unsubscribe?.()
     unsubscribe = undefined
-    setAttachmentVersion((value) => value + 1)
   }
 
   createEffect(() => {
-    attachmentVersion()
     input.connection()
     input.visible()
     reconcile()

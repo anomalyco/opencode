@@ -141,6 +141,8 @@ type BridgeHarness = {
   setVisible(visible: boolean): void
   setCapabilitiesVersion(version: number): void
   capabilityCalls(): number
+  pauseCapabilities(): void
+  resumeCapabilities(): void
   failCapabilities(error: unknown): void
   clearCapabilitiesError(): void
   emit(data: Changed, directory?: string): void
@@ -161,6 +163,7 @@ function bridgeHarness(): BridgeHarness {
   let capabilitiesVersion = 1
   let capabilitiesCalls = 0
   let capabilitiesError: unknown
+  let capabilitiesGate: ReturnType<typeof deferred<void>> | undefined
   let summaries: RunSummary[] = []
 
   const key = (ownerDirectory: string | undefined, runID: string) => `${ownerDirectory ?? ""}\u0000${runID}`
@@ -173,6 +176,7 @@ function bridgeHarness(): BridgeHarness {
   const api = {
     capabilities: async () => {
       capabilitiesCalls += 1
+      await capabilitiesGate?.promise
       if (capabilitiesError) throw capabilitiesError
       return { schemaVersion: capabilitiesVersion, pluginVersion: "0.1.0", maxTasks: 500, reporting: "controller" }
     },
@@ -255,6 +259,13 @@ function bridgeHarness(): BridgeHarness {
       capabilitiesVersion = version
     },
     capabilityCalls: () => capabilitiesCalls,
+    pauseCapabilities() {
+      capabilitiesGate = deferred<void>()
+    },
+    resumeCapabilities() {
+      capabilitiesGate?.resolve()
+      capabilitiesGate = undefined
+    },
     failCapabilities(error) {
       capabilitiesError = error
     },
@@ -432,6 +443,26 @@ describe("createExecutionBridge", () => {
     first?.resolve(runFixture({ revision: 1 }))
     await harness.flush()
     expect(harness.model.run()?.runID).toBe("run-1")
+    harness.dispose()
+  })
+
+  test("reconnecting reselects a newly preferred run for an automatic attachment", async () => {
+    const harness = bridgeHarness()
+    const first = harness.attachActive(SCOPE, "run-1")
+    await harness.flush()
+    first?.resolve(runFixture({ runID: "run-1", revision: 1 }))
+    await harness.flush()
+
+    harness.setConnected(false)
+    harness.setSummaries([summaryFixture(SCOPE, "run-2", 1)])
+    const second = harness.next(SCOPE, "run-2")
+    harness.setConnected(true)
+    await harness.flush()
+
+    expect(harness.getRunCalls.at(-1)?.runID).toBe("run-2")
+    second.resolve(runFixture({ runID: "run-2", revision: 1 }))
+    await harness.flush()
+    expect(harness.model.run()?.runID).toBe("run-2")
     harness.dispose()
   })
 
@@ -759,6 +790,28 @@ describe("createExecutionBridge", () => {
     expect(harness.getRunCalls).toHaveLength(2)
     follow.resolve(runFixture({ revision: 2 }))
     await harness.flush()
+    expect(harness.model.run()?.revision).toBe(2)
+    harness.dispose()
+  })
+
+  test("the automatic safety timer performs one snapshot fetch per interval", async () => {
+    const harness = bridgeHarness()
+    const first = harness.attachActive(SCOPE, "run-1")
+    await harness.flush()
+    first?.resolve(runFixture({ revision: 1 }))
+    await harness.flush()
+    const before = harness.getRunCalls.length
+    const follow = harness.next(SCOPE, "run-1")
+    harness.pauseCapabilities()
+
+    harness.clock.advance(EXECUTION_RECONCILE_INTERVAL)
+    await harness.flush()
+    harness.resumeCapabilities()
+    await harness.flush()
+    follow.resolve(runFixture({ revision: 2 }))
+    await harness.flush()
+
+    expect(harness.getRunCalls).toHaveLength(before + 1)
     expect(harness.model.run()?.revision).toBe(2)
     harness.dispose()
   })

@@ -32,6 +32,25 @@ export function formatKeybind(config: string) {
   return config === "none" ? "" : config
 }
 
+export function formatKeybindParts(config: string) {
+  return formatKeybind(config).split("+").filter(Boolean)
+}
+
+export function matchKeybind(
+  keybinds: Array<{ key: string; ctrl: boolean; meta: boolean; shift: boolean; alt: boolean }>,
+  event: KeyboardEvent,
+) {
+  const key = event.key.toLowerCase()
+  return keybinds.some(
+    (keybind) =>
+      keybind.key === key &&
+      keybind.ctrl === event.ctrlKey &&
+      keybind.meta === event.metaKey &&
+      keybind.shift === event.shiftKey &&
+      keybind.alt === event.altKey,
+  )
+}
+
 export function useCommand() {
   return {
     options: [],

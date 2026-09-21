@@ -37,6 +37,7 @@ const catalog = [
 
 export function useProviders() {
   return {
+    ready: () => true,
     all: () => new Map(catalog.map((item) => [item.id, item])),
     default: () => ({ anthropic: model_id }),
     connected: () => [provider],
