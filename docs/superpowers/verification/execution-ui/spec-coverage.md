@@ -50,10 +50,11 @@ recorded exactly; no unavailable gate is labelled a pass (§16).
   resolved to `@opencode/plugin` 2.0.11, `@opencode/schema` 2.0.11, `zod` 4.1.8 (no `workspace:` /
   `catalog:` ranges) and installed as real copies into the staging tree, with each dependency's real
   path asserted outside the repository and inside the staging directory.
-- `bun run package:smoke`: 4 pass / 1 skip / 0 fail.
-- `bun run package:host-smoke`: 5 pass / 0 fail; the real disposable 2.0.11 server loads the staged
-  directory entry (`entrypoint=file:///tmp/opencode/superpowers-execution-package/index.js`) and
-  serves `capabilities` → `pluginVersion: "0.1.0"` before and after an isolated restart.
+- `bun run package:smoke`: 9 pass / 1 skip / 0 fail.
+- `bun run package:host-smoke`: 10 pass / 0 fail; the real disposable 2.0.11 server loads a disposable
+  wrapper around the staged package entry, performs a durable `run.start` through host storage, and serves
+  `pluginVersion: "0.1.0"` plus `host-gate-run` at revision 1 with the same `createdAt` before and after an
+  isolated restart.
 
 ### AC20 — web and Windows Desktop smoke use an explicitly selected test server
 
@@ -67,9 +68,9 @@ recorded exactly; no unavailable gate is labelled a pass (§16).
 |---|---|---|
 | Windows Desktop smoke (AC20) | `release-checklist.md` §7 | UNRUN — no Windows host |
 | Unopened-dashboard causal long-task attribution (AC18) | `performance.md` (T19) | UNRUN — needs a feature-absent build |
-| `packages/app` component suite `production session owner loads native telemetry for agents` | `release-checklist.md` §8.1 | FAILED — T19 visibility gating vs. non-representative fixture; open blocker |
+| `packages/app` component suite | `release-checklist.md` §8.1 | Stable two-worker run PASS (105); exact default-worker run FLAKY during Storybook startup (98 pass / 7 fail) |
 | Desktop `browser-native` / `browser-idle` Electron tests | `release-checklist.md` §7 | FAILED — Electron refuses to run as root without `--no-sandbox` |
-| Root `bun run check` | `release-checklist.md` §8.2 | FAILED — pre-existing `@opencode/posts#typecheck` (`@tsconfig/bun` not found) |
+| Root `bun run check` | `release-checklist.md` §8.2 | FAILED — pre-existing Posts/WWW Astro `@tsconfig/bun` errors, then Turbo/Bun SIGSEGV |
 | `packages/app typecheck:e2e` | `release-checklist.md` §8.2 | 3 pre-existing unrelated errors |
 
 ## Definition of done (§16)
@@ -77,7 +78,7 @@ recorded exactly; no unavailable gate is labelled a pass (§16).
 All acceptance criteria have corresponding tests or explicitly recorded manual checks. The root
 full check, affected package tests, production app build, UI/component tests, regression
 benchmarks, local-package smoke, and Windows Desktop smoke have real outcomes recorded above.
-Failing or unavailable checks are recorded with their evidence and are never called passing. The
-Windows Desktop smoke and the `packages/app` component regression remain open at the time of this
-record; the project must not be called fully done until they are resolved or the user explicitly
-revises the target.
+Failing or unavailable checks are recorded with their evidence and are never called passing. The Windows
+Desktop smoke and causal unopened-dashboard long-task attribution remain UNRUN. The default-worker component
+command also remains environmentally flaky although the complete two-worker run passes. The project must not
+be called fully done until the required unavailable gates are run or the user explicitly revises the target.

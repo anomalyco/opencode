@@ -16,7 +16,7 @@ export function SessionReviewToggle(props: { execution?: ExecutionModel }) {
   const language = useLanguage()
   const { view, tabs } = useSessionLayout()
   const openExecution = () => {
-    props.execution?.selectSubview("agents")
+    if (!view().reviewPanel.opened()) view().reviewPanel.open()
     void tabs().open(SESSION_EXECUTION_TAB)
   }
 

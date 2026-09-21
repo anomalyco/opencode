@@ -226,6 +226,9 @@ function applyEvidenceAdd(
 ): RunSnapshot {
   const task = requireTask(current, operation.taskID)
   requireAttempt(task, operation.attempt)
+  if (task.state === "verified") {
+    throw domainError("invalid_transition", `cannot add evidence to verified task ${task.id}; reopen it first`)
+  }
   if (current.evidence.some((record) => record.id === operation.id)) {
     throw domainError("operation_conflict", `evidence already exists: ${operation.id}`)
   }
@@ -333,6 +336,15 @@ function applyFinish(current: RunSnapshot, context: ReportContext): RunSnapshot 
   }
   if (!included.some((task) => task.finalReview)) {
     throw domainError("invalid_transition", "run has no verified final-review task")
+  }
+  const inconsistent = included.filter((task) =>
+    task.requiredGates.some((gate) => latestOutcome(current.evidence, task.id, task.attempt, gate) !== "passed"),
+  )
+  if (inconsistent.length > 0) {
+    throw domainError(
+      "invalid_transition",
+      `verified tasks lack passing required gates: ${inconsistent.map((task) => task.id).join(", ")}`,
+    )
   }
   const assignments = closeAssignments(current.assignments, context.now)
   return commit({ ...current, status: "completed", assignments }, "run.finish", "run completed", context)

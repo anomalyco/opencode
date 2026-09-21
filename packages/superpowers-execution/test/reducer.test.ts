@@ -160,6 +160,22 @@ test("verification requires the latest evidence per gate on the current attempt"
   expect(codeOf(() => report(run, { type: "task.state", taskID: "task-a", attempt: 1, state: "running" }))).toBe("invalid_transition")
 })
 
+test("verified work rejects later evidence until it is explicitly reopened", () => {
+  let run = start()
+  run = verifyAll(run)
+
+  expect(codeOf(() => report(run, evidence("spec", 1, "tests", "failed")))).toBe("invalid_transition")
+  expect(codeOf(() => report(run, evidence("impl", 1, "tests", "failed")))).toBe("invalid_transition")
+  expect(codeOf(() => report(run, evidence("review", 1, "code_review", "failed")))).toBe("invalid_transition")
+  expect(codeOf(() => report(run, { type: "run.finish" }))).toBeUndefined()
+
+  run = report(run, { type: "task.reopen", taskID: "spec", reason: "new evidence required" })
+  expect(taskOf(run, "spec")).toMatchObject({ state: "pending", attempt: 2 })
+  expect(taskOf(run, "impl")).toMatchObject({ state: "pending", attempt: 2 })
+  expect(taskOf(run, "review")).toMatchObject({ state: "pending", attempt: 2 })
+  expect(codeOf(() => report(run, evidence("spec", 2, "tests", "failed")))).toBeUndefined()
+})
+
 test("verification requires resolved dependencies", () => {
   const run = start()
   expect(codeOf(() => report(run, { type: "task.verify", taskID: "impl", attempt: 1 }))).toBe("invalid_transition")
@@ -305,6 +321,31 @@ test("run.finish requires every included task verified", () => {
 test("run.finish requires a verified final-review task", () => {
   let run = report(undefined, { type: "run.start", title: "Execution run", plan: fixturePlan, tasks: single(false) })
   run = verify(run, "task-a")
+  expect(codeOf(() => report(run, { type: "run.finish" }))).toBe("invalid_transition")
+})
+
+test("run.finish rejects a snapshot whose latest required-gate evidence contradicts verification", () => {
+  let run = start()
+  run = verifyAll(run)
+  run = {
+    ...run,
+    evidence: [
+      ...run.evidence,
+      {
+        id: "late-failure",
+        taskID: "review",
+        attempt: 1,
+        gate: "code_review",
+        outcome: "failed",
+        summary: "late review failure",
+        sessionID: "child",
+        messageID: "msg-late",
+        reportedBySessionID: "root",
+        createdAt: 1_001,
+      },
+    ],
+  }
+
   expect(codeOf(() => report(run, { type: "run.finish" }))).toBe("invalid_transition")
 })
 

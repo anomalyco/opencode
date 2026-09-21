@@ -204,8 +204,9 @@ export function openExecutionOverview(input: {
   execution: ExecutionModel
   openTab: () => void
   showMobile: () => void
+  agents?: boolean
 }) {
-  input.execution.selectSubview("agents")
+  if (input.agents) input.execution.selectSubview("agents")
   input.openTab()
   input.showMobile()
 }

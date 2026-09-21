@@ -331,6 +331,22 @@ describe("createExecutionModel tasks", () => {
     expect(failed.history.map((row) => row.id)).toEqual(["a-old"])
   })
 
+  test("projects reported assignments and task outcomes onto raw native agent records", () => {
+    const run = detailedTasksRun()
+    const native = agentFixture("agents").map(({ assignments: _, ...agent }) => agent)
+    const model = createExecutionModel({ snapshot: () => run, agents: () => native })
+    const child = model.agents().find((agent) => agent.id === "child")
+
+    expect(model.agents().filter((agent) => agent.id === "child")).toHaveLength(1)
+    expect(child?.assignments?.map((assignment) => assignment.id)).toEqual(["a-impl", "a-review", "a-old"])
+    expect(child?.assignments?.map((assignment) => assignment.taskState)).toEqual([
+      "verified",
+      "verified",
+      "failed",
+    ])
+    expect(child?.assignments?.map((assignment) => assignment.active)).toEqual([true, true, false])
+  })
+
   test("joins current-attempt evidence separately from superseded attempts", () => {
     const run = detailedTasksRun()
     const agents = agentFixture("agents")

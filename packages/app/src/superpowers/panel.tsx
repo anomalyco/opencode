@@ -6,6 +6,7 @@ import { ExecutionActivityFeed } from "./activity-feed"
 import { ExecutionTaskDetails } from "./task-details"
 import { ExecutionTaskList } from "./task-list"
 import { EXECUTION_SUBVIEWS, structuredViewsEnabled, type ExecutionModel, type ExecutionSubview } from "./model"
+import { ExecutionPendingNotice } from "./pending-notice"
 
 const LazyExecutionMap = lazy(() =>
   import("./execution-map").then((module) => ({ default: module.ExecutionMap })),
@@ -100,6 +101,9 @@ export function ExecutionPanel(props: {
           </button>
         </Show>
       </div>
+      <Show when={props.presentation === "mobile"}>
+        <ExecutionPendingNotice model={props.model} onReturn={() => props.model.reviewRequest()} />
+      </Show>
       <Show when={props.model.mode() !== "observer" && props.model.mode() !== "ready"}>
         <p
           data-slot="execution-mode-notice"

@@ -128,15 +128,15 @@ plugin harness:
 
 ```text
 $ cd packages/superpowers-execution && bun run package:smoke
-(pass) staged contract is browser-safe and package is self-contained [2802.73ms]
-(pass) staged runtime dependencies are self-contained copies outside the repository [2442.15ms]
-(pass) the stager rejects unsafe targets before deleting anything [5.85ms]
-(pass) the stager refuses every pre-existing output without deleting it [2374.31ms]
-(pass) the stager rejects a symlinked-ancestor alias into the repository without deleting [1.77ms]
-(pass) a symlinked output alias into the repository is rejected without touching its target [1.79ms]
-(pass) working directory cleanup is bound to the mkdtemp directory identity [2.98ms]
-(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2535.11ms]
-(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2655.91ms]
+(pass) staged contract is browser-safe and package is self-contained [2603.57ms]
+(pass) staged runtime dependencies are self-contained copies outside the repository [2417.23ms]
+(pass) the stager rejects unsafe targets before deleting anything [3.06ms]
+(pass) the stager refuses every pre-existing output without deleting it [2147.68ms]
+(pass) the stager rejects a symlinked-ancestor alias into the repository without deleting [1.72ms]
+(pass) a symlinked output alias into the repository is rejected without touching its target [1.76ms]
+(pass) working directory cleanup is bound to the mkdtemp directory identity [3.12ms]
+(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2452.59ms]
+(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2471.83ms]
 (skip) the built package directory loads in a disposable 2.0.11 host and survives an isolated restart
 
  9 pass / 1 skip / 0 fail
@@ -151,40 +151,43 @@ recovers the stored run plus its summary.
 
 ```text
 $ cd packages/superpowers-execution && bun run package:host-smoke
-(pass) staged contract is browser-safe and package is self-contained [2694.26ms]
-(pass) staged runtime dependencies are self-contained copies outside the repository [3105.43ms]
-(pass) the stager rejects unsafe targets before deleting anything [2.81ms]
-(pass) the stager refuses every pre-existing output without deleting it [2596.55ms]
-(pass) the stager rejects a symlinked-ancestor alias into the repository without deleting [1.96ms]
-(pass) a symlinked output alias into the repository is rejected without touching its target [2.09ms]
-(pass) working directory cleanup is bound to the mkdtemp directory identity [3.19ms]
-(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2846.43ms]
-(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2658.76ms]
-(pass) the built package directory loads in a disposable 2.0.11 host and survives an isolated restart [10751.55ms]
+(pass) staged contract is browser-safe and package is self-contained [2313.42ms]
+(pass) staged runtime dependencies are self-contained copies outside the repository [1966.75ms]
+(pass) the stager rejects unsafe targets before deleting anything [3.77ms]
+(pass) the stager refuses every pre-existing output without deleting it [2187.11ms]
+(pass) the stager rejects a symlinked-ancestor alias into the repository without deleting [2.72ms]
+(pass) a symlinked output alias into the repository is rejected without touching its target [6.06ms]
+(pass) working directory cleanup is bound to the mkdtemp directory identity [4.15ms]
+(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2375.59ms]
+(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2204.14ms]
+(pass) the built package directory loads in a disposable 2.0.11 host and survives an isolated restart [10251.02ms]
 
  10 pass / 0 fail
- 65 expect() calls
+ 70 expect() calls
 ```
 
-Raw gate result:
+Durable host assertions:
 
 ```text
-HOST {"directory":"/tmp/opencode/superpowers-execution-package","port":36922,
-      "first":{"pluginVersion":"0.1.0","runCount":0},
-      "restarted":{"pluginVersion":"0.1.0","runCount":0}}
+first:     {"pluginVersion":"0.1.0","runCount":1,"runID":"host-gate-run","revision":1}
+restarted: {"pluginVersion":"0.1.0","runCount":1,"runID":"host-gate-run","revision":1}
+restarted.createdAt === first.createdAt
 ```
 
-Server log (two separate boots, same isolated XDG data directory; the host loads the staged
-standalone package directory entry, not workspace source):
+Server log (two separate boots, same isolated XDG data directory; the host loads a disposable wrapper that
+imports the staged `dist/plugin.js`, never workspace source):
 
 ```text
-timestamp=... msg="loading plugin" id=/tmp/opencode/superpowers-execution-package entrypoint=file:///tmp/opencode/superpowers-execution-package/index.js
-timestamp=... msg="loading plugin" id=/tmp/opencode/superpowers-execution-package entrypoint=file:///tmp/opencode/superpowers-execution-package/index.js
+timestamp=... msg="loading plugin" id=<isolated-host>/execution-host-gate entrypoint=file://<isolated-host>/execution-host-gate/index.js
+timestamp=... msg="loading plugin" id=<isolated-host>/execution-host-gate entrypoint=file://<isolated-host>/execution-host-gate/index.js
 ```
 
-The gate starts its own `packages/cli` server on a freshly allocated loopback port with its own
+The disposable wrapper invokes the staged plugin and performs a real `run.start` through the plugin's
+repository backed by host storage. The gate rereads `host-gate-run` before shutdown, then verifies the same
+run, revision, and `createdAt` after restart. It starts its own `packages/cli` server on a freshly allocated loopback port with its own
 `XDG_{CONFIG,DATA,CACHE,STATE}_HOME` under a `mkdtemp` directory, a per-run Basic-auth password, and
-`{ "plugins": ["<staged dir>"] }`. It calls `capabilities` and `listRuns` over authenticated HTTP,
+`{ "plugins": ["<isolated wrapper>"] }`. The wrapper imports the staged built plugin by file URL. The gate
+calls `capabilities`, `listRuns`, and `getRun` over authenticated HTTP,
 then kills and restarts the same isolated host and repeats. It never runs service discovery and
 never stops, restarts, or replaces the user's service.
 
@@ -194,7 +197,7 @@ never stops, restarts, or replaces the user's service.
 $ cd packages/app
 $ EXECUTION_E2E_TARGET='{"disposable":true,"directory":"/tmp/opencode/execution-e2e","port":4601}' \
     bun run test:e2e e2e/superpowers/execution.spec.ts --workers=1
- 20 passed (3.3m)
+  20 passed (3.2m)
  execution credential artifact scan: clean (2 files)
 ```
 
@@ -239,50 +242,34 @@ this task and are not claimed as passing.
 
 | Command | Result |
 |---|---|
-| `packages/superpowers-execution`: `bun test` | 120 pass / 1 skip / 0 fail |
+| `packages/superpowers-execution`: `bun test` | 123 pass / 1 skip / 0 fail |
 | `packages/superpowers-execution`: `bun run typecheck` | exit 0 |
 | `packages/superpowers-execution`: `bun run build` | exit 0 (`dist/` + declarations) |
-| `packages/superpowers-execution`: `bun run package:smoke` | 8 pass / 1 skip / 0 fail |
-| `packages/superpowers-execution`: `bun run package:host-smoke` | 9 pass / 0 fail |
+| `packages/superpowers-execution`: `bun run package:smoke` | 9 pass / 1 skip / 0 fail |
+| `packages/superpowers-execution`: `bun run package:host-smoke` | 10 pass / 0 fail |
 | `packages/app`: `bun run typecheck` | exit 0 |
-| `packages/app`: `bun run test:unit` | 1051 pass / 1 skip / 0 fail |
+| `packages/app`: `bun run test:unit` | 1061 pass / 1 skip / 0 fail |
+| `packages/app`: focused `bun test ... ./src/superpowers` | 200 pass / 0 fail |
 | `packages/app`: `bun run test:browser` | 157 pass / 0 fail |
-| `packages/app`: `bun run test:components component-tests/superpowers.spec.ts` | **FAILED**: 103 passed, 1 failed |
+| `packages/app`: `bun run test:components component-tests/superpowers.spec.ts` | **FLAKY**: latest 6-worker run 98 passed / 7 failed while waiting for empty Storybook roots |
+| `packages/app`: `bun run test:components component-tests/superpowers.spec.ts --workers=2` | 105 passed / 0 fail |
 | `packages/app`: `bun run test:e2e e2e/superpowers/execution.spec.ts` (explicit target) | 20 passed, credential scan clean |
 | `packages/app`: `bun run typecheck:e2e` | 3 pre-existing errors (below), none in `e2e/superpowers/**` |
 | `packages/app`: `bun run build` | exit 0 |
 | `packages/desktop`: `bun run typecheck` | exit 0 |
 | `packages/desktop`: `bun run build` | exit 0 |
 | `packages/desktop`: `bun run test` | 187 pass / 2 skip / 2 fail (Electron root sandbox) |
-| repository root: `bun run check` | **FAILED** on `@opencode/posts#typecheck` (pre-existing, below) |
+| repository root: `bun run check` | **FAILED** on pre-existing Posts/WWW Astro config errors, then Turbo/Bun SIGSEGV (below) |
 | `git diff --check` | clean |
 
-### 8.1 Component suite failure (release blocker)
+### 8.1 Component suite stability
 
-`production session owner loads native telemetry for agents` (`component-tests/superpowers.spec.ts:787`)
-fails deterministically:
-
-```text
-Locator: getByRole('treeitem', { name: /Root controller/ }).getByTestId('execution-agent-usage')
-Expected: "$1.50 · 1,750 tokens"
-Error: element(s) not found
-```
-
-Root cause: commit `765aa01c24` (T19) gated native descendant hydration in
-`packages/app/src/superpowers/session-execution.tsx` on
-`layout.tabs().active() === SESSION_EXECUTION_TAB`. The `session-execution-agents` component fixture
-mounts `SessionExecutionProvider` directly with `liveSession.layout.tabs()` fixed to
-`{ active: "review" }`, so hydration never runs and no native usage telemetry is produced. The
-fixture does not model the tab being active; in production the Agents view is only reachable while
-the Execution tab is active.
-
-Reproduced by counterfactual: with `packages/app/src/superpowers/session-execution.tsx` restored to
-the T17 commit `943af10f7a`, the same single story passes (`1 passed (2.4m)`); with the current HEAD
-version it fails. The branch file was restored unchanged after the check.
-
-This task did not modify any `packages/app` file. It is recorded as an open blocker for the
-controller to adjudicate (fixture vs. production gating), not fixed here because T20's file list
-does not include app component fixtures.
+The production-owner telemetry regression is fixed by keeping core native hydration active while gating only
+detailed visible-row activity and the reconciliation timer. The complete suite passes with two workers
+(`105 passed`, 6.3 minutes). The exact default-worker command remains environmentally flaky: its latest run
+passed 98 tests and failed 7 while waiting for Storybook pages whose `#storybook-root` stayed empty. Those were
+Storybook startup/resource failures rather than component assertion failures; the result is recorded as flaky,
+not passed.
 
 ### 8.2 Pre-existing failures
 
@@ -294,8 +281,9 @@ e2e/regression/session-queue.spec.ts(78,46)
 
 root bun run check:
 @opencode/posts#typecheck: [GenerateContentTypesError] ... Tsconfig not found @tsconfig/bun/tsconfig.json
-Tasks: 28 successful, 36 total   Failed: @opencode/posts#typecheck
-turbo exited with code 1
+@opencode/www#typecheck: [GenerateContentTypesError] ... Tsconfig not found @tsconfig/bun/tsconfig.json
+error: Failed to run "turbo" due to signal SIGSEGV
+bun run check exited 139
 ```
 
 Both are recorded, not called passing. `packages/app` and `packages/superpowers-execution`

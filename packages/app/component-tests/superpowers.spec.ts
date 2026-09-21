@@ -922,6 +922,20 @@ story("mobile execution view is selectable and defaults to the task list at 390 
   await expect(page.getByTestId("execution-model-count")).toHaveText("1")
 })
 
+story("mobile execution returns to a pending request without replying", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 })
+  await openExecutionFixture(page, "tracked")
+  await page.getByRole("button", { name: "Show pending question", exact: true }).click()
+  await page.getByRole("tab", { name: "Execution", exact: true }).click()
+  const banner = page.getByTestId("execution-pending-banner")
+  await expect(banner).toBeVisible()
+  await banner.getByRole("button", { name: "Return to request", exact: true }).click()
+  await expect(page.getByTestId("execution-panel")).toHaveCount(0)
+  await expect(page.getByTestId("native-composer")).toBeVisible()
+  await expect(page.getByTestId("native-request-region")).toBeFocused()
+  await expect(page.getByTestId("question-reply-count")).toHaveText("0")
+})
+
 story("execution presentation switches at the 768 px boundary and expands at 1440 px", async ({ page }) => {
   await page.setViewportSize({ width: 767, height: 760 })
   await openExecutionFixture(page, "tracked")

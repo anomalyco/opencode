@@ -44,7 +44,11 @@ import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
 import { SESSION_EXECUTION_TAB } from "@/shell/state/session-tabs"
-import { createExecutionOverviewOpener, SessionExecutionOwner } from "@/superpowers/session-execution"
+import {
+  createExecutionOverviewOpener,
+  executionPresentationVisible,
+  SessionExecutionOwner,
+} from "@/superpowers/session-execution"
 import { createExecutionExpansion, executionPresentation } from "@/superpowers/expanded"
 import type { ExecutionModel } from "@/superpowers/model"
 
@@ -198,12 +202,23 @@ export function SessionScreen(props: { session: SessionModel }) {
   })
   useUsageExceededDialogs()
 
-  const reviewNativeRequest = () => {
+  const focusNativeRequest = () => {
     const dock = document.querySelector('[data-component="session-composer-dock"]')
     dock?.querySelector<HTMLElement>("button, textarea, input, [tabindex]")?.focus()
   }
+  const reviewNativeRequest = () => {
+    if (!isDesktop()) {
+      review.mobile.setTab("session")
+      session.layout.view().terminal.close()
+    }
+    if (typeof requestAnimationFrame !== "function") {
+      focusNativeRequest()
+      return
+    }
+    requestAnimationFrame(() => requestAnimationFrame(focusNativeRequest))
+  }
   const restoreConversationFocus = () => {
-    const focusComposer = () => focusComposerEditor(reviewNativeRequest)
+    const focusComposer = () => focusComposerEditor(focusNativeRequest)
     if (typeof requestAnimationFrame !== "function") {
       focusComposer()
       return
@@ -217,6 +232,13 @@ export function SessionScreen(props: { session: SessionModel }) {
     blocked: composer.requests.background.blocking().length,
   })
   const [execution, setExecution] = createSignal<ExecutionModel>()
+  const [executionDocumentVisible, setExecutionDocumentVisible] = createSignal(
+    typeof document === "undefined" || document.visibilityState === "visible",
+  )
+  const executionOwner = createMemo(() => {
+    session.ownership.key()
+    return session.ownership.capture()
+  })
   const executionAvailable = () => execution() !== undefined
   const executionSurface = () =>
     executionPresentation({ mobile: !isDesktop(), expanded: execution()?.expanded() ?? false })
@@ -228,8 +250,24 @@ export function SessionScreen(props: { session: SessionModel }) {
     panelWidth: () => session.layout.view().reviewPanel.width(),
     resizePanel: (width) => session.layout.view().reviewPanel.resize(width),
   })
+  onMount(() =>
+    makeEventListener(document, "visibilitychange", () =>
+      setExecutionDocumentVisible(document.visibilityState === "visible"),
+    ),
+  )
+  const executionVisible = createMemo(() =>
+    executionPresentationVisible({
+      desktop: isDesktop(),
+      expanded: execution()?.expanded() ?? false,
+      reviewPanelOpen: session.layout.view().reviewPanel.opened(),
+      executionTabActive: session.layout.tabs().active() === SESSION_EXECUTION_TAB,
+      mobileExecution: mobileView() === "execution",
+      activeOwner: executionOwner().current(),
+      documentVisible: executionDocumentVisible(),
+    }),
+  )
   const openExecution = createExecutionOverviewOpener({ session, mobile: review.mobile })
-  const showExecutionOverview = (model = execution()) => (model ? openExecution(model) : undefined)
+  const showExecutionOverview = (model = execution()) => (model ? openExecution(model, { agents: true }) : undefined)
   const selectMobileView = (view: SessionMobileView) => {
     if (view === "execution") {
       void session.layout.tabs().open(SESSION_EXECUTION_TAB)
@@ -400,6 +438,7 @@ export function SessionScreen(props: { session: SessionModel }) {
     <SessionExecutionOwner
       session={session}
       attention={executionAttention}
+      visible={executionVisible}
       reviewRequest={reviewNativeRequest}
       openSession={(sessionID) => void navigate(sessionHref(server.key, sessionID))}
       mobile={review.mobile}

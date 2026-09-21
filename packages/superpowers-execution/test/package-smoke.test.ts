@@ -226,9 +226,14 @@ test.skipIf(process.env.EXECUTION_PACKAGE_HOST_SMOKE !== "1")(
     const artifact = await buildStagedPackage({ directory: temporaryOutput() })
     const result = await runDisposableHostGate(artifact)
     expect(result.first.pluginVersion).toBe("0.1.0")
-    expect(result.first.runCount).toBe(0)
+    expect(result.first.runCount).toBe(1)
+    expect(result.first.runID).toBe("host-gate-run")
+    expect(result.first.revision).toBe(1)
     expect(result.restarted.pluginVersion).toBe("0.1.0")
-    expect(result.restarted.runCount).toBe(0)
+    expect(result.restarted.runCount).toBe(1)
+    expect(result.restarted.runID).toBe("host-gate-run")
+    expect(result.restarted.revision).toBe(1)
+    expect(result.restarted.createdAt).toBe(result.first.createdAt)
   },
   180_000,
 )

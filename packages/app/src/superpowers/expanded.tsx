@@ -1,7 +1,8 @@
-import { Show, Suspense, lazy, onMount, onCleanup, type Accessor } from "solid-js"
+import { Suspense, lazy, onMount, onCleanup, type Accessor } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ExecutionModel } from "./model"
 import type { ExecutionPresentation } from "./panel"
+import { ExecutionPendingNotice } from "./pending-notice"
 
 export function executionPresentation(input: { mobile: boolean; expanded: boolean }): ExecutionPresentation {
   if (input.mobile) return "mobile"
@@ -62,7 +63,6 @@ function returnFocus(target: HTMLElement | undefined, attempt = 0) {
 
 export function ExpandedExecution(props: { model: ExecutionModel; onClose: () => void }) {
   const language = useLanguage()
-  const pending = () => props.model.attention().needsInput
   const returnToRequest = () => {
     props.onClose()
     if (typeof requestAnimationFrame !== "function") {
@@ -93,24 +93,7 @@ export function ExpandedExecution(props: { model: ExecutionModel; onClose: () =>
       <header data-slot="execution-expanded-header" class="execution-expanded__header">
         <h2 class="execution-expanded__title">{language.t("execution.expanded.title")}</h2>
         <span class="execution-expanded__spacer" aria-hidden />
-        <Show when={pending() > 0}>
-          <div
-            data-slot="execution-pending-banner"
-            data-testid="execution-pending-banner"
-            class="execution-expanded__banner"
-            role="status"
-          >
-            <span>{language.plural("execution.expanded.pending", pending())}</span>
-            <button
-              type="button"
-              data-testid="execution-return-to-request"
-              class="execution-expanded__action"
-              onClick={returnToRequest}
-            >
-              {language.t("execution.expanded.returnToRequest")}
-            </button>
-          </div>
-        </Show>
+        <ExecutionPendingNotice model={props.model} onReturn={returnToRequest} />
         <button
           type="button"
           data-testid="execution-collapse"

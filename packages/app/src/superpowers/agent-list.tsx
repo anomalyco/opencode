@@ -98,6 +98,8 @@ export function ExecutionAgentList(props: { model: ExecutionModel }) {
     setPendingFocus(undefined)
   })
 
+  createEffect(() => props.model.loadAgentActivity(visible().map((row) => row.agent.id)))
+
   onMount(() => {
     if (scroller?.clientHeight) setViewport(scroller.clientHeight)
   })
@@ -354,6 +356,13 @@ function AgentRow(props: {
                   <li class="execution-agent__assignment">
                     <span>{assignment.taskTitle ?? assignment.taskID}</span>
                     <span class="execution-agent__assignment-role">{language.t(roleKey(assignment.role))}</span>
+                    <Show when={assignment.taskState}>
+                      {(state) => (
+                        <span class="execution-agent__assignment-state" data-reported-state={state()}>
+                          {language.t(taskStateKey(state()))}
+                        </span>
+                      )}
+                    </Show>
                   </li>
                 )}
               </For>
@@ -380,6 +389,13 @@ function AgentRow(props: {
                     <li class="execution-agent__assignment">
                       <span>{assignment.taskTitle ?? assignment.taskID}</span>
                       <span class="execution-agent__assignment-role">{language.t(roleKey(assignment.role))}</span>
+                      <Show when={assignment.taskState}>
+                        {(state) => (
+                          <span class="execution-agent__assignment-state" data-reported-state={state()}>
+                            {language.t(taskStateKey(state()))}
+                          </span>
+                        )}
+                      </Show>
                     </li>
                   )}
                 </For>
@@ -433,4 +449,14 @@ function roleKey(role: ExecutionAgentRole) {
   if (role === "spec_reviewer") return "execution.agent.role.spec_reviewer" as const
   if (role === "code_reviewer") return "execution.agent.role.code_reviewer" as const
   return "execution.agent.role.debugger" as const
+}
+
+function taskStateKey(state: NonNullable<ExecutionAgent["assignments"]>[number]["taskState"]) {
+  if (state === "running") return "execution.task.state.running" as const
+  if (state === "blocked") return "execution.task.state.blocked" as const
+  if (state === "awaiting_review") return "execution.task.state.awaiting_review" as const
+  if (state === "verified") return "execution.task.state.verified" as const
+  if (state === "failed") return "execution.task.state.failed" as const
+  if (state === "skipped") return "execution.task.state.skipped" as const
+  return "execution.task.state.pending" as const
 }

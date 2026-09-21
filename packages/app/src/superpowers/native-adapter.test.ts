@@ -8,6 +8,7 @@ import {
   createNativeExecutionAdapter,
   messageHasPart,
   nativeState,
+  resolveNativeTarget,
   type NativeBoundary,
   type NativeDetail,
   type NativeScope,
@@ -135,6 +136,38 @@ function deferred<Value>() {
   })
   return { promise, resolve, reject }
 }
+
+test("production target resolution walks uncached ancestry and takes ownership from the real root", async () => {
+  const fake = fakeBoundary({ details: baseDetails() })
+  const resolved = await resolveNativeTarget({
+    serverKey: ServerConnection.Key.make("wsl:Ubuntu"),
+    selectedSessionID: "grandchild",
+    boundary: fake.boundary,
+  })
+
+  expect(resolved?.scope).toEqual({
+    serverKey: ServerConnection.Key.make("wsl:Ubuntu"),
+    ownerDirectory: "/root/git/demo",
+    rootSessionID: "root",
+  })
+  expect(resolved?.selectedSessionID).toBe("grandchild")
+  expect(resolved?.resolvedChain.map((record) => record.id)).toEqual(["grandchild", "child", "root"])
+  expect(fake.calls).toEqual(["detail:grandchild", "detail:child", "detail:root"])
+})
+
+test("production target resolution withholds attachment when an ancestor lookup fails", async () => {
+  const details = baseDetails()
+  details.delete("child")
+  const fake = fakeBoundary({ details })
+  const resolved = await resolveNativeTarget({
+    serverKey: ServerConnection.Key.make("wsl:Ubuntu"),
+    selectedSessionID: "grandchild",
+    boundary: fake.boundary,
+  })
+
+  expect(resolved).toBeUndefined()
+  expect(fake.calls).toEqual(["detail:grandchild", "detail:child"])
+})
 
 async function waitFor(condition: () => boolean) {
   for (let attempt = 0; attempt < 200; attempt += 1) {

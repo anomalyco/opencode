@@ -63,6 +63,7 @@ export type SessionExecutionInput = {
   navigateEvidence?: EvidenceNavigator
   reviewRequest?: () => void
   retry?: () => void
+  loadAgentActivity?: (sessionIDs: string[]) => void
   clock?: ExecutionClock
 }
 
@@ -112,6 +113,8 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
   let capabilitiesLoaded = false
   let currentMode: ExecutionMode = "observer"
   let locationPaused = false
+  let automatic = true
+  let discovering: number | undefined
   let online = input.connection()
   let timer: unknown
   let unsubscribe: (() => void) | undefined
@@ -144,10 +147,13 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     if (!parsed.success) return
     if (parsed.data.rootSessionID !== scope.rootSessionID) return
     if (!attachment) {
-      if (currentMode !== "incompatible") void attachActive()
+      if (automatic && currentMode !== "incompatible") void attachActive()
       return
     }
-    if (parsed.data.runID !== attachment.runID) return
+    if (parsed.data.runID !== attachment.runID) {
+      if (automatic) void attachActive()
+      return
+    }
     if (parsed.data.revision <= highestRevision) return
     highestRevision = parsed.data.revision
     reconcile()
@@ -155,7 +161,11 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
 
   function startTimer() {
     if (timer !== undefined) return
-    timer = clock.setInterval(() => (attachment ? reconcile() : attachActive()), EXECUTION_RECONCILE_INTERVAL)
+    timer = clock.setInterval(() => {
+      if (currentMode === "incompatible") return
+      if (automatic) void attachActive()
+      else reconcile()
+    }, EXECUTION_RECONCILE_INTERVAL)
   }
 
   function stopTimer() {
@@ -179,7 +189,8 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       if (snapshot()) setModeValue("stale")
       return
     }
-    if (!online) {
+    const reconnected = !online
+    if (reconnected) {
       online = true
       capabilitiesLoaded = false
       setReasonValue(undefined)
@@ -188,7 +199,10 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     if (currentMode === "incompatible") return
     if (input.visible()) startTimer()
     else stopTimer()
-    if (!attachment) return
+    if (!attachment) {
+      if (reconnected && automatic) void attachActive()
+      return
+    }
     if (inFlight) {
       followUp = true
       return
@@ -233,7 +247,8 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
 
   async function attachActive() {
     const scope = input.scope()
-    if (disposed || !scope) return
+    if (disposed || !scope || currentMode === "incompatible") return
+    automatic = true
     const previous = attachment
     if (
       previous !== undefined &&
@@ -246,8 +261,10 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       setReasonValue("location_changed")
       return
     }
-    resetForScope(scope)
+    const nextScopeKey = scopeKey(scope)
+    if (cachedScopeKey !== nextScopeKey) resetForScope(scope)
     const requestGeneration = generation
+    if (discovering === requestGeneration) return
     ensureListener()
     setAttachmentVersion((value) => value + 1)
     if (!input.connection()) {
@@ -257,12 +274,14 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       return
     }
     online = true
+    discovering = requestGeneration
     try {
       const capabilities = await input.api().capabilities({}, locationOptions(scope))
       if (ignoredDiscovery(requestGeneration)) return
       capabilitiesLoaded = true
       const schemaVersion: number = capabilities.schemaVersion
       if (schemaVersion !== 1) {
+        stopTimer()
         setModeValue("incompatible")
         setReasonValue("incompatible_schema")
         return
@@ -273,23 +292,37 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
       if (!preferred) {
         setModeValue("observer")
         setReasonValue("no_run")
-        reconcile()
+        if (input.visible()) startTimer()
         return
       }
       const ownerChanged = preferred.ownerDirectory !== scope.ownerDirectory
       locationPaused = ownerChanged
+      const sameRun =
+        attachment !== undefined && runKey(attachment.scope, attachment.runID) === runKey(scope, preferred.runID)
+      if (sameRun) {
+        reconcile()
+        return
+      }
+      generation += 1
+      const cached = runCache.get(runKey(scope, preferred.runID))
+      revision = cached?.revision ?? 0
+      highestRevision = cached?.revision ?? 0
+      setSnapshot(cached)
       attachment = {
         scope: ownerChanged ? { ...scope, ownerDirectory: preferred.ownerDirectory } : scope,
         runID: preferred.runID,
-        generation: requestGeneration,
+        generation,
       }
+      setModeValue(cached ? "ready" : "observer")
       setReasonValue(ownerChanged ? "location_changed" : undefined)
       setAttachmentVersion((value) => value + 1)
       reconcile()
     } catch (error) {
       if (ignoredDiscovery(requestGeneration)) return
       handleFailure(error)
-      if (currentMode !== "incompatible") reconcile()
+      reconcile()
+    } finally {
+      if (discovering === requestGeneration) discovering = undefined
     }
   }
 
@@ -348,6 +381,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     const failure = failureReason(error)
     if (failure === "incompatible_schema") {
       capabilitiesLoaded = true
+      stopTimer()
       setModeValue("incompatible")
       setReasonValue(failure)
       return
@@ -372,6 +406,7 @@ export function createExecutionBridge(input: ExecutionBridgeInput): ExecutionBri
     if (disposed) return
     const scope = input.scope()
     if (!scope) return
+    automatic = false
     const previous = attachment
     const sameIdentity = previous !== undefined && runKey(previous.scope, previous.runID) === runKey(scope, runID)
     const nextScopeKey = scopeKey(scope)
@@ -438,9 +473,9 @@ export function createSessionExecution(input: SessionExecutionInput): SessionExe
   })
   const model = createExecutionModel({
     scope: input.scope,
-    mode: () => bridge.getMode(),
-    reason: () => bridge.getReason(),
-    snapshot: () => bridge.getSnapshot(),
+    mode: () => (input.scope() ? bridge.getMode() : "observer"),
+    reason: () => (input.scope() ? bridge.getReason() : undefined),
+    snapshot: () => (input.scope() ? bridge.getSnapshot() : undefined),
     agents: input.agents,
     nativeComplete: input.nativeComplete,
     attention: input.attention,
@@ -451,7 +486,9 @@ export function createSessionExecution(input: SessionExecutionInput): SessionExe
     navigateEvidence: input.navigateEvidence,
     reviewRequest: input.reviewRequest,
     retry: input.retry,
+    loadAgentActivity: input.loadAgentActivity,
     reconcile: () => bridge.reconcile(),
+    selectRun: (runID) => (runID === undefined ? bridge.attachActive() : bridge.attach(runID)),
   })
   let attachedScopeKey: string | undefined
   let disposed = false

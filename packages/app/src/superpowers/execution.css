@@ -868,6 +868,12 @@
   line-height: var(--line-height-compact);
 }
 
+.execution-panel__pending {
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--v2-border-border-base);
+}
+
 .execution-expanded__action {
   flex-shrink: 0;
   height: 28px;

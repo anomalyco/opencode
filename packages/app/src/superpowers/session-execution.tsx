@@ -1,4 +1,5 @@
 import { createEffect, createMemo, onCleanup, onMount, type Accessor, type JSX, type ParentProps } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
 import { ExecutionRpc } from "@bearmanser/opencode-superpowers-execution/contract"
 import type { SessionModel } from "@/session/model"
@@ -10,8 +11,17 @@ import { createSessionExecution } from "./bridge-client"
 import { consumeExecutionOverview, openExecutionOverview } from "./home-summary"
 import { requestEvidenceReveal } from "./evidence-reveal"
 import { createExecutionPreferences } from "./preferences"
-import { createExecutionScope } from "./identity"
-import { createNativeBoundary, createNativeExecutionAdapter, messageHasPart, nativeState } from "./native-adapter"
+import {
+  createNativeBoundary,
+  createNativeExecutionAdapter,
+  latestNativeActivity,
+  messageHasPart,
+  nativeRecord,
+  nativeSessionInfo,
+  nativeState,
+  resolveNativeTarget,
+  type NativeResolvedTarget,
+} from "./native-adapter"
 import { createNativeExecutionOwner } from "./native-execution"
 import type {
   EvidenceNavigator,
@@ -24,6 +34,7 @@ import type {
 export function createSessionExecutionModel(input: {
   session: SessionModel
   attention: Accessor<ExecutionAttention>
+  visible?: Accessor<boolean>
   reviewRequest?: () => void
   openSession?: (sessionID: string) => void
   onOverviewRequested?: (model: ExecutionModel) => void
@@ -31,50 +42,125 @@ export function createSessionExecutionModel(input: {
   const server = useServer()
   const sdk = useServerSDK()
   const navigate = useNavigate()
-  const rootSessionID = createMemo(() => {
-    const seen = new Set<string>()
-    let id = input.session.identity.sessionID()
-    while (id && !seen.has(id)) {
-      seen.add(id)
-      const parentID = input.session.shared.data.session.get(id)?.parentID
-      if (!parentID) return id
-      id = parentID
-    }
-    return id
-  })
-  const scope = createMemo(() => {
-    const root = rootSessionID()
-    const info = root ? input.session.shared.data.session.get(root) : undefined
-    return createExecutionScope({
+  const boundary = createNativeBoundary({ api: sdk.api })
+  const [native, setNative] = createStore<{
+    target?: NativeResolvedTarget
+    activity: Record<string, string | undefined>
+  }>({ activity: {} })
+  const scope = () => native.target?.scope
+  const executionVisible = input.visible ?? (() => input.session.layout.tabs().active() === SESSION_EXECUTION_TAB)
+  const ancestry = createMemo(() =>
+    JSON.stringify(
+      input.session.shared.data.session.list().map((session) => [session.id, session.parentID, session.location.directory]),
+    ),
+  )
+  let resolutionGeneration = 0
+  let resolutionController: AbortController | undefined
+  let activityGeneration = 0
+  let activityActive = 0
+  const activityLoaded = new Set<string>()
+  const activityQueued = new Set<string>()
+  const activityQueue: string[] = []
+
+  const resolveTarget = () => {
+    const selectedSessionID = input.session.identity.sessionID()
+    resolutionGeneration += 1
+    activityGeneration += 1
+    const current = resolutionGeneration
+    resolutionController?.abort()
+    resolutionController = new AbortController()
+    activityLoaded.clear()
+    activityQueued.clear()
+    activityQueue.length = 0
+    setNative({ target: undefined, activity: {} })
+    if (!selectedSessionID) return
+    void resolveNativeTarget({
       serverKey: server.key,
-      ownerDirectory: info?.location.directory ?? input.session.workspace.directory(),
-      rootSessionID: root,
+      selectedSessionID,
+      boundary,
+      signal: resolutionController.signal,
+    }).then((target) => {
+      if (current !== resolutionGeneration || resolutionController?.signal.aborted) return
+      setNative("target", target)
     })
+  }
+
+  createEffect(() => {
+    input.session.identity.sessionID()
+    ancestry()
+    resolveTarget()
   })
-  const executionVisible = () => input.session.layout.tabs().active() === SESSION_EXECUTION_TAB
   const nativeExecution = createNativeExecutionOwner({
-    scope: () => {
-      const current = scope()
-      if (!current) return undefined
-      return { serverKey: server.key, ownerDirectory: current.ownerDirectory, rootSessionID: current.rootSessionID }
-    },
+    scope,
     selectedSessionID: () => input.session.identity.sessionID(),
     createAdapter: (target) =>
       createNativeExecutionAdapter({
-        target: () => target,
-        boundary: createNativeBoundary({ api: sdk.api }),
+        target: () => ({ ...target, resolvedChain: native.target?.resolvedChain }),
+        boundary,
       }),
   })
-  const agents = createMemo<ExecutionAgent[]>(() =>
-    (nativeExecution.snapshot()?.nodes ?? []).map((record) => ({ ...record, state: nativeState(record) })),
-  )
-  nativeExecution.refresh()
   createEffect(() => {
-    input.session.identity.sessionID()
-    scope()
+    native.target
     nativeExecution.refresh()
   })
-  onCleanup(() => nativeExecution.dispose())
+  const agents = createMemo<ExecutionAgent[]>(() =>
+    (nativeExecution.snapshot()?.nodes ?? []).map((record) => {
+      const info = input.session.shared.data.session.get(record.id)
+      const messages = input.session.shared.data.session.message.list(record.id)
+      const activity = latestNativeActivity(messages) ?? native.activity[record.id] ?? record.activity
+      if (!info) return { ...record, activity, state: nativeState(record) }
+      const live = nativeRecord(
+        nativeSessionInfo(info),
+        input.session.shared.data.session.status(record.id) === "running" ? "running" : record.status,
+        record.needsInput,
+      )
+      const merged = { ...record, ...live, title: live.title || record.title, activity }
+      return { ...merged, state: nativeState(merged) }
+    }),
+  )
+
+  const pumpActivity = () => {
+    while (activityActive < 4 && activityQueue.length > 0) {
+      const sessionID = activityQueue.shift()
+      if (!sessionID) continue
+      const current = activityGeneration
+      activityActive += 1
+      void sdk.api.message
+        .list({ sessionID, order: "desc", limit: 20 })
+        .then((page) => {
+          if (current !== activityGeneration) return
+          setNative("activity", sessionID, latestNativeActivity([...page.data].reverse()))
+          activityLoaded.add(sessionID)
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          activityActive -= 1
+          activityQueued.delete(sessionID)
+          pumpActivity()
+        })
+    }
+  }
+  const loadAgentActivity = (sessionIDs: string[]) => {
+    if (!executionVisible()) return
+    sessionIDs.forEach((sessionID) => {
+      if (activityLoaded.has(sessionID) || activityQueued.has(sessionID)) return
+      const local = latestNativeActivity(input.session.shared.data.session.message.list(sessionID))
+      if (local) {
+        setNative("activity", sessionID, local)
+        activityLoaded.add(sessionID)
+        return
+      }
+      activityQueued.add(sessionID)
+      activityQueue.push(sessionID)
+    })
+    pumpActivity()
+  }
+  onCleanup(() => {
+    resolutionGeneration += 1
+    activityGeneration += 1
+    resolutionController?.abort()
+    nativeExecution.dispose()
+  })
   const resolveEvidence: EvidenceResolver = async ({ sessionID, messageID, partID }) => {
     const loaded = input.session.shared.data.session.message.get(sessionID, messageID)
     if (loaded) return partID === undefined || messageHasPart(loaded, partID)
@@ -109,6 +195,7 @@ export function createSessionExecutionModel(input: {
     agents: () => agents(),
     nativeComplete: () => nativeExecution.snapshot()?.complete,
     retry: nativeExecution.refresh,
+    loadAgentActivity,
   })
   onMount(() => {
     if (!consumeExecutionOverview(input.session.identity.sessionID())) return
@@ -121,6 +208,7 @@ export function SessionExecutionProvider(
   props: ParentProps<{
     session: SessionModel
     attention: Accessor<ExecutionAttention>
+    visible?: Accessor<boolean>
     reviewRequest?: () => void
     openSession?: (sessionID: string) => void
     onOverviewRequested?: (model: ExecutionModel) => void
@@ -130,6 +218,7 @@ export function SessionExecutionProvider(
   const execution = createSessionExecutionModel({
     session: props.session,
     attention: props.attention,
+    visible: props.visible,
     reviewRequest: props.reviewRequest,
     openSession: props.openSession,
     onOverviewRequested: props.onOverviewRequested,
@@ -142,7 +231,9 @@ export function createExecutionOverviewOpener(input: {
   session: SessionModel
   mobile: { setTab: (tab: "execution") => void }
 }) {
-  return (execution: ExecutionModel) =>
+  return (execution: ExecutionModel, options?: { agents?: boolean }) => {
+    if (options?.agents) execution.selectSubview("agents")
+    if (input.session.isDesktop()) input.session.layout.view().reviewPanel.open()
     openExecutionOverview({
       execution,
       openTab: () => void input.session.layout.tabs().open(SESSION_EXECUTION_TAB),
@@ -150,12 +241,28 @@ export function createExecutionOverviewOpener(input: {
         if (!input.session.isDesktop()) input.mobile.setTab("execution")
       },
     })
+  }
+}
+
+export function executionPresentationVisible(input: {
+  desktop: boolean
+  expanded: boolean
+  reviewPanelOpen: boolean
+  executionTabActive: boolean
+  mobileExecution: boolean
+  activeOwner: boolean
+  documentVisible: boolean
+}) {
+  if (!input.activeOwner || !input.documentVisible) return false
+  if (!input.desktop) return input.mobileExecution
+  return input.expanded || (input.reviewPanelOpen && input.executionTabActive)
 }
 
 export function SessionExecutionOwner(
   props: ParentProps<{
     session: SessionModel
     attention: Accessor<ExecutionAttention>
+    visible?: Accessor<boolean>
     reviewRequest?: () => void
     openSession?: (sessionID: string) => void
     mobile: { setTab: (tab: "execution") => void }
@@ -167,6 +274,7 @@ export function SessionExecutionOwner(
     <SessionExecutionProvider
       session={props.session}
       attention={props.attention}
+      visible={props.visible}
       reviewRequest={props.reviewRequest}
       openSession={props.openSession}
       onOverviewRequested={openOverview}

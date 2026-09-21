@@ -8,6 +8,7 @@ import {
   type RunEvent,
   type RunSnapshot,
   type Task,
+  type TaskState,
 } from "@bearmanser/opencode-superpowers-execution/contract"
 import { projectAgentTree } from "./agent-tree"
 import type { ExecutionScope } from "./identity"
@@ -46,6 +47,7 @@ export type ExecutionAssignment = {
   role: ExecutionAgentRole
   attempt: number
   active: boolean
+  taskState?: TaskState
 }
 
 export type ExecutionAgent = NativeRecord & {
@@ -154,6 +156,33 @@ export function joinTaskAssignments(input: {
   }
 }
 
+export function joinAgentAssignments(agents: ExecutionAgent[], run: RunSnapshot | undefined): ExecutionAgent[] {
+  if (!run) return agents
+  const tasks = new Map(run.tasks.map((task) => [task.id, task]))
+  const bySession = new Map<string, ExecutionAssignment[]>()
+  for (const assignment of run.assignments) {
+    const task = tasks.get(assignment.taskID)
+    if (!task) continue
+    const projected: ExecutionAssignment = {
+      id: assignment.id,
+      taskID: assignment.taskID,
+      taskTitle: task.title,
+      role: assignment.role,
+      attempt: assignment.attempt,
+      active: assignment.endedAt === undefined,
+      taskState: task.state,
+    }
+    bySession.set(assignment.sessionID, [...(bySession.get(assignment.sessionID) ?? []), projected])
+  }
+  return agents.map((agent) => {
+    const reported = bySession.get(agent.id) ?? []
+    const reportedIDs = new Set(reported.map((assignment) => assignment.id))
+    const retained = (agent.assignments ?? []).filter((assignment) => !reportedIDs.has(assignment.id))
+    const assignments = [...reported, ...retained]
+    return assignments.length === 0 ? agent : { ...agent, assignments }
+  })
+}
+
 export function joinTaskEvidence(input: {
   run: RunSnapshot
   taskID: string
@@ -241,6 +270,7 @@ export type ExecutionModelInput = {
   reviewRequest?: () => void
   selectRun?: (runID: string | undefined) => void
   reconcile?: () => void
+  loadAgentActivity?: (sessionIDs: string[]) => void
 }
 
 export type ExecutionModel = {
@@ -277,6 +307,7 @@ export type ExecutionModel = {
   retryAgent: (sessionID: string) => void
   reviewRequest: () => void
   reconcile: () => void
+  loadAgentActivity: (sessionIDs: string[]) => void
 }
 
 const emptyAgents: ExecutionAgent[] = []
@@ -347,7 +378,7 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     if (incompatible()) return undefined
     return input.run?.() ?? rawSnapshot()
   }
-  const agents = () => input.agents?.() ?? emptyAgents
+  const agents = () => joinAgentAssignments(input.agents?.() ?? emptyAgents, snapshot())
   const reason = () => input.reason?.()
   const structured = () => !incompatible() && (mode() === "ready" || mode() === "stale")
   const progress = () => {
@@ -575,6 +606,7 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     retryAgent: (sessionID) => input.retry?.(sessionID),
     reviewRequest: () => input.reviewRequest?.(),
     reconcile: () => input.reconcile?.(),
+    loadAgentActivity: (sessionIDs) => input.loadAgentActivity?.(sessionIDs),
   }
 }
 

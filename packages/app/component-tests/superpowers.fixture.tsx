@@ -147,9 +147,31 @@ const liveSession = {
   shared: {
     data: {
       session: {
+        list: () => [
+          {
+            id: "root",
+            title: "Root controller",
+            location: { directory: "/root/git/demo" },
+            model: { id: "gpt-5-codex", providerID: "openai" },
+            cost: 1.5,
+            tokens: { input: 1000, output: 250, reasoning: 0, cache: { read: 500, write: 0 } },
+          },
+        ],
         get: (id: string) =>
-          id === "root" ? { parentID: undefined, location: { directory: "/root/git/demo" } } : undefined,
+          id === "root"
+            ? {
+                id: "root",
+                title: "Root controller",
+                parentID: undefined,
+                location: { directory: "/root/git/demo" },
+                model: { id: "gpt-5-codex", providerID: "openai" },
+                cost: 1.5,
+                tokens: { input: 1000, output: 250, reasoning: 0, cache: { read: 500, write: 0 } },
+              }
+            : undefined,
+        status: (id: string) => (id === "root" ? "running" : "idle"),
         message: {
+          list: () => [],
           get: (sessionID: string, messageID: string) =>
             sessionID === "child" && messageID === "msg-api-1"
               ? { type: "assistant", content: [{ type: "tool", id: "part-api-1" }] }
@@ -419,7 +441,14 @@ function TrackedFixture(props: { host: HTMLElement; lateRun: boolean }) {
     snapshot: run,
     agents: () => agentFixture("agents"),
     attention: () => ({ stale: false, needsInput: state.pendingQuestion ? 1 : 0, failed: 0, blocked: 0 }),
-    reviewRequest: () => requestRegion?.focus(),
+    reviewRequest: () => {
+      selectMobileView("session")
+      if (typeof requestAnimationFrame !== "function") {
+        requestRegion?.focus()
+        return
+      }
+      requestAnimationFrame(() => requestRegion?.focus())
+    },
   })
   const expansion = createExecutionExpansion({
     model: () => model,
@@ -778,10 +807,20 @@ function destinationSession(input: {
       sessionKey: () => `${ServerConnection.key(desktopServer)}::${input.id()}`,
       params: { id: input.id() },
     },
-    shared: { data: { session: { get: () => undefined, message: { get: () => undefined } } } },
+    shared: {
+      data: {
+        session: {
+          list: () => [],
+          get: () => undefined,
+          status: () => "idle",
+          message: { list: () => [], get: () => undefined },
+        },
+      },
+    },
     workspace: { directory: () => homeFixtureProject.worktree },
     isDesktop: () => !input.narrow(),
     layout: {
+      view: () => ({ reviewPanel: { opened: () => false, open: () => undefined } }),
       tabs: () => ({
         active: input.activeTab,
         all: () => [input.activeTab()],

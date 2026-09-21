@@ -11,7 +11,10 @@ export type NativeScope = ExecutionScope & { serverKey: ServerConnection.Key }
 export type NativeTarget = {
   scope: NativeScope
   selectedSessionID: string
+  resolvedChain?: NativeRecord[]
 }
+
+export type NativeResolvedTarget = NativeTarget & { resolvedChain: NativeRecord[] }
 
 export type NativeSessionInfo = {
   id: string
@@ -80,6 +83,37 @@ export function nativeRecord(
   }
 }
 
+export async function resolveNativeTarget(input: {
+  serverKey: ServerConnection.Key
+  selectedSessionID: string
+  boundary: NativeBoundary
+  signal?: AbortSignal
+}): Promise<NativeResolvedTarget | undefined> {
+  const seen = new Set<string>()
+  const chain: NativeRecord[] = []
+  let sessionID = input.selectedSessionID
+  while (!seen.has(sessionID) && !input.signal?.aborted) {
+    seen.add(sessionID)
+    const loaded = await input.boundary.detail({ sessionID, signal: input.signal }).catch(() => undefined)
+    if (!loaded) return
+    const record = nativeRecord(loaded.info, "unknown", loaded.needsInput)
+    chain.push(record)
+    if (record.parentID) {
+      sessionID = record.parentID
+      continue
+    }
+    return {
+      scope: {
+        serverKey: input.serverKey,
+        ownerDirectory: record.directory,
+        rootSessionID: record.id,
+      },
+      selectedSessionID: input.selectedSessionID,
+      resolvedChain: chain,
+    }
+  }
+}
+
 export function createNativeBoundary(input: { api: Pick<OpenCodeClient, "permission" | "session"> }): NativeBoundary {
   const session = input.api.session
   return {
@@ -89,17 +123,17 @@ export function createNativeBoundary(input: { api: Pick<OpenCodeClient, "permiss
         input.api.permission.list({ sessionID }, { signal }),
         session.form.list({ sessionID }, { signal }),
       ])
-      return { info: nativeInfo(info), needsInput: permissions.length > 0 || forms.some(isAttentionForm) }
+      return { info: nativeSessionInfo(info), needsInput: permissions.length > 0 || forms.some(isAttentionForm) }
     },
     async children({ sessionID, cursor, signal }) {
       const response = await session.list({ parentID: sessionID, order: "desc", cursor }, { signal })
-      return { data: response.data.map(nativeInfo), next: response.cursor.next ?? undefined }
+      return { data: response.data.map(nativeSessionInfo), next: response.cursor.next ?? undefined }
     },
     active: ({ signal } = {}) => session.active({ signal }),
   }
 }
 
-function nativeInfo(session: SessionInfo): NativeSessionInfo {
+export function nativeSessionInfo(session: SessionInfo): NativeSessionInfo {
   return {
     id: session.id,
     parentID: session.parentID,
@@ -109,6 +143,16 @@ function nativeInfo(session: SessionInfo): NativeSessionInfo {
     cost: session.cost,
     tokens: session.tokens,
   }
+}
+
+export function latestNativeActivity(messages: readonly SessionMessageInfo[]) {
+  const message = messages.findLast((item) => item.type === "assistant")
+  if (!message || message.type !== "assistant") return
+  const part = message.content.findLast((item) => item.type === "tool" || item.type === "text")
+  if (!part) return
+  if (part.type === "tool") return part.name
+  const text = part.text.trim().replace(/\s+/g, " ")
+  return text.length > 120 ? `${text.slice(0, 117)}…` : text || undefined
 }
 
 function nativeUsage(info: NativeSessionInfo): NativeUsage | undefined {
@@ -253,7 +297,13 @@ export function createNativeExecutionAdapter(input: {
     }
     const current = generation
 
-    const resolution = await resolveRoot(currentTarget.selectedSessionID, current)
+    for (const record of currentTarget.resolvedChain ?? []) records.set(record.id, record)
+
+    const resolvedChain = currentTarget.resolvedChain
+    const resolution =
+      resolvedChain && resolvedChain[0]?.id === currentTarget.selectedSessionID
+        ? { rootID: resolvedChain.at(-1)?.id, chain: resolvedChain.map((record) => record.id) }
+        : await resolveRoot(currentTarget.selectedSessionID, current)
     if (stale(current)) return snapshot()
     if (resolution.rootID !== currentTarget.scope.rootSessionID) return snapshot()
 

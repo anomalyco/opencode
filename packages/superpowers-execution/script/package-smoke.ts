@@ -2,6 +2,7 @@ import { chromium } from "@playwright/test"
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { createWorkingDirectory, removeWorkingDirectory, repositoryRoot, type StagedPackage } from "./stage"
 
 export {
@@ -21,6 +22,9 @@ export interface BrowserContractResult {
 export interface HostProbe {
   readonly pluginVersion: string | undefined
   readonly runCount: number
+  readonly runID: string | undefined
+  readonly revision: number | undefined
+  readonly createdAt: number | undefined
 }
 
 export interface HostGateResult {
@@ -93,9 +97,16 @@ export async function runDisposableHostGate(
   await mkdir(path.join(workspace, "data"), { recursive: true })
   await mkdir(path.join(workspace, "cache"), { recursive: true })
   await mkdir(path.join(workspace, "state"), { recursive: true })
+  const wrapper = path.join(workspace, "execution-host-gate")
+  await mkdir(wrapper)
+  await writeFile(path.join(wrapper, "package.json"), `${JSON.stringify({ type: "module", main: "index.js" })}\n`)
+  await writeFile(
+    path.join(wrapper, "index.js"),
+    hostGatePlugin(pathToFileURL(path.join(staged.directory, "dist/plugin.js")).href),
+  )
   await writeFile(
     path.join(workspace, "config/opencode/opencode.json"),
-    `${JSON.stringify({ plugins: [staged.directory] }, null, 2)}\n`,
+    `${JSON.stringify({ plugins: [wrapper] }, null, 2)}\n`,
   )
 
   const env = {
@@ -122,6 +133,54 @@ const browserPage = `<!doctype html>
   </body>
 </html>
 `
+
+function hostGatePlugin(pluginURL: string) {
+  return `import plugin, { createRepositoryForContext } from ${JSON.stringify(pluginURL)}
+
+export default {
+  ...plugin,
+  async setup(ctx) {
+    const cleanup = await plugin.setup(ctx)
+    const repository = createRepositoryForContext(ctx, () => undefined)
+    const reported = await repository.report(
+      {
+        operationID: "host-gate-start",
+        runID: "host-gate-run",
+        expectedRevision: 0,
+        operation: {
+          type: "run.start",
+          title: "Host gate run",
+          plan: { path: "docs/host-gate.md", sha256: "${"0".repeat(64)}" },
+          tasks: [
+            {
+              id: "host-gate-task",
+              title: "Host gate task",
+              phase: "Acceptance",
+              order: 0,
+              dependsOn: [],
+              requiredGates: ["manual"],
+              finalReview: true
+            }
+          ]
+        }
+      },
+      { sessionID: "host-gate-root", rootSessionID: "host-gate-root" }
+    )
+    await repository.close()
+    if (!reported.ok) {
+      await cleanup()
+      throw new Error(reported.error.detail)
+    }
+    const loaded = await repository.getRun("host-gate-root", "host-gate-run")
+    if (!loaded.ok) {
+      await cleanup()
+      throw new Error(loaded.error.detail)
+    }
+    return cleanup
+  }
+}
+`
+}
 
 interface BrowserWindow {
   readonly __executionContract?: { readonly rpcID: string }
@@ -172,10 +231,23 @@ async function withDisposableHost(
   try {
     await waitForHost(port, password, child)
     const capabilities = await hostRpc<{ pluginVersion: string }>(port, password, "capabilities", {})
-    const list = await hostRpc<{ items: readonly unknown[] }>(port, password, "listRuns", {
+    const list = await hostRpc<{ items: readonly { runID: string; revision: number }[] }>(port, password, "listRuns", {
       rootSessionID: "host-gate-root",
     })
-    return { pluginVersion: capabilities.pluginVersion, runCount: list.items.length }
+    const selected = list.items[0]
+    const run = selected
+      ? await hostRpc<{ runID: string; revision: number; createdAt: number }>(port, password, "getRun", {
+          rootSessionID: "host-gate-root",
+          runID: selected.runID,
+        })
+      : undefined
+    return {
+      pluginVersion: capabilities.pluginVersion,
+      runCount: list.items.length,
+      runID: run?.runID,
+      revision: run?.revision,
+      createdAt: run?.createdAt,
+    }
   } finally {
     child.kill()
     await child.exited

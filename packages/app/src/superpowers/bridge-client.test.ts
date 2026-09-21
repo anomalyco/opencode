@@ -140,6 +140,7 @@ type BridgeHarness = {
   setConnected(connected: boolean): void
   setVisible(visible: boolean): void
   setCapabilitiesVersion(version: number): void
+  capabilityCalls(): number
   failCapabilities(error: unknown): void
   clearCapabilitiesError(): void
   emit(data: Changed, directory?: string): void
@@ -158,6 +159,7 @@ function bridgeHarness(): BridgeHarness {
   const replies = new Map<string, Reply>()
   const getRunCalls: RequestCall[] = []
   let capabilitiesVersion = 1
+  let capabilitiesCalls = 0
   let capabilitiesError: unknown
   let summaries: RunSummary[] = []
 
@@ -170,6 +172,7 @@ function bridgeHarness(): BridgeHarness {
 
   const api = {
     capabilities: async () => {
+      capabilitiesCalls += 1
       if (capabilitiesError) throw capabilitiesError
       return { schemaVersion: capabilitiesVersion, pluginVersion: "0.1.0", maxTasks: 500, reporting: "controller" }
     },
@@ -211,6 +214,7 @@ function bridgeHarness(): BridgeHarness {
       reason: () => bridge.getReason(),
       snapshot: () => bridge.getSnapshot(),
       reconcile: () => bridge.reconcile(),
+      selectRun: (runID) => (runID === undefined ? bridge.attachActive() : bridge.attach(runID)),
     })
   })
 
@@ -250,6 +254,7 @@ function bridgeHarness(): BridgeHarness {
     setCapabilitiesVersion(version) {
       capabilitiesVersion = version
     },
+    capabilityCalls: () => capabilitiesCalls,
     failCapabilities(error) {
       capabilitiesError = error
     },
@@ -414,6 +419,36 @@ describe("createExecutionBridge", () => {
     harness.dispose()
   })
 
+  test("automatic selection resumes discovery after starting offline", async () => {
+    const harness = bridgeHarness()
+    harness.setConnected(false)
+    const first = harness.attachActive(SCOPE, "run-1")
+    await harness.flush()
+    expect(harness.capabilityCalls()).toBe(0)
+
+    harness.setConnected(true)
+    await harness.flush()
+    expect(harness.getRunCalls).toHaveLength(1)
+    first?.resolve(runFixture({ revision: 1 }))
+    await harness.flush()
+    expect(harness.model.run()?.runID).toBe("run-1")
+    harness.dispose()
+  })
+
+  test("a scope change during automatic discovery cannot attach the previous root", async () => {
+    const harness = bridgeHarness()
+    const nextScope = { ...SCOPE, rootSessionID: "root-b" }
+    harness.attachActive(SCOPE, "run-1")
+    const current = harness.attachActive(nextScope, "run-2")
+    await harness.flush()
+
+    expect(harness.getRunCalls.at(-1)).toMatchObject({ rootSessionID: "root-b", runID: "run-2" })
+    current?.resolve(runFixture({ rootSessionID: "root-b", runID: "run-2" }))
+    await harness.flush()
+    expect(harness.model.run()?.rootSessionID).toBe("root-b")
+    harness.dispose()
+  })
+
   test("an incompatible schema disables structured views without retrying", async () => {
     const harness = bridgeHarness()
     harness.failCapabilities({
@@ -517,6 +552,67 @@ describe("createExecutionBridge", () => {
     await harness.flush()
     expect(harness.model.mode()).toBe("ready")
     expect(harness.model.run()?.runID).toBe("run-9")
+    harness.dispose()
+  })
+
+  test("automatic selection adopts a newer run after the displayed run completes", async () => {
+    const harness = bridgeHarness()
+    const first = harness.attachActive(SCOPE, "run-1")
+    await harness.flush()
+    first?.resolve(runFixture({ runID: "run-1", revision: 4, status: "completed" }))
+    await harness.flush()
+    expect(harness.model.run()?.runID).toBe("run-1")
+
+    const second = harness.next(SCOPE, "run-2")
+    harness.setSummaries([summaryFixture(SCOPE, "run-2", 1)])
+    harness.emit({ rootSessionID: "root", runID: "run-2", revision: 1 })
+    await harness.flush()
+    expect(harness.getRunCalls.at(-1)?.runID).toBe("run-2")
+    second.resolve(runFixture({ runID: "run-2", revision: 1 }))
+    await harness.flush()
+    expect(harness.model.run()?.runID).toBe("run-2")
+    harness.dispose()
+  })
+
+  test("explicit historical selection stays pinned while automatic selection can be restored", async () => {
+    const harness = bridgeHarness()
+    const historical = harness.attach(SCOPE, "run-1")
+    await harness.flush()
+    historical.resolve(runFixture({ runID: "run-1", revision: 4, status: "completed" }))
+    await harness.flush()
+
+    harness.setSummaries([summaryFixture(SCOPE, "run-2")])
+    harness.emit({ rootSessionID: "root", runID: "run-2", revision: 1 })
+    await harness.flush()
+    expect(harness.model.run()?.runID).toBe("run-1")
+
+    const current = harness.next(SCOPE, "run-2")
+    harness.model.selectRun(undefined)
+    await harness.flush()
+    current.resolve(runFixture({ runID: "run-2", revision: 1 }))
+    await harness.flush()
+    expect(harness.model.run()?.runID).toBe("run-2")
+    harness.dispose()
+  })
+
+  test("schema mismatch during discovery stops polling until reconnection", async () => {
+    const harness = bridgeHarness()
+    harness.setCapabilitiesVersion(2)
+    harness.attachActive(SCOPE)
+    await harness.flush()
+    expect(harness.model.mode()).toBe("incompatible")
+    expect(harness.capabilityCalls()).toBe(1)
+    expect(harness.clock.active()).toBe(0)
+
+    harness.clock.advance(EXECUTION_RECONCILE_INTERVAL * 2)
+    await harness.flush()
+    expect(harness.capabilityCalls()).toBe(1)
+
+    harness.setConnected(false)
+    harness.setCapabilitiesVersion(1)
+    harness.setConnected(true)
+    await harness.flush()
+    expect(harness.capabilityCalls()).toBe(2)
     harness.dispose()
   })
 

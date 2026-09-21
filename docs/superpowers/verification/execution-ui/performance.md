@@ -8,7 +8,7 @@ Spec coverage: AC18. Authority: spec §13 and §6.3.
 |---|---|
 | Branch | `execution-ui` |
 | Base | `v2` at `c555559ac1b94910b769eebaa595b2b8822efa14` (OpenCode 2.0.11) |
-| Measured working tree | T19 commits `perf(app): enforce execution rendering and lifecycle budgets`, `fix(app): address execution performance review findings`, `fix(app): enforce paired gates and browser long-task attribution`, and the T01-scenario long-task round (base `fb485c3d5ec4b175d22f61fe4153592f0efd7a46`) |
+| Measured working tree | Final whole-branch fix wave on top of T20, including automatic run rediscovery, confirmed native ancestry, presentation-aware reconciliation, and visibility-gated detailed activity loading |
 | Bun | 1.4.2 |
 | Node (Playwright driver) | v24.21.0 |
 | Playwright / Chromium | 1.59.1 / chromium-1217 (`147.0.7727.15`) |
@@ -42,20 +42,20 @@ error: Cannot find module './lifecycle' from '.../lifecycle.test.ts'
  0 pass / 1 fail / 1 error
 ```
 
-### Step 4 GREEN (after implementation; see `/tmp/opencode/t19-lifecycle-tests.log`)
+### Step 4 GREEN (final verification; see `/tmp/opencode/final-fix-app-superpowers.log`)
 
 ```text
 $ cd packages/app
 $ bun test --conditions=solid --preload ./happydom.ts ./src/superpowers
-[task-19-perf] rendering={"graphLayout500Ms":4.1859...,"graphLayout500P95Ms":4.1859...,"graphLayoutsForTokenOnlyUpdates":0,"graphLayoutsForLongTitles":0,"retainedNodes":500}
-[task-19-lifecycle] rendering={"graphLayout500Ms":1.1365...,"graphLayout500P95Ms":1.1365...,"graphLayoutsForTokenOnlyUpdates":0,"graphLayoutsForLongTitles":0,"retainedNodes":500}
+[task-19-perf] rendering={"graphLayout500Ms":13.4598...,"graphLayout500P95Ms":13.4598...,"graphLayoutsForTokenOnlyUpdates":0,"graphLayoutsForLongTitles":0,"retainedNodes":500}
+[task-19-lifecycle] rendering={"graphLayout500Ms":13.3152...,"graphLayout500P95Ms":13.3152...,"graphLayoutsForTokenOnlyUpdates":0,"graphLayoutsForLongTitles":0,"retainedNodes":500}
 [task-19-lifecycle] baseline=0 listeners=0 intervals=0 cache=0 concurrent=1 closedPolls=0
- 190 pass / 0 fail
+  200 pass / 0 fail
 ```
 
 | Target (§13) | Measured | Result |
 |---|---|---|
-| 500-task graph layout: every cold run ≤ 250 ms | max cold run 1.14–4.19 ms over 5 runs | PASS |
+| 500-task graph layout: every cold run ≤ 250 ms | max cold run 13.32–13.46 ms over 5 runs | PASS |
 | No relayout for token/status-only updates | `graphLayoutsForTokenOnlyUpdates = 0`; retained nodes stayed 500 | PASS |
 | No relayout for long titles | `graphLayoutsForLongTitles = 0` | PASS |
 | 1,000 retained events stay bounded | activity page holds 100 of 1,000 with `hasMore` | PASS |
@@ -88,22 +88,22 @@ $ PLAYWRIGHT_BUILD=1 EXECUTION_E2E_TARGET='{"disposable":true,"directory":"/tmp/
 
 | Scenario | T01 recorded p95 (firstCorrect / stable) | Measured p95 (firstCorrect / stable) | Budget (×1.10) | Result |
 |---|---|---|---|---|
-| tab switch: cold, review closed | 530.90 / 583.00 ms | 330.20 / 367.90 ms | 583.99 / 641.30 ms | PASS |
-| tab switch: warm, review closed | 106.60 / 305.50 ms | 49.70 / 180.10 ms | 117.26 / 336.05 ms | PASS |
-| entry: cold session from Home | 1069.80 / 1227.00 ms | 617.90 / 699.40 ms | 1176.78 / 1349.70 ms | PASS |
+| tab switch: cold, review closed | 530.90 / 583.00 ms | 391.70 / 442.40 ms | 583.99 / 641.30 ms | PASS |
+| tab switch: warm, review closed | 106.60 / 305.50 ms | 63.30 / 218.80 ms | 117.26 / 336.05 ms | PASS |
+| entry: cold session from Home | 1069.80 / 1227.00 ms | 682.70 / 759.70 ms | 1176.78 / 1349.70 ms | PASS |
 
 Complete measured distributions (canonical run, 20 complete pairs each):
 
 ```text
 tab switch: cold, review closed
-  firstCorrect: [369, 271.8, 296.9, 299.1, 288.3, 278.5, 302.8, 313.6, 330.2, 296.6, 260.2, 312.8, 288.7, 278.5, 310.5, 292.8, 290.3, 303, 273.1, 293.3]
-  stable:       [442.6, 321.9, 333.9, 306.2, 327.8, 329.5, 347.7, 322.9, 367.9, 346.1, 304, 321.6, 337.5, 323, 358.8, 301.3, 345.8, 347.2, 329.9, 345]
+  firstCorrect: [305.4, 338, 334.4, 285.7, 285.7, 324.3, 341.4, 283.1, 391.7, 328.2, 315.7, 389, 288.3, 341.9, 343.3, 272.3, 348.9, 276.7, 316.1, 417.9]
+  stable:       [344.3, 390.4, 385.6, 337.4, 353.2, 363.2, 397, 337.6, 442.4, 419.3, 385.8, 433.5, 339.9, 384.4, 398.2, 321.3, 399.7, 324.5, 388.9, 482]
 tab switch: warm, review closed
-  firstCorrect: [58.4, 49.7, 49.2, 49, 44.7, 49, 45.5, 48, 45.3, 43, 42.3, 44.9, 44.2, 42.5, 44.1, 43.5, 43.2, 43.2, 41.5, 42.5]
-  stable:       [124.1, 171.7, 168.4, 180.1, 109.2, 167.7, 163.7, 125.4, 185, 109.2, 102.8, 110.6, 162.7, 102.4, 163.8, 100.8, 103.5, 148.5, 98.6, 98]
+  firstCorrect: [51, 50.1, 44.6, 65.9, 46.5, 63.3, 57, 52.2, 47.3, 60, 42.5, 45.6, 43.4, 52.2, 55.2, 45.6, 52.7, 50.4, 58.8, 62.3]
+  stable:       [180.6, 187.3, 157.8, 154.7, 172, 200, 218.8, 186.9, 166.4, 195.8, 111.6, 161, 106.2, 181.1, 131.3, 179.4, 233.3, 173.5, 215.5, 211.6]
 entry: cold session from Home
-  firstCorrect: [617.9, 600.2, 504.5, 506.5, 625.3, 520.8, 525.7, 519.1, 552.3, 504.3, 484.6, 515.1, 523.5, 491.4, 506.6, 491.5, 519.7, 525, 462.6, 487]
-  stable:       [746.1, 675.4, 638.6, 587.1, 699.4, 656.1, 529.1, 597.1, 695.6, 573, 554.6, 580.4, 654.9, 570.6, 574.7, 558.8, 661, 593.2, 541.7, 625.3]
+  firstCorrect: [682.7, 569, 558.6, 572.2, 494.7, 513.4, 487.1, 546.6, 559.8, 550.8, 537.2, 535.3, 553.6, 572.7, 528.9, 527.5, 592.5, 690.4, 537.4, 576.4]
+  stable:       [768.2, 651.4, 635.1, 579.8, 574.1, 581.1, 610.6, 611.9, 637.3, 643.1, 604.3, 607.7, 696.1, 709.3, 598.5, 604.1, 677.9, 759.7, 683.4, 581.8]
 ```
 
 ## Long-task observation on the T01 scenarios
@@ -118,17 +118,13 @@ route => route.abort())`) as an in-run feature-network-disabled baseline.
 
 | Scenario | current samples / >50 ms | current feature-attributable | baseline samples / >50 ms | baseline feature-attributable |
 |---|---|---|---|---|
-| tab switch: cold, review closed | 63 / 63 | 3 (all 60–64 ms) | 19 / 19 | 0 |
-| tab switch: warm, review closed | 5 / 4 | 0 | 5 / 5 | 0 |
-| entry: cold session from Home | 36 / 36 | 0 | 9 / 9 | 0 |
+| tab switch: cold, review closed | 70 / 70 | 0 | 20 / 19 | 0 |
+| tab switch: warm, review closed | 26 / 23 | 0 | 15 / 12 | 0 |
+| entry: cold session from Home | 42 / 42 | 0 | 11 / 11 | 0 |
 
 Attribution is `self` / `window` for every record in both states
-(`attributionSources: ["self|window::"]`). The three feature-attributable cold records are 60–64 ms tasks
-starting at `560.9–564.5 ms`, overlapping `execution-window-1` — a `getSummaries` fetch that completed in
-~10 ms while the timeline was rendering. The execution windows themselves are recorded with
-`performance.measure` (for example cold document `…-g82plcic9y`: `getSummaries` 309.3→322.3 ms, `capabilities`
-522.5→651.1 ms), showing that the flagged tasks coincide with an in-flight asynchronous fetch rather than with
-synchronous feature work.
+(`attributionSources: ["self|window::"]`). No final-run long task overlaps an Execution RPC window. This
+excludes direct synchronous overlap in this run but does not establish a causal feature-absent comparison.
 
 **Feature-attribution gate: UNRUN.** `featureAttributionGate: "unrun"`. Reason: *Chromium long tasks report
 only self/window attribution; overlap with asynchronous execution RPC windows attributes unrelated
@@ -145,15 +141,15 @@ page `fetch` boundary timestamps the `getRun` response; a `MutationObserver` rec
 `data-state` mutation. 12 samples.
 
 ```text
-statusUpdateP95Ms: 11.5   (budget ≤ 100 ms)
-distribution: [11.5, 10, 7.1, 9.3, 6.8, 7.7, 5.5, 5.1, 5.6, 4.7, 5.3, 6.1]
+statusUpdateP95Ms: 10.8   (budget ≤ 100 ms)
+distribution: [9, 8.2, 9.5, 7.3, 10.8, 6.3, 8.6, 8.6, 5.6, 7.9, 5.5, 4.8]
 ```
 
 ## Polling and open/close lifecycle (browser)
 
 ```text
 an unopened execution dashboard performs no interval polling
-  {"closedDashboardFullRunPolls":0,"visibleDashboardFullRunPolls":4,"closedPollWindowMs":60000,"mountedGraphNodes":0}
+  {"closedDashboardFullRunPolls":0,"visibleDashboardFullRunPolls":5,"closedPollWindowMs":60000,"mountedGraphNodes":0}
 fifty execution open and close cycles leave no mounted graph
   {"openCloseCycles":50,"mountedGraphNodes":0,"maxMountedGraphNodes":100}
 ```
@@ -165,14 +161,14 @@ visibility are drained before the closed window is sampled.
 
 | Scenario | T01 baseline (firstCorrect / stable) | T19 final (firstCorrect / stable) | Delta |
 |---|---|---|---|
-| tab switch: cold, review closed | 530.90 / 583.00 ms | 343.70 / 399.70 ms | −35.3 % / −31.4 % |
-| tab switch: cold, review open | 657.50 / 759.80 ms | 396.20 / 426.40 ms | −39.7 % / −43.9 % |
-| tab switch: warm, review closed | 106.60 / 305.50 ms | 74.90 / 189.10 ms | −29.7 % / −38.1 % |
-| tab switch: warm, review open | 200.70 / 434.70 ms | 122.10 / 246.10 ms | −39.2 % / −43.4 % |
-| tab switch: warm, review resized | 246.80 / 365.70 ms | 182.50 / 308.70 ms | −26.1 % / −15.6 % |
-| entry: cold session from Home | 1069.80 / 1227.00 ms | 702.00 / 798.10 ms | −34.4 % / −34.9 % |
+| tab switch: cold, review closed | 530.90 / 583.00 ms | 425.40 / 594.90 ms | −19.9 % / +2.0 % |
+| tab switch: cold, review open | 657.50 / 759.80 ms | 488.10 / 553.20 ms | −25.8 % / −27.2 % |
+| tab switch: warm, review closed | 106.60 / 305.50 ms | 91.20 / 238.20 ms | −14.4 % / −22.0 % |
+| tab switch: warm, review open | 200.70 / 434.70 ms | 144.20 / 284.10 ms | −28.2 % / −34.6 % |
+| tab switch: warm, review resized | 246.80 / 365.70 ms | 207.40 / 348.20 ms | −16.0 % / −4.8 % |
+| entry: cold session from Home | 1069.80 / 1227.00 ms | 851.30 / 983.40 ms | −20.4 % / −19.9 % |
 
-`bench:tabs`: 100 passed (9.1 m), exit 0. `bench:entry`: 20 passed / 40 failed (6.6 m), exit 1; the two
+`bench:tabs`: 100 passed (9.8 m), exit 0. `bench:entry`: 20 passed / 40 failed (6.9 m), exit 1; the two
 failing scenarios fail on the pre-existing `session-entry-benchmark.spec.ts:47` assertion, identical to the
 T01/T17 record.
 
@@ -181,7 +177,7 @@ T01/T17 record.
 ```text
 $ cd packages/app
 $ bun test --conditions=solid --preload ./happydom.ts ./src/superpowers
- 190 pass / 0 fail
+  200 pass / 0 fail
 
 $ cd packages/app && bun run typecheck     # tsgo -b
  (exit 0)
@@ -198,17 +194,18 @@ $ cd packages/app && EXECUTION_E2E_TARGET=... bun run test:e2e e2e/superpowers/e
 Raw output references (lossless canonical artifacts are committed):
 
 - canonical BENCHMARK records: `docs/superpowers/verification/execution-ui/artifacts/t19-execution-benchmark.jsonl` (6 records, including full distributions, measured execution windows, and per-scenario long-task records with attribution)
-- lifecycle unit run: `/tmp/opencode/t19-lifecycle-tests.log`
-- `bench:tabs`: `/tmp/opencode/t19-bench-tabs-final.log`; raw records `packages/app/e2e/test-results/performance/tab-switch-benchmark.jsonl`
-- `bench:entry`: `/tmp/opencode/t19-bench-entry-final.log`; raw records `packages/app/e2e/test-results/performance/tab-switch-benchmark.jsonl`
+- lifecycle unit run: `/tmp/opencode/final-fix-app-superpowers.log`
+- `bench:tabs`: `/tmp/opencode/final-fix-post-tabs.log`
+- `bench:entry`: `/tmp/opencode/final-fix-post-entry.log`
 
-## Release blocker found and fixed
+## Final visibility behavior
 
-The first paired runs measured a 20–29 % closed-dashboard entry regression; root cause was eager native
-descendant hydration while the Execution tab was closed. Fix: gate native hydration on `executionVisible`
-(`session-execution.tsx`). Later rounds replaced the ad-hoc gate with the recorded T01 scenarios, enforced
-complete paired observations, and moved long-task observation onto the T01 scenarios with explicit
-`performance.mark`/`measure` execution-RPC windows. No threshold was raised.
+The final implementation keeps native root/descendant hydration active while the Execution presentation is
+closed because header attention and native telemetry depend on it. Actual presentation visibility gates only
+the 15-second full-run reconciliation interval and detailed per-agent message activity requests. Visibility
+requires the active Session owner and visible document plus either the open desktop panel with the Execution
+tab active, expanded presentation, or the mobile Execution view. Detailed activity loads only for virtualized
+visible agent rows with at most four concurrent requests. No threshold was raised.
 
 ## Unrun gates
 
@@ -216,7 +213,6 @@ complete paired observations, and moved long-task observation onto the T01 scena
 |---|---|---|
 | Feature-attributable long task (closed dashboard) | Chromium reports only self/window attribution; asynchronous RPC-window overlap attributes unrelated render tasks; no feature-absent build available for a causal difference | UNRUN (raw profiles preserved); see above |
 | Windows Desktop smoke (AC20) | Windows host required | UNRUN; T20 owns it. |
-| Built companion package outside the monorepo (AC19) | package staging/load | UNRUN here; T20 owns packaging. |
 | Root canonical check | `bun run check` (repo root) | Pre-existing `@opencode/posts#typecheck` / `@opencode/www#typecheck` failures (recorded by T13/T17); `packages/app` typecheck exits 0. |
 
 ## Files changed
