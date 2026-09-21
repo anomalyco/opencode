@@ -43,6 +43,10 @@ for the user-facing guide.
    resolves back inside this repository or is a symlink, so the printed directory is genuinely
    portable and can be copied or moved.
 
+   The output path is validated before anything is deleted: the repository root, the package source
+   directory, any path inside the repository, and the home directory root are rejected, and an
+   existing non-empty directory is only replaced when it carries the stager's ownership marker.
+
 2. Merge **one entry** into the existing `plugins` array of your server config. This is an entry to
    merge, not a replacement for your full config; keep your existing Superpowers and other plugin
    entries.

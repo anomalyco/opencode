@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import type { Plugin } from "@opencode/plugin/promise/plugin"
@@ -45,6 +46,31 @@ test("staged runtime dependencies are self-contained copies outside the reposito
     const installed = JSON.parse(fs.readFileSync(resolved, "utf8")) as { readonly version?: string }
     expect(installed.version).toBe(artifact.manifest.dependencies[name])
   }
+})
+
+test("the stager rejects unsafe targets before deleting anything", async () => {
+  const pluginSource = path.join(repositoryRoot, "packages/superpowers-execution/src/plugin.ts")
+  const repositoryManifest = path.join(repositoryRoot, "package.json")
+  const nestedTarget = path.join(repositoryRoot, "packages/superpowers-execution/.stage-guard")
+
+  await expect(buildStagedPackage({ directory: repositoryRoot })).rejects.toThrow(/inside the repository/)
+  await expect(buildStagedPackage({ directory: path.dirname(pluginSource) })).rejects.toThrow(/inside the repository/)
+  await expect(buildStagedPackage({ directory: nestedTarget })).rejects.toThrow(/inside the repository/)
+  await expect(buildStagedPackage({ directory: os.homedir() })).rejects.toThrow(/home directory root/)
+
+  expect(fs.existsSync(pluginSource)).toBe(true)
+  expect(fs.existsSync(repositoryManifest)).toBe(true)
+  expect(fs.existsSync(nestedTarget)).toBe(false)
+})
+
+test("the stager refuses to delete a directory it does not own", async () => {
+  const foreign = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-stager-guard-"))
+  fs.writeFileSync(path.join(foreign, "keep.txt"), "keep")
+
+  await expect(buildStagedPackage({ directory: foreign })).rejects.toThrow(/does not own/)
+  expect(fs.readFileSync(path.join(foreign, "keep.txt"), "utf8")).toBe("keep")
+
+  fs.rmSync(foreign, { recursive: true, force: true })
 })
 
 test("the staged package directory entry loads its built plugin and its dist-relative reporting skill", async () => {

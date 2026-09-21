@@ -1,4 +1,4 @@
-import { cp, mkdir, lstat, realpath, rm, writeFile } from "node:fs/promises"
+import { cp, mkdir, lstat, readdir, realpath, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { buildPackage, packageRoot } from "./build"
@@ -25,10 +25,10 @@ export interface StagedPackage {
 }
 
 export async function buildStagedPackage(options: { readonly directory?: string } = {}): Promise<StagedPackage> {
+  const requested = path.resolve(options.directory ?? stagedPackageDirectory)
+  assertSafeStagingTarget(requested)
   await buildPackage()
-  const directory = path.resolve(options.directory ?? stagedPackageDirectory)
-  await rm(directory, { recursive: true, force: true })
-  await mkdir(directory, { recursive: true })
+  const directory = await claimStagingDirectory(requested)
 
   const manifest = await composeManifest()
   await copyPackageFiles(directory)
@@ -36,6 +36,36 @@ export async function buildStagedPackage(options: { readonly directory?: string 
   await installRuntimeDependencies(directory)
   const dependencyPaths = await verifySelfContained(directory, manifest)
   return { directory, manifest, dependencyPaths }
+}
+
+const stagingMarker = ".opencode-superpowers-execution-staging"
+
+function assertSafeStagingTarget(target: string): void {
+  if (within(repositoryRoot, target)) {
+    throw new Error(`refusing to stage inside the repository: ${target}`)
+  }
+  if (target === path.parse(target).root) {
+    throw new Error(`refusing to stage at the filesystem root: ${target}`)
+  }
+  if (target === path.resolve(os.homedir())) {
+    throw new Error(`refusing to stage at the home directory root: ${target}`)
+  }
+}
+
+async function claimStagingDirectory(target: string): Promise<string> {
+  const existing = await lstat(target).catch(() => undefined)
+  if (existing !== undefined) {
+    if (existing.isSymbolicLink()) throw new Error(`refusing to replace a symlink: ${target}`)
+    if (!existing.isDirectory()) throw new Error(`refusing to replace a non-directory: ${target}`)
+    const marker = await lstat(path.join(target, stagingMarker)).catch(() => undefined)
+    if (marker === undefined && (await readdir(target)).length > 0) {
+      throw new Error(`refusing to replace a directory the stager does not own: ${target}`)
+    }
+  }
+  await rm(target, { recursive: true, force: true })
+  await mkdir(target, { recursive: true })
+  await writeFile(path.join(target, stagingMarker), "")
+  return target
 }
 
 async function composeManifest(): Promise<StagedManifest> {
@@ -113,10 +143,10 @@ async function verifySelfContained(directory: string, manifest: StagedManifest):
         throw new Error(`staged dependency ${name} is a symlink into the repository`)
       }
       const resolved = await realpath(Bun.resolveSync(`${name}/package.json`, directory))
-      if (isInside(repository, resolved)) {
+      if (within(repository, resolved)) {
         throw new Error(`staged dependency ${name} resolves inside the repository: ${resolved}`)
       }
-      if (!isInside(staged, resolved)) {
+      if (!within(staged, resolved)) {
         throw new Error(`staged dependency ${name} resolves outside the staging tree: ${resolved}`)
       }
       const installed = (await Bun.file(resolved).json()) as { readonly version?: string }
@@ -129,9 +159,9 @@ async function verifySelfContained(directory: string, manifest: StagedManifest):
   return Object.fromEntries(entries)
 }
 
-function isInside(parent: string, child: string): boolean {
+function within(parent: string, child: string): boolean {
   const relative = path.relative(parent, child)
-  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
 }
 
 if (import.meta.main) {

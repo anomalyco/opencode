@@ -64,6 +64,10 @@ Self-containment is enforced by the stager and asserted by a test:
 - each dependency's real path is inside the staging directory and outside the repository;
 - each installed dependency version equals the staged manifest's exact range.
 
+Caller-supplied output paths are validated before any deletion: the repository root, the package
+source directory, any path inside the repository, and the home directory root are rejected, and an
+existing non-empty directory is replaced only when it carries the stager's ownership marker.
+
 Staging installs the published exact-version packages from the registry (`bun install --production
 --ignore-scripts`), so the first staging run needs registry access; later runs use the Bun cache.
 
@@ -118,14 +122,16 @@ plugin harness:
 
 ```text
 $ cd packages/superpowers-execution && bun run package:smoke
-(pass) staged contract is browser-safe and package is self-contained [2395.75ms]
-(pass) staged runtime dependencies are self-contained copies outside the repository [2357.25ms]
-(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2630.46ms]
-(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2551.29ms]
+(pass) staged contract is browser-safe and package is self-contained [5831.20ms]
+(pass) staged runtime dependencies are self-contained copies outside the repository [2486.59ms]
+(pass) the stager rejects unsafe targets before deleting anything [0.56ms]
+(pass) the stager refuses to delete a directory it does not own [1258.91ms]
+(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2416.69ms]
+(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2937.42ms]
 (skip) the built package directory loads in a disposable 2.0.11 host and survives an isolated restart
 
- 4 pass / 1 skip / 0 fail
- 36 expect() calls
+ 6 pass / 1 skip / 0 fail
+ 45 expect() calls
 ```
 
 The lifecycle case installs (`setup`), reports (`execution_report` → revision 1), reads `getRun`,
@@ -136,14 +142,16 @@ recovers the stored run plus its summary.
 
 ```text
 $ cd packages/superpowers-execution && bun run package:host-smoke
-(pass) staged contract is browser-safe and package is self-contained [2719.62ms]
-(pass) staged runtime dependencies are self-contained copies outside the repository [2343.99ms]
-(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2737.40ms]
-(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2568.77ms]
-(pass) the built package directory loads in a disposable 2.0.11 host and survives an isolated restart [10315.75ms]
+(pass) staged contract is browser-safe and package is self-contained [2486.14ms]
+(pass) staged runtime dependencies are self-contained copies outside the repository [2194.75ms]
+(pass) the stager rejects unsafe targets before deleting anything [0.68ms]
+(pass) the stager refuses to delete a directory it does not own [1143.04ms]
+(pass) the staged package directory entry loads its built plugin and its dist-relative reporting skill [2279.65ms]
+(pass) the staged built plugin installs, reports, serves getRun, unloads, reloads, and recovers stored state [2309.05ms]
+(pass) the built package directory loads in a disposable 2.0.11 host and survives an isolated restart [9682.02ms]
 
- 5 pass / 0 fail
- 40 expect() calls
+ 7 pass / 0 fail
+ 49 expect() calls
 ```
 
 Raw gate result:
@@ -219,11 +227,11 @@ this task and are not claimed as passing.
 
 | Command | Result |
 |---|---|
-| `packages/superpowers-execution`: `bun test` | 116 pass / 1 skip / 0 fail |
+| `packages/superpowers-execution`: `bun test` | 118 pass / 1 skip / 0 fail |
 | `packages/superpowers-execution`: `bun run typecheck` | exit 0 |
 | `packages/superpowers-execution`: `bun run build` | exit 0 (`dist/` + declarations) |
-| `packages/superpowers-execution`: `bun run package:smoke` | 4 pass / 1 skip / 0 fail |
-| `packages/superpowers-execution`: `bun run package:host-smoke` | 5 pass / 0 fail |
+| `packages/superpowers-execution`: `bun run package:smoke` | 6 pass / 1 skip / 0 fail |
+| `packages/superpowers-execution`: `bun run package:host-smoke` | 7 pass / 0 fail |
 | `packages/app`: `bun run typecheck` | exit 0 |
 | `packages/app`: `bun run test:unit` | 1051 pass / 1 skip / 0 fail |
 | `packages/app`: `bun run test:browser` | 157 pass / 0 fail |
