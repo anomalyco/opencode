@@ -19,6 +19,7 @@ import type { SessionScreenLayout } from "../screen-layout"
 import { createReviewPanelState } from "./panel-state"
 import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "./review-diff-kinds"
 import type { DiffStyle } from "./review-tab"
+import type { SessionMobileView } from "./view"
 
 export type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
@@ -38,7 +39,7 @@ export function createSessionReview(input: {
   const location = useWorkspaceLocation()
   const server = useServerSDK()
   const [state, setState] = createStore({
-    mobileTab: "session" as "session" | "changes" | "files" | "usage",
+    mobileTab: "session" as SessionMobileView,
     detailsOpen: false,
     scroll: undefined as HTMLDivElement | undefined,
     pendingFile: undefined as string | undefined,
@@ -410,7 +411,7 @@ export function createSessionReview(input: {
     loadDiff,
     mobile: {
       changes: mobileChanges,
-      setTab: (tab: "session" | "changes" | "files" | "usage") => setState("mobileTab", tab),
+      setTab: (tab: SessionMobileView) => setState("mobileTab", tab),
       tab: () => state.mobileTab,
     },
     mode,

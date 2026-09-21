@@ -59,6 +59,14 @@ export const LazyExecutionPanel = lazy(async () => {
   return { default: ExecutionPanel }
 })
 
+export function sessionBrowserPaneVisible(input: {
+  reviewOpen: boolean
+  activeTab: string | undefined
+  executionExpanded: boolean
+}) {
+  return input.reviewOpen && isSessionBrowserTab(input.activeTab) && !input.executionExpanded
+}
+
 export function SessionTabAddControl(props: {
   browserAvailable: boolean
   executionOpen: boolean
@@ -183,6 +191,7 @@ export function SessionSidePanel(props: {
   stacked?: boolean
   browser: ReturnType<typeof createSessionBrowser>
   execution: ExecutionModel
+  onExpandExecution?: () => void
 }) {
   const layout = useLayout()
   const settings = useSettings()
@@ -647,7 +656,7 @@ export function SessionSidePanel(props: {
                         </Tabs.Content>
                       </Show>
 
-                      <Show when={activeTab() === SESSION_EXECUTION_TAB}>
+                      <Show when={activeTab() === SESSION_EXECUTION_TAB && !props.execution.expanded()}>
                         <div
                           id={executionTabPanelID}
                           role="tabpanel"
@@ -660,7 +669,11 @@ export function SessionSidePanel(props: {
                               <div class="p-3 text-12-regular text-text-weak">{language.t("execution.loading")}</div>
                             }
                           >
-                            <LazyExecutionPanel model={props.execution} presentation="panel" />
+                            <LazyExecutionPanel
+                              model={props.execution}
+                              presentation="panel"
+                              onExpand={props.onExpandExecution}
+                            />
                           </Suspense>
                         </div>
                       </Show>
@@ -679,7 +692,11 @@ export function SessionSidePanel(props: {
                         >
                           <SessionBrowserPane
                             browser={props.browser}
-                            visible={reviewOpen() && isSessionBrowserTab(activeTab())}
+                            visible={sessionBrowserPaneVisible({
+                              reviewOpen: reviewOpen(),
+                              activeTab: activeTab(),
+                              executionExpanded: props.execution.expanded(),
+                            })}
                           />
                         </div>
                       </Show>

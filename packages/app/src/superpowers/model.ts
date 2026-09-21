@@ -270,11 +270,42 @@ const emptyAgents: ExecutionAgent[] = []
 const emptyAttention: ExecutionAttention = { stale: false, needsInput: 0, failed: 0, blocked: 0 }
 
 export function createExecutionModel(input: ExecutionModelInput = {}): ExecutionModel {
-  const [subview, setSubview] = createSignal<ExecutionSubview>(
-    input.initialSubview ?? defaultSubview(input),
-  )
-  const [selectedTaskID, setSelectedTaskID] = createSignal<string | undefined>()
-  const [expanded, setExpanded] = createSignal(false)
+  const initialSubview = () => input.initialSubview ?? defaultSubview(input)
+  const rootKey = () => `${input.scope?.()?.serverKey ?? ""}\u0000${input.scope?.()?.rootSessionID ?? ""}`
+  const [subviewRoot, setSubviewRoot] = createSignal(rootKey())
+  const [activeSubview, setActiveSubview] = createSignal<ExecutionSubview>(initialSubview())
+  const [subviewMemory, setSubviewMemory] = createStore<Record<string, ExecutionSubview | undefined>>({})
+  const subview = () =>
+    subviewRoot() === rootKey() ? activeSubview() : (subviewMemory[rootKey()] ?? initialSubview())
+  const selectSubview = (next: ExecutionSubview) => {
+    if (subviewRoot() !== rootKey()) setSubviewRoot(rootKey())
+    setActiveSubview(next)
+    setSubviewMemory(rootKey(), next)
+  }
+  const [taskRoot, setTaskRoot] = createSignal(rootKey())
+  const [activeTaskID, setActiveTaskID] = createSignal<string | undefined>()
+  const [taskMemory, setTaskMemory] = createStore<Record<string, string | undefined>>({})
+  const selectedTaskID = () => (taskRoot() === rootKey() ? activeTaskID() : taskMemory[rootKey()])
+  const selectTask = (next: string | undefined) => {
+    if (taskRoot() !== rootKey()) setTaskRoot(rootKey())
+    setActiveTaskID(next)
+    setTaskMemory(rootKey(), next)
+  }
+  let observedRoot = rootKey()
+  let expandedRoot: string | undefined
+  const [activeExpanded, setActiveExpanded] = createSignal(false)
+  const expanded = () => {
+    if (observedRoot !== rootKey()) {
+      observedRoot = rootKey()
+      expandedRoot = undefined
+    }
+    return activeExpanded() && expandedRoot === observedRoot
+  }
+  const setExpanded = (next: boolean) => {
+    observedRoot = rootKey()
+    expandedRoot = next ? observedRoot : undefined
+    setActiveExpanded(next)
+  }
   const [expandedNodes, setExpandedNodes] = createSignal<Record<string, boolean>>({})
   const [assignmentHistory, setAssignmentHistory] = createSignal<Record<string, boolean>>({})
   const [evidenceStates, setEvidenceStates] = createSignal<Record<string, EvidenceResolution>>({})
@@ -504,8 +535,8 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     openEvidence,
     expanded,
     attention,
-    selectSubview: setSubview,
-    selectTask: setSelectedTaskID,
+    selectSubview,
+    selectTask,
     selectRun: (runID) => input.selectRun?.(runID),
     setExpanded,
     loadMoreActivity,
@@ -518,6 +549,10 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     reviewRequest: () => input.reviewRequest?.(),
     reconcile: () => input.reconcile?.(),
   }
+}
+
+export function selectNarrowExecutionSubview(model: ExecutionModel) {
+  if (model.run() !== undefined && model.subview() === "map") model.selectSubview("tasks")
 }
 
 function controllerRank(rootSessionID: string | undefined, agent: ExecutionAgent) {

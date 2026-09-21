@@ -612,7 +612,39 @@ export function largeGraphRun(): RunSnapshot {
   return runFixture({ tasks })
 }
 
+export function trackedRun(): RunSnapshot {
+  return runFixture({
+    runID: "run-tracked",
+    revision: 4,
+    status: "active",
+    plan: { path: "docs/superpowers/plans/tracked.md", sha256: FIXTURE_PLAN_HASH, revision: 2 },
+    tasks: [
+      taskFixture({ id: "api", title: "API contract", phase: "Build", order: 0, state: "running", attempt: 1 }),
+      taskFixture({
+        id: "schema",
+        title: "Storage schema",
+        phase: "Build",
+        order: 1,
+        state: "verified",
+        requiredGates: ["tests"],
+        finalReview: false,
+      }),
+      taskFixture({
+        id: "final-review",
+        title: "Final review",
+        phase: "Review",
+        order: 2,
+        state: "awaiting_review",
+        requiredGates: ["spec_review"],
+        finalReview: true,
+      }),
+    ],
+    assignments: [fixtureAssignment({ id: "a-tracked-api", taskID: "api", sessionID: "child", role: "implementer" })],
+  })
+}
+
 export function taskRunFixture(scenario: string): RunSnapshot | undefined {
+  if (scenario === "tracked" || scenario === "tracked-rtl") return trackedRun()
   if (scenario === "half-verified") return halfVerifiedRun()
   if (scenario === "tasks-detailed") return detailedTasksRun()
   if (scenario === "tasks-scope") return smallScopeRun()

@@ -614,6 +614,22 @@ describe("createExecutionBridge", () => {
     harness.dispose()
   })
 
+  test("expanding the presentation does not add a second reconciliation owner", async () => {
+    const harness = bridgeHarness()
+    const first = harness.attach(SCOPE, "run-1")
+    await harness.flush()
+    expect(harness.clock.active()).toBe(1)
+    harness.model.setExpanded(true)
+    expect(harness.clock.active()).toBe(1)
+    harness.model.setExpanded(false)
+    expect(harness.clock.active()).toBe(1)
+    first.resolve(runFixture({ revision: 1 }))
+    await harness.flush()
+    expect(harness.model.run()?.runID).toBe("run-1")
+    harness.dispose()
+    expect(harness.clock.active()).toBe(0)
+  })
+
   test("the safety timer reconciles one bounded run poll each interval", async () => {
     const harness = bridgeHarness()
     const first = harness.attach(SCOPE, "run-1")

@@ -21,9 +21,19 @@ const MobilePanelDrawer = lazy(async () => {
   return { default: MobilePanelDrawer }
 })
 
+export type SessionMobileView = "session" | "changes" | "files" | "usage" | "terminal" | "execution"
+
+const DEFAULT_MOBILE_VIEWS = ["session", "changes", "files", "terminal"] as const
+
+function sessionMobileViewTabs(executionAvailable: boolean | undefined): readonly SessionMobileView[] {
+  if (!executionAvailable) return DEFAULT_MOBILE_VIEWS
+  return ["session", "changes", "files", "execution", "terminal"]
+}
+
 export function SessionMobileViewTabs(props: {
-  current: "session" | "changes" | "files" | "usage" | "terminal"
-  onSelect: (view: "session" | "changes" | "files" | "usage" | "terminal") => void
+  current: SessionMobileView
+  onSelect: (view: SessionMobileView) => void
+  executionAvailable?: boolean
   details?: (close: () => void) => JSX.Element
   onDetailsOpenChange?: (open: boolean) => void
 }) {
@@ -44,7 +54,7 @@ export function SessionMobileViewTabs(props: {
     >
       <Tabs value={props.current} variant="line" class="!h-auto min-w-0 flex-1" data-slot="session-mobile-view-tabs">
         <Tabs.List aria-label={language.t("session.view.select")} class="!h-9 !gap-0 !px-0 before:!hidden">
-          <For each={["session", "changes", "files", "terminal"] as const}>
+          <For each={sessionMobileViewTabs(props.executionAvailable)}>
             {(view) => (
               <Tabs.Trigger
                 value={view}
@@ -58,7 +68,9 @@ export function SessionMobileViewTabs(props: {
                     ? language.plural("session.review.change", 0)
                     : view === "files"
                       ? language.t("session.tab.files")
-                      : language.t("terminal.title")}
+                      : view === "execution"
+                        ? language.t("session.tab.execution")
+                        : language.t("terminal.title")}
               </Tabs.Trigger>
             )}
           </For>
@@ -129,6 +141,7 @@ export function SessionDesktopReview(props: {
   review: SessionReviewModel
   browser: ReturnType<typeof createSessionBrowser>
   execution: ExecutionModel
+  onExpandExecution?: () => void
   present?: boolean
 }) {
   return (
@@ -156,6 +169,7 @@ export function SessionDesktopReview(props: {
         stacked={props.review.screen.side.layout().stacked}
         browser={props.browser}
         execution={props.execution}
+        onExpandExecution={props.onExpandExecution}
       />
     </Suspense>
   )

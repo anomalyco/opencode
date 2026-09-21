@@ -13,7 +13,11 @@ const LazyExecutionMap = lazy(() =>
 
 export type ExecutionPresentation = "panel" | "expanded" | "mobile"
 
-export function ExecutionPanel(props: { model: ExecutionModel; presentation: ExecutionPresentation }) {
+export function ExecutionPanel(props: {
+  model: ExecutionModel
+  presentation: ExecutionPresentation
+  onExpand?: () => void
+}) {
   const language = useLanguage()
   const structuredEnabled = () => structuredViewsEnabled(props.model.mode())
   const effectiveSubview = () => (structuredEnabled() ? props.model.subview() : "agents")
@@ -46,6 +50,18 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
             </button>
           )}
         </For>
+        <Show when={props.presentation === "panel"}>
+          <span class="execution-panel__spacer" aria-hidden />
+          <button
+            type="button"
+            data-testid="execution-expand"
+            class="execution-panel__expand"
+            aria-label={language.t("execution.expand")}
+            onClick={() => (props.onExpand ? props.onExpand() : props.model.setExpanded(true))}
+          >
+            {language.t("execution.expand.short")}
+          </button>
+        </Show>
       </nav>
       <Show when={props.model.mode() !== "observer" && props.model.mode() !== "ready"}>
         <p

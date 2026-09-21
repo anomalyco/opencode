@@ -28,7 +28,8 @@ import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
 import { createSessionReview } from "./review/model"
-import { SessionDesktopReview, SessionMobileReview, SessionMobileViewTabs } from "./review/view"
+import { SessionDesktopReview, SessionMobileReview, SessionMobileViewTabs, type SessionMobileView } from "./review/view"
+import { LazyExecutionPanel } from "./files/session-side-panel"
 import { SessionContextTab } from "./files/session-context-tab"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
@@ -41,7 +42,13 @@ import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
 import { SESSION_EXECUTION_TAB } from "@/shell/state/session-tabs"
 import { SessionExecutionProvider } from "@/superpowers/session-execution"
-import type { ExecutionModel } from "@/superpowers/model"
+import { createExecutionExpansion, executionPresentation } from "@/superpowers/expanded"
+import { selectNarrowExecutionSubview, type ExecutionModel } from "@/superpowers/model"
+
+const LazyExpandedExecution = lazy(async () => {
+  const { ExpandedExecution } = await import("@/superpowers/expanded")
+  return { default: ExpandedExecution }
+})
 
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
@@ -174,7 +181,7 @@ export function SessionScreen(props: { session: SessionModel }) {
     return key
   })
   const review = createSessionReview({ session, screen, deferRender: () => store.deferRender })
-  const mobileView = createMemo(() => (screen.terminal.open() ? "terminal" : review.mobile.tab()))
+  const mobileView = createMemo<SessionMobileView>(() => (screen.terminal.open() ? "terminal" : review.mobile.tab()))
   const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
   createEffect(() => {
     if (!isDesktop() && screen.terminal.open()) setStore("mobileTerminalCached", true)
@@ -198,9 +205,37 @@ export function SessionScreen(props: { session: SessionModel }) {
     blocked: composer.requests.background.blocking().length,
   })
   const [execution, setExecution] = createSignal<ExecutionModel>()
+  const executionAvailable = () => execution()?.run() !== undefined
+  const executionSurface = () =>
+    executionPresentation({ mobile: !isDesktop(), expanded: execution()?.expanded() ?? false })
+  const executionExpansion = createExecutionExpansion({
+    model: execution,
+    key: session.identity.sessionKey,
+    activeTab: () => session.layout.tabs().active(),
+    selectTab: (tab) => session.layout.tabs().setActive(tab),
+    panelWidth: () => session.layout.view().reviewPanel.width(),
+    resizePanel: (width) => session.layout.view().reviewPanel.resize(width),
+  })
   const openExecutionOverview = () => {
     execution()?.selectSubview("agents")
     void session.layout.tabs().open(SESSION_EXECUTION_TAB)
+    if (!isDesktop()) review.mobile.setTab("execution")
+  }
+  const selectMobileView = (view: SessionMobileView) => {
+    if (view === "execution") {
+      void session.layout.tabs().open(SESSION_EXECUTION_TAB)
+      review.mobile.setTab("execution")
+      session.layout.view().terminal.close()
+      const model = execution()
+      if (model) selectNarrowExecutionSubview(model)
+      return
+    }
+    if (view === "terminal") {
+      session.layout.view().terminal.open()
+      return
+    }
+    review.mobile.setTab(view)
+    session.layout.view().terminal.close()
   }
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
@@ -213,6 +248,8 @@ export function SessionScreen(props: { session: SessionModel }) {
       {(_key) => (
         <SessionMobileViewTabs
           current={mobileView()}
+          executionAvailable={executionAvailable()}
+          onSelect={selectMobileView}
           onDetailsOpenChange={review.details.setOpen}
           details={
             !session.data.isChild() && detailsProject()
@@ -249,14 +286,6 @@ export function SessionScreen(props: { session: SessionModel }) {
                 )
               : undefined
           }
-          onSelect={(view) => {
-            if (view === "terminal") {
-              session.layout.view().terminal.open()
-              return
-            }
-            review.mobile.setTab(view)
-            session.layout.view().terminal.close()
-          }}
         />
       )}
     </Show>
@@ -334,6 +363,13 @@ export function SessionScreen(props: { session: SessionModel }) {
               <SessionMobileFiles />
             </Suspense>
           </Match>
+          <Match when={mobileView() === "execution" && executionSurface() === "mobile" ? execution() : undefined}>
+            {(model) => (
+              <Suspense>
+                <LazyExecutionPanel model={model()} presentation="mobile" />
+              </Suspense>
+            )}
+          </Match>
           <Match when={session.identity.params.id && review.mobile.changes()}>
             <SessionMobileReview review={review} />
           </Match>
@@ -359,7 +395,14 @@ export function SessionScreen(props: { session: SessionModel }) {
       reviewRequest={reviewNativeRequest}
       onModel={setExecution}
     >
-      <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+      <div class="relative flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+        <Show when={executionSurface() === "expanded" ? execution() : undefined}>
+          {(model) => (
+            <Suspense>
+              <LazyExpandedExecution model={model()} onClose={executionExpansion.collapse} />
+            </Suspense>
+          )}
+        </Show>
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
           {/* Keep the control outside panel animations; the terminal's 52px header includes a 1px divider. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
@@ -471,6 +514,7 @@ export function SessionScreen(props: { session: SessionModel }) {
                             review={review}
                             browser={browser}
                             execution={model()}
+                            onExpandExecution={executionExpansion.expand}
                             present={store.sideReviewPresent}
                           />
                         )}

@@ -19,7 +19,13 @@ import { createOpenSessionFileTab, createSessionTabs } from "../src/session/help
 import { LazyExecutionPanel, SessionTabAddControl } from "../src/session/files/session-side-panel"
 import { BackgroundWorkSummary, type BackgroundTask } from "../src/session/summary/background"
 import { SessionSummaryPanel } from "../src/session/summary/panel"
+import { createMediaQuery } from "@solid-primitives/media"
 import { createSessionTimelineInteraction } from "../src/session/timeline/interaction"
+import { SessionMobileViewTabs, type SessionMobileView } from "../src/session/review/view"
+import { sessionBrowserPaneVisible } from "../src/session/files/session-side-panel"
+import { ExecutionPanel } from "../src/superpowers/panel"
+import { ExpandedExecution, createExecutionExpansion } from "../src/superpowers/expanded"
+import { selectNarrowExecutionSubview } from "../src/superpowers/model"
 import { MessageTimeline } from "../src/session/timeline/message-timeline"
 import type { TimelineSessionSource } from "../src/session/timeline/controller"
 import { createExecutionModel, type ExecutionAttention, type ExecutionModel, type ExecutionProgress } from "../src/superpowers/model"
@@ -37,6 +43,7 @@ import {
   increasedScopeRun,
   runFixture,
   taskRunFixture,
+  trackedRun,
 } from "../src/superpowers/fixtures"
 import { requestEvidenceReveal, revealPendingEvidence } from "../src/superpowers/evidence-reveal"
 import type { ExecutionScope } from "../src/superpowers/identity"
@@ -345,11 +352,175 @@ function mountLiveSessionHeader(mode: string) {
   }
 }
 
+let trackedModelSequence = 0
+
+function TrackedFixture(props: { host: HTMLElement }) {
+  const isDesktop = createMediaQuery("(min-width: 768px)")
+  const [root, setRoot] = createSignal<"root" | "other-root">("root")
+  const [state, setState] = createStore({
+    activeTab: "file://a.ts" as string | undefined,
+    panelWidth: 600,
+    mobileTab: "session" as SessionMobileView,
+    pendingQuestion: false,
+    replies: 0,
+  })
+  const scope = (): ExecutionScope => ({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: root() })
+  const run = () => (root() === "root" ? trackedRun() : undefined)
+  let requestRegion: HTMLDivElement | undefined
+  trackedModelSequence += 1
+  const modelInstance = trackedModelSequence
+  const model = createExecutionModel({
+    mode: () => (run() ? "ready" : "observer"),
+    scope,
+    snapshot: run,
+    agents: () => agentFixture("agents"),
+    attention: () => ({ stale: false, needsInput: state.pendingQuestion ? 1 : 0, failed: 0, blocked: 0 }),
+    reviewRequest: () => requestRegion?.focus(),
+  })
+  const expansion = createExecutionExpansion({
+    model: () => model,
+    key: () => scope().rootSessionID,
+    activeTab: () => state.activeTab,
+    selectTab: (tab) => setState("activeTab", tab),
+    panelWidth: () => state.panelWidth,
+    resizePanel: (width) => setState("panelWidth", width),
+  })
+  const nativeHidden = () =>
+    !sessionBrowserPaneVisible({
+      reviewOpen: true,
+      activeTab: "browser:tab-fixture",
+      executionExpanded: model.expanded(),
+    })
+
+  return (
+    <>
+      <div
+        data-testid="execution-fixture-controls"
+        style={{
+          position: "relative",
+          "z-index": 50,
+          display: "flex",
+          "flex-wrap": "wrap",
+          gap: "4px",
+          width: "fit-content",
+          "max-width": "60%",
+        }}
+      >
+        <button type="button" onClick={() => model.selectTask("api")}>
+          Select API task
+        </button>
+        <button type="button" onClick={() => setState("pendingQuestion", (pending) => !pending)}>
+          Show pending question
+        </button>
+        <button type="button" onClick={() => setState("activeTab", "file://b.ts")}>
+          Switch tab while expanded
+        </button>
+        <button type="button" onClick={() => setState("panelWidth", 900)}>
+          Resize panel while expanded
+        </button>
+        <button type="button" onClick={() => setRoot((current) => (current === "root" ? "other-root" : "root"))}>
+          Switch root
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const temporary = document.createElement("button")
+            temporary.dataset.testid = "temporary-focus"
+            temporary.textContent = "temporary focus target"
+            props.host.appendChild(temporary)
+            temporary.focus()
+            expansion.expand()
+            temporary.remove()
+          }}
+        >
+          Expand from a disposed target
+        </button>
+      </div>
+      <div data-testid="selected-task">{model.selectedTaskID() ?? ""}</div>
+      <div data-testid="execution-scope-root">{model.scope()?.rootSessionID ?? ""}</div>
+      <div data-testid="execution-model-count">{modelInstance}</div>
+      <div data-testid="active-tab">{state.activeTab ?? ""}</div>
+      <div data-testid="panel-width">{state.panelWidth}</div>
+      <div data-testid="native-pane-hidden">{String(nativeHidden())}</div>
+      <div data-testid="native-pane-overlay" hidden={nativeHidden()}>
+        native browser surface
+      </div>
+      <div data-testid="retained-terminal">terminal</div>
+      <div data-testid="inner-menu" role="menu" tabIndex={0}>
+        inner menu
+      </div>
+      <div data-testid="question-reply-count">{state.replies}</div>
+      <Show when={state.pendingQuestion}>
+        <div
+          data-testid="native-request-region"
+          tabIndex={-1}
+          ref={(element) => (requestRegion = element)}
+          onClick={() => setState("replies", (count) => count + 1)}
+        >
+          <span>Question requested</span>
+        </div>
+      </Show>
+      <Show
+        when={isDesktop()}
+        fallback={
+          <div data-testid="execution-mobile-composition">
+            <SessionMobileViewTabs
+              current={state.mobileTab}
+              executionAvailable={run() !== undefined}
+              onSelect={(view) => {
+                if (view === "execution") {
+                  selectNarrowExecutionSubview(model)
+                  setState("mobileTab", "execution")
+                  return
+                }
+                setState("mobileTab", view)
+              }}
+            />
+            <Show when={state.mobileTab === "execution" && run() !== undefined}>
+              <ExecutionPanel model={model} presentation="mobile" />
+            </Show>
+          </div>
+        }
+      >
+        <div data-testid="execution-desktop-composition">
+          <Show when={!model.expanded()} fallback={<ExpandedExecution model={model} onClose={expansion.collapse} />}>
+            <ExecutionPanel model={model} presentation="panel" onExpand={expansion.expand} />
+          </Show>
+        </div>
+      </Show>
+    </>
+  )
+}
+
+function mountTrackedFixture(rtl: boolean) {
+  const host = document.createElement("main")
+  host.dataset.testid = "execution-fixture"
+  host.dir = rtl ? "rtl" : "ltr"
+  host.style.cssText = "position:fixed;inset:0;background:#181818;color:#eee;padding:12px"
+  document.body.appendChild(host)
+  render(
+    () => (
+      <LanguageProvider locale="en">
+        <UiI18nBridge>
+          <DialogProvider>
+            <TrackedFixture host={host} />
+          </DialogProvider>
+        </UiI18nBridge>
+      </LanguageProvider>
+    ),
+    host,
+  )
+}
+
 export async function mountExecutionFixture(input: {
   surface?: ExecutionPresentation
   scenario?: string
 } = {}): Promise<ReturnType<typeof render>> {
   const scenario = input.scenario ?? "observer"
+  if (scenario === "tracked" || scenario === "tracked-rtl") {
+    mountTrackedFixture(scenario === "tracked-rtl")
+    return undefined as unknown as ReturnType<typeof render>
+  }
   if (
     scenario === "session-execution-live" ||
     scenario === "evidence-production" ||

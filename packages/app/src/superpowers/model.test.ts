@@ -33,6 +33,7 @@ import {
   joinTaskAssignments,
   joinTaskEvidence,
   latestEvidenceForGate,
+  selectNarrowExecutionSubview,
   structuredViewsEnabled,
   type ExecutionMode,
 } from "./model"
@@ -770,4 +771,41 @@ describe("createExecutionModel agents", () => {
   test("virtualizes agent rows above one hundred", () => {
     expect(AGENT_ROWS_VIRTUALIZE_THRESHOLD).toBe(100)
   })
+})
+
+describe("execution presentation preferences", () => {
+  const rootScope = (rootSessionID: string): ExecutionScope => ({
+    serverKey: "wsl",
+    ownerDirectory: "/root/git/demo",
+    rootSessionID,
+  })
+
+  test("resets transient expansion and restores each root's remembered subview and task", () =>
+    root(() => {
+      const [scope, setScope] = createSignal<ExecutionScope>(rootScope("root"))
+      const model = createExecutionModel({ scope, snapshot: () => runFixture() })
+      model.selectSubview("tasks")
+      model.selectTask("api")
+      model.setExpanded(true)
+      expect(model.expanded()).toBe(true)
+      setScope(rootScope("other-root"))
+      expect(model.expanded()).toBe(false)
+      expect(model.subview()).toBe("map")
+      expect(model.selectedTaskID()).toBeUndefined()
+      setScope(rootScope("root"))
+      expect(model.subview()).toBe("tasks")
+      expect(model.selectedTaskID()).toBe("api")
+      expect(model.expanded()).toBe(false)
+    }))
+
+  test("narrow execution defaults from the map to the task list only when a run exists", () =>
+    root(() => {
+      const withRun = createExecutionModel({ snapshot: () => runFixture() })
+      expect(withRun.subview()).toBe("map")
+      selectNarrowExecutionSubview(withRun)
+      expect(withRun.subview()).toBe("tasks")
+      const observer = createExecutionModel()
+      selectNarrowExecutionSubview(observer)
+      expect(observer.subview()).toBe("agents")
+    }))
 })
