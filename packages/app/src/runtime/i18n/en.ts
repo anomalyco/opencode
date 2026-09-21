@@ -817,6 +817,9 @@ export const dict = {
   "execution.tracking.unavailable.title": "Tracking not connected",
   "execution.tracking.unavailable.description":
     "Connect the Superpowers reporting plugin to show the plan map, tasks, and activity.",
+  "execution.mode.stale": "Tracking paused — showing the last reported snapshot.",
+  "execution.mode.incompatible": "This execution tracker uses an unsupported schema version.",
+  "execution.mode.unavailable": "Execution tracking is unavailable on this server.",
   "execution.agents.tree.label": "Agent tree",
   "execution.agents.partial": "Some child sessions could not be loaded. The agent tree is incomplete.",
   "execution.agents.partialMissing": "Missing parent session: {{id}}",

@@ -13,6 +13,7 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
       data-slot="execution-panel"
       data-testid="execution-panel"
       data-presentation={props.presentation}
+      data-mode={props.model.mode()}
       aria-label={language.t("execution.panel.label")}
       class="execution-panel"
     >
@@ -36,6 +37,20 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
           )}
         </For>
       </nav>
+      <Show when={props.model.mode() !== "observer" && props.model.mode() !== "ready"}>
+        <p
+          data-slot="execution-mode-notice"
+          data-mode={props.model.mode()}
+          class="execution-panel__unavailable-description px-3 py-1.5"
+          role="status"
+        >
+          <Switch>
+            <Match when={props.model.mode() === "stale"}>{language.t("execution.mode.stale")}</Match>
+            <Match when={props.model.mode() === "incompatible"}>{language.t("execution.mode.incompatible")}</Match>
+            <Match when={props.model.mode() === "unavailable"}>{language.t("execution.mode.unavailable")}</Match>
+          </Switch>
+        </p>
+      </Show>
       <div data-slot="execution-body" class="execution-panel__body">
         <Switch>
           <Match when={props.model.subview() === "agents"}>

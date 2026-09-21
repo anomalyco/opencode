@@ -1,4 +1,6 @@
 import { createSignal, type Accessor } from "solid-js"
+import { summarizeProgress } from "@bearmanser/opencode-superpowers-execution/progress"
+import type { ProgressSummary, RunSnapshot } from "@bearmanser/opencode-superpowers-execution/contract"
 import { projectAgentTree } from "./agent-tree"
 import type { ExecutionScope } from "./identity"
 import type { NativeRecord } from "./native-types"
@@ -8,25 +10,9 @@ export type ExecutionSubview = (typeof EXECUTION_SUBVIEWS)[number]
 
 export type ExecutionMode = "observer" | "ready" | "stale" | "incompatible" | "unavailable"
 
-export type ExecutionProgress = {
-  verified: number
-  total: number
-  skipped: number
-  failed: number
-  blocked: number
-  awaitingReview: number
-  percent: number | null
-  source: "controller_report"
-}
+export type ExecutionProgress = ProgressSummary
 
-export type ExecutionRun = {
-  runID: string
-  rootSessionID: string
-  ownerDirectory: string
-  revision: number
-  status: "active" | "completed" | "cancelled"
-  title?: string
-}
+export type ExecutionRun = RunSnapshot
 
 export type ExecutionAgentState = "running" | "idle" | "needs_input" | "error" | "unknown"
 export type ExecutionAgentRole = "controller" | "implementer" | "spec_reviewer" | "code_reviewer" | "debugger"
@@ -76,6 +62,7 @@ export type ExecutionModelInput = {
   mode?: Accessor<ExecutionMode>
   scope?: Accessor<ExecutionScope | undefined>
   run?: Accessor<ExecutionRun | undefined>
+  snapshot?: Accessor<RunSnapshot | undefined>
   agents?: Accessor<ExecutionAgent[]>
   progress?: Accessor<ExecutionProgress | undefined>
   attention?: Accessor<ExecutionAttention>
@@ -125,12 +112,28 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
   const [expandedNodes, setExpandedNodes] = createSignal<Record<string, boolean>>({})
   const [assignmentHistory, setAssignmentHistory] = createSignal<Record<string, boolean>>({})
 
-  const mode = () => input.mode?.() ?? "observer"
+  const mode = () => input.mode?.() ?? (snapshot() ? "ready" : "observer")
   const scope = () => input.scope?.()
-  const run = () => input.run?.()
+  const snapshot = () => input.snapshot?.()
+  const run = () => input.run?.() ?? snapshot()
   const agents = () => input.agents?.() ?? emptyAgents
-  const progress = () => input.progress?.()
-  const attention = () => input.attention?.() ?? emptyAttention
+  const progress = () => {
+    const explicit = input.progress?.()
+    if (explicit) return explicit
+    const current = snapshot()
+    return current ? summarizeProgress(current.tasks) : undefined
+  }
+  const attention = () => {
+    const current = input.attention?.() ?? emptyAttention
+    const currentSnapshot = snapshot()
+    const derived = currentSnapshot ? summarizeProgress(currentSnapshot.tasks) : undefined
+    return {
+      stale: current.stale || mode() === "stale",
+      needsInput: current.needsInput,
+      failed: Math.max(current.failed, derived?.failed ?? 0),
+      blocked: current.blocked,
+    }
+  }
 
   const nodeKey = (sessionID: string) => {
     const current = scope()

@@ -1,3 +1,4 @@
+import type { RunSnapshot, Task } from "@bearmanser/opencode-superpowers-execution/contract"
 import type { ExecutionAssignment, ExecutionAgent } from "./model"
 import { nativeState } from "./native-adapter"
 import type { NativeRecord } from "./native-types"
@@ -128,4 +129,51 @@ const assignmentFixture: Record<string, ExecutionAssignment[]> = {
 
 function toAgent(record: NativeRecord): ExecutionAgent {
   return { ...record, state: nativeState(record) }
+}
+
+const FIXTURE_PLAN_HASH = "a".repeat(64)
+
+export function taskFixture(overrides: Partial<Task> = {}): Task {
+  return {
+    id: "task-1",
+    title: "Fixture task",
+    phase: "Fixture",
+    order: 0,
+    dependsOn: [],
+    state: "pending",
+    attempt: 1,
+    requiredGates: ["tests"],
+    finalReview: true,
+    ...overrides,
+  }
+}
+
+export function failedTaskFixture(overrides: Partial<Task> = {}): Task {
+  return taskFixture({
+    id: "task-failed",
+    title: "Failing task",
+    state: "failed",
+    reason: "The controller reported a failed task",
+    ...overrides,
+  })
+}
+
+export function runFixture(overrides: Partial<RunSnapshot> = {}): RunSnapshot {
+  return {
+    schemaVersion: 1,
+    runID: "run-1",
+    rootSessionID: "root",
+    title: "Fixture run",
+    ownerDirectory: "/root/git/demo",
+    plan: { path: "docs/superpowers/plans/fixture.md", sha256: FIXTURE_PLAN_HASH, revision: 1 },
+    revision: 1,
+    status: "active",
+    createdAt: 1_700_000_000_000,
+    updatedAt: 1_700_000_000_000,
+    tasks: [taskFixture()],
+    assignments: [],
+    evidence: [],
+    events: [],
+    ...overrides,
+  }
 }

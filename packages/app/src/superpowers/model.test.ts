@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { RunSnapshot } from "@bearmanser/opencode-superpowers-execution/contract"
 import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSessionTabs, getTabReorderIndex } from "../session/helpers"
@@ -10,7 +11,7 @@ import {
   sessionBrowserTab,
   type SessionTabState,
 } from "../shell/state/session-tabs"
-import { agentFixture } from "./fixtures"
+import { agentFixture, failedTaskFixture, runFixture } from "./fixtures"
 import { AGENT_ROWS_VIRTUALIZE_THRESHOLD, EXECUTION_SUBVIEWS, createExecutionModel } from "./model"
 import type { ExecutionScope } from "./identity"
 
@@ -205,6 +206,21 @@ describe("createExecutionModel", () => {
       model.reconcile()
       expect(opened).toEqual(["child"])
       expect(reconciled).toBe(1)
+    })
+  })
+
+  test("enters failure attention when a bridge snapshot reports a failed task", () => {
+    root(() => {
+      const [snapshot, setSnapshot] = createSignal<RunSnapshot | undefined>(
+        runFixture({ tasks: [failedTaskFixture()] }),
+      )
+      const model = createExecutionModel({ snapshot })
+      expect(model.run()?.revision).toBe(1)
+      expect(model.progress()?.failed).toBe(1)
+      expect(model.attention().failed).toBe(1)
+      setSnapshot(undefined)
+      expect(model.attention().failed).toBe(0)
+      expect(model.progress()).toBeUndefined()
     })
   })
 })
