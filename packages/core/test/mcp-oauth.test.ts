@@ -390,6 +390,31 @@ describe("MCP OAuth", () => {
     expect(url.pathname).toBe("/as/authorize")
   })
 
+  test("accepts an authorization server issuer that differs only by a trailing slash", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/mcp") return new Response(null, { status: 401 })
+        if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
+          return Response.json({ resource: `${url.origin}/mcp`, authorization_servers: [url.origin] })
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: `${url.origin}/`,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+          })
+        return new Response(null, { status: 404 })
+      },
+    })
+    const { url } = await Effect.runPromise(
+      Effect.scoped(start(`${server.url.origin}/mcp`, { client_id: "client" })),
+    ).finally(() => server.stop(true))
+    expect(url.origin).toBe(server.url.origin)
+    expect(url.pathname).toBe("/authorize")
+  })
+
   test("uses configured authorization server metadata when the resource publishes none", async () => {
     const { server: issuer } = authorizationServer({})
     const resource = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
