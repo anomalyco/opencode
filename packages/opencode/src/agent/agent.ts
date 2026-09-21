@@ -290,7 +290,16 @@ const layer = Layer.effect(
           item.name = value.name ?? item.name
           item.steps = value.steps ?? item.steps
           item.options = mergeDeep(item.options, value.options ?? {})
-          item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+          const configuredPermission = Permission.fromConfig(value.permission ?? {})
+          item.permission = Permission.merge(
+            item.permission,
+            // An explicit permission block on a custom agent is an allowlist. Keep
+            // unspecified actions denied instead of inheriting the permissive `*` default.
+            ...(item.native || configuredPermission.length === 0
+              ? []
+              : [Permission.fromConfig({ "*": "deny" })]),
+            configuredPermission,
+          )
         }
 
         // Ensure Truncate.GLOB is allowed unless explicitly configured
