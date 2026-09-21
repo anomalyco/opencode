@@ -40,7 +40,7 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
-import { formatDuration } from "../../util/format"
+import { formatDuration, formatElapsed } from "../../util/format"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
@@ -259,6 +259,21 @@ export function Prompt(props: PromptProps) {
     const messages = sync.data.message[props.sessionID]
     if (!messages) return undefined
     return messages.findLast((m): m is UserMessage => m.role === "user")
+  })
+
+  // Ticks once a second while the agent is busy so the elapsed time stays current.
+  const [busyNow, setBusyNow] = createSignal(Date.now())
+  createEffect(() => {
+    if (status().type !== "busy") return
+    setBusyNow(Date.now())
+    const interval = setInterval(() => setBusyNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(interval))
+  })
+  const busyElapsed = createMemo(() => {
+    if (status().type !== "busy") return ""
+    const startedAt = lastUserMessage()?.time.created
+    if (startedAt === undefined) return ""
+    return formatElapsed(startedAt, busyNow())
   })
 
   const usage = createMemo(() => {
@@ -1525,6 +1540,9 @@ export function Prompt(props: PromptProps) {
                       <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                     </Show>
                   </box>
+                  <Show when={busyElapsed()}>
+                    <text fg={theme.textMuted}>{busyElapsed()}</text>
+                  </Show>
                   <box flexDirection="row" gap={1} flexShrink={0}>
                     {(() => {
                       const retry = createMemo(() => {
