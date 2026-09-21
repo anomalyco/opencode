@@ -1,30 +1,11 @@
 import { chromium } from "@playwright/test"
-import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { buildPackage, packageRoot } from "./build"
+import { repositoryRoot, type StagedPackage } from "./stage"
 
-export const repositoryRoot = path.resolve(packageRoot, "..", "..")
-export const stagedPackageDirectory = path.join(os.tmpdir(), "opencode-superpowers-execution-package")
-
-const runtimeDependencies = ["@opencode/plugin", "@opencode/schema", "zod"]
-
-export interface StagedManifest {
-  readonly name: string
-  readonly version: string
-  readonly description: string
-  readonly type: "module"
-  readonly license: string
-  readonly main: string
-  readonly exports: Record<string, string>
-  readonly files: readonly string[]
-  readonly dependencies: Record<string, string>
-}
-
-export interface StagedPackage {
-  readonly directory: string
-  readonly manifest: StagedManifest
-}
+export { buildStagedPackage, repositoryRoot, stagedPackageDirectory } from "./stage"
+export type { StagedManifest, StagedPackage } from "./stage"
 
 export interface BrowserContractResult {
   readonly rpcID: string
@@ -41,19 +22,6 @@ export interface HostGateResult {
   readonly port: number
   readonly first: HostProbe
   readonly restarted: HostProbe
-}
-
-export async function buildStagedPackage(options: { readonly directory?: string } = {}): Promise<StagedPackage> {
-  await buildPackage()
-  const directory = options.directory ?? stagedPackageDirectory
-  await rm(directory, { recursive: true, force: true })
-  await mkdir(directory, { recursive: true })
-
-  const manifest = await composeManifest()
-  await copyPackageFiles(directory)
-  await linkRuntimeDependencies(directory)
-  await writeFile(path.join(directory, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`)
-  return { directory, manifest }
 }
 
 export async function importStagedContractInBrowser(staged: StagedPackage): Promise<BrowserContractResult> {
@@ -148,70 +116,6 @@ const browserPage = `<!doctype html>
 
 interface BrowserWindow {
   readonly __executionContract?: { readonly rpcID: string }
-}
-
-async function composeManifest(): Promise<StagedManifest> {
-  const source = (await Bun.file(path.join(packageRoot, "package.json")).json()) as {
-    readonly name: string
-    readonly version: string
-    readonly description: string
-    readonly license: string
-    readonly dependencies: Record<string, string>
-  }
-  return {
-    name: source.name,
-    version: source.version,
-    description: source.description,
-    type: "module",
-    license: source.license,
-    main: "./index.js",
-    exports: { ".": "./index.js", "./contract": "./dist/contract.js" },
-    files: ["index.js", "dist", "skills", "README.md", "LICENSE"],
-    dependencies: await resolveDependencies(source.dependencies),
-  }
-}
-
-async function resolveDependencies(dependencies: Record<string, string>): Promise<Record<string, string>> {
-  const root = (await Bun.file(path.join(repositoryRoot, "package.json")).json()) as {
-    readonly workspaces: { readonly catalog: Record<string, string> }
-  }
-  return Object.fromEntries(
-    await Promise.all(
-      Object.entries(dependencies).map(async ([name, range]) => {
-        if (range.startsWith("catalog:")) {
-          const version = root.workspaces.catalog[name]
-          if (version === undefined) throw new Error(`catalog entry missing for ${name}`)
-          return [name, version]
-        }
-        if (range.startsWith("workspace:")) return [name, await workspaceVersion(name)]
-        return [name, range]
-      }),
-    ),
-  )
-}
-
-async function workspaceVersion(name: string): Promise<string> {
-  const manifestPath = Bun.resolveSync(`${name}/package.json`, packageRoot)
-  const manifest = (await Bun.file(manifestPath).json()) as { readonly version?: string }
-  if (manifest.version === undefined) throw new Error(`workspace dependency ${name} has no version`)
-  return manifest.version
-}
-
-async function copyPackageFiles(directory: string): Promise<void> {
-  await cp(path.join(packageRoot, "index.js"), path.join(directory, "index.js"))
-  await cp(path.join(packageRoot, "dist"), path.join(directory, "dist"), { recursive: true })
-  await cp(path.join(packageRoot, "skills"), path.join(directory, "skills"), { recursive: true })
-  await cp(path.join(packageRoot, "README.md"), path.join(directory, "README.md"))
-  await cp(path.join(repositoryRoot, "LICENSE"), path.join(directory, "LICENSE"))
-}
-
-async function linkRuntimeDependencies(directory: string): Promise<void> {
-  const modules = path.join(directory, "node_modules")
-  await mkdir(path.join(modules, "@opencode"), { recursive: true })
-  for (const name of runtimeDependencies) {
-    const source = path.dirname(Bun.resolveSync(`${name}/package.json`, packageRoot))
-    await symlink(source, path.join(modules, name), "dir")
-  }
 }
 
 function serverModules(inputs: Record<string, unknown>): string[] {

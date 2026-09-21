@@ -16,6 +16,7 @@
     "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "tsgo --noEmit",
     "build": "bun run script/build.ts",
+    "package:stage": "bun run script/stage.ts",
     "package:smoke": "bun test --timeout 120000 test/package-smoke.test.ts",
     "package:host-smoke": "EXECUTION_PACKAGE_HOST_SMOKE=1 bun test --timeout 180000 test/package-smoke.test.ts"
   },

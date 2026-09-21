@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test"
+import fs from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import type { Plugin } from "@opencode/plugin/promise/plugin"
 import {
   buildStagedPackage,
   importStagedContractInBrowser,
+  repositoryRoot,
   runDisposableHostGate,
 } from "../script/package-smoke"
 import type { RunSnapshot, RunSummary } from "../src/schema"
@@ -26,6 +28,23 @@ test("staged contract is browser-safe and package is self-contained", async () =
   const result = await importStagedContractInBrowser(artifact)
   expect(result.rpcID).toBe("superpowers.execution.v1")
   expect(result.serverModulesLoaded).toEqual([])
+})
+
+test("staged runtime dependencies are self-contained copies outside the repository", async () => {
+  const artifact = await buildStagedPackage()
+  const staged = fs.realpathSync(artifact.directory)
+  const repository = fs.realpathSync(repositoryRoot)
+  const names = Object.keys(artifact.manifest.dependencies).sort()
+  expect(names).toEqual(["@opencode/plugin", "@opencode/schema", "zod"])
+
+  for (const name of names) {
+    const resolved = fs.realpathSync(artifact.dependencyPaths[name] ?? "")
+    expect(resolved.startsWith(repository + path.sep)).toBe(false)
+    expect(resolved.startsWith(staged + path.sep)).toBe(true)
+    expect(fs.lstatSync(path.join(artifact.directory, "node_modules", name)).isSymbolicLink()).toBe(false)
+    const installed = JSON.parse(fs.readFileSync(resolved, "utf8")) as { readonly version?: string }
+    expect(installed.version).toBe(artifact.manifest.dependencies[name])
+  }
 })
 
 test("the staged package directory entry loads its built plugin and its dist-relative reporting skill", async () => {

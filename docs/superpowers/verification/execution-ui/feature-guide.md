@@ -34,12 +34,16 @@ without this feature can still call the read RPC directly once the companion is 
 Install only if you want a real plan map, honest task counts, and durable evidence. Without it the
 UI stays in observer mode and shows no fabricated percentage.
 
-1. Build the package:
+1. Create the standalone local package directory (builds, resolves the manifest, and copies the
+   exact-version runtime dependencies into a portable directory outside the checkout):
 
    ```bash
    cd packages/superpowers-execution
-   bun run build
+   bun run package:stage /opt/opencode/superpowers-execution
    ```
+
+   The command prints the staged directory and its resolved dependencies. It refuses to produce a
+   directory whose dependencies resolve back into the checkout or are symlinks.
 
 2. Merge **one entry** into the `plugins` array of your server config. It is an entry to merge, not
    a replacement for your full config; keep your existing Superpowers and other plugin entries.
@@ -49,7 +53,7 @@ UI stays in observer mode and shows no fabricated percentage.
      // ...keep your existing configuration...
      "plugins": [
        // ...keep your existing plugin entries...
-       "/root/git/opencode/packages/superpowers-execution"
+       "/opt/opencode/superpowers-execution"
      ]
    }
    ```
@@ -57,10 +61,12 @@ UI stays in observer mode and shows no fabricated percentage.
 3. Restart only the server you own. This repository never restarts, replaces, or upgrades your
    running service.
 
-Point at the **built local package directory** (the directory containing `package.json`,
-`index.js`, `dist/`, and `skills/`). Do not point at a guessed bare-file path and do not use the
-unpublished npm name. The built plugin reads the reporting skill at the dist-relative
-`../skills/superpowers-execution-reporting/SKILL.md` layout, so keep `dist/` and `skills/` together.
+Point at the **staged standalone package directory** (containing `package.json`, `index.js`,
+`dist/`, `skills/`, and `node_modules/`). Do not point at a guessed bare-file path, do not point at
+the workspace source directory (its manifest still has `workspace:*`/`catalog:` ranges and resolves
+dependencies from the checkout), and do not use the unpublished npm name. The built plugin reads the
+reporting skill at the dist-relative `../skills/superpowers-execution-reporting/SKILL.md` layout, so
+keep `dist/` and `skills/` together.
 
 Importing the shared contract alone does not install the plugin.
 

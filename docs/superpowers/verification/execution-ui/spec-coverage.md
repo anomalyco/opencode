@@ -30,8 +30,8 @@ recorded exactly; no unavailable gate is labelled a pass (§16).
 | AC15 | T16, T18 | `task-13.md`/Home tests: bounded batches, ordinary rows unchanged. | PASS |
 | AC16 | T02, T04, T12, T14 | telemetry partial/unknown handling, no double counting. | PASS |
 | AC17 | T17 | `accessibility.md`: English keys, keyboard, RTL, motion, zoom. | PASS |
-| AC18 | T01, T13, T19 | `task-13.md`, `performance.md`, `artifacts/t19-execution-benchmark.jsonl`. Paired T01 latency gates pass; unopened-dashboard causal long-task attribution is UNRUN (needs a feature-absent build). | PASS (with recorded UNRUN sub-gate) |
-| AC19 | T09, T10, T18, T20 | This task: staged package outside the monorepo, browser-safe contract import, built-plugin install/report/getRun/unload/reload/stored-state recovery, real disposable 2.0.11 host load and isolated restart (`release-checklist.md` §2–§5). | PASS |
+| AC18 | T01, T13, T19 | `task-13.md`, `performance.md`, `artifacts/t19-execution-benchmark.jsonl`. Paired T01 latency, status-render, and lifecycle gates pass; the causal unopened-dashboard long-task sub-gate is UNRUN because it needs a feature-absent counterfactual build. | UNRUN (causal long-task sub-gate) |
+| AC19 | T09, T10, T18, T20 | This task: staged standalone package outside the monorepo with exact-version runtime dependencies installed into the staging tree (no repository symlinks), browser-safe contract import, built-plugin install/report/getRun/unload/reload/stored-state recovery, real disposable 2.0.11 host load and isolated restart (`release-checklist.md` §2–§5). | PASS |
 | AC20 | T01, T20 | This task: web e2e against an explicitly selected disposable target (`release-checklist.md` §6); Windows Desktop smoke UNRUN, no Windows host (`release-checklist.md` §7). | Web PASS; Windows Desktop UNRUN |
 
 ## T20-owned criteria detail
@@ -46,12 +46,13 @@ recorded exactly; no unavailable gate is labelled a pass (§16).
 
 ### AC19 — built package loads outside the monorepo and survives an isolated restart
 
-- Staged outside the monorepo at `/tmp/opencode-superpowers-execution-package`; manifest dependencies
+- Staged outside the monorepo at `/tmp/opencode/superpowers-execution-package`; manifest dependencies
   resolved to `@opencode/plugin` 2.0.11, `@opencode/schema` 2.0.11, `zod` 4.1.8 (no `workspace:` /
-  `catalog:` ranges).
-- `bun run package:smoke`: 3 pass / 1 skip / 0 fail.
-- `bun run package:host-smoke`: 4 pass / 0 fail; the real disposable 2.0.11 server loads the staged
-  directory entry (`entrypoint=file:///tmp/opencode-superpowers-execution-package/index.js`) and
+  `catalog:` ranges) and installed as real copies into the staging tree, with each dependency's real
+  path asserted outside the repository and inside the staging directory.
+- `bun run package:smoke`: 4 pass / 1 skip / 0 fail.
+- `bun run package:host-smoke`: 5 pass / 0 fail; the real disposable 2.0.11 server loads the staged
+  directory entry (`entrypoint=file:///tmp/opencode/superpowers-execution-package/index.js`) and
   serves `capabilities` → `pluginVersion: "0.1.0"` before and after an isolated restart.
 
 ### AC20 — web and Windows Desktop smoke use an explicitly selected test server
