@@ -1,6 +1,4 @@
-import { readdir, readFile } from "node:fs/promises"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { readFile } from "node:fs/promises"
 import { base64Encode } from "@opencode/util/encode"
 import { expect, test } from "@playwright/test"
 import {
@@ -14,6 +12,8 @@ import {
 } from "./execution-fixtures"
 
 const target = requireExplicitTestTarget(process.env.EXECUTION_E2E_TARGET)
+
+test.use({ trace: "off" })
 
 test.describe("disposable execution target guards", () => {
   test("an unset target stays unconfigured instead of defaulting to a production service", () => {
@@ -425,7 +425,7 @@ test.describe("Superpowers execution bridge lifecycle", () => {
     await expect(execution.panel(page)).toHaveAttribute("data-mode", "ready")
   })
 
-  test("no captured request URL or retained artifact contains the disposable credential", async ({ page }) => {
+  test("no captured request URL or retained artifact contains the disposable credential", async ({ page }, testInfo) => {
     const run = await execution.startRun()
     const urls: string[] = []
     page.on("request", (request) => urls.push(request.url()))
@@ -444,12 +444,8 @@ test.describe("Superpowers execution bridge lifecycle", () => {
     expect(page.url()).not.toContain(password)
     expect(page.url()).not.toContain(encoded)
 
-    const artifacts = await listFiles(fileURLToPath(new URL("../test-results/", import.meta.url)))
-    for (const artifact of artifacts) {
-      const content = await readFile(artifact)
-      expect(content.includes(password)).toBe(false)
-      expect(content.includes(encoded)).toBe(false)
-    }
+    await testInfo.attach("execution-credential-page", { body: await page.screenshot(), contentType: "image/png" })
+
     expect(execution.logs()).not.toContain(password)
     expect(execution.logs()).not.toContain(encoded)
     expect(execution.owned.process.pid).not.toBe(process.pid)
@@ -551,14 +547,4 @@ function expectListContract(body: unknown) {
 
 function expectActiveContract(body: unknown) {
   expect(typeof (body as { data: unknown }).data).toBe("object")
-}
-
-async function listFiles(root: string): Promise<string[]> {
-  const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
-  const nested = await Promise.all(
-    entries.map((entry) =>
-      entry.isDirectory() ? listFiles(path.join(root, entry.name)) : Promise.resolve([path.join(root, entry.name)]),
-    ),
-  )
-  return nested.flat()
 }

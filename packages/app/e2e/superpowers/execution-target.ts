@@ -32,7 +32,11 @@ export function parseExecutionTarget(raw: string | undefined): ExecutionTestTarg
       : process.versions.bun
         ? process.execPath
         : "bun"
-  const password = typeof parsed.password === "string" && parsed.password !== "" ? parsed.password : crypto.randomUUID()
+  const password =
+    typeof parsed.password === "string" && parsed.password !== ""
+      ? parsed.password
+      : (process.env.EXECUTION_E2E_PASSWORD ?? crypto.randomUUID())
+  process.env.EXECUTION_E2E_PASSWORD = password
   return { disposable: true, directory, port, host, password, executable }
 }
 

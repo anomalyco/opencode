@@ -34,7 +34,16 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers,
-  reporter: [["html", { outputFolder: "e2e/playwright-report", open: "never" }], ["line"]],
+  reporter: executionTarget
+    ? [
+        ["html", { outputFolder: "e2e/playwright-report", open: "never" }],
+        ["line"],
+        ["./e2e/superpowers/credential-reporter.ts"],
+      ]
+    : [
+        ["html", { outputFolder: "e2e/playwright-report", open: "never" }],
+        ["line"],
+      ],
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {

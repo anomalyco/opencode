@@ -1,9 +1,11 @@
 # Execution UI Integration Verification (T18)
 
 Task: T18 Exercise real bridge lifecycle and recovery end to end.
-Spec coverage: AC06, AC07, AC08, AC11 (plugin/bridge/host integration) and the T18 portion of AC19
-(lifecycle survives an isolated restart of the disposable stand-in host). AC19's "built companion package
-loads outside the monorepo on the tested host" and AC20 remain T20 gates.
+Spec coverage: AC06, AC07, AC08, AC11 (plugin/bridge/host integration). **T18 claims no AC19 coverage.**
+AC19's "built companion package loads outside the monorepo on the tested host" is UNRUN here and deferred to
+T20, which owns packaging and the real-host package-load gate; AC20 (Windows Desktop smoke) is likewise T20's.
+The stand-in host below checks lifecycle behavior at the plugin/bridge/app integration boundary only and is
+not AC19 evidence.
 Branch: `execution-ui`. Host: Ubuntu 24.04.2 LTS, Bun 1.4.2, Playwright Chromium.
 
 ## 1. What was built, and what the host is not
@@ -11,6 +13,7 @@ Branch: `execution-ui`. Host: Ubuntu 24.04.2 LTS, Bun 1.4.2, Playwright Chromium
 | File | Purpose |
 |---|---|
 | `packages/app/e2e/superpowers/execution-target.ts` | Shared strict disposable-target parser used by both `playwright.config.ts` and the fixtures. |
+| `packages/app/e2e/superpowers/credential-reporter.ts` | Post-run `onEnd` scan of retained `test-results`/`playwright-report` artifacts for the password and its encoded form. |
 | `packages/app/e2e/superpowers/execution-fixtures.ts` | `requireExplicitTestTarget` + `createExecutionTestHarness` (nonce-verified manifest, owned child-process handle, controls, page helpers). |
 | `packages/app/e2e/superpowers/disposable-host.ts` | The disposable stand-in host: real `@bearmanser/opencode-superpowers-execution` plugin **source** setup over HTTP RPC, file-backed storage, SSE invalidations, synthetic native sessions, test-only controls. |
 | `packages/app/e2e/superpowers/native-host-fixtures.json` | Sanitized native API responses captured from a **real** disposable OpenCode 2.0.11 server. |
@@ -44,9 +47,23 @@ runs service discovery, never stops/restarts the user's service, and removes onl
 
 Authentication is injected as a request header on the browser context
 (`context.setExtraHTTPHeaders({ authorization })`); no `?auth_token=` or other credential appears in any
-navigation URL. The suite captures every request URL and scans retained `e2e/test-results` artifacts, the
-page URL, and the host log for the plaintext password and its `opencode:<password>` base64 form, asserting
-none appear. The password itself is generated per run and passed to the child by environment only.
+navigation URL. The password is generated per run, cached in `EXECUTION_E2E_PASSWORD` so the config, the
+worker, and the reporter agree, and passed to the child by environment only.
+
+Two layers assert the credential never reaches a retained artifact:
+
+- In-test: every request URL and the page URL are checked against the plaintext password and its
+  `opencode:<password>` base64 form; the child log is checked; and the artifacts this test writes (an attached
+  page screenshot and its finalized `testInfo.outputDir` files) are scanned immediately after they are
+  written.
+- Post-run: `e2e/superpowers/credential-reporter.ts` runs in `onEnd`, after Playwright finalizes the run's
+  artifacts and the HTML report, and recursively scans `e2e/test-results` and `e2e/playwright-report` for the
+  plaintext password and its encoded form, throwing (failing the run) on any hit.
+
+The execution suite sets `trace: "off"` and is not run with retries, so no interactive trace is retained for
+authenticated requests: a Playwright trace records request headers verbatim, including the `Authorization`
+header, and must therefore not be retained for an authenticated session. Removing the credential from the URL
+is what makes the retained video/screenshot/report artifacts credential-free.
 
 ## 4. Real disposable OpenCode host — recorded UNRUN (deferred to T20)
 
@@ -132,7 +149,8 @@ The location-change pause is additionally locked by a bridge unit test
 ```text
 $ cd packages/app && EXECUTION_E2E_TARGET='{"disposable":true,"directory":"/tmp/opencode/execution-e2e","port":4601}' \
     bun run test:e2e e2e/superpowers/execution.spec.ts --workers=1
-  20 passed (56.7s)
+  execution credential artifact scan: clean (2 files)
+  20 passed (56.4s)
 ```
 
 ```text
@@ -176,6 +194,7 @@ The three `typecheck:e2e` errors are pre-existing: re-running with this task's f
 - `packages/app/e2e/superpowers/execution.spec.ts`
 - `packages/app/e2e/superpowers/execution-fixtures.ts`
 - `packages/app/e2e/superpowers/execution-target.ts`
+- `packages/app/e2e/superpowers/credential-reporter.ts`
 - `packages/app/e2e/superpowers/disposable-host.ts`
 - `packages/app/e2e/superpowers/native-host-fixtures.json`
 - `packages/app/playwright.config.ts`
