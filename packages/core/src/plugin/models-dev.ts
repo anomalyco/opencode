@@ -99,6 +99,7 @@ function applyModel(
       }
   draft.capabilities = {
     tools: model.tool_call,
+    reasoning: model.reasoning,
     input: [...(model.modalities?.input ?? [])],
     output: [...(model.modalities?.output ?? [])],
   }

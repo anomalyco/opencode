@@ -66,6 +66,7 @@ export const Plugin = define({
                 if (config.capabilities !== undefined) {
                   model.capabilities = {
                     tools: config.capabilities.tools,
+                    reasoning: config.capabilities.reasoning ?? model.capabilities.reasoning,
                     input: [...config.capabilities.input],
                     output: [...config.capabilities.output],
                   }
