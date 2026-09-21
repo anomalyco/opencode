@@ -3,7 +3,7 @@ import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { Skill } from "@opencode/schema/skill"
 import { Tool } from "@opencode/schema/tool"
-import type { Context as PluginContext } from "@opencode/plugin/promise/plugin"
+import type { Context as PluginContext, Plugin } from "@opencode/plugin/promise/plugin"
 import type { SessionContext } from "@opencode/plugin/promise/session"
 import type { SkillEditor } from "@opencode/plugin/promise/skill"
 import type { Info, ToolContext, ToolEditor } from "@opencode/plugin/promise/tool"
@@ -290,6 +290,8 @@ export interface SessionFixture {
 export interface PluginHarnessOptions {
   readonly sessions: readonly SessionFixture[]
   readonly location?: string
+  readonly storage?: MemoryStorage
+  readonly plugin?: Plugin
 }
 
 export interface Identity {
@@ -361,7 +363,8 @@ interface StandardSchemaLike {
 
 export async function pluginHarness(options: PluginHarnessOptions): Promise<PluginHarness> {
   const location = options.location ?? "/root/git/demo"
-  const storage = memoryStorage()
+  const storage = options.storage ?? memoryStorage()
+  const pluginDefinition = options.plugin ?? executionPlugin
   const sessions = new Map(options.sessions.map((session) => [session.id, session]))
   const accesses: string[] = []
   const changes: Changed[] = []
@@ -533,7 +536,7 @@ export async function pluginHarness(options: PluginHarnessOptions): Promise<Plug
     },
   }) as unknown as PluginContext
 
-  const returned = await executionPlugin.setup(host)
+  const returned = await pluginDefinition.setup(host)
   if (typeof returned === "function") cleanup = returned
 
   const contextFor = (identity: Identity): ToolContext => ({

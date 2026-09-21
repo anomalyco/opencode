@@ -15,7 +15,9 @@
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "tsgo --noEmit",
-    "build": "bun run script/build.ts"
+    "build": "bun run script/build.ts",
+    "package:smoke": "bun test --timeout 120000 test/package-smoke.test.ts",
+    "package:host-smoke": "EXECUTION_PACKAGE_HOST_SMOKE=1 bun test --timeout 180000 test/package-smoke.test.ts"
   },
   "dependencies": {
     "@opencode/plugin": "workspace:*",
@@ -23,6 +25,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@playwright/test": "catalog:",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
