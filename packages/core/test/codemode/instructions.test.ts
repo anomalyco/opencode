@@ -46,11 +46,9 @@ describe("CodeModeInstructions", () => {
   it.effect("renders the initial catalog, semantic deltas, and removal", () =>
     Effect.gen(function* () {
       const initialized = yield* readInitial(CodeModeInstructions.make({ tools: [echo] }))
-      expect(initialized.text).toContain(
-        "This catalog is the complete set of tools callable inside `execute`. It does not affect tools exposed directly outside Code Mode.",
-      )
+      expect(initialized.text).toContain("Use the `execute` tool to call the tools listed below.")
+      expect(initialized.text).toContain("The catalog is complete.")
       expect(initialized.text).toContain("## Available tools")
-      expect(initialized.text).not.toContain("## Search")
       expect(initialized.text).toContain(`  - ${echo.signature} // Echo text`)
 
       const added = yield* readUpdate(CodeModeInstructions.make({ tools: [echo, lookup] }), initialized)

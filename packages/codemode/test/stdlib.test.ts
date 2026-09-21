@@ -1165,6 +1165,147 @@ describe("TextEncoder and TextDecoder", () => {
   })
 })
 
+describe("Iterator helpers", () => {
+  test("lazy helpers chain over collection iterators and generators, one source step per result", async () => {
+    expect(
+      await value(`
+        const pulled = []
+        function* naturals() { let n = 0; while (true) { pulled.push(n); yield n++ } }
+        const squares = naturals().map((n) => n * n).filter((n) => n % 2 === 0).drop(1).take(3)
+        const first = squares.next()
+        return {
+          first,
+          rest: squares.toArray(),
+          after: squares.next(),
+          pulled,
+          values: new Map([["a", 1], ["b", 2]]).values().map((v, i) => v * 10 + i).toArray(),
+          flat: [1, 2].values().flatMap((n) => [n, [n]]).toArray(),
+          entries: [...new Map([[1, 2]]).entries().map(([k, v]) => k + v)],
+        }
+      `),
+    ).toEqual({
+      first: { value: 4, done: false },
+      rest: [16, 36],
+      after: { done: true },
+      pulled: [0, 1, 2, 3, 4, 5, 6],
+      values: [10, 21],
+      flat: [1, [1], 2, [2]],
+      entries: [3],
+    })
+  })
+
+  test("eager helpers consume the source and close it on early exit", async () => {
+    expect(
+      await value(`
+        const log = []
+        function* g() { try { yield 1; yield 2; yield 3 } finally { log.push("closed") } }
+        const seen = []
+        g().forEach((v, i) => seen.push([v, i]))
+        return {
+          seen,
+          sum: g().reduce((a, b) => a + b),
+          sumFrom: g().reduce((a, b) => a + b, 10),
+          some: g().some((v) => v === 2),
+          every: g().every((v) => v < 2),
+          find: g().find((v) => v > 1),
+          missing: g().find((v) => v > 5),
+          log,
+        }
+      `),
+    ).toEqual({
+      seen: [
+        [1, 0],
+        [2, 1],
+        [3, 2],
+      ],
+      sum: 6,
+      sumFrom: 16,
+      some: true,
+      every: false,
+      find: 2,
+      log: ["closed", "closed", "closed", "closed", "closed", "closed", "closed"],
+    })
+  })
+
+  test("a helper closes its source when a callback throws, on return(), and on early for...of exit", async () => {
+    expect(
+      await value(`
+        const log = []
+        function* g(name) { try { yield 1; yield 2 } finally { log.push(name) } }
+        const throwing = g("throw").map((v) => { if (v === 2) throw new Error("boom"); return v })
+        throwing.next()
+        let message
+        try { throwing.next() } catch (error) { message = error.message }
+        const returned = g("return").map((v) => v)
+        returned.next()
+        const closed = returned.return()
+        for (const v of g("loop").filter((v) => true)) break
+        return { message, afterThrow: throwing.next(), closed, afterReturn: returned.next(), log }
+      `),
+    ).toEqual({
+      message: "boom",
+      afterThrow: { done: true },
+      closed: { done: true },
+      afterReturn: { done: true },
+      log: ["throw", "return", "loop"],
+    })
+  })
+
+  test("collection iterators have no return() and continue after an early exit, as in JS", async () => {
+    expect(
+      await value(`
+        const it = [1, 2, 3].values()
+        const found = it.some((v) => v === 2)
+        return [typeof it.return, found, it.next().value, typeof it.map(x => x).return]
+      `),
+    ).toEqual(["undefined", true, 3, "function"])
+  })
+
+  test("Iterator.from and the abstract Iterator constructor", async () => {
+    expect(
+      await value(`
+        const it = [1].values()
+        let n = 0
+        const errors = []
+        for (const attempt of [() => Iterator(), () => new Iterator(), () => Iterator.from(5)]) {
+          try { attempt() } catch (error) { errors.push(error.name) }
+        }
+        return [
+          Iterator.from(it) === it,
+          Iterator.from("ab").toArray(),
+          Iterator.from([1, 2]).map((v) => v * 2).toArray(),
+          Iterator.from({ next: () => ({ done: n > 1, value: n++ }) }).toArray(),
+          it instanceof Iterator,
+          errors,
+        ]
+      `),
+    ).toEqual([true, ["a", "b"], [2, 4], [0, 1], true, ["TypeError", "TypeError", "TypeError"]])
+  })
+
+  test("argument validation", async () => {
+    const cases: Array<[string, string]> = [
+      ["[1].values().map(1)", "Iterator.prototype.map expects a function callback."],
+      ["[1].values().take(-1)", "Iterator.prototype.take expects a non-negative count, received -1."],
+      ["[1].values().drop()", "Iterator.prototype.drop expects a non-negative count, received NaN."],
+      [
+        "[1].values().flatMap((v) => 'ab').toArray()",
+        "Iterator.prototype.flatMap expects an iterable or iterator, received a string.",
+      ],
+      ["[].values().reduce((a, b) => a)", "Iterator.prototype.reduce of an empty iterator with no initial value."],
+    ]
+    for (const [code, message] of cases) {
+      expect((await error(`return ${code}`)).message).toContain(message)
+    }
+    expect(
+      await error(`
+        function* g() { while (true) yield 1 }
+        const it = g().map(() => it.next())
+        return it.next()
+      `),
+    ).toMatchObject({ message: expect.stringContaining("Iterator helper is already running.") })
+  })
+})
+
 describe("built-in iterators", () => {
   test("keys/values/entries and [Symbol.iterator] step with next() and stay live", async () => {
     expect(
@@ -1264,6 +1405,39 @@ describe("built-in iterators", () => {
     expect((await error(`const it = [1].keys(); const next = it.next; return next()`)).message).toContain(
       "Iterator.prototype.next called on incompatible receiver undefined",
     )
+  })
+})
+
+describe("Object.prototype.toString", () => {
+  test("reports the built-in kind it is inherited by, as JS does through Symbol.toStringTag", async () => {
+    expect(
+      await value(`
+      return [
+        new Map().toString(), new Set().toString(), new Headers().toString(), Promise.resolve(1).toString(),
+        [1].values().toString(), ({}).toString(), String(new Map()), String(Promise.resolve(1)),
+        \`\${new Set([1])}\`, [new Map()] + "", new Map() == "[object Map]",
+      ]
+    `),
+    ).toEqual([
+      "[object Map]",
+      "[object Set]",
+      "[object Headers]",
+      "[object Promise]",
+      "[object Iterator]",
+      "[object Object]",
+      "[object Map]",
+      "[object Promise]",
+      "[object Set]",
+      "[object Map]",
+      true,
+    ])
+  })
+})
+
+describe("console.log of errors", () => {
+  test("prints name and message, nested too", async () => {
+    const result = await run(`console.log(new Error("boom"), { e: new RangeError("r") })`)
+    expect(result.logs).toEqual(['Error: boom {"e":RangeError: r}'])
   })
 })
 

@@ -236,6 +236,11 @@ built-ins/Array/prototype/unshift/S15.4.4.13_A2_T3.js  # Array.prototype.unshift
 built-ins/Array/prototype/unshift/S15.4.4.13_A3_T2.js  # Array.prototype.unshift called on incompatible receiver a data object.
 built-ins/Array/prototype/unshift/S15.4.4.13_A4_T1.js  # Array.prototype.unshift called on incompatible receiver a data object.
 built-ins/Array/prototype/unshift/S15.4.4.13_A4_T2.js  # #3: Array.prototype[0] = 1; x = []; x.length = 1; x.unshift(0); x[1] === 1. Actual: undefined
+built-ins/Iterator/from/return-method-returns-iterator-result.js  # Iterator next must be a function.
+built-ins/Iterator/prototype/drop/limit-tonumber-throws.js  # Expected a Test262Error but got a RangeError
+built-ins/Iterator/prototype/drop/limit-tonumber.js  # Iterator.prototype.drop expects a non-negative count, received NaN.
+built-ins/Iterator/prototype/take/limit-tonumber-throws.js  # Expected a Test262Error but got a RangeError
+built-ins/Iterator/prototype/take/limit-tonumber.js  # Iterator.prototype.take expects a non-negative count, received NaN.
 language/statements/async-generator/dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/async-generator/dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all

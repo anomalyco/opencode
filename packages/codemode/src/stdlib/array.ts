@@ -2,26 +2,34 @@ import { Effect } from "effect"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength, MAX_ARRAY_LENGTH } from "../interpreter/limits.js"
 import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
-import { define, get, hidden, Arr, GeneratorObj, IteratorObj, Obj } from "../interpreter/objects.js"
+import {
+  define,
+  get,
+  hidden,
+  Arr,
+  GeneratorObj,
+  hostIterator,
+  Obj,
+  coerceToNumber,
+  coerceToString,
+  type Value,
+} from "../interpreter/objects.js"
 import { describeValue, rejectCircularInsertion } from "../interpreter/references.js"
 import { applyCollectionCallback, invoke, preserveConsumerError } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { compareText } from "../tool-runtime.js"
-import { coerceToNumber, coerceToString } from "./value.js"
 
-const arrayLikeSource = (source: unknown): { readonly length: number; readonly source: Obj } => {
+const arrayLikeSource = (source: Value): { readonly length: number; readonly source: Obj } => {
   if (source instanceof Obj && typeof get(source, "length") === "number") {
     const length = get(source, "length") as number
     const normalized = Number.isNaN(length) || length <= 0 ? 0 : Math.trunc(length)
     checkArrayLength(normalized)
     return { length: normalized, source }
   }
-  throw invalidData(
-    `Array.from expects an array, string, Map, Set, or array-like value, received ${describeValue(source)}.`,
-  )
+  throw invalidData(`Array.from expects an iterable or array-like value, received ${describeValue(source)}.`)
 }
 
-const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<unknown>): Effect.Effect<unknown, unknown, R> => {
+const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Value, unknown, R> => {
   const source = args[0]
   const proto = ctx.builtins.Array
   const apply =
@@ -30,17 +38,19 @@ const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<unknown>): Effect.Effect<
     const cursor = yield* ctx.iterate(source)
     if (cursor === undefined) {
       if (source instanceof GeneratorObj) {
-        throw typeError("Array.from expects a synchronous iterable or array-like value.")
+        throw typeError(
+          `Array.from expects a synchronous iterable or array-like value, received ${describeValue(source)}.`,
+        )
       }
       const arrayLike = arrayLikeSource(source)
-      const values: Array<unknown> = []
+      const values: Array<Value> = []
       for (let index = 0; index < arrayLike.length; index += 1) {
         const item = get(arrayLike.source, index)
         values.push(apply === undefined ? item : yield* apply([item, index]))
       }
       return new Arr(proto, values)
     }
-    const values: Array<unknown> = []
+    const values: Array<Value> = []
     let index = 0
     while (true) {
       const step = yield* cursor.next
@@ -53,21 +63,21 @@ const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<unknown>): Effect.Effect<
 
 export const sortArray = <R>(
   ctx: Interpreter<R>,
-  target: Array<unknown>,
-  comparator: unknown,
+  target: Array<Value>,
+  comparator: Value,
   name: string,
-): Effect.Effect<Array<unknown>, unknown, R> => {
+): Effect.Effect<Array<Value>, unknown, R> => {
   if (comparator === undefined) {
     return Effect.sync(() => [...target].sort((a, b) => compareText(coerceToString(a), coerceToString(b))))
   }
   const apply = applyCollectionCallback(ctx, comparator, name)
-  const mergeSort = (items: Array<unknown>): Effect.Effect<Array<unknown>, unknown, R> => {
+  const mergeSort = (items: Array<Value>): Effect.Effect<Array<Value>, unknown, R> => {
     if (items.length <= 1) return Effect.succeed(items)
     const midpoint = Math.floor(items.length / 2)
     return Effect.gen(function* () {
       const left = yield* mergeSort(items.slice(0, midpoint))
       const right = yield* mergeSort(items.slice(midpoint))
-      const merged: Array<unknown> = []
+      const merged: Array<Value> = []
       let leftIndex = 0
       let rightIndex = 0
       while (leftIndex < left.length && rightIndex < right.length) {
@@ -88,8 +98,8 @@ export const sortArray = <R>(
 export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.Array
-  const wrap = (items: Array<unknown>) => new Arr(proto, items)
-  const construct = (args: Array<unknown>, into: Obj): Arr => {
+  const wrap = (items: Array<Value>) => new Arr(proto, items)
+  const construct = (args: Array<Value>, into: Obj): Arr => {
     if (args.length !== 1) return new Arr(into, [...args])
     const first = args[0]
     if (typeof first !== "number") return new Arr(into, [first])
@@ -109,8 +119,8 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     ["from", 1, (_, args) => arrayFrom(ctx, args)],
   ])
 
-  const self = (thisValue: unknown, name: string) => receiver(Arr, thisValue, `Array.prototype.${name}`)
-  const optNumber = (name: string, value: unknown, label: string): number | undefined => {
+  const self = (thisValue: Value, name: string) => receiver(Arr, thisValue, `Array.prototype.${name}`)
+  const optNumber = (name: string, value: Value, label: string): number | undefined => {
     if (value === undefined) return undefined
     if (typeof value !== "number") {
       throw typeError(`Array.${name} expects ${label} to be a number.`)
@@ -122,11 +132,11 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     name: string,
     length: number,
     body: (
-      target: Array<unknown>,
+      target: Array<Value>,
       receiver: Arr,
-      apply: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>,
-      args: Array<unknown>,
-    ) => Effect.Effect<unknown, unknown, R>,
+      apply: (args: Array<Value>) => Effect.Effect<Value, unknown, R>,
+      args: Array<Value>,
+    ) => Effect.Effect<Value, unknown, R>,
   ): Method => [
     name,
     length,
@@ -214,7 +224,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       "flat",
       0,
       (thisValue, args) => {
-        const flatten = (items: Array<unknown>, depth: number): Array<unknown> =>
+        const flatten = (items: Array<Value>, depth: number): Array<Value> =>
           items.flatMap((item) => (item instanceof Arr && depth > 0 ? flatten(item.items, depth - 1) : [item]))
         const flattened = flatten(self(thisValue, "flat").items, optNumber("flat", args[0], "depth") ?? 1)
         checkArrayLength(flattened.length)
@@ -353,14 +363,14 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
           (parts) => parts.join(","),
         ),
     ],
-    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").items.keys())],
-    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").items.values())],
+    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").items.keys())],
+    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").items.values())],
     [
       "entries",
       0,
       (thisValue) =>
-        new IteratorObj(
-          builtins.Iterator,
+        hostIterator(
+          builtins,
           self(thisValue, "entries")
             .items.entries()
             .map(([index, item]) => wrap([index, item])),
@@ -369,7 +379,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     iterate("map", 1, (target, receiver, apply) =>
       Effect.gen(function* () {
         const length = target.length
-        const values: Array<unknown> = []
+        const values: Array<Value> = []
         values.length = length
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
@@ -381,7 +391,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     iterate("flatMap", 1, (target, receiver, apply) =>
       Effect.gen(function* () {
         const length = target.length
-        const values: Array<unknown> = []
+        const values: Array<Value> = []
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
           const mapped = yield* apply([target[index], index, receiver])
@@ -394,7 +404,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     iterate("filter", 1, (target, receiver, apply) =>
       Effect.gen(function* () {
         const length = target.length
-        const values: Array<unknown> = []
+        const values: Array<Value> = []
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
           const item = target[index]

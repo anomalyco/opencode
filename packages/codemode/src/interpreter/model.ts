@@ -2,7 +2,7 @@ import type { Node } from "acorn"
 import { Context } from "effect"
 import type { ErrorType } from "./intrinsics.js"
 import type { DiagnosticKind } from "../codemode.js"
-import type { ErrorObj } from "./objects.js"
+import type { ErrorObj, Value } from "./objects.js"
 
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
 export type AstNode = Node
@@ -14,13 +14,13 @@ export const CallSite = Context.Reference<{ readonly node?: AstNode; readonly de
 
 export type Binding = {
   mutable: boolean
-  value: unknown
+  value: Value
   initialized?: boolean
 }
 
 export type StatementResult =
   | { kind: "none" }
-  | { kind: "return"; value: unknown }
+  | { kind: "return"; value: Value }
   | { kind: "break"; label?: string }
   | { kind: "continue"; label?: string }
 
@@ -31,11 +31,11 @@ export const IteratorSymbol: unique symbol = Symbol("codemode.iterator")
 export const IteratorSymbols = [AsyncIteratorSymbol, IteratorSymbol] as const
 
 export class Throw {
-  constructor(readonly value: unknown) {}
+  constructor(readonly value: Value) {}
 }
 
 export class GeneratorReturn {
-  constructor(readonly value: unknown) {}
+  constructor(readonly value: Value) {}
 }
 
 export const OptionalShortCircuit: unique symbol = Symbol("codemode.optional-short-circuit")
@@ -82,9 +82,6 @@ export const unsupportedSyntax = (kind: string, node: AstNode): PendingThrow =>
     "UnsupportedSyntax",
     [supportedSyntaxMessage],
   )
-
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null
 
 // Acorn lines are 1-based and its columns are 0-based. Diagnostics use 1-based columns of the submitted source.
 export const sourceLocation = (node: AstNode): { readonly line: number; readonly column: number } => ({

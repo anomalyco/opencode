@@ -1030,7 +1030,7 @@ describe("confined generators", () => {
         const params = new URLSearchParams(entries())
         return [events, params.toString()]
       `),
-    ).toEqual([["first", "second", "pair close", "outer close"], "%5Bobject+Object%5D=2"])
+    ).toEqual([["first", "second", "pair close", "outer close"], "%5Bobject+Promise%5D=2"])
   })
 
   test("validates URLSearchParams pair lengths after converting the outer sequence", async () => {

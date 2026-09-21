@@ -76,6 +76,11 @@ use `.*` to match an ID prefix. A later ID re-enables a plugin.
 }
 ```
 
+Two built-in plugins ignore removals so that a repository cannot switch off
+[policy](/policies) enforcement: `opencode.config.policy` and
+`opencode.provider.opencode`, the Console connection that delivers organization
+policy.
+
 ## Manage
 
 Install, list, check, update, or remove global package plugins with the CLI.

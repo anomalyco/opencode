@@ -1,6 +1,6 @@
 {
   "revision": "250f204f23a9249ff204be2baec29600faae7b75",
-  "directories": ["built-ins/Array/prototype", "language/statements"],
+  "directories": ["built-ins/Array/prototype", "language/statements", "built-ins/Iterator"],
   "harness": ["assert.js", "sta.js", "compareArray.js", "doneprintHandle.js"],
   "flags": ["module", "raw", "noStrict"],
   "boundaries": {
@@ -101,6 +101,8 @@
     "legacy-regexp",
     "__proto__",
     "__getter__",
-    "__setter__"
+    "__setter__",
+    "iterator-sequencing",
+    "joint-iteration"
   ]
 }
