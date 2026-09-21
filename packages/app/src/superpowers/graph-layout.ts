@@ -16,6 +16,23 @@ export type GraphNodeSize = { width: number; height: number }
 export type GraphMeasurer = (task: Task) => GraphNodeSize | undefined
 export type GraphPhaseGroup = { phase: string; tasks: Task[] }
 
+export type GraphTypography = { fontSize: number; lineHeight: number; fontFamily: string; scale: number }
+
+export function graphDimensionKey(typography: GraphTypography) {
+  return `${typography.fontSize}:${typography.lineHeight}:${typography.scale}:${typography.fontFamily}`
+}
+
+export function measureGraphTypography(element: HTMLElement): GraphTypography {
+  const style = getComputedStyle(element)
+  const fontSize = Number.parseFloat(style.fontSize) || 13
+  return {
+    fontSize,
+    lineHeight: Math.max(16, Math.round(fontSize * 1.4)),
+    fontFamily: style.fontFamily || "sans-serif",
+    scale: typeof window === "undefined" ? 1 : window.devicePixelRatio || 1,
+  }
+}
+
 export function graphSignature(tasks: Task[]) {
   return JSON.stringify(
     tasks.map((task) => ({

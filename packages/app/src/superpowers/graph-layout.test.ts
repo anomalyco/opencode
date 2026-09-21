@@ -9,9 +9,11 @@ import {
   GRAPH_VERTICAL_GAP,
   cachedLayout,
   clampZoom,
+  graphDimensionKey,
   graphSignature,
   groupTasksByPhase,
   layoutTaskGraph,
+  measureGraphTypography,
   resetLayoutCache,
   type GraphLayout,
   type GraphMeasurer,
@@ -215,6 +217,22 @@ describe("graphSignature", () => {
   })
 })
 
+describe("typography", () => {
+  test("the measured dimension key tracks computed font family", () => {
+    const element = document.createElement("div")
+    document.body.appendChild(element)
+    element.style.fontSize = "13px"
+    element.style.fontFamily = "Alpha Family"
+    const first = graphDimensionKey(measureGraphTypography(element))
+    element.style.fontFamily = "Beta Family"
+    const second = graphDimensionKey(measureGraphTypography(element))
+    expect(second).not.toBe(first)
+    element.style.fontFamily = "Alpha Family"
+    expect(graphDimensionKey(measureGraphTypography(element))).toBe(first)
+    element.remove()
+  })
+})
+
 describe("cachedLayout", () => {
   test("reuses the layout for a topology-only signature", () => {
     const tasks = taskGraphFixture()
@@ -242,6 +260,18 @@ describe("cachedLayout", () => {
     const resized = cachedLayout(tasks, tall, "26:36:1")
     expect(resized).not.toBe(first)
     expect(nodeByID(resized, "schema").height).toBe(140)
+  })
+
+  test("a font-family-only dimension change invalidates the cached layout", () => {
+    resetLayoutCache()
+    const tasks = taskGraphFixture()
+    const measure: GraphMeasurer = () => ({ width: GRAPH_NODE_WIDTH, height: GRAPH_NODE_HEIGHT })
+    const sans = graphDimensionKey({ fontSize: 13, lineHeight: 18, fontFamily: "sans-serif", scale: 1 })
+    const serif = graphDimensionKey({ fontSize: 13, lineHeight: 18, fontFamily: "serif", scale: 1 })
+    expect(serif).not.toBe(sans)
+    const first = cachedLayout(tasks, measure, sans)
+    expect(cachedLayout(tasks.map((task) => ({ ...task, state: "running" })), measure, sans)).toBe(first)
+    expect(cachedLayout(tasks, measure, serif)).not.toBe(first)
   })
 })
 

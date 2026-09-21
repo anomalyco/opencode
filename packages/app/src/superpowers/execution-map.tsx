@@ -10,7 +10,9 @@ import {
   GRAPH_NODE_WIDTH,
   cachedLayout,
   clampZoom,
+  graphDimensionKey,
   groupTasksByPhase,
+  measureGraphTypography,
 } from "./graph-layout"
 import type { ExecutionModel } from "./model"
 
@@ -18,7 +20,12 @@ const FIT_PADDING = 24
 
 type MapMetrics = { key: string; font: string; lineHeight: number; chrome: number }
 
-const DEFAULT_MAP_METRICS: MapMetrics = { key: "13:18:1", font: "13px sans-serif", lineHeight: 18, chrome: 28 }
+const DEFAULT_MAP_METRICS: MapMetrics = {
+  key: graphDimensionKey({ fontSize: 13, lineHeight: 18, fontFamily: "sans-serif", scale: 1 }),
+  font: "13px sans-serif",
+  lineHeight: 18,
+  chrome: 28,
+}
 
 export function ExecutionMap(props: { model: ExecutionModel }) {
   const language = useLanguage()
@@ -39,7 +46,7 @@ export function ExecutionMap(props: { model: ExecutionModel }) {
       if (!element) return
       const next = readMapMetrics(element)
       const current = metrics()
-      if (current.key === next.key && current.font === next.font) return
+      if (current.key === next.key) return
       setMetrics(next)
     }
     refresh()
@@ -350,14 +357,11 @@ function measureTask(task: Task, metrics: MapMetrics) {
 }
 
 function readMapMetrics(element: HTMLElement): MapMetrics {
-  const style = getComputedStyle(element)
-  const fontSize = Number.parseFloat(style.fontSize) || 13
-  const lineHeight = Math.max(16, Math.round(fontSize * 1.4))
-  const scale = window.devicePixelRatio || 1
+  const typography = measureGraphTypography(element)
   return {
-    key: `${fontSize}:${lineHeight}:${scale}`,
-    font: `${fontSize}px ${style.fontFamily || "sans-serif"}`,
-    lineHeight,
+    key: graphDimensionKey(typography),
+    font: `${typography.fontSize}px ${typography.fontFamily}`,
+    lineHeight: typography.lineHeight,
     chrome: 28,
   }
 }

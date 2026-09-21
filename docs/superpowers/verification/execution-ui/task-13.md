@@ -7,7 +7,7 @@
 | Bun | 1.4.2 |
 | Branch | execution-ui |
 | Package | `packages/app` |
-| Fixture size | 19 focused `graph-layout.test.ts` tests; 60 `superpowers.spec.ts` component tests |
+| Fixture size | 21 focused `graph-layout.test.ts` tests; 60 `superpowers.spec.ts` component tests |
 | Map fixture | diamond DAG (`schema → api → tests → final-review`, `schema → cli`); 250-task grouped fixture |
 | Layout micro-benchmark | 500 tasks, 480 edges, per-task measured heights (layers of 20 columns x 25) |
 
@@ -31,16 +31,16 @@ error: Cannot find module './graph-layout' from '.../graph-layout.test.ts'
 ```text
 $ cd packages/app
 $ bun test --conditions=solid --preload ./happydom.ts ./src/superpowers/graph-layout.test.ts
- 19 pass
+ 21 pass
  0 fail
- 78 expect() calls
-Ran 19 tests across 1 file. [319.00ms]
+ 83 expect() calls
+Ran 21 tests across 1 file. [329.00ms]
 ```
 
 ```text
 $ cd packages/app
 $ bun run test:components component-tests/superpowers.spec.ts --grep "map" --workers=2
- 10 passed (2.8m)
+ 11 passed (2.9m)
 
 $ bun run test:components component-tests/superpowers.spec.ts --workers=2
  60 passed (2.4m)
@@ -55,11 +55,11 @@ $ tsgo -b
 
 ```text
 $ bun test --conditions=solid --preload ./happydom.ts ./src
- 981 pass
+ 983 pass
  1 skip
  0 fail
- 3102 expect() calls
-Ran 982 tests across 136 files. [5.57s]
+ 3107 expect() calls
+Ran 984 tests across 136 files. [5.11s]
 ```
 
 ```text
@@ -80,14 +80,14 @@ per-task measured heights, takes the minimum of five cold-cache
 ```text
 $ cd packages/app
 $ bun test --conditions=solid --preload ./happydom.ts ./src/superpowers/graph-layout.test.ts
-[task-13-perf] layout500min=0.84ms runs=3.10,1.48,0.90,1.05,0.84 statusUpdate=0.112ms
-(pass) layoutTaskGraph > records the 500-task layout and status-update budgets [9.90ms]
+[task-13-perf] layout500min=0.87ms runs=2.12,1.13,2.39,1.18,0.87 statusUpdate=0.114ms
+(pass) layoutTaskGraph > records the 500-task layout and status-update budgets [11.81ms]
 ```
 
 | Target (§13) | Measured | Result |
 |---|---|---|
-| Full 500-task graph layout <= 250 ms | 0.84 ms (min of 5 runs; slowest cold run 3.10 ms) | PASS |
-| Status-only update <= 100 ms | 0.112 ms (cache hit, no relayout) | PASS |
+| Full 500-task graph layout <= 250 ms | 0.87 ms (min of 5 runs; slowest cold run 2.39 ms) | PASS |
+| Status-only update <= 100 ms | 0.114 ms (cache hit, no relayout) | PASS |
 
 These are Node/Bun-side pure layout timings on this worktree's development machine, not
 browser paint or network latency. The 500-task graph stays under the map's grouped threshold
