@@ -24,6 +24,7 @@ export type Family = typeof Family.Type
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
+  reasoning: optional(Schema.Boolean),
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
 }).annotate({ identifier: "Model.Capabilities" })
