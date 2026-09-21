@@ -1,7 +1,7 @@
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { DataProvider } from "@opencode/session-ui/context"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { Show, Suspense, createEffect, createMemo, createSignal } from "solid-js"
+import { Match, Show, Suspense, Switch, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { LanguageProvider, UiI18nBridge } from "../src/runtime/i18n/language"
@@ -23,6 +23,8 @@ import { createSessionTimelineInteraction } from "../src/session/timeline/intera
 import { MessageTimeline } from "../src/session/timeline/message-timeline"
 import type { TimelineSessionSource } from "../src/session/timeline/controller"
 import { createExecutionModel, type ExecutionAttention, type ExecutionModel, type ExecutionProgress } from "../src/superpowers/model"
+import { ExecutionActivityFeed } from "../src/superpowers/activity-feed"
+import { ExecutionAgentList } from "../src/superpowers/agent-list"
 import { SessionExecutionProvider } from "../src/superpowers/session-execution"
 import { ExecutionTaskDetails } from "../src/superpowers/task-details"
 import { ExecutionTaskList } from "../src/superpowers/task-list"
@@ -183,6 +185,29 @@ function installExecutionTransport(snapshot = runFixture({ runID: "run-1", revis
     },
   })
   const listeners = new Set<(event: unknown) => void>()
+  const nativeSession = (sessionID: string) => {
+    if (sessionID === "root") {
+      return {
+        id: "root",
+        title: "Root controller",
+        location: { directory: "/root/git/demo" },
+        model: { id: "gpt-5-codex", providerID: "openai" },
+        cost: 1.5,
+        tokens: { input: 1000, output: 250, reasoning: 0, cache: { read: 500, write: 0 } },
+      }
+    }
+    if (sessionID === "child") {
+      return {
+        id: "child",
+        parentID: "root",
+        title: "Child implementer",
+        location: { directory: "/root/git/demo/.worktrees/feature" },
+        cost: 0.5,
+        tokens: { input: 500, output: 100, reasoning: 0, cache: { read: 0, write: 0 } },
+      }
+    }
+    return { id: sessionID, parentID: "root", title: "Idle reviewer", location: { directory: "/root/git/demo" } }
+  }
   ;(globalThis as { __opencodeExecutionTransport?: unknown }).__opencodeExecutionTransport = {
     rpc,
     listen: (handler: (event: unknown) => void) => {
@@ -190,6 +215,16 @@ function installExecutionTransport(snapshot = runFixture({ runID: "run-1", revis
       return () => listeners.delete(handler)
     },
     status: () => "connected",
+    session: {
+      get: async ({ sessionID }: { sessionID: string }) => nativeSession(sessionID),
+      list: async ({ parentID }: { parentID?: string }) =>
+        parentID === "root"
+          ? { data: [nativeSession("child"), nativeSession("idle-child")], cursor: {} }
+          : { data: [], cursor: {} },
+      active: async () => ({ root: { type: "running" } }),
+      form: { list: async () => [] },
+    },
+    permission: { list: async () => [] },
   }
   return () => {
     listeners.clear()
@@ -244,8 +279,28 @@ function LiveEvidenceComposition() {
   )
 }
 
-function mountLiveSessionHeader(evidence = false) {
-  const restore = installExecutionTransport(evidence ? halfVerifiedRun() : undefined)
+function LiveAgentsComposition() {
+  const [execution, setExecution] = createSignal<ExecutionModel>()
+  return (
+    <SessionExecutionProvider
+      session={liveSession}
+      attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
+      onModel={setExecution}
+    >
+      <Show when={execution()}>
+        {(model) => (
+          <>
+            <ExecutionAgentList model={model()} />
+            <ExecutionActivityFeed model={model()} />
+          </>
+        )}
+      </Show>
+    </SessionExecutionProvider>
+  )
+}
+
+function mountLiveSessionHeader(mode: string) {
+  const restore = installExecutionTransport(mode === "evidence-production" ? halfVerifiedRun() : undefined)
   const host = document.createElement("main")
   host.dataset.testid = "execution-fixture"
   host.style.cssText = "position:fixed;inset:0;background:#181818;color:#eee;padding:24px"
@@ -261,7 +316,17 @@ function mountLiveSessionHeader(evidence = false) {
                   <TabsProvider>
                     <GlobalProvider>
                       <ServerProvider conn={desktopServer}>
-                        {evidence ? <LiveEvidenceComposition /> : <LiveExecutionHeader />}
+                        <Switch>
+                          <Match when={mode === "evidence-production"}>
+                            <LiveEvidenceComposition />
+                          </Match>
+                          <Match when={mode === "session-execution-agents"}>
+                            <LiveAgentsComposition />
+                          </Match>
+                          <Match when={true}>
+                            <LiveExecutionHeader />
+                          </Match>
+                        </Switch>
                       </ServerProvider>
                     </GlobalProvider>
                   </TabsProvider>
@@ -285,8 +350,12 @@ export async function mountExecutionFixture(input: {
   scenario?: string
 } = {}): Promise<ReturnType<typeof render>> {
   const scenario = input.scenario ?? "observer"
-  if (scenario === "session-execution-live" || scenario === "evidence-production") {
-    mountLiveSessionHeader(scenario === "evidence-production")
+  if (
+    scenario === "session-execution-live" ||
+    scenario === "evidence-production" ||
+    scenario === "session-execution-agents"
+  ) {
+    mountLiveSessionHeader(scenario)
     return undefined as unknown as ReturnType<typeof render>
   }
   const host = document.createElement("main")

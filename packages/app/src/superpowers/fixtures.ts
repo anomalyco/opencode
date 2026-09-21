@@ -52,7 +52,23 @@ export const AGENT_FIXTURE_SCENARIOS = [
 ] as const
 
 export function agentFixture(scenario: string): ExecutionAgent[] {
-  if (scenario === "agents-telemetry" || scenario === "activity") return usageAgents().map(toAgent)
+  if (scenario === "agents-telemetry") return usageAgents().map(toAgent)
+  if (scenario === "activity") return fullUsageAgents().map(toAgent)
+  if (scenario === "agents-telemetry-partial") {
+    return usageAgents()
+      .concat([
+        {
+          id: "deleted-child",
+          parentID: "child",
+          title: "Deleted child",
+          directory: "/root/git/demo/.worktrees/feature",
+          status: "unknown",
+          needsInput: false,
+          error: "Session not found",
+        },
+      ])
+      .map(toAgent)
+  }
   const base = nativeFixture().map(toAgent)
   if (scenario === "agents-foreground") {
     return base.concat(
@@ -142,8 +158,16 @@ const FIXTURE_TOKENS = (input: number, output: number, read = 0) => ({
 
 function usageAgents(): NativeRecord[] {
   return nativeFixture().map((record) => {
-    if (record.id === "root") return { ...record, usage: { cost: 1.25, tokens: FIXTURE_TOKENS(1000, 250, 500) } }
-    if (record.id === "child") return { ...record, usage: { cost: 0.75, tokens: FIXTURE_TOKENS(500, 100) } }
+    if (record.id === "root") return { ...record, usage: { cost: 1.5, tokens: FIXTURE_TOKENS(1000, 250, 500) } }
+    if (record.id === "child") return { ...record, usage: { cost: 0.5, tokens: FIXTURE_TOKENS(500, 100) } }
+    return record
+  })
+}
+
+function fullUsageAgents(): NativeRecord[] {
+  return usageAgents().map((record) => {
+    if (record.id === "idle-child") return { ...record, usage: { cost: 0.25, tokens: FIXTURE_TOKENS(50, 0) } }
+    if (record.id === "grandchild") return { ...record, usage: { cost: 0.25, tokens: FIXTURE_TOKENS(25, 0) } }
     return record
   })
 }
@@ -604,17 +628,47 @@ export function taskRunFixture(scenario: string): RunSnapshot | undefined {
 const ACTIVITY_EPOCH = 1_700_001_000_000
 
 export function activityRun(): RunSnapshot {
-  const events: RunEvent[] = Array.from({ length: 150 }, (_, index) => ({
+  const filler: RunEvent[] = Array.from({ length: 146 }, (_, index) => ({
     revision: 1001 + index,
-    type: index % 3 === 0 ? "task.state" : index % 3 === 1 ? "evidence.add" : "assignment.add",
+    type: index % 3 === 0 ? "task.state" : index % 2 === 0 ? "evidence.add" : "assignment.add",
     taskID: index % 5 === 0 ? "task-review" : "task-api",
     summary: `Reported event ${1001 + index}`,
     createdAt: ACTIVITY_EPOCH + index * 1_000,
   }))
+  const tail: RunEvent[] = [
+    {
+      revision: 1147,
+      type: "assignment.add",
+      taskID: "task-review",
+      summary: "code_reviewer assigned to task-review",
+      createdAt: ACTIVITY_EPOCH + 146_000,
+    },
+    {
+      revision: 1148,
+      type: "evidence.add",
+      taskID: "task-review",
+      summary: "spec_review passed for task-review",
+      createdAt: ACTIVITY_EPOCH + 147_000,
+    },
+    {
+      revision: 1149,
+      type: "evidence.add",
+      taskID: "task-api",
+      summary: "tests passed for task-api",
+      createdAt: ACTIVITY_EPOCH + 148_000,
+    },
+    {
+      revision: 1150,
+      type: "assignment.add",
+      taskID: "task-api",
+      summary: "implementer assigned to task-api",
+      createdAt: ACTIVITY_EPOCH + 149_000,
+    },
+  ]
   return runFixture({
     runID: "run-activity",
     revision: 1150,
-    updatedAt: ACTIVITY_EPOCH + 150_000,
+    updatedAt: ACTIVITY_EPOCH + 149_000,
     status: "active",
     tasks: [
       taskFixture({ id: "task-api", title: "API contract", phase: "Build", order: 0, state: "verified" }),
@@ -629,12 +683,19 @@ export function activityRun(): RunSnapshot {
       }),
     ],
     assignments: [
-      fixtureAssignment({ id: "a-activity-api", taskID: "task-api", sessionID: "child", role: "implementer" }),
+      fixtureAssignment({
+        id: "a-activity-api",
+        taskID: "task-api",
+        sessionID: "child",
+        role: "implementer",
+        createdAt: ACTIVITY_EPOCH + 149_000,
+      }),
       fixtureAssignment({
         id: "a-activity-review",
         taskID: "task-review",
         sessionID: "idle-child",
         role: "code_reviewer",
+        createdAt: ACTIVITY_EPOCH + 146_000,
       }),
     ],
     evidence: [
@@ -646,6 +707,7 @@ export function activityRun(): RunSnapshot {
         sessionID: "child",
         messageID: "msg-activity-1",
         summary: "Tests passed",
+        createdAt: ACTIVITY_EPOCH + 148_000,
       }),
       fixtureEvidence({
         id: "e-activity-review",
@@ -655,10 +717,10 @@ export function activityRun(): RunSnapshot {
         sessionID: "idle-child",
         messageID: "msg-activity-2",
         summary: "Spec review passed",
-        createdAt: ACTIVITY_EPOCH + 200_000,
+        createdAt: ACTIVITY_EPOCH + 147_000,
       }),
     ],
-    events,
+    events: [...filler, ...tail],
     historyTruncatedBeforeRevision: 1001,
   })
 }

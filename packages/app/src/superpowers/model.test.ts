@@ -515,11 +515,122 @@ describe("createExecutionModel activity", () => {
         snapshot: () => activityRun(),
         agents: () => agentFixture("activity"),
       })
-      expect(withAgents.activityUsage().cost).toEqual({ value: 2, coverage: "complete" })
-      expect(withAgents.activityUsage().tokens).toEqual({ value: 2350, coverage: "complete" })
+      expect(withAgents.activityUsage().cost).toEqual({ value: 2.5, coverage: "complete" })
+      expect(withAgents.activityUsage().tokens).toEqual({ value: 2425, coverage: "complete" })
       const withoutAgents = createExecutionModel({ snapshot: () => activityRun() })
       expect(withoutAgents.activityUsage().cost).toEqual({ value: undefined, coverage: "unavailable" })
       expect(withoutAgents.activityUsage().tokens).toEqual({ value: undefined, coverage: "unavailable" })
+    }))
+
+  test("absent native accounting is partial when other sessions report usage", () =>
+    root(() => {
+      const model = createExecutionModel({
+        snapshot: () => activityRun(),
+        agents: () => agentFixture("agents-telemetry"),
+      })
+      expect(model.agentTree().complete).toBe(true)
+      expect(model.activityUsage().cost).toEqual({ value: 2, coverage: "partial" })
+      expect(model.activityUsage().tokens).toEqual({ value: 2350, coverage: "partial" })
+    }))
+
+  test("reports partial usage coverage when the native tree is incomplete", () =>
+    root(() => {
+      const model = createExecutionModel({
+        snapshot: () => activityRun(),
+        agents: () => agentFixture("agents-telemetry-partial"),
+      })
+      expect(model.agentTree().complete).toBe(false)
+      expect(model.activityUsage().cost).toEqual({ value: 2, coverage: "partial" })
+      expect(model.activityUsage().tokens).toEqual({ value: 2350, coverage: "partial" })
+    }))
+
+  test("links an assignment event to the assignment that event created, not a later worker", () =>
+    root(() => {
+      const history = runFixture({
+        runID: "run-history",
+        revision: 4,
+        tasks: [taskFixture({ id: "task-1", title: "History task" })],
+        events: [
+          { revision: 1, type: "run.start", summary: "start", createdAt: 100 },
+          { revision: 2, type: "assignment.add", taskID: "task-1", summary: "first", createdAt: 200 },
+          { revision: 3, type: "assignment.add", taskID: "task-1", summary: "second", createdAt: 300 },
+          { revision: 4, type: "task.state", taskID: "task-1", summary: "running", createdAt: 400 },
+        ],
+        assignments: [
+          { id: "a1", taskID: "task-1", attempt: 1, sessionID: "child", role: "implementer", createdAt: 200 },
+          { id: "a2", taskID: "task-1", attempt: 1, sessionID: "idle-child", role: "implementer", createdAt: 300 },
+        ],
+      })
+      const model = createExecutionModel({ snapshot: () => history, agents: () => agentFixture("agents") })
+      const events = model.activity().events
+      expect(events.find((item) => item.revision === 2)?.sessionID).toBe("child")
+      expect(events.find((item) => item.revision === 3)?.sessionID).toBe("idle-child")
+      expect(events.find((item) => item.revision === 4)?.sessionID).toBe("root")
+      expect(events.find((item) => item.revision === 1)?.sessionID).toBe("root")
+    }))
+
+  test("links an evidence event to its own record and the reporter for a verification", () =>
+    root(() => {
+      const history = runFixture({
+        runID: "run-evidence",
+        revision: 4,
+        tasks: [taskFixture({ id: "task-1", title: "Evidence task" })],
+        events: [
+          { revision: 1, type: "run.start", summary: "start", createdAt: 100 },
+          { revision: 2, type: "evidence.add", taskID: "task-1", summary: "old evidence", createdAt: 200 },
+          { revision: 3, type: "evidence.add", taskID: "task-1", summary: "new evidence", createdAt: 300 },
+          { revision: 4, type: "task.verify", taskID: "task-1", summary: "verified", createdAt: 400 },
+        ],
+        evidence: [
+          {
+            id: "e1",
+            taskID: "task-1",
+            attempt: 1,
+            gate: "tests",
+            outcome: "passed",
+            summary: "old",
+            sessionID: "child",
+            messageID: "m1",
+            reportedBySessionID: "root",
+            createdAt: 200,
+          },
+          {
+            id: "e2",
+            taskID: "task-1",
+            attempt: 1,
+            gate: "tests",
+            outcome: "passed",
+            summary: "new",
+            sessionID: "idle-child",
+            messageID: "m2",
+            reportedBySessionID: "root",
+            createdAt: 300,
+          },
+        ],
+      })
+      const model = createExecutionModel({ snapshot: () => history, agents: () => agentFixture("agents") })
+      const events = model.activity().events
+      expect(events.find((item) => item.revision === 2)?.sessionID).toBe("child")
+      expect(events.find((item) => item.revision === 3)?.sessionID).toBe("idle-child")
+      expect(events.find((item) => item.revision === 4)?.sessionID).toBe("root")
+    }))
+
+  test("omits a session link when no durable record matches the event", () =>
+    root(() => {
+      const history = runFixture({
+        runID: "run-orphan",
+        revision: 2,
+        tasks: [taskFixture({ id: "task-1" })],
+        events: [
+          { revision: 1, type: "run.start", summary: "start", createdAt: 100 },
+          { revision: 2, type: "assignment.add", taskID: "task-1", summary: "orphan", createdAt: 999 },
+        ],
+        assignments: [
+          { id: "a1", taskID: "task-1", attempt: 1, sessionID: "child", role: "implementer", createdAt: 200 },
+        ],
+      })
+      const model = createExecutionModel({ snapshot: () => history, agents: () => agentFixture("agents") })
+      expect(model.activity().events.find((item) => item.revision === 2)?.sessionID).toBeUndefined()
     }))
 
   test("merges injected message accounting without double counting a session summary", () =>
@@ -546,7 +657,7 @@ describe("createExecutionModel activity", () => {
           },
         ],
       })
-      expect(model.activityUsage().cost).toEqual({ value: 2, coverage: "complete" })
+      expect(model.activityUsage().cost).toEqual({ value: 2.5, coverage: "complete" })
       expect(model.activityUsage().duplicates).toBe(1)
       expect(model.activityUsage().rejected.inclusive).toBe(1)
     }))

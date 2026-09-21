@@ -1,4 +1,4 @@
-import { createEffect, createMemo, type Accessor, type JSX, type ParentProps } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX, type ParentProps } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { ExecutionRpc } from "@bearmanser/opencode-superpowers-execution/contract"
 import type { SessionModel } from "@/session/model"
@@ -8,9 +8,24 @@ import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { createSessionExecution } from "./bridge-client"
 import { requestEvidenceReveal } from "./evidence-reveal"
-import { createExecutionScope } from "./identity"
-import { messageHasPart } from "./native-adapter"
-import type { EvidenceNavigator, EvidenceResolver, ExecutionAttention, ExecutionModel } from "./model"
+import { createExecutionScope, scopeKey } from "./identity"
+import {
+  createNativeBoundary,
+  createNativeExecutionAdapter,
+  messageHasPart,
+  nativeState,
+  type NativeExecutionAdapter,
+  type NativeScope,
+  type NativeSnapshot,
+  type NativeTarget,
+} from "./native-adapter"
+import type {
+  EvidenceNavigator,
+  EvidenceResolver,
+  ExecutionAgent,
+  ExecutionAttention,
+  ExecutionModel,
+} from "./model"
 
 export function createSessionExecutionModel(input: {
   session: SessionModel
@@ -32,15 +47,57 @@ export function createSessionExecutionModel(input: {
     }
     return id
   })
-  const scope = createMemo(() => {
+  const scope = createMemo<NativeScope | undefined>(() => {
     const root = rootSessionID()
     const info = root ? input.session.shared.data.session.get(root) : undefined
-    return createExecutionScope({
+    const scoped = createExecutionScope({
       serverKey: server.key,
       ownerDirectory: info?.location.directory ?? input.session.workspace.directory(),
       rootSessionID: root,
     })
+    if (!scoped) return undefined
+    return { serverKey: server.key, ownerDirectory: scoped.ownerDirectory, rootSessionID: scoped.rootSessionID }
   })
+  const [nativeSnapshot, setNativeSnapshot] = createSignal<NativeSnapshot | undefined>()
+  let nativeAdapter: NativeExecutionAdapter | undefined
+  let nativeAdapterKey: string | undefined
+  const hydrateNative = () => {
+    const current = scope()
+    const selected = input.session.identity.sessionID()
+    if (!current || !selected) {
+      nativeAdapter?.dispose()
+      nativeAdapter = undefined
+      nativeAdapterKey = undefined
+      setNativeSnapshot(undefined)
+      return
+    }
+    const key = `${scopeKey(current)}::${selected}`
+    if (key !== nativeAdapterKey) {
+      nativeAdapter?.dispose()
+      nativeAdapter = createNativeExecutionAdapter({
+        target: (): NativeTarget => ({ scope: current, selectedSessionID: selected }),
+        boundary: createNativeBoundary({ api: sdk.api }),
+      })
+      nativeAdapterKey = key
+      setNativeSnapshot(undefined)
+    }
+    const adapter = nativeAdapter
+    if (!adapter) return
+    void adapter.hydrate().then(
+      (snapshot) => setNativeSnapshot(snapshot),
+      () => setNativeSnapshot(undefined),
+    )
+  }
+  const agents = createMemo<ExecutionAgent[]>(() =>
+    (nativeSnapshot()?.nodes ?? []).map((record) => ({ ...record, state: nativeState(record) })),
+  )
+  hydrateNative()
+  createEffect(() => {
+    input.session.identity.sessionID()
+    scope()
+    hydrateNative()
+  })
+  onCleanup(() => nativeAdapter?.dispose())
   const resolveEvidence: EvidenceResolver = async ({ sessionID, messageID, partID }) => {
     const loaded = input.session.shared.data.session.message.get(sessionID, messageID)
     if (loaded) return partID === undefined || messageHasPart(loaded, partID)
@@ -70,6 +127,8 @@ export function createSessionExecutionModel(input: {
     openSession: input.openSession,
     resolveEvidence,
     navigateEvidence,
+    agents: () => agents(),
+    retry: hydrateNative,
   }).model
 }
 

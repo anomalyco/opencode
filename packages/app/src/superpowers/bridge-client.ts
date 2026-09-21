@@ -58,6 +58,7 @@ export type SessionExecutionInput = {
   resolveEvidence?: EvidenceResolver
   navigateEvidence?: EvidenceNavigator
   reviewRequest?: () => void
+  retry?: () => void
   clock?: ExecutionClock
 }
 
@@ -410,6 +411,7 @@ export function createSessionExecution(input: SessionExecutionInput): SessionExe
     resolveEvidence: input.resolveEvidence,
     navigateEvidence: input.navigateEvidence,
     reviewRequest: input.reviewRequest,
+    retry: input.retry,
     reconcile: () => bridge.reconcile(),
   })
   let attachedScopeKey: string | undefined

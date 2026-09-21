@@ -64,6 +64,8 @@ type ExecutionTransportOverride = {
   rpc: (...args: unknown[]) => unknown
   listen: (handler: (event: unknown) => void) => () => void
   status: () => string
+  session?: Record<string, unknown>
+  permission?: Record<string, unknown>
 }
 
 function executionTransport() {
@@ -76,7 +78,14 @@ export function useServerSDK() {
     server,
     scope: ServerScope.local,
     url: "http://storybook.local",
-    api: override ? { ...api, rpc: override.rpc } : api,
+    api: override
+      ? {
+          ...api,
+          rpc: override.rpc,
+          ...(override.session ? { session: override.session } : {}),
+          ...(override.permission ? { permission: override.permission } : {}),
+        }
+      : api,
     client,
     event: override
       ? {

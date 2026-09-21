@@ -436,19 +436,18 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
   const activityUsage = (): UsageAggregate => {
     const currentScope = scope()
     const serverKey = currentScope?.serverKey ?? ""
-    const sessions = agents()
-      .filter((agent) => agent.usage !== undefined)
-      .map((agent) => ({
-        serverKey,
-        sessionID: agent.id,
-        parentSessionID: agent.parentID,
-        currency: ACCOUNTING_CURRENCY,
-        cost: agent.usage?.cost,
-        tokens: agent.usage?.tokens,
-      }) satisfies UsageRecord)
+    const sessions = agents().map((agent) => ({
+      serverKey,
+      sessionID: agent.id,
+      parentSessionID: agent.parentID,
+      currency: ACCOUNTING_CURRENCY,
+      cost: agent.usage?.cost,
+      tokens: agent.usage?.tokens,
+    }) satisfies UsageRecord)
     return sumUsageRecords([...sessions, ...(input.usage?.() ?? [])], {
       serverKey,
       currency: ACCOUNTING_CURRENCY,
+      complete: agentTree().complete,
     })
   }
 
@@ -526,10 +525,30 @@ function controllerRank(rootSessionID: string | undefined, agent: ExecutionAgent
 
 function activitySession(run: RunSnapshot, event: RunEvent) {
   if (!event.taskID) return run.rootSessionID
-  const assignments = run.assignments.filter((item) => item.taskID === event.taskID)
-  if (event.type === "assignment.add" || event.type === "assignment.end") return assignments.at(-1)?.sessionID
-  const evidence = run.evidence.filter((item) => item.taskID === event.taskID).at(-1)
-  return evidence?.sessionID ?? assignments.at(-1)?.sessionID
+  if (event.type === "assignment.add") {
+    return matchedAssignment(run, event.taskID, (assignment) => assignment.createdAt === event.createdAt)?.sessionID
+  }
+  if (event.type === "assignment.end") {
+    return matchedAssignment(
+      run,
+      event.taskID,
+      (assignment) => assignment.endedAt !== undefined && assignment.endedAt === event.createdAt,
+    )?.sessionID
+  }
+  if (event.type === "evidence.add") {
+    const matched = run.evidence.filter((item) => item.taskID === event.taskID && item.createdAt === event.createdAt)
+    return matched.length === 1 ? matched[0]?.sessionID : undefined
+  }
+  return run.rootSessionID
+}
+
+function matchedAssignment(
+  run: RunSnapshot,
+  taskID: string,
+  matches: (assignment: RunSnapshot["assignments"][number]) => boolean,
+) {
+  const matched = run.assignments.filter((assignment) => assignment.taskID === taskID).filter(matches)
+  return matched.length === 1 ? matched[0] : undefined
 }
 
 function compareActivityEvents(left: RunEvent, right: RunEvent) {

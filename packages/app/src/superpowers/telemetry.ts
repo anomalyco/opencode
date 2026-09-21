@@ -66,7 +66,7 @@ export function contextPercent(used: number | undefined, denominator: number | u
 
 export function sumUsageRecords(
   records: UsageRecord[],
-  options: { serverKey?: string; currency?: string; contextLimit?: number } = {},
+  options: { serverKey?: string; currency?: string; contextLimit?: number; complete?: boolean } = {},
 ): UsageAggregate {
   const serverKey = options.serverKey ?? records[0]?.serverKey
   const currency = options.currency ?? ACCOUNTING_CURRENCY
@@ -78,10 +78,6 @@ export function sumUsageRecords(
   for (const record of records) {
     if (serverKey !== undefined && record.serverKey !== serverKey) {
       rejected.server += 1
-      continue
-    }
-    if (record.currency !== undefined && record.currency !== currency) {
-      rejected.currency += 1
       continue
     }
     const identity = `${record.serverKey}\u0000${record.sessionID}\u0000${record.messageID ?? ""}`
@@ -104,8 +100,9 @@ export function sumUsageRecords(
     return !covered
   })
 
-  const loaded = included.every((record) => record.complete !== false)
-  const cost = aggregateMetric(included, (record) => record.cost, loaded)
+  rejected.currency = included.filter((record) => isForeignCurrency(record, currency)).length
+  const loaded = options.complete !== false && included.every((record) => record.complete !== false)
+  const cost = aggregateCost(included, currency, loaded)
   const tokens = aggregateMetric(
     included,
     (record) => (record.tokens === undefined ? undefined : tokenTotal(record.tokens)),
@@ -118,6 +115,21 @@ export function sumUsageRecords(
     records: included.length,
     duplicates,
     rejected,
+  }
+}
+
+function isForeignCurrency(record: UsageRecord, currency: string) {
+  return record.currency !== undefined && record.currency !== currency
+}
+
+function aggregateCost(records: UsageRecord[], currency: string, loaded: boolean): KnownUsage<number> {
+  const values = records.map((record) => (isForeignCurrency(record, currency) ? undefined : record.cost))
+  const known = values.filter((value): value is number => value !== undefined)
+  if (known.length === 0) return { value: undefined, coverage: "unavailable" }
+  const excluded = records.some((record) => isForeignCurrency(record, currency) && record.cost !== undefined)
+  return {
+    value: known.reduce((total, value) => total + value, 0),
+    coverage: known.length === values.length && loaded && !excluded ? "complete" : "partial",
   }
 }
 

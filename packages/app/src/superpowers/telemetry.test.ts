@@ -85,7 +85,7 @@ test("a session summary replaces its own messages without dropping a child sessi
   expect(aggregate.rejected.inclusive).toBe(1)
 })
 
-test("another server's or another currency's accounting is excluded and reported", () => {
+test("another server's accounting is excluded and another currency keeps its tokens", () => {
   const aggregate = sumUsageRecords(
     [
       record({ messageID: "msg-1", cost: 1, tokens: tokens(10) }),
@@ -96,9 +96,35 @@ test("another server's or another currency's accounting is excluded and reported
     { serverKey: "wsl" },
   )
   expect(aggregate.cost).toEqual({ value: 1, coverage: "partial" })
-  expect(aggregate.tokens).toEqual({ value: 10, coverage: "partial" })
+  expect(aggregate.tokens).toEqual({ value: 30, coverage: "partial" })
   expect(aggregate.rejected.server).toBe(1)
   expect(aggregate.rejected.currency).toBe(1)
+})
+
+test("a currency mismatch excludes only the cost and keeps token coverage", () => {
+  const aggregate = sumUsageRecords([
+    record({ messageID: "msg-1", cost: 1, tokens: tokens(10) }),
+    record({ messageID: "msg-2", cost: 2, tokens: tokens(20), currency: "EUR" }),
+  ])
+  expect(aggregate.cost).toEqual({ value: 1, coverage: "partial" })
+  expect(aggregate.tokens).toEqual({ value: 30, coverage: "complete" })
+  expect(aggregate.rejected.currency).toBe(1)
+})
+
+test("cost is unavailable when every reported cost is in another currency", () => {
+  const aggregate = sumUsageRecords([record({ messageID: "msg-1", cost: 2, tokens: tokens(20), currency: "EUR" })])
+  expect(aggregate.cost).toEqual({ value: undefined, coverage: "unavailable" })
+  expect(aggregate.tokens).toEqual({ value: 20, coverage: "complete" })
+  expect(aggregate.rejected.currency).toBe(1)
+})
+
+test("an incomplete native tree makes known usage partial", () => {
+  const partial = sumUsageRecords([record({ messageID: "msg-1", cost: 1, tokens: tokens(10) })], { complete: false })
+  expect(partial.cost).toEqual({ value: 1, coverage: "partial" })
+  expect(partial.tokens).toEqual({ value: 10, coverage: "partial" })
+  const missing = sumUsageRecords([], { complete: false })
+  expect(missing.cost).toEqual({ value: undefined, coverage: "unavailable" })
+  expect(missing.tokens).toEqual({ value: undefined, coverage: "unavailable" })
 })
 
 test("an incompletely loaded page makes coverage partial even when values are known", () => {
