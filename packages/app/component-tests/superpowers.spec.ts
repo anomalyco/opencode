@@ -492,6 +492,18 @@ story("task evidence opens the specific message and part only on selection", asy
   await expect(page.getByTestId("evidence-target")).toHaveText("child#msg-api-1#part-api-1")
 })
 
+story("task evidence hands the message part to the destination session", async ({ page }) => {
+  await openExecutionFixture(page, "half-verified")
+  await page
+    .getByRole("button", { name: /Open evidence from/ })
+    .first()
+    .evaluate((element) => (element as HTMLElement).click())
+  await expect(page.getByTestId("evidence-target")).toHaveText("child#msg-api-1#part-api-1")
+  await expect(page.getByTestId("revealed-target")).toHaveText("")
+  await page.getByRole("button", { name: "Activate evidence destination", exact: true }).click()
+  await expect(page.getByTestId("revealed-target")).toHaveText("msg-api-1#part-api-1")
+})
+
 story("task progress shows a scope increase reducing the fraction", async ({ page }) => {
   await openExecutionFixture(page, "tasks-scope")
   await expect(page.getByTestId("execution-progress-count")).toHaveText("2/2")

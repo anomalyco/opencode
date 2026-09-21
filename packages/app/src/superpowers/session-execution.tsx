@@ -7,6 +7,7 @@ import { sessionHref } from "@/shell/routes/session"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { createSessionExecution } from "./bridge-client"
+import { requestEvidenceReveal } from "./evidence-reveal"
 import { createExecutionScope } from "./identity"
 import { messageHasPart } from "./native-adapter"
 import type { EvidenceNavigator, EvidenceResolver, ExecutionAttention, ExecutionModel } from "./model"
@@ -16,7 +17,6 @@ export function createSessionExecutionModel(input: {
   attention: Accessor<ExecutionAttention>
   reviewRequest?: () => void
   openSession?: (sessionID: string) => void
-  revealEvidence?: EvidenceNavigator
 }): ExecutionModel {
   const server = useServer()
   const sdk = useServerSDK()
@@ -52,8 +52,12 @@ export function createSessionExecutionModel(input: {
     }
   }
   const navigateEvidence: EvidenceNavigator = (reference) => {
+    requestEvidenceReveal({
+      sessionID: reference.sessionID,
+      messageID: reference.messageID,
+      partID: reference.partID,
+    })
     void navigate(`${sessionHref(server.key, reference.sessionID)}#message-${reference.messageID}`)
-    if (reference.sessionID === input.session.identity.sessionID()) input.revealEvidence?.(reference)
   }
   return createSessionExecution({
     scope,
@@ -75,7 +79,6 @@ export function SessionExecutionProvider(
     attention: Accessor<ExecutionAttention>
     reviewRequest?: () => void
     openSession?: (sessionID: string) => void
-    revealEvidence?: EvidenceNavigator
     onModel: (model: ExecutionModel) => void
   }>,
 ) {
@@ -84,7 +87,6 @@ export function SessionExecutionProvider(
     attention: props.attention,
     reviewRequest: props.reviewRequest,
     openSession: props.openSession,
-    revealEvidence: props.revealEvidence,
   })
   createEffect(() => props.onModel(execution))
   return props.children

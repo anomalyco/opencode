@@ -3,6 +3,7 @@ import type { Gate, Outcome, Task } from "@bearmanser/opencode-superpowers-execu
 import { useLanguage } from "@/runtime/i18n/language"
 import { agentRoleKey, taskStateKey } from "./task-list"
 import {
+  evidenceAvailability,
   latestEvidenceForGate,
   type ExecutionAgentState,
   type ExecutionAssignmentJoin,
@@ -210,8 +211,7 @@ export function ExecutionTaskDetails(props: { model: ExecutionModel }) {
 function EvidenceRow(props: { model: ExecutionModel; item: ExecutionEvidenceJoin }) {
   const language = useLanguage()
   const resolution = () => props.model.evidenceResolution(props.item.id)
-  const availability = () =>
-    resolution() === undefined ? "unknown" : resolution() === "available" ? "true" : "false"
+  const availability = () => evidenceAvailability(resolution())
   return (
     <li
       class="execution-evidence"

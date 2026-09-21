@@ -1,9 +1,10 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
-import { createEffect, on, onCleanup } from "solid-js"
+import { createEffect, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLayout } from "@/shell/state/layout"
+import { revealPendingEvidence } from "@/superpowers/evidence-reveal"
 import type { SessionModel } from "../model"
 import { useSessionHashScroll } from "../use-session-hash-scroll"
 import { createTimelineModel } from "./model"
@@ -39,6 +40,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   }
   let scroller: HTMLDivElement | undefined
   let dockHeight = 0
+  const [revealReady, setRevealReady] = createSignal(false)
   let revealMessage = (_id: string, _partID?: string) => {}
   let scrollToEnd = () => {}
   let scrollMark = 0
@@ -283,6 +285,13 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       fill()
     },
   )
+  createEffect(() => {
+    revealPendingEvidence({
+      sessionID: session.identity.params.id,
+      ready: timeline.ready() && revealReady(),
+      reveal: (messageID, partID) => revealMessage(messageID, partID),
+    })
+  })
   onCleanup(() => {
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
@@ -318,6 +327,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       },
       setRevealMessage: (reveal: (id: string, partID?: string) => void) => {
         revealMessage = reveal
+        setRevealReady(true)
       },
       setScrollRef,
       setScrollToEnd: (scroll: () => void) => {

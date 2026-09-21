@@ -26,6 +26,7 @@ import { SessionExecutionProvider } from "../src/superpowers/session-execution"
 import { SessionReviewToggle } from "../src/session/header/session-header-actions"
 import { ExecutionStatusBadge } from "../src/superpowers/status-badge"
 import { agentFixture, failedTaskFixture, increasedScopeRun, runFixture, taskRunFixture } from "../src/superpowers/fixtures"
+import { requestEvidenceReveal, revealPendingEvidence } from "../src/superpowers/evidence-reveal"
 import type { ExecutionScope } from "../src/superpowers/identity"
 import type { ExecutionPresentation } from "../src/superpowers/panel"
 import type { SessionModel } from "../src/session/model"
@@ -253,6 +254,7 @@ export async function mountExecutionFixture(input: {
       navigationTarget: "",
       navigationHref: "",
       evidenceTarget: "",
+      revealedTarget: "",
       retryTarget: "",
       permissionReplies: 0,
       questionReplies: 0,
@@ -301,8 +303,10 @@ export async function mountExecutionFixture(input: {
       attention: () => fixtureAttention(scenario),
       progress: () => fixtureProgress(scenario),
       resolveEvidence: async ({ messageID }) => resolvableEvidence.has(messageID),
-      navigateEvidence: ({ sessionID, messageID, partID }) =>
-        setState("evidenceTarget", `${sessionID}#${messageID}#${partID ?? ""}`),
+      navigateEvidence: (reference) => {
+        requestEvidenceReveal(reference)
+        setState("evidenceTarget", `${reference.sessionID}#${reference.messageID}#${reference.partID ?? ""}`)
+      },
       reviewRequest: () => requestRegion?.focus(),
       openSession: (sessionID) => {
         setState("navigationTarget", `${scope().serverKey}/${sessionID}`)
@@ -339,6 +343,18 @@ export async function mountExecutionFixture(input: {
           <button type="button" onClick={() => setRun(increasedScopeRun())}>
             Show increased scope fixture
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              revealPendingEvidence({
+                sessionID: "child",
+                ready: true,
+                reveal: (messageID, partID) => setState("revealedTarget", `${messageID}#${partID ?? ""}`),
+              })
+            }}
+          >
+            Activate evidence destination
+          </button>
         </div>
         <div
           data-testid="execution-header"
@@ -363,6 +379,7 @@ export async function mountExecutionFixture(input: {
         <div data-testid="navigation-target">{state.navigationTarget}</div>
         <div data-testid="navigation-href">{state.navigationHref}</div>
         <div data-testid="evidence-target">{state.evidenceTarget}</div>
+        <div data-testid="revealed-target">{state.revealedTarget}</div>
         <div data-testid="retry-target">{state.retryTarget}</div>
         <div data-testid="execution-scope-root">{model.scope()?.rootSessionID ?? ""}</div>
         <Show when={request()}>

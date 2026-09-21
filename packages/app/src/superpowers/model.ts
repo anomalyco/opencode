@@ -95,6 +95,12 @@ export function latestEvidenceForGate(evidence: ExecutionEvidenceJoin[], gate: G
   return evidence.filter((item) => item.gate === gate).at(-1)
 }
 
+export function evidenceAvailability(resolution: EvidenceResolution | undefined) {
+  if (resolution === "available") return "true"
+  if (resolution === "unavailable") return "false"
+  return "unknown"
+}
+
 export function joinTaskAssignments(input: {
   run: RunSnapshot
   taskID: string

@@ -22,10 +22,12 @@ import {
   runFixture,
   smallScopeRun,
 } from "./fixtures"
+import { requestEvidenceReveal, revealPendingEvidence } from "./evidence-reveal"
 import {
   AGENT_ROWS_VIRTUALIZE_THRESHOLD,
   EXECUTION_SUBVIEWS,
   createExecutionModel,
+  evidenceAvailability,
   joinTaskAssignments,
   joinTaskEvidence,
   latestEvidenceForGate,
@@ -352,6 +354,32 @@ describe("createExecutionModel tasks", () => {
     expect(join.current.map((row) => row.id)).toEqual(["z-pass", "a-fail"])
     expect(latestEvidenceForGate(join.current, "tests")?.id).toBe("a-fail")
     expect(latestEvidenceForGate(join.current, "tests")?.outcome).toBe("failed")
+  })
+
+  test("maps a resolving evidence reference to a neutral availability", () => {
+    expect(evidenceAvailability(undefined)).toBe("unknown")
+    expect(evidenceAvailability("resolving")).toBe("unknown")
+    expect(evidenceAvailability("available")).toBe("true")
+    expect(evidenceAvailability("unavailable")).toBe("false")
+  })
+
+  test("hands a resolved cross-session target to the destination session", async () => {
+    await rootAsync(async () => {
+      const model = createExecutionModel({
+        snapshot: () => halfVerifiedRun(),
+        agents: () => agentFixture("agents"),
+        resolveEvidence: () => true,
+        navigateEvidence: requestEvidenceReveal,
+      })
+      const revealed: string[] = []
+      model.openEvidence({ id: "e-api-tests", sessionID: "child", messageID: "msg-api-1", partID: "part-api-1" })
+      await settle()
+      expect(model.evidenceResolution("e-api-tests")).toBe("available")
+      expect(revealPendingEvidence({ sessionID: "child", ready: true, reveal: (messageID, partID) => revealed.push(`${messageID}#${partID ?? ""}`) })?.messageID).toBe(
+        "msg-api-1",
+      )
+      expect(revealed).toEqual(["msg-api-1#part-api-1"])
+    })
   })
 
   test("resolves evidence lazily and navigates the specific resolved target", async () => {
