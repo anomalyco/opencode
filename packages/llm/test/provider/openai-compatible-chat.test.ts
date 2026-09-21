@@ -6,7 +6,7 @@ import { Auth, LLMClient } from "../../src/route"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
-import { dynamicResponse } from "../lib/http"
+import { dynamicResponse, fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
 const Json = Schema.fromJsonString(Schema.Unknown)
@@ -233,6 +233,41 @@ describe("OpenAI-compatible Chat route", () => {
       expect(response.text).toBe("Hello!")
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
       expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
+    }),
+  )
+
+  it.effect("ignores non-object keep-alive frames injected between deltas", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.succeed(
+              input.respond(
+                sseEvents(
+                  deltaChunk({ role: "assistant", content: "Hello" }),
+                  "null",
+                  deltaChunk({ content: "!" }),
+                  "null",
+                  deltaChunk({}, "stop"),
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello!")
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
+    }),
+  )
+
+  it.effect("fails on an object frame that is not a stream event", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(deltaChunk({ role: "assistant", content: "Hello" }), { choices: "nope" })
+      const error = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)), Effect.flip)
+
+      expect(error.message).toContain("Invalid deepseek/openai-compatible-chat stream event")
     }),
   )
 })
