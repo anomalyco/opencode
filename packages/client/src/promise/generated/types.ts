@@ -509,7 +509,12 @@ export type PromptAgentAttachment = { name: string; mention?: PromptMention }
 
 export type PromptSkillAttachment = { id: string; name: string; text?: string; mention?: PromptMention }
 
-export type SessionMessageAssistantText = { type: "text"; text: string; state?: SessionMessageProviderState }
+export type SessionMessageAssistantText = {
+  type: "text"
+  text: string
+  state?: SessionMessageProviderState
+  time?: { created: number; completed?: number }
+}
 
 export type SessionMessageAssistantReasoning = {
   type: "reasoning"
@@ -1354,7 +1359,12 @@ export type SessionToolCalled = {
   }
 }
 
-export type SessionMessageAssistantText1 = { type: "text"; text: string; state?: SessionMessageProviderState1 }
+export type SessionMessageAssistantText1 = {
+  type: "text"
+  text: string
+  state?: SessionMessageProviderState1
+  time?: { created: number; completed?: number }
+}
 
 export type SessionMessageAssistantReasoning1 = {
   type: "reasoning"
@@ -3102,7 +3112,12 @@ export type SessionImportInput = {
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
           readonly content: ReadonlyArray<
-            | { readonly type: "text"; readonly text: string; readonly state?: { readonly [x: string]: JsonValue } }
+            | {
+                readonly type: "text"
+                readonly text: string
+                readonly state?: { readonly [x: string]: JsonValue }
+                readonly time?: { readonly created: number; readonly completed?: number }
+              }
             | {
                 readonly type: "reasoning"
                 readonly text: string
@@ -3419,7 +3434,12 @@ export type SessionImportInput = {
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
           readonly content: ReadonlyArray<
-            | { readonly type: "text"; readonly text: string; readonly state?: { readonly [x: string]: JsonValue } }
+            | {
+                readonly type: "text"
+                readonly text: string
+                readonly state?: { readonly [x: string]: JsonValue }
+                readonly time?: { readonly created: number; readonly completed?: number }
+              }
             | {
                 readonly type: "reasoning"
                 readonly text: string
@@ -3736,7 +3756,12 @@ export type SessionImportInput = {
           readonly agent: string
           readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
           readonly content: ReadonlyArray<
-            | { readonly type: "text"; readonly text: string; readonly state?: { readonly [x: string]: JsonValue } }
+            | {
+                readonly type: "text"
+                readonly text: string
+                readonly state?: { readonly [x: string]: JsonValue }
+                readonly time?: { readonly created: number; readonly completed?: number }
+              }
             | {
                 readonly type: "reasoning"
                 readonly text: string

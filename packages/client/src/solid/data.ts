@@ -903,7 +903,7 @@ export function createData(config: CreateDataInput) {
         return
       case "session.text.started":
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
-          assistant.content.push({ type: "text", text: "" })
+          assistant.content.push({ type: "text", text: "", time: { created: event.created } })
         })
         return
       case "session.text.delta":
@@ -914,6 +914,7 @@ export function createData(config: CreateDataInput) {
       case "session.text.ended":
         message.editText(event.data.sessionID, event.data.assistantMessageID, (text) => {
           text.text = event.data.text
+          text.time = { created: text.time?.created ?? event.created, completed: event.created }
         })
         return
       case "session.tool.input.started":

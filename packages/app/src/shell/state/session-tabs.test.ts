@@ -68,6 +68,18 @@ describe("openSessionTab", () => {
       state(["file://a.ts", "file://b.ts"], "file://b.ts"),
     )
   })
+
+  test("places Performance after Context and before file tabs", () => {
+    expect(openSessionTab(state(["context", "file://a.ts"], "file://a.ts"), "performance")).toEqual(
+      state(["context", "performance", "file://a.ts"], "performance"),
+    )
+    expect(openSessionTab(state(["file://a.ts"], "file://a.ts"), "performance")).toEqual(
+      state(["performance", "file://a.ts"], "performance"),
+    )
+    expect(openSessionTab(state(["performance", "file://a.ts"], "performance"), "context")).toEqual(
+      state(["context", "performance", "file://a.ts"], "context"),
+    )
+  })
 })
 
 describe("closeSessionTab", () => {
