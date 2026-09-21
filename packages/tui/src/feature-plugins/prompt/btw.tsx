@@ -1,7 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
-import { createSignal, Show } from "solid-js"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { createMemo, createSignal, Show } from "solid-js"
 import { Spinner } from "../../component/spinner"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
@@ -97,6 +97,8 @@ export function Answer(props: {
   const overlay = useTheme()
   const syntax = useThemes().currentSyntax
   const config = useConfig().data
+  const dimensions = useTerminalDimensions()
+  const maxHeight = createMemo(() => Math.max(8, Math.floor(dimensions().height * 0.6)))
   const [copied, setCopied] = createSignal(false)
   let scroll: ScrollBoxRenderable | undefined
 
@@ -114,34 +116,31 @@ export function Answer(props: {
 
   useKeyboard((event) => {
     if (!scroll) return
-    if (event.name === "up") return scroll.scrollBy(-1)
-    if (event.name === "down") return scroll.scrollBy(1)
-    if (event.name === "pageup") return scroll.scrollBy(-20)
-    if (event.name === "pagedown") return scroll.scrollBy(20)
+    if (event.name === "up" || event.name === "k") return scroll.scrollBy(-1)
+    if (event.name === "down" || event.name === "j") return scroll.scrollBy(1)
+    if (event.name === "pageup") return scroll.scrollBy(-maxHeight())
+    if (event.name === "pagedown") return scroll.scrollBy(maxHeight())
     if (event.name === "home") return scroll.scrollTo(0)
     if (event.name === "end") return scroll.scrollTo(scroll.scrollHeight)
   })
 
   return (
-    <box gap={1}>
-      <box paddingLeft={2} paddingRight={2}>
-        <box flexDirection="row" justifyContent="space-between">
-          <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
-            /btw
-          </text>
-          <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
-            esc
-          </text>
-        </box>
-        <box paddingTop={1}>
-          <text fg={theme.text.muted} wrapMode="word">
-            {props.question}
-          </text>
-        </box>
+    <box gap={1} paddingBottom={1}>
+      <box flexDirection="row" gap={2} paddingLeft={2} paddingRight={2}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.base} flexShrink={0}>
+          /btw
+        </text>
+        <text fg={theme.text.muted} wrapMode="word" flexGrow={1}>
+          {props.question}
+        </text>
+        <text fg={theme.text.muted} flexShrink={0} onMouseUp={() => dialog.clear()}>
+          esc
+        </text>
       </box>
       <scrollbox
         ref={(element: ScrollBoxRenderable) => (scroll = element)}
-        maxHeight={20}
+        maxHeight={maxHeight()}
+        contentOptions={{ minHeight: 0 }}
         backgroundColor={overlay.background.raised.high}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={getScrollAcceleration(config)}
@@ -159,14 +158,14 @@ export function Answer(props: {
           />
         </box>
       </scrollbox>
-      <box flexDirection="row" gap={3} paddingLeft={2} paddingRight={2} paddingBottom={1}>
+      <box flexDirection="row" gap={3} paddingLeft={2} paddingRight={2}>
         <text onMouseUp={copy}>
           <span style={{ fg: copied() ? theme.text.feedback.success.base : theme.text.base }}>
             <b>{copied() ? "✓ copied" : "c"}</b>
           </span>
           <span style={{ fg: theme.text.muted }}>{copied() ? "" : " copy"}</span>
         </text>
-        <text fg={theme.text.muted}>↑/↓ scroll</text>
+        <text fg={theme.text.muted}>j/k ↑/↓ scroll</text>
       </box>
     </box>
   )
