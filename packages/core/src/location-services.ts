@@ -86,28 +86,40 @@ export function buildLocationServiceMap(
 ): Layer.Layer<LocationServiceMap.Service> {
   return Layer.effect(
     LocationServiceMap.Service,
-    LayerMap.make(
-      (ref: Location.Ref) => {
-        const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
-        // Apply replacements during hoist, not afterward: replacements can
-        // introduce new tagged dependencies (Location.boundNode depends on
-        // Project), and the hoist walk is the only pass that can still slice
-        // those back out.
-        const location = LayerNode.hoist(locationServices, Node.tags.values.global, allReplacements)
+    Effect.gen(function* () {
+      const map = yield* LayerMap.make(
+        (ref: Location.Ref) => {
+          const allReplacements = replacements.concat([[Location.node, Location.boundNode(ref)]])
+          // Apply replacements during hoist, not afterward: replacements can
+          // introduce new tagged dependencies (Location.boundNode depends on
+          // Project), and the hoist walk is the only pass that can still slice
+          // those back out.
+          const location = LayerNode.hoist(locationServices, Node.tags.values.global, allReplacements)
 
-        return LayerNode.compile(location.node).pipe(
-          Layer.fresh,
-          Layer.tap(() =>
-            Effect.logInfo("booting location services", {
-              directory: ref.directory,
-              workspaceID: ref.workspaceID,
-            }),
-          ),
-          Layer.provide(LayerNode.compile(location.hoisted)),
-        )
-      },
-      { idleTimeToLive: "60 minutes" },
-    ),
+          return LayerNode.compile(location.node).pipe(
+            Layer.fresh,
+            Layer.tap(() =>
+              Effect.logInfo("booting location services", {
+                directory: ref.directory,
+                workspaceID: ref.workspaceID,
+              }),
+            ),
+            Layer.provide(LayerNode.compile(location.hoisted)),
+          )
+        },
+        { idleTimeToLive: "60 minutes" },
+      )
+
+      // Windows paths are case-insensitive, but LayerMap keys use structural
+      // equality. Canonicalize every lookup so `C:\\Dev\\repo` and
+      // `C:\\dev\\repo` share one location service and one instruction state.
+      return {
+        ...map,
+        get: (ref: Location.Ref) => map.get(LocationServiceMap.normalize(ref)),
+        contextEffect: (ref: Location.Ref) => map.contextEffect(LocationServiceMap.normalize(ref)),
+        invalidate: (ref: Location.Ref) => map.invalidate(LocationServiceMap.normalize(ref)),
+      }
+    }),
   )
 }
 
