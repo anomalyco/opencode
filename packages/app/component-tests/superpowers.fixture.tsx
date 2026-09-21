@@ -38,7 +38,6 @@ import { ExecutionTaskDetails } from "../src/superpowers/task-details"
 import { ExecutionTaskList } from "../src/superpowers/task-list"
 import { SessionReviewToggle } from "../src/session/header/session-header-actions"
 import { ExecutionStatusBadge } from "../src/superpowers/status-badge"
-import { openExecutionOverview } from "../src/superpowers/home-summary"
 import { HomeSessions } from "../src/home/sessions/region"
 import { createHomeSessionsController } from "../src/home/sessions/controller"
 import { createHomeSessionSearchController } from "../src/home/sessions/search"
@@ -569,12 +568,14 @@ function homeFakeContext(input: {
   scenario: string
   connected: () => boolean
   verified: () => number
+  failSummaries: () => boolean
   onFullRun: () => void
 }) {
   const listeners = new Set<(event: OpenCodeEvent) => void>()
   const rpc = {
     getSummaries: async (request: { rootSessionIDs: string[] }) => {
-      if (input.scenario === "home-missing-plugin") throw { type: "rpc.method_not_found", message: "Unknown RPC method" }
+      if (input.scenario === "home-missing-plugin" || input.failSummaries())
+        throw { type: "rpc.method_not_found", message: "Unknown RPC method" }
       if (!request.rootSessionIDs.includes("root-tracked")) return { items: [] }
       return {
         items: [
@@ -672,11 +673,12 @@ function homeFakeController(ctx: unknown): HomeController {
 }
 
 function HomeDirectRoute(props: { scenario: string }) {
-  const [state, setState] = createStore({ fullRunFetches: 0, verified: 1, connection: true })
+  const [state, setState] = createStore({ fullRunFetches: 0, verified: 1, connection: true, failSummaries: false })
   const fake = homeFakeContext({
     scenario: props.scenario,
     connected: () => state.connection,
     verified: () => state.verified,
+    failSummaries: () => state.failSummaries,
     onFullRun: () => setState("fullRunFetches", (count) => count + 1),
   })
   const home = homeFakeController(fake.ctx)
@@ -708,6 +710,16 @@ function HomeDirectRoute(props: { scenario: string }) {
       <button type="button" data-testid="lose-connection" onClick={() => setState("connection", false)}>
         Lose connection
       </button>
+      <button
+        type="button"
+        data-testid="fail-summary"
+        onClick={() => {
+          setState("failSummaries", true)
+          fake.emit()
+        }}
+      >
+        Fail summary
+      </button>
       <div ref={content}>
         <HomeSessions sessions={sessions} search={search} scroll={scroll} />
       </div>
@@ -715,64 +727,9 @@ function HomeDirectRoute(props: { scenario: string }) {
   )
 }
 
-function destinationSession(input: { id: () => string; narrow: () => boolean; tabs: () => { active: string } }): SessionModel {
-  return {
-    identity: {
-      sessionID: input.id,
-      sessionKey: () => `${ServerConnection.key(desktopServer)}::${input.id()}`,
-      params: { id: input.id() },
-    },
-    shared: { data: { session: { get: () => undefined, message: { get: () => undefined } } } },
-    workspace: { directory: () => homeFixtureProject.worktree },
-    isDesktop: () => !input.narrow(),
-    layout: {
-      tabs: () => ({
-        active: () => input.tabs().active,
-        all: () => [input.tabs().active],
-        open: async () => undefined,
-      }),
-    },
-  } as unknown as SessionModel
-}
-
-function DestinationRoute(props: { scenario: string }) {
+function DestinationRoute() {
   const params = useParams<{ id: string }>()
-  const narrow = () => props.scenario === "home-narrow"
-  const [tabs, setTabs] = createStore({ active: "review" })
-  const [mobileTab, setMobileTab] = createSignal("session")
-  const [execution, setExecution] = createSignal<ExecutionModel>()
-  const session = destinationSession({ id: () => params.id, narrow, tabs: () => tabs })
-  return (
-    <>
-      <div data-testid="destination-session">{params.id}</div>
-      <div data-testid="destination-mobile-tab">{mobileTab()}</div>
-      <SessionExecutionProvider
-        session={session}
-        attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
-        onOverviewRequested={(model) =>
-          openExecutionOverview({
-            execution: model,
-            openTab: () => setTabs("active", "execution"),
-            showMobile: () => {
-              if (narrow()) setMobileTab("execution")
-            },
-          })
-        }
-        onModel={setExecution}
-      >
-        <Show when={execution()}>
-          {(model) => (
-            <>
-              <div data-testid="destination-subview">{model().subview()}</div>
-              <Show when={tabs.active === "execution"}>
-                <ExecutionPanel model={model()} presentation={narrow() ? "mobile" : "panel"} />
-              </Show>
-            </>
-          )}
-        </Show>
-      </SessionExecutionProvider>
-    </>
-  )
+  return <div data-testid="destination-session">{params.id}</div>
 }
 
 function HomeFixtureRoot(props: ParentProps) {
@@ -806,7 +763,7 @@ function mountHomeFixture(scenario: string) {
     () => (
       <MemoryRouter root={HomeFixtureRoot}>
         <Route path="/" component={() => <HomeDirectRoute scenario={scenario} />} />
-        <Route path="/server/:serverKey/session/:id" component={() => <DestinationRoute scenario={scenario} />} />
+        <Route path="/server/:serverKey/session/:id" component={DestinationRoute} />
       </MemoryRouter>
     ),
     host,
