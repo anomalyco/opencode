@@ -41,8 +41,7 @@ import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
 import { SESSION_EXECUTION_TAB } from "@/shell/state/session-tabs"
-import { SessionExecutionProvider } from "@/superpowers/session-execution"
-import { openExecutionOverview } from "@/superpowers/home-summary"
+import { createExecutionOverviewOpener, SessionExecutionOwner } from "@/superpowers/session-execution"
 import { createExecutionExpansion, executionPresentation } from "@/superpowers/expanded"
 import type { ExecutionModel } from "@/superpowers/model"
 
@@ -217,16 +216,8 @@ export function SessionScreen(props: { session: SessionModel }) {
     panelWidth: () => session.layout.view().reviewPanel.width(),
     resizePanel: (width) => session.layout.view().reviewPanel.resize(width),
   })
-  const showExecutionOverview = (model = execution()) => {
-    if (!model) return
-    openExecutionOverview({
-      execution: model,
-      openTab: () => void session.layout.tabs().open(SESSION_EXECUTION_TAB),
-      showMobile: () => {
-        if (!isDesktop()) review.mobile.setTab("execution")
-      },
-    })
-  }
+  const openExecution = createExecutionOverviewOpener({ session, mobile: review.mobile })
+  const showExecutionOverview = (model = execution()) => (model ? openExecution(model) : undefined)
   const selectMobileView = (view: SessionMobileView) => {
     if (view === "execution") {
       void session.layout.tabs().open(SESSION_EXECUTION_TAB)
@@ -393,11 +384,11 @@ export function SessionScreen(props: { session: SessionModel }) {
   )
 
   return (
-    <SessionExecutionProvider
+    <SessionExecutionOwner
       session={session}
       attention={executionAttention}
       reviewRequest={reviewNativeRequest}
-      onOverviewRequested={showExecutionOverview}
+      mobile={review.mobile}
       onModel={setExecution}
     >
       <div class="relative flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
@@ -624,6 +615,6 @@ export function SessionScreen(props: { session: SessionModel }) {
           </div>
         </Show>
       </div>
-    </SessionExecutionProvider>
+    </SessionExecutionOwner>
   )
 }

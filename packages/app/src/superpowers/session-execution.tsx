@@ -7,7 +7,7 @@ import { sessionHref } from "@/shell/routes/session"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { createSessionExecution } from "./bridge-client"
-import { consumeExecutionOverview } from "./home-summary"
+import { consumeExecutionOverview, openExecutionOverview } from "./home-summary"
 import { requestEvidenceReveal } from "./evidence-reveal"
 import { createExecutionPreferences } from "./preferences"
 import { createExecutionScope } from "./identity"
@@ -135,4 +135,43 @@ export function SessionExecutionProvider(
   })
   createEffect(() => props.onModel(execution))
   return props.children
+}
+
+export function createExecutionOverviewOpener(input: {
+  session: SessionModel
+  mobile: { setTab: (tab: "execution") => void }
+}) {
+  return (execution: ExecutionModel) =>
+    openExecutionOverview({
+      execution,
+      openTab: () => void input.session.layout.tabs().open(SESSION_EXECUTION_TAB),
+      showMobile: () => {
+        if (!input.session.isDesktop()) input.mobile.setTab("execution")
+      },
+    })
+}
+
+export function SessionExecutionOwner(
+  props: ParentProps<{
+    session: SessionModel
+    attention: Accessor<ExecutionAttention>
+    reviewRequest?: () => void
+    openSession?: (sessionID: string) => void
+    mobile: { setTab: (tab: "execution") => void }
+    onModel: (model: ExecutionModel) => void
+  }>,
+) {
+  const openOverview = createExecutionOverviewOpener({ session: props.session, mobile: props.mobile })
+  return (
+    <SessionExecutionProvider
+      session={props.session}
+      attention={props.attention}
+      reviewRequest={props.reviewRequest}
+      openSession={props.openSession}
+      onOverviewRequested={openOverview}
+      onModel={props.onModel}
+    >
+      {props.children}
+    </SessionExecutionProvider>
+  )
 }

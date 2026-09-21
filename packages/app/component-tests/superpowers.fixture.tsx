@@ -33,7 +33,7 @@ import type { TimelineSessionSource } from "../src/session/timeline/controller"
 import { createExecutionModel, type ExecutionAttention, type ExecutionModel, type ExecutionProgress } from "../src/superpowers/model"
 import { ExecutionActivityFeed } from "../src/superpowers/activity-feed"
 import { ExecutionAgentList } from "../src/superpowers/agent-list"
-import { SessionExecutionProvider } from "../src/superpowers/session-execution"
+import { SessionExecutionOwner, SessionExecutionProvider } from "../src/superpowers/session-execution"
 import { ExecutionTaskDetails } from "../src/superpowers/task-details"
 import { ExecutionTaskList } from "../src/superpowers/task-list"
 import { SessionReviewToggle } from "../src/session/header/session-header-actions"
@@ -727,9 +727,65 @@ function HomeDirectRoute(props: { scenario: string }) {
   )
 }
 
-function DestinationRoute() {
+function destinationSession(input: {
+  id: () => string
+  narrow: () => boolean
+  activeTab: () => string
+  openTab: (tab: string) => void
+}): SessionModel {
+  return {
+    identity: {
+      sessionID: input.id,
+      sessionKey: () => `${ServerConnection.key(desktopServer)}::${input.id()}`,
+      params: { id: input.id() },
+    },
+    shared: { data: { session: { get: () => undefined, message: { get: () => undefined } } } },
+    workspace: { directory: () => homeFixtureProject.worktree },
+    isDesktop: () => !input.narrow(),
+    layout: {
+      tabs: () => ({
+        active: input.activeTab,
+        all: () => [input.activeTab()],
+        open: async (tab: string) => input.openTab(tab),
+      }),
+    },
+  } as unknown as SessionModel
+}
+
+function DestinationRoute(props: { scenario: string }) {
   const params = useParams<{ id: string }>()
-  return <div data-testid="destination-session">{params.id}</div>
+  const narrow = () => props.scenario === "home-narrow"
+  const [state, setState] = createStore({ activeTab: "review", mobileTab: "session" })
+  const [execution, setExecution] = createSignal<ExecutionModel>()
+  const session = destinationSession({
+    id: () => params.id,
+    narrow,
+    activeTab: () => state.activeTab,
+    openTab: (tab) => setState("activeTab", tab),
+  })
+  return (
+    <>
+      <div data-testid="destination-session">{params.id}</div>
+      <div data-testid="destination-mobile-tab">{state.mobileTab}</div>
+      <SessionExecutionOwner
+        session={session}
+        attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
+        mobile={{ setTab: (tab) => setState("mobileTab", tab) }}
+        onModel={setExecution}
+      >
+        <Show when={execution()}>
+          {(model) => (
+            <>
+              <div data-testid="destination-subview">{model().subview()}</div>
+              <Show when={state.activeTab === SESSION_EXECUTION_TAB}>
+                <ExecutionPanel model={model()} presentation={narrow() ? "mobile" : "panel"} />
+              </Show>
+            </>
+          )}
+        </Show>
+      </SessionExecutionOwner>
+    </>
+  )
 }
 
 function HomeFixtureRoot(props: ParentProps) {
@@ -763,7 +819,7 @@ function mountHomeFixture(scenario: string) {
     () => (
       <MemoryRouter root={HomeFixtureRoot}>
         <Route path="/" component={() => <HomeDirectRoute scenario={scenario} />} />
-        <Route path="/server/:serverKey/session/:id" component={DestinationRoute} />
+        <Route path="/server/:serverKey/session/:id" component={() => <DestinationRoute scenario={scenario} />} />
       </MemoryRouter>
     ),
     host,
