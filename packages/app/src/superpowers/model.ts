@@ -209,6 +209,16 @@ export type ExecutionAttention = {
   blocked: number
 }
 
+export type ExecutionPreference = {
+  subview?: ExecutionSubview
+  taskID?: string
+}
+
+export type ExecutionPreferenceStore = {
+  get: (key: string) => ExecutionPreference | undefined
+  set: (key: string, value: ExecutionPreference) => void
+}
+
 export type ExecutionModelInput = {
   mode?: Accessor<ExecutionMode>
   scope?: Accessor<ExecutionScope | undefined>
@@ -221,6 +231,8 @@ export type ExecutionModelInput = {
   attention?: Accessor<ExecutionAttention>
   usage?: Accessor<UsageRecord[]>
   initialSubview?: ExecutionSubview
+  narrow?: Accessor<boolean>
+  preferences?: ExecutionPreferenceStore
   openSession?: (sessionID: string) => void
   resolveEvidence?: EvidenceResolver
   navigateEvidence?: EvidenceNavigator
@@ -270,26 +282,40 @@ const emptyAgents: ExecutionAgent[] = []
 const emptyAttention: ExecutionAttention = { stale: false, needsInput: 0, failed: 0, blocked: 0 }
 
 export function createExecutionModel(input: ExecutionModelInput = {}): ExecutionModel {
-  const initialSubview = () => input.initialSubview ?? defaultSubview(input)
   const rootKey = () => `${input.scope?.()?.serverKey ?? ""}\u0000${input.scope?.()?.rootSessionID ?? ""}`
-  const [subviewRoot, setSubviewRoot] = createSignal(rootKey())
-  const [activeSubview, setActiveSubview] = createSignal<ExecutionSubview>(initialSubview())
-  const [subviewMemory, setSubviewMemory] = createStore<Record<string, ExecutionSubview | undefined>>({})
-  const subview = () =>
-    subviewRoot() === rootKey() ? activeSubview() : (subviewMemory[rootKey()] ?? initialSubview())
-  const selectSubview = (next: ExecutionSubview) => {
-    if (subviewRoot() !== rootKey()) setSubviewRoot(rootKey())
-    setActiveSubview(next)
-    setSubviewMemory(rootKey(), next)
+  const preferenceKey = () => {
+    const current = input.scope?.()
+    return [
+      current?.serverKey ?? "",
+      current?.ownerDirectory ?? "",
+      current?.rootSessionID ?? "",
+      run()?.runID ?? "",
+    ].join("\u0000")
   }
-  const [taskRoot, setTaskRoot] = createSignal(rootKey())
-  const [activeTaskID, setActiveTaskID] = createSignal<string | undefined>()
+  const narrow = () => input.narrow?.() ?? false
+  const initialSubview = () => input.initialSubview ?? defaultSubview(input)
+  const [subviewMemory, setSubviewMemory] = createStore<Record<string, ExecutionSubview | undefined>>({})
+  const subview = () => {
+    const key = preferenceKey()
+    const explicit = subviewMemory[key] ?? input.preferences?.get(key)?.subview
+    if (explicit !== undefined) return explicit
+    if (narrow() && run() !== undefined) return "tasks"
+    return initialSubview()
+  }
+  const selectSubview = (next: ExecutionSubview) => {
+    const key = preferenceKey()
+    setSubviewMemory(key, next)
+    input.preferences?.set(key, { ...input.preferences?.get(key), subview: next })
+  }
   const [taskMemory, setTaskMemory] = createStore<Record<string, string | undefined>>({})
-  const selectedTaskID = () => (taskRoot() === rootKey() ? activeTaskID() : taskMemory[rootKey()])
+  const selectedTaskID = () => {
+    const key = preferenceKey()
+    return taskMemory[key] ?? input.preferences?.get(key)?.taskID
+  }
   const selectTask = (next: string | undefined) => {
-    if (taskRoot() !== rootKey()) setTaskRoot(rootKey())
-    setActiveTaskID(next)
-    setTaskMemory(rootKey(), next)
+    const key = preferenceKey()
+    setTaskMemory(key, next)
+    input.preferences?.set(key, { ...input.preferences?.get(key), taskID: next })
   }
   let observedRoot = rootKey()
   let expandedRoot: string | undefined
@@ -549,10 +575,6 @@ export function createExecutionModel(input: ExecutionModelInput = {}): Execution
     reviewRequest: () => input.reviewRequest?.(),
     reconcile: () => input.reconcile?.(),
   }
-}
-
-export function selectNarrowExecutionSubview(model: ExecutionModel) {
-  if (model.run() !== undefined && model.subview() === "map") model.selectSubview("tasks")
 }
 
 function controllerRank(rootSessionID: string | undefined, agent: ExecutionAgent) {

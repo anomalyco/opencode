@@ -43,7 +43,7 @@ import { createTimelineCache } from "./timeline/cache"
 import { SESSION_EXECUTION_TAB } from "@/shell/state/session-tabs"
 import { SessionExecutionProvider } from "@/superpowers/session-execution"
 import { createExecutionExpansion, executionPresentation } from "@/superpowers/expanded"
-import { selectNarrowExecutionSubview, type ExecutionModel } from "@/superpowers/model"
+import type { ExecutionModel } from "@/superpowers/model"
 
 const LazyExpandedExecution = lazy(async () => {
   const { ExpandedExecution } = await import("@/superpowers/expanded")
@@ -205,7 +205,7 @@ export function SessionScreen(props: { session: SessionModel }) {
     blocked: composer.requests.background.blocking().length,
   })
   const [execution, setExecution] = createSignal<ExecutionModel>()
-  const executionAvailable = () => execution()?.run() !== undefined
+  const executionAvailable = () => execution() !== undefined
   const executionSurface = () =>
     executionPresentation({ mobile: !isDesktop(), expanded: execution()?.expanded() ?? false })
   const executionExpansion = createExecutionExpansion({
@@ -226,8 +226,6 @@ export function SessionScreen(props: { session: SessionModel }) {
       void session.layout.tabs().open(SESSION_EXECUTION_TAB)
       review.mobile.setTab("execution")
       session.layout.view().terminal.close()
-      const model = execution()
-      if (model) selectNarrowExecutionSubview(model)
       return
     }
     if (view === "terminal") {

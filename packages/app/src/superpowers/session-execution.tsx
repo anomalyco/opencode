@@ -8,6 +8,7 @@ import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { createSessionExecution } from "./bridge-client"
 import { requestEvidenceReveal } from "./evidence-reveal"
+import { createExecutionPreferences } from "./preferences"
 import { createExecutionScope } from "./identity"
 import { createNativeBoundary, createNativeExecutionAdapter, messageHasPart, nativeState } from "./native-adapter"
 import { createNativeExecutionOwner } from "./native-execution"
@@ -95,6 +96,8 @@ export function createSessionExecutionModel(input: {
     events: sdk.event,
     connection: () => sdk.connection.status() === "connected",
     visible: () => input.session.layout.tabs().active() === SESSION_EXECUTION_TAB,
+    narrow: () => !input.session.isDesktop(),
+    preferences: createExecutionPreferences(),
     attention: input.attention,
     reviewRequest: input.reviewRequest,
     openSession: input.openSession,

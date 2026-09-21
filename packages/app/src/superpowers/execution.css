@@ -9,6 +9,7 @@
 .execution-panel__toolbar {
   display: flex;
   flex-shrink: 0;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   padding: 8px 12px;
@@ -16,6 +17,7 @@
 }
 
 .execution-panel__subview {
+  flex: 0 0 auto;
   height: 28px;
   padding: 0 10px;
   border-radius: 6px;

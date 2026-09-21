@@ -25,7 +25,8 @@ import { SessionMobileViewTabs, type SessionMobileView } from "../src/session/re
 import { sessionBrowserPaneVisible } from "../src/session/files/session-side-panel"
 import { ExecutionPanel } from "../src/superpowers/panel"
 import { ExpandedExecution, createExecutionExpansion } from "../src/superpowers/expanded"
-import { selectNarrowExecutionSubview } from "../src/superpowers/model"
+import { PlatformProvider } from "../src/runtime/platform/platform"
+import { createWebPlatform } from "../src/runtime/platform/web"
 import { MessageTimeline } from "../src/session/timeline/message-timeline"
 import type { TimelineSessionSource } from "../src/session/timeline/controller"
 import { createExecutionModel, type ExecutionAttention, type ExecutionModel, type ExecutionProgress } from "../src/superpowers/model"
@@ -314,35 +315,37 @@ function mountLiveSessionHeader(mode: string) {
   document.body.appendChild(host)
   const dispose = render(
     () => (
-      <LanguageProvider locale="en">
-        <UiI18nBridge>
-          <DialogProvider>
-            <QueryClientProvider client={desktopQueryClient}>
-              <SettingsProvider>
-                <ServersProvider servers={[desktopServer]}>
-                  <TabsProvider>
-                    <GlobalProvider>
-                      <ServerProvider conn={desktopServer}>
-                        <Switch>
-                          <Match when={mode === "evidence-production"}>
-                            <LiveEvidenceComposition />
-                          </Match>
-                          <Match when={mode === "session-execution-agents"}>
-                            <LiveAgentsComposition />
-                          </Match>
-                          <Match when={true}>
-                            <LiveExecutionHeader />
-                          </Match>
-                        </Switch>
-                      </ServerProvider>
-                    </GlobalProvider>
-                  </TabsProvider>
-                </ServersProvider>
-              </SettingsProvider>
-            </QueryClientProvider>
-          </DialogProvider>
-        </UiI18nBridge>
-      </LanguageProvider>
+      <PlatformProvider value={createWebPlatform("test").platform}>
+        <LanguageProvider locale="en">
+          <UiI18nBridge>
+            <DialogProvider>
+              <QueryClientProvider client={desktopQueryClient}>
+                <SettingsProvider>
+                  <ServersProvider servers={[desktopServer]}>
+                    <TabsProvider>
+                      <GlobalProvider>
+                        <ServerProvider conn={desktopServer}>
+                          <Switch>
+                            <Match when={mode === "evidence-production"}>
+                              <LiveEvidenceComposition />
+                            </Match>
+                            <Match when={mode === "session-execution-agents"}>
+                              <LiveAgentsComposition />
+                            </Match>
+                            <Match when={true}>
+                              <LiveExecutionHeader />
+                            </Match>
+                          </Switch>
+                        </ServerProvider>
+                      </GlobalProvider>
+                    </TabsProvider>
+                  </ServersProvider>
+                </SettingsProvider>
+              </QueryClientProvider>
+            </DialogProvider>
+          </UiI18nBridge>
+        </LanguageProvider>
+      </PlatformProvider>
     ),
     host,
   )
@@ -354,9 +357,10 @@ function mountLiveSessionHeader(mode: string) {
 
 let trackedModelSequence = 0
 
-function TrackedFixture(props: { host: HTMLElement }) {
+function TrackedFixture(props: { host: HTMLElement; lateRun: boolean }) {
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const [root, setRoot] = createSignal<"root" | "other-root">("root")
+  const [runAvailable, setRunAvailable] = createSignal(!props.lateRun)
   const [state, setState] = createStore({
     activeTab: "file://a.ts" as string | undefined,
     panelWidth: 600,
@@ -365,13 +369,14 @@ function TrackedFixture(props: { host: HTMLElement }) {
     replies: 0,
   })
   const scope = (): ExecutionScope => ({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: root() })
-  const run = () => (root() === "root" ? trackedRun() : undefined)
+  const run = () => (root() === "root" && runAvailable() ? trackedRun() : undefined)
   let requestRegion: HTMLDivElement | undefined
   trackedModelSequence += 1
   const modelInstance = trackedModelSequence
   const model = createExecutionModel({
     mode: () => (run() ? "ready" : "observer"),
     scope,
+    narrow: () => !isDesktop(),
     snapshot: run,
     agents: () => agentFixture("agents"),
     attention: () => ({ stale: false, needsInput: state.pendingQuestion ? 1 : 0, failed: 0, blocked: 0 }),
@@ -421,6 +426,9 @@ function TrackedFixture(props: { host: HTMLElement }) {
         <button type="button" onClick={() => setRoot((current) => (current === "root" ? "other-root" : "root"))}>
           Switch root
         </button>
+        <button type="button" onClick={() => setRunAvailable(true)}>
+          Register run
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -466,17 +474,10 @@ function TrackedFixture(props: { host: HTMLElement }) {
           <div data-testid="execution-mobile-composition">
             <SessionMobileViewTabs
               current={state.mobileTab}
-              executionAvailable={run() !== undefined}
-              onSelect={(view) => {
-                if (view === "execution") {
-                  selectNarrowExecutionSubview(model)
-                  setState("mobileTab", "execution")
-                  return
-                }
-                setState("mobileTab", view)
-              }}
+              executionAvailable={true}
+              onSelect={(view) => setState("mobileTab", view)}
             />
-            <Show when={state.mobileTab === "execution" && run() !== undefined}>
+            <Show when={state.mobileTab === "execution"}>
               <ExecutionPanel model={model} presentation="mobile" />
             </Show>
           </div>
@@ -492,18 +493,18 @@ function TrackedFixture(props: { host: HTMLElement }) {
   )
 }
 
-function mountTrackedFixture(rtl: boolean) {
+function mountTrackedFixture(input: { rtl: boolean; lateRun: boolean }) {
   const host = document.createElement("main")
   host.dataset.testid = "execution-fixture"
-  host.dir = rtl ? "rtl" : "ltr"
-  host.style.cssText = "position:fixed;inset:0;background:#181818;color:#eee;padding:12px"
+  host.dir = input.rtl ? "rtl" : "ltr"
+  host.style.cssText = "position:fixed;inset:0;overflow:auto;background:#181818;color:#eee;padding:12px"
   document.body.appendChild(host)
   render(
     () => (
       <LanguageProvider locale="en">
         <UiI18nBridge>
           <DialogProvider>
-            <TrackedFixture host={host} />
+            <TrackedFixture host={host} lateRun={input.lateRun} />
           </DialogProvider>
         </UiI18nBridge>
       </LanguageProvider>
@@ -517,8 +518,8 @@ export async function mountExecutionFixture(input: {
   scenario?: string
 } = {}): Promise<ReturnType<typeof render>> {
   const scenario = input.scenario ?? "observer"
-  if (scenario === "tracked" || scenario === "tracked-rtl") {
-    mountTrackedFixture(scenario === "tracked-rtl")
+  if (scenario === "tracked" || scenario === "tracked-rtl" || scenario === "tracked-late") {
+    mountTrackedFixture({ rtl: scenario === "tracked-rtl", lateRun: scenario === "tracked-late" })
     return undefined as unknown as ReturnType<typeof render>
   }
   if (

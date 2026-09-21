@@ -11,6 +11,7 @@ import {
   type ExecutionAttention,
   type ExecutionMode,
   type ExecutionModel,
+  type ExecutionPreferenceStore,
   type ExecutionReason,
 } from "./model"
 
@@ -55,6 +56,8 @@ export type SessionExecutionInput = {
   agents?: Accessor<ExecutionAgent[]>
   nativeComplete?: Accessor<boolean | undefined>
   attention?: Accessor<ExecutionAttention>
+  narrow?: Accessor<boolean>
+  preferences?: ExecutionPreferenceStore
   openSession?: (sessionID: string) => void
   resolveEvidence?: EvidenceResolver
   navigateEvidence?: EvidenceNavigator
@@ -409,6 +412,8 @@ export function createSessionExecution(input: SessionExecutionInput): SessionExe
     agents: input.agents,
     nativeComplete: input.nativeComplete,
     attention: input.attention,
+    narrow: input.narrow,
+    preferences: input.preferences,
     openSession: input.openSession,
     resolveEvidence: input.resolveEvidence,
     navigateEvidence: input.navigateEvidence,

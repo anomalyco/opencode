@@ -785,9 +785,9 @@ story("expanded execution returns to the request area without acknowledging", as
   await expect(banner).toBeVisible()
   await expect(page.getByTestId("question-reply-count")).toHaveText("0")
   await banner.getByRole("button", { name: "Return to request", exact: true }).click()
+  await expect(page.getByTestId("execution-expanded")).toHaveCount(0)
   await expect(page.getByTestId("native-request-region")).toBeFocused()
   await expect(page.getByTestId("question-reply-count")).toHaveText("0")
-  await expect(banner).toBeVisible()
 })
 
 story("expanded execution falls back when the saved focus target is disposed", async ({ page }) => {
@@ -812,6 +812,20 @@ story("expanded execution resets on a root switch without leaking the old transi
   await page.getByRole("button", { name: "Switch root", exact: true }).click()
   await expect(page.getByTestId("execution-scope-root")).toHaveText("root")
   await expect(page.getByTestId("selected-task")).toHaveText("api")
+})
+
+story("production session owner persists execution preferences per identity", async ({ page }) => {
+  await openExecutionFixture(page, "evidence-production")
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const raw = localStorage.getItem("opencode.global.dat:execution") ?? ""
+          return raw.includes("run-1") && raw.includes("task-api")
+        }),
+      { timeout: 10_000 },
+    )
+    .toBe(true)
 })
 
 story("mobile execution view is selectable and defaults to the task list at 390 px", async ({ page }) => {
@@ -839,20 +853,43 @@ story("execution presentation switches at the 768 px boundary and expands at 144
   await expect(page.getByTestId("execution-model-count")).toHaveText("1")
 })
 
-story("mobile execution controls work with 200% text zoom at 390 px", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 760 })
+story("mobile execution controls stay reachable at 200% zoom", async ({ page }) => {
+  await page.setViewportSize({ width: 195, height: 380 })
   await openExecutionFixture(page, "tracked")
-  await page.evaluate(() => {
-    document.documentElement.style.fontSize = "200%"
-  })
   await page.getByRole("tab", { name: "Execution", exact: true }).click()
+  await expect(page.getByTestId("execution-panel")).toHaveAttribute("data-presentation", "mobile")
+  for (const name of ["Map", "Agents", "Tasks", "Activity"]) {
+    const control = page.getByRole("button", { name, exact: true })
+    await expect(control).toBeVisible()
+    const box = await control.boundingBox()
+    expect(box!.x).toBeGreaterThanOrEqual(0)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(195)
+  }
+  await page.getByRole("button", { name: "Tasks", exact: true }).click()
   await expect(page.getByTestId("execution-tasks-list")).toBeVisible()
-  await page.getByRole("searchbox", { name: "Search tasks", exact: true }).fill("schema")
+  const search = page.getByRole("searchbox", { name: "Search tasks", exact: true })
+  await expect(search).toBeVisible()
+  await expect(page.getByLabel("Filter by state")).toBeVisible()
+  await expect(page.getByLabel("Filter by phase")).toBeVisible()
+  await search.fill("schema")
   await expect(page.getByTestId("execution-tasks-list").locator("li")).toHaveCount(1)
   await page
     .getByRole("button", { name: /Storage schema/ })
     .evaluate((element) => (element as HTMLElement).click())
   await expect(page.getByTestId("selected-task")).toHaveText("schema")
+})
+
+story("mobile execution adopts a run that arrives after the view opens", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 })
+  await openExecutionFixture(page, "tracked-late")
+  await page.getByRole("tab", { name: "Execution", exact: true }).click()
+  await expect(page.getByTestId("execution-panel")).toHaveAttribute("data-presentation", "mobile")
+  await expect(page.getByTestId("execution-tasks-list")).toHaveCount(0)
+  await expect(page.getByRole("tree", { name: "Agent tree" })).toBeVisible()
+  await page.getByRole("button", { name: "Register run", exact: true }).click()
+  await expect(page.getByTestId("execution-tasks-list")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Tasks", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("tree", { name: "Agent tree" })).toHaveCount(0)
 })
 
 story("mobile execution keeps one panel and works in rtl", async ({ page }) => {

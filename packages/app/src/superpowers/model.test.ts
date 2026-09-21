@@ -33,8 +33,8 @@ import {
   joinTaskAssignments,
   joinTaskEvidence,
   latestEvidenceForGate,
-  selectNarrowExecutionSubview,
   structuredViewsEnabled,
+  type ExecutionPreference,
   type ExecutionMode,
 } from "./model"
 import type { ExecutionScope } from "./identity"
@@ -798,14 +798,63 @@ describe("execution presentation preferences", () => {
       expect(model.expanded()).toBe(false)
     }))
 
-  test("narrow execution defaults from the map to the task list only when a run exists", () =>
+  test("defaults to the map on a wide presentation and to the task list when a narrow run arrives", () =>
     root(() => {
-      const withRun = createExecutionModel({ snapshot: () => runFixture() })
-      expect(withRun.subview()).toBe("map")
-      selectNarrowExecutionSubview(withRun)
-      expect(withRun.subview()).toBe("tasks")
-      const observer = createExecutionModel()
-      selectNarrowExecutionSubview(observer)
-      expect(observer.subview()).toBe("agents")
+      const [snapshot, setSnapshot] = createSignal<RunSnapshot | undefined>()
+      const [narrow, setNarrow] = createSignal(true)
+      const model = createExecutionModel({ snapshot, narrow })
+      expect(model.subview()).toBe("agents")
+      setSnapshot(runFixture())
+      expect(model.subview()).toBe("tasks")
+      model.selectSubview("map")
+      expect(model.subview()).toBe("map")
+      setSnapshot(runFixture({ revision: 9 }))
+      expect(model.subview()).toBe("map")
+      setNarrow(false)
+      expect(model.subview()).toBe("map")
+      expect(createExecutionModel({ snapshot: () => runFixture() }).subview()).toBe("map")
+      expect(createExecutionModel({ snapshot: () => runFixture(), narrow: () => true }).subview()).toBe("tasks")
+    }))
+
+  test("scopes preferences to server, owner directory, root, and run", () =>
+    root(() => {
+      const [scope, setScope] = createSignal<ExecutionScope>(rootScope("root"))
+      const [snapshot, setSnapshot] = createSignal<RunSnapshot | undefined>(runFixture({ runID: "run-a" }))
+      const model = createExecutionModel({ scope, snapshot })
+      model.selectSubview("tasks")
+      model.selectTask("api")
+      setSnapshot(runFixture({ runID: "run-b" }))
+      expect(model.subview()).toBe("map")
+      expect(model.selectedTaskID()).toBeUndefined()
+      setSnapshot(runFixture({ runID: "run-a" }))
+      expect(model.subview()).toBe("tasks")
+      expect(model.selectedTaskID()).toBe("api")
+      setScope({ serverKey: "wsl", ownerDirectory: "/root/git/other", rootSessionID: "root" })
+      expect(model.subview()).toBe("map")
+      expect(model.selectedTaskID()).toBeUndefined()
+    }))
+
+  test("round-trips preferences through the injected store, including the observer key", () =>
+    root(() => {
+      const entries = new Map<string, ExecutionPreference>()
+      const preferences = {
+        get: (key: string) => entries.get(key),
+        set: (key: string, value: ExecutionPreference) => entries.set(key, value),
+      }
+      const scope = () => ({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: "root" })
+      const first = createExecutionModel({ scope, snapshot: () => runFixture(), preferences })
+      first.selectSubview("activity")
+      first.selectTask("api")
+      expect(entries.size).toBe(1)
+      const [key] = [...entries.keys()]
+      expect(key?.split("\u0000")).toEqual(["wsl", "/root/git/demo", "root", "run-1"])
+      const restored = createExecutionModel({ scope, snapshot: () => runFixture(), preferences })
+      expect(restored.subview()).toBe("activity")
+      expect(restored.selectedTaskID()).toBe("api")
+      const observer = createExecutionModel({ scope, preferences })
+      observer.selectSubview("agents")
+      const observerKey = [...entries.keys()].at(-1)
+      expect(observerKey?.split("\u0000")).toEqual(["wsl", "/root/git/demo", "root", ""])
+      expect(createExecutionModel({ scope, preferences }).subview()).toBe("agents")
     }))
 })

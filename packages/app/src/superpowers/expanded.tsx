@@ -63,6 +63,14 @@ function returnFocus(target: HTMLElement | undefined, attempt = 0) {
 export function ExpandedExecution(props: { model: ExecutionModel; onClose: () => void }) {
   const language = useLanguage()
   const pending = () => props.model.attention().needsInput
+  const returnToRequest = () => {
+    props.onClose()
+    if (typeof requestAnimationFrame !== "function") {
+      props.model.reviewRequest()
+      return
+    }
+    requestAnimationFrame(() => props.model.reviewRequest())
+  }
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key !== "Escape" || event.defaultPrevented) return
     const target = event.target
@@ -97,7 +105,7 @@ export function ExpandedExecution(props: { model: ExecutionModel; onClose: () =>
               type="button"
               data-testid="execution-return-to-request"
               class="execution-expanded__action"
-              onClick={() => props.model.reviewRequest()}
+              onClick={returnToRequest}
             >
               {language.t("execution.expanded.returnToRequest")}
             </button>

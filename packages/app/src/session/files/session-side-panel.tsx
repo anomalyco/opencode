@@ -656,25 +656,28 @@ export function SessionSidePanel(props: {
                         </Tabs.Content>
                       </Show>
 
-                      <Show when={activeTab() === SESSION_EXECUTION_TAB && !props.execution.expanded()}>
+                      <Show when={activeTab() === SESSION_EXECUTION_TAB}>
                         <div
                           id={executionTabPanelID}
                           role="tabpanel"
                           aria-labelledby={executionTabID}
                           data-slot="tabs-content"
+                          data-expanded={props.execution.expanded()}
                           class="flex flex-col h-full overflow-hidden contain-strict"
                         >
-                          <Suspense
-                            fallback={
-                              <div class="p-3 text-12-regular text-text-weak">{language.t("execution.loading")}</div>
-                            }
-                          >
-                            <LazyExecutionPanel
-                              model={props.execution}
-                              presentation="panel"
-                              onExpand={props.onExpandExecution}
-                            />
-                          </Suspense>
+                          <Show when={!props.execution.expanded()}>
+                            <Suspense
+                              fallback={
+                                <div class="p-3 text-12-regular text-text-weak">{language.t("execution.loading")}</div>
+                              }
+                            >
+                              <LazyExecutionPanel
+                                model={props.execution}
+                                presentation="panel"
+                                onExpand={props.onExpandExecution}
+                              />
+                            </Suspense>
+                          </Show>
                         </div>
                       </Show>
 
