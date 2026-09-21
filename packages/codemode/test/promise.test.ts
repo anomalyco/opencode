@@ -730,7 +730,7 @@ describe("Promise.all over arbitrary arrays", () => {
 
   test("a non-collection argument is a clear error", async () => {
     const diagnostic = await error(`return await Promise.all(42)`)
-    expect(diagnostic.message).toContain("Promise.all expects an array")
+    expect(diagnostic.message).toContain("Promise.all expects a synchronous iterable, received a number")
   })
 
   test("exceeding maxToolCalls inside Promise.all is a ToolCallLimitExceeded diagnostic", async () => {
@@ -1131,8 +1131,25 @@ describe("unsupported promise surface", () => {
   })
 
   test("unknown Promise statics are not functions", async () => {
-    const diagnostic = await error(`return await Promise.withResolvers()`)
-    expect(diagnostic.message).toContain("Promise.withResolvers is not a function")
+    const diagnostic = await error(`return await Promise.try(() => 1)`)
+    expect(diagnostic.message).toContain("Promise.try is not a function")
+  })
+})
+
+describe("Promise.withResolvers", () => {
+  test("returns a pending promise with resolvers that settle it once and adopt thenables", async () => {
+    expect(
+      await value(`
+        const first = Promise.withResolvers()
+        first.resolve(Promise.resolve("adopted"))
+        first.resolve("ignored")
+        const second = Promise.withResolvers()
+        second.reject(new Error("no"))
+        let caught
+        try { await second.promise } catch (e) { caught = e.message }
+        return [Object.keys(first), first.promise instanceof Promise, await first.promise, caught]
+      `),
+    ).toEqual([["promise", "resolve", "reject"], true, "adopted", "no"])
   })
 })
 

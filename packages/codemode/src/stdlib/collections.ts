@@ -88,7 +88,7 @@ const constructMap = <R>(ctx: Interpreter<R>, init: Value, proto: Obj) => {
   return Effect.gen(function* () {
     const cursor = yield* ctx.iterate(init)
     if (cursor === undefined) {
-      throw typeError("new Map(...) expects an iterable of [key, value] pairs or no argument.")
+      throw typeError(`new Map(...) expects an iterable of [key, value] pairs, received ${describeValue(init)}.`)
     }
     while (true) {
       const step = yield* cursor.next
@@ -112,7 +112,7 @@ const constructSet = <R>(ctx: Interpreter<R>, init: Value, proto: Obj) => {
   return Effect.gen(function* () {
     const cursor = yield* ctx.iterate(init)
     if (cursor === undefined) {
-      throw typeError("new Set(...) expects a synchronous iterable or no argument.")
+      throw typeError(`new Set(...) expects a synchronous iterable, received ${describeValue(init)}.`)
     }
     while (true) {
       const step = yield* cursor.next

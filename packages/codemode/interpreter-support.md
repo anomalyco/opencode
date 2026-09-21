@@ -238,6 +238,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       resolving with the promise itself rejects with a `TypeError`. Resolver callables work anywhere callbacks are
       accepted, including `.then`/`.catch` handlers and collection callbacks, and vanish at the data boundary like
       any function.
+- [x] `Promise.withResolvers()`: the same promise and resolver callables as the constructor, as a `{ promise, resolve,
+    reject }` object.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
       constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
       first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
@@ -370,7 +372,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `JSON.stringify` function and array replacers. Function replacers receive `(key, value)` in preorder, including
       the root, but no `this` holder. Array replacers preserve requested property order, deduplicate names, coerce
       number primitives, and ignore non-string/non-number entries. Primitive wrapper entries remain unsupported.
-- [x] Captured `console.log`, `console.info`, `console.debug`, `console.warn`, and `console.error`.
+- [x] Captured `console.log`, `console.info`, `console.debug`, `console.warn`, and `console.error`. An Error prints as
+      `Error.prototype.toString` would show it (`Error: boom`), wherever it appears in the logged value.
 - [x] Captured `console.dir` and `console.table`.
 
 ## Date

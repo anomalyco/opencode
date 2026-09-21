@@ -5,7 +5,7 @@ import { CallSite, Throw, rangeError, typeError } from "./model.js"
 import { Callable, define, get, hidden, Arr, Fn, Obj, PromiseObj, record, type Value } from "./objects.js"
 import { constructor, fn, methods, native, receiver, requiresNew } from "./native.js"
 import { createAggregateErrorValue, locate, materialize, normalizeError } from "./errors.js"
-import { typeofValue } from "./references.js"
+import { describeValue, typeofValue } from "./references.js"
 import { applyCollectionCallback, isSupportedCallback } from "./callback.js"
 import type { Interpreter } from "./interpreter.js"
 
@@ -136,7 +136,7 @@ export const resolvePromise = <R>(ctx: Interpreter<R>, value: Value): Effect.Eff
   return ctx.pending.createWithSelf((self) => resolvePromiseValue(ctx, value, self))
 }
 
-const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject"] as const
+const promiseStatics = ["all", "allSettled", "race", "any", "resolve", "reject", "withResolvers"] as const
 
 const invokePromiseMethod = <R>(
   ctx: Interpreter<R>,
@@ -149,11 +149,18 @@ const invokePromiseMethod = <R>(
   if (name === "reject") {
     return ctx.pending.create(Effect.fail(new Throw(args[0])))
   }
+  if (name === "withResolvers") {
+    return Effect.map(promiseCapability(ctx), (made) =>
+      record(ctx.builtins.Object, { promise: made.promise, resolve: made.resolve, reject: made.reject }),
+    )
+  }
 
   return ctx.pending.create(
     Effect.gen(function* () {
       const cursor = yield* ctx.iterate(args[0])
-      if (cursor === undefined) throw typeError(`Promise.${name} expects an array or other synchronous iterable.`)
+      if (cursor === undefined) {
+        throw typeError(`Promise.${name} expects a synchronous iterable, received ${describeValue(args[0])}.`)
+      }
       const items: Array<PromiseObj> = []
       while (true) {
         const step = yield* cursor.next
@@ -237,23 +244,30 @@ const instanceMethod = <R>(
   return chainReaction(ctx, promise, onFulfilled, onRejected, method)
 }
 
-const constructPromise = <R>(ctx: Interpreter<R>, executor: Value): Effect.Effect<PromiseObj, unknown, R> => {
-  if (!(executor instanceof Fn)) {
-    throw typeError("new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).")
-  }
-  return Effect.gen(function* () {
+/** NewPromiseCapability: a pending promise with the resolve/reject callables that settle it exactly once. */
+const promiseCapability = <R>(ctx: Interpreter<R>) =>
+  Effect.gen(function* () {
     const deferred = Deferred.makeUnsafe<Value, unknown>()
     const promise = yield* ctx.pending.createWithSelf((self) =>
       Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(ctx, value, self)),
     )
     const resolve = capability(ctx, "resolve", (value) => Deferred.doneUnsafe(deferred, Exit.succeed(value)))
     const reject = capability(ctx, "reject", (value) => Deferred.doneUnsafe(deferred, Exit.fail(new Throw(value))))
-    const executed = yield* Effect.exit(ctx.call(executor, undefined, [resolve, reject]))
+    return { promise, resolve, reject, deferred }
+  })
+
+const constructPromise = <R>(ctx: Interpreter<R>, executor: Value): Effect.Effect<PromiseObj, unknown, R> => {
+  if (!(executor instanceof Fn)) {
+    throw typeError("new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).")
+  }
+  return Effect.gen(function* () {
+    const made = yield* promiseCapability(ctx)
+    const executed = yield* Effect.exit(ctx.call(executor, undefined, [made.resolve, made.reject]))
     if (!Exit.isSuccess(executed)) {
       if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
-      Deferred.doneUnsafe(deferred, Exit.fail(Cause.squash(executed.cause)))
+      Deferred.doneUnsafe(made.deferred, Exit.fail(Cause.squash(executed.cause)))
     }
-    return promise
+    return made.promise
   })
 }
 

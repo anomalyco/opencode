@@ -26,9 +26,7 @@ const arrayLikeSource = (source: Value): { readonly length: number; readonly sou
     checkArrayLength(normalized)
     return { length: normalized, source }
   }
-  throw invalidData(
-    `Array.from expects an array, string, Map, Set, or array-like value, received ${describeValue(source)}.`,
-  )
+  throw invalidData(`Array.from expects an iterable or array-like value, received ${describeValue(source)}.`)
 }
 
 const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Value, unknown, R> => {
@@ -40,7 +38,9 @@ const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Va
     const cursor = yield* ctx.iterate(source)
     if (cursor === undefined) {
       if (source instanceof GeneratorObj) {
-        throw typeError("Array.from expects a synchronous iterable or array-like value.")
+        throw typeError(
+          `Array.from expects a synchronous iterable or array-like value, received ${describeValue(source)}.`,
+        )
       }
       const arrayLike = arrayLikeSource(source)
       const values: Array<Value> = []

@@ -1293,6 +1293,13 @@ describe("Object.prototype.toString", () => {
   })
 })
 
+describe("console.log of errors", () => {
+  test("prints name and message, nested too", async () => {
+    const result = await run(`console.log(new Error("boom"), { e: new RangeError("r") })`)
+    expect(result.logs).toEqual(['Error: boom {"e":RangeError: r}'])
+  })
+})
+
 describe("toLocaleString", () => {
   test("numbers and dates format as en-US in UTC; everything else falls back to toString", async () => {
     expect(

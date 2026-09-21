@@ -129,6 +129,9 @@ export class ErrorObj extends Obj {
     if (shownName === "") return shownMessage
     return `${shownName}: ${shownMessage}`
   }
+  override inspect() {
+    return this.toString()
+  }
 }
 
 /** Interpreter machinery a program can hold but never inspect, serialize, or hand to the host. */
