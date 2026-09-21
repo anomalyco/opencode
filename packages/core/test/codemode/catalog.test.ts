@@ -120,23 +120,19 @@ describe("CodeModeInstructions.render", () => {
     expect(instructions).toContain("## Available tools")
     expect(instructions).toContain("- orders (1 tool)")
     expect(instructions).toContain(`  - ${lookup.signature} // Look up an order by ID`)
-    expect(instructions).not.toContain("## Search")
-    expect(instructions).toContain("The Code Mode tool catalog below is complete.")
-    expect(instructions).toContain("This catalog is the complete set of tools callable inside `execute`.")
-    expect(instructions).toContain("It does not affect tools exposed directly outside Code Mode.")
+    expect(instructions).not.toContain("search")
+    expect(instructions).toContain("They cannot be called directly. They only work inside code you pass to `execute`.")
+    expect(instructions).toContain("The catalog is complete. Do not guess tool names.")
   })
 
   test("adds search guidance when the catalog exceeds the budget", () => {
     const partial = render([lookup], 0)
     expect(partial).toContain("## Available tools")
     expect(partial).toContain("- orders (1 tool, none shown)")
-    expect(partial).toContain("## Search")
-    expect(partial).toContain("Call `search(...)` to discover exact paths and signatures for additional tools:")
-    expect(partial).toContain("The Code Mode tool catalog below is partial.")
+    expect(partial).toContain("They cannot be called directly, and neither can `search`.")
     expect(partial).toContain(
-      "The Code Mode catalog and `search` results are the complete set of tools callable inside `execute`.",
+      "The catalog is partial. To find a tool, call `search(...)` inside `execute`, then call the `path` it returns, also inside `execute`.",
     )
-    expect(partial).toContain("It does not affect tools exposed directly outside Code Mode.")
     expect(partial).toContain("- search(input: {")
     expect(partial).toContain("  /** @integer @exclusiveMinimum 0 */\n  limit?: number,")
     expect(partial).toContain("  /** @integer @minimum 0 */\n  offset?: number,")
@@ -158,7 +154,7 @@ describe("CodeModeInstructions.render", () => {
       { name: "beta", count: 1, entries: [] },
     ].reduce((total, namespace) => total + Math.round(CodeModeCatalog.namespaceLine(namespace).length / 4), 0)
     const instructions = render([cheapAlpha, expensive, cheapBeta], 40 + namespaceCost)
-    expect(instructions).toContain("## Search")
+    expect(instructions).toContain("The catalog is partial.")
     expect(instructions).toContain("- alpha (2 tools, 1 shown)")
     expect(instructions).toContain(`  - ${cheapAlpha.signature} // Cheap`)
     expect(instructions).not.toContain("tools.alpha.expensive(")
@@ -228,7 +224,7 @@ describe("CodeModeInstructions.update", () => {
     expect(text).toContain(
       "The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.",
     )
-    expect(text).toContain("## Search")
+    expect(text).toContain("The catalog is partial.")
     expect(text).toContain("## Available tools")
   })
 
@@ -237,7 +233,7 @@ describe("CodeModeInstructions.update", () => {
     const text = update([...previous, echo], [echo])
     expect(text).toContain("This catalog supersedes the previous Code Mode tool catalog.")
     expect(text).toContain("## Available tools")
-    expect(text).not.toContain("## Search")
+    expect(text).toContain("The catalog is complete.")
     expect(text).not.toContain("The following tools are no longer available")
   })
 

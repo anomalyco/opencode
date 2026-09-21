@@ -6,15 +6,13 @@ import { Instructions } from "../instructions/index.js"
 import { CodeModeCatalog } from "./catalog.js"
 
 // prettier-ignore
-const prompt = (hasMoreTools: boolean) => `The Code Mode tool catalog below is ${hasMoreTools ? "partial" : "complete"}.
+const prompt = (hasMoreTools: boolean) => `# Code Mode
 
-${hasMoreTools ? "The Code Mode catalog and `search` results are" : "This catalog is"} the complete set of tools callable inside \`execute\`. It does not affect tools exposed directly outside Code Mode.${hasMoreTools ? `
+Use the \`execute\` tool to call the tools listed below. They cannot be called directly${hasMoreTools ? ", and neither can \`search\`. Both" : ". They"} only work inside code you pass to \`execute\`.
 
-## Search
+${hasMoreTools ? `The catalog is partial. To find a tool, call \`search(...)\` inside \`execute\`, then call the \`path\` it returns, also inside \`execute\`. Do not guess tool names.
 
-Call \`search(...)\` to discover exact paths and signatures for additional tools:
-
-- ${searchSignature}` : ""}
+- ${searchSignature}` : "The catalog is complete. Do not guess tool names."}
 
 ## Available tools`
 
