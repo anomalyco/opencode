@@ -39,6 +39,17 @@ export type Payload<D extends Definition = Definition> = {
   readonly metadata?: Record<string, unknown>
 }
 
+/** A durable, sequence-preserving marker for a replaced event snapshot. */
+export const Compacted = define({
+  type: "event.compacted",
+  durable: { version: 1, aggregate: "aggregateID" },
+  schema: {
+    aggregateID: Schema.String,
+    supersededType: Schema.String,
+    supersededBy: Schema.String,
+  },
+})
+
 export function define<
   const Type extends string,
   const Fields extends Readonly<Record<PropertyKey, Schema.Codec<unknown, unknown>>>,

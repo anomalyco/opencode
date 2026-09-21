@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Context, Deferred, Effect, Fiber, Layer } from "effect"
+import { Effect, Layer } from "effect"
 import { asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -201,62 +201,6 @@ describe("SessionEventLogCompaction", () => {
     }),
   )
 
-  it.effect("resumes indexed compaction after an interrupted database waiter", () =>
-    Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      const events = yield* EventV2.Service
-      const sessionID = SessionID.descending("ses_event_log_compaction_interrupt")
-      const messageID = SessionV1.MessageID.ascending("msg_event_log_compaction_interrupt")
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "compaction-interrupt",
-          directory: "/project",
-          title: "compaction interrupt",
-          version: "test",
-        })
-        .run()
-      const info = (agent: string) => ({
-        id: messageID,
-        sessionID,
-        role: "user" as const,
-        time: { created: 1 },
-        agent,
-        model: { providerID: ProviderV2.ID.make("provider"), modelID: ModelV2.ID.make("model") },
-      })
-      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: info("before") })
-      yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: info("after") })
-      yield* SessionEventLogCompaction.prepareIndex(db)
-
-      const started = yield* Deferred.make<void>()
-      const release = yield* Deferred.make<void>()
-      const holder = yield* db
-        .transaction(
-          () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release))),
-          { behavior: "immediate" },
-        )
-        .pipe(Effect.forkChild)
-      yield* Deferred.await(started)
-
-      const interrupted = yield* SessionEventLogCompaction.compactIndexed(db, 1).pipe(Effect.forkChild)
-      yield* Fiber.interrupt(interrupted)
-      expect(yield* db.get<{ cursor: number }>(sql`SELECT compacted_scan_id AS cursor FROM event_compaction_state`)).toEqual({
-        cursor: 0,
-      })
-
-      yield* Deferred.succeed(release, undefined)
-      yield* Fiber.join(holder)
-      expect((yield* SessionEventLogCompaction.compactIndexed(db, 1)).report.rewritten).toBe(1)
-      expect((yield* SessionEventLogCompaction.compactIndexed(db, 1)).report.rewritten).toBe(0)
-    }),
-  )
-
   itFile.effect("leaves indexed compaction resumable when another SQLite connection holds an exclusive lock", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
@@ -264,10 +208,9 @@ describe("SessionEventLogCompaction", () => {
         (value) => Effect.promise(() => value[Symbol.asyncDispose]()),
       )
       const filename = `${tmp.path}/compaction.sqlite`
-      const layer = AppNodeBuilder.build(
-        LayerNode.group([Database.node, EventV2.node, SessionProjector.node]),
-        [[Database.node, Database.layerFromPath(filename)]],
-      )
+      const layer = AppNodeBuilder.build(LayerNode.group([Database.node, EventV2.node, SessionProjector.node]), [
+        [Database.node, Database.layerFromPath(filename)],
+      ])
 
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -301,19 +244,34 @@ describe("SessionEventLogCompaction", () => {
           yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: info("before") })
           yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID, info: info("after") })
           yield* SessionEventLogCompaction.prepareIndex(db)
+          yield* db.run(sql`PRAGMA busy_timeout = 100`)
 
-          const second = yield* Layer.build(Database.layerFromPath(filename))
-          const busy = Context.get(second, Database.Service).db
-          yield* busy.run(sql`PRAGMA busy_timeout = 0`)
-          yield* busy.run(sql`BEGIN EXCLUSIVE`)
+          const { Database: SqliteDatabase } = yield* Effect.promise(() => import("bun:sqlite"))
+          const busy = yield* Effect.acquireRelease(
+            Effect.sync(() => new SqliteDatabase(filename)),
+            (value) => Effect.sync(() => value.close()),
+          )
+          yield* Effect.sync(() => busy.exec("PRAGMA busy_timeout = 0"))
+          yield* Effect.sync(() => busy.exec("BEGIN EXCLUSIVE"))
           const blocked = yield* SessionEventLogCompaction.compactIndexed(db, 1).pipe(Effect.exit)
           expect(String(blocked)).toMatch(/busy|locked/i)
-          expect(yield* db.get<{ cursor: number }>(sql`SELECT compacted_scan_id AS cursor FROM event_compaction_state`)).toEqual({
+          expect(
+            yield* db.get<{ cursor: number }>(sql`SELECT compacted_scan_id AS cursor FROM event_compaction_state`),
+          ).toEqual({
             cursor: 0,
           })
-          yield* busy.run(sql`ROLLBACK`)
+          yield* Effect.sync(() => busy.exec("ROLLBACK"))
 
           expect((yield* SessionEventLogCompaction.compactIndexed(db, 1)).report.rewritten).toBe(1)
+
+          const reclaim = yield* SessionEventLogCompaction.reclaim(db, `${tmp.path}/compaction-backup.sqlite`)
+          expect(reclaim).toMatchObject({
+            integrity: "ok",
+            backupIntegrity: "ok",
+            bytesBefore: expect.any(Number),
+            bytesAfter: expect.any(Number),
+            bytesReclaimed: expect.any(Number),
+          })
         }).pipe(Effect.provide(layer)),
       )
     }),

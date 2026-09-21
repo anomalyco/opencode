@@ -651,15 +651,9 @@ export const dropIndex = Effect.fn("SessionEventLogCompaction.dropIndex")(functi
 })
 
 const size = Effect.fn("SessionEventLogCompaction.size")(function* (db: Database.Interface["db"]) {
-  const row = yield* db
-    .get<{ pageCount: number; pageSize: number }>(
-      sql`
-      SELECT (SELECT page_count FROM pragma_page_count) AS pageCount,
-             (SELECT page_size FROM pragma_page_size) AS pageSize
-    `,
-    )
-    .pipe(Effect.orDie)
-  return (row?.pageCount ?? 0) * (row?.pageSize ?? 0)
+  const pageCount = yield* db.all<Record<string, unknown>>(sql.raw("PRAGMA page_count")).pipe(Effect.orDie)
+  const pageSize = yield* db.all<Record<string, unknown>>(sql.raw("PRAGMA page_size")).pipe(Effect.orDie)
+  return Number(Object.values(pageCount[0] ?? {})[0] ?? 0) * Number(Object.values(pageSize[0] ?? {})[0] ?? 0)
 })
 
 const quickCheck = Effect.fn("SessionEventLogCompaction.quickCheck")(function* (

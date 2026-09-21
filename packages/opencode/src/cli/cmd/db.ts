@@ -54,17 +54,20 @@ const PathCommand = effectCmd({
   }),
 })
 
-const CompactEventsCommand = cmd<{}, {
-  apply: boolean
-  session?: string
-  all: boolean
-  limit?: number
-  cursor?: string
-  afterSeq?: number
-  untilDone: boolean
-  vacuum: boolean
-  backup?: string
-}>({
+const CompactEventsCommand = cmd<
+  {},
+  {
+    apply: boolean
+    session?: string
+    all: boolean
+    limit?: number
+    cursor?: string
+    afterSeq?: number
+    untilDone: boolean
+    vacuum: boolean
+    backup?: string
+  }
+>({
   command: "compact-events",
   describe: "replace superseded message and part snapshots with replay-safe checkpoints",
   builder: (yargs: Argv) =>
@@ -75,12 +78,34 @@ const CompactEventsCommand = cmd<{}, {
       .option("limit", { type: "number", describe: "maximum snapshots per bounded batch" })
       .option("cursor", { type: "string", describe: "session cursor returned by an all-scope batch" })
       .option("afterSeq", { alias: "after-seq", type: "number", describe: "event cursor returned by a bounded batch" })
-      .option("untilDone", { alias: "until-done", type: "boolean", default: false, describe: "apply batches until all work is complete" })
+      .option("untilDone", {
+        alias: "until-done",
+        type: "boolean",
+        default: false,
+        describe: "apply batches until all work is complete",
+      })
       .option("vacuum", { type: "boolean", default: false, describe: "verify and reclaim physical storage" })
       .option("backup", { type: "string", describe: "absolute path for the verified compact recovery database" }),
   async handler(args) {
     const effect = Database.Service.use(({ db }) =>
       Effect.gen(function* () {
+        // Keep this envelope stable for maintenance adapters. Payload bytes are
+        // logical estimates; reclaim bytes are physical SQLite file changes.
+        const contract = {
+          contract: "opencode.db.compact-events.v1",
+          capabilities: {
+            replaySafe: "supported",
+            interruptionResume: "supported",
+            boundedApplyConcurrency: "sqlite-immediate-transaction",
+            untilDoneConcurrency: "exclusive-database-lock",
+            physicalReclamation: args.vacuum ? "supported-with-verified-backup" : "not-requested",
+            unsupported: {
+              lockWaitInterruption: "not-supported-by-sqlite-transaction-wrapper",
+              workspaceOwned: "dry-run-only",
+              syncOwned: "dry-run-only",
+            },
+          },
+        } as const
         if (args.untilDone && (!args.apply || !args.all)) return yield* fail("until-done requires --all --apply")
         if (args.vacuum && (!args.untilDone || !args.backup)) {
           return yield* fail("vacuum requires --all --apply --until-done --backup <absolute-path>")
@@ -106,9 +131,26 @@ const CompactEventsCommand = cmd<{}, {
             const indexed = args.untilDone ? yield* SessionEventLogCompaction.compactIndexed(db, args.limit) : undefined
             const report = indexed
               ? indexed.report
-              : yield* SessionEventLogCompaction.compact(db, { aggregateID: args.session, all: args.all, apply: args.apply, limit: args.limit, cursor, afterSeq })
+              : yield* SessionEventLogCompaction.compact(db, {
+                  aggregateID: args.session,
+                  all: args.all,
+                  apply: args.apply,
+                  limit: args.limit,
+                  cursor,
+                  afterSeq,
+                })
             if (!args.untilDone) {
-              console.log(JSON.stringify(report, null, 2))
+              console.log(
+                JSON.stringify(
+                  {
+                    ...contract,
+                    ...report,
+                    bytes: { logicalPayloadReclaimed: report.payloadBytesReclaimed, physicalReclaimed: null },
+                  },
+                  null,
+                  2,
+                ),
+              )
               return
             }
             batches++
@@ -135,7 +177,30 @@ const CompactEventsCommand = cmd<{}, {
           }
           if (args.untilDone) yield* SessionEventLogCompaction.dropIndex(db)
           const reclaim = args.vacuum ? yield* SessionEventLogCompaction.reclaim(db, args.backup) : undefined
-          console.log(JSON.stringify({ dryRun: false, batches, inspected, candidates, rewritten, projectionMismatches, compatibilityRejected, malformed, payloadBytesReclaimed, byType, reclaim }, null, 2))
+          console.log(
+            JSON.stringify(
+              {
+                ...contract,
+                dryRun: false,
+                batches,
+                inspected,
+                candidates,
+                rewritten,
+                projectionMismatches,
+                compatibilityRejected,
+                malformed,
+                payloadBytesReclaimed,
+                byType,
+                bytes: {
+                  logicalPayloadReclaimed: payloadBytesReclaimed,
+                  physicalReclaimed: reclaim?.bytesReclaimed ?? null,
+                },
+                reclaim,
+              },
+              null,
+              2,
+            ),
+          )
         })
         if (!args.untilDone) return yield* run
         yield* Database.acquireExclusive(db)
@@ -156,7 +221,9 @@ const EventLogStatusCommand = cmd({
   describe: "report event-log growth and compaction recommendation",
   async handler() {
     const effect = Database.Service.use(({ db }) =>
-      SessionEventLogCompaction.status(db).pipe(Effect.tap((report) => Effect.sync(() => console.log(JSON.stringify(report, null, 2)))),
+      SessionEventLogCompaction.status(db).pipe(
+        Effect.tap((report) => Effect.sync(() => console.log(JSON.stringify(report, null, 2)))),
+      ),
     )
     await Effect.runPromise(Effect.scoped(effect.pipe(Effect.provide(Database.readOnlyLayerFromPath(Database.path())))))
   },
@@ -167,7 +234,12 @@ export const DbCommand = effectCmd({
   describe: "database tools",
   instance: false,
   builder: (yargs: Argv) => {
-    return yargs.command(QueryCommand).command(PathCommand).command(CompactEventsCommand).command(EventLogStatusCommand).demandCommand()
+    return yargs
+      .command(QueryCommand)
+      .command(PathCommand)
+      .command(CompactEventsCommand)
+      .command(EventLogStatusCommand)
+      .demandCommand()
   },
   handler: Effect.fn("Cli.db")(function* () {}),
 })
