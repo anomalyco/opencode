@@ -2,7 +2,6 @@
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
   "permission": {},
-  "plugins": ["opencode-gitlab-auth@3.0.0"],
   "references": {
     "effect": {
       "repository": "github.com/Effect-TS/effect-smol",
