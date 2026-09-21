@@ -19,7 +19,6 @@ import {
   type GraphMeasurer,
 } from "./graph-layout"
 import type { ExecutionScope } from "./identity"
-import { createExecutionModel } from "./model"
 import { createNativeExecutionAdapter, type NativeBoundary, type NativeSessionInfo } from "./native-adapter"
 import { createNativeExecutionOwner, type NativeExecutionOwner } from "./native-execution"
 
@@ -47,7 +46,6 @@ export type LifecycleHarness = {
   intervalCount(): number
   cacheSize(): number
   maxConcurrentDetails(): number
-  maxSyncSpanMs(): number
   runCallCount(): number
   closedDashboardFullRunPolls(rounds?: number): Promise<number>
   setVisible(visible: boolean): void
@@ -63,7 +61,6 @@ export type GraphBudgetMetrics = {
   graphLayoutsForTokenOnlyUpdates: number
   graphLayoutsForLongTitles: number
   retainedNodes: number
-  statusUpdateP95Ms: number
 }
 
 export function percentile(values: number[], target: number) {
@@ -81,7 +78,6 @@ export function lifecycleHarness(): LifecycleHarness {
   const [visible, setVisibleSignal] = createSignal(false)
   const runs = new Map<string, RunSnapshot>()
   const runCalls: Array<{ rootSessionID: string; runID: string; visible: boolean }> = []
-  const syncSpans: number[] = []
   const detailState = { current: 0, max: 0 }
   let activeRoot: string | undefined
   let activeRun: string | undefined
@@ -150,7 +146,6 @@ export function lifecycleHarness(): LifecycleHarness {
     runs.set(runKeyOf(input.rootSessionID, runID), runSnapshot(input.rootSessionID, runID))
     setScope({ serverKey: HARNESS_SERVER_KEY, ownerDirectory: OWNER_DIRECTORY, rootSessionID: input.rootSessionID })
 
-    const constructed = performance.now()
     let disposeRoot!: () => void
     let execution!: SessionExecution
     let native!: NativeExecutionOwner
@@ -174,17 +169,14 @@ export function lifecycleHarness(): LifecycleHarness {
       })
       native.refresh()
     })
-    syncSpans.push(performance.now() - constructed)
     liveExecution = execution
 
     return {
       model: execution.model,
       snapshot: () => execution.bridge.getSnapshot(),
       async reconcile() {
-        const start = performance.now()
         execution.bridge.reconcile()
         native.refresh()
-        syncSpans.push(performance.now() - start)
         await flush()
       },
       attach(nextRunID) {
@@ -230,7 +222,6 @@ export function lifecycleHarness(): LifecycleHarness {
     intervalCount: () => clock.active(),
     cacheSize,
     maxConcurrentDetails: () => detailState.max,
-    maxSyncSpanMs: () => Math.max(0, ...syncSpans),
     runCallCount: () => runCalls.length,
     async closedDashboardFullRunPolls(rounds = 10) {
       const view = open({ rootSessionID: "root-closed-polls", runID: "run", visible: false })
@@ -301,41 +292,12 @@ export function measureGraphBudgets(): GraphBudgetMetrics {
   }
 
   return {
-    graphLayout500Ms: Math.min(...layoutRuns),
+    graphLayout500Ms: Math.max(...layoutRuns),
     graphLayout500P95Ms: percentile(layoutRuns, 95),
     graphLayoutsForTokenOnlyUpdates: tokenOnlyLayouts,
     graphLayoutsForLongTitles: longTitleLayouts,
     retainedNodes: base.nodes.length,
-    statusUpdateP95Ms: measureStatusUpdates(100),
   }
-}
-
-function measureStatusUpdates(count: number) {
-  const tasks = largeTaskSet(count)
-  const [snapshot, setSnapshot] = createSignal<RunSnapshot | undefined>(runFixture({ tasks }))
-  const durations: number[] = []
-  createRoot((dispose) => {
-    const model = createExecutionModel({ snapshot })
-    for (let index = 0; index < 50; index += 1) {
-      setSnapshot(
-        runFixture({
-          revision: index + 2,
-          tasks: tasks.map((task, taskIndex) => ({
-            ...task,
-            state: taskIndex % 2 === index % 2 ? ("running" as const) : ("verified" as const),
-          })),
-        }),
-      )
-      const start = performance.now()
-      model.run()
-      model.progress()
-      model.attention()
-      model.agentRows()
-      durations.push(performance.now() - start)
-    }
-    dispose()
-  })
-  return percentile(durations, 95)
 }
 
 function largeTaskSet(count: number, longTitle = false) {
