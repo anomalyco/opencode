@@ -1,10 +1,11 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Effect, Option } from "effect"
+import { Effect, Tracer } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { Npm } from "@opencode-ai/core/npm"
+import { NpmConfig } from "@opencode-ai/core/npm-config"
 import { tmpdir } from "./fixture/tmpdir"
 
 const win = process.platform === "win32"
@@ -58,6 +59,54 @@ describe("Npm.add", () => {
 })
 
 describe("Npm.install", () => {
+  test("overrides package-lock=false in memory and skips reify on the second install", async () => {
+    await using tmp = await tmpdir()
+    await writePackage(tmp.path, {
+      name: "fixture",
+      dependencies: {
+        "prod-pkg": "file:./prod-pkg",
+      },
+    })
+    await fs.mkdir(path.join(tmp.path, "prod-pkg"))
+    await writePackage(path.join(tmp.path, "prod-pkg"), { name: "prod-pkg" })
+    const npmrc = "package-lock=false\n"
+    await Bun.write(path.join(tmp.path, ".npmrc"), npmrc)
+    expect((await Effect.runPromise(NpmConfig.load(tmp.path))).packageLock).toBe(false)
+
+    const spans: string[] = []
+    const install = Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      yield* npm.install(tmp.path)
+    }).pipe(
+      Effect.provide(npmLayer(path.join(tmp.path, "cache"))),
+      Effect.withTracer(
+        Tracer.make({
+          span(options) {
+            spans.push(options.name)
+            return new Tracer.NativeSpan(options)
+          },
+        }),
+      ),
+    )
+
+    await Effect.runPromise(install)
+
+    expect(spans.filter((name) => name === "Npm.reify")).toHaveLength(1)
+    expect(fs.stat(path.join(tmp.path, "node_modules", "prod-pkg"))).resolves.toBeDefined()
+    expect(await Bun.file(path.join(tmp.path, ".npmrc")).text()).toBe(npmrc)
+    expect(await Bun.file(path.join(tmp.path, "package-lock.json")).exists()).toBe(true)
+    const lock = await Bun.file(path.join(tmp.path, "package-lock.json")).json()
+    expect(lock.packages[""].dependencies).toEqual({ "prod-pkg": "file:./prod-pkg" })
+
+    spans.length = 0
+    await Effect.runPromise(install)
+
+    expect(spans).toContain("Npm.install")
+    expect(spans).not.toContain("Npm.reify")
+    expect(await Bun.file(path.join(tmp.path, ".npmrc")).text()).toBe(npmrc)
+    expect((await Effect.runPromise(NpmConfig.load(tmp.path))).packageLock).toBe(false)
+  })
+
   test("respects omit from project .npmrc", async () => {
     await using tmp = await tmpdir()
 
