@@ -335,6 +335,63 @@ story("session execution badge reports bridge failures while the execution tab i
   await expect(page.getByTestId("execution-status-badge")).toHaveAttribute("data-attention", "failed")
 })
 
+story("home leaves ordinary sessions unchanged", async ({ page }) => {
+  await openExecutionFixture(page, "home-mixed")
+  await expect(page.getByTestId("home-root-tracked").getByText("1/2", { exact: true })).toBeVisible()
+  await expect(page.getByTestId("home-root-ordinary").getByTestId("execution-summary")).toHaveCount(0)
+  await expect(page.getByTestId("full-run-fetch-count")).toHaveText("0")
+  await page.getByTestId("home-root-tracked").getByRole("button", { name: "Open execution overview" }).click()
+  await expect(page.getByTestId("navigation-target")).toHaveText("wsl/root-tracked/execution")
+})
+
+story("home summary shows a cancelled run without hiding its fraction", async ({ page }) => {
+  await openExecutionFixture(page, "home-cancelled")
+  const summary = page.getByTestId("home-root-tracked").getByTestId("execution-summary")
+  await expect(summary).toHaveAttribute("data-status", "cancelled")
+  await expect(summary.getByText("1/2", { exact: true })).toBeVisible()
+  await expect(summary.getByText("Cancelled", { exact: true })).toBeVisible()
+  await expect(page.getByTestId("home-root-ordinary").getByTestId("execution-summary")).toHaveCount(0)
+})
+
+story("home keeps ordinary rows when the plugin is missing", async ({ page }) => {
+  await openExecutionFixture(page, "home-missing-plugin")
+  await expect(page.getByTestId("home-root-tracked")).toBeVisible()
+  await expect(page.getByTestId("home-root-ordinary")).toBeVisible()
+  await expect(page.getByTestId("execution-summary")).toHaveCount(0)
+  await expect(page.getByTestId("full-run-fetch-count")).toHaveText("0")
+})
+
+story("home marks loaded summaries stale when the connection drops", async ({ page }) => {
+  await openExecutionFixture(page, "home-mixed")
+  const summary = page.getByTestId("home-root-tracked").getByTestId("execution-summary")
+  await expect(summary).toHaveAttribute("data-stale", "false")
+  await page.getByTestId("lose-connection").evaluate((element) => (element as HTMLElement).click())
+  await expect(summary).toHaveAttribute("data-stale", "true")
+  await expect(summary.getByText("Stale", { exact: true })).toBeVisible()
+  await expect(summary.getByText("1/2", { exact: true })).toBeVisible()
+})
+
+story("home rows stay editable while summaries update", async ({ page }) => {
+  await openExecutionFixture(page, "home-mixed")
+  const row = page.getByTestId("home-root-tracked")
+  await expect(row.getByText("1/2", { exact: true })).toBeVisible()
+  await row.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Rename" }).click()
+  const editor = row.locator('[data-component="home-session-rename"]')
+  await expect(editor).toBeVisible()
+  await editor.fill("Renamed controller")
+  await page.getByTestId("advance-summary").evaluate((element) => (element as HTMLElement).click())
+  await expect(editor).toHaveValue("Renamed controller")
+  await page.keyboard.press("Escape")
+  await expect(row.getByText("2/2", { exact: true })).toBeVisible()
+  await expect(row.getByTestId("execution-summary")).toBeVisible()
+})
+
+story("execution shortcut opens agents through the one-shot home handoff", async ({ page }) => {
+  await openExecutionFixture(page, "session-execution-handoff")
+  await expect(page.getByTestId("execution-tab-active")).toHaveText("execution")
+})
+
 story("desktop summary composition opens agents", async ({ page }) => {
   await openExecutionFixture(page, "desktop-summary")
   await page.getByRole("button", { name: "2 background tasks running", exact: true }).click()

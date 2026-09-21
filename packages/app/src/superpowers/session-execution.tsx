@@ -1,4 +1,4 @@
-import { createEffect, createMemo, onCleanup, type Accessor, type JSX, type ParentProps } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount, type Accessor, type JSX, type ParentProps } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { ExecutionRpc } from "@bearmanser/opencode-superpowers-execution/contract"
 import type { SessionModel } from "@/session/model"
@@ -7,6 +7,7 @@ import { sessionHref } from "@/shell/routes/session"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { createSessionExecution } from "./bridge-client"
+import { consumeExecutionOverview } from "./home-summary"
 import { requestEvidenceReveal } from "./evidence-reveal"
 import { createExecutionPreferences } from "./preferences"
 import { createExecutionScope } from "./identity"
@@ -90,7 +91,7 @@ export function createSessionExecutionModel(input: {
     })
     void navigate(`${sessionHref(server.key, reference.sessionID)}#message-${reference.messageID}`)
   }
-  return createSessionExecution({
+  const execution = createSessionExecution({
     scope,
     api: () => sdk.api.rpc(ExecutionRpc),
     events: sdk.event,
@@ -106,7 +107,13 @@ export function createSessionExecutionModel(input: {
     agents: () => agents(),
     nativeComplete: () => nativeExecution.snapshot()?.complete,
     retry: nativeExecution.refresh,
-  }).model
+  })
+  onMount(() => {
+    if (!consumeExecutionOverview(input.session.identity.sessionID())) return
+    execution.model.selectSubview("agents")
+    void input.session.layout.tabs().open(SESSION_EXECUTION_TAB)
+  })
+  return execution.model
 }
 
 export function SessionExecutionProvider(

@@ -1,10 +1,10 @@
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { DataProvider } from "@opencode/session-ui/context"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { Match, Show, Suspense, Switch, createEffect, createMemo, createSignal } from "solid-js"
+import { Match, Show, Suspense, Switch, createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
-import { LanguageProvider, UiI18nBridge } from "../src/runtime/i18n/language"
+import { LanguageProvider, UiI18nBridge, useLanguage } from "../src/runtime/i18n/language"
 import { ServerConnection, ServersProvider } from "../src/runtime/server/registry"
 import { GlobalProvider } from "../src/runtime/server/runtime"
 import { ServerProvider, useServer } from "../src/runtime/server/current"
@@ -37,6 +37,12 @@ import { ExecutionTaskDetails } from "../src/superpowers/task-details"
 import { ExecutionTaskList } from "../src/superpowers/task-list"
 import { SessionReviewToggle } from "../src/session/header/session-header-actions"
 import { ExecutionStatusBadge } from "../src/superpowers/status-badge"
+import { createHomeExecutionSummaries, requestExecutionOverview } from "../src/superpowers/home-summary"
+import type { ExecutionEventSource } from "../src/superpowers/bridge-client"
+import { HomeSessionsView } from "../src/home/sessions/view"
+import { buildHomeSessionRecords } from "../src/home/sessions/records"
+import type { HomeSessionGroup } from "../src/home/sessions/controller"
+import type { LocalProject } from "../src/shell/state/layout"
 import {
   agentFixture,
   failedTaskFixture,
@@ -52,7 +58,9 @@ import type { ExecutionPresentation } from "../src/superpowers/panel"
 import type { SessionModel } from "../src/session/model"
 import type { Project } from "../src/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, RpcCallOptions, RpcClient } from "@opencode/client/promise"
 import type { RunSnapshot, RunSummary } from "@bearmanser/opencode-superpowers-execution/contract"
+import { ExecutionRpc } from "@bearmanser/opencode-superpowers-execution/contract"
 
 type PendingRequest = { type: "permission" | "question"; owner: string }
 
@@ -129,6 +137,8 @@ function SeedProject() {
   return null
 }
 
+const [liveTabs, setLiveTabs] = createStore({ active: "review", all: ["review"] })
+
 const liveSession = {
   identity: { sessionID: () => "root", sessionKey: () => "wsl::root", params: { id: "root" } },
   shared: {
@@ -146,7 +156,17 @@ const liveSession = {
     },
   },
   workspace: { directory: () => "/root/git/demo" },
-  layout: { tabs: () => ({ active: () => "review", all: () => ["review"] }) },
+  isDesktop: () => true,
+  layout: {
+    tabs: () => ({
+      active: () => liveTabs.active,
+      all: () => liveTabs.all,
+      open: async (tab: string) => {
+        setLiveTabs("active", tab)
+        if (!liveTabs.all.includes(tab)) setLiveTabs("all", (all) => [...all, tab])
+      },
+    }),
+  },
 } as unknown as SessionModel
 
 const evidenceTimelineSession = {
@@ -250,7 +270,14 @@ function LiveExecutionHeader() {
         attention={() => ({ stale: false, needsInput: 0, failed: 0, blocked: 0 })}
         onModel={setExecution}
       >
-        <Show when={execution()}>{(model) => <SessionReviewToggle execution={model()} />}</Show>
+        <Show when={execution()}>
+          {(model) => (
+            <>
+              <div data-testid="execution-subview">{model().subview()}</div>
+              <SessionReviewToggle execution={model()} />
+            </>
+          )}
+        </Show>
       </SessionExecutionProvider>
     </>
   )
@@ -309,6 +336,7 @@ function LiveAgentsComposition() {
 
 function mountLiveSessionHeader(mode: string) {
   const restore = installExecutionTransport(mode === "evidence-production" ? halfVerifiedRun() : undefined)
+  if (mode === "session-execution-handoff") requestExecutionOverview("root")
   const host = document.createElement("main")
   host.dataset.testid = "execution-fixture"
   host.style.cssText = "position:fixed;inset:0;background:#181818;color:#eee;padding:24px"
@@ -513,11 +541,219 @@ function mountTrackedFixture(input: { rtl: boolean; lateRun: boolean }) {
   )
 }
 
+const homeFixtureProject: LocalProject = { id: "demo", worktree: "/root/git/demo", expanded: false }
+
+function homeFixtureSession(id: string, title: string): SessionInfo {
+  return {
+    id,
+    projectID: "demo",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1_700_000_000_000, updated: 1_700_000_000_000 },
+    title,
+    location: { directory: "/root/git/demo" },
+  } as unknown as SessionInfo
+}
+
+function homeFixtureSummary(input: { status: RunSummary["status"]; verified: number; total: number }): RunSummary {
+  return {
+    runID: "run-home",
+    rootSessionID: "root-tracked",
+    ownerDirectory: "/root/git/demo",
+    title: "Home fixture run",
+    status: input.status,
+    revision: 2,
+    updatedAt: 1_700_000_000_000,
+    planRevision: 1,
+    progress: {
+      verified: input.verified,
+      total: input.total,
+      skipped: 0,
+      failed: 0,
+      blocked: 0,
+      awaitingReview: 0,
+      percent: null,
+      source: "controller_report",
+    },
+  }
+}
+
+function HomeExecutionFixture(props: { scenario: string }) {
+  const language = useLanguage()
+  const [state, setState] = createStore({
+    navigationTarget: "",
+    fullRunFetches: 0,
+    verified: 1,
+    connection: true,
+  })
+  const sessions = [homeFixtureSession("root-tracked", "Tracked controller"), homeFixtureSession("root-ordinary", "Ordinary session")]
+  const records = buildHomeSessionRecords({
+    sessions: () => sessions,
+    projectDirectories: () => undefined,
+    projects: () => [homeFixtureProject],
+  })
+  const groups: HomeSessionGroup[] = [{ id: "today", title: "Today", sessions: records }]
+  const roots = records.map((record) => ({
+    serverKey: "wsl",
+    ownerDirectory: record.session.location.directory,
+    rootSessionID: record.session.id,
+  }))
+  const listeners = new Set<(event: OpenCodeEvent) => void>()
+  const api = {
+    getSummaries: async (input: { rootSessionIDs: string[] }) => {
+      if (props.scenario === "home-missing-plugin") throw { type: "rpc.method_not_found", message: "Unknown RPC method" }
+      if (!input.rootSessionIDs.includes("root-tracked")) return { items: [] }
+      return {
+        items: [
+          homeFixtureSummary({
+            status: props.scenario === "home-cancelled" ? "cancelled" : "active",
+            verified: state.verified,
+            total: 2,
+          }),
+        ],
+      }
+    },
+    getRun: async () => {
+      setState("fullRunFetches", (count) => count + 1)
+      throw new Error("Home summaries must not load a full run")
+    },
+    listRuns: async () => ({ items: [] }),
+    capabilities: async () => ({ schemaVersion: 1, pluginVersion: "0.1.0", maxTasks: 500, reporting: "controller" }),
+    events: { subscribe: () => ({}) as never, on: () => () => undefined },
+  } as unknown as RpcClient<typeof ExecutionRpc, RpcCallOptions>
+  const events: ExecutionEventSource = {
+    listen: (handler) => {
+      listeners.add(handler)
+      return () => listeners.delete(handler)
+    },
+  }
+  const summaries = createHomeExecutionSummaries({
+    serverKey: () => "wsl",
+    roots: () => roots,
+    api: () => api,
+    events: () => events,
+    connection: () => state.connection,
+  })
+  let homeRoot: HTMLDivElement | undefined
+  onMount(() => annotateHomeRows())
+  function annotateHomeRows() {
+    homeRoot?.querySelector('[data-session-id="root-tracked"]')?.setAttribute("data-testid", "home-root-tracked")
+    homeRoot?.querySelector('[data-session-id="root-ordinary"]')?.setAttribute("data-testid", "home-root-ordinary")
+  }
+  const emitChanged = () => {
+    const event = {
+      id: "event-home",
+      created: 1,
+      type: "rpc.superpowers.execution.v1.changed",
+      location: { directory: "/root/git/demo" },
+      data: { rootSessionID: "root-tracked", runID: "run-home", revision: 3 },
+    } as unknown as OpenCodeEvent
+    for (const handler of [...listeners]) handler(event)
+  }
+  return (
+    <>
+      <div data-testid="navigation-target">{state.navigationTarget}</div>
+      <div data-testid="full-run-fetch-count">{state.fullRunFetches}</div>
+      <button
+        type="button"
+        data-testid="advance-summary"
+        onClick={() => {
+          setState("verified", (value) => value + 1)
+          emitChanged()
+        }}
+      >
+        Advance summary
+      </button>
+      <button type="button" data-testid="lose-connection" onClick={() => setState("connection", false)}>
+        Lose connection
+      </button>
+      <div ref={homeRoot}>
+        <HomeSessionsView
+          language={language}
+          groups={groups}
+          loading={false}
+          showProjectName={false}
+          server={ServerConnection.Key.make("wsl")}
+          canCreateSession={false}
+          searchValue=""
+          searchPlaceholder="Search sessions"
+          searchOpen={false}
+          searchLoading={false}
+          searchResults={[]}
+          searchActive=""
+          searchNoResultsLabel="No results"
+          titleOpacity={() => 1}
+          isOpenTab={() => false}
+          onCreateSession={() => undefined}
+          onOpenSession={() => undefined}
+          onArchiveSession={async () => undefined}
+          onRenameSession={async () => true}
+          onExportSession={async () => undefined}
+          onDeleteSession={() => undefined}
+          onSetHoverTarget={() => undefined}
+          onSetThumbTrack={() => undefined}
+          onSetContent={() => undefined}
+          onSetHeader={() => undefined}
+          onWheel={() => undefined}
+          onSetSearchRoot={() => undefined}
+          onSetSearchInput={() => undefined}
+          onSetSearchList={() => undefined}
+          onSearchFocus={() => undefined}
+          onSearchInput={() => undefined}
+          onSearchClose={() => undefined}
+          onSearchMove={() => undefined}
+          onSearchSelectActive={() => undefined}
+          onSearchHighlight={() => undefined}
+          onSearchSelect={() => undefined}
+          executionSummary={(record) => summaries.summary(record.session.id)}
+          executionSummaryStale={summaries.stale()}
+          onOpenExecution={(record) => setState("navigationTarget", `wsl/${record.session.id}/execution`)}
+        />
+      </div>
+    </>
+  )
+}
+
+function mountHomeFixture(scenario: string) {
+  const host = document.createElement("main")
+  host.dataset.testid = "execution-fixture"
+  host.style.cssText = "position:fixed;inset:0;overflow:auto;background:#181818;color:#eee;padding:12px"
+  document.body.appendChild(host)
+  render(
+    () => (
+      <LanguageProvider locale="en">
+        <UiI18nBridge>
+          <DialogProvider>
+            <QueryClientProvider client={desktopQueryClient}>
+              <SettingsProvider>
+                <ServersProvider servers={[desktopServer]}>
+                  <TabsProvider>
+                    <GlobalProvider>
+                      <ServerProvider conn={desktopServer}>
+                        <HomeExecutionFixture scenario={scenario} />
+                      </ServerProvider>
+                    </GlobalProvider>
+                  </TabsProvider>
+                </ServersProvider>
+              </SettingsProvider>
+            </QueryClientProvider>
+          </DialogProvider>
+        </UiI18nBridge>
+      </LanguageProvider>
+    ),
+    host,
+  )
+}
+
 export async function mountExecutionFixture(input: {
   surface?: ExecutionPresentation
   scenario?: string
 } = {}): Promise<ReturnType<typeof render>> {
   const scenario = input.scenario ?? "observer"
+  if (scenario.startsWith("home-")) {
+    mountHomeFixture(scenario)
+    return undefined as unknown as ReturnType<typeof render>
+  }
   if (scenario === "tracked" || scenario === "tracked-rtl" || scenario === "tracked-late") {
     mountTrackedFixture({ rtl: scenario === "tracked-rtl", lateRun: scenario === "tracked-late" })
     return undefined as unknown as ReturnType<typeof render>
@@ -525,7 +761,8 @@ export async function mountExecutionFixture(input: {
   if (
     scenario === "session-execution-live" ||
     scenario === "evidence-production" ||
-    scenario === "session-execution-agents"
+    scenario === "session-execution-agents" ||
+    scenario === "session-execution-handoff"
   ) {
     mountLiveSessionHeader(scenario)
     return undefined as unknown as ReturnType<typeof render>

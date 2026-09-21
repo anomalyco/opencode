@@ -1,4 +1,6 @@
 import type { SessionInfo } from "@opencode/client/promise"
+import { ExecutionRpc } from "@bearmanser/opencode-superpowers-execution/contract"
+import { requestExecutionOverview } from "@/superpowers/home-summary"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Button } from "@opencode/ui/button"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
@@ -90,6 +92,25 @@ export function createHomeSessionsController(home: HomeController) {
   )
   const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
   const groups = createMemo(() => groupSessions(records(), language))
+  const openSession = (session: SessionInfo, options?: OpenSessionOptions) => {
+    const project = homeProjectForSession(session, home.project.list())
+    const conn = home.server.focused()
+    if (!conn) return
+    const connKey = ServerConnection.key(conn)
+    const directory = project?.worktree ?? session.location.directory
+    const ctx = home.server.focusedContext()
+    if (!ctx) return
+    if (!options?.background) void ctx.data.session.message.sync(session.id).catch(() => undefined)
+    // Commit cache/project changes with navigation instead of rebuilding
+    // the outgoing Home list before leaving it.
+    void startTransition(() => {
+      const tab = tabs.addSessionTab({ server: connKey, sessionId: session.id })
+      if (!options?.background) tabs.select(tab)
+      ctx.data.session.remember(session)
+      ctx.projects.open(directory)
+      if (!options?.background) ctx.projects.touch(directory)
+    })
+  }
   const prefetched = new Set<string>()
 
   createEffect(() => {
@@ -268,25 +289,7 @@ export function createHomeSessionsController(home: HomeController) {
         })[0]
       },
       create: home.project.openNewSession,
-      open: (session: SessionInfo, options?: OpenSessionOptions) => {
-        const project = homeProjectForSession(session, home.project.list())
-        const conn = home.server.focused()
-        if (!conn) return
-        const connKey = ServerConnection.key(conn)
-        const directory = project?.worktree ?? session.location.directory
-        const ctx = home.server.focusedContext()
-        if (!ctx) return
-        if (!options?.background) void ctx.data.session.message.sync(session.id).catch(() => undefined)
-        // Commit cache/project changes with navigation instead of rebuilding
-        // the outgoing Home list before leaving it.
-        void startTransition(() => {
-          const tab = tabs.addSessionTab({ server: connKey, sessionId: session.id })
-          if (!options?.background) tabs.select(tab)
-          ctx.data.session.remember(session)
-          ctx.projects.open(directory)
-          if (!options?.background) ctx.projects.touch(directory)
-        })
-      },
+      open: openSession,
       archive: async (session: SessionInfo) => {
         const conn = home.server.focused()
         const ctx = home.server.focusedContext()
@@ -308,6 +311,29 @@ export function createHomeSessionsController(home: HomeController) {
       export: exportSession,
       showDelete: (server: ServerConnection.Key, session: SessionInfo) =>
         dialog.show(() => <DeleteDialog server={server} session={session} />),
+    },
+    execution: {
+      api: () => home.server.focusedContext()?.sdk.api.rpc(ExecutionRpc),
+      events: () => home.server.focusedContext()?.sdk.event,
+      connection: () => home.server.focusedContext()?.sdk.connection.status() === "connected",
+      roots: () =>
+        groups().flatMap((group) =>
+          group.sessions.flatMap((record) =>
+            record.session.parentID
+              ? []
+              : [
+                  {
+                    serverKey: home.selection.value().server ?? "",
+                    ownerDirectory: record.session.location.directory,
+                    rootSessionID: record.session.id,
+                  },
+                ],
+          ),
+        ),
+      open: (record: HomeSessionRecord) => {
+        openSession(record.session)
+        requestExecutionOverview(record.session.id)
+      },
     },
     tab: {
       isOpen: (record: HomeSessionRecord) => {

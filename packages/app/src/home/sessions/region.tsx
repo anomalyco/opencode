@@ -2,6 +2,7 @@ import type { HomeScrollController } from "../scroll"
 import type { HomeSessionSearchController } from "./search"
 import type { HomeSessionsController } from "./controller"
 import { HomeSessionsView } from "./view"
+import { createHomeExecutionSummaries } from "@/superpowers/home-summary"
 import { Show } from "solid-js"
 
 export function HomeSessions(props: {
@@ -9,6 +10,13 @@ export function HomeSessions(props: {
   search: HomeSessionSearchController
   scroll: HomeScrollController
 }) {
+  const execution = createHomeExecutionSummaries({
+    serverKey: () => props.sessions.session.server(),
+    roots: props.sessions.execution.roots,
+    api: props.sessions.execution.api,
+    events: props.sessions.execution.events,
+    connection: props.sessions.execution.connection,
+  })
   return (
     <Show when={props.sessions.session.server()}>
       {(server) => (
@@ -28,6 +36,9 @@ export function HomeSessions(props: {
           searchNoResultsLabel={props.search.result.noResultsLabel()}
           titleOpacity={props.scroll.header.titleOpacity}
           isOpenTab={props.sessions.tab.isOpen}
+          executionSummary={(record) => execution.summary(record.session.id)}
+          executionSummaryStale={execution.stale()}
+          onOpenExecution={props.sessions.execution.open}
           onCreateSession={props.sessions.session.create}
           onOpenSession={props.sessions.session.open}
           onArchiveSession={props.sessions.session.archive}

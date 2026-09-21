@@ -859,6 +859,7 @@ export const dict = {
   "execution.agent.assignments.hide": "Hide earlier assignments",
   "execution.agent.assignments.show.one": "Show {{count}} earlier assignment",
   "execution.agent.assignments.show.other": "Show {{count}} earlier assignments",
+  "execution.home.stale": "Stale",
   "execution.status.open": "Open execution overview",
   "execution.status.normal": "Execution ready",
   "execution.status.stale": "Execution status stale",

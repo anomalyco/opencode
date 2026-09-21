@@ -1,4 +1,5 @@
 import type { SessionInfo } from "@opencode/client/promise"
+import type { RunSummary } from "@bearmanser/opencode-superpowers-execution/contract"
 import { Key } from "@solid-primitives/keyed"
 import { createMemo, For, Index, onCleanup, Show } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
@@ -14,6 +15,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { sessionLabel } from "@/session/title"
+import { ExecutionHomeSummary } from "@/superpowers/home-summary"
 import { shouldOpenSessionInBackground } from "./open"
 import "./view.css"
 import {
@@ -79,6 +81,9 @@ export type HomeSessionsViewProps = {
   onSearchSelectActive: () => void
   onSearchHighlight: (record: HomeSessionRecord) => void
   onSearchSelect: (record: HomeSessionRecord, options?: OpenSessionOptions) => void
+  executionSummary?: (record: HomeSessionRecord) => RunSummary | undefined
+  executionSummaryStale?: boolean
+  onOpenExecution?: (record: HomeSessionRecord) => void
 }
 
 // Session store updates recreate row components, so row-local state would
@@ -656,6 +661,15 @@ function HomeSessionRow(
             </Show>
           </div>
         </button>
+      </Show>
+      <Show when={!editor() ? props.executionSummary?.(props.record) : undefined}>
+        {(summary) => (
+          <ExecutionHomeSummary
+            summary={summary()}
+            stale={props.executionSummaryStale}
+            onOpen={() => props.onOpenExecution?.(props.record)}
+          />
+        )}
       </Show>
       <Menu
         modal={false}

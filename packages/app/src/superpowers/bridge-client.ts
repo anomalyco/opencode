@@ -450,7 +450,7 @@ function locationOptions(scope: ExecutionScope): RpcCallOptions {
   return { location: { directory: scope.ownerDirectory } }
 }
 
-function eventLocationDirectory(event: OpenCodeEvent) {
+export function eventLocationDirectory(event: OpenCodeEvent) {
   const location = (event as { location?: { directory?: string } }).location
   return location?.directory
 }
