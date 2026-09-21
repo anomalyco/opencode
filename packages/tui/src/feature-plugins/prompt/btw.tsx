@@ -69,7 +69,17 @@ export default Plugin.define({
                   .generate({ sessionID: route.sessionID, prompt: [instructions, question].join("\n\n") })
                   .then((result) => {
                     context.ui.dialog.show(() => (
-                      <Answer question={question} answer={result.text.trim()} markdown={plugins.markdown} />
+                      <Answer
+                        question={question}
+                        answer={result.text.trim()}
+                        markdown={plugins.markdown}
+                        onFork={async () => {
+                          const fork = await context.client.session.fork({ sessionID: route.sessionID })
+                          await context.client.session.prompt({ sessionID: fork.id, text: question })
+                          context.ui.dialog.clear()
+                          context.ui.router.navigate({ type: "session", sessionID: fork.id })
+                        }}
+                      />
                     ))
                     context.ui.dialog.set({ size: "large", centered: true })
                   })
@@ -89,6 +99,7 @@ export function Answer(props: {
   question: string
   answer: string
   markdown: ReturnType<typeof usePlugin>["markdown"]
+  onFork: () => Promise<void>
 }) {
   const dialog = useDialog()
   const toast = useToast()
@@ -98,6 +109,7 @@ export function Answer(props: {
   const syntax = useThemes().currentSyntax
   const config = useConfig().data
   const [copied, setCopied] = createSignal(false)
+  const [forking, setForking] = createSignal(false)
   let scroll: ScrollBoxRenderable | undefined
 
   const copy = () => {
@@ -107,9 +119,21 @@ export function Answer(props: {
       .catch(toast.error)
   }
 
+  const fork = async () => {
+    if (forking()) return
+    setForking(true)
+    await props
+      .onFork()
+      .catch(toast.error)
+      .finally(() => setForking(false))
+  }
+
   Keymap.createLayer(() => ({
     mode: "modal",
-    commands: [{ bind: "c", title: "Copy answer", group: "Dialog", run: copy }],
+    commands: [
+      { bind: "c", title: "Copy answer", group: "Dialog", run: copy },
+      { bind: "f", title: "Fork session", group: "Dialog", run: fork },
+    ],
   }))
 
   useKeyboard((event) => {
@@ -165,6 +189,12 @@ export function Answer(props: {
             <b>{copied() ? "✓ copied" : "c"}</b>
           </span>
           <span style={{ fg: theme.text.muted }}>{copied() ? "" : " copy"}</span>
+        </text>
+        <text onMouseUp={() => void fork()}>
+          <span style={{ fg: theme.text.base }}>
+            <b>{forking() ? "…" : "f"}</b>
+          </span>
+          <span style={{ fg: theme.text.muted }}>{forking() ? " forking" : " fork session"}</span>
         </text>
         <text fg={theme.text.muted}>↑/↓ scroll</text>
       </box>
