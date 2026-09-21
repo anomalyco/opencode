@@ -6,7 +6,7 @@ import {
   define,
   hidden,
   Arr,
-  IteratorObj,
+  hostIterator,
   RegExpObj,
   record,
   coerceToNumber,
@@ -272,11 +272,8 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   define(
     builtins.String,
     IteratorSymbol,
-    fn(
-      builtins,
-      "[Symbol.iterator]",
-      0,
-      (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "[Symbol.iterator]")[Symbol.iterator]()),
+    fn(builtins, "[Symbol.iterator]", 0, (thisValue) =>
+      hostIterator(builtins, self(thisValue, "[Symbol.iterator]")[Symbol.iterator]()),
     ),
     hidden,
   )

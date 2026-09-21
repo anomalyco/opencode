@@ -70,6 +70,9 @@ import {
   Callable,
   define,
   get,
+  hostCursor,
+  IteratorObj,
+  type Cursor,
   has,
   hasPrototype,
   keys,
@@ -301,6 +304,10 @@ export class Interpreter<R> {
 
   iterate(value: Value) {
     return this.root.iterate(value)
+  }
+
+  iterateDirect(value: Value) {
+    return this.root.iterateDirect(value)
   }
 
   /** Runs one host tool: arguments cross as JSON and the result comes back as program values. */
@@ -657,7 +664,7 @@ class Frame<R> {
       if (declared?.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
       const right = yield* self.evaluateExpression(node.right)
 
-      const cursor = self.hostCursor(right)
+      const cursor = self.builtinCursor(right)
       const iterator = cursor === undefined ? yield* self.customIterator(right, node, awaiting) : undefined
       if (iterator === undefined && cursor === undefined) {
         throw invalidData(
@@ -752,35 +759,47 @@ class Frame<R> {
     })
   }
 
-  iterate(value: Value, node?: AstNode) {
-    const cursor = this.hostCursor(value)
+  iterate(value: Value, node?: AstNode): Effect.Effect<Cursor<R> | undefined, unknown, R> {
+    const cursor = this.builtinCursor(value)
     if (cursor !== undefined) return Effect.succeed(cursor)
-    const self = this
     return Effect.map(this.customIterator(value, node, false), (iterator) =>
-      iterator === undefined
-        ? undefined
-        : {
-            next: self.nextIteratorResult(iterator, node, false),
-            close: Effect.suspend(() => self.closeIterator(iterator, node, false)),
-          },
+      iterator === undefined ? undefined : this.customCursor(iterator, node),
     )
   }
 
-  private hostCursor(value: Value) {
+  /** GetIteratorDirect: drive an iterator by its own `next`, without asking for `[Symbol.iterator]`. */
+  iterateDirect(value: Value, node?: AstNode): Cursor<R> {
+    if (value instanceof IteratorObj) return value.cursor as Cursor<R>
+    if (!(value instanceof Obj)) {
+      throw typeError(`An iterator must be an object, received ${describeValue(value)}.`, node)
+    }
+    return this.customCursor(
+      {
+        iterator: value,
+        next: this.requireIteratorMethod(get(value, "next"), "Iterator next", node),
+        asynchronous: false,
+      },
+      node,
+    )
+  }
+
+  private customCursor(iterator: CustomIterator, node: AstNode | undefined): Cursor<R> {
+    return {
+      next: this.nextIteratorResult(iterator, node, false),
+      close: Effect.suspend(() => this.closeIterator(iterator, node, false)),
+    }
+  }
+
+  private builtinCursor(value: Value): Cursor<R> | undefined {
+    // Natives build their cursors without knowing R, like `lift` in native.ts.
+    if (value instanceof IteratorObj) return value.cursor as Cursor<R>
     const iterator =
       typeof value === "string"
         ? value[Symbol.iterator]()
         : value instanceof Obj
           ? value.iterator(this.ctx.builtins)
           : undefined
-    if (iterator === undefined) return undefined
-    return {
-      next: Effect.sync(() => {
-        const step = iterator.next()
-        return { done: Boolean(step.done), value: step.value }
-      }),
-      close: Effect.void,
-    }
+    return iterator === undefined ? undefined : hostCursor(iterator)
   }
 
   private customIterator(value: Value, node: AstNode | undefined, allowAsync = true) {
@@ -1831,7 +1850,7 @@ class Frame<R> {
   private delegateYield(value: Value, node: AstNode): Effect.Effect<Value, unknown, R> {
     const self = this
     return Effect.gen(function* () {
-      const cursor = self.hostCursor(value)
+      const cursor = self.builtinCursor(value)
       if (cursor !== undefined) {
         while (true) {
           const step = yield* cursor.next

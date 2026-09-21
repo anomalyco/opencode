@@ -9,7 +9,8 @@ import {
   hidden,
   Arr,
   coerceToString,
-  IteratorObj,
+  hostCursor,
+  hostIterator,
   MapObj,
   Obj,
   PromiseObj,
@@ -177,9 +178,9 @@ export const mapGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").map.keys())],
-    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").map.values())],
-    ["entries", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "entries").iterator(builtins))],
+    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").map.keys())],
+    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").map.values())],
+    ["entries", 0, (thisValue) => hostIterator(builtins, self(thisValue, "entries").iterator(builtins))],
     [
       "forEach",
       1,
@@ -239,10 +240,15 @@ const loadSetRecord = <R>(
       size: Math.max(Math.trunc(size), 0),
       has: (item: Value) => Effect.map(ctx.call(has, source, [item]), Boolean),
       keys: () =>
-        Effect.flatMap(ctx.call(keys, source, []), (result): Effect.Effect<Iterable<Value>> => {
-          if (result instanceof IteratorObj) return Effect.succeed(result.source)
-          if (result instanceof Arr) return Effect.succeed(result.items)
-          throw typeError(`Set.${name} expected 'keys' to return an iterator.`)
+        Effect.gen(function* () {
+          const result = yield* ctx.call(keys, source, [])
+          const cursor = result instanceof Arr ? hostCursor(result.items.values()) : ctx.iterateDirect(result)
+          const items: Array<Value> = []
+          while (true) {
+            const step = yield* cursor.next
+            if (step.done) return items
+            items.push(step.value)
+          }
         }),
     }
   })
@@ -360,14 +366,14 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").set.values())],
-    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").set.values())],
+    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").set.values())],
+    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").set.values())],
     [
       "entries",
       0,
       (thisValue) =>
-        new IteratorObj(
-          builtins.Iterator,
+        hostIterator(
+          builtins,
           self(thisValue, "entries")
             .set.values()
             .map((item) => wrap([item, item])),
