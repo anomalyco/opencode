@@ -36,9 +36,9 @@ const WEEK_MS = 7 * DAY_MS
 // from both sources.
 const LIVE_SOURCE_START = "2026-08-11T10:57:48.186Z"
 
-// R2 SQL limits result sets to 10,000 rows and does not support OFFSET. Two
-// queries per day/week keep each result bounded and avoid combining the costly
-// distinct user/session aggregates with the high-cardinality geo dimensions.
+// R2 SQL results are cursor-paginated after aggregation. Separate usage and geo
+// queries per day/week avoid combining costly distinct user/session aggregates
+// with the high-cardinality geo dimensions.
 export function buildStatsQueries(periodStart: Date, periodEnd: Date, input?: StatsQuerySource) {
   const source = input ?? {
     namespace: Resource.R2Sql.namespace,
@@ -327,7 +327,6 @@ FROM filtered
 GROUP BY GROUPING SETS (
   ${groupingSets}
 )
-LIMIT 10000
 `
 }
 

@@ -2,6 +2,7 @@
 export const goModels = [
   { id: "kimi-k3", name: "Kimi K3", requests: 110, allowance: 15, featured: true },
   { id: "qwen3.8-max", name: "Qwen3.8 Max", requests: 160, allowance: 15 },
+  { id: "grok-4.7", name: "Grok 4.7", requests: 169, allowance: 15 },
   { id: "grok-4.6", name: "Grok 4.6", requests: 169, allowance: 15 },
   { id: "qwen3.7-max", name: "Qwen3.7 Max", requests: 170, allowance: 30 },
   { id: "glm-5.3", name: "GLM-5.3", requests: 220, allowance: 15 },
@@ -49,14 +50,5 @@ export const goModels = [
     requests: 45300,
     allowance: 60,
     regions: true,
-  },
-  {
-    id: "union-alpha",
-    name: "Union Alpha Free",
-    requests: Infinity,
-    allowance: Infinity,
-    featured: true,
-    fresh: true,
-    unlimited: true,
   },
 ].sort((a, b) => a.requests - b.requests)
