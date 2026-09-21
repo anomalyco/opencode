@@ -139,6 +139,60 @@ https://opencode.ai/zen/v1/models
 
 ---
 
+### Jev
+
+Jev é um modelo System One da TypeSafe AI para decisões rápidas e estruturadas. Em vez de gerar texto, ele avalia um `state` com base em perguntas tipadas e retorna valores e probabilidades que seu código pode usar diretamente. Ele é compatível com perguntas de sim/não (`noul`), de múltipla escolha (`choice`) e baseadas em critérios de avaliação (`score`).
+
+Use sua chave de API do OpenCode Zen com o endpoint `https://opencode.ai/zen/v1/systemone`. Este exemplo verifica se uma solicitação de suporte é urgente:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+Você pode fazer várias perguntas em uma única solicitação. Jev as avalia em paralelo e retorna cada resposta sob o ID da pergunta correspondente:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+Use `jev-1.13-free` em vez de `jev-1.13` para usar o modelo gratuito por tempo limitado. Consulte a [documentação da TypeSafe AI](https://docs.typesafe.ai/) para saber mais sobre os tipos de perguntas e os campos de resposta.
+
+---
+
 ## Preços
 
 Oferecemos um modelo pay-as-you-go. Abaixo estão os preços **por 1M tokens**.

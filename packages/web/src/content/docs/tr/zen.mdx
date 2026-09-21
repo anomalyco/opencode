@@ -139,6 +139,60 @@ https://opencode.ai/zen/v1/models
 
 ---
 
+### Jev
+
+Jev, hızlı ve yapılandırılmış kararlar için TypeSafe AI tarafından geliştirilen bir System One modelidir. Metin üretmek yerine bir `state` değerini türü belirlenmiş sorulara göre değerlendirir ve kodunuzun doğrudan kullanabileceği değerler ile olasılıklar döndürür. Evet/hayır (`noul`), çoktan seçmeli (`choice`) ve ölçüt tabanlı puanlama (`score`) sorularını destekler.
+
+OpenCode Zen API anahtarınızı `https://opencode.ai/zen/v1/systemone` uç noktasıyla kullanın. Bu örnek, bir destek isteğinin acil olup olmadığını denetler:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+Tek bir istekte birden fazla soru sorabilirsiniz. Jev bunları paralel olarak değerlendirir ve her yanıtı eşleşen soru ID'si altında döndürür:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+Sınırlı süreli ücretsiz modeli kullanmak için `jev-1.13` yerine `jev-1.13-free` kullanın. Soru türleri ve yanıt alanları hakkında ayrıntılar için [TypeSafe AI belgelerine](https://docs.typesafe.ai/) bakın.
+
+---
+
 ## Fiyatlandırma
 
 Kullandıkça öde modelini destekliyoruz. Aşağıda **1M token başına** fiyatlar yer alıyor.

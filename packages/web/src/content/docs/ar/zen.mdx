@@ -143,6 +143,60 @@ https://opencode.ai/zen/v1/models
 
 ---
 
+### Jev
+
+Jev هو نموذج System One من TypeSafe AI لاتخاذ قرارات سريعة ومنظّمة. بدلا من إنشاء نص، يقيّم `state` استنادا إلى أسئلة ذات أنواع محددة ويعيد قيما واحتمالات يمكن لكودك استخدامها مباشرة. يدعم أسئلة نعم/لا (`noul`)، والاختيار من متعدد (`choice`)، والأسئلة القائمة على معايير تقييم (`score`).
+
+استخدم مفتاح API الخاص بـ OpenCode Zen مع نقطة النهاية `https://opencode.ai/zen/v1/systemone`. يتحقق هذا المثال مما إذا كان طلب الدعم عاجلا:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+يمكنك طرح عدة أسئلة في طلب واحد. يقيّمها Jev بالتوازي ويعيد كل إجابة تحت معرّف السؤال المطابق:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+استخدم `jev-1.13-free` بدلا من `jev-1.13` لاستخدام النموذج المجاني المتاح لفترة محدودة. راجع [وثائق TypeSafe AI](https://docs.typesafe.ai/) لمعرفة تفاصيل أنواع الأسئلة وحقول الاستجابة.
+
+---
+
 ## التسعير
 
 ندعم نموذج الدفع حسب الاستخدام. فيما يلي الأسعار **لكل 1M tokens**.

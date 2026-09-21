@@ -144,6 +144,60 @@ https://opencode.ai/zen/v1/models
 
 ---
 
+### Jev
+
+Jev 是 TypeSafe AI 推出的一款 System One 模型，適合用於快速、結構化的決策。它不會產生文字，而是根據有型別的問題評估 `state`，並回傳可供程式碼直接使用的值與機率。它支援是／否問題（`noul`）、多選問題（`choice`），以及依評分標準判定的問題（`score`）。
+
+將你的 OpenCode Zen API 金鑰用於 `https://opencode.ai/zen/v1/systemone` 端點。以下範例會檢查支援請求是否緊急：
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+你可以在單一請求中提出多個問題。Jev 會平行評估這些問題，並將每個答案回傳到對應的問題 ID 下：
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+使用 `jev-1.13-free` 取代 `jev-1.13`，即可使用限時免費模型。如需問題類型與回應欄位的詳細資訊，請參閱 [TypeSafe AI 文件](https://docs.typesafe.ai/)。
+
+---
+
 ## 定價
 
 我們支援按量付費模式。以下是 **每 1M tokens** 的價格。

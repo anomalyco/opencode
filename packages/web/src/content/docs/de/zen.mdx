@@ -139,6 +139,60 @@ https://opencode.ai/zen/v1/models
 
 ---
 
+### Jev
+
+Jev ist ein System One-Modell von TypeSafe AI für schnelle, strukturierte Entscheidungen. Anstatt Text zu generieren, wertet es einen `state` anhand typisierter Fragen aus und gibt Werte und Wahrscheinlichkeiten zurück, die dein Code direkt verwenden kann. Es unterstützt Ja/Nein-Fragen (`noul`), Multiple-Choice-Fragen (`choice`) und bewertungsbasierte Fragen (`score`).
+
+Verwende deinen OpenCode Zen API-Key mit dem Endpunkt `https://opencode.ai/zen/v1/systemone`. Dieses Beispiel prüft, ob eine Supportanfrage dringend ist:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+Du kannst in einer Anfrage mehrere Fragen stellen. Jev wertet sie parallel aus und gibt jede Antwort unter der zugehörigen Frage-ID zurück:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+Verwende `jev-1.13-free` anstelle von `jev-1.13`, um das zeitlich begrenzt kostenlose Modell zu nutzen. Weitere Informationen zu Fragetypen und Antwortfeldern findest du in der [TypeSafe AI-Dokumentation](https://docs.typesafe.ai/).
+
+---
+
 ## Preise
 
 Wir unterstützen ein Pay-as-you-go-Modell. Unten findest du die Preise **pro 1M Tokens**.
