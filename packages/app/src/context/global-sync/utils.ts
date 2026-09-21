@@ -16,6 +16,7 @@ export function normalizeAgentList(input: AgentListOutput["data"] | Agent[]): Ag
   if (input.every((agent) => !("request" in agent))) return input as Agent[]
   return (input as AgentListOutput["data"]).map((agent) => ({
     name: agent.id,
+    native: "native" in agent ? agent.native : undefined,
     description: agent.description,
     mode: agent.mode,
     hidden: agent.hidden,

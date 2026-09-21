@@ -87,6 +87,7 @@ export const Plugin = define({
 
             const exists = draft.get(agentID) !== undefined
             draft.update(agentID, (agent) => {
+              if (!exists) agent.native = false
               if (!exists) agent.permissions.push(...permissions)
               if (item.model !== undefined) {
                 const model = ModelV2.parse(item.model)

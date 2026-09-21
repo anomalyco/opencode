@@ -119,6 +119,7 @@ export const Plugin = define({
 
     yield* ctx.agent.transform((draft) => {
       draft.update(AgentV2.defaultID, (item) => {
+        item.native = true
         item.description = "The default agent. Executes tools based on configured permissions."
         item.system ??= BUILD_SYSTEM
         item.mode = "primary"
@@ -131,6 +132,7 @@ export const Plugin = define({
       })
 
       draft.update(AgentV2.ID.make("plan"), (item) => {
+        item.native = true
         item.description = "Plan mode. Disallows all edit tools."
         item.mode = "primary"
         item.permissions.push(
@@ -150,6 +152,7 @@ export const Plugin = define({
       })
 
       draft.update(AgentV2.ID.make("general"), (item) => {
+        item.native = true
         item.description =
           "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
         item.mode = "subagent"
@@ -157,6 +160,7 @@ export const Plugin = define({
       })
 
       draft.update(AgentV2.ID.make("explore"), (item) => {
+        item.native = true
         item.description =
           'Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
         item.system = PROMPT_EXPLORE
@@ -178,6 +182,7 @@ export const Plugin = define({
       })
 
       draft.update(AgentV2.ID.make("compaction"), (item) => {
+        item.native = true
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_COMPACTION
@@ -185,6 +190,7 @@ export const Plugin = define({
       })
 
       draft.update(AgentV2.ID.make("title"), (item) => {
+        item.native = true
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_TITLE
@@ -192,6 +198,7 @@ export const Plugin = define({
       })
 
       draft.update(AgentV2.ID.make("summary"), (item) => {
+        item.native = true
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_SUMMARY

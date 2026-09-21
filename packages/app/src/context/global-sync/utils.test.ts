@@ -12,6 +12,7 @@ describe("normalizeAgentList", () => {
     const result = normalizeAgentList([
       {
         id: "build",
+        native: false,
         name: "Build",
         mode: "primary",
         hidden: false,
@@ -26,6 +27,7 @@ describe("normalizeAgentList", () => {
     expect(result).toEqual([
       {
         name: "build",
+        native: false,
         description: undefined,
         mode: "primary",
         hidden: false,
