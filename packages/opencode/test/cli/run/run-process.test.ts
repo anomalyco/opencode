@@ -120,8 +120,10 @@ describe("opencode run (non-interactive subprocess)", () => {
         for (const evt of events) {
           expect(typeof evt.type).toBe("string")
           expect(typeof evt.sessionID).toBe("string")
+          expect(typeof evt.timestamp).toBe("number")
+          expect(evt.sessionID).toBe(events[0]?.sessionID)
         }
-        expect(events.map((event) => event.type)).toEqual(["step_start", "text", "step_finish"])
+        expect(events.map((event) => event.type)).toEqual(["step_start", "text", "step_finish", "done"])
         expect(events.map(({ timestamp: _, sessionID: __, ...event }) => event)).toEqual([
           { type: "step_start", part: expect.objectContaining({ type: "step-start" }) },
           {
@@ -129,6 +131,7 @@ describe("opencode run (non-interactive subprocess)", () => {
             part: expect.objectContaining({ type: "text", text: "structured output" }),
           },
           { type: "step_finish", part: expect.objectContaining({ type: "step-finish" }) },
+          { type: "done", reason: "idle", rejected: [] },
         ])
         expect(result.stdout.endsWith("\n")).toBe(true)
         expect(
@@ -192,6 +195,7 @@ describe("opencode run (non-interactive subprocess)", () => {
           "step_start",
           "text",
           "step_finish",
+          "done",
         ])
         expect(events.find((event) => event.type === "reasoning")?.part).toEqual(
           expect.objectContaining({ type: "reasoning", text: "reasoning" }),
@@ -239,11 +243,98 @@ describe("opencode run (non-interactive subprocess)", () => {
           "step_start",
           "text",
           "step_finish",
+          "done",
         ])
         expect(events[1]?.part).toEqual(expect.objectContaining({ type: "text", text: "partial json" }))
         expect(events[5]?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "unknown" }))
         expect(events[7]?.part).toEqual(expect.objectContaining({ type: "text", text: "recovered" }))
-        expect(events.at(-1)?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "stop" }))
+        expect(events.at(-2)?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "stop" }))
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "--format json waits for continuation after stop with tool calls",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(
+          reply()
+            .tool("bash", { command: "printf tool", description: "Print deterministic output" })
+            .stop(),
+        )
+        yield* llm.text("after tool")
+        const result = yield* opencode.run("use a tool", {
+          format: "json",
+          extraArgs: ["--dangerously-skip-permissions"],
+        })
+        opencode.expectExit(result, 0)
+
+        const events = opencode.parseJsonEvents(result.stdout)
+        expect(events.map((event) => event.type)).toEqual([
+          "step_start",
+          "tool_use",
+          "step_finish",
+          "step_start",
+          "text",
+          "step_finish",
+          "done",
+        ])
+        expect(events[2]?.part).toEqual(expect.objectContaining({ type: "step-finish", reason: "stop" }))
+        expect(events[4]?.part).toEqual(expect.objectContaining({ type: "text", text: "after tool" }))
+        expect(events.at(-1)).toEqual({
+          type: "done",
+          timestamp: expect.any(Number),
+          sessionID: events[0]?.sessionID,
+          reason: "idle",
+          rejected: [],
+        })
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "--format json marks an empty command response as done",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(reply().stop())
+        const result = yield* opencode.run("", { command: "init", format: "json" })
+        opencode.expectExit(result, 0)
+
+        const events = opencode.parseJsonEvents(result.stdout)
+        expect(events.map((event) => event.type)).toEqual(["step_start", "step_finish", "done"])
+        expect(events.at(-1)).toEqual({
+          type: "done",
+          timestamp: expect.any(Number),
+          sessionID: events[0]?.sessionID,
+          reason: "idle",
+          rejected: [],
+        })
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "--format json includes auto-rejected permissions in done",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.tool("bash", { command: "printf denied", description: "Print deterministic output" })
+        yield* llm.text("continued after rejection")
+        const result = yield* opencode.run("request permission", {
+          format: "json",
+          permission: { bash: "ask" },
+        })
+        opencode.expectExit(result, 0)
+
+        const events = opencode.parseJsonEvents(result.stdout)
+        expect(events.map((event) => event.type)).toEqual(["step_start", "tool_use", "step_finish", "done"])
+        expect(events.at(-1)).toEqual({
+          type: "done",
+          timestamp: expect.any(Number),
+          sessionID: events[0]?.sessionID,
+          reason: "idle",
+          rejected: ["bash"],
+        })
+        expect(result.stderr).toContain("permission requested: bash")
       }),
     60_000,
   )
@@ -325,11 +416,12 @@ describe("opencode run (non-interactive subprocess)", () => {
     ({ llm, opencode }) =>
       Effect.gen(function* () {
         yield* llm.hang
-        const run = yield* opencode.startRun("wait forever")
+        const run = yield* opencode.startRun("wait forever", { format: "json" })
         yield* llm.wait(1)
         run.interrupt()
         const result = yield* run.result
 
+        expect(opencode.parseJsonEvents(result.stdout).some((event) => event.type === "done")).toBe(false)
         expect(result.exitCode).not.toBe(0)
         expect(result.durationMs).toBeLessThan(30_000)
       }),

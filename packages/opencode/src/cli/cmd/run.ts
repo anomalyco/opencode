@@ -697,6 +697,7 @@ export const RunCommand = effectCmd({
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
           const sessions = new Set([sessionID])
+          const rejected = new Set<string>()
           let error: string | undefined
 
           for await (const event of events.stream) {
@@ -795,7 +796,7 @@ export const RunCommand = effectCmd({
               event.properties.sessionID === sessionID &&
               event.properties.status.type === "idle"
             ) {
-              break
+              return { error, rejected: [...rejected], idle: true }
             }
 
             if (event.type === "permission.asked") {
@@ -808,6 +809,7 @@ export const RunCommand = effectCmd({
                   reply: "once",
                 })
               } else {
+                rejected.add(permission.permission)
                 UI.println(
                   UI.Style.TEXT_WARNING_BOLD + "!",
                   UI.Style.TEXT_NORMAL +
@@ -820,7 +822,7 @@ export const RunCommand = effectCmd({
               }
             }
           }
-          return error
+          return { error, rejected: [...rejected], idle: false }
         }
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
         const client = args.attach ? attachSDK(cwd) : sdk
@@ -838,8 +840,10 @@ export const RunCommand = effectCmd({
           })
           async function finish() {
             if (args.attach) return
-            const error = await completed
-            if (error) process.exitCode = 1
+            const result = await completed
+            if (!result) return
+            if (result.error) process.exitCode = 1
+            if (result.idle) emit("done", { reason: "idle", rejected: result.rejected })
           }
 
           if (args.command) {
