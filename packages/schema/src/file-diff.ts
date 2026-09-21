@@ -9,5 +9,7 @@ export const Info = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   status: optional(Schema.Literals(["added", "deleted", "modified"])),
+  // Patch text was withheld because it exceeded the snapshot diff budget.
+  truncated: optional(Schema.Boolean),
 }).annotate({ identifier: "SnapshotFileDiff" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}

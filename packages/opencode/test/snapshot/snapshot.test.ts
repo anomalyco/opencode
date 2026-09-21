@@ -902,6 +902,52 @@ it.instance(
 )
 
 it.instance(
+  "diffFull omits patch text above the per-file byte limit",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      yield* write(`${tmp.path}/large-unicode.txt`, "🙂".repeat(300_000))
+      const after = yield* snapshot.track()
+      expect(after).toBeTruthy()
+      const diffs = yield* snapshot.diffFull(before, after!)
+      expect(diffs).toHaveLength(1)
+      expect(diffs[0]).toEqual(
+        expect.objectContaining({
+          file: "large-unicode.txt",
+          patch: "",
+          additions: 1,
+          deletions: 0,
+          truncated: true,
+        }),
+      )
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
+  "diffFull limits total patch text across files",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      yield* write(`${tmp.path}/cap-a.txt`, "a".repeat(600_000))
+      yield* write(`${tmp.path}/cap-b.txt`, "b".repeat(600_000))
+      const after = yield* snapshot.track()
+      expect(after).toBeTruthy()
+      const diffs = yield* snapshot.diffFull(before, after!)
+      const first = diffs.find((item) => item.file === "cap-a.txt")
+      const second = diffs.find((item) => item.file === "cap-b.txt")
+      expect(diffs.reduce((total, item) => total + Buffer.byteLength(item.patch ?? ""), 0)).toBeLessThanOrEqual(
+        1024 * 1024,
+      )
+      expect(first?.patch).toContain("+aaa")
+      expect(first?.truncated).toBeUndefined()
+      expect(second?.patch).toBe("")
+      expect(second?.truncated).toBe(true)
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
   "diffFull with a large interleaved mixed diff",
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
