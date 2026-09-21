@@ -1,3 +1,4 @@
+import type { Locator } from "@playwright/test"
 import { expect, story } from "../../storybook/playwright/story"
 
 story("keeps file disclosures keyboard-accessible as the file list changes", async ({ mount }) => {
@@ -55,11 +56,22 @@ story("merges follow-up patches into one stack with a distinct file count", asyn
   await group.screenshot({ path: info.outputPath("merged.png") })
 })
 
+// A reasoning separator turns the group into a thinking block, where each patch batch renders as a
+// task row and its patch detail mounts only while that row is open. Expand every batch first so the
+// batch boundary assertions below stay presentation-independent.
+async function expandPatchBatches(group: Locator) {
+  for (const row of await group.locator('[data-component="thinking-task-row"]').all()) {
+    const trigger = row.locator('[data-slot="thinking-task-row-trigger"]')
+    if ((await trigger.getAttribute("aria-expanded")) === "false") await trigger.click()
+  }
+}
+
 for (const separator of ["shell", "error", "reasoning"]) {
   story(`does not merge patches across an intervening ${separator}`, async ({ mount }) => {
     const root = await mount("current-tool-group--patch-follow-ups", { args: { separator } })
     await root.getByRole("button", { name: "Finish follow-up patch" }).click()
     const group = root.locator('[data-component="collapsed-tool-group"]')
+    await expandPatchBatches(group)
     await expect(group.locator('[data-component="apply-patch-tool"]')).toHaveCount(2)
     await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "b.ts", "a.ts", "c.ts"])
     if (separator === "error") await expect(group.locator('[data-kind="tool-error-card"]')).toBeVisible()
@@ -71,9 +83,11 @@ story("does not retain patch files in the wrong batch when thoughts are shown", 
   await root.getByRole("button", { name: "Hide thoughts", exact: true }).click()
   await root.getByRole("button", { name: "Finish follow-up patch" }).click()
   const group = root.locator('[data-component="collapsed-tool-group"]')
+  await expandPatchBatches(group)
   await expect(group.locator('[data-component="apply-patch-tool"]')).toHaveCount(1)
   await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "b.ts", "c.ts"])
   await root.getByRole("button", { name: "Show thoughts", exact: true }).click()
+  await expandPatchBatches(group)
   await expect(group.locator('[data-component="apply-patch-tool"]')).toHaveCount(2)
   await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "b.ts", "a.ts", "c.ts"])
 })

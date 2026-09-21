@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { formatThinkingDuration, LIVE_CREATED_MAX_AGE_MS, thinkingElapsedMs } from "./thinking-duration"
+import {
+  formatThinkingDuration,
+  LIVE_CREATED_MAX_AGE_MS,
+  thinkingElapsedMs,
+  thinkingGroupRange,
+} from "./thinking-duration"
 
 describe("formatThinkingDuration", () => {
   test("formats whole seconds without a fraction", () => {
@@ -62,5 +67,33 @@ describe("thinkingElapsedMs", () => {
         fallbackStart: 200,
       }),
     ).toBeUndefined()
+  })
+})
+
+describe("thinkingGroupRange", () => {
+  test("uses the earliest start and latest end when every item is complete", () => {
+    expect(
+      thinkingGroupRange([
+        { start: 100, end: 400 },
+        { start: 250, end: 900 },
+      ]),
+    ).toEqual({ createdAt: 100, completedAt: 900, streaming: false })
+  })
+
+  test("drops completedAt while any item is still running", () => {
+    expect(
+      thinkingGroupRange([
+        { start: 100, end: 400 },
+        { start: 250, running: true },
+      ]),
+    ).toEqual({ createdAt: 100, completedAt: undefined, streaming: true })
+  })
+
+  test("returns an empty range when no timestamps exist", () => {
+    expect(thinkingGroupRange([{}, { running: true }])).toEqual({
+      createdAt: undefined,
+      completedAt: undefined,
+      streaming: true,
+    })
   })
 })

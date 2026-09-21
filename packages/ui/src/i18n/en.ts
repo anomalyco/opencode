@@ -241,6 +241,8 @@ const source = {
   "ui.message.copied": "Copied",
   "ui.message.thought": "Thought",
   "ui.message.thoughtFor": "Thought for {{duration}}",
+  "ui.message.stepCount.one": "{{count}} step",
+  "ui.message.stepCount.other": "{{count}} steps",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
   "ui.message.interrupted": "Interrupted",

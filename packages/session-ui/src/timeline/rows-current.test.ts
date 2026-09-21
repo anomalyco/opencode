@@ -5,6 +5,7 @@ import type {
   SessionMessageInfo,
 } from "@opencode/client/promise"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
+import { timelinePresets } from "./detail"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
 
 describe("current session timeline rows", () => {
@@ -65,6 +66,49 @@ describe("current session timeline rows", () => {
 
     expect(result.activeMessageID).toBe("msg_shell")
     expect(result.rows.map(TimelineRow.key)).toEqual(["shell:msg_shell"])
+  })
+
+  test("hides successful user shells in the messages-only preset", () => {
+    const result = createTimelineProjection({
+      sessionMessages: [
+        {
+          id: "msg_shell_ok",
+          type: "shell",
+          shellID: "shell_ok",
+          command: "pwd",
+          status: "exited",
+          exit: 0,
+          output: { output: "/repo", cursor: 5, size: 5, truncated: false },
+          time: { created: 1, completed: 2 },
+        },
+      ],
+      status: { type: "idle" },
+      reasoningMode: "hidden",
+      timelineDetail: timelinePresets[4].value,
+    })
+    expect(result.rows.map(TimelineRow.key)).toEqual([])
+  })
+
+  test("keeps failed user shells visible in the messages-only preset", () => {
+    const result = createTimelineProjection({
+      sessionMessages: [
+        {
+          id: "msg_shell_fail",
+          type: "shell",
+          shellID: "shell_fail",
+          command: "false",
+          status: "exited",
+          exit: 1,
+          output: { output: "", cursor: 0, size: 0, truncated: false },
+          time: { created: 1, completed: 2 },
+        },
+      ],
+      status: { type: "idle" },
+      reasoningMode: "hidden",
+      timelineDetail: timelinePresets[4].value,
+    })
+    expect(result.rows.map(TimelineRow.key)).toEqual(["shell:msg_shell_fail"])
+    expect(timelinePresets[4].value.shell.details).toBe("collapsed")
   })
 
   test("keeps assistant content when no user root is available", () => {
@@ -288,7 +332,7 @@ describe("current session timeline rows", () => {
     })
   })
 
-  test("uses the latest reasoning part and groups earlier thoughts with tools", () => {
+  test("keeps live reasoning inside a preceding context group", () => {
     const document = storyDocument(
       [
         { type: "reasoning", text: "Old thought", time: { created: 1, completed: 2 } },
@@ -298,11 +342,17 @@ describe("current session timeline rows", () => {
       true,
     )
     const result = Timeline.constructSessionMessageRows(document.messages, true, { type: "busy" })
-    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart", "Thinking"])
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
     expect(result.rows[1]).toMatchObject({
-      group: { type: "context", refs: [{ partID: "msg_tool_projection_assistant:reasoning:0" }, { partID: "read" }] },
+      group: {
+        type: "context",
+        refs: [
+          { partID: "msg_tool_projection_assistant:reasoning:0" },
+          { partID: "read" },
+          { partID: "msg_tool_projection_assistant:reasoning:1" },
+        ],
+      },
     })
-    expect(result.rows[2]).toMatchObject({ ref: { partID: "msg_tool_projection_assistant:reasoning:1" } })
   })
 
   test("keeps actual thinking with the active prompt above an undelivered prompt", () => {
@@ -1063,5 +1113,99 @@ describe("current session timeline rows", () => {
     expect(Timeline.constructSessionMessageRows(compacted, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual(
       ["UserMessage", "AssistantPart", "Notice", "AssistantPart"],
     )
+  })
+
+  test("groups consecutive reasoning and tools before a text answer", () => {
+    const groups = Timeline.constructSessionMessageRows(
+      storyDocument([
+        { type: "reasoning", text: "Inspect the renderer", time: { created: 1, completed: 2 } },
+        storyTool("read", "read", "completed", { path: "message-part.tsx" }),
+        storyTool("grep", "grep", "completed", { pattern: "ReasoningPart" }),
+        { type: "text", text: "The renderer already groups context tools." },
+      ]).messages,
+      true,
+      { type: "idle" },
+    ).rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group.type] : []))
+
+    expect(groups).toEqual(["context", "part"])
+  })
+
+  test("leaves a text-only assistant message ungrouped", () => {
+    const groups = Timeline.constructSessionMessageRows(
+      storyDocument([{ type: "text", text: "Hello" }]).messages,
+      true,
+      { type: "idle" },
+    ).rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group] : []))
+
+    expect(groups).toEqual([
+      {
+        type: "part",
+        key: "part:msg_tool_projection_assistant:msg_tool_projection_assistant:text:0",
+        ref: { messageID: "msg_tool_projection_assistant", partID: "msg_tool_projection_assistant:text:0" },
+      },
+    ])
+  })
+
+  test("does not merge thinking groups across a text boundary", () => {
+    const groups = Timeline.constructSessionMessageRows(
+      storyDocument([
+        { type: "reasoning", text: "First thought", time: { created: 1, completed: 2 } },
+        { type: "text", text: "Partial answer" },
+        { type: "reasoning", text: "Second thought", time: { created: 3, completed: 4 } },
+        { type: "text", text: "Final answer" },
+      ]).messages,
+      true,
+      { type: "idle" },
+    ).rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group.type] : []))
+
+    expect(groups).toEqual(["part", "part", "part", "part"])
+  })
+
+  test("keeps a running tool as a thinking group", () => {
+    const groups = Timeline.constructSessionMessageRows(
+      storyDocument([storyTool("read", "read", "running", { path: "session.ts" })], true).messages,
+      true,
+      { type: "busy" },
+    ).rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group] : []))
+
+    expect(groups).toEqual([
+      {
+        type: "context",
+        key: "context:msg_tool_projection_assistant:read",
+        refs: [{ messageID: "msg_tool_projection_assistant", partID: "read" }],
+      },
+    ])
+  })
+
+  test("keeps a failed tool inside the restored thinking group", () => {
+    const groups = Timeline.constructSessionMessageRows(
+      storyDocument([
+        { type: "reasoning", text: "Try a command", time: { created: 1, completed: 2 } },
+        storyTool("shell", "shell", "error", { command: "false" }),
+        { type: "text", text: "The command failed." },
+      ]).messages,
+      true,
+      { type: "idle" },
+    ).rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group.type] : []))
+
+    expect(groups).toEqual(["context", "part"])
+  })
+
+  test("rebuilds the same thinking group from saved history parts", () => {
+    const document = storyDocument([
+      { type: "reasoning", text: "Finished thought", time: { created: 1, completed: 2 } },
+      storyTool("read", "read", "completed", { path: "session.ts" }),
+      { type: "text", text: "Done." },
+    ])
+    const first = Timeline.constructSessionMessageRows(document.messages, true, { type: "idle" })
+    const restored = Timeline.constructSessionMessageRows(document.messages, true, { type: "idle" })
+
+    expect(restored.rows.map(TimelineRow.key)).toEqual(first.rows.map(TimelineRow.key))
+    expect(restored.rows[1]).toMatchObject({
+      group: {
+        type: "context",
+        refs: [{ partID: "msg_tool_projection_assistant:reasoning:0" }, { partID: "read" }],
+      },
+    })
   })
 })

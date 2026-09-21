@@ -46,9 +46,14 @@ test("changes timeline presets and saves custom thinking details", async ({ page
     .toEqual({ placement: "grouped", details: "collapsed" })
   await settings.getByRole("button", { name: "Back to app", exact: true }).click()
   await expect(settings).toBeHidden()
-  await page.getByRole("button", { name: "Used 1 Thought", exact: true }).click()
-  await expect(part.getByRole("button")).toHaveAttribute("aria-expanded", "false")
-  await part.getByRole("button").click()
+  // Reasoning is embedded in the thinking group, so the group trigger owns disclosure. The saved
+  // "collapsed" detail setting starts it closed, and expanding the group reveals the reasoning body.
+  const trigger = page.locator(
+    '[data-component="collapsed-tool-group"][data-thinking="true"] > [data-component="collapsible"] > [data-slot="collapsible-trigger"]',
+  )
+  await expect(trigger).toHaveAttribute("aria-expanded", "false")
+  await trigger.click()
+  await expect(trigger).toHaveAttribute("aria-expanded", "true")
   await expect(part.getByText("The selected mode controls these details.", { exact: true })).toBeVisible()
 })
 

@@ -560,6 +560,7 @@ export function AssistantReasoningContent(props: {
   id: string
   content: SessionMessageAssistantReasoning
   streaming: boolean
+  embedded?: boolean
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -567,22 +568,35 @@ export function AssistantReasoningContent(props: {
 }) {
   const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
   return (
-    <div data-component="reasoning-part" data-timeline-part-id={props.id}>
-      <ThinkingState
-        streaming={props.streaming}
-        createdAt={props.content.time?.created}
-        completedAt={props.content.time?.completed}
-        heading={heading()}
-        hideDetails={!props.content.text.trim()}
-        open={props.open}
-        defaultOpen={props.defaultOpen}
-        onOpenChange={(value) => {
-          props.onOpenChange?.(value)
-          props.onContentRendered?.()
-        }}
+    <div
+      data-component="reasoning-part"
+      data-embedded={props.embedded ? "true" : undefined}
+      data-timeline-part-id={props.id}
+    >
+      <Show
+        when={props.embedded}
+        fallback={
+          <ThinkingState
+            streaming={props.streaming}
+            createdAt={props.content.time?.created}
+            completedAt={props.content.time?.completed}
+            heading={heading()}
+            hideDetails={!props.content.text.trim()}
+            open={props.open}
+            defaultOpen={props.defaultOpen}
+            onOpenChange={(value) => {
+              props.onOpenChange?.(value)
+              props.onContentRendered?.()
+            }}
+          >
+            <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
+          </ThinkingState>
+        }
       >
-        <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
-      </ThinkingState>
+        <Show when={props.content.text.trim()}>
+          <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
+        </Show>
+      </Show>
     </div>
   )
 }

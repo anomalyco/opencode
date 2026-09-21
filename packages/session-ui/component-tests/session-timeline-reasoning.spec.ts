@@ -51,19 +51,29 @@ for (const mode of ["hidden", "compact", "full"] as const) {
       if (following === "tool") {
         const group = timeline.locator('[data-component="collapsed-tool-group"]')
         const trigger = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-        await expect(trigger).toHaveText(/^Used\s*1\s*Skill$/)
-        await expect(trigger).toHaveAttribute("aria-expanded", "false")
-        await expect(
-          group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-        ).toHaveText("Skill")
-        await expect(timeline.getByText("Inspecting stability", { exact: true })).toBeHidden()
-        await trigger.click()
-        await expect(trigger).toHaveAttribute("aria-expanded", "true")
+        if (mode === "hidden") {
+          await expect(trigger).toHaveText(/^Used\s*1\s*Skill$/)
+          await expect(trigger).toHaveAttribute("aria-expanded", "false")
+          await expect(
+            group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
+          ).toHaveText("Skill")
+          await expect(timeline.getByText("Inspecting stability", { exact: true })).toBeHidden()
+          await trigger.click()
+          await expect(trigger).toHaveAttribute("aria-expanded", "true")
+        } else {
+          await expect(group).toHaveAttribute("data-thinking", "true")
+          await expect(trigger.locator('[data-component="text-shimmer"]')).toHaveAttribute("aria-label", "Thinking")
+          await expect(trigger.locator('[data-slot="basic-tool-tool-subtitle"][data-kind="steps"]')).toHaveText("1 step")
+          await expect(trigger).toHaveAttribute("aria-expanded", "true")
+          await expect(part).toHaveAttribute("data-embedded", "true")
+          await expect(part.locator('[data-slot="collapsible-trigger"]')).toHaveCount(0)
+        }
         await expect(group.locator('[data-timeline-part-id="tool_reasoning_projection_skill"]')).toBeVisible()
         await expect(group.locator('[data-component="reasoning-part"]')).toHaveCount(mode === "hidden" ? 0 : 1)
+        await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+        return
       }
-      if (following === "text")
-        await expect(timeline.getByText("The timeline is stable", { exact: true })).toBeVisible()
+      await expect(timeline.getByText("The timeline is stable", { exact: true })).toBeVisible()
       await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
       await expect(part).toHaveCount(mode === "hidden" ? 0 : 1)
       if (mode === "hidden") return

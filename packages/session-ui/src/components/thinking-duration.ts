@@ -17,6 +17,19 @@ export function thinkingElapsedMs(input: {
   return Math.max(0, input.completedAt - input.createdAt)
 }
 
+export function thinkingGroupRange(
+  parts: { start?: number; end?: number; running?: boolean }[],
+): { createdAt?: number; completedAt?: number; streaming: boolean } {
+  const starts = parts.flatMap((part) => (part.start !== undefined ? [part.start] : []))
+  const ends = parts.flatMap((part) => (part.end !== undefined ? [part.end] : []))
+  const streaming = parts.some((part) => part.running)
+  return {
+    createdAt: starts.length > 0 ? Math.min(...starts) : undefined,
+    completedAt: streaming || ends.length === 0 ? undefined : Math.max(...ends),
+    streaming,
+  }
+}
+
 export function formatThinkingDuration(ms: number, locale: string) {
   const total = Math.max(0, ms) / 1000
   const numfmt = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 })

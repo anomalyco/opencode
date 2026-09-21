@@ -23,6 +23,7 @@ export function ThinkingState(props: {
   createdAt?: number
   completedAt?: number
   heading?: string
+  steps?: number
   open?: boolean
   defaultOpen?: boolean
   hideDetails?: boolean
@@ -97,6 +98,13 @@ export function ThinkingState(props: {
                   <span data-slot="basic-tool-tool-subtitle" data-kind="duration">
                     {durationLabel()}
                   </span>
+                </Show>
+                <Show when={props.steps}>
+                  {(steps) => (
+                    <span data-slot="basic-tool-tool-subtitle" data-kind="steps">
+                      {i18n.plural("ui.message.stepCount", steps())}
+                    </span>
+                  )}
                 </Show>
                 <Show when={props.streaming && !open() && !!props.heading}>
                   <span data-slot="basic-tool-tool-subtitle">

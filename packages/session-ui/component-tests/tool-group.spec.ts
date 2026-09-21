@@ -1,71 +1,39 @@
 import { expect, story } from "../../storybook/playwright/story"
 
-for (const reasoningDefaultOpen of [false, true]) {
-  story(
-    `keeps ordered thoughts and tool-only counts with reasoning ${reasoningDefaultOpen ? "expanded" : "collapsed"}`,
-    async ({ mount }) => {
-      const root = await mount("current-tool-group--mixed-reasoning", { args: { reasoningDefaultOpen } })
-      const group = root.locator('[data-component="collapsed-tool-group"]')
-      const used = group.getByRole("button", { name: /^Used \d+ Read, Skill$/ })
-      const first = group.locator('[data-timeline-part-id="reasoning_first"]')
-      const second = group.locator('[data-timeline-part-id="reasoning_second"]')
-      await expect(used).toHaveAttribute("aria-expanded", "true")
-      await expect(used).toHaveAccessibleName("Used 4 Read, Skill")
-      await expect(
-        group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-      ).toHaveText("Read, Skill")
-      await expect(group.locator('[data-slot="context-tool-group-item"]')).toHaveText([
-        /Read.*group\.ts/,
-        /Thought/,
-        /Loaded.*opencode.*frontend-design.*skills/,
-        /Thought/,
-        /Loaded.*rtl-aware-development.*skill/,
-      ])
-      await expect(
-        group.locator('[data-timeline-part-ids="reasoning_skill_first,reasoning_skill_second"]'),
-      ).toBeVisible()
-      await expect(first.getByRole("button", { name: "Thought", exact: true })).toHaveAttribute(
-        "aria-expanded",
-        String(reasoningDefaultOpen),
-      )
-      await expect(second.getByRole("button", { name: "Thought", exact: true })).toHaveAttribute(
-        "aria-expanded",
-        String(reasoningDefaultOpen),
-      )
-      await first.getByRole("button", { name: "Thought", exact: true }).click()
-      await root.getByRole("button", { name: "Append follow-up read", exact: true }).click()
-      await expect(used).toHaveAccessibleName("Used 5 Read, Skill")
-      await expect(
-        group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-      ).toHaveText("Read, Skill")
-      await expect(group.locator('[data-slot="context-tool-group-item"]')).toHaveText([
-        /Read.*group\.ts/,
-        /Thought/,
-        /Loaded.*opencode.*frontend-design.*skills/,
-        /Thought/,
-        /Loaded.*rtl-aware-development.*skill/,
-        /Read.*group\.test\.ts/,
-      ])
-      await expect(first.getByRole("button", { name: "Thought", exact: true })).toHaveAttribute(
-        "aria-expanded",
-        String(!reasoningDefaultOpen),
-      )
-      await expect(second.getByRole("button", { name: "Thought", exact: true })).toHaveAttribute(
-        "aria-expanded",
-        String(reasoningDefaultOpen),
-      )
-      if (reasoningDefaultOpen) {
-        await expect(
-          first.getByText("The renderer groups adjacent tools. Check the relevant skills before changing it."),
-        ).toBeHidden()
-        return
-      }
-      await expect(
-        first.getByText("The renderer groups adjacent tools. Check the relevant skills before changing it."),
-      ).toBeVisible()
-    },
-  )
-}
+story("keeps ordered thoughts inside a thinking block as tools append", async ({ mount }) => {
+  const root = await mount("current-tool-group--mixed-reasoning")
+  const group = root.locator('[data-component="collapsed-tool-group"]')
+  const trigger = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+  const first = group.locator('[data-timeline-part-id="reasoning_first"]')
+  const second = group.locator('[data-timeline-part-id="reasoning_second"]')
+  await expect(group).toHaveAttribute("data-thinking", "true")
+  await expect(trigger).toHaveAttribute("aria-expanded", "true")
+  await expect(trigger.locator('[data-slot="basic-tool-tool-title"]')).toContainText("Thought for")
+  await expect(trigger.locator('[data-slot="basic-tool-tool-subtitle"][data-kind="steps"]')).toHaveText("4 steps")
+  await expect(group.locator('[data-slot="context-tool-group-item"]')).toHaveText([
+    /Read.*group\.ts/,
+    /The renderer groups adjacent tools/,
+    /Skill.*opencode.*frontend-design/,
+    /Keep these skill groups separate/,
+    /Skill.*rtl-aware-development/,
+  ])
+  await expect(group.locator('[data-timeline-part-ids="reasoning_skill_first,reasoning_skill_second"]')).toBeVisible()
+  await expect(first.locator('[data-slot="collapsible-trigger"]')).toHaveCount(0)
+  await expect(second).toHaveAttribute("data-embedded", "true")
+  await root.getByRole("button", { name: "Append follow-up read", exact: true }).click()
+  await expect(trigger.locator('[data-slot="basic-tool-tool-subtitle"][data-kind="steps"]')).toHaveText("5 steps")
+  await expect(group.locator('[data-slot="context-tool-group-item"]')).toHaveText([
+    /Read.*group\.ts/,
+    /The renderer groups adjacent tools/,
+    /Skill.*opencode.*frontend-design/,
+    /Keep these skill groups separate/,
+    /Skill.*rtl-aware-development/,
+    /Read.*group\.test\.ts/,
+  ])
+  await expect(
+    first.getByText("The renderer groups adjacent tools. Check the relevant skills before changing it."),
+  ).toBeVisible()
+})
 
 story("summarizes subagents as Agent while retaining their card titles", async ({ mount }) => {
   const root = await mount("current-tool-group--mixed-tools")
@@ -150,3 +118,45 @@ for (const width of [840, 390]) {
       .toBe(true)
   })
 }
+
+story("compresses consecutive inspect tools into thinking chips", async ({ mount }) => {
+  const root = await mount("current-tool-group--thinking-chips")
+  const group = root.locator('[data-component="collapsed-tool-group"][data-thinking="true"]')
+  const chips = group.locator('[data-component="thinking-tool-chip"]')
+  await expect(group.locator('[data-component="thinking-tool-chips"]')).toHaveCount(2)
+  await expect(chips).toHaveCount(5)
+  await expect(chips.nth(0)).toContainText("Read")
+  await expect(chips.nth(0)).toContainText("message-part.tsx")
+  await expect(chips.nth(1)).toContainText("Grep")
+  await expect(chips.nth(1)).toContainText("ReasoningPart")
+  await expect(chips.nth(2)).toContainText("Glob")
+  await expect(chips.nth(2)).toContainText("**/*.test.ts")
+  await expect(group.locator('[data-timeline-part-id="chip_grep_failed"]')).toBeVisible()
+  await expect(group.locator('[data-slot="thinking-detail"]')).toHaveCount(0)
+  await chips.nth(1).click()
+  await expect(chips.nth(1)).toHaveAttribute("aria-expanded", "true")
+  const detail = group.locator('[data-slot="thinking-detail"][data-timeline-part-id="chip_grep"]')
+  await expect(detail).toBeVisible()
+  await expect(detail.locator('[data-slot="collapsible-trigger"]')).toHaveCount(0)
+  await expect(detail.locator('[data-component="tool-output"]')).toBeVisible()
+  await chips.nth(1).click()
+  await expect(chips.nth(1)).toHaveAttribute("aria-expanded", "false")
+})
+
+story("renders remaining thinking tools as task rows", async ({ mount }) => {
+  const root = await mount("current-tool-group--thinking-tasks")
+  const group = root.locator('[data-component="collapsed-tool-group"][data-thinking="true"]')
+  const rows = group.locator('[data-component="thinking-task-row"]')
+  await expect(group.locator('[data-component="thinking-tool-chip"]')).toHaveCount(2)
+  await expect(rows).toHaveCount(3)
+  await expect(rows.nth(0).locator('[data-slot="thinking-task-row-trigger"]')).toContainText("Skill")
+  await expect(rows.nth(0).locator('[data-slot="thinking-task-row-trigger"]')).toContainText("frontend-design")
+  await expect(rows.nth(1).locator('[data-slot="thinking-task-row-trigger"]')).toContainText("Shell")
+  await expect(rows.nth(1).locator('[data-slot="thinking-task-row-trigger"]')).toContainText("bun test")
+  await expect(rows.nth(2).locator('[data-slot="thinking-task-row-trigger"]')).toContainText("Edit")
+  await expect(rows.nth(2).locator('[data-slot="thinking-task-row-trigger"]')).toContainText("thinking-state.tsx")
+  await expect(group.locator('[data-slot="thinking-detail"]')).toHaveCount(0)
+  await rows.nth(1).locator('[data-slot="thinking-task-row-trigger"]').click()
+  await expect(group.locator('[data-slot="thinking-detail"] [data-slot="bash-result"]')).toContainText("200 pass")
+  await expect(group.locator('[data-slot="thinking-detail"] [data-slot="collapsible-trigger"]')).toHaveCount(0)
+})

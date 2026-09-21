@@ -376,12 +376,28 @@ export namespace Timeline {
     appendAssistantSegment(assistantSegment)
 
     if (thinking && lastAssistant) {
-      rows.push(
-        new TimelineRow.Thinking({
-          userMessageID: turnID,
-          ref: { messageID: lastAssistant.id, partID: contentEntries(lastAssistant).at(-1)!.id },
-        }),
-      )
+      const lastEntry = contentEntries(lastAssistant).at(-1)!
+      const lastPart = rows.findLast((row) => row._tag === "AssistantPart" && row.userMessageID === turnID)
+      if (lastPart?._tag === "AssistantPart" && lastPart.group.type === "context") {
+        const index = rows.lastIndexOf(lastPart)
+        rows[index] = new TimelineRow.AssistantPart({
+          userMessageID: lastPart.userMessageID,
+          previousAssistantPart: lastPart.previousAssistantPart,
+          spacing: lastPart.spacing,
+          group: {
+            type: "context",
+            key: lastPart.group.key,
+            refs: [...lastPart.group.refs, { messageID: lastAssistant.id, partID: lastEntry.id }],
+          },
+        })
+      } else {
+        rows.push(
+          new TimelineRow.Thinking({
+            userMessageID: turnID,
+            ref: { messageID: lastAssistant.id, partID: lastEntry.id },
+          }),
+        )
+      }
     }
 
     return rows
@@ -410,6 +426,8 @@ function isInterrupted(error: SessionMessageAssistant["error"]) {
 }
 
 function shellFailed(message: SessionMessageShell) {
+  // Hidden shell placement still keeps failed commands on the timeline so the
+  // error is visible. Expansion follows timeline details, not this exception.
   return (
     message.status === "timeout" || (message.status === "exited" && message.exit !== undefined && message.exit !== 0)
   )
