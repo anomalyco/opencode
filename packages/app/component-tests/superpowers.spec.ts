@@ -995,7 +995,24 @@ story("execution keyboard path reaches tasks and returns to chat", async ({ page
   await page.keyboard.press("Enter")
   await expect(page.getByTestId("selected-task")).toHaveText("api")
   await page.getByRole("button", { name: "Return to conversation", exact: true }).click()
-  await expect(page.getByTestId("native-composer")).toBeFocused()
+  await expect(page.getByTestId("native-composer").locator('[data-component="composer-editor"]')).toBeFocused()
+})
+
+story("returning to chat focuses the real composer editor rather than its scroll viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 })
+  await openExecutionFixture(page, "tracked")
+  await page.getByRole("tab", { name: "Execution", exact: true }).click()
+  await page.getByRole("button", { name: "Return to conversation", exact: true }).click()
+  const composer = page.getByTestId("native-composer")
+  const editor = composer.locator('[data-component="composer-editor"]')
+  await expect(editor).toBeFocused()
+  await expect(editor).toHaveAttribute("contenteditable", "true")
+  await expect(editor).toHaveAttribute("role", "textbox")
+  const viewportFocused = await composer.evaluate((element) => {
+    const viewport = element.querySelector('[data-component="composer-scroll"] [tabindex]')
+    return viewport !== null && viewport === document.activeElement
+  })
+  expect(viewportFocused).toBe(false)
 })
 
 story("execution subview toolbar follows the tabs pattern", async ({ page }) => {
@@ -1018,6 +1035,41 @@ story("execution subview toolbar follows the tabs pattern", async ({ page }) => 
   await expect(page.getByRole("tab", { name: "Activity", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(page.getByTestId("execution-activity")).toBeVisible()
   await expect(page.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "execution-subview-tab-activity")
+})
+
+story("execution subview tabs keep a roving tab stop in both directions", async ({ page }) => {
+  await openExecutionFixture(page, "tracked")
+  const map = page.getByRole("tab", { name: "Map", exact: true })
+  const agents = page.getByRole("tab", { name: "Agents", exact: true })
+  const activity = page.getByRole("tab", { name: "Activity", exact: true })
+  await expect(map).toHaveAttribute("tabindex", "0")
+  await expect(agents).toHaveAttribute("tabindex", "-1")
+  await map.focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(agents).toBeFocused()
+  await expect(agents).toHaveAttribute("tabindex", "0")
+  await expect(map).toHaveAttribute("tabindex", "-1")
+  await page.keyboard.press("End")
+  await expect(activity).toBeFocused()
+  await expect(activity).toHaveAttribute("tabindex", "0")
+  await expect(agents).toHaveAttribute("tabindex", "-1")
+  await page.keyboard.press("Home")
+  await expect(map).toBeFocused()
+  await expect(map).toHaveAttribute("tabindex", "0")
+
+  await openExecutionFixture(page, "tracked-rtl")
+  const rtlMap = page.getByRole("tab", { name: "Map", exact: true })
+  const rtlAgents = page.getByRole("tab", { name: "Agents", exact: true })
+  const rtlActivity = page.getByRole("tab", { name: "Activity", exact: true })
+  await rtlMap.focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(rtlActivity).toBeFocused()
+  await expect(rtlActivity).toHaveAttribute("tabindex", "0")
+  await expect(rtlMap).toHaveAttribute("tabindex", "-1")
+  await page.keyboard.press("ArrowLeft")
+  await expect(rtlMap).toBeFocused()
+  await expect(rtlMap).toHaveAttribute("tabindex", "0")
+  await expect(rtlAgents).toHaveAttribute("tabindex", "-1")
 })
 
 story("execution controls show focus for keyboard users", async ({ page }) => {
@@ -1070,9 +1122,22 @@ story("execution surfaces render localized copy without missing keys", async ({ 
     if (scenario === "observer" || scenario === "permission-pending") {
       await page.getByRole("button", { name: "Open execution overview", exact: true }).click()
     }
-    const text = await page.getByTestId("execution-fixture").innerText()
+    const fixture = page.getByTestId("execution-fixture")
+    const text = await fixture.innerText()
     expect(text).not.toMatch(/execution\.[a-z]/)
     expect(text).not.toContain("{{")
+    const attributes = await fixture.evaluate((element) =>
+      [...element.querySelectorAll("*")].flatMap((node) =>
+        ["aria-label", "title", "placeholder", "alt"].flatMap((name) => {
+          const value = node.getAttribute(name)
+          return value ? [`${name}=${value}`] : []
+        }),
+      ),
+    )
+    for (const attribute of attributes) {
+      expect(attribute).not.toMatch(/execution\.[a-z]/)
+      expect(attribute).not.toContain("{{")
+    }
   }
 })
 
@@ -1089,10 +1154,12 @@ story("execution compact copy keeps the shared line height", async ({ page }) =>
   )
   expect(violations).toEqual([])
   await openExecutionFixture(page, "map")
-  const mapLineHeight = await page
-    .getByTestId("execution-map")
-    .evaluate((element) => Number.parseFloat(getComputedStyle(element).lineHeight))
-  expect(mapLineHeight).toBeGreaterThanOrEqual(16)
+  const mapMetrics = await page.getByTestId("execution-map").evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { fontSize: style.fontSize, lineHeight: style.lineHeight }
+  })
+  expect(mapMetrics.fontSize).toBe("13px")
+  expect(mapMetrics.lineHeight).toBe("16px")
 })
 
 story("execution agent indentation follows the document direction", async ({ page }) => {

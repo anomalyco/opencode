@@ -6,6 +6,10 @@ import { Match, Show, Suspense, Switch, createEffect, createMemo, createSignal, 
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { LanguageProvider, UiI18nBridge } from "../src/runtime/i18n/language"
+import { ComposerEditor } from "../src/composer/editor/editor"
+import { createComposerEditor } from "../src/composer/editor/interaction"
+import type { ComposerPersistedState } from "../src/composer/types"
+import { focusComposerEditor } from "../src/session/composer/dock-focus"
 import { ServerConnection, ServersProvider } from "../src/runtime/server/registry"
 import { GlobalProvider } from "../src/runtime/server/runtime"
 import { ServerProvider, useServer } from "../src/runtime/server/current"
@@ -381,11 +385,29 @@ function TrackedFixture(props: { host: HTMLElement; lateRun: boolean }) {
   const scope = (): ExecutionScope => ({ serverKey: "wsl", ownerDirectory: "/root/git/demo", rootSessionID: root() })
   const run = () => (root() === "root" && runAvailable() ? trackedRun() : undefined)
   let requestRegion: HTMLDivElement | undefined
-  let composer: HTMLDivElement | undefined
+  const [composerDraft, setComposerDraft] = createStore<ComposerPersistedState>({
+    prompt: [{ type: "text", content: "", start: 0, end: 0 }],
+    cursor: 0,
+    model: { providerID: "openai", modelID: "gpt-5-codex" },
+    context: { items: [] },
+  })
+  const composerEditor = createComposerEditor({
+    store: [composerDraft, setComposerDraft],
+    commands: () => [],
+    context: () => [],
+    searchContextFiles: () => [],
+    view: {
+      submit: {
+        stopping: () => false,
+        onSubmit: () => undefined,
+        onStop: () => undefined,
+      },
+    },
+  })
   const selectMobileView = (view: SessionMobileView) => {
     setState("mobileTab", view)
     if (view === "session" && typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => composer?.focus())
+      requestAnimationFrame(() => focusComposerEditor(() => undefined))
     }
   }
   trackedModelSequence += 1
@@ -500,8 +522,8 @@ function TrackedFixture(props: { host: HTMLElement; lateRun: boolean }) {
             <Show
               when={state.mobileTab === "execution"}
               fallback={
-                <div data-testid="native-composer" tabindex="0" ref={(element) => (composer = element)}>
-                  Message composer
+                <div data-testid="native-composer" data-component="session-composer-dock" class="w-full">
+                  <ComposerEditor controller={composerEditor} />
                 </div>
               }
             >

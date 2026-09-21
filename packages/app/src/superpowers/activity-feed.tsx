@@ -117,7 +117,8 @@ function ActivityUsage(props: { model: ExecutionModel }) {
       ? undefined
       : new Intl.NumberFormat(language.intl(), { style: "currency", currency: "USD" }).format(value)
   }
-  const tokens = () => usage().tokens.value?.toLocaleString(language.intl())
+  const tokenTotalValue = () => usage().tokens.value
+  const tokens = () => tokenTotalValue()?.toLocaleString(language.intl())
   return (
     <section class="execution-activity__usage" data-testid="execution-activity-usage" data-coverage={coverage()}>
       <Show
@@ -132,7 +133,11 @@ function ActivityUsage(props: { model: ExecutionModel }) {
           {(value) => <span>{language.t("execution.activity.usage.cost", { cost: value() })}</span>}
         </Show>
         <Show when={tokens()}>
-          {(value) => <span>{language.t("execution.activity.usage.tokens", { tokens: value() })}</span>}
+          {(value) => (
+            <span>
+              {language.plural("execution.activity.usage.tokens", tokenTotalValue() ?? 0, { tokens: value() })}
+            </span>
+          )}
         </Show>
         <Show when={coverage() === "partial"}>
           <span class="execution-activity__usage-partial">{language.t("execution.activity.usage.partial")}</span>

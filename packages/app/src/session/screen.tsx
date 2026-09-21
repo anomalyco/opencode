@@ -35,6 +35,7 @@ import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
+import { focusComposerEditor } from "./composer/dock-focus"
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
@@ -199,11 +200,12 @@ export function SessionScreen(props: { session: SessionModel }) {
     dock?.querySelector<HTMLElement>("button, textarea, input, [tabindex]")?.focus()
   }
   const restoreConversationFocus = () => {
+    const focusComposer = () => focusComposerEditor(reviewNativeRequest)
     if (typeof requestAnimationFrame !== "function") {
-      reviewNativeRequest()
+      focusComposer()
       return
     }
-    requestAnimationFrame(() => requestAnimationFrame(reviewNativeRequest))
+    requestAnimationFrame(() => requestAnimationFrame(focusComposer))
   }
   const executionAttention = () => ({
     stale: server.ctx.sdk.connection.status() !== "connected",

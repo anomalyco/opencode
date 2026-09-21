@@ -1,5 +1,5 @@
 import "./execution.css"
-import { For, Match, Show, Suspense, Switch, lazy } from "solid-js"
+import { For, Match, Show, Suspense, Switch, createEffect, createSignal, lazy } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExecutionAgentList } from "./agent-list"
 import { ExecutionActivityFeed } from "./activity-feed"
@@ -26,20 +26,30 @@ export function ExecutionPanel(props: {
   const structuredEnabled = () => structuredViewsEnabled(props.model.mode())
   const effectiveSubview = () => (structuredEnabled() ? props.model.subview() : "agents")
   const enabledSubviews = () => EXECUTION_SUBVIEWS.filter((subview) => subview === "agents" || structuredEnabled())
+  const [focusedSubview, setFocusedSubview] = createSignal<ExecutionSubview | undefined>()
+  const tabStop = () => {
+    const current = focusedSubview()
+    if (current && enabledSubviews().includes(current)) return current
+    return effectiveSubview()
+  }
+  createEffect(() => setFocusedSubview(effectiveSubview()))
   const moveSubviewFocus = (event: KeyboardEvent, subview: ExecutionSubview) => {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") return
     event.preventDefault()
     const options = enabledSubviews()
     const index = options.indexOf(subview)
     if (index < 0) return
-    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0
+    const forward = getComputedStyle(event.currentTarget as Element).direction === "rtl" ? -1 : 1
+    const step = event.key === "ArrowRight" ? forward : event.key === "ArrowLeft" ? -forward : 0
     const target =
       event.key === "Home"
         ? options[0]
         : event.key === "End"
           ? options[options.length - 1]
           : options[(index + step + options.length) % options.length]
-    if (target) document.getElementById(subviewTabID(target))?.focus()
+    if (!target) return
+    setFocusedSubview(target)
+    document.getElementById(subviewTabID(target))?.focus()
   }
   return (
     <section
@@ -62,10 +72,14 @@ export function ExecutionPanel(props: {
                 disabled={subview !== "agents" && !structuredEnabled()}
                 aria-selected={effectiveSubview() === subview}
                 aria-controls="execution-subview-panel"
-                tabindex={effectiveSubview() === subview ? 0 : -1}
+                tabindex={tabStop() === subview ? 0 : -1}
                 class="execution-panel__subview disabled:opacity-60"
                 classList={{ "execution-panel__subview--active": effectiveSubview() === subview }}
-                onClick={() => props.model.selectSubview(subview)}
+                onClick={() => {
+                  setFocusedSubview(subview)
+                  props.model.selectSubview(subview)
+                }}
+                onFocus={() => setFocusedSubview(subview)}
                 onKeyDown={(event) => moveSubviewFocus(event, subview)}
               >
                 {language.t(`execution.subview.${subview}`)}

@@ -399,11 +399,13 @@ function AgentUsage(props: { usage: NativeUsage }) {
       props.usage.cost === undefined
         ? undefined
         : new Intl.NumberFormat(language.intl(), { style: "currency", currency: "USD" }).format(props.usage.cost)
-    const tokens =
-      props.usage.tokens === undefined ? undefined : tokenTotal(props.usage.tokens).toLocaleString(language.intl())
-    if (cost !== undefined && tokens !== undefined) return language.t("execution.agent.usage.both", { cost, tokens })
+    const total = props.usage.tokens === undefined ? undefined : tokenTotal(props.usage.tokens)
+    const tokens = total === undefined ? undefined : total.toLocaleString(language.intl())
+    if (cost !== undefined && tokens !== undefined && total !== undefined)
+      return language.plural("execution.agent.usage.both", total, { cost, tokens })
     if (cost !== undefined) return language.t("execution.agent.usage.costOnly", { cost })
-    if (tokens !== undefined) return language.t("execution.agent.usage.tokensOnly", { tokens })
+    if (tokens !== undefined && total !== undefined)
+      return language.plural("execution.agent.usage.tokensOnly", total, { tokens })
     return undefined
   }
   return (

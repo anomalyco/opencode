@@ -535,7 +535,7 @@
   min-height: 0;
   flex: 1;
   font-size: 13px;
-  line-height: max(var(--line-height-compact), 1.4em);
+  line-height: var(--line-height-compact);
 }
 
 .execution-map__controls {
