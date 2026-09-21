@@ -956,6 +956,7 @@ export const dict = {
   "execution.task.assignments.sessionUnavailable": "Session unavailable",
 
   "execution.map.label": "Task dependency map",
+  "execution.map.loading": "Loading dependency map…",
   "execution.map.controls.label": "Map controls",
   "execution.map.viewport.label": "Task dependency map",
   "execution.map.node.label": "{{title}}, {{state}}, phase {{phase}}",

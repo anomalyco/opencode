@@ -69,8 +69,12 @@ export function layoutTaskGraph(tasks: Task[], measure: GraphMeasurer = defaultM
 
 const layoutCache = new Map<string, GraphLayout>()
 
-export function cachedLayout(tasks: Task[], measure: GraphMeasurer = defaultMeasure): GraphLayout {
-  const signature = graphSignature(tasks)
+export function cachedLayout(
+  tasks: Task[],
+  measure: GraphMeasurer = defaultMeasure,
+  dimensionKey = "",
+): GraphLayout {
+  const signature = `${graphSignature(tasks)}|${dimensionKey}`
   const cached = layoutCache.get(signature)
   if (cached) {
     layoutCache.delete(signature)

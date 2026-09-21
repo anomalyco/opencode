@@ -549,6 +549,15 @@ story("map selects a node with the keyboard", async ({ page }) => {
   await expect(api).toHaveAttribute("aria-pressed", "true")
 })
 
+story("map mounts only while the Map subview is selected", async ({ page }) => {
+  await openExecutionFixture(page, "map")
+  await expect(page.getByTestId("execution-map")).toBeVisible()
+  await page.getByRole("button", { name: "Tasks", exact: true }).click()
+  await expect(page.getByTestId("execution-map")).toHaveCount(0)
+  await page.getByRole("button", { name: "Map", exact: true }).click()
+  await expect(page.getByTestId("execution-map")).toBeVisible()
+})
+
 story("map keeps zoom within the supported bounds", async ({ page }) => {
   await openExecutionFixture(page, "map")
   const viewport = page.getByTestId("execution-map-viewport")
@@ -611,6 +620,17 @@ story("map grows measured height for an expanded task title", async ({ page }) =
   const schema = await page.locator('[data-testid="execution-map-node"][data-task-id="schema"]').boundingBox()
   const cli = await page.locator('[data-testid="execution-map-node"][data-task-id="cli"]').boundingBox()
   expect(cli!.height).toBeGreaterThan(schema!.height)
+})
+
+story("map relayouts when accessibility text size increases", async ({ page }) => {
+  await openExecutionFixture(page, "map")
+  const cli = page.locator('[data-testid="execution-map-node"][data-task-id="cli"]')
+  const before = await cli.boundingBox()
+  await page.getByTestId("execution-map").evaluate((element) => {
+    ;(element as HTMLElement).style.fontSize = "26px"
+    window.dispatchEvent(new Event("resize"))
+  })
+  await expect.poll(async () => (await cli.boundingBox())?.height ?? 0).toBeGreaterThan(before!.height)
 })
 
 story("map groups more than 200 visible tasks without losing identity or counts", async ({ page }) => {

@@ -1,11 +1,14 @@
 import "./execution.css"
-import { For, Match, Show, Switch } from "solid-js"
+import { For, Match, Show, Suspense, Switch, lazy } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExecutionAgentList } from "./agent-list"
-import { ExecutionMap } from "./execution-map"
 import { ExecutionTaskDetails } from "./task-details"
 import { ExecutionTaskList } from "./task-list"
 import { EXECUTION_SUBVIEWS, structuredViewsEnabled, type ExecutionModel } from "./model"
+
+const LazyExecutionMap = lazy(() =>
+  import("./execution-map").then((module) => ({ default: module.ExecutionMap })),
+)
 
 export type ExecutionPresentation = "panel" | "expanded" | "mobile"
 
@@ -81,7 +84,15 @@ export function ExecutionPanel(props: { model: ExecutionModel; presentation: Exe
               }
             >
               <div data-slot="execution-graph" data-testid="execution-graph" class="execution-panel__graph-view">
-                <ExecutionMap model={props.model} />
+                <Suspense
+                  fallback={
+                    <p class="execution-panel__empty" data-testid="execution-map-loading">
+                      {language.t("execution.map.loading")}
+                    </p>
+                  }
+                >
+                  <LazyExecutionMap model={props.model} />
+                </Suspense>
               </div>
             </Show>
           </Match>

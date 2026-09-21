@@ -1,4 +1,4 @@
-import { For, Show, createMemo } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Task } from "@bearmanser/opencode-superpowers-execution/contract"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -16,16 +16,41 @@ import type { ExecutionModel } from "./model"
 
 const FIT_PADDING = 24
 
+type MapMetrics = { key: string; font: string; lineHeight: number; chrome: number }
+
+const DEFAULT_MAP_METRICS: MapMetrics = { key: "13:18:1", font: "13px sans-serif", lineHeight: 18, chrome: 28 }
+
 export function ExecutionMap(props: { model: ExecutionModel }) {
   const language = useLanguage()
   const [view, setView] = createStore({ zoom: 1, x: 0, y: 0, phase: "all" })
+  const [metrics, setMetrics] = createSignal(DEFAULT_MAP_METRICS)
   let viewport: HTMLDivElement | undefined
+  let mapRoot: HTMLDivElement | undefined
   let panning = false
   let moved = false
   let startX = 0
   let startY = 0
   let originX = 0
   let originY = 0
+
+  onMount(() => {
+    const refresh = () => {
+      const element = mapRoot
+      if (!element) return
+      const next = readMapMetrics(element)
+      const current = metrics()
+      if (current.key === next.key && current.font === next.font) return
+      setMetrics(next)
+    }
+    refresh()
+    window.addEventListener("resize", refresh)
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(refresh)
+    if (observer && mapRoot) observer.observe(mapRoot)
+    onCleanup(() => {
+      window.removeEventListener("resize", refresh)
+      observer?.disconnect()
+    })
+  })
 
   const tasks = createMemo(() => props.model.run()?.tasks ?? [])
   const phases = createMemo(() => [...new Set(tasks().map((task) => task.phase))].sort())
@@ -36,7 +61,10 @@ export function ExecutionMap(props: { model: ExecutionModel }) {
     return tasks().filter((task) => task.phase === phase).sort(compareTasks)
   })
   const grouped = createMemo(() => visibleTasks().length > GRAPH_GROUPING_THRESHOLD)
-  const layout = createMemo(() => cachedLayout(tasks(), measureTask))
+  const layout = createMemo(() => {
+    const current = metrics()
+    return cachedLayout(tasks(), (task) => measureTask(task, current), current.key)
+  })
   const visibleNodeIDs = createMemo(() => new Set(visibleTasks().map((task) => task.id)))
   const visibleNodes = createMemo(() => layout().nodes.filter((node) => visibleNodeIDs().has(node.id)))
   const visibleEdges = createMemo(() =>
@@ -117,7 +145,7 @@ export function ExecutionMap(props: { model: ExecutionModel }) {
   }
 
   return (
-    <div class="execution-map" data-testid="execution-map">
+    <div class="execution-map" data-testid="execution-map" ref={(element) => (mapRoot = element)}>
       <ExecutionProgress
         summary={props.model.progress()}
         runStatus={props.model.run()?.status}
@@ -308,13 +336,30 @@ export function ExecutionMap(props: { model: ExecutionModel }) {
 
 let measurementCanvas: HTMLCanvasElement | undefined
 
-function measureTask(task: Task) {
+function measurementContext() {
   if (measurementCanvas === undefined) measurementCanvas = document.createElement("canvas")
-  const context = measurementCanvas.getContext("2d")
+  return measurementCanvas.getContext("2d")
+}
+
+function measureTask(task: Task, metrics: MapMetrics) {
+  const context = measurementContext()
   if (!context) return { width: GRAPH_NODE_WIDTH, height: GRAPH_NODE_HEIGHT }
-  context.font = "13px sans-serif"
+  context.font = metrics.font
   const lines = Math.max(1, Math.ceil(context.measureText(task.title).width / (GRAPH_NODE_WIDTH - 16)))
-  return { width: GRAPH_NODE_WIDTH, height: 24 + lines * 16 + 4 + 16 }
+  return { width: GRAPH_NODE_WIDTH, height: metrics.chrome + (lines + 1) * metrics.lineHeight }
+}
+
+function readMapMetrics(element: HTMLElement): MapMetrics {
+  const style = getComputedStyle(element)
+  const fontSize = Number.parseFloat(style.fontSize) || 13
+  const lineHeight = Math.max(16, Math.round(fontSize * 1.4))
+  const scale = window.devicePixelRatio || 1
+  return {
+    key: `${fontSize}:${lineHeight}:${scale}`,
+    font: `${fontSize}px ${style.fontFamily || "sans-serif"}`,
+    lineHeight,
+    chrome: 28,
+  }
 }
 
 function compareTasks(left: Task, right: Task) {

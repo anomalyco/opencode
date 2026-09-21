@@ -498,6 +498,8 @@
   gap: 8px;
   min-height: 0;
   flex: 1;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .execution-map__controls {
@@ -613,8 +615,8 @@
 
 .execution-map__node-title {
   color: var(--v2-text-text-base);
-  font-size: 13px;
-  line-height: var(--line-height-compact);
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .execution-map__node-meta {
@@ -628,8 +630,8 @@
 .execution-map__node-state,
 .execution-map__node-assignments {
   color: var(--v2-text-text-muted);
-  font-size: 13px;
-  line-height: var(--line-height-compact);
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .execution-map__empty,

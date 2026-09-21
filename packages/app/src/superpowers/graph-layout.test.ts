@@ -108,6 +108,52 @@ describe("layoutTaskGraph", () => {
     expect(layout.width).toBe(GRAPH_NODE_WIDTH)
   })
 
+  test("records the 500-task layout and status-update budgets", () => {
+    const id = (index: number) => `task-${String(index).padStart(3, "0")}`
+    const tasks = Array.from({ length: 500 }, (_, index) =>
+      taskFixture({
+        id: id(index),
+        title: `Task ${String(index).padStart(3, "0")}`,
+        phase: index % 4 === 0 ? "Build" : "Verify",
+        order: index,
+        dependsOn: index % 25 === 0 ? [] : [id(index - 1)],
+      }),
+    )
+    const measure: GraphMeasurer = (task) => ({
+      width: GRAPH_NODE_WIDTH,
+      height: GRAPH_NODE_HEIGHT + (task.title.length % 5) * 8,
+    })
+
+    const layoutRuns: number[] = []
+    for (let index = 0; index < 5; index += 1) {
+      resetLayoutCache()
+      const start = performance.now()
+      const layout = layoutTaskGraph(tasks, measure)
+      layoutRuns.push(performance.now() - start)
+      expect(layout.nodes).toHaveLength(500)
+      expect(layout.edges).toHaveLength(480)
+    }
+    const layoutMs = Math.min(...layoutRuns)
+
+    resetLayoutCache()
+    const first = cachedLayout(tasks, measure, "13:18:1")
+    const statusChanged = tasks.map((task) => ({ ...task, state: "running" as const }))
+    const statusRuns: number[] = []
+    for (let index = 0; index < 5; index += 1) {
+      const start = performance.now()
+      const next = cachedLayout(statusChanged, measure, "13:18:1")
+      statusRuns.push(performance.now() - start)
+      expect(next).toBe(first)
+    }
+    const statusMs = Math.min(...statusRuns)
+
+    console.log(
+      `[task-13-perf] layout500min=${layoutMs.toFixed(2)}ms runs=${layoutRuns.map((value) => value.toFixed(2)).join(",")} statusUpdate=${statusMs.toFixed(3)}ms`,
+    )
+    expect(layoutMs).toBeLessThan(250)
+    expect(statusMs).toBeLessThan(100)
+  })
+
   test("rejects a dependency cycle", () => {
     const tasks = [
       taskFixture({ id: "a", dependsOn: ["b"] }),
@@ -183,6 +229,19 @@ describe("cachedLayout", () => {
     const second = cachedLayout(taskGraphFixture().concat(taskFixture({ id: "added", order: 9 })))
     expect(second).not.toBe(first)
     expect(second.nodes.some((node) => node.id === "added")).toBe(true)
+  })
+
+  test("relayouts when measured dimensions change and reuses otherwise", () => {
+    resetLayoutCache()
+    const tasks = taskGraphFixture()
+    const short: GraphMeasurer = () => ({ width: GRAPH_NODE_WIDTH, height: GRAPH_NODE_HEIGHT })
+    const tall: GraphMeasurer = () => ({ width: GRAPH_NODE_WIDTH, height: 140 })
+    const first = cachedLayout(tasks, short, "13:18:1")
+    expect(nodeByID(first, "schema").height).toBe(GRAPH_NODE_HEIGHT)
+    expect(cachedLayout(tasks.map((task) => ({ ...task, state: "running" })), short, "13:18:1")).toBe(first)
+    const resized = cachedLayout(tasks, tall, "26:36:1")
+    expect(resized).not.toBe(first)
+    expect(nodeByID(resized, "schema").height).toBe(140)
   })
 })
 
