@@ -8,7 +8,7 @@ Spec coverage: AC18. Authority: spec §13 and §6.3.
 |---|---|
 | Branch | `execution-ui` |
 | Base | `v2` at `c555559ac1b94910b769eebaa595b2b8822efa14` (OpenCode 2.0.11) |
-| Measured working tree | T19 commit `perf(app): enforce execution rendering and lifecycle budgets` + `fix(app): address execution performance review findings` (base `fb485c3d5ec4b175d22f61fe4153592f0efd7a46`) |
+| Measured working tree | T19 commits `perf(app): enforce execution rendering and lifecycle budgets` + `fix(app): address execution performance review findings` (base `fb485c3d5ec4b175d22f61fe4153592f0efd7a46`) |
 | Bun | 1.4.2 |
 | Node (Playwright driver) | v24.21.0 |
 | Playwright / Chromium | 1.59.1 / chromium-1217 (`147.0.7727.15`) |
@@ -24,7 +24,7 @@ built companion package and is not AC19 evidence. No user service was contacted.
 | Concern | Fixture | Size |
 |---|---|---|
 | Lifecycle harness runs | `src/superpowers/lifecycle.ts` synthetic run per root | 1 task, 0–50 descendants |
-| Render/status budget tasks | `measureGraphBudgets()` DAG | 500 tasks / 480 edges; long-title variant |
+| Render budgets | `measureGraphBudgets()` DAG | 500 tasks / 480 edges; long-title variant |
 | Retained events | `createExecutionModel` activity projection | 1,000 events, page size 100 |
 | Closed-dashboard host tasks | disposable host `run.start` | 100 tasks (flat, status-transitionable) |
 | Closed-dashboard host sessions | disposable host `sessions` control | root + 50 descendants + 1 plain session |
@@ -75,22 +75,23 @@ $ bun test --conditions=solid --preload ./happydom.ts ./src/superpowers
 | Hidden dashboard makes no interval full-run poll | 0 over 10 intervals | PASS |
 | Hiding the tab suspends and resuming restores the single safety interval | 1 → 0 → 1 | PASS |
 
-The 500-task figure is a pure Bun-side layout (T13 method); the acceptance value is now the **maximum** cold
-run, not the minimum. Status-update render latency and browser long tasks are measured in the real app below,
-not by the unit harness.
+The 500-task figure is a pure Bun-side layout (T13 method); the acceptance value is the **maximum** cold run.
+Status-render latency and browser long tasks are measured in the real app below.
 
 ## T01 session-switch gates (AC18 regression target)
 
 The 10% gate is enforced on the recorded T01 scenarios with the T01 fixture, probe, and
 first-correct/stable timeline milestones, comparing this machine's measured p95 against the recorded
-pre-feature T01 p95 (`baseline.md`) × 1.10. 20 samples per scenario.
+pre-feature T01 p95 (`baseline.md`) × 1.10. Each scenario requires exactly **20 complete observations**;
+a missing first-correct or stable milestone for any repeat fails the gate with the offending indices, and no
+null is ever dropped to shrink the distribution.
 
 ```text
 $ cd packages/app
 $ PLAYWRIGHT_BUILD=1 EXECUTION_E2E_TARGET='{"disposable":true,"directory":"/tmp/opencode/execution-perf","port":4611}' \
     bun run test:e2e --config e2e/performance/playwright.config.ts \
     superpowers/execution-benchmark.spec.ts --workers=1
- 7 passed (2.1m)
+ 7 passed (2.2m)
 ```
 
 Run exactly as listed in the brief (no `EXECUTION_E2E_TARGET`), the three T01 gates execute and the four
@@ -105,22 +106,22 @@ $ bun run test:e2e --config e2e/performance/playwright.config.ts superpowers/exe
 
 | Scenario | T01 recorded p95 (firstCorrect / stable) | Measured p95 (firstCorrect / stable) | Budget (×1.10) | Result |
 |---|---|---|---|---|
-| tab switch: cold, review closed | 530.90 / 583.00 ms | 375.70 / 425.00 ms | 583.99 / 641.30 ms | PASS |
-| tab switch: warm, review closed | 106.60 / 305.50 ms | 52.00 / 194.40 ms | 117.26 / 336.05 ms | PASS |
-| entry: cold session from Home | 1069.80 / 1227.00 ms | 578.80 / 688.20 ms | 1176.78 / 1349.70 ms | PASS |
+| tab switch: cold, review closed | 530.90 / 583.00 ms | 376.70 / 438.50 ms | 583.99 / 641.30 ms | PASS |
+| tab switch: warm, review closed | 106.60 / 305.50 ms | 53.30 / 179.70 ms | 117.26 / 336.05 ms | PASS |
+| entry: cold session from Home | 1069.80 / 1227.00 ms | 645.00 / 723.10 ms | 1176.78 / 1349.70 ms | PASS |
 
-Complete measured distributions (canonical run, 20 samples each):
+Complete measured distributions (canonical run, 20 complete pairs each):
 
 ```text
 tab switch: cold, review closed
-  firstCorrect: [340.8, 285.8, 326, 284.8, 395.4, 303.2, 323.4, 276.7, 297.8, 284.3, 320.9, 304.4, 365, 291.6, 375.7, 285.3, 356.2, 314, 318.1, 339.6]
-  stable:       [400.7, 330.3, 371.9, 331.1, 440.8, 356.2, 362.5, 320.8, 334.3, 330.5, 368.1, 354.9, 425, 352.5, 423.8, 333.5, 397.6, 367, 366.2, 382.1]
+  firstCorrect: [268.5, 284.6, 385.3, 311.2, 284.2, 324.9, 283.6, 303.7, 313.4, 306.6, 295.3, 322, 296.9, 310.2, 376.7, 295.9, 320.6, 370.1, 289.5, 335.8]
+  stable:       [299.4, 330.1, 438.5, 364.5, 334.5, 360.6, 329.6, 314.2, 347.2, 352.1, 350.1, 357.1, 342.5, 361.8, 442.1, 344.3, 370.4, 418.4, 349.2, 373.4]
 tab switch: warm, review closed
-  firstCorrect: [48.7, 49.9, 52, 42, 42.5, 46, 46.5, 42.9, 45.5, 48.4, 42.8, 43.5, 39.5, 43.2, 40.7, 39.7, 39.7, 48.9, 46, 52.5]
-  stable:       [180, 169.7, 172.9, 107.3, 165.4, 173.7, 159.9, 158.9, 168.2, 163.2, 100.7, 194.4, 157.8, 103.5, 106.3, 155.7, 152.7, 165, 179.1, 216.6]
+  firstCorrect: [53.3, 42.8, 45.9, 40, 57.5, 46.8, 40.4, 46.7, 44.6, 45.6, 45.2, 51.8, 45.5, 43.5, 43.8, 51.2, 43.4, 45, 45.2, 49.5]
+  stable:       [179.7, 100.5, 164.8, 162.5, 126.5, 158.9, 150.6, 110, 173, 110.4, 169.2, 182, 177.6, 168.8, 170, 122.7, 109.1, 110.5, 165.5, 175.1]
 entry: cold session from Home
-  firstCorrect: [617.8, 513.7, 577.3, 522.1, 526.6, 565.5, 517.7, 552.4, 559.9, 527.3, 520.7, 578.8, 519.7, 515.8, 512.4, 536.7, 519.4, 510.7, 573.6, 507.4]
-  stable:       [765.7, 587.9, 649.5, 657.6, 595.2, 644.2, 658.9, 688.2, 642.9, 604.3, 656.1, 656.1, 659.5, 585.5, 579.4, 667.9, 652.8, 576.9, 642.7, 584.3]
+  firstCorrect: [658.1, 541.3, 529.8, 570.2, 531.6, 565.5, 503.2, 549.8, 571.8, 561.5, 517.9, 645, 518.1, 475.8, 529.9, 505.3, 505.6, 485.7, 581.7, 536.9]
+  stable:       [730.1, 621, 599.8, 644.7, 604.1, 710.5, 638.8, 688.9, 716.2, 638.3, 661.4, 723.1, 590.9, 549.2, 611, 637.8, 630.2, 633.6, 663.9, 612.6]
 ```
 
 ## Data-arrival-to-visible-render budget (100 tasks / 50 descendants)
@@ -130,28 +131,49 @@ host; the page-level `fetch` boundary records when the `getRun` response resolve
 records when the real map node's `data-state` becomes `running`. 12 samples.
 
 ```text
-statusUpdateP95Ms: 10.2   (samples 12, tasks 100, descendants 50, budget ≤ 100 ms)
-distribution: [8.5, 8.2, 10.2, 10.2, 7.7, 9.3, 4.6, 4.4, 4.3, 4.1, 4.1, 4.4]
+statusUpdateP95Ms: 10.4   (samples 12, tasks 100, descendants 50, budget ≤ 100 ms)
+distribution: [8.7, 7.8, 10.4, 8.7, 9.3, 4.9, 4.6, 5.6, 4.3, 4.5, 5.4, 5.6]
 ```
 
 ## Browser long-task budget (closed dashboard)
 
-`PerformanceObserver({ type: "longtask", buffered: true })` in the production app, over a deterministic
-`page.clock.fastForward(60_000)` steady-state window with the dashboard closed (page-boot tasks excluded by an
-in-page warm-up and a stable-count drain). Same window with the plugin loaded (closed) and unloaded (baseline):
+`PerformanceObserver({ type: "longtask", buffered: true })` runs across the actual closed-dashboard session
+entry work — six full navigations (page boot included) alternating root/plain session, after one discarded
+warm-up navigation and a stable-count drain — for the feature-loaded closed dashboard (current) and the
+plugin-unloaded baseline. Each task records `name`, `duration`, `startTime`, and attribution.
 
 ```text
-closed:   { supported: true, samples: 0, overThreshold: 0, maxDurationMs: 0, durations: [] }
-baseline: { supported: true, samples: 0, overThreshold: 0, maxDurationMs: 0, durations: [] }
+current  (plugin loaded, Execution closed)
+  supported: true, samples: 6, overThreshold: 6, maxDurationMs: 161, attributionSources: ["self|window::"]
+  records: [
+    {"name":"self","duration":144,"startTime":126.8,"attribution":["window::"]},
+    {"name":"self","duration":134,"startTime":100.8,"attribution":["window::"]},
+    {"name":"self","duration":143,"startTime":108.6,"attribution":["window::"]},
+    {"name":"self","duration":145,"startTime":99.3,"attribution":["window::"]},
+    {"name":"self","duration":145,"startTime":86,"attribution":["window::"]},
+    {"name":"self","duration":161,"startTime":87.6,"attribution":["window::"]}
+  ]
+baseline (plugin unloaded)
+  supported: true, samples: 6, overThreshold: 6, maxDurationMs: 138, attributionSources: ["self|window::"]
+  records: [
+    {"name":"self","duration":137,"startTime":76.2,"attribution":["window::"]},
+    {"name":"self","duration":136,"startTime":140.6,"attribution":["window::"]},
+    {"name":"self","duration":138,"startTime":82.4,"attribution":["window::"]},
+    {"name":"self","duration":136,"startTime":92.3,"attribution":["window::"]},
+    {"name":"self","duration":136,"startTime":94.1,"attribution":["window::"]},
+    {"name":"self","duration":120,"startTime":88,"attribution":["window::"]}
+  ]
 ```
 
-No long task above 50 ms in either state; the closed count is not greater than baseline → PASS.
+Both states produce one boot long task per navigation with identical `self`/`window` attribution; the current
+`>50 ms` count is not greater than baseline and no attribution source is new → PASS. The current maximum is
+within 23 ms of baseline (same per-navigation boot task, not a new task).
 
 ## Polling and open/close lifecycle (browser)
 
 ```text
 an unopened execution dashboard performs no interval polling
-  {"closedDashboardFullRunPolls":0,"visibleDashboardFullRunPolls":4,"closedPollWindowMs":60000,"mountedGraphNodes":0}
+  {"closedDashboardFullRunPolls":0,"visibleDashboardFullRunPolls":3,"closedPollWindowMs":60000,"mountedGraphNodes":0}
 fifty execution open and close cycles leave no mounted graph
   {"openCloseCycles":50,"mountedGraphNodes":0,"maxMountedGraphNodes":100}
 ```
@@ -196,7 +218,7 @@ Found 0 warnings and 0 errors.
 $ cd packages/app
 $ PLAYWRIGHT_BUILD=1 EXECUTION_E2E_TARGET=... bun run test:e2e --config e2e/performance/playwright.config.ts \
     superpowers/execution-benchmark.spec.ts --workers=1
- 7 passed (2.1m)
+ 7 passed (2.2m)
 
 $ cd packages/app && EXECUTION_E2E_TARGET=... bun run test:e2e e2e/superpowers/execution.spec.ts --workers=1
  20 passed (3.1m); execution credential artifact scan: clean (2 files)
@@ -204,7 +226,7 @@ $ cd packages/app && EXECUTION_E2E_TARGET=... bun run test:e2e e2e/superpowers/e
 
 Raw output references (lossless canonical artifacts are committed):
 
-- canonical BENCHMARK records: `docs/superpowers/verification/execution-ui/artifacts/t19-execution-benchmark.jsonl` (7 records)
+- canonical BENCHMARK records: `docs/superpowers/verification/execution-ui/artifacts/t19-execution-benchmark.jsonl` (7 records, including full distributions and long-task attribution)
 - lifecycle unit run: `/tmp/opencode/t19-lifecycle-tests.log`
 - `bench:tabs`: `/tmp/opencode/t19-bench-tabs-final.log`; raw records `packages/app/e2e/test-results/performance/tab-switch-benchmark.jsonl`
 - `bench:entry`: `/tmp/opencode/t19-bench-entry-final.log`; raw records `packages/app/e2e/test-results/performance/tab-switch-benchmark.jsonl`
@@ -216,8 +238,9 @@ The first paired runs measured a 20–29 % closed-dashboard entry regression. Ro
 `createSessionExecutionModel` hydrated the root + 50 descendants (~153 native requests) on every session
 entry even with the Execution tab closed. Fix (`packages/app/src/superpowers/session-execution.tsx`): gate the
 native descendant hydration on the same `executionVisible` predicate the bridge already uses; bridge discovery
-is unchanged so closed-dashboard failure tracking is preserved. Subsequent review round replaced the ad-hoc
-gate with the recorded T01 scenarios above. No threshold was raised.
+is unchanged so closed-dashboard failure tracking is preserved. Later review rounds replaced the ad-hoc gate
+with the recorded T01 scenarios, enforced complete paired observations, and recorded browser long-task
+attribution. No threshold was raised.
 
 ## Unrun gates
 

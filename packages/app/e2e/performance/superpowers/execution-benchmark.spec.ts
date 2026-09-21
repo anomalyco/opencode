@@ -32,6 +32,7 @@ const OPEN_CLOSE_CYCLES = 50
 const CLOSED_POLL_WINDOW_MS = 60_000
 const GET_RUN_PATH = "/api/rpc/superpowers.execution.v1/getRun"
 const LONGTASK_THRESHOLD_MS = 50
+const LONGTASK_NAVIGATIONS = 6
 
 const T01_BASELINE = {
   "tab switch: cold, review closed": { firstCorrect: 530.9, stable: 583.0 },
@@ -56,7 +57,7 @@ benchmark.describe("T01 session-switch regression with execution closed", () => 
     const baseline = T01_BASELINE["tab switch: cold, review closed"]
     const result = await measureT01TabSwitch(page, "cold")
     report(comparisonReport("tab switch: cold, review closed", result, baseline, "cold"))
-    assertWithinT01Budget(result, baseline)
+    assertWithinT01Budget("tab switch: cold, review closed", result, baseline)
   })
 
   benchmark("tab switch: warm, review closed does not regress past the T01 budget", async ({ page, report }) => {
@@ -65,7 +66,7 @@ benchmark.describe("T01 session-switch regression with execution closed", () => 
     const baseline = T01_BASELINE["tab switch: warm, review closed"]
     const result = await measureT01TabSwitch(page, "warm")
     report(comparisonReport("tab switch: warm, review closed", result, baseline, "warm"))
-    assertWithinT01Budget(result, baseline)
+    assertWithinT01Budget("tab switch: warm, review closed", result, baseline)
   })
 
   benchmark("entry: cold session from Home does not regress past the T01 budget", async ({ page, report }) => {
@@ -95,7 +96,7 @@ benchmark.describe("T01 session-switch regression with execution closed", () => 
     }
     const baseline = T01_BASELINE["entry: cold session from Home"]
     report(comparisonReport("entry: cold session from Home", results, baseline, "cold"))
-    assertWithinT01Budget(results, baseline)
+    assertWithinT01Budget("entry: cold session from Home", results, baseline)
   })
 })
 
@@ -129,23 +130,25 @@ benchmark.describe("superpowers execution dashboard lifecycle budgets", () => {
     if (target === undefined) return
     await execution.authenticate(page)
     await registerServer(page, execution, target.password)
-    const longTasks: number[] = []
-    await observeLongTasks(page, longTasks)
-    await page.clock.install()
+    const records: LongTaskAttribution[] = []
+    await observeLongTasks(page, records)
 
-    const closed = await measureClosedDashboardLongTasks(page, execution, longTasks)
+    const current = await measureNavigationLongTasks(page, execution, records)
     await execution.unloadPlugin()
-    const baseline = await measureClosedDashboardLongTasks(page, execution, longTasks)
+    const baseline = await measureNavigationLongTasks(page, execution, records)
     await execution.reloadPlugin()
 
     report({
-      closedLongTasks: closed,
+      currentLongTasks: current,
       baselineLongTasks: baseline,
       thresholdMs: LONGTASK_THRESHOLD_MS,
       mountedGraphNodes: 0,
     })
-    expect(closed.supported).toBe(true)
-    expect(closed.overThreshold).toBeLessThanOrEqual(baseline.overThreshold)
+    expect(current.supported).toBe(true)
+    expect(current.overThreshold).toBeLessThanOrEqual(baseline.overThreshold)
+    expect(
+      current.attributionSources.filter((source) => !baseline.attributionSources.includes(source)),
+    ).toEqual([])
   })
 
   benchmark("a status-only update renders within the update budget", async ({ page, report }) => {
@@ -282,12 +285,20 @@ type SessionSwitchResult = {
   stableObservedMs: number | null
 }
 
+type LongTaskAttribution = {
+  name: string
+  duration: number
+  startTime: number
+  attribution: string[]
+}
+
 type LongTaskReport = {
   supported: boolean
   samples: number
   overThreshold: number
   maxDurationMs: number
-  durations: number[]
+  attributionSources: string[]
+  records: LongTaskAttribution[]
 }
 
 async function prepareT01TabSwitch(page: Page) {
@@ -366,32 +377,45 @@ function comparisonReport(
   baseline: { firstCorrect: number; stable: number },
   cache: string,
 ) {
-  const firstCorrect = results.map((result) => result.firstCorrectObservedMs)
-  const stable = results.map((result) => result.stableObservedMs)
+  const samples = completeSamples(scenario, results)
   return {
     scenario,
     t01BaselineFirstCorrectP95Ms: baseline.firstCorrect,
     t01BaselineStableP95Ms: baseline.stable,
-    firstCorrectP95Ms: round(percentile(numbers(firstCorrect), 95)),
-    stableP95Ms: round(percentile(numbers(stable), 95)),
+    firstCorrectP95Ms: round(percentile(samples.firstCorrect, 95)),
+    stableP95Ms: round(percentile(samples.stable, 95)),
     firstCorrectBudgetMs: round(baseline.firstCorrect * 1.1),
     stableBudgetMs: round(baseline.stable * 1.1),
-    samples: results.length,
+    samples: samples.firstCorrect.length,
     cache,
-    firstCorrectDistribution: firstCorrect.map((value) => (value === null ? null : round(value))),
-    stableDistribution: stable.map((value) => (value === null ? null : round(value))),
+    firstCorrectDistribution: samples.firstCorrect.map(round),
+    stableDistribution: samples.stable.map(round),
   }
 }
 
-function assertWithinT01Budget(results: SessionSwitchResult[], baseline: { firstCorrect: number; stable: number }) {
-  const firstCorrect = percentile(numbers(results.map((result) => result.firstCorrectObservedMs)), 95)
-  const stable = percentile(numbers(results.map((result) => result.stableObservedMs)), 95)
-  expect(firstCorrect).toBeLessThanOrEqual(baseline.firstCorrect * 1.1)
-  expect(stable).toBeLessThanOrEqual(baseline.stable * 1.1)
+function assertWithinT01Budget(
+  scenario: keyof typeof T01_BASELINE,
+  results: SessionSwitchResult[],
+  baseline: { firstCorrect: number; stable: number },
+) {
+  const samples = completeSamples(scenario, results)
+  expect(percentile(samples.firstCorrect, 95)).toBeLessThanOrEqual(baseline.firstCorrect * 1.1)
+  expect(percentile(samples.stable, 95)).toBeLessThanOrEqual(baseline.stable * 1.1)
 }
 
-function numbers(values: Array<number | null>) {
-  return values.filter((value): value is number => value !== null)
+function completeSamples(scenario: string, results: SessionSwitchResult[]) {
+  expect(results).toHaveLength(T01_SAMPLES)
+  const missing = results.flatMap((result, index) => {
+    const absent = []
+    if (result.firstCorrectObservedMs === null) absent.push("firstCorrect")
+    if (result.stableObservedMs === null) absent.push("stable")
+    return absent.length > 0 ? [`${scenario}#${index}:${absent.join("+")}`] : []
+  })
+  expect(missing).toEqual([])
+  return {
+    firstCorrect: results.map((result) => result.firstCorrectObservedMs!),
+    stable: results.map((result) => result.stableObservedMs!),
+  }
 }
 
 async function observeGetRunDelivery(page: Page) {
@@ -409,16 +433,28 @@ async function observeGetRunDelivery(page: Page) {
   })
 }
 
-async function observeLongTasks(page: Page, durations: number[]) {
-  await page.exposeFunction("__reportLongTask", (duration: number) => {
-    durations.push(duration)
+async function observeLongTasks(page: Page, records: LongTaskAttribution[]) {
+  await page.exposeFunction("__reportLongTask", (record: LongTaskAttribution) => {
+    records.push(record)
   })
   await page.addInitScript(() => {
     const host = window as Window & { __longTasksUnsupported?: boolean }
     try {
       new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          ;(window as Window & { __reportLongTask?: (duration: number) => void }).__reportLongTask?.(entry.duration)
+          const attribution = (
+            entry as PerformanceEntry & {
+              attribution?: Array<{ containerType?: string; containerName?: string; containerId?: string }>
+            }
+          ).attribution
+          ;(window as Window & { __reportLongTask?: (record: LongTaskAttribution) => void }).__reportLongTask?.({
+            name: entry.name,
+            duration: entry.duration,
+            startTime: entry.startTime,
+            attribution: (attribution ?? []).map(
+              (item) => `${item.containerType ?? ""}:${item.containerName ?? ""}:${item.containerId ?? ""}`,
+            ),
+          })
         }
       }).observe({ type: "longtask", buffered: true })
     } catch {
@@ -427,37 +463,42 @@ async function observeLongTasks(page: Page, durations: number[]) {
   })
 }
 
-async function measureClosedDashboardLongTasks(
+async function measureNavigationLongTasks(
   page: Page,
   execution: ExecutionTestHarness,
-  durations: number[],
+  records: LongTaskAttribution[],
 ): Promise<LongTaskReport> {
   await page.goto(execution.sessionHref(EXECUTION_ROOT_SESSION))
   await expect(page.locator("[data-session-title]")).toBeVisible()
+  await drainLongTasks(records)
+  const start = records.length
+  for (let index = 0; index < LONGTASK_NAVIGATIONS; index += 1) {
+    const sessionID = index % 2 === 0 ? EXECUTION_ROOT_SESSION : PERF_OTHER_SESSION
+    await page.goto(execution.sessionHref(sessionID))
+    await expect(page.locator("[data-session-title]")).toBeVisible()
+  }
   await expect(page.locator('[data-testid="execution-map-node"]')).toHaveCount(0)
-  await drainLongTasks(durations)
-  const start = durations.length
-  await page.clock.fastForward(CLOSED_POLL_WINDOW_MS)
-  await drainLongTasks(durations)
+  await drainLongTasks(records)
   const supported = await page.evaluate(
     () => !(window as Window & { __longTasksUnsupported?: boolean }).__longTasksUnsupported,
   )
-  const slice = durations.slice(start)
+  const slice = records.slice(start)
   return {
     supported,
     samples: slice.length,
-    overThreshold: slice.filter((duration) => duration > LONGTASK_THRESHOLD_MS).length,
-    maxDurationMs: slice.reduce((max, duration) => Math.max(max, duration), 0),
-    durations: slice,
+    overThreshold: slice.filter((record) => record.duration > LONGTASK_THRESHOLD_MS).length,
+    maxDurationMs: slice.reduce((max, record) => Math.max(max, record.duration), 0),
+    attributionSources: [...new Set(slice.flatMap((record) => [`${record.name}|${record.attribution.join(",")}`]))].sort(),
+    records: slice,
   }
 }
 
-async function drainLongTasks(durations: number[]) {
+async function drainLongTasks(records: LongTaskAttribution[]) {
   let previous = -1
   await expect
     .poll(
       () => {
-        const current = durations.length
+        const current = records.length
         const stable = current === previous
         previous = current
         return stable
