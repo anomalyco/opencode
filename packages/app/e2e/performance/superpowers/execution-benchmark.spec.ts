@@ -27,12 +27,16 @@ const PERF_OTHER_SESSION = "ses_perf_other"
 const PERF_RUN_ID = "run-perf-1"
 const PLAN = { path: "docs/plan.md", sha256: "0".repeat(64) }
 const T01_SAMPLES = 20
+const T01_BASELINE_SAMPLES = 6
 const STATUS_SAMPLES = 12
 const OPEN_CLOSE_CYCLES = 50
 const CLOSED_POLL_WINDOW_MS = 60_000
 const GET_RUN_PATH = "/api/rpc/superpowers.execution.v1/getRun"
+const EXECUTION_RPC_PATTERN = "**/api/rpc/superpowers.execution.v1/**"
 const LONGTASK_THRESHOLD_MS = 50
-const LONGTASK_NAVIGATIONS = 6
+const FEATURE_ATTRIBUTION_GATE = "unrun"
+const FEATURE_ATTRIBUTION_REASON =
+  "Chromium long tasks report only self/window attribution; overlap with asynchronous execution RPC windows attributes unrelated boot/timeline render tasks, and no feature-absent build is available at runtime for a causal difference."
 
 const T01_BASELINE = {
   "tab switch: cold, review closed": { firstCorrect: 530.9, stable: 583.0 },
@@ -54,49 +58,35 @@ benchmark.describe("T01 session-switch regression with execution closed", () => 
   benchmark("tab switch: cold, review closed does not regress past the T01 budget", async ({ page, report }) => {
     benchmark.setTimeout(600_000)
     await prepareT01TabSwitch(page)
-    const baseline = T01_BASELINE["tab switch: cold, review closed"]
-    const result = await measureT01TabSwitch(page, "cold")
-    report(comparisonReport("tab switch: cold, review closed", result, baseline, "cold"))
-    assertWithinT01Budget("tab switch: cold, review closed", result, baseline)
+    const observation = await observeT01Scenario(page, "cold")
+    report({
+      ...comparisonReport("tab switch: cold, review closed", observation.current.result, T01_BASELINE["tab switch: cold, review closed"], "cold"),
+      ...observationReport(observation),
+    })
+    assertWithinT01Budget("tab switch: cold, review closed", observation.current.result, T01_BASELINE["tab switch: cold, review closed"])
   })
 
   benchmark("tab switch: warm, review closed does not regress past the T01 budget", async ({ page, report }) => {
     benchmark.setTimeout(600_000)
     await prepareT01TabSwitch(page)
-    const baseline = T01_BASELINE["tab switch: warm, review closed"]
-    const result = await measureT01TabSwitch(page, "warm")
-    report(comparisonReport("tab switch: warm, review closed", result, baseline, "warm"))
-    assertWithinT01Budget("tab switch: warm, review closed", result, baseline)
+    const observation = await observeT01Scenario(page, "warm")
+    report({
+      ...comparisonReport("tab switch: warm, review closed", observation.current.result, T01_BASELINE["tab switch: warm, review closed"], "warm"),
+      ...observationReport(observation),
+    })
+    assertWithinT01Budget("tab switch: warm, review closed", observation.current.result, T01_BASELINE["tab switch: warm, review closed"])
   })
 
   benchmark("entry: cold session from Home does not regress past the T01 budget", async ({ page, report }) => {
     benchmark.setTimeout(600_000)
     await mockStressTimeline(page)
     await installStressSessionTabs(page, { sessionIDs: [] })
-    const selector = `[data-component="home-session-row-container"][data-session-id="${fixture.targetID}"] [data-component="home-session-row"]`
-    const lastID = fixture.expected.targetMessageIDs.at(-1)!
-    const results: SessionSwitchResult[] = []
-    for (let index = 0; index < T01_SAMPLES; index += 1) {
-      await page.goto("/")
-      await expect(page.locator(selector)).toBeVisible()
-      results.push(
-        await measureSessionSwitch(page, {
-          destinationIDs: fixture.messages[fixture.targetID].map((message) => message.id),
-          sourceIDs: [],
-          lastID,
-          requiredPartID: fixture.expected.targetPartIDs.at(-1)!,
-          href: stressSessionHref(fixture.targetID),
-          triggerSelector: selector,
-          switch: async () => {
-            await page.locator(selector).click()
-            await waitForStableTimeline(page, lastID)
-          },
-        }),
-      )
-    }
-    const baseline = T01_BASELINE["entry: cold session from Home"]
-    report(comparisonReport("entry: cold session from Home", results, baseline, "cold"))
-    assertWithinT01Budget("entry: cold session from Home", results, baseline)
+    const observation = await observeEntryScenario(page)
+    report({
+      ...comparisonReport("entry: cold session from Home", observation.current.result, T01_BASELINE["entry: cold session from Home"], "cold"),
+      ...observationReport(observation),
+    })
+    assertWithinT01Budget("entry: cold session from Home", observation.current.result, T01_BASELINE["entry: cold session from Home"])
   })
 })
 
@@ -123,32 +113,6 @@ benchmark.describe("superpowers execution dashboard lifecycle budgets", () => {
     await execution.resetSessions()
     await installPerformanceSessions(execution)
     await startPerformanceRun(execution)
-  })
-
-  benchmark("a closed dashboard adds no browser long task above fifty milliseconds", async ({ page, report }) => {
-    benchmark.setTimeout(300_000)
-    if (target === undefined) return
-    await execution.authenticate(page)
-    await registerServer(page, execution, target.password)
-    const records: LongTaskAttribution[] = []
-    await observeLongTasks(page, records)
-
-    const current = await measureNavigationLongTasks(page, execution, records)
-    await execution.unloadPlugin()
-    const baseline = await measureNavigationLongTasks(page, execution, records)
-    await execution.reloadPlugin()
-
-    report({
-      currentLongTasks: current,
-      baselineLongTasks: baseline,
-      thresholdMs: LONGTASK_THRESHOLD_MS,
-      mountedGraphNodes: 0,
-    })
-    expect(current.supported).toBe(true)
-    expect(current.overThreshold).toBeLessThanOrEqual(baseline.overThreshold)
-    expect(
-      current.attributionSources.filter((source) => !baseline.attributionSources.includes(source)),
-    ).toEqual([])
   })
 
   benchmark("a status-only update renders within the update budget", async ({ page, report }) => {
@@ -285,20 +249,215 @@ type SessionSwitchResult = {
   stableObservedMs: number | null
 }
 
+type ExecutionWindow = {
+  name: string
+  url: string
+  start: number
+  end: number
+  document: string
+}
+
 type LongTaskAttribution = {
   name: string
   duration: number
   startTime: number
   attribution: string[]
+  document: string
+  featureAttributable: boolean
+  overlappingWindows: string[]
 }
 
-type LongTaskReport = {
-  supported: boolean
+type LongTaskProfile = {
   samples: number
   overThreshold: number
+  featureAttributableSamples: number
+  featureAttributableOverThreshold: number
   maxDurationMs: number
   attributionSources: string[]
+  executionWindows: number
   records: LongTaskAttribution[]
+}
+
+type ScenarioRun = {
+  result: SessionSwitchResult[]
+  longTasks: LongTaskProfile
+  windows: ExecutionWindow[]
+}
+
+type ObservedScenario = {
+  current: ScenarioRun
+  baseline: ScenarioRun
+}
+
+async function observeT01Scenario(page: Page, cache: "cold" | "warm"): Promise<ObservedScenario> {
+  return observeScenario(
+    page,
+    () => measureT01TabSwitch(page, cache, T01_SAMPLES),
+    () => measureT01TabSwitch(page, cache, T01_BASELINE_SAMPLES),
+    async () => {
+      await page.goto(stressSessionHref(fixture.sourceID))
+      await expectSessionTitle(page, fixture.expected.sourceTitle)
+      await expectReadyT01Timeline(page, fixture.sourceID)
+    },
+  )
+}
+
+async function observeEntryScenario(page: Page): Promise<ObservedScenario> {
+  const selector = `[data-component="home-session-row-container"][data-session-id="${fixture.targetID}"] [data-component="home-session-row"]`
+  const lastID = fixture.expected.targetMessageIDs.at(-1)!
+  const runScenario = (samples: number) => async () => {
+    const results: SessionSwitchResult[] = []
+    for (let index = 0; index < samples; index += 1) {
+      await page.goto("/")
+      await expect(page.locator(selector)).toBeVisible()
+      results.push(
+        await measureSessionSwitch(page, {
+          destinationIDs: fixture.messages[fixture.targetID].map((message) => message.id),
+          sourceIDs: [],
+          lastID,
+          requiredPartID: fixture.expected.targetPartIDs.at(-1)!,
+          href: stressSessionHref(fixture.targetID),
+          triggerSelector: selector,
+          switch: async () => {
+            await page.locator(selector).click()
+            await waitForStableTimeline(page, lastID)
+          },
+        }),
+      )
+    }
+    return results
+  }
+  return observeScenario(page, runScenario(T01_SAMPLES), runScenario(T01_BASELINE_SAMPLES), async () => {
+    await page.goto("/")
+    await expect(page.locator(selector)).toBeVisible()
+  })
+}
+
+async function observeScenario(
+  page: Page,
+  current: () => Promise<SessionSwitchResult[]>,
+  baseline: () => Promise<SessionSwitchResult[]>,
+  warmup: () => Promise<void>,
+): Promise<ObservedScenario> {
+  const records: LongTaskAttribution[] = []
+  const windows: ExecutionWindow[] = []
+  await observeLongTasks(page, records, windows)
+  await warmup()
+  await drainLongTasks(records)
+  const currentStart = records.length
+  const windowsStart = windows.length
+  const currentResult = await current()
+  const currentWindows = windows.slice(windowsStart)
+  const currentLongTasks = summarizeLongTasks(records.slice(currentStart), currentWindows)
+
+  await page.route(EXECUTION_RPC_PATTERN, (route) => route.abort())
+  const baselineStart = records.length
+  const baselineWindowsStart = windows.length
+  const baselineResult = await baseline()
+  const baselineWindows = windows.slice(baselineWindowsStart)
+  const baselineLongTasks = summarizeLongTasks(records.slice(baselineStart), baselineWindows)
+  await page.unroute(EXECUTION_RPC_PATTERN)
+
+  return {
+    current: { result: currentResult, longTasks: currentLongTasks, windows: currentWindows },
+    baseline: { result: baselineResult, longTasks: baselineLongTasks, windows: baselineWindows },
+  }
+}
+
+async function observeLongTasks(page: Page, records: LongTaskAttribution[], windows: ExecutionWindow[]) {
+  await page.exposeFunction("__reportLongTask", (record: LongTaskAttribution) => {
+    records.push(record)
+  })
+  await page.exposeFunction("__reportExecutionWindow", (window: ExecutionWindow) => {
+    windows.push(window)
+  })
+  await page.addInitScript(() => {
+    const host = window as Window & {
+      __longTasksUnsupported?: boolean
+      __reportLongTask?: (record: LongTaskAttribution) => void
+      __reportExecutionWindow?: (window: ExecutionWindow) => void
+    }
+    const documentID = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const windows: ExecutionWindow[] = []
+    let sequence = 0
+    const original = window.fetch.bind(window)
+    window.fetch = (async (...args: Parameters<typeof fetch>) => {
+      const input = args[0]
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.href : input instanceof Request ? input.url : ""
+      if (!url.includes("/api/rpc/superpowers.execution.v1/")) return original(...args)
+      sequence += 1
+      const name = `execution-window-${sequence}`
+      const start = performance.now()
+      performance.mark(`${name}-start`, { startTime: start })
+      try {
+        return await original(...args)
+      } finally {
+        const end = performance.now()
+        performance.mark(`${name}-end`, { startTime: end })
+        try {
+          performance.measure(name, `${name}-start`, `${name}-end`)
+        } catch {
+          host.__longTasksUnsupported = true
+        }
+        const window = { name, url, start, end, document: documentID }
+        windows.push(window)
+        host.__reportExecutionWindow?.(window)
+      }
+    }) as unknown as typeof fetch
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const attribution = (
+            entry as PerformanceEntry & {
+              attribution?: Array<{ containerType?: string; containerName?: string; containerId?: string }>
+            }
+          ).attribution
+          const overlapping = windows.filter(
+            (window) => entry.startTime < window.end && window.start < entry.startTime + entry.duration,
+          )
+          host.__reportLongTask?.({
+            name: entry.name,
+            duration: entry.duration,
+            startTime: entry.startTime,
+            attribution: (attribution ?? []).map(
+              (item) => `${item.containerType ?? ""}:${item.containerName ?? ""}:${item.containerId ?? ""}`,
+            ),
+            document: documentID,
+            featureAttributable: overlapping.length > 0,
+            overlappingWindows: overlapping.map((window) => window.name),
+          })
+        }
+      }).observe({ type: "longtask", buffered: true })
+    } catch {
+      host.__longTasksUnsupported = true
+    }
+  })
+}
+
+function summarizeLongTasks(records: LongTaskAttribution[], windows: ExecutionWindow[]): LongTaskProfile {
+  const attributable = records.filter((record) => record.featureAttributable)
+  return {
+    samples: records.length,
+    overThreshold: records.filter((record) => record.duration > LONGTASK_THRESHOLD_MS).length,
+    featureAttributableSamples: attributable.length,
+    featureAttributableOverThreshold: attributable.filter((record) => record.duration > LONGTASK_THRESHOLD_MS).length,
+    maxDurationMs: records.reduce((max, record) => Math.max(max, record.duration), 0),
+    attributionSources: [...new Set(records.flatMap((record) => [`${record.name}|${record.attribution.join(",")}`]))].sort(),
+    executionWindows: windows.length,
+    records,
+  }
+}
+
+function observationReport(observation: ObservedScenario) {
+  return {
+    currentLongTasks: observation.current.longTasks,
+    baselineLongTasks: observation.baseline.longTasks,
+    executionWindows: observation.current.windows,
+    baselineExecutionWindows: observation.baseline.windows,
+    featureAttributionGate: FEATURE_ATTRIBUTION_GATE,
+    featureAttributionReason: FEATURE_ATTRIBUTION_REASON,
+  }
 }
 
 async function prepareT01TabSwitch(page: Page) {
@@ -314,7 +473,7 @@ async function prepareT01TabSwitch(page: Page) {
   await installStressSessionTabs(page)
 }
 
-async function measureT01TabSwitch(page: Page, cache: "cold" | "warm") {
+async function measureT01TabSwitch(page: Page, cache: "cold" | "warm", samples: number) {
   const destination = fixture.targetID
   const source = fixture.sourceID
   const results: SessionSwitchResult[] = []
@@ -323,7 +482,7 @@ async function measureT01TabSwitch(page: Page, cache: "cold" | "warm") {
     await expectSessionTitle(page, fixture.expected.sourceTitle)
     await expectReadyT01Timeline(page, source)
   }
-  for (let index = 0; index < T01_SAMPLES; index += 1) {
+  for (let index = 0; index < samples; index += 1) {
     if (cache === "cold") {
       await page.goto(stressSessionHref(source))
       await expectSessionTitle(page, fixture.expected.sourceTitle)
@@ -433,81 +592,6 @@ async function observeGetRunDelivery(page: Page) {
   })
 }
 
-async function observeLongTasks(page: Page, records: LongTaskAttribution[]) {
-  await page.exposeFunction("__reportLongTask", (record: LongTaskAttribution) => {
-    records.push(record)
-  })
-  await page.addInitScript(() => {
-    const host = window as Window & { __longTasksUnsupported?: boolean }
-    try {
-      new PerformanceObserver((list) => {
-        for (const entry of list.getEntries()) {
-          const attribution = (
-            entry as PerformanceEntry & {
-              attribution?: Array<{ containerType?: string; containerName?: string; containerId?: string }>
-            }
-          ).attribution
-          ;(window as Window & { __reportLongTask?: (record: LongTaskAttribution) => void }).__reportLongTask?.({
-            name: entry.name,
-            duration: entry.duration,
-            startTime: entry.startTime,
-            attribution: (attribution ?? []).map(
-              (item) => `${item.containerType ?? ""}:${item.containerName ?? ""}:${item.containerId ?? ""}`,
-            ),
-          })
-        }
-      }).observe({ type: "longtask", buffered: true })
-    } catch {
-      host.__longTasksUnsupported = true
-    }
-  })
-}
-
-async function measureNavigationLongTasks(
-  page: Page,
-  execution: ExecutionTestHarness,
-  records: LongTaskAttribution[],
-): Promise<LongTaskReport> {
-  await page.goto(execution.sessionHref(EXECUTION_ROOT_SESSION))
-  await expect(page.locator("[data-session-title]")).toBeVisible()
-  await drainLongTasks(records)
-  const start = records.length
-  for (let index = 0; index < LONGTASK_NAVIGATIONS; index += 1) {
-    const sessionID = index % 2 === 0 ? EXECUTION_ROOT_SESSION : PERF_OTHER_SESSION
-    await page.goto(execution.sessionHref(sessionID))
-    await expect(page.locator("[data-session-title]")).toBeVisible()
-  }
-  await expect(page.locator('[data-testid="execution-map-node"]')).toHaveCount(0)
-  await drainLongTasks(records)
-  const supported = await page.evaluate(
-    () => !(window as Window & { __longTasksUnsupported?: boolean }).__longTasksUnsupported,
-  )
-  const slice = records.slice(start)
-  return {
-    supported,
-    samples: slice.length,
-    overThreshold: slice.filter((record) => record.duration > LONGTASK_THRESHOLD_MS).length,
-    maxDurationMs: slice.reduce((max, record) => Math.max(max, record.duration), 0),
-    attributionSources: [...new Set(slice.flatMap((record) => [`${record.name}|${record.attribution.join(",")}`]))].sort(),
-    records: slice,
-  }
-}
-
-async function drainLongTasks(records: LongTaskAttribution[]) {
-  let previous = -1
-  await expect
-    .poll(
-      () => {
-        const current = records.length
-        const stable = current === previous
-        previous = current
-        return stable
-      },
-      { timeout: 5_000 },
-    )
-    .toBe(true)
-}
-
 async function installPerformanceSessions(execution: ExecutionTestHarness) {
   const owner = execution.owned.directories.owner
   await execution.setSessions([
@@ -575,11 +659,19 @@ async function registerServer(page: Page, execution: ExecutionTestHarness, passw
 }
 
 async function drainFullRunPolls(polls: string[]) {
+  await drainUntilStable(() => polls.length)
+}
+
+async function drainLongTasks(records: LongTaskAttribution[]) {
+  await drainUntilStable(() => records.length)
+}
+
+async function drainUntilStable(read: () => number) {
   let previous = -1
   await expect
     .poll(
       () => {
-        const current = polls.length
+        const current = read()
         const stable = current === previous
         previous = current
         return stable
