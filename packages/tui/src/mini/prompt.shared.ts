@@ -44,9 +44,11 @@ export function promptSame(a: RunPrompt, b: RunPrompt): boolean {
   )
 }
 
+export const EXIT_COMMANDS = ["exit", "quit", "q"]
+
 export function isExitCommand(input: string): boolean {
   const text = input.trim().toLowerCase()
-  return text === "/exit" || text === "/quit" || text === ":q"
+  return text === ":q" || EXIT_COMMANDS.some((name) => text === `/${name}`)
 }
 
 export function isNewCommand(input: string): boolean {

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { constants, type Method, methods } from "../interpreter/native.js"
 import { typeError } from "../interpreter/model.js"
-import { Obj } from "../interpreter/objects.js"
+import { Obj, type Value } from "../interpreter/objects.js"
 import { preserveConsumerError } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 
@@ -14,7 +14,7 @@ declare global {
 
 // Validate only the arguments a method consumes; like JS, extras are ignored
 // (so built-ins work as callbacks receiving (element, index, array)).
-const number = (name: string, args: Array<unknown>, index: number): number => {
+const number = (name: string, args: Array<Value>, index: number): number => {
   if (index >= args.length) return Number.NaN
   const arg = args[index]
   if (typeof arg !== "number") throw typeError(`Math.${name} expects number arguments.`)
@@ -105,7 +105,7 @@ export const mathGlobal = <R>(ctx: Interpreter<R>) => {
             const step = yield* cursor.next
             if (step.done) return Math.sumPrecise(numbers)
             yield* preserveConsumerError(
-              cursor,
+              cursor.close,
               Effect.sync(() => {
                 if (typeof step.value !== "number") {
                   throw typeError("Math.sumPrecise expects an iterable of numbers.")

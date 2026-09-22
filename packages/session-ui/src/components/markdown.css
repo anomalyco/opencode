@@ -101,6 +101,20 @@
     text-underline-offset: 2px;
   }
 
+  a[data-local-link] {
+    cursor: pointer;
+  }
+
+  &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code) {
+    cursor: pointer;
+  }
+
+  &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code):hover {
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklch, var(--markdown-inline-code-path-color) 40%, transparent);
+    text-underline-offset: 2px;
+  }
+
   /* Lists */
   ul,
   ol {

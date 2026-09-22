@@ -1,7 +1,8 @@
 import { constructor, constants, methods } from "../interpreter/native.js"
+import { coerceToString, type Value } from "../interpreter/objects.js"
 import { rangeError, typeError } from "../interpreter/model.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { coercion, coerceToString } from "./value.js"
+import { coercion } from "./value.js"
 
 export const numberGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
@@ -39,11 +40,11 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
     ["parseFloat", 1, (_, args) => parseFloat(coerceToString(args[0]))],
   ])
 
-  const self = (thisValue: unknown, name: string): number => {
+  const self = (thisValue: Value, name: string): number => {
     if (typeof thisValue === "number") return thisValue
     throw typeError(`Number.prototype.${name} requires that 'this' be a Number.`)
   }
-  const optNum = (name: string, arg: unknown): number | undefined => {
+  const optNum = (name: string, arg: Value): number | undefined => {
     if (arg === undefined) return undefined
     if (typeof arg !== "number") throw typeError(`Number.${name} expects a number argument.`)
     return arg
@@ -89,7 +90,7 @@ export const booleanGlobal = <R>(ctx: Interpreter<R>) => {
     length: 1,
     call: coercion(ctx, "Boolean").call,
   })
-  const self = (thisValue: unknown, name: string): boolean => {
+  const self = (thisValue: Value, name: string): boolean => {
     if (typeof thisValue === "boolean") return thisValue
     throw typeError(`Boolean.prototype.${name} requires that 'this' be a Boolean.`)
   }

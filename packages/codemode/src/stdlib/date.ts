@@ -1,12 +1,11 @@
 import { Effect } from "effect"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { rangeError } from "../interpreter/model.js"
-import { DateObj, Obj } from "../interpreter/objects.js"
+import { DateObj, Obj, coerceToNumber, coerceToString, type Value } from "../interpreter/objects.js"
 import { toPrimitive, toPrimitiveNumber } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { coerceToNumber, coerceToString } from "./value.js"
 
-const constructDate = <R>(ctx: Interpreter<R>, args: Array<unknown>, proto: Obj) => {
+const constructDate = <R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj) => {
   if (args.length === 0) return Effect.succeed(new DateObj(proto, Date.now()))
   if (args.length === 1) {
     const arg = args[0]
@@ -83,7 +82,7 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
     ["UTC", 7, (_, args) => Date.UTC(...(args.map((arg) => coerceToNumber(arg)) as Parameters<typeof Date.UTC>))],
   ])
 
-  const self = (thisValue: unknown, name: string) => receiver(DateObj, thisValue, `Date.prototype.${name}`)
+  const self = (thisValue: Value, name: string) => receiver(DateObj, thisValue, `Date.prototype.${name}`)
   const iso = (value: DateObj) => {
     if (!Number.isFinite(value.time)) throw rangeError("Invalid time value.")
     return new Date(value.time).toISOString()

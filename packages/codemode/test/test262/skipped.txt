@@ -236,6 +236,11 @@ built-ins/Array/prototype/unshift/S15.4.4.13_A2_T3.js  # Array.prototype.unshift
 built-ins/Array/prototype/unshift/S15.4.4.13_A3_T2.js  # Array.prototype.unshift called on incompatible receiver a data object.
 built-ins/Array/prototype/unshift/S15.4.4.13_A4_T1.js  # Array.prototype.unshift called on incompatible receiver a data object.
 built-ins/Array/prototype/unshift/S15.4.4.13_A4_T2.js  # #3: Array.prototype[0] = 1; x = []; x.length = 1; x.unshift(0); x[1] === 1. Actual: undefined
+built-ins/Iterator/from/return-method-returns-iterator-result.js  # Iterator next must be a function.
+built-ins/Iterator/prototype/drop/limit-tonumber-throws.js  # Expected a Test262Error but got a RangeError
+built-ins/Iterator/prototype/drop/limit-tonumber.js  # Iterator.prototype.drop expects a non-negative count, received NaN.
+built-ins/Iterator/prototype/take/limit-tonumber-throws.js  # Expected a Test262Error but got a RangeError
+built-ins/Iterator/prototype/take/limit-tonumber.js  # Iterator.prototype.take expects a non-negative count, received NaN.
 language/statements/async-generator/dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/async-generator/dflt-params-ref-later.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/async-generator/dflt-params-ref-self.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
@@ -290,7 +295,6 @@ language/statements/for-await-of/async-func-decl-dstr-obj-empty-num.js  # TypeEr
 language/statements/for-await-of/async-func-decl-dstr-obj-empty-string.js  # TypeError: Object destructuring requires a data object or array value, received a string.
 language/statements/for-await-of/async-func-decl-dstr-obj-rest-number.js  # TypeError: Object destructuring requires a data object or array value, received a number.
 language/statements/for-await-of/async-func-decl-dstr-obj-rest-str-val.js  # TypeError: Object destructuring requires a data object or array value, received a string.
-language/statements/for-await-of/async-gen-decl-dstr-array-elem-iter-rtrn-close-null.js  # "Promise incorrectly fulfilled."
 language/statements/for-await-of/async-gen-decl-dstr-obj-empty-bool.js  # TypeError: Object destructuring requires a data object or array value, received a boolean.
 language/statements/for-await-of/async-gen-decl-dstr-obj-empty-num.js  # TypeError: Object destructuring requires a data object or array value, received a number.
 language/statements/for-await-of/async-gen-decl-dstr-obj-empty-string.js  # TypeError: Object destructuring requires a data object or array value, received a string.
@@ -298,10 +302,7 @@ language/statements/for-await-of/async-gen-decl-dstr-obj-rest-number.js  # TypeE
 language/statements/for-await-of/async-gen-decl-dstr-obj-rest-str-val.js  # TypeError: Object destructuring requires a data object or array value, received a string.
 language/statements/for-in/head-lhs-member.js  # Unsupported for...in binding.
 language/statements/for-of/dstr/array-elem-iter-rtrn-close-err.js  # Iterator next must be a function.
-language/statements/for-of/dstr/array-elem-iter-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/for-of/dstr/array-elem-iter-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
-language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
-language/statements/for-of/dstr/array-elem-trlg-iter-list-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/for-of/dstr/array-elem-trlg-iter-list-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
 language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
@@ -335,11 +336,6 @@ language/statements/function/S13.2_A1_T1.js  # #1: __func.prototype !== undefine
 language/statements/function/S13.2_A1_T2.js  # #1: __func.prototype !== undefined
 language/statements/function/S13.2_A4_T1.js  # Unknown identifier '…'.
 language/statements/function/S13.2_A4_T2.js  # #1: typeof __gunc.prototype === '…'. Actual: typeof __gunc.prototype ===undefined
-language/statements/function/S13_A3_T1.js  # Unknown identifier '…'.
-language/statements/function/S13_A6_T1.js  # Identifier '…' has already been declared.
-language/statements/function/S14_A2.js  # Unknown identifier '…'.
-language/statements/function/S14_A5_T1.js  # Identifier '…' has already been declared.
-language/statements/function/S14_A5_T2.js  # Identifier '…' has already been declared.
 language/statements/function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dflt-params-abrupt.js  # Expected a Test262Error to be thrown but no exception was thrown at all
@@ -389,9 +385,6 @@ language/statements/generators/dstr/obj-ptrn-prop-id-init-throws.js  # Expected 
 language/statements/generators/dstr/obj-ptrn-prop-id-init-unresolvable.js  # Expected a ReferenceError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/obj-ptrn-prop-obj-value-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/obj-ptrn-prop-obj-value-undef.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/generators/has-instance.js  # The right-hand side of '…' has no '…' object.
-language/statements/generators/prototype-typeof.js  # Expected SameValue(«"undefined"», «"object"») to be true
-language/statements/generators/prototype-uniqueness.js  # Expected true but got false
 language/statements/labeled/value-await-non-module.js  # Failed to parse TypeScript: Expression expected.
 language/statements/let/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/return/S12.9_A1_T1.js  # expected SyntaxError but the program ran

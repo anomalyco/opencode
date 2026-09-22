@@ -33,12 +33,13 @@ test("validates mini replay and work spinner settings", () => {
 test("validates the session tabs setting", () => {
   const decode = Schema.decodeUnknownSync(Info)
 
-  expect(decode({ tabs: { enabled: true, layout: "vertical", indicators: "numbers" } })).toEqual({
-    tabs: { enabled: true, layout: "vertical", indicators: "numbers" },
+  expect(decode({ tabs: { mode: "on", layout: "vertical", indicators: "numbers" } })).toEqual({
+    tabs: { mode: "on", layout: "vertical", indicators: "numbers" },
   })
   expect(() => decode({ tabs: { indicators: "unknown" } })).toThrow()
   expect(() => decode({ tabs: { layout: true } })).toThrow()
-  expect(() => decode({ tabs: { enabled: "on" } })).toThrow()
+  expect(() => decode({ tabs: { mode: true } })).toThrow()
+  expect(decode({ tabs: { enabled: false } })).toEqual({ tabs: { enabled: false } })
   expect(decode({ prompt: { image_preview: true } })).toEqual({ prompt: { image_preview: true } })
   expect(decode({ session: { image_preview: true } })).toEqual({ session: { image_preview: true } })
   expect(decode({ session: { tps: false } })).toEqual({ session: { tps: false } })
@@ -55,7 +56,7 @@ test("resolves nested config and keybind defaults", () => {
       diffs: { view: "split" },
       debug: { devtools: true },
     },
-    { terminalSuspend: true },
+    { terminalSuspend: true, environment: {} },
   )
 
   expect(config.leader.timeout).toBe(500)
@@ -63,13 +64,38 @@ test("resolves nested config and keybind defaults", () => {
   expect(config.scroll).toEqual({ speed: 2, acceleration: true })
   expect(config.diffs).toEqual({ view: "split" })
   expect(config.debug).toEqual({ devtools: true })
-  expect(config.tabs).toEqual({ enabled: true, scope: "cwd", layout: "horizontal", indicators: "status" })
+  expect(config.tabs).toEqual({
+    mode: "auto",
+    enabled: true,
+    scope: "cwd",
+    layout: "horizontal",
+    indicators: "status",
+  })
   expect(config.session.new_location).toBe("launch")
   expect(config.session.tps).toBe(true)
 })
 
+test("resolves automatic tabs from the terminal environment", () => {
+  expect(resolve({}, { terminalSuspend: true, environment: {} }).tabs.enabled).toBe(true)
+  expect(resolve({}, { terminalSuspend: true, environment: { HERDR_ENV: "1" } }).tabs.enabled).toBe(false)
+  expect(
+    resolve({ tabs: { mode: "on" } }, { terminalSuspend: true, environment: { HERDR_ENV: "1" } }).tabs.enabled,
+  ).toBe(true)
+  expect(resolve({ tabs: { mode: "off" } }, { terminalSuspend: true, environment: {} }).tabs.enabled).toBe(false)
+  expect(resolve({ tabs: { enabled: false } }, { terminalSuspend: true, environment: {} }).tabs).toMatchObject({
+    mode: "off",
+    enabled: false,
+  })
+  expect(
+    resolve({ tabs: { mode: "on", enabled: false } }, { terminalSuspend: true, environment: {} }).tabs,
+  ).toMatchObject({ mode: "on", enabled: true })
+})
+
 test("shows resolved tab defaults in settings", () => {
-  expect(settings.find((setting) => setting.path.join(".") === "tabs.enabled")?.default).toBe(true)
+  expect(settings.find((setting) => setting.path.join(".") === "tabs.mode")).toMatchObject({
+    default: "auto",
+    values: ["off", "on", "auto"],
+  })
   expect(settings.find((setting) => setting.path.join(".") === "tabs.scope")?.default).toBe("cwd")
   expect(settings.find((setting) => setting.path.join(".") === "tabs.layout")?.default).toBe("horizontal")
   expect(settings.find((setting) => setting.path.join(".") === "tabs.indicators")).toMatchObject({

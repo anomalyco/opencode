@@ -87,7 +87,6 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Destructuring reads through the prototype chain like member access: `const { constructor } = error` and
       `const { slice } = values` find the inherited built-in.
 - [ ] Member expressions as `for...in` targets (`for (x.y in obj)`).
-- [ ] `IteratorClose` during destructuring should throw a `TypeError` when `return()` yields a non-object.
 
 ## Statements and control flow
 
@@ -146,8 +145,11 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       assignments, object literal keys, and destructuring or parameter defaults.
 - [x] Built-in functions are objects too, with `name` and `length` (`Math.max.length === 2`,
       `Array.prototype.push.name === "push"`).
-- [ ] A named function expression's name is not bound inside its own body.
-- [ ] Redeclaring a function in the same scope is rejected; in JavaScript the last declaration wins.
+- [x] A named function expression's name is bound read-only inside its own body; assigning to it throws a
+      `TypeError`, as in strict mode.
+- [x] Redeclaring a function in the same scope, or alongside a `var`, is allowed: the last declaration wins.
+- [x] Generator functions have their own `prototype` (inheriting the shared generator prototype), so
+      `g() instanceof g` holds. Plain functions have none, since they cannot construct.
 - [ ] Generator and async generator functions evaluate parameter defaults and destructuring at the first `next()`
       rather than at the call, so their errors are not thrown synchronously.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
@@ -162,7 +164,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       rejected by every synchronous consumer.
 - [x] Synchronous iterator acquisition and result validation follow `IteratorClose` boundaries: consumer errors and
       intentional early stops invoke `return()`, acquisition/`next()` failures do not, and an original consumer error
-      wins over a cleanup failure. Async iterator consumption remains limited to `for await...of` and async `yield*`.
+      wins over a cleanup failure. A generator's `return()` is an intentional stop, so a `return()` that throws or
+      yields a non-object surfaces from it as a `TypeError`. Async iterator consumption remains limited to `for await...of` and async `yield*`.
 - [x] Portable generator protocol coverage is adapted from pinned Test262 cases for suspended-start, suspended-yield,
       and completed states; sync and async `next`/`return`/`throw`; finally yields and completion overrides; rejected
       yielded promises; mixed async request queues; sync and async `yield*` forwarding; malformed methods/results;
@@ -196,7 +199,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Plain, arithmetic, bitwise, and logical assignment operators.
 - [x] Property deletion on plain data objects and arrays, including computed and optional forms; deleting an array index
       creates a hole without changing its length. Deleting a non-configurable property (`length`) or
-      assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode.
+      assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode. `delete` of a
+      non-reference (`delete 0`, `delete f()`) evaluates the operand and is `true`; `delete x` on a variable throws.
 - [ ] Operators, `switch` discriminants, template interpolation, and coercion helpers such as `String` and `isNaN`
       applied to functions and namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
 - [ ] ToPrimitive on object operands: operators, `Error(message)`, `Date` arguments, and `parseInt` radix should call
@@ -238,6 +242,10 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       resolving with the promise itself rejects with a `TypeError`. Resolver callables work anywhere callbacks are
       accepted, including `.then`/`.catch` handlers and collection callbacks, and vanish at the data boundary like
       any function.
+- [x] `Promise.withResolvers()`: the same promise and resolver callables as the constructor, as a `{ promise, resolve,
+  reject }` object.
+- [x] `Promise.try(fn, ...args)`: calls `fn` synchronously; a throw rejects, a return fulfils, and a returned promise or
+      thenable is adopted.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
       constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
       first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
@@ -275,7 +283,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `Object.is` for supported data values.
 - [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
       and plain-object results.
-- [x] `Object.prototype` methods on values: `toString` (`"[object Array]"`), `toLocaleString` (calls the value's
+- [x] `Object.prototype` methods on values: `toString` (`"[object Array]"`, `"[object Map]"`, `"[object Promise]"`, and so
+      on for every built-in kind, as JS reports through `Symbol.toStringTag`), `toLocaleString` (calls the value's
       `toString`, as in JS), `valueOf`, `hasOwnProperty`, `isPrototypeOf`, and `propertyIsEnumerable`.
 
 ## Arrays
@@ -369,7 +378,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `JSON.stringify` function and array replacers. Function replacers receive `(key, value)` in preorder, including
       the root, but no `this` holder. Array replacers preserve requested property order, deduplicate names, coerce
       number primitives, and ignore non-string/non-number entries. Primitive wrapper entries remain unsupported.
-- [x] Captured `console.log`, `console.info`, `console.debug`, `console.warn`, and `console.error`.
+- [x] Captured `console.log`, `console.info`, `console.debug`, `console.warn`, and `console.error`. An Error prints as
+      `Error.prototype.toString` would show it (`Error: boom`), wherever it appears in the logged value.
 - [x] Captured `console.dir` and `console.table`.
 
 ## Date
@@ -412,15 +422,30 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Match `indices` metadata for the `d` flag, including named groups on `exec`, `match`, and `matchAll` results.
 - [x] `RegExp.escape`.
 
+## Iterator
+
+- [x] `Iterator.prototype.map`, `filter`, `take`, `drop`, and `flatMap` on any iterator or generator: lazy, one source
+      step per result, closing the source when a callback throws, on early `return()`, or when `for...of` or
+      destructuring finishes with it early. Once done or closed a helper stays done, and a callback that re-enters its
+      own helper is a `TypeError`. `take`/`drop` coerce their count and reject `NaN` or negative counts with a
+      `RangeError`; `flatMap` callbacks must return an iterable or iterator, not a string.
+- [x] `Iterator.prototype.reduce`, `toArray`, `forEach`, `some`, `every`, and `find`, closing the source on early exit.
+- [x] `Iterator.from(value)` returns iterators and generators as they are, and wraps strings, iterables, and objects
+      with a `next` method. `Iterator` itself is abstract: calling or constructing it is a `TypeError`.
+- [x] Helpers and `Iterator.from` wrappers have `return()`; collection iterators (`array.values()`) do not, as in JS,
+      so an early exit from them leaves them where they were.
+- [ ] `Iterator.concat`, `Iterator.zip`, and `Iterator.zipKeyed` (stage 3 proposals).
+
 ## Map and Set
 
 - [x] Static `Map.groupBy` over finite collections and custom synchronous iterators/generators, preserving key identity.
 - [x] `new Map()` from synchronous iterables of entries.
 - [x] Map `get`, `set`, `has`, `delete`, `clear`, `size`, `forEach`, `getOrInsert`, and `getOrInsertComputed`.
+      `forEach` is live: entries deleted during the walk are skipped and entries added are visited, as in JS.
 - [x] `new Set()` from synchronous iterables.
 - [x] Set `add`, `has`, `delete`, `clear`, `size`, and `forEach`.
 - [x] Live `keys`, `values`, `entries`, and `[Symbol.iterator]` iterators for Map and Set; a Set-like operand's `keys()`
-      may return a built-in iterator or an array.
+      may return any iterator or an array.
 - [x] Spread, `for...of`, `Array.from`, and `Object.fromEntries` integration.
 - [x] Map and Set values serialize to `{}` at host/JSON boundaries.
 - [x] Set composition and relation methods: `union`, `intersection`, `difference`, `symmetricDifference`, `isSubsetOf`,
