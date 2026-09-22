@@ -144,6 +144,45 @@ describe("buildPromptRequest", () => {
     expect(result.files.some((file) => file.uri === "file:///repo/src/shared.ts")).toBe(true)
   })
 
+  test("ignores bare @words inside comment text", () => {
+    const result = buildPromptRequest({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        {
+          key: "ctx:bare-mention",
+          type: "file",
+          path: "src/review.ts",
+          comment: "or should I use @here?",
+        },
+      ],
+      images: [],
+      text: "look",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.files.map((file) => file.uri)).toEqual(["file:///repo/src/review.ts"])
+  })
+
+  test("keeps path-shaped @mentions alongside bare words in comment text", () => {
+    const result = buildPromptRequest({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        {
+          key: "ctx:mixed-mention",
+          type: "file",
+          path: "src/review.ts",
+          comment: "Compare with @src/shared.ts and @here.",
+        },
+      ],
+      images: [],
+      text: "look",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.files.some((file) => file.uri === "file:///repo/src/shared.ts")).toBe(true)
+    expect(result.files.some((file) => file.uri === "file:///repo/here")).toBe(false)
+  })
+
   test("handles Windows paths correctly (simulated on macOS)", () => {
     const prompt: Prompt = [{ type: "file", path: "src\\foo.ts", content: "@src\\foo.ts", start: 0, end: 11 }]
 

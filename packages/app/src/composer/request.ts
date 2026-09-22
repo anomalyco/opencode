@@ -51,10 +51,14 @@ const fileQuery = (selection: FileSelection | undefined) =>
 
 const mention = /(^|[\s([{"'])@(\S+)/g
 
+// Bare words such as @here are mention-style text, not workspace paths.
+const looksLikePath = (path: string) => path.startsWith("~") || /[\\/.#]/.test(path)
+
 const parseCommentMentions = (comment: string) => {
   return Array.from(comment.matchAll(mention)).flatMap((match) => {
     const path = (match[2] ?? "").replace(/[.,!?;:)}\]"']+$/, "")
     if (!path) return []
+    if (!looksLikePath(path)) return []
     return [path]
   })
 }
