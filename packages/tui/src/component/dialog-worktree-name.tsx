@@ -49,10 +49,10 @@ export function DialogWorktreeName(props: { onConfirm: (name: string) => void })
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
           Name worktree
         </text>
-        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
@@ -64,17 +64,17 @@ export function DialogWorktreeName(props: { onConfirm: (name: string) => void })
         }}
         onSubmit={confirm}
         placeholder="Worktree name"
-        placeholderColor={theme.text.subdued}
-        textColor={theme.text.formfield.default}
-        focusedTextColor={theme.text.formfield.default}
-        cursorColor={theme.text.formfield.default}
+        placeholderColor={theme.text.muted}
+        textColor={theme.text.formfield.base}
+        focusedTextColor={theme.text.formfield.base}
+        cursorColor={theme.text.formfield.base}
       />
       <box paddingBottom={1} flexDirection="row" gap={2}>
-        <text fg={theme.text.default}>
-          enter <span style={{ fg: theme.text.subdued }}>submit</span>
+        <text fg={theme.text.base}>
+          enter <span style={{ fg: theme.text.muted }}>submit</span>
         </text>
-        <text fg={theme.text.default}>
-          {shortcuts.get("dialog.worktree.generate")} <span style={{ fg: theme.text.subdued }}>generate one</span>
+        <text fg={theme.text.base}>
+          {shortcuts.get("dialog.worktree.generate")} <span style={{ fg: theme.text.muted }}>generate one</span>
         </text>
       </box>
     </box>

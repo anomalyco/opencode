@@ -13251,6 +13251,27 @@
         "required": ["input", "output"],
         "additionalProperties": false
       },
+      "Config.Model.Settings": {
+        "type": "object",
+        "properties": {
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
+          }
+        },
+        "allOf": [
+          {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        ]
+      },
       "Config.ModelEncoded": {
         "type": "object",
         "properties": {
@@ -13270,7 +13291,7 @@
             "type": "string"
           },
           "settings": {
-            "$ref": "#/components/schemas/Config.Provider.Settings"
+            "$ref": "#/components/schemas/Config.Model.Settings"
           },
           "headers": {
             "type": "object",
@@ -13293,7 +13314,7 @@
                   "type": "string"
                 },
                 "settings": {
-                  "$ref": "#/components/schemas/Config.Provider.Settings"
+                  "$ref": "#/components/schemas/Config.Model.Settings"
                 },
                 "headers": {
                   "type": "object",
@@ -15508,7 +15529,7 @@
             "type": "string"
           },
           "settings": {
-            "$ref": "#/components/schemas/Provider.Settings"
+            "$ref": "#/components/schemas/Model.Settings"
           },
           "headers": {
             "type": "object",
@@ -15614,6 +15635,20 @@
         "required": ["id", "providerID"],
         "additionalProperties": false
       },
+      "Model.Settings": {
+        "type": "object",
+        "properties": {
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
+          }
+        },
+        "allOf": [
+          {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        ]
+      },
       "Model.Variant": {
         "type": "object",
         "properties": {
@@ -15621,7 +15656,7 @@
             "type": "string"
           },
           "settings": {
-            "$ref": "#/components/schemas/Provider.Settings"
+            "$ref": "#/components/schemas/Model.Settings"
           },
           "headers": {
             "type": "object",

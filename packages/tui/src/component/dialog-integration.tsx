@@ -114,7 +114,7 @@ export function DialogIntegration(
         disabled: methods.length === 0 && credentials.length === 0,
         gutter:
           integration.connections.length > 0
-            ? () => <text fg={theme.text.feedback.success.default}>✓</text>
+            ? () => <text fg={theme.text.feedback.success.base}>✓</text>
             : undefined,
         onSelect: () => {
           if (credentials.length) return manageConnections(integration, methods, location, dialog, props.onConnected)
@@ -130,12 +130,12 @@ export function DialogIntegration(
       options={options()}
       emptyView={
         <box paddingLeft={4} paddingRight={4}>
-          <text fg={theme.text.subdued}>No integrations available</text>
+          <text fg={theme.text.muted}>No integrations available</text>
         </box>
       }
       noMatchView={
         <box paddingLeft={4} paddingRight={4}>
-          <text fg={theme.text.subdued}>No integrations found</text>
+          <text fg={theme.text.muted}>No integrations found</text>
         </box>
       }
     />
@@ -433,10 +433,10 @@ function CommandView(props: { title: string; output: string; message: string }) 
   return (
     <box gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
           {props.title}
         </text>
-        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
           esc close
         </text>
       </box>
@@ -447,10 +447,10 @@ function CommandView(props: { title: string; output: string; message: string }) 
         paddingTop={1}
         paddingBottom={1}
       >
-        <text fg={overlayTheme.text.default}>{props.output.trim()}</text>
+        <text fg={overlayTheme.text.base}>{props.output.trim()}</text>
       </box>
       <box paddingLeft={2} paddingRight={2}>
-        <text fg={theme.text.subdued}>{props.message}</text>
+        <text fg={theme.text.muted}>{props.message}</text>
       </box>
     </box>
   )
@@ -487,7 +487,7 @@ function KeyMethod(props: {
           .catch((cause) => setError(message(cause)))
       }}
       description={() => (
-        <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.default}>{value()}</text>}</Show>
+        <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
       )}
     />
   )
@@ -706,9 +706,9 @@ function OAuthCode(props: {
       }}
       description={() => (
         <box gap={1}>
-          <text fg={theme.text.subdued}>{props.attempt.instructions}</text>
+          <text fg={theme.text.muted}>{props.attempt.instructions}</text>
           <Link href={props.attempt.url} fg={theme.markdown.link} />
-          <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.default}>{value()}</text>}</Show>
+          <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
         </box>
       )}
     />
@@ -728,10 +728,10 @@ function OAuthView(props: {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
           {props.title}
         </text>
-        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
@@ -740,21 +740,21 @@ function OAuthView(props: {
           <box gap={1}>
             <Link href={url()} fg={theme.markdown.link} />
             <Show when={props.instructions}>
-              {(instructions) => <text fg={theme.text.subdued}>{instructions()}</text>}
+              {(instructions) => <text fg={theme.text.muted}>{instructions()}</text>}
             </Show>
           </box>
         )}
       </Show>
-      <text fg={theme.text.subdued}>{props.message}</text>
+      <text fg={theme.text.muted}>{props.message}</text>
       <box flexDirection="row" gap={2}>
         <Show when={props.open}>
-          <text fg={theme.text.default}>
-            o <span style={{ fg: theme.text.subdued }}>open</span>
+          <text fg={theme.text.base}>
+            o <span style={{ fg: theme.text.muted }}>open</span>
           </text>
         </Show>
         <Show when={props.copy}>
-          <text fg={theme.text.default}>
-            c <span style={{ fg: theme.text.subdued }}>copy</span>
+          <text fg={theme.text.base}>
+            c <span style={{ fg: theme.text.muted }}>copy</span>
           </text>
         </Show>
       </box>
@@ -872,9 +872,9 @@ function textAnswer(
             description={() => (
               <box gap={1}>
                 <Show when={field.description}>
-                  {(description) => <text fg={theme.text.subdued}>{description()}</text>}
+                  {(description) => <text fg={theme.text.muted}>{description()}</text>}
                 </Show>
-                <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.default}>{value()}</text>}</Show>
+                <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
               </box>
             )}
           />

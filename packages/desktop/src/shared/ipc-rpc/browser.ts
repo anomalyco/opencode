@@ -34,6 +34,7 @@ export type BrowserPaneRequest = Schema.Schema.Type<typeof BrowserPaneRequestSch
 
 export const BrowserPaneEventSchema = Schema.Union([
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
+  Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
   Schema.Struct({
     type: Schema.Literal("state"),
     state: Schema.NullOr(Browser.State),

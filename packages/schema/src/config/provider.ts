@@ -17,10 +17,24 @@ export const Settings = Schema.StructWithRest(
 ).annotate({ identifier: "Config.Provider.Settings" })
 export type Settings = typeof Settings.Type
 
+export const ModelSettings = Schema.StructWithRest(
+  Schema.Struct({
+    compaction: Provider.Compaction.pipe(optional),
+  }),
+  [Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json))],
+).annotate({ identifier: "Config.Model.Settings" })
+export type ModelSettings = typeof ModelSettings.Type
+
 const JsonRecord = Schema.Record(Schema.String, Schema.Json)
 
 export const Overlays = {
   settings: Settings.pipe(optional),
+  headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  body: JsonRecord.pipe(optional),
+}
+
+const ModelOverlays = {
+  settings: ModelSettings.pipe(optional),
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
   body: JsonRecord.pipe(optional),
 }
@@ -57,11 +71,11 @@ class Model extends Schema.Class<Model>("Config.Model")({
   name: Schema.String.pipe(optional),
   compatibility: Compatibility.pipe(optional),
   package: Schema.String.pipe(optional),
-  ...Overlays,
+  ...ModelOverlays,
   capabilities: Capabilities.pipe(optional),
   variants: Schema.Struct({
     id: VariantID,
-    ...Overlays,
+    ...ModelOverlays,
   }).pipe(Schema.Array, optional),
   cost: Schema.Union([Cost, Cost.pipe(Schema.Array)]).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),

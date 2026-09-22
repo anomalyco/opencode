@@ -31,7 +31,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       >
         <box flexShrink={0} paddingRight={2} paddingBottom={1}>
           <title_shimmer
-            fg={theme.text.default}
+            fg={theme.text.base}
             rename={{
               pending: data.session.title.pending(props.sessionID),
               title: withTimestampedFallback(session()),
@@ -62,7 +62,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             height: "100%",
             trackOptions: {
               backgroundColor: theme.background.raised.base,
-              foregroundColor: theme.scrollbar.default,
+              foregroundColor: theme.scrollbar.base,
             },
           }}
         >

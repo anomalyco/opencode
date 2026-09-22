@@ -122,10 +122,10 @@ describe("Map.groupBy Test262 parity", () => {
           grouped.get(1),
           grouped.get("1"),
           grouped.has(stringable),
-          grouped.keys().length,
+          [...grouped.keys()].length,
           parity.get("even"),
           parity.get("odd"),
-          lengths.keys(),
+          [...lengths.keys()],
           lengths.get(5),
           lengths.get(4),
         ]
@@ -162,7 +162,7 @@ describe("Map.groupBy Test262 parity", () => {
       await value(`
         const grouped = Map.groupBy("🥰💩🙏😈", (char) => char < "🙏" ? "before" : "after")
         const empty = Map.groupBy([], () => { throw new Error("not called") })
-        return [grouped.keys(), grouped.get("before"), grouped.get("after"), empty.size]
+        return [[...grouped.keys()], grouped.get("before"), grouped.get("after"), empty.size]
       `),
     ).toEqual([["after", "before"], ["💩", "😈"], ["🥰", "🙏"], 0])
   })

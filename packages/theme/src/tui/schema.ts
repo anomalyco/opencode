@@ -61,23 +61,8 @@ const HueDefinition = Schema.Struct({
 })
 export type HueDefinition = Schema.Schema.Type<typeof HueDefinition>
 
-const HueOverrideDefinition = Schema.Struct({
-  gray: Schema.optional(HueValueDefinition),
-  red: Schema.optional(HueValueDefinition),
-  orange: Schema.optional(HueValueDefinition),
-  yellow: Schema.optional(HueValueDefinition),
-  green: Schema.optional(HueValueDefinition),
-  cyan: Schema.optional(HueValueDefinition),
-  blue: Schema.optional(HueValueDefinition),
-  purple: Schema.optional(HueValueDefinition),
-  accent: Schema.optional(HueValueDefinition),
-  interactive: Schema.optional(HueValueDefinition),
-  neutral: Schema.optional(HueValueDefinition),
-})
-export type HueOverrideDefinition = Schema.Schema.Type<typeof HueOverrideDefinition>
-
 const StatefulColorDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
+  base: Schema.optional(ColorValue),
   $hovered: Schema.optional(ColorValue),
   $focused: Schema.optional(ColorValue),
   $pressed: Schema.optional(ColorValue),
@@ -95,27 +80,19 @@ const ActionColorDefinition = Schema.Struct({
 })
 
 const TextFeedbackDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
-  subdued: Schema.optional(ColorValue),
+  base: Schema.optional(ColorValue),
+  muted: Schema.optional(ColorValue),
 })
 
 const BackgroundFeedbackDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
+  base: Schema.optional(ColorValue),
 })
 
 const TextDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
-  subdued: Schema.optional(ColorValue),
+  base: Schema.optional(ColorValue),
+  muted: Schema.optional(ColorValue),
   action: Schema.optional(ActionColorDefinition),
   formfield: Schema.optional(StatefulColorDefinition),
-  status: Schema.optional(
-    Schema.Struct({
-      running: Schema.optional(ColorValue),
-      question: Schema.optional(ColorValue),
-      permission: Schema.optional(ColorValue),
-      unread: Schema.optional(ColorValue),
-    }),
-  ),
   feedback: Schema.optional(
     Schema.Struct({
       error: Schema.optional(TextFeedbackDefinition),
@@ -128,7 +105,7 @@ const TextDefinition = Schema.Struct({
 export type TextDefinition = Schema.Schema.Type<typeof TextDefinition>
 
 const BackgroundDefinition = Schema.Struct({
-  default: Schema.optional(ColorValue),
+  base: Schema.optional(ColorValue),
   raised: Schema.optional(
     Schema.Struct({
       base: Schema.optional(ColorValue),
@@ -217,49 +194,111 @@ export type DiffDefinition = Schema.Schema.Type<typeof DiffDefinition>
 const ThemeTokensDefinition = Schema.Struct({
   text: Schema.optional(TextDefinition),
   background: Schema.optional(BackgroundDefinition),
-  border: Schema.optional(Schema.Struct({ default: Schema.optional(ColorValue) })),
-  scrollbar: Schema.optional(Schema.Struct({ default: Schema.optional(ColorValue) })),
+  border: Schema.optional(Schema.Struct({ base: Schema.optional(ColorValue) })),
+  scrollbar: Schema.optional(Schema.Struct({ base: Schema.optional(ColorValue) })),
   diff: Schema.optional(DiffDefinition),
   syntax: Schema.optional(SyntaxDefinition),
   markdown: Schema.optional(MarkdownDefinition),
 })
 export type ThemeTokensDefinition = Schema.Schema.Type<typeof ThemeTokensDefinition>
 
+const CompleteStatefulColorDefinition = Schema.Struct({
+  base: ColorValue,
+  $hovered: Schema.optional(ColorValue),
+  $focused: Schema.optional(ColorValue),
+  $pressed: Schema.optional(ColorValue),
+  $selected: Schema.optional(ColorValue),
+  $disabled: Schema.optional(ColorValue),
+})
+
+const CompleteActionColorDefinition = Schema.Struct({
+  primary: CompleteStatefulColorDefinition,
+  secondary: CompleteStatefulColorDefinition,
+  destructive: CompleteStatefulColorDefinition,
+})
+
+const CompleteTextFeedbackDefinition = Schema.Struct({ base: ColorValue, muted: Schema.optional(ColorValue) })
+const CompleteBackgroundFeedbackDefinition = Schema.Struct({ base: ColorValue })
+
+const CompleteThemeTokensDefinition = Schema.Struct({
+  text: Schema.Struct({
+    base: ColorValue,
+    muted: ColorValue,
+    action: CompleteActionColorDefinition,
+    formfield: CompleteStatefulColorDefinition,
+    feedback: Schema.Struct({
+      error: CompleteTextFeedbackDefinition,
+      warning: CompleteTextFeedbackDefinition,
+      success: CompleteTextFeedbackDefinition,
+      info: CompleteTextFeedbackDefinition,
+    }),
+  }),
+  background: Schema.Struct({
+    base: ColorValue,
+    raised: Schema.Struct({ base: ColorValue, high: ColorValue, max: ColorValue }),
+    action: CompleteActionColorDefinition,
+    formfield: CompleteStatefulColorDefinition,
+    feedback: Schema.Struct({
+      error: CompleteBackgroundFeedbackDefinition,
+      warning: CompleteBackgroundFeedbackDefinition,
+      success: CompleteBackgroundFeedbackDefinition,
+      info: CompleteBackgroundFeedbackDefinition,
+    }),
+  }),
+  border: Schema.Struct({ base: ColorValue }),
+  scrollbar: Schema.Struct({ base: ColorValue }),
+  diff: Schema.Struct({
+    text: Schema.Struct({ added: ColorValue, removed: ColorValue, context: ColorValue, hunkHeader: ColorValue }),
+    background: Schema.Struct({ added: ColorValue, removed: ColorValue, context: ColorValue }),
+    highlight: Schema.Struct({ added: ColorValue, removed: ColorValue }),
+    lineNumber: Schema.Struct({
+      text: ColorValue,
+      background: Schema.Struct({ added: ColorValue, removed: ColorValue }),
+    }),
+  }),
+  syntax: Schema.Record(SyntaxToken, HueColorValue),
+  markdown: Schema.Record(MarkdownToken, HueColorValue),
+})
+
 const ThemeDefinitionFields = Schema.Struct({
   hue: HueDefinition,
-  categorical: Schema.optional(CategoricalDefinition),
-  ...ThemeTokensDefinition.fields,
+  categorical: CategoricalDefinition,
+  ...CompleteThemeTokensDefinition.fields,
   "@dialog": Schema.optional(ThemeTokensDefinition),
 })
 export const ThemeDefinition = ThemeDefinitionFields
 export type ThemeDefinition = Schema.Schema.Type<typeof ThemeDefinition>
 
-const FileThemeDefinition = Schema.Struct({
-  hue: Schema.optional(HueOverrideDefinition),
-  categorical: Schema.optional(CategoricalDefinition),
-  ...ThemeTokensDefinition.fields,
+export const BaseThemeDefinition = Schema.Struct({
+  categorical: CategoricalDefinition,
+  ...CompleteThemeTokensDefinition.fields,
   "@dialog": Schema.optional(ThemeTokensDefinition),
 })
-export type FileThemeDefinition = Schema.Schema.Type<typeof FileThemeDefinition>
+export type BaseThemeDefinition = Schema.Schema.Type<typeof BaseThemeDefinition>
 
-const MergeModeDefinition = Schema.Struct({
-  mergeMode: Schema.Literal(true),
-  hue: Schema.optional(HueOverrideDefinition),
+export const ModeDefinition = Schema.Struct({
+  hue: HueDefinition,
   categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
   "@dialog": Schema.optional(ThemeTokensDefinition),
 })
-export type MergeModeDefinition = Schema.Schema.Type<typeof MergeModeDefinition>
-export const ModeDefinition = Schema.Union([MergeModeDefinition, FileThemeDefinition])
 export type ModeDefinition = Schema.Schema.Type<typeof ModeDefinition>
 
 const FileMetadata = {
   $schema: Schema.optional(Schema.String),
-  version: Schema.Literal(2),
-  standalone: Schema.optional(Schema.Boolean),
 }
 export const ThemeDocument = Schema.Union([
-  Schema.Struct({ ...FileMetadata, light: ModeDefinition, dark: Schema.optional(ModeDefinition) }),
-  Schema.Struct({ ...FileMetadata, light: Schema.optional(ModeDefinition), dark: ModeDefinition }),
+  Schema.Struct({
+    ...FileMetadata,
+    base: BaseThemeDefinition,
+    light: ModeDefinition,
+    dark: Schema.optional(ModeDefinition),
+  }),
+  Schema.Struct({
+    ...FileMetadata,
+    base: BaseThemeDefinition,
+    light: Schema.optional(ModeDefinition),
+    dark: ModeDefinition,
+  }),
 ])
 export type ThemeDocument = Schema.Schema.Type<typeof ThemeDocument>

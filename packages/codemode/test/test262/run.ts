@@ -9,7 +9,7 @@ import type { Interpreter } from "../../src/interpreter/interpreter.js"
 import { Throw } from "../../src/interpreter/model.js"
 import { createErrorValue } from "../../src/interpreter/intrinsics.js"
 import { constructor, fn, methods } from "../../src/interpreter/native.js"
-import { Callable, define, get, hidden, Arr, Fn, Obj } from "../../src/interpreter/objects.js"
+import { Callable, define, get, hidden, Arr, Fn, Obj, type Value } from "../../src/interpreter/objects.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
 
 export const root = import.meta.dir
@@ -64,10 +64,7 @@ export const run = async (file: string): Promise<Outcome> => {
   return { status: "pass" }
 }
 
-const harness = <R>(
-  ctx: Interpreter<R>,
-  onDone: (error: unknown) => void,
-): ReadonlyArray<readonly [string, unknown]> => {
+const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): ReadonlyArray<readonly [string, Value]> => {
   const builtins = ctx.builtins
   const test262Prototype = new Obj(builtins.Object)
   define(test262Prototype, "name", "Test262Error", hidden)
@@ -90,7 +87,7 @@ const harness = <R>(
   methods(builtins, compareArray, [["format", 1, (_, args) => show(args[0])]])
   const assert = fn<R>(builtins, "assert", 2, (_, args) =>
     args[0] === true
-      ? Effect.void
+      ? Effect.undefined
       : fail(args[1] === undefined ? `Expected true but got ${show(args[0])}` : String(args[1])),
   )
   methods(builtins, assert, [
@@ -99,7 +96,7 @@ const harness = <R>(
       3,
       (_, args) =>
         Object.is(args[0], args[1])
-          ? Effect.void
+          ? Effect.undefined
           : fail(`${prefix(args[2])}Expected SameValue(«${show(args[0])}», «${show(args[1])}») to be true`),
     ],
     [
@@ -108,14 +105,14 @@ const harness = <R>(
       (_, args) =>
         Object.is(args[0], args[1])
           ? fail(`${prefix(args[2])}Expected SameValue(«${show(args[0])}», «${show(args[1])}») to be false`)
-          : Effect.void,
+          : Effect.undefined,
     ],
     [
       "compareArray",
       3,
       (_, args) =>
         compare(args[0], args[1])
-          ? Effect.void
+          ? Effect.undefined
           : fail(
               `Actual ${show(args[0])} and expected ${show(args[1])} should have the same contents. ${prefix(args[2])}`,
             ),
@@ -132,7 +129,7 @@ const harness = <R>(
               const thrown = materialize(ctx, Cause.squash(cause))
               if (!(thrown instanceof Obj)) return fail(`${prefix(args[2])}Thrown value was not an object!`)
               const actual = get(thrown, "constructor")
-              if (actual === args[0]) return Effect.void
+              if (actual === args[0]) return Effect.undefined
               return fail(`${prefix(args[2])}Expected a ${expected} but got a ${show(actual)}`)
             },
             onSuccess: () =>
@@ -146,7 +143,13 @@ const harness = <R>(
     ["assert", assert],
     ["compareArray", compareArray],
     ["Test262Error", test262Error],
-    ["$DONE", fn<R>(builtins, "$DONE", 1, (_, args) => onDone(args[0]))],
+    [
+      "$DONE",
+      fn<R>(builtins, "$DONE", 1, (_, args) => {
+        onDone(args[0])
+        return undefined
+      }),
+    ],
     [
       "$DONOTEVALUATE",
       fn<R>(builtins, "$DONOTEVALUATE", 0, () =>

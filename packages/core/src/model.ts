@@ -36,6 +36,9 @@ export type Ref = typeof Ref.Type
 export const Info = Model.Info
 export type Info = Model.Info
 
+/** Effective provider and model settings used only while constructing a runtime model. */
+export type RuntimeInfo = Omit<Info, "settings"> & { readonly settings?: Provider.Settings }
+
 export type MutableInfo = DeepMutable<Info>
 
 export { Event } from "@opencode/schema/model"
@@ -188,7 +191,10 @@ const layer = Layer.effect(
                     ...model,
                     ...(provider?.canonical === undefined ? {} : { canonical: provider.canonical }),
                     package: model.package ?? provider?.package,
-                    settings: Provider.mergeOverlay(provider?.settings, model.settings),
+                    settings: Provider.mergeOverlay(
+                      Provider.modelSettings(provider?.settings),
+                      Provider.modelSettings(model.settings),
+                    ),
                     headers: Provider.mergeHeaders(provider?.headers, model.headers),
                     body: Provider.mergeOverlay(provider?.body, model.body),
                   } satisfies Info

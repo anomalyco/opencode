@@ -14,8 +14,8 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
     location: { directory: "/workspace" },
     theme: {
       text: {
-        default: color,
-        subdued,
+        base: color,
+        muted: subdued,
       },
     },
     keymap: {
@@ -70,8 +70,8 @@ test("prompt footer can hide details", async () => {
     location: { directory: "/workspace" },
     theme: {
       text: {
-        default: color,
-        subdued: color,
+        base: color,
+        muted: color,
       },
     },
     keymap: {

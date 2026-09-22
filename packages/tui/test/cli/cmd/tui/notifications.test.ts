@@ -146,23 +146,27 @@ const permissionNotification: AttentionNotifyOptions = {
 }
 
 describe("internal notifications TUI plugin", () => {
-  test("shows execution failures in the viewed session without needing an assistant message", async () => {
+  test("shows execution failures as session-scoped toasts without needing an assistant message", async () => {
     const harness = await setup()
     harness.emit(executionStarted("started"))
     harness.emit(executionFailed("failed"))
     harness.emit(executionFailed("duplicate"))
-    expect(harness.toasts).toEqual([{ title: "Session failed", message: "boom", variant: "error" }])
+    expect(harness.toasts).toEqual([
+      { sessionID: "session", title: "Session failed", message: "boom", variant: "error" },
+    ])
     harness.emit(executionStarted("retry"))
     harness.emit(executionFailed("failed-again"))
     expect(harness.toasts).toHaveLength(2)
   })
 
   test.each<Route>([{ type: "home" }, { type: "session", sessionID: "other" }])(
-    "keeps other sessions' failures out of the current composer (%j)",
+    "leaves routing of other sessions' failures to the session-scoped toast (%j)",
     async (route) => {
       const harness = await setup(route)
       harness.emit(executionFailed("failed"))
-      expect(harness.toasts).toEqual([])
+      expect(harness.toasts).toEqual([
+        { sessionID: "session", title: "Session failed", message: "boom", variant: "error" },
+      ])
       expect(harness.notifications).toHaveLength(1)
     },
   )

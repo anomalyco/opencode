@@ -27,6 +27,7 @@ export function resolve(model: Model.Info, supports: readonly Support[] = [{ typ
 const EFFORTS = ["low", "medium", "high"]
 const ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
 const ADAPTIVE_THINKING = { type: "adaptive", display: "summarized" }
+const ANTHROPIC_OUTPUT_TOKEN_MAX = 32_000
 
 const variant = (id: string, overlay: Overlay): Variants[number] => ({ id: Model.VariantID.make(id), ...overlay })
 
@@ -39,8 +40,9 @@ function budgets(
   model: Model.Info,
   support: Extract<Support, { type: "budget_tokens" }>,
   spell: (tokens: number) => Overlay,
+  ceiling = model.limit.output,
 ): Variants {
-  const maximum = Math.min(support.max ?? model.limit.output - 1, model.limit.output - 1)
+  const maximum = Math.min(support.max ?? ceiling - 1, model.limit.output - 1, ceiling - 1)
   if (maximum <= 0) return []
   const high = Math.min(Math.max(support.min ?? 0, Math.floor((maximum + 1) / 2)), maximum)
   return [variant("high", spell(high)), variant("max", spell(maximum))]
@@ -273,9 +275,12 @@ const anthropicMessages: Protocol = (model, support) => {
       return toggle({ settings: { thinking: { type: "disabled" } } }, thinking)
     }
     case "budget_tokens":
-      return budgets(model, support, (tokens) => ({
-        settings: { thinking: { type: "enabled", budgetTokens: tokens } },
-      }))
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { thinking: { type: "enabled", budgetTokens: tokens } } }),
+        ANTHROPIC_OUTPUT_TOKEN_MAX,
+      )
   }
 }
 
@@ -381,10 +386,14 @@ const bedrockConverse: Protocol = (model, support) => {
         ? toggle(fields({ thinking: { type: "disabled" } }), fields({ thinking: ADAPTIVE_THINKING }))
         : toggle(fields({ reasoningConfig: { type: "disabled" } }), fields({ reasoningConfig: { type: "enabled" } }))
     case "budget_tokens":
-      return budgets(model, support, (tokens) =>
-        claude
-          ? fields({ thinking: { type: "enabled", budget_tokens: tokens } })
-          : fields({ reasoningConfig: { type: "enabled", budgetTokens: tokens } }),
+      return budgets(
+        model,
+        support,
+        (tokens) =>
+          claude
+            ? fields({ thinking: { type: "enabled", budget_tokens: tokens } })
+            : fields({ reasoningConfig: { type: "enabled", budgetTokens: tokens } }),
+        claude ? ANTHROPIC_OUTPUT_TOKEN_MAX : model.limit.output,
       )
   }
 }
@@ -436,9 +445,12 @@ const bedrockAISDK: Protocol = (model, support) => {
             { settings: { additionalModelRequestFields: { reasoningConfig: { type: "enabled" } } } },
           )
     case "budget_tokens":
-      return budgets(model, support, (tokens) => ({
-        settings: { reasoningConfig: { type: "enabled", budgetTokens: tokens } },
-      }))
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { reasoningConfig: { type: "enabled", budgetTokens: tokens } } }),
+        claude ? ANTHROPIC_OUTPUT_TOKEN_MAX : model.limit.output,
+      )
   }
 }
 
@@ -489,8 +501,11 @@ const sapAICore: Protocol = (model, support) => {
       return []
     case "budget_tokens":
       if (id.includes("anthropic"))
-        return budgets(model, support, (tokens) =>
-          sap({ additionalModelRequestFields: { thinking: { type: "enabled", budget_tokens: tokens } } }),
+        return budgets(
+          model,
+          support,
+          (tokens) => sap({ additionalModelRequestFields: { thinking: { type: "enabled", budget_tokens: tokens } } }),
+          ANTHROPIC_OUTPUT_TOKEN_MAX,
         )
       if (id.includes("gemini"))
         return budgets(model, support, (tokens) =>

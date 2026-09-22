@@ -32,6 +32,7 @@ type ComposerSubmitInput = {
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
   addToHistory: (prompt: Prompt, mode: "normal" | "shell") => void
+  removeFromHistory: (prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) => void
   resetHistory: () => void
   setMode: (mode: "normal" | "shell") => void
   closePopover: () => void
@@ -250,6 +251,8 @@ function restoreSubmission(
 ) {
   const restored = submission.restore()
   if (!restored) return false
+  // The prompt is back in the composer; its history entry would only keep attachments referenced.
+  input.removeFromHistory(value.prompt, value.mode, comments)
   restored.target.set(restored.prompt, promptLength(restored.prompt))
   restored.target.mode.set(value.mode)
   restored.target.context.replaceComments(

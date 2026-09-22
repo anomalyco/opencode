@@ -434,7 +434,7 @@ describe("AzurePlugin", () => {
     ),
   )
 
-  it.effect("marks only Azure v1 Responses deployments as WebSocket capable", () =>
+  it.effect("stores the Azure Responses WebSocket preference on the provider", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Provider.Service
@@ -472,9 +472,8 @@ describe("AzurePlugin", () => {
 
         yield* addPlugin()
 
-        const responses = required(yield* service.get(Provider.ID.azure, models.responses))
-        expect(responses.settings?.transport).toBe("websocket")
-        for (const modelID of [models.chat, models.preview, models.deploymentURL, models.gateway, models.nonAzure]) {
+        expect((yield* catalog.get(Provider.ID.azure))?.settings?.transport).toBe("websocket")
+        for (const modelID of [models.responses, models.chat, models.preview, models.deploymentURL, models.gateway, models.nonAzure]) {
           const model = required(yield* service.get(Provider.ID.azure, modelID))
           expect(model.settings?.transport).toBeUndefined()
         }

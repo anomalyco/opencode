@@ -1,7 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
-import { createSignal, Show } from "solid-js"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { createMemo, createSignal, Show } from "solid-js"
 import { Spinner } from "../../component/spinner"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
@@ -32,7 +32,7 @@ export default Plugin.define({
         return (
           <Show when={pending() > 0}>
             <box flexShrink={0}>
-              <Spinner color={theme.text.status.running}>/btw</Spinner>
+              <Spinner color={theme.hue.interactive[200]}>/btw</Spinner>
             </box>
           </Show>
         )
@@ -43,6 +43,8 @@ export default Plugin.define({
       append: "app",
       render() {
         const toast = useToast()
+        // Dialogs render beside PluginProvider, so Answer cannot call usePlugin().
+        const plugins = usePlugin()
         context.keymap.layer(() => ({
           mode: "global",
           commands: [
@@ -66,7 +68,9 @@ export default Plugin.define({
                 await context.client.session
                   .generate({ sessionID: route.sessionID, prompt: [instructions, question].join("\n\n") })
                   .then((result) => {
-                    context.ui.dialog.show(() => <Answer question={question} answer={result.text.trim()} />)
+                    context.ui.dialog.show(() => (
+                      <Answer question={question} answer={result.text.trim()} markdown={plugins.markdown} />
+                    ))
                     context.ui.dialog.set({ size: "large", centered: true })
                   })
                   .catch((cause: unknown) => toast.error(cause))
@@ -81,15 +85,20 @@ export default Plugin.define({
   },
 })
 
-function Answer(props: { question: string; answer: string }) {
+export function Answer(props: {
+  question: string
+  answer: string
+  markdown: ReturnType<typeof usePlugin>["markdown"]
+}) {
   const dialog = useDialog()
   const toast = useToast()
   const clipboard = useClipboard()
-  const plugins = usePlugin()
   const theme = useTheme().surface("dialog")
   const overlay = useTheme()
   const syntax = useThemes().currentSyntax
   const config = useConfig().data
+  const dimensions = useTerminalDimensions()
+  const maxHeight = createMemo(() => Math.max(8, Math.floor(dimensions().height * 0.6)))
   const [copied, setCopied] = createSignal(false)
   let scroll: ScrollBoxRenderable | undefined
 
@@ -107,34 +116,31 @@ function Answer(props: { question: string; answer: string }) {
 
   useKeyboard((event) => {
     if (!scroll) return
-    if (event.name === "up") return scroll.scrollBy(-1)
-    if (event.name === "down") return scroll.scrollBy(1)
-    if (event.name === "pageup") return scroll.scrollBy(-20)
-    if (event.name === "pagedown") return scroll.scrollBy(20)
+    if (event.name === "up" || event.name === "k") return scroll.scrollBy(-1)
+    if (event.name === "down" || event.name === "j") return scroll.scrollBy(1)
+    if (event.name === "pageup") return scroll.scrollBy(-maxHeight())
+    if (event.name === "pagedown") return scroll.scrollBy(maxHeight())
     if (event.name === "home") return scroll.scrollTo(0)
     if (event.name === "end") return scroll.scrollTo(scroll.scrollHeight)
   })
 
   return (
-    <box gap={1}>
-      <box paddingLeft={2} paddingRight={2}>
-        <box flexDirection="row" justifyContent="space-between">
-          <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
-            /btw
-          </text>
-          <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
-            esc
-          </text>
-        </box>
-        <box paddingTop={1}>
-          <text fg={theme.text.subdued} wrapMode="word">
-            {props.question}
-          </text>
-        </box>
+    <box gap={1} paddingBottom={1}>
+      <box flexDirection="row" gap={2} paddingLeft={2} paddingRight={2}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.base} flexShrink={0}>
+          /btw
+        </text>
+        <text fg={theme.text.muted} wrapMode="word" flexGrow={1}>
+          {props.question}
+        </text>
+        <text fg={theme.text.muted} flexShrink={0} onMouseUp={() => dialog.clear()}>
+          esc
+        </text>
       </box>
       <scrollbox
         ref={(element: ScrollBoxRenderable) => (scroll = element)}
-        maxHeight={20}
+        maxHeight={maxHeight()}
+        contentOptions={{ minHeight: 0 }}
         backgroundColor={overlay.background.raised.high}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={getScrollAcceleration(config)}
@@ -142,7 +148,7 @@ function Answer(props: { question: string; answer: string }) {
         <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
           <markdown
             syntaxStyle={syntax()}
-            renderNode={plugins.markdown()}
+            renderNode={props.markdown()}
             content={props.answer}
             conceal
             internalBlockMode="top-level"
@@ -152,14 +158,14 @@ function Answer(props: { question: string; answer: string }) {
           />
         </box>
       </scrollbox>
-      <box flexDirection="row" gap={3} paddingLeft={2} paddingRight={2} paddingBottom={1}>
+      <box flexDirection="row" gap={3} paddingLeft={2} paddingRight={2}>
         <text onMouseUp={copy}>
-          <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
+          <span style={{ fg: copied() ? theme.text.feedback.success.base : theme.text.base }}>
             <b>{copied() ? "✓ copied" : "c"}</b>
           </span>
-          <span style={{ fg: theme.text.subdued }}>{copied() ? "" : " copy"}</span>
+          <span style={{ fg: theme.text.muted }}>{copied() ? "" : " copy"}</span>
         </text>
-        <text fg={theme.text.subdued}>↑/↓ scroll</text>
+        <text fg={theme.text.muted}>j/k ↑/↓ scroll</text>
       </box>
     </box>
   )

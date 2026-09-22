@@ -558,9 +558,6 @@ sessions.
   "providers": {
     "openai": {
       "settings": { "transport": "http" },
-      "models": {
-        "gpt-5.5": { "settings": { "transport": "websocket" } },
-      },
     },
   },
 }
@@ -568,9 +565,8 @@ sessions.
 
 WebSocket behavior follows these rules:
 
-- Built-in providers opt supported models in according to their own policy.
-- `settings.transport: "websocket"` enables a provider or model; `"http"` disables it.
-- A model value overrides its provider value.
+- Built-in providers opt supported routes in according to their own policy.
+- Provider `settings.transport: "websocket"` enables it; `"http"` disables it.
 - `"websocket"` on a route without a WebSocket channel logs a warning and falls back to HTTP.
 - OpenAI provider compaction uses the same connection.
 - xAI continues from stored responses only. With its default `store: false`, each step is sent in full over the reused

@@ -1030,7 +1030,7 @@ describe("confined generators", () => {
         const params = new URLSearchParams(entries())
         return [events, params.toString()]
       `),
-    ).toEqual([["first", "second", "pair close", "outer close"], "%5Bobject+Object%5D=2"])
+    ).toEqual([["first", "second", "pair close", "outer close"], "%5Bobject+Promise%5D=2"])
   })
 
   test("validates URLSearchParams pair lengths after converting the outer sequence", async () => {
@@ -1245,5 +1245,28 @@ describe("confined generators", () => {
         return events
       `),
     ).toEqual(["catch", "reaction"])
+  })
+
+  test("a generator's return() through for...of or destructuring surfaces a failing close, as break does", async () => {
+    expect(
+      await value(`
+        const make = (ret) => ({ [Symbol.iterator]: () => ({ next: () => ({ done: false, value: [1] }), return: ret }) })
+        const blanks = (ret) => ({ [Symbol.iterator]: () => ({ next: () => ({ done: false }), return: ret }) })
+        const outcomes = []
+        for (const [label, ret] of [
+          ["null", () => null],
+          ["throws", () => { throw new RangeError("close") }],
+          ["ok", () => ({ done: true })],
+        ]) {
+          function* loop() { for (const [a] of make(ret)) yield a }
+          function* pattern() { for ([ {} = yield ] of [blanks(ret)]) {} }
+          for (const g of [loop(), pattern()]) {
+            g.next()
+            try { g.return(7); outcomes.push(label + " quiet") } catch (e) { outcomes.push(label + " " + e.constructor.name) }
+          }
+        }
+        return outcomes
+      `),
+    ).toEqual(["null TypeError", "null TypeError", "throws RangeError", "throws RangeError", "ok quiet", "ok quiet"])
   })
 })

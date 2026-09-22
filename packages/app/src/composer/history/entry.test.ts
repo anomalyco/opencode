@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/composer/state"
-import { prependHistoryEntry, type PromptHistoryComment } from "./entry"
+import { prependHistoryEntry, removeHistoryEntry, type PromptHistoryComment } from "./entry"
 import { Schema } from "effect"
 import { PromptHistoryState } from "../schema"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -34,6 +34,24 @@ describe("Composer history", () => {
 
     const dedupedComments = prependHistoryEntry(commentsOnly, DEFAULT_PROMPT, [comment("c1")])
     expect(dedupedComments).toBe(commentsOnly)
+  })
+
+  test("removeHistoryEntry drops the entry recorded for a prompt and leaves others alone", () => {
+    const image: Prompt = [
+      { type: "text", content: "look", start: 0, end: 4 },
+      { type: "image", id: "img", filename: "big.png", mime: "image/png", blob: { id: "hash", url: "" } },
+    ]
+    const entries = prependHistoryEntry(prependHistoryEntry([], text("earlier")), image, [comment("c1")])
+    expect(entries).toHaveLength(2)
+
+    const untouched = removeHistoryEntry(entries, text("never sent"))
+    expect(untouched).toBe(entries)
+
+    const withoutComments = removeHistoryEntry(entries, image)
+    expect(withoutComments).toBe(entries)
+
+    const removed = removeHistoryEntry(entries, image, [comment("c1")])
+    expect(removed).toEqual(prependHistoryEntry([], text("earlier")))
   })
 
   test("insertion isolates canonical entries from source mutations", () => {

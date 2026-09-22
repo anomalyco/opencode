@@ -27,7 +27,7 @@ export function mergeTheme(...values: unknown[]): Record<string, unknown> {
   return values.reduce<Record<string, unknown>>((result, value) => {
     if (!isRecord(value)) return result
     return Object.entries(value).reduce<Record<string, unknown>>((next, [key, item]) => {
-      if (item === undefined || key === "mergeMode") return next
+      if (item === undefined) return next
       return {
         ...next,
         [key]: isRecord(item) ? mergeTheme(next[key], item) : item,
@@ -40,7 +40,7 @@ function expandText(definition: TextDefinition | undefined): TextDefinition | un
   if (!definition) return
   return {
     ...definition,
-    subdued: definition.subdued ?? (definition.default ? "$text.default" : undefined),
+    muted: definition.muted ?? (definition.base ? "$text.base" : undefined),
     action: expandActions(definition.action, "text.action"),
     formfield: expandFormfield(definition.formfield, "text.formfield"),
     feedback: definition.feedback
@@ -50,7 +50,7 @@ function expandText(definition: TextDefinition | undefined): TextDefinition | un
               kind,
               {
                 ...feedback,
-                subdued: feedback.subdued ?? (feedback.default ? `$text.feedback.${kind}.default` : undefined),
+                muted: feedback.muted ?? (feedback.base ? `$text.feedback.${kind}.base` : undefined),
               },
             ]
           }),
@@ -69,11 +69,11 @@ function expandBackground(definition: BackgroundDefinition | undefined): Backgro
 }
 
 function expandFormfield(definition: StatefulColorDefinition | undefined, path: string) {
-  if (!definition?.default) return definition
+  if (!definition?.base) return definition
   return {
     ...definition,
     ...Object.fromEntries(
-      ActionState.literals.map((state) => [`$${state}`, definition[`$${state}`] ?? `$${path}.default`]),
+      ActionState.literals.map((state) => [`$${state}`, definition[`$${state}`] ?? `$${path}.base`]),
     ),
   }
 }
@@ -85,13 +85,13 @@ function expandActions<Definition extends Partial<Record<string, StatefulColorDe
   if (!definition) return
   return Object.fromEntries(
     Object.entries(definition).map(([variant, value]) => {
-      if (!value?.default) return [variant, value]
+      if (!value?.base) return [variant, value]
       return [
         variant,
         {
           ...value,
           ...Object.fromEntries(
-            ActionState.literals.map((state) => [`$${state}`, value[`$${state}`] ?? `$${path}.${variant}.default`]),
+            ActionState.literals.map((state) => [`$${state}`, value[`$${state}`] ?? `$${path}.${variant}.base`]),
           ),
         },
       ]

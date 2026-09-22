@@ -47,16 +47,16 @@ function SessionLocationMissingStory(props: { context: Plugin.Context }) {
   return (
     <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background.raised.base}>
       <box paddingLeft={2} paddingRight={2} paddingTop={1} flexGrow={1}>
-        <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
           Workerd Modal workspace driver
         </text>
-        <text fg={theme.text.subdued}>build · GPT-5.6 Sol (high)</text>
+        <text fg={theme.text.muted}>build · GPT-5.6 Sol (high)</text>
         <box height={1} />
-        <text fg={theme.text.default}>You</text>
-        <text fg={theme.text.subdued}>Test the mounted workspace and verify the deployment.</text>
+        <text fg={theme.text.base}>You</text>
+        <text fg={theme.text.muted}>Test the mounted workspace and verify the deployment.</text>
         <box height={1} />
-        <text fg={theme.text.default}>Build · GPT-5.6 Sol (high)</text>
-        <text fg={theme.text.subdued}>The deployment is verified and the worktree is clean.</text>
+        <text fg={theme.text.base}>Build · GPT-5.6 Sol (high)</text>
+        <text fg={theme.text.muted}>The deployment is verified and the worktree is clean.</text>
         <box flexGrow={1} />
         <SessionLocationUnavailable directory={directory} onMove={open} />
       </box>

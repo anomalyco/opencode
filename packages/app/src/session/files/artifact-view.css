@@ -1,0 +1,94 @@
+/* The control defaults to a fixed 232px with equal segments; here it hugs its two labels. */
+[data-slot="artifact-toolbar"] [data-slot="segmented-control-v2"] {
+  width: auto;
+}
+
+[data-slot="artifact-toolbar"] [data-slot="segmented-control-v2-item"] {
+  flex: 0 0 auto;
+  padding: 0 14px;
+}
+
+/* Shrink-wrapped segments round the label box down a fraction; the ellipsis overflow then clips glyph edges. */
+[data-slot="artifact-toolbar"] [data-slot="segmented-control-v2-item-label"] {
+  overflow: visible;
+  max-width: none;
+}
+
+[data-slot="artifact-stage"] {
+  --artifact-check: color-mix(in oklch, var(--v2-text-text-base) 5%, transparent);
+  background-color: var(--v2-background-bg-deep);
+}
+
+[data-slot="artifact-stage"][data-checker] {
+  background-image:
+    linear-gradient(45deg, var(--artifact-check) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--artifact-check) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--artifact-check) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--artifact-check) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+}
+
+[data-slot="artifact-media"] {
+  display: block;
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 0.5px var(--v2-border-border-base),
+    0 12px 32px -12px color-mix(in oklch, var(--v2-text-text-base) 25%, transparent);
+}
+
+[data-slot="artifact-stage"][data-zoom="fit"] [data-slot="artifact-media"] {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+[data-slot="artifact-stage"][data-zoom="fit"][data-overflow] [data-slot="artifact-media"] {
+  cursor: zoom-in;
+}
+
+[data-slot="artifact-stage"][data-zoom="actual"] [data-slot="artifact-media"] {
+  cursor: zoom-out;
+}
+
+[data-slot="artifact-table"] {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="artifact-table"] th,
+[data-slot="artifact-table"] td {
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--v2-border-border-muted);
+  border-inline-end: 1px solid var(--v2-border-border-muted);
+  white-space: pre;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: start;
+  line-height: var(--line-height-compact);
+}
+
+[data-slot="artifact-table"] th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--v2-background-bg-layer-01);
+  font-weight: var(--font-weight-medium);
+  color: var(--v2-text-text-muted);
+}
+
+[data-slot="artifact-table"] tbody tr:hover td {
+  background: color-mix(in oklch, var(--v2-text-text-base) 3%, transparent);
+}
+
+[data-slot="artifact-table"] td[data-index] {
+  color: var(--v2-text-text-faint);
+  text-align: end;
+  user-select: none;
+}

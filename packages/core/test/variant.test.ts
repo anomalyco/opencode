@@ -93,6 +93,15 @@ test("recognizes Claude version spellings and future models", () => {
       settings: { effort, thinking: { type: "adaptive", display: "summarized" } },
     })),
   )
+
+  expect(
+    resolve(model("@opencode/ai/providers/anthropic", "claude-haiku-4-5", 64_000), [
+      { type: "budget_tokens", min: 1_024, max: 64_000 },
+    ]),
+  ).toEqual([
+    { id: "high", settings: { thinking: { type: "enabled", budgetTokens: 16_000 } } },
+    { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 31_999 } } },
+  ])
 })
 
 test("spells Cloudflare AI Gateway variants for their upstream routes", () => {

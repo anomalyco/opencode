@@ -21,7 +21,7 @@ export function PanelHost(props: {
     const theme = useTheme()
     // Side panels sit on a raised surface; fullscreen takes over the base background.
     const background = () =>
-      panels.presentation() === "panel" ? theme.background.raised.base : theme.background.default
+      panels.presentation() === "panel" ? theme.background.raised.base : theme.background.base
     return (
       <box
         id="session-panel"

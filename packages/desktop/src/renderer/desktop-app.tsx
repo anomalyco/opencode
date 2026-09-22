@@ -48,15 +48,23 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
     drawingReady: false,
     route,
   })
+  // The window was created with the answers the shell gate needs; only a fresh install, which has no
+  // onboarding decision yet, asks over IPC and waits for the port.
+  const bootstrap = props.api.getWindowBootstrap()
   const [firstLaunch] = createResource(() =>
-    props.api.isFirstLaunchOnboardingPending().catch((error) => {
-      console.error("[desktop-onboarding] first launch check failed", error)
-      return false
-    }),
+    bootstrap.firstLaunchPending !== undefined
+      ? Promise.resolve(bootstrap.firstLaunchPending)
+      : props.api.isFirstLaunchOnboardingPending().catch((error) => {
+          console.error("[desktop-onboarding] first launch check failed", error)
+          return false
+        }),
   )
   const platform = createDesktopPlatform(props.api, windowState, props.updater)
   const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
-  const [defaultServer] = createResource(() => platform.getDefaultServer?.())
+  const [defaultServer] = createResource(async () => {
+    if (bootstrap.defaultServerUrl === undefined) return platform.getDefaultServer?.()
+    return bootstrap.defaultServerUrl ? ServerConnection.Key.make(bootstrap.defaultServerUrl) : null
+  })
   const [locale] = createResource(() => preloadStoredLocale(platform))
   const [initialRoute] = createResource(
     () => !firstLaunch.loading && (firstLaunch() && initialUrl === "/" ? "/new-session" : initialUrl),

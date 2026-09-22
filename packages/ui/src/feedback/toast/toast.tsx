@@ -1,4 +1,5 @@
 import { Toaster, toast, type ToasterProps } from "solid-sonner"
+import { boundToastDescription } from "./description"
 import { isRTL } from "@kobalte/core/i18n"
 import type { ComponentProps, JSX } from "solid-js"
 import { createContext, onCleanup, onMount, splitProps, useContext } from "solid-js"
@@ -205,7 +206,7 @@ const activeToastByKey = new Map<string, ActiveToast>()
 const activeToastById = new Map<number, ActiveToast>()
 
 export function showToast(options: ToastOptions | string) {
-  const opts: ToastOptions = typeof options === "string" ? { description: options } : options
+  const opts = boundToastDescription(typeof options === "string" ? { description: options } : options)
   const key = JSON.stringify({
     title: opts.title,
     description: opts.description,

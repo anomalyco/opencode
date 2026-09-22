@@ -3,6 +3,7 @@ export {
   type ActionStateKey,
   ActionVariant,
   BaseHue,
+  BaseThemeDefinition,
   CategoricalDefinition,
   FeedbackKind,
   FormfieldState,
@@ -20,11 +21,8 @@ export {
   ThemeDocument,
   type BackgroundDefinition,
   type DiffDefinition,
-  type FileThemeDefinition,
   type FormfieldColorDefinition,
   type HueDefinition,
-  type HueOverrideDefinition,
-  type MergeModeDefinition,
   type Mode,
   type StatefulColorDefinition,
   type TextDefinition,
@@ -32,6 +30,7 @@ export {
 } from "./schema.js"
 
 export type {
+  ActionStates,
   Categorical,
   FormfieldColor,
   Hue,
@@ -43,7 +42,7 @@ export type {
   ResolvedThemeTokens,
   StatefulColor,
 } from "./types.js"
-export { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"
+export { DEFAULT_CATEGORICAL } from "./categorical.js"
 export { expandTheme } from "./expand.js"
 export { migrateV1 } from "./v1-migrate.js"
 export { resolveTheme, resolveThemeDocument, themeDecodeError } from "./resolve.js"

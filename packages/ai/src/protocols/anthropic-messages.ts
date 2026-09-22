@@ -83,7 +83,7 @@ const AnthropicCacheControl = Schema.Struct({
   type: Schema.tag("ephemeral"),
   ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
 })
-const AnthropicServiceTier = Schema.Literals(["auto", "standard_only"])
+const AnthropicServiceTier = knownString<"auto" | "standard_only">()
 
 const AnthropicTextBlock = Schema.Struct({
   type: Schema.tag("text"),
@@ -276,7 +276,7 @@ const AnthropicThinkingBlockBinding = Schema.Struct({
 })
 
 const AnthropicThinkingFields = {
-  display: Schema.optional(Schema.Literals(["summarized", "omitted"])),
+  display: Schema.optional(knownString<"summarized" | "omitted">()),
   block_binding: Schema.optional(AnthropicThinkingBlockBinding),
 }
 const AnthropicThinkingEnabled = Schema.Struct({

@@ -5,6 +5,7 @@ import type { UpdaterState } from "@opencode/app/updater"
 import type { WslServersPlatform } from "@opencode/app/wsl/types"
 import type { SshPlatform } from "@opencode/app/ssh"
 import type { BrowserPaneRequest } from "../shared/ipc-rpc/browser"
+import type { WindowBootstrap } from "../shared/window-bootstrap"
 import type {
   ClipboardImage,
   DirectoryPickerOptions,
@@ -53,6 +54,7 @@ export type ElectronAPI = {
   draftBlobPut(data: ArrayBuffer): Promise<string>
   draftBlobGet(id: string): Promise<ArrayBuffer | null>
   getWindowID(): string
+  getWindowBootstrap(): WindowBootstrap
   themeReady(): Promise<void>
   onMenuCommand(cb: (id: string) => void): () => void
   onDeepLink(cb: (urls: string[]) => void): () => void

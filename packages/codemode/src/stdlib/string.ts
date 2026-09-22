@@ -1,16 +1,26 @@
 import { Effect } from "effect"
-import { constructor, type Method, methods } from "../interpreter/native.js"
+import { constructor, fn, type Impl, type Method, methods } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
-import { invalidData, rangeError, typeError } from "../interpreter/model.js"
-import { Arr, PromiseObj, RegExpObj, record } from "../interpreter/objects.js"
+import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
+import {
+  define,
+  hidden,
+  Arr,
+  hostIterator,
+  RegExpObj,
+  record,
+  coerceToNumber,
+  coerceToString,
+  type Value,
+} from "../interpreter/objects.js"
 import { containsOpaqueReference, typeofValue } from "../interpreter/references.js"
 import { applyCollectionCallback, isSupportedCallback } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { matchToValue, toHostRegex } from "./regexp.js"
-import { coerceToNumber, coerceToString, coercion } from "./value.js"
+import { coercion } from "./value.js"
 
 // console is intercepted by the interpreter before reaching here.
-const requireDataArgument = (name: string, index: number, arg: unknown): unknown => {
+const requireDataArgument = (name: string, index: number, arg: Value): Value => {
   if (containsOpaqueReference(arg)) {
     throw invalidData(`String.${name} expects argument ${index + 1} to be a data value.`)
   }
@@ -29,21 +39,23 @@ const replaceWithCallback = <R>(
   ctx: Interpreter<R>,
   value: string,
   name: "replace" | "replaceAll",
-  args: Array<unknown>,
-): Effect.Effect<unknown, unknown, R> => {
+  args: Array<Value>,
+): Effect.Effect<Value, unknown, R> => {
   const builtins = ctx.builtins
   const apply = applyCollectionCallback(ctx, args[1], `String.${name}`)
-  const matches: Array<{ readonly match: string; readonly offset: number; readonly args: Array<unknown> }> = []
-  const collect = (...callbackArgs: Array<unknown>): string => {
+  const matches: Array<{ readonly match: string; readonly offset: number; readonly args: Array<Value> }> = []
+  // The host calls back with (match, ...captures, offset, string, groups?); only groups is not already a Value.
+  const collect = (
+    ...callbackArgs: Array<string | number | undefined | Record<string, string | undefined>>
+  ): string => {
     const match = callbackArgs[0]
-    const groups = callbackArgs[callbackArgs.length - 1]
-    const hasGroups = groups !== null && typeof groups === "object"
+    const hasGroups = typeof callbackArgs.at(-1) === "object"
     const offset = callbackArgs[callbackArgs.length - (hasGroups ? 3 : 2)]
     if (typeof match !== "string" || typeof offset !== "number") {
       throw typeError(`String.${name} produced an invalid replacement match.`)
     }
-    if (hasGroups) callbackArgs[callbackArgs.length - 1] = record(builtins.Object, groups as Record<string, unknown>)
-    matches.push({ match, offset, args: callbackArgs })
+    const args = callbackArgs.map((arg) => (typeof arg === "object" ? record(builtins.Object, arg) : arg))
+    matches.push({ match, offset, args })
     return match
   }
 
@@ -63,10 +75,7 @@ const replaceWithCallback = <R>(
     let end = 0
     for (const match of matches) {
       const replacement = yield* apply(match.args)
-      output.push(
-        value.slice(end, match.offset),
-        replacement instanceof PromiseObj ? "[object Promise]" : coerceToString(replacement),
-      )
+      output.push(value.slice(end, match.offset), coerceToString(replacement))
       end = match.offset + match.match.length
     }
     output.push(value.slice(end))
@@ -99,7 +108,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     codeUnits("fromCodePoint", String.fromCodePoint),
   ])
 
-  const self = (thisValue: unknown, name: string): string => {
+  const self = (thisValue: Value, name: string): string => {
     if (typeof thisValue === "string") return thisValue
     if (thisValue === null || thisValue === undefined) {
       throw typeError(`String.prototype.${name} called on null or undefined.`)
@@ -107,26 +116,26 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     return coerceToString(thisValue)
   }
   // Coerce arguments like native JS; opaque runtime references still reject.
-  const str = (name: string, args: Array<unknown>, index: number): string =>
+  const str = (name: string, args: Array<Value>, index: number): string =>
     coerceToString(requireDataArgument(name, index, args[index]))
-  const num = (name: string, args: Array<unknown>, index: number): number =>
+  const num = (name: string, args: Array<Value>, index: number): number =>
     coerceToNumber(requireDataArgument(name, index, args[index]))
-  const optNum = (name: string, args: Array<unknown>, index: number): number | undefined =>
+  const optNum = (name: string, args: Array<Value>, index: number): number | undefined =>
     args[index] === undefined ? undefined : num(name, args, index)
-  const optStr = (name: string, args: Array<unknown>, index: number): string | undefined =>
+  const optStr = (name: string, args: Array<Value>, index: number): string | undefined =>
     args[index] === undefined ? undefined : str(name, args, index)
-  const rejectRegex = (name: string, args: Array<unknown>): void => {
+  const rejectRegex = (name: string, args: Array<Value>): void => {
     if (args[0] instanceof RegExpObj) {
       throw typeError(
         `String.${name} cannot take a regular expression; use regex.test(string) or String.search instead.`,
       )
     }
   }
-  const simple = (name: string, length: number, op: (value: string, args: Array<unknown>) => unknown): Method => [
-    name,
-    length,
-    (thisValue, args) => op(self(thisValue, name), args),
-  ]
+  const simple = (
+    name: string,
+    length: number,
+    op: (value: string, args: Array<Value>) => ReturnType<Impl>,
+  ): Method => [name, length, (thisValue, args) => op(self(thisValue, name), args)]
   const replace = (name: "replace" | "replaceAll") =>
     simple(name, 2, (value, args) => {
       if (isSupportedCallback(args[1])) return replaceWithCallback(ctx, value, name, args)
@@ -150,6 +159,8 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     simple("valueOf", 0, (value) => value),
     simple("toLowerCase", 0, (value) => value.toLowerCase()),
     simple("toUpperCase", 0, (value) => value.toUpperCase()),
+    simple("toLocaleLowerCase", 0, (value) => value.toLowerCase()),
+    simple("toLocaleUpperCase", 0, (value) => value.toUpperCase()),
     simple("trim", 0, (value) => value.trim()),
     simple("trimStart", 0, (value) => value.trimStart()),
     simple("trimLeft", 0, (value) => value.trimStart()),
@@ -216,7 +227,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
           `String.matchAll requires a regular expression with the global (g) flag: write /${pattern.source}/${pattern.flags}g, or use String.match for a single match.`,
         )
       }
-      const matches: Array<unknown> = []
+      const matches: Array<Value> = []
       for (const match of value.matchAll(pattern)) {
         checkArrayLength(matches.length + 1)
         matches.push(matchToValue(builtins, match))
@@ -258,5 +269,13 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
       return joined
     }),
   ])
+  define(
+    builtins.String,
+    IteratorSymbol,
+    fn(builtins, "[Symbol.iterator]", 0, (thisValue) =>
+      hostIterator(builtins, self(thisValue, "[Symbol.iterator]")[Symbol.iterator]()),
+    ),
+    hidden,
+  )
   return string
 }
