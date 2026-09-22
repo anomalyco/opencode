@@ -4411,7 +4411,7 @@ describe("SessionRunnerLLM", () => {
     })
   })
 
-  scenario("adds the parent session header to child model requests", function* (s) {
+  scenario("uses parent cache affinity for child model requests", function* (s) {
     const parentID = Session.ID.make("ses_runner_parent")
 
     yield* s.db
@@ -4423,6 +4423,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Run child request")
 
     expect(s.requests[0]?.http?.headers?.["x-parent-session-id"]).toBe(parentID)
+    expect(s.requests[0]?.promptCacheKey).toBe(parentID)
   })
 
   scenario("runs different sessions concurrently", function* (s) {
