@@ -1,6 +1,6 @@
 export * as Credential from "./credential.js"
 
-import { asc, desc, eq } from "drizzle-orm"
+import { and, asc, desc, eq } from "drizzle-orm"
 import { Cause, Context, Effect, Layer, Schema } from "effect"
 import { Credential } from "@opencode/schema/credential"
 import { Integration } from "@opencode/schema/integration"
@@ -48,6 +48,8 @@ export interface Interface {
   readonly activate: (id: ID) => Effect.Effect<void>
   /** Updates the label or secret value of a stored credential. */
   readonly update: (id: ID, updates: Partial<Pick<Info, "label" | "value">>) => Effect.Effect<void>
+  /** Replaces a secret value only when the caller still holds the current value. */
+  readonly updateValue: (id: ID, expected: Value, value: Value) => Effect.Effect<boolean>
   /** Removes a stored credential. */
   readonly remove: (id: ID) => Effect.Effect<void>
 }
@@ -232,6 +234,26 @@ const layer = Layer.effect(
         })
         if (updates.label !== undefined && updates.label !== credential.label)
           yield* bus.publish(Event.Updated, {}, { global: true })
+      }),
+      updateValue: Effect.fn("Credential.updateValue")(function* (id, expected, value) {
+        const updated = yield* db
+          .update(CredentialTable)
+          .set({ value })
+          .where(and(eq(CredentialTable.id, id), eq(CredentialTable.value, expected)))
+          .returning({ id: CredentialTable.id })
+          .get()
+          .pipe(
+            Effect.onError((cause) =>
+              Effect.logError("credential value update failed", {
+                credentialID: id,
+                errors: ErrorSummary.from(Cause.squash(cause)),
+              }),
+            ),
+            Effect.orDie,
+          )
+        if (!updated) return false
+        yield* Effect.logInfo("credential value updated", { credentialID: id })
+        return true
       }),
       remove: Effect.fn("Credential.remove")(function* (id) {
         const removed = yield* db
