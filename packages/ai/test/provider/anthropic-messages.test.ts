@@ -934,6 +934,42 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("drops malformed provider metadata fields without discarding their siblings", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "",
+                providerMetadata: { anthropic: { signature: 123, redactedData: "opaque_1" } },
+              },
+              {
+                type: "reasoning",
+                text: "visible",
+                providerMetadata: { anthropic: { signature: "sig_1", redactedData: 7 } },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              { type: "redacted_thinking", data: "opaque_1" },
+              { type: "thinking", thinking: "visible", signature: "sig_1" },
+            ],
+          },
+        ],
+      })
+    }),
+  )
+
   it.effect("round-trips compatible provider metadata in its own namespace", () =>
     Effect.gen(function* () {
       const compatible = Route.make({

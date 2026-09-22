@@ -144,7 +144,10 @@ function toMessage(item: (typeof Response.Type.output)[number], model: LLMReques
       summary.map((part) => ({
         type: "reasoning" as const,
         text: part.text,
-        providerMetadata: { [key]: { itemId: item.id, reasoningEncryptedContent: item.encrypted_content } },
+        providerMetadata: OpenResponses.providerMetadata.write(key, {
+          itemId: item.id,
+          reasoningEncryptedContent: item.encrypted_content,
+        }),
       })),
     )
   }

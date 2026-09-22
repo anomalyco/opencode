@@ -37,7 +37,7 @@ export const onDone: (
   function* (state, item, tools) {
     const tool = tools[item.type]
     if (!tool) return [state, []] satisfies OpenResponses.StepResult
-    const providerMetadata = OpenResponses.providerMetadata(state, { itemId: item.id })
+    const providerMetadata = OpenResponses.providerMetadata.write(state.providerMetadataKey, { itemId: item.id })
     const events: LLMEvent[] = []
     const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
     events.push(

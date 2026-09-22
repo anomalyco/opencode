@@ -300,14 +300,15 @@ const lowerUserPart = Effect.fn("Gemini.lowerUserPart")(function* (part: TextPar
   return { inlineData: { mimeType: media.mime, data: media.base64 } }
 })
 
-const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
+const GeminiProviderMetadata = ProviderShared.providerMetadata(
+  Schema.Struct({
+    thoughtSignature: lenient(Schema.String),
+    promptFeedback: lenient(GeminiPromptFeedback),
+  }),
+)
 
-const thoughtSignature = (metadata: ProviderMetadata | undefined, key: string) => {
-  const value = metadata?.[key]
-  return ProviderShared.isRecord(value) && typeof value.thoughtSignature === "string"
-    ? value.thoughtSignature
-    : undefined
-}
+const thoughtSignature = (metadata: ProviderMetadata | undefined, key: string) =>
+  GeminiProviderMetadata.read(metadata, key)?.thoughtSignature
 
 const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string) => ({
   functionCall: { ...(omitIds ? {} : { id: part.id }), name: part.name, args: part.input },
@@ -510,7 +511,7 @@ const mapUsage = (usage: GeminiUsage | undefined, metadataKey: string) => {
     cacheReadInputTokens: cached,
     reasoningTokens: thoughts,
     totalTokens: ProviderShared.totalTokens(promptTokens, outputTokens, usage.totalTokenCount ?? undefined),
-    providerMetadata: providerMetadata(metadataKey, usage),
+    providerMetadata: { [metadataKey]: usage },
   })
 }
 
@@ -560,7 +561,7 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
       state.reasoningId,
       state.reasoningSignature === undefined
         ? undefined
-        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.reasoningSignature }),
+        : GeminiProviderMetadata.write(state.providerMetadataKey, { thoughtSignature: state.reasoningSignature }),
     )
   if (state.textId !== undefined)
     lifecycle = Lifecycle.textEnd(
@@ -569,7 +570,7 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
       state.textId,
       state.textSignature === undefined
         ? undefined
-        : providerMetadata(state.providerMetadataKey, { thoughtSignature: state.textSignature }),
+        : GeminiProviderMetadata.write(state.providerMetadataKey, { thoughtSignature: state.textSignature }),
     )
   Lifecycle.finish(lifecycle, events, {
     reason: {
@@ -581,7 +582,7 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> => {
     providerMetadata:
       state.promptFeedback === undefined
         ? undefined
-        : providerMetadata(state.providerMetadataKey, { promptFeedback: state.promptFeedback }),
+        : GeminiProviderMetadata.write(state.providerMetadataKey, { promptFeedback: state.promptFeedback }),
   })
   return events
 }
@@ -670,7 +671,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
             events,
             textId,
             textSignature
-              ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature })
+              ? GeminiProviderMetadata.write(state.providerMetadataKey, { thoughtSignature: textSignature })
               : undefined,
           )
           textId = undefined
@@ -685,7 +686,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
           events,
           reasoningId,
           part.text,
-          signature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature }) : undefined,
+          signature
+            ? GeminiProviderMetadata.write(state.providerMetadataKey, { thoughtSignature: signature })
+            : undefined,
         )
         continue
       }
@@ -695,7 +698,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           events,
           reasoningId,
           reasoningSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
+            ? GeminiProviderMetadata.write(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
             : undefined,
         )
         reasoningId = undefined
@@ -710,7 +713,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
         events,
         textId,
         part.text,
-        textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
+        textSignature
+          ? GeminiProviderMetadata.write(state.providerMetadataKey, { thoughtSignature: textSignature })
+          : undefined,
       )
       textSignature = undefined
       continue
@@ -732,7 +737,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           events,
           reasoningId,
           reasoningSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
+            ? GeminiProviderMetadata.write(state.providerMetadataKey, { thoughtSignature: reasoningSignature })
             : undefined,
         )
         reasoningId = undefined
@@ -743,7 +748,9 @@ const step = (state: ParserState, event: GeminiEvent) => {
           lifecycle,
           events,
           textId,
-          textSignature ? providerMetadata(state.providerMetadataKey, { thoughtSignature: textSignature }) : undefined,
+          textSignature
+            ? GeminiProviderMetadata.write(state.providerMetadataKey, { thoughtSignature: textSignature })
+            : undefined,
         )
         textId = undefined
         textSignature = undefined
@@ -755,7 +762,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
           name: part.functionCall.name,
           input,
           providerMetadata: part.thoughtSignature
-            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
+            ? GeminiProviderMetadata.write(state.providerMetadataKey, { thoughtSignature: part.thoughtSignature })
             : undefined,
         }),
       )
