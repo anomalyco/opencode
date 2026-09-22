@@ -839,6 +839,36 @@ describe("coercion parity: global isFinite and isNaN", () => {
   })
 })
 
+describe("coercion parity: built-in arguments coerce as in JS", () => {
+  test("numeric arguments apply ToIntegerOrInfinity", async () => {
+    expect(
+      await value(`
+        return [
+          [1, 2, 3].indexOf(2, "1"), [1, 2, 3].lastIndexOf(3, "5"), [1, 2, 3].includes(1, "1"),
+          [1, 2, 3, 4].slice("1", "3"), [1, 2, 3].at(null), [1, 2, 3].at(1.7),
+          [1, [2, [3]]].flat(1.9), [1, 2, 3].with(1.5, 9), [1, 2, 3, 4].splice("1", "2"),
+          Math.max("3", "2"), Math.floor(null), Math.hypot("3", "4"),
+          parseInt("11", "2"), Number.parseInt("ff", "16"), (1.5).toFixed("2"), (255).toString("16"),
+          String.fromCharCode("65", 66.9), new Uint8Array([1, 2, 3]).indexOf(2, "1"),
+        ]
+      `),
+    ).toEqual([1, 2, false, [2, 3], 1, 2, [1, 2, [3]], [1, 9, 3], [2, 3], 3, 0, 5, 3, 255, "1.50", "ff", "AB", 1])
+  })
+
+  test("join separators, JSON.parse text, and Array.from length coerce", async () => {
+    expect(
+      await value(`
+        return [
+          [1, 2].join(null), [1, 2].join(0), [1, 2].join(undefined), new Uint8Array([1, 2]).join(null),
+          JSON.parse(123), JSON.parse(true),
+          Array.from({ length: "2" }), Array.from({ length: 2.5 }), Array.from({ length: -1 }), Array.from({}),
+        ]
+      `),
+    ).toEqual(["1null2", "102", "1,2", "1null2", 123, true, [null, null], [null, null], [], []])
+    expect((await error(`return JSON.parse(undefined)`)).message).toContain("JSON")
+  })
+})
+
 describe("coercion parity: arrays coerce to numbers through their string form", () => {
   test("arrays with objects become NaN instead of crashing on host ToPrimitive", async () => {
     expect(await value(`let x = [{}]; x++; return Number.isNaN(x)`)).toBe(true)

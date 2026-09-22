@@ -124,8 +124,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `Boolean`, `Number`, `String`, `parseInt`, `parseFloat`, `isFinite`, `isNaN`, and URI helpers as callbacks.
 - [x] Built-in method references as callbacks, such as `values.map(Math.abs)`, `records.map(JSON.stringify)`,
       `items.forEach(console.log)`, and `Promise.resolve(-1).then(Math.abs)`. Extra callback arguments a built-in
-      does not consume are ignored, like JS; consumed arguments stay strictly validated (`Math.floor` still rejects a
-      string). A detached method loses its receiver, as in JS: `values.filter("abc".includes)` is a `TypeError`
+      does not consume are ignored, like JS, and consumed arguments coerce, like JS (`"3.7".replace(/\d\.\d/,
+    Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.filter("abc".includes)` is a `TypeError`
       because `includes` is called without a string `this`.
 - [x] Constructors work as callbacks with JS call semantics: `Error` types construct (`messages.map(Error)`),
       and new-requiring constructors (`Map`, `Set`, `URL`, `URLSearchParams`, `Headers`, `Promise`) throw a `TypeError`,
@@ -205,8 +205,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       applied to functions and namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
 - [ ] ToPrimitive on object operands: operators, `Error(message)`, `Date` arguments, and `parseInt` radix should call
       `valueOf`/`toString` in spec order and surface their throws.
-- [ ] Property keys follow ToPropertyKey: `x[null]`, `x[true]`, and objects (via `toString`) become string keys; only
-      strings and numbers are accepted.
+- [x] Property keys follow ToPropertyKey: `x[null]`, `x[true]`, and objects (via their built-in string form) become
+      string keys.
 
 ## Promises and tools
 
@@ -319,10 +319,12 @@ reject }` object.
 - [x] Assigning `length` to truncate or extend an array; invalid lengths throw `RangeError`.
 - [x] Non-index own properties on arrays (`arr.foo = 1`, `arr.constructor = null`). They are excluded from the JSON
       form, like `JSON.stringify`.
-- [ ] Argument coercion for `indexOf`, `lastIndexOf`, `includes`, `fill`, `flat`, `copyWithin`, and the `join`
-      separator: JavaScript applies ToIntegerOrInfinity/ToString (including `valueOf`, strings, and `undefined`), the
-      interpreter requires numbers and strings. `indexOf()` and `lastIndexOf()` with no argument already search for
-      `undefined`; `includes()` still requires a value.
+- [x] Numeric arguments coerce as in JS (ToIntegerOrInfinity): `indexOf(x, "1")`, `slice("1", "3")`, `at(null)`,
+      `flat(1.9)`, `with(1.5, v)`, `Math.max("3", "2")`, `parseInt("11", "2")`, `(1.5).toFixed("2")`,
+      `String.fromCharCode("65")`, and the Uint8Array equivalents. `join(sep)` and `JSON.parse(text)` apply ToString
+      (`join(null)` is `"1null2"`, `JSON.parse(123)` is `123`). `Array.from({ length: "2" })` applies ToLength; a
+      promise source still throws with an `await` hint rather than JS's silent `[]`. A program object's own
+      `valueOf`/`toString` is not consulted yet (see ToPrimitive above).
 
 ## Strings
 

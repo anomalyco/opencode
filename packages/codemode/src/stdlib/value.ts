@@ -1,5 +1,4 @@
 import { fn } from "../interpreter/native.js"
-import { typeError } from "../interpreter/model.js"
 import { coerceToNumber, coerceToString, type Native, type Value } from "../interpreter/objects.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 
@@ -20,11 +19,7 @@ const coerce = <R>(ctx: Interpreter<R>, name: Coercion, args: Array<Value>): Val
   if (name === "isFinite") return Number.isFinite(coerceToNumber(raw))
   if (name === "isNaN") return Number.isNaN(coerceToNumber(raw))
   if (name === "parseInt") {
-    const radix = args[1]
-    if (radix !== undefined && typeof radix !== "number") {
-      throw typeError("parseInt expects a numeric radix.")
-    }
-    return parseInt(coerceToString(raw), radix)
+    return parseInt(coerceToString(raw), coerceToNumber(args[1]))
   }
   if (name === "parseFloat") return parseFloat(coerceToString(raw))
   return coerceToString(raw)

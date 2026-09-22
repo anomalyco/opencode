@@ -422,6 +422,12 @@ export const coerceToNumber = (value: Value): number => {
   return value instanceof ToolReference ? Number.NaN : Number(value)
 }
 
+/** ToIntegerOrInfinity: NaN is 0, fractions truncate. */
+export const coerceToInteger = (value: Value): number => {
+  const number = coerceToNumber(value)
+  return Number.isNaN(number) ? 0 : Math.trunc(number)
+}
+
 /** Values that cannot cross the data boundary: opaque machinery and host-backed wrappers. */
 export const isRuntimeReference = (value: Value): boolean =>
   value instanceof Opaque || value instanceof Wrapper || value instanceof ToolReference
