@@ -51,11 +51,9 @@ export function mentionTriggerIndex(value: string, offset = promptOffsetWidth(va
 
 export function slashTriggerIndex(value: string, offset = promptOffsetWidth(value)) {
   const text = displaySlice(value, 0, offset)
-  for (let index = text.lastIndexOf("/"); index >= 0; index = text.lastIndexOf("/", index - 1)) {
-    const before = index === 0 ? undefined : text[index - 1]
-    const query = text.slice(index)
-    if (before !== undefined && !/\s/.test(before)) continue
-    if (/\s/.test(query) || query.slice(1).includes("/")) return
-    return promptOffsetWidth(text.slice(0, index))
-  }
+  // Slash commands are only commands when they open the prompt: `parseSlashHead`
+  // ignores anything else, and the command list is empty away from offset 0.
+  if (!text.startsWith("/")) return
+  if (/\s/.test(text) || text.slice(1).includes("/")) return
+  return 0
 }

@@ -31,13 +31,18 @@ describe("prompt display", () => {
     expect(mentionTriggerIndex("中文 @src file")).toBeUndefined()
   })
 
-  test("finds slash attachments at token boundaries", () => {
+  test("finds slash commands only at the start of the prompt", () => {
     expect(slashTriggerIndex("/")).toBe(0)
-    expect(slashTriggerIndex("Review this /api-design")).toBe(12)
-    expect(slashTriggerIndex("中文 /api-design")).toBe(5)
+    expect(slashTriggerIndex("/compact")).toBe(0)
+    expect(slashTriggerIndex("/中文")).toBe(0)
+    expect(slashTriggerIndex("/compact now", Bun.stringWidth("/compact"))).toBe(0)
+    expect(slashTriggerIndex("Review this /api-design")).toBeUndefined()
+    expect(slashTriggerIndex("中文 /api-design")).toBeUndefined()
     expect(slashTriggerIndex("Review /api design")).toBeUndefined()
     expect(slashTriggerIndex("Review /tmp/file.ts")).toBeUndefined()
     expect(slashTriggerIndex("https://opencode.ai/docs")).toBeUndefined()
     expect(slashTriggerIndex("src/prompt/index.ts")).toBeUndefined()
+    expect(slashTriggerIndex("/compact now")).toBeUndefined()
+    expect(slashTriggerIndex("/usr/bin")).toBeUndefined()
   })
 })
