@@ -22,16 +22,18 @@ const writePackage = (dir: string, pkg: Record<string, unknown>) =>
 const npmLayer = (cache: string) =>
   AppNodeBuilder.build(Npm.node, [Global.node.replace(Global.layerWith({ cache, state: path.join(cache, "state") }))])
 
-async function createGitFixture(directory: string) {
+async function createGitFixture(directory: string, prepare = false) {
   const repository = path.join(directory, "repository")
   await fs.mkdir(path.join(repository, "dependency"), { recursive: true })
   await writePackage(repository, {
     name: "fixture-git-plugin",
     exports: "./index.js",
     dependencies: { "fixture-dependency": "file:./dependency" },
+    ...(prepare ? { scripts: { prepare: "bun prepare.ts" } } : {}),
   })
   await writePackage(path.join(repository, "dependency"), { name: "fixture-dependency", exports: "./index.js" })
   await Bun.write(path.join(repository, "index.js"), "export default { root: true }\n")
+  if (prepare) await Bun.write(path.join(repository, "prepare.ts"), 'await Bun.write("prepared.txt", "ready\\n")\n')
   await Bun.write(path.join(repository, "dependency", "index.js"), "export const dependency = true\n")
 
   const subdirectory = path.join(repository, "packages", "subdirectory-plugin")
@@ -246,6 +248,19 @@ describe("Npm.add", () => {
     ).toBeTruthy()
     expect(entries.added.directory).toContain(path.join("npm", await Npm.cacheKey(spec)))
     expect(entries.added.directory).toContain("node_modules")
+  })
+
+  test("installs Git packages with prepare scripts", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path, true)
+    const spec = `git+file://${fixture.repository}#${fixture.commit}`
+
+    const entry = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    await expect(Bun.file(path.join(entry.directory, "prepared.txt")).text()).resolves.toBe("ready\n")
   })
 
   test("installs a Git package from an npm ::path: subdirectory", async () => {
