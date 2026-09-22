@@ -41,6 +41,7 @@ import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
+import { subtreeCost } from "../../util/session-subtree"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
@@ -263,7 +264,6 @@ export function Prompt(props: PromptProps) {
 
   const usage = createMemo(() => {
     if (!props.sessionID) return
-    const session = sync.session.get(props.sessionID)
     const msg = sync.data.message[props.sessionID] ?? []
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return
@@ -274,10 +274,12 @@ export function Prompt(props: PromptProps) {
 
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
-    const cost = session?.cost ?? 0
+    const subtree = subtreeCost(sync.data.session, props.sessionID)
+    const cost = subtree.self + subtree.subagents
+    const subagents = subtree.subagents > 0 ? ` (+${money.format(subtree.subagents)} subagents)` : ""
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
-      cost: cost > 0 ? money.format(cost) : undefined,
+      cost: cost > 0 ? `${money.format(cost)}${subagents}` : undefined,
     }
   })
 
