@@ -253,8 +253,10 @@ export namespace Jev {
     const confidence = choice.confidence ?? 0
     // Unknown complexity defaults to HARD, not easy. Fail expensive. The wire
     // score is a raw weighted level index (0..n-1); gates and policy speak 0..1.
+    // `== null` also catches an explicit JSON null, which would otherwise
+    // normalize to 0 and read as trivially easy.
     const rawScore = complexity?.score
-    const score = rawScore === undefined ? 1 : normalizeComplexity(rawScore)
+    const score = rawScore == null ? 1 : normalizeComplexity(rawScore)
     const complexityConfidence = complexity?.confidence ?? 0
 
     const meta = { intent: choice.choice, complexity: score, confidence }

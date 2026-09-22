@@ -250,6 +250,17 @@ describe("routeWith", () => {
     expect(result?.decision.reason).toBe("high-complexity")
   })
 
+  test("explicit null complexity score defaults to HARD — fail expensive", async () => {
+    const engine = mockEngine({
+      tier: { type: "choice", choice: "cheap", confidence: 0.9 },
+      complexity: { type: "score", score: null as unknown as number, confidence: 0.9 },
+    } as Jev.Answers)
+    const result = await Jev.routeWith(config(), input(), engine)
+    expect(result?.model).toEqual(top.model)
+    expect(result?.decision.complexity).toBe(1)
+    expect(result?.decision.reason).toBe("high-complexity")
+  })
+
   test("unknown tier id from Jev keeps the default model", async () => {
     const engine = mockEngine(tierAnswer("supercheap", 0.9, 0.1, 0.9))
     const result = await Jev.routeWith(config(), input(), engine)
