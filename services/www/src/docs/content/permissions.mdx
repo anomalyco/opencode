@@ -277,3 +277,19 @@ Review broad approvals and remove those no longer needed.
 
 Clients may attach feedback when rejecting. Non-interactive clients must decide
 how to handle approval requests; configured `deny` rules always remain enforced.
+
+## Policies
+
+A [policy](/policies) can hard-deny a permission check after these rules and saved
+approvals run. It turns `allow` or `ask` into `deny` and never grants access.
+
+```jsonc
+{
+  "experimental": {
+    "policies": [{ "action": "permission", "resource": "shell:sudo *", "effect": "deny" }],
+  },
+}
+```
+
+Global and Console-managed policies override project configuration, which is how an
+organization blocks a command that a repository would allow.

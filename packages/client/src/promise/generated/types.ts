@@ -456,6 +456,10 @@ export type V2EventServerConnected = {
   data: {}
 }
 
+export type ModelSettings = { compaction?: ProviderCompaction } & { [x: string]: any }
+
+export type ConfigModelSettings = { compaction?: ProviderCompaction } & { [x: string]: JsonValue | null }
+
 export type ProviderSettings = {
   timeout?: number | false
   chunkTimeout?: number
@@ -1656,17 +1660,17 @@ export type SessionInboxMove = {
   payload: SessionInboxMovePayload
 }
 
+export type ModelVariant = {
+  id: string
+  settings?: ModelSettings
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+}
+
 export type ProviderRequest = {
   settings: ProviderSettings
   headers: { [x: string]: string }
   body: { [x: string]: any }
-}
-
-export type ModelVariant = {
-  id: string
-  settings?: ProviderSettings
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
 }
 
 export type ProviderInfo = {
@@ -1898,7 +1902,7 @@ export type ModelInfo = {
   name: string
   compatibility?: ModelCompatibility
   package?: string
-  settings?: ProviderSettings
+  settings?: ModelSettings
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
   capabilities: ModelCapabilities
@@ -2107,13 +2111,13 @@ export type ConfigEntry =
                 name?: string
                 compatibility?: ModelCompatibility
                 package?: string
-                settings?: ConfigProviderSettings
+                settings?: ConfigModelSettings
                 headers?: { [x: string]: string }
                 body?: { [x: string]: JsonValue }
                 capabilities?: ModelCapabilities
                 variants?: Array<{
                   id: string
-                  settings?: ConfigProviderSettings
+                  settings?: ConfigModelSettings
                   headers?: { [x: string]: string }
                   body?: { [x: string]: JsonValue }
                 }>

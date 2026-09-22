@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { BoxRenderable, TextRenderable } from "@opentui/core"
+import { BoxRenderable, ImageRenderable, NativeImage, TextRenderable } from "@opentui/core"
 import { Effect } from "effect"
-import { createHarness, execute, type Harness, matches, snapshot, state } from "../src/frontend/actions"
+import { capture, createHarness, execute, type Harness, matches, snapshot, state } from "../src/frontend/actions"
 import { SimulationRenderer } from "../src/frontend/renderer"
 import { SimulationSemantics } from "../src/frontend/semantics"
 
@@ -69,6 +69,42 @@ test("headless input mirrors the configured kitty keyboard protocol", async () =
         yield* execute(harness, { type: "ui.press", key: "escape" })
 
         expect(key).toMatchObject({ name: "escape", source: "kitty" })
+      }),
+    ),
+  )
+})
+
+test("captures image pixels and their terminal placement", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const renderer = yield* SimulationRenderer.create({ width: 20, height: 10 })
+        const image = NativeImage.fromRgba(
+          Uint8Array.from([255, 0, 0, 255, 0, 0, 255, 255]),
+          2,
+          1,
+        )
+        renderer.root.add(new ImageRenderable(renderer, {
+          source: image,
+          position: "absolute",
+          left: 2,
+          top: 1,
+          width: 2,
+          height: 1,
+          fit: "fill",
+        }))
+
+        const frame = yield* capture(createHarness(renderer))
+
+        expect(frame.images).toEqual([{
+          x: 2,
+          y: 1,
+          width: 2,
+          height: 1,
+          pixelWidth: 2,
+          pixelHeight: 1,
+          rgba: "/wAA/wAA//8=",
+        }])
       }),
     ),
   )

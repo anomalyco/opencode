@@ -77,7 +77,7 @@ export function DiffFileMenu(props: {
             if (event.button === MouseButton.LEFT) run()
           }}
         >
-          <text fg={theme.text.default} selectable={false} wrapMode="none" truncate>
+          <text fg={theme.text.base} selectable={false} wrapMode="none" truncate>
             {label()}
           </text>
         </box>

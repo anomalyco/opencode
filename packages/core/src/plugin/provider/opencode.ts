@@ -6,8 +6,11 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } fr
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
+import { IntegrationConnection } from "../../integration/connection.js"
+import { ManagedPolicy } from "../../managed-policy.js"
 import { Provider } from "../../provider.js"
 import { WebSearch } from "../../websearch.js"
+import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Money } from "@opencode/schema/money"
 
@@ -18,6 +21,10 @@ const RemoteResponse = Schema.Struct({
   providers: Schema.Record(Schema.String, ConfigProvider.Info),
   websearch: Schema.Struct({
     providerID: WebSearch.ID,
+  }).pipe(Schema.optional),
+  // Organization policy compiled for the authenticated caller; omitted when there is none.
+  experimental: Schema.Struct({
+    policies: Schema.Array(ConfigPolicy.Info).pipe(Schema.optional),
   }).pipe(Schema.optional),
 })
 const Device = Schema.Struct({
@@ -111,32 +118,50 @@ function oauth(http: HttpClient.HttpClient) {
   } satisfies IntegrationOAuthMethodRegistration
 }
 
-export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope.Scope>({
+export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | ManagedPolicy.Service | Scope.Scope>({
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
     const bus = yield* Bus.Service
     const http = yield* HttpClient.HttpClient
+    const managed = yield* ManagedPolicy.Service
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
       config: typeof RemoteResponse.Type | undefined
       connection: ActiveConnection
-    } = { config: undefined, connection: undefined }
+      organization: string | undefined
+    } = { config: undefined, connection: undefined, organization: undefined }
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("opencode")
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
-      const config = credential
-        ? yield* fetchConfig(http, credential).pipe(
-            Effect.catch((cause) =>
-              Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(Effect.as(undefined)),
-            ),
+      if (!connection) return { config: undefined, connection, organization: undefined }
+      return yield* ctx.integration.connection.resolve(connection).pipe(
+        Effect.flatMap((credential) => {
+          if (!credential) return Effect.succeed({ config: undefined, connection, organization: undefined })
+          return fetchConfig(http, credential).pipe(
+            Effect.map((config) => ({
+              config,
+              connection,
+              organization: typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined,
+            })),
           )
-        : undefined
-      return { config, connection }
+        }),
+        Effect.catch((cause) =>
+          Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(
+            // A load that fails for the connection already in place keeps its last config: dropping it
+            // would lift organization policy while personal credentials keep working.
+            Effect.as(
+              IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
+                ? { config: snapshot.config, connection, organization: snapshot.organization }
+                : { config: undefined, connection, organization: undefined },
+            ),
+          ),
+        ),
+      )
     })
+    // Statements ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
+    const publish = (next: typeof snapshot) =>
+      managed.set({ statements: next.config?.experimental?.policies ?? [], organization: next.organization })
 
     yield* ctx.integration.transform((editor) => {
       editor.update("opencode", (integration) => {
@@ -147,6 +172,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
     })
 
     snapshot = yield* load()
+    yield* publish(snapshot)
     yield* ctx.provider.transform((providers) => {
       for (const [providerID, item] of Object.entries(snapshot.config?.providers ?? {})) {
         const source = providers.get(item.canonical ?? providerID)
@@ -309,6 +335,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
 
     const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
       snapshot = next
+      yield* publish(next)
       yield* Effect.all([ctx.provider.reload(), ctx.websearch.reload()], { concurrency: 2, discard: true })
     })
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))

@@ -71,7 +71,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     const shifted = await content.evaluate((element) => getComputedStyle(element).translate)
     await content.evaluate((element) => element.setAttribute("data-summary-motion", ""))
     // Keep issuing resize events before the idle timer expires, including crossing the width cutoff.
-    for (const width of [1520, 1280, 1600]) {
+    for (const width of [1520, 1280, 1800]) {
       await page.setViewportSize({ width, height: 900 })
       await expect(panel).toHaveAttribute("data-summary-resizing", "true")
       await page.clock.runFor(100)
@@ -84,6 +84,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(content).toHaveAttribute("data-summary-motion", "transitionrun,transitionend,")
     await expect(content).not.toHaveCSS("translate", shifted)
     await page.setViewportSize({ width: 1440, height: 900 })
+    await expect(panel).toHaveAttribute("data-summary-resizing", "false")
     await expect(content).toHaveCSS("translate", shifted)
 
     await content.evaluate((element) => element.setAttribute("data-summary-motion", ""))
@@ -112,7 +113,8 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(summary).toBeVisible()
 
     await page.setViewportSize({ width: 1800, height: 900 })
-    await expect(content).toHaveCSS("translate", "0px")
+    await expect(panel).toHaveAttribute("data-summary-resizing", "false")
+    await expect(content).toHaveCSS("translate", "none")
     await expect(summary).toBeVisible()
 
     await page.emulateMedia({ reducedMotion: "reduce" })

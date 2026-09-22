@@ -9,7 +9,6 @@ import {
   typeError,
 } from "../interpreter/model.js"
 import {
-  Callable,
   define,
   entries,
   enumerableKeys,
@@ -20,23 +19,20 @@ import {
   keys,
   own,
   Arr,
-  Bytes,
-  DateObj,
-  ErrorObj,
   Obj,
   PromiseObj,
-  RegExpObj,
   set,
+  coerceToString,
+  type Value,
 } from "../interpreter/objects.js"
 import { containsOpaqueReference, describeValue, rejectCircularInsertion } from "../interpreter/references.js"
-import { preserveConsumerError } from "../interpreter/callback.js"
+import { invoke, preserveConsumerError } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { ToolReference } from "../tool-runtime.js"
 import { groupBy } from "./collections.js"
-import { coerceToString } from "./value.js"
 
 // ToObject for enumeration.
-export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: unknown, node?: AstNode): Obj => {
+export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: Value, node?: AstNode): Obj => {
   if (value === null || value === undefined) {
     throw typeError(`${label} cannot convert ${describeValue(value)} to an object.`, node)
   }
@@ -54,7 +50,7 @@ export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: u
   return new Obj(ctx.builtins.Object)
 }
 
-export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<unknown>): unknown => {
+export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<Value>): Value => {
   const target = args[0]
   // JS would box a primitive target; wrappers and primitives cannot hold fields here.
   if (!(target instanceof Obj)) {
@@ -75,7 +71,7 @@ export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<unknown>): unkn
   return target
 }
 
-const objectFromEntries = <R>(ctx: Interpreter<R>, source: unknown): Effect.Effect<Obj, unknown, R> => {
+const objectFromEntries = <R>(ctx: Interpreter<R>, source: Value): Effect.Effect<Obj, unknown, R> => {
   const out = new Obj(ctx.builtins.Object)
   return Effect.gen(function* () {
     const cursor = yield* ctx.iterate(source)
@@ -86,7 +82,7 @@ const objectFromEntries = <R>(ctx: Interpreter<R>, source: unknown): Effect.Effe
       const step = yield* cursor.next
       if (step.done) return out
       yield* preserveConsumerError(
-        cursor,
+        cursor.close,
         Effect.sync(() => {
           if (!(step.value instanceof Obj) || containsOpaqueReference(step.value)) {
             throw typeError("Object.fromEntries expects [key, value] entry objects.")
@@ -98,29 +94,24 @@ const objectFromEntries = <R>(ctx: Interpreter<R>, source: unknown): Effect.Effe
   })
 }
 
-export const classTag = (value: unknown): string => {
+const classTag = (value: Value): string => {
   if (value === null) return "Null"
   if (value === undefined) return "Undefined"
-  if (value instanceof Arr) return "Array"
-  if (value instanceof Callable) return "Function"
-  if (value instanceof ErrorObj) return "Error"
-  if (value instanceof DateObj) return "Date"
-  if (value instanceof RegExpObj) return "RegExp"
-  if (value instanceof Bytes) return "Uint8Array"
+  if (value instanceof Obj) return value.tag
   if (typeof value === "string") return "String"
   if (typeof value === "number") return "Number"
   if (typeof value === "boolean") return "Boolean"
   return "Object"
 }
 
-const propertyKey = (value: unknown): PropertyKey =>
+const propertyKey = (value: Value): PropertyKey =>
   value === AsyncIteratorSymbol || value === IteratorSymbol ? value : coerceToString(value)
 
 // Object constructs identically with or without new, like JS. Only `keys` copies its result into the
 // program; `values`, `entries`, `assign`, and `fromEntries` hand back the program's own values.
 export const objectGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
-  const construct = (args: Array<unknown>): unknown => {
+  const construct = (args: Array<Value>): Value => {
     const first = args[0]
     if (first === null || first === undefined) return new Obj(builtins.Object)
     if (first instanceof Obj) return first
@@ -196,7 +187,7 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
         true,
     ],
     ["toString", 0, (thisValue) => `[object ${classTag(thisValue)}]`],
-    ["toLocaleString", 0, (thisValue) => `[object ${classTag(thisValue)}]`],
+    ["toLocaleString", 0, (thisValue) => invoke(ctx, thisValue, "toString", "Object.prototype.toLocaleString")],
     [
       "valueOf",
       0,

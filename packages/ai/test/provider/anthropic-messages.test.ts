@@ -215,13 +215,31 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("forwards unknown values for pass-through string enums", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: {
+            service_tier: "future-tier",
+            thinking: { type: "adaptive", display: "future-display" },
+          },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        service_tier: "future-tier",
+        thinking: { type: "adaptive", display: "future-display" },
+      })
+    }),
+  )
+
   it.effect("ignores unknown provider options and rejects malformed known ones", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(LLMRequest.update(request, { providerOptions: { unknownOption: true } }))
       const malformed = [
-        { service_tier: "fast" },
+        { service_tier: 1 },
         { metadata: { user_id: 42 } },
-        { cache_control: { type: "ephemeral", ttl: "2h" } },
+        { cache_control: { type: "ephemeral", ttl: "future-ttl" } },
         { output_config: { format: { type: "text" } } },
         { thinking: { type: "automatic" } },
       ]

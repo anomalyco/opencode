@@ -22,17 +22,17 @@ function Mcp(props: { context: Plugin.Context }) {
   return (
     <Show when={list().length}>
       <box gap={1} flexDirection="row" flexShrink={0} onMouseUp={() => props.context.keymap.dispatch("mcp.list")}>
-        <text fg={props.context.theme.text.default}>
+        <text fg={props.context.theme.text.base}>
           <Switch>
             <Match when={failed()}>
-              <span style={{ fg: props.context.theme.text.feedback.error.default }}>⊙ </span>
+              <span style={{ fg: props.context.theme.text.feedback.error.base }}>⊙ </span>
               {failed()} MCP failed
             </Match>
             <Match when={true}>
               <span
                 style={{
                   fg:
-                    count() > 0 ? props.context.theme.text.feedback.success.default : props.context.theme.text.subdued,
+                    count() > 0 ? props.context.theme.text.feedback.success.base : props.context.theme.text.muted,
                 }}
               >
                 ⊙{" "}
@@ -42,7 +42,7 @@ function Mcp(props: { context: Plugin.Context }) {
           </Switch>
         </text>
         <Show when={visibility().mcpCommand}>
-          <text fg={props.context.theme.text.subdued}>/mcps</text>
+          <text fg={props.context.theme.text.muted}>/mcps</text>
         </Show>
       </box>
     </Show>
@@ -62,12 +62,12 @@ function Plugins(props: { context: Plugin.Context }) {
   return (
     <Show when={failed()}>
       <box gap={1} flexDirection="row" flexShrink={0} onMouseUp={() => props.context.keymap.dispatch("plugins.list")}>
-        <text fg={props.context.theme.text.default}>
-          <span style={{ fg: props.context.theme.text.feedback.error.default }}>⊙ </span>
+        <text fg={props.context.theme.text.base}>
+          <span style={{ fg: props.context.theme.text.feedback.error.base }}>⊙ </span>
           {failed()} plugin{failed() === 1 ? "" : "s"} failed
         </text>
         <Show when={visibility().pluginCommand}>
-          <text fg={props.context.theme.text.subdued}>/plugins</text>
+          <text fg={props.context.theme.text.muted}>/plugins</text>
         </Show>
       </box>
     </Show>
@@ -96,7 +96,7 @@ function View(props: { context: Plugin.Context }) {
         <box flexGrow={1} />
         <Show when={visibility().version}>
           <box flexShrink={0}>
-            <text fg={props.context.theme.text.subdued}>{props.context.app.version}</text>
+            <text fg={props.context.theme.text.muted}>{props.context.app.version}</text>
           </box>
         </Show>
       </box>

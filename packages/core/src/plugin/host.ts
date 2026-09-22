@@ -453,6 +453,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
     tool: {
       transform: tools.transform,
       reload: tools.reload,
+      list: tools.list,
       hook: (name, callback) => hooks.register("tool", name, callback),
     },
     vcs: {

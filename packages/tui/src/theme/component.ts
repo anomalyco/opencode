@@ -38,7 +38,6 @@ export function createComponentTheme(
     source: (color: RGBA) => view().source(color),
     increase: (color: RGBA, amount = 1) => view().increase(color, amount),
     decrease: (color: RGBA, amount = 1) => view().decrease(color, amount),
-    raise: (color: RGBA) => view().raise(color),
     surface(name: SurfaceName) {
       const cached = surfaces.get(name)
       if (cached) return cached

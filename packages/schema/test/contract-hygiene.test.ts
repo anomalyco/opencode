@@ -169,6 +169,7 @@ describe("contract hygiene", () => {
   test("reusable public identifiers are stable and unique", () => {
     const identifiers = [
       Agent.Color,
+      ConfigProvider.ModelSettings,
       ConfigProvider.Settings,
       FileSystem.Submatch,
       Form.Field,
@@ -183,6 +184,7 @@ describe("contract hygiene", () => {
       Model.Ref,
       Model.Capabilities,
       Model.Cost,
+      Model.Settings,
       Model.Variant,
       Project.Current,
       Worktree.Directory,
@@ -239,11 +241,12 @@ describe("contract hygiene", () => {
 
     expect(
       sources
-        .filter((item) => item.file !== "provider.ts" && item.file !== "integration.ts")
+        .filter((item) => item.file !== "provider.ts" && item.file !== "model.ts" && item.file !== "integration.ts")
         .map((item) => item.source)
         .join("\n"),
     ).not.toContain("Schema.Any")
     expect(sources.find((item) => item.file === "provider.ts")?.source.match(/Schema\.Any/g)).toHaveLength(3)
+    expect(sources.find((item) => item.file === "model.ts")?.source.match(/Schema\.Any/g)).toHaveLength(2)
     expect(sources.find((item) => item.file === "integration.ts")?.source.match(/Schema\.Any/g)).toHaveLength(2)
     expect(source).not.toContain("Schema.mutable")
   })

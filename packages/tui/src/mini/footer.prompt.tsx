@@ -41,6 +41,7 @@ import {
   createPromptHistory,
   displayCharAt,
   displaySlice,
+  EXIT_COMMANDS,
   isExitCommand,
   isCompactCommand,
   mentionTriggerIndex,
@@ -531,7 +532,9 @@ export function createPromptState(input: PromptInput): PromptState {
         display: "/compact",
         description: "compact older session context to free space",
       } satisfies SlashOption,
-      { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
+      ...EXIT_COMMANDS.map(
+        (name) => ({ kind: "slash", name, display: `/${name}`, description: "close OpenCode" }) satisfies SlashOption,
+      ),
     ]
     const hidden = new Set(builtins.map((item) => item.name))
     return [
@@ -566,11 +569,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
     return fuzzysort
       .go(next, mixed, {
-        keys: [
-          (item) => (item.kind === "mention" ? item.value : item.name).trimEnd(),
-          "display",
-          "description",
-        ],
+        keys: [(item) => (item.kind === "mention" ? item.value : item.name).trimEnd(), "display", "description"],
       })
       .map((item) => item.obj)
   })
@@ -1054,7 +1053,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
       const cursor = area.cursorOffset
       const head = parseSlashHead(area.plainText)
-      const local = !shell() && (next.name === "new" || next.name === "exit")
+      const local = !shell() && (next.name === "new" || isExitCommand(`/${next.name}`))
       const separator = !shell() && !local && head && /\s/.test(area.plainText[head.end] ?? "") ? "" : " "
       const text = `/${next.name}${separator}`
 

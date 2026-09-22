@@ -134,9 +134,14 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
 
 /** opencode settings consumed in Core; native packages never receive them. */
 const CORE_KEYS = ["chunkTimeout", "compaction", "fetch", "timeout", "transport"] as const
+const PROVIDER_ONLY_KEYS = ["chunkTimeout", "timeout", "transport"] as const
 
 export function nativeSettings(settings: Settings): Settings {
   return Struct.omit(settings, CORE_KEYS)
+}
+
+export function modelSettings(settings: Settings | undefined) {
+  return settings && Struct.omit(settings, PROVIDER_ONLY_KEYS)
 }
 
 export function mergeOverlay(

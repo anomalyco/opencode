@@ -82,7 +82,7 @@ export function TerminalsTab(props: { sessionID: string; visibleTerminalID?: str
                     ? theme.background.action.primary.focused
                     : current()
                       ? theme.background.action.primary.selected
-                      : theme.background.action.primary.default
+                      : theme.background.action.primary.base
                 }
                 onMouseMove={() => setSelected(index())}
                 onMouseUp={() => {
@@ -96,7 +96,7 @@ export function TerminalsTab(props: { sessionID: string; visibleTerminalID?: str
                       ? theme.text.action.primary.focused
                       : current()
                         ? theme.text.action.primary.selected
-                        : theme.text.action.primary.default
+                        : theme.text.action.primary.base
                   }
                   attributes={active() ? TextAttributes.BOLD : undefined}
                   wrapMode="none"

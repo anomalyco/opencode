@@ -1,23 +1,14 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpInstructions } from "@opencode/core/mcp/instructions"
-import { Permission } from "@opencode/core/permission"
 import { McpTool } from "@opencode/core/tool/mcp"
 import { it } from "./lib/effect"
 import { readInitial, readUpdate } from "./lib/instructions"
 
-const build = Agent.ID.make("build")
-
-const selection = (permissions: Permission.Ruleset = []) => {
-  const info = Agent.Info.make({ ...Agent.Info.default(build), permissions })
-  return { id: info.id, info }
-}
-
 const instructions = (server: string, text: string) =>
-  ({ server: Mcp.ServerName.make(server), instructions: text } satisfies Mcp.ServerInstructions)
+  ({ server: Mcp.ServerName.make(server), instructions: text }) satisfies Mcp.ServerInstructions
 
 const schema = { type: "object" as const }
 const tool = (server: string, name = "search") =>
@@ -38,12 +29,10 @@ describe("McpInstructions", () => {
     Effect.gen(function* () {
       const service = yield* McpInstructions.Service
       const generation = yield* service
-        .load(
-          selection([
-            { action: McpTool.name("alpha", "restricted"), resource: "*", effect: "deny" },
-            { action: McpTool.name("hidden", "search"), resource: "*", effect: "deny" },
-          ]),
-        )
+        .load([
+          { action: McpTool.name("alpha", "restricted"), resource: "*", effect: "deny" },
+          { action: McpTool.name("hidden", "search"), resource: "*", effect: "deny" },
+        ])
         .pipe(Effect.flatMap(readInitial))
 
       expect(generation.text).toBe(
@@ -80,7 +69,7 @@ describe("McpInstructions", () => {
     Effect.gen(function* () {
       const service = yield* McpInstructions.Service
       const generation = yield* service
-        .load(selection([{ action: "execute", resource: "*", effect: "deny" }]))
+        .load([{ action: "execute", resource: "*", effect: "deny" }])
         .pipe(Effect.flatMap(readInitial))
 
       expect(generation.text).toBe("")
@@ -98,7 +87,7 @@ describe("McpInstructions", () => {
     Effect.gen(function* () {
       const service = yield* McpInstructions.Service
       const generation = yield* service
-        .load(selection([{ action: "execute", resource: "*", effect: "deny" }]))
+        .load([{ action: "execute", resource: "*", effect: "deny" }])
         .pipe(Effect.flatMap(readInitial))
 
       expect(generation.text).toBe(
@@ -114,7 +103,14 @@ describe("McpInstructions", () => {
       Effect.provide(
         layer(
           () => [instructions("alpha", "Alpha instructions")],
-          () => [({ server: Mcp.ServerName.make("alpha"), name: "search", inputSchema: schema, codemode: false }) satisfies Mcp.Tool],
+          () => [
+            {
+              server: Mcp.ServerName.make("alpha"),
+              name: "search",
+              inputSchema: schema,
+              codemode: false,
+            } satisfies Mcp.Tool,
+          ],
         ),
       ),
     ),
@@ -124,10 +120,10 @@ describe("McpInstructions", () => {
     let tools: Mcp.Tool[] = [tool("alpha")]
     return Effect.gen(function* () {
       const service = yield* McpInstructions.Service
-      const initialized = yield* service.load(selection()).pipe(Effect.flatMap(readInitial))
+      const initialized = yield* service.load([]).pipe(Effect.flatMap(readInitial))
 
       tools = [{ ...tool("alpha"), codemode: false }]
-      const changed = yield* readUpdate(yield* service.load(selection()), initialized)
+      const changed = yield* readUpdate(yield* service.load([]), initialized)
       expect(changed.text).toBe(
         [
           "The available MCP server instructions have changed. This list supersedes the previous one.",
@@ -153,10 +149,10 @@ describe("McpInstructions", () => {
     const tools = [tool("alpha"), tool("beta")]
     return Effect.gen(function* () {
       const service = yield* McpInstructions.Service
-      const initialized = yield* service.load(selection()).pipe(Effect.flatMap(readInitial))
+      const initialized = yield* service.load([]).pipe(Effect.flatMap(readInitial))
 
       catalog = [instructions("alpha", "Alpha instructions"), instructions("beta", "Beta instructions")]
-      const added = yield* readUpdate(yield* service.load(selection()), initialized)
+      const added = yield* readUpdate(yield* service.load([]), initialized)
       expect(added.text).toBe(
         [
           "New MCP server instructions are available in addition to those previously listed:",
@@ -168,7 +164,7 @@ describe("McpInstructions", () => {
       )
 
       catalog = [instructions("alpha", "Updated alpha"), instructions("beta", "Beta instructions")]
-      const changed = yield* readUpdate(yield* service.load(selection()), added)
+      const changed = yield* readUpdate(yield* service.load([]), added)
       expect(changed.text).toBe(
         [
           "The available MCP server instructions have changed. This list supersedes the previous one.",
@@ -186,11 +182,11 @@ describe("McpInstructions", () => {
       )
 
       catalog = [instructions("beta", "Beta instructions")]
-      const removed = yield* readUpdate(yield* service.load(selection()), changed)
+      const removed = yield* readUpdate(yield* service.load([]), changed)
       expect(removed.text).toBe("Instructions for the following MCP servers are no longer available: alpha.")
 
       catalog = []
-      expect((yield* readUpdate(yield* service.load(selection()), removed)).text).toBe(
+      expect((yield* readUpdate(yield* service.load([]), removed)).text).toBe(
         "MCP server instructions are no longer available.",
       )
     }).pipe(

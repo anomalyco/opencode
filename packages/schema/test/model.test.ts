@@ -75,13 +75,10 @@ describe("Model.Info", () => {
   })
 })
 
-describe("Model.Capabilities", () => {
-  test("decodes the optional transport setting", () => {
-    const model = Model.Info.default(Provider.ID.openai, Model.ID.make("gpt-5.4-mini"))
-    expect(Schema.encodeSync(Model.Info)({ ...model, settings: { transport: undefined } }).settings).toEqual({})
-    expect(Schema.decodeUnknownSync(Model.Info)({ ...model, settings: { transport: "websocket" } }).settings).toEqual({
-      transport: "websocket",
+describe("Model.Settings", () => {
+  test("preserves provider-specific model options", () => {
+    expect(Schema.decodeUnknownSync(Model.Settings)({ providerOption: true })).toEqual({
+      providerOption: true,
     })
-    expect(() => Schema.decodeUnknownSync(Model.Info)({ ...model, settings: { transport: "sse" } })).toThrow()
   })
 })

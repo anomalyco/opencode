@@ -11,66 +11,78 @@ import { sseEvents } from "../lib/sse.js"
 
 const decodeEvent = Schema.decodeUnknownEffect(OpenResponses.protocol.stream.event)
 
-it.effect("normalizes flat errors in shared SSE and WebSocket decoding", () =>
+it.effect("decodes error frames verbatim in shared SSE and WebSocket decoding", () =>
   Effect.gen(function* () {
-    const frame = {
-      type: "error",
-      sequence_number: 4,
-      code: "server_shutting_down",
-      message: "Server is shutting down. Please retry your request.",
-      param: null,
-    }
     for (const decode of [decodeEvent, OpenResponses.decodeChannelEvent]) {
-      const event = yield* decode(JSON.stringify(frame))
-      expect(event).toEqual({
-        type: "error",
-        sequence_number: 4,
-        error: { code: frame.code, message: frame.message, param: null },
-      })
-
-      for (const unchanged of [
-        event,
+      for (const frame of [
+        { type: "error", sequence_number: 4, code: "server_shutting_down", message: "Shutting down", param: null },
         { type: "error" },
+        { type: "error", error: "Gateway failed" },
+        { type: "error", error: { code: 429, message: "slow down" } },
+        { type: "error", error: 42 },
+        { type: "error", code: 500, message: ["not", "a", "string"] },
+        { type: "response.failed", response: { id: "resp_failed", error: "Gateway failed" } },
+        { type: "response.failed", response: { id: "resp_failed", error: ["weird"] } },
         {
           type: "response.failed",
           response: { id: "resp_failed", error: { code: "server_error", message: "Internal server error" } },
         },
         { type: "response.output_text.delta", item_id: "msg_text", delta: "Hello" },
       ]) {
-        expect(yield* decode(JSON.stringify(unchanged))).toEqual(unchanged)
+        expect(yield* decode(JSON.stringify(frame))).toEqual(frame)
       }
     }
   }),
 )
 
-it.effect("continues to normalize untyped xAI WebSocket errors", () =>
+it.effect("reads bare WebSocket error envelopes as error events", () =>
   Effect.gen(function* () {
     const message = "gRPC error: Response with id=resp_missing not found"
-    for (const error of [{ type: "api_error", message }, message]) {
-      expect(yield* OpenResponses.decodeChannelEvent(JSON.stringify({ error }))).toEqual({
-        type: "error",
-        error: typeof error === "string" ? { message } : error,
-      })
+    for (const error of [{ type: "api_error", message }, message, 42]) {
+      expect(yield* OpenResponses.decodeChannelEvent(JSON.stringify({ error }))).toEqual({ type: "error", error })
+    }
+    for (const frame of [{ error: null }, { message }]) {
+      expect(yield* OpenResponses.decodeChannelEvent(JSON.stringify(frame)).pipe(Effect.flip)).toBeDefined()
     }
   }),
 )
 
-it.effect("normalizes string errors in shared SSE and WebSocket decoding", () =>
+it.effect("extracts error details from every shape and falls back to the raw frame", () =>
   Effect.gen(function* () {
-    for (const decode of [decodeEvent, OpenResponses.decodeChannelEvent]) {
-      expect(yield* decode(JSON.stringify({ type: "error", error: "Gateway failed" }))).toEqual({
-        type: "error",
-        error: { message: "Gateway failed" },
-      })
-      expect(
-        yield* decode(
-          JSON.stringify({ type: "response.failed", response: { id: "resp_failed", error: "Gateway failed" } }),
-        ),
-      ).toEqual({
-        type: "response.failed",
-        response: { id: "resp_failed", error: { message: "Gateway failed" } },
-      })
+    const cases: Array<[frame: Record<string, unknown>, message: string, tag: string]> = [
+      [
+        { type: "error", code: "server_shutting_down", message: "Shutting down" },
+        "server_shutting_down: Shutting down",
+        "UnknownProvider",
+      ],
+      [{ type: "error", error: "Gateway failed" }, "Gateway failed", "UnknownProvider"],
+      [{ type: "error", error: { code: 429, message: "slow down" } }, "429: slow down", "UnknownProvider"],
+      [{ type: "error", error: { message: "slow down" }, status: 429 }, "slow down", "RateLimit"],
+      [{ type: "error", code: 500, message: ["not", "a", "string"] }, "500", "UnknownProvider"],
+      [
+        { type: "response.failed", response: { id: "resp_failed", error: "Gateway failed" } },
+        "Gateway failed",
+        "UnknownProvider",
+      ],
+    ]
+    for (const [frame, message, tag] of cases) {
+      const event = yield* OpenResponses.decodeChannelEvent(JSON.stringify(frame))
+      const error = OpenResponses.providerFailure(event, "fallback", JSON.stringify(frame))
+      expect(error.message).toBe(message)
+      expect(error.reason._tag).toBe(tag)
+      expect(error.reason.body).toBe(JSON.stringify(frame))
     }
+    for (const frame of [
+      { type: "error", error: 42 },
+      { type: "response.failed", response: { id: "resp_failed", error: ["weird"] } },
+    ]) {
+      const event = yield* OpenResponses.decodeChannelEvent(JSON.stringify(frame))
+      const error = OpenResponses.providerFailure(event, "fallback", JSON.stringify(frame))
+      expect(error.message).toBe(JSON.stringify(frame))
+      expect(error.reason._tag).toBe("UnknownProvider")
+    }
+    expect(OpenResponses.providerFailure({ type: "error" }, "fallback", "{}").message).toBe("fallback")
+    expect(OpenResponses.providerFailure({ type: "error" }, "fallback", "{}").reason._tag).toBe("ProviderInternal")
   }),
 )
 

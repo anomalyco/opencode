@@ -55,7 +55,7 @@ export function StartupLoading(props: { ready: () => boolean }) {
     <Show when={show()}>
       <box position="absolute" zIndex={5000} left={0} right={0} bottom={1} justifyContent="center" alignItems="center">
         <box backgroundColor={theme.background.raised.base} paddingLeft={1} paddingRight={1}>
-          <Spinner color={theme.text.subdued}>{text()}</Spinner>
+          <Spinner color={theme.text.muted}>{text()}</Spinner>
         </box>
       </box>
     </Show>

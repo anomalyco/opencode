@@ -13,8 +13,8 @@ The idea of code mode was originally introduced by Cloudflare. See
 
 ## How it differs from JavaScript
 
-- **Only supported APIs are available.** Programs can use the provided tools and supported JavaScript built-ins. APIs
-  such as `fetch`, timers, `process`, filesystem access, imports, and modules are unavailable.
+- **Only supported APIs are available.** Programs can use the provided tools, supported JavaScript built-ins, and the
+  globals the host adds through extensions. Timers, `process`, filesystem access, imports, and modules are unavailable.
 - **Unfinished work is interrupted.** Tool calls and async functions start when called. When the program finishes,
   anything still running is interrupted. Unhandled rejections from un-awaited promises are returned as warnings.
 - **REPL-style results.** Without an explicit `return`, the final top-level expression becomes the result. `undefined`
@@ -94,11 +94,19 @@ receive `{ extension, name, args }`. An `after` hook also receives how the call 
 `failure` with its error, or `interrupted`). A failing `before` hook denies the call, and the program catches the
 failure as a thrown error.
 
-### `Values`
+### `Extension.make`
 
-`Values` exports the runtime's non-JSON value classes: `Values.URL`, `Values.URLSearchParams`, `Values.Date`,
-`Values.RegExp`, `Values.Map`, `Values.Set`, and `Values.Promise`. The interpreter recognizes these by class; a
-program's `new URL(...)` is a `Values.URL` wrapping the host `URL`. `Values.isValue` narrows to the data-like kinds.
+Extensions are host functions a program calls directly as globals, such as `fetch`. Unlike tools they are not in the
+catalog, not counted against `maxToolCalls`, and not described to the model; the host decides what they mean.
+
+```ts
+const web = Extension.make({ name: "web", globals: { fetch: (url: string) => globalThis.fetch(url) } })
+const runtime = CodeMode.make({ tools, extensions: [web] })
+```
+
+Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as
+copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
+extension throws at `CodeMode.make`.
 
 ### OpenAPI tools
 

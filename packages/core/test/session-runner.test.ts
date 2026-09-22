@@ -362,21 +362,27 @@ const layer = Layer.unwrap(
       load: () => Effect.succeed(Instructions.empty),
     })
     const skillInstructions = Layer.mock(SkillInstructions.Service, {
-      load: (agent) =>
-        Effect.succeed(
-          state.skillBaselines.has(agent.id)
-            ? Instructions.make({
+      load: (permissions) => {
+        // `setup` tags each agent's ruleset with a `skill` rule naming that agent.
+        const baseline = permissions
+          .filter((rule) => rule.action === "skill")
+          .map((rule) => state.skillBaselines.get(Agent.ID.make(rule.resource)))
+          .findLast((text) => text !== undefined)
+        return Effect.succeed(
+          baseline === undefined
+            ? Instructions.empty
+            : Instructions.make({
                 key: Instructions.Key.make("test/skill-guidance"),
                 codec: Schema.toCodecJson(Schema.String),
-                read: Effect.succeed(state.skillBaselines.get(agent.id)!),
+                read: Effect.succeed(baseline),
                 render: {
                   initial: String,
                   changed: (_previous, current) => current,
                   removed: () => "Skill guidance removed",
                 },
-              })
-            : Instructions.empty,
-        ),
+              }),
+        )
+      },
     })
     const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
       load: () => Effect.succeed(Instructions.empty),
@@ -526,11 +532,17 @@ const setup = Effect.gen(function* () {
   })
   yield* IdentityPlugin.Plugin.effect(pluginHost)
   yield* NativeCompactionPlugin.Plugin.effect(pluginHost)
-  yield* agents.transform((editor) =>
+  yield* agents.transform((editor) => {
     editor.update(Agent.ID.make("build"), (agent) => {
       agent.mode = "primary"
-    }),
-  )
+    })
+    // Skill instructions receive only a ruleset, so tag each agent with a rule naming itself for the mock.
+    for (const id of ["build", "reviewer"]) {
+      editor.update(Agent.ID.make(id), (agent) => {
+        agent.permissions.push({ action: "skill", resource: id, effect: "allow" })
+      })
+    }
+  })
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })

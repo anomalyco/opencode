@@ -1,5 +1,4 @@
 import { type Accessor, createMemo } from "solid-js"
-import { DateTime } from "luxon"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useProviders } from "@/providers/catalog/providers"
@@ -9,6 +8,8 @@ export type ModelKey = { providerID: string; modelID: string }
 
 type Visibility = "show" | "hide"
 const RECENT_LIMIT = 5
+// luxon's diffNow().as("months") used an average month; keep the same window.
+const sixMonths = 6 * 30.436875 * 24 * 60 * 60 * 1000
 
 function modelKey(model: ModelKey) {
   return `${model.providerID}:${model.modelID}`
@@ -29,27 +30,23 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
     ),
   )
 
+  // Release dates as epoch ms; an unparseable date is NaN and never counts as recent.
   const release = createMemo(
     () =>
       new Map(
-        available().map((model) => {
-          const parsed = DateTime.fromISO(model.release_date)
-          return [modelKey({ providerID: model.provider.id, modelID: model.id }), parsed] as const
-        }),
+        available().map(
+          (model) => [modelKey({ providerID: model.provider.id, modelID: model.id }), Date.parse(model.release_date)] as const,
+        ),
       ),
   )
 
   const latest = createMemo(() =>
     pipe(
       available(),
-      filter(
-        (x) =>
-          Math.abs(
-            (release().get(modelKey({ providerID: x.provider.id, modelID: x.id })) ?? DateTime.invalid("invalid"))
-              .diffNow()
-              .as("months"),
-          ) < 6,
-      ),
+      filter((x) => {
+        const released = release().get(modelKey({ providerID: x.provider.id, modelID: x.id })) ?? NaN
+        return Math.abs(Date.now() - released) < sixMonths
+      }),
       groupBy((x) => x.provider.id),
       mapValues((models) =>
         pipe(
@@ -101,9 +98,8 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
     if (state === "hide") return false
     if (state === "show") return true
     if (latestSet().has(key)) return true
-    const date = release().get(key)
-    if (!date?.isValid) return true
-    return false
+    // Models without a parseable release date stay visible.
+    return !Number.isFinite(release().get(key) ?? NaN)
   }
 
   const setVisibility = (model: ModelKey, state: boolean) => {

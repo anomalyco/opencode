@@ -2,10 +2,7 @@
 node_modules
 .worktrees
 .sst
-.env
-.env.local
 .idea
-.vscode
 .codex
 *~
 playground
@@ -36,3 +33,4 @@ RELEASE_REVIEW.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+config.bat

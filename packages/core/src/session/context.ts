@@ -127,14 +127,16 @@ const layer = Layer.effect(
       yield* mcpTools.flush
       const agent = yield* agents.select(session.agent)
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
+      // Session permissions narrow discovery the same way they narrow the tool snapshot.
+      const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
       const loaded = yield* Effect.all(
         {
-          tools: registry.snapshot(Permission.merge(agent.info.permissions, session.permissions ?? [])),
+          tools: registry.snapshot(permissions),
           builtins: builtins.load(sessionID),
           discovery: discovery.load(),
-          skills: skillInstructions.load(agent),
+          skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),
-          mcp: mcpInstructions.load(agent),
+          mcp: mcpInstructions.load(permissions),
           entries: entries.load(sessionID),
         },
         { concurrency: "unbounded" },

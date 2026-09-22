@@ -106,9 +106,12 @@ describe("callable namespaces", () => {
     const diagnostic = await failure(runtime, `return await tools.issues.missing({})`)
     expect(diagnostic.kind).toBe("UnknownTool")
     expect(diagnostic.message).toContain("Unknown tool 'issues.missing'")
-    expect(diagnostic.suggestions).toEqual([
-      "The tool may have been removed or renamed. Use search to find available tools.",
-    ])
+    expect(diagnostic.suggestions).toEqual(["Use search to find available tools."])
+  })
+
+  test("an unknown tool names the closest match", async () => {
+    const diagnostic = await failure(runtime, `return await tools.issues["get-list"]({})`)
+    expect(diagnostic.message).toBe("Unknown tool 'issues.get-list'. Did you mean tools.issues.list?")
   })
 
   test("a namespace without its own tool stays non-callable", async () => {

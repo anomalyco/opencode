@@ -218,6 +218,19 @@ describe("property deletion", () => {
     ).toEqual([true, true, { keep: 1 }])
   })
 
+  test("a non-reference operand is evaluated and the result is true; a variable cannot be deleted", async () => {
+    expect(
+      await value(`
+        let called = false
+        const results = [delete 0, delete null, delete { x: 1 }, delete void 0, delete (() => { called = true })()]
+        let variable = 1
+        let failure
+        try { delete variable } catch (error) { failure = error.constructor.name }
+        return [results, called, failure]
+      `),
+    ).toEqual([[true, true, true, true, true], true, "TypeError"])
+  })
+
   test("evaluates computed object and key expressions once", async () => {
     expect(
       await value(`
@@ -502,9 +515,15 @@ describe("CodeMode-specific array behavior", () => {
     expect(err.message).toContain("circular")
   })
 
-  test("keys/values/entries return arrays usable with for...of and spread", async () => {
+  test("indexOf and lastIndexOf with no argument search for undefined", async () => {
+    expect(await value(`return [1, undefined, 3].indexOf()`)).toBe(1)
+    expect(await value(`return [1, undefined, 3].lastIndexOf()`)).toBe(1)
+    expect(await value(`return [1, 2, 3].indexOf()`)).toBe(-1)
+  })
+
+  test("keys/values/entries return iterators usable with for...of and spread", async () => {
     expect(await value(`return [...["x","y","z"].keys()]`)).toEqual([0, 1, 2])
-    expect(await value(`return ["x","y"].values()`)).toEqual(["x", "y"])
+    expect(await value(`return [...["x","y"].values()]`)).toEqual(["x", "y"])
     expect(
       await value(`
       const out = []
@@ -940,6 +959,12 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`try { JSON.rawJSON("1") } catch (e) { return e.message }`)).toBe(
       "JSON.rawJSON is not a function.",
     )
+    expect(await value(`try { search({ query: "star" }).catch(() => 1) } catch (e) { return e.message }`)).toBe(
+      "search(...).catch is not a function.",
+    )
+    expect(
+      await value(`const foo = () => ({ bar: () => ({}) }); try { foo().bar().baz() } catch (e) { return e.message }`),
+    ).toBe("foo(...).bar(...).baz is not a function.")
   })
 
   test("built-ins are objects on a real prototype chain", async () => {
@@ -958,6 +983,17 @@ describe("coercion parity: unknown static members read as undefined", () => {
         ]
       `),
     ).toEqual([true, true, true, "push", 1, 2, [], "function", true])
+  })
+})
+
+describe("async function line breaks", () => {
+  test("a line break between function and the name is an async function", async () => {
+    expect(await value(`async function\nfoo() { return 1 }\nreturn await foo()`)).toBe(1)
+  })
+
+  test("a line break between async and function is not an async function", async () => {
+    const failure = await error(`async\nfunction foo() { return 1 }\nreturn foo()`)
+    expect(failure.message).toContain("Unknown identifier 'async'")
   })
 })
 

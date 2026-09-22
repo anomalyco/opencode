@@ -15,21 +15,23 @@ import {
   Obj,
   PromiseObj,
   record,
+  type Value,
   SetObj,
   URLSearchParamsObj,
+  HeadersObj,
 } from "./interpreter/objects.js"
 import { typeofValue } from "./interpreter/references.js"
 
 export type Json = Schema.Json
 
-type Replacer<R> = (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
+type Replacer<R> = (args: Array<Value>) => Effect.Effect<Value, unknown, R>
 
 /**
  * What `JSON.stringify` would serialize for a program value, as host JSON: `toJSON` is honored, functions and
  * `undefined` vanish, non-finite numbers become null, and everything else is copied. Two departures from JS
  * so a mistake is not a silent `{}`: an Error serializes as `{ name, message, ...own }`, and a promise throws.
  */
-export const toJson = <R>(ctx: Interpreter<R>, value: unknown, replacer?: Replacer<R>) =>
+export const toJson = <R>(ctx: Interpreter<R>, value: Value, replacer?: Replacer<R>) =>
   walk(ctx, value, replacer, false)
 
 /**
@@ -37,11 +39,11 @@ export const toJson = <R>(ctx: Interpreter<R>, value: unknown, replacer?: Replac
  * awaited, a Set crosses as an array, a URLSearchParams as its query string, a Uint8Array asks to be encoded as
  * text first, and a `__proto__` key is dropped so host code can never receive one.
  */
-export const toBoundary = <R>(ctx: Interpreter<R>, value: unknown) => walk(ctx, value, undefined, true)
+export const toBoundary = <R>(ctx: Interpreter<R>, value: Value) => walk(ctx, value, undefined, true)
 
 const walk = <R>(
   ctx: Interpreter<R>,
-  value: unknown,
+  value: Value,
   replacer: Replacer<R> | undefined,
   boundary: boolean,
 ): Effect.Effect<Json | undefined, unknown, R> => {
@@ -69,6 +71,7 @@ const walk = <R>(
         )
       }
       if (boundary && value instanceof URLSearchParamsObj) return value.params.toString()
+      if (value instanceof HeadersObj) return Object.fromEntries(value.headers)
       const target = boundary && value instanceof SetObj ? new Arr(ctx.builtins.Array, [...value.set]) : value
       if (stack.has(target)) throw typeError("Converting circular structure to JSON.")
       stack.add(target)
@@ -102,7 +105,7 @@ const walk = <R>(
 }
 
 /** Host JSON as program values: objects and arrays are copied, primitives pass through. */
-export const fromJson = <R>(ctx: Interpreter<R>, value: unknown): unknown => {
+export const fromJson = <R>(ctx: Interpreter<R>, value: Json | undefined): Value => {
   if (value === null || typeof value !== "object") return value
   if (Array.isArray(value))
     return new Arr(

@@ -32,12 +32,8 @@ export const fileHandlers = FileRpcs.toLayer(
           Effect.orDie,
         ),
       FilesRevealPath: ({ path }) => files.revealPath(path),
-      FilesReadClipboardImage: () =>
-        Effect.sync(() => {
-          const image = files.readClipboardImage()
-          return image ? { ...image, buffer: new Uint8Array(image.buffer) } : null
-        }),
-      FilesWriteClipboardText: ({ text }) => Effect.sync(() => files.writeClipboardText(text)),
+      FilesReadClipboardImage: () => files.readClipboardImage(),
+      FilesWriteClipboardText: ({ text }) => files.writeClipboardText(text),
     })
   }),
 )

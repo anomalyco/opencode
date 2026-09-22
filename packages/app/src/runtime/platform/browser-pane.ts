@@ -19,6 +19,7 @@ export type BrowserPaneCommand = Browser.Action
 export type BrowserPaneState = Browser.State | null
 export type BrowserPaneEvent =
   | { type: "focus"; tabID: Browser.TabID }
+  | { type: "preview"; path: string }
   | { type: "state"; state: BrowserPaneState; error?: string }
 
 export type BrowserPaneRegistration = {

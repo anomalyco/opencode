@@ -116,7 +116,7 @@ test("single-server settings expose scoped pages without a server picker", async
   await expect(connection.getByRole("heading", { name: "Connection", exact: true })).toBeVisible()
   await expect(connection.locator('[data-component="settings-list"]')).toHaveCSS("padding-left", "16px")
   await expect(connection.locator(".settings-servers-row")).toHaveCSS("padding-top", "20px")
-  await expect(connection.locator(".settings-servers-lead")).toHaveCSS("column-gap", "4px")
+  await expect(connection.locator(".settings-servers-lead")).toHaveCSS("column-gap", "10px")
   await expect(connection.locator(".settings-servers-copy")).toHaveCSS("row-gap", "6px")
   await expect(settings.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible()
   await expect(settings.getByText("Terminal shell", { exact: true })).toBeVisible()

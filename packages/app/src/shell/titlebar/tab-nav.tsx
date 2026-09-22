@@ -328,6 +328,7 @@ export function TabNavItem(props: {
 
   return (
     <Menu.Context
+      modal={false}
       onOpenChange={(open) => {
         setMenu("open", open)
         if (open) setPopoverOpen(false)

@@ -48,6 +48,18 @@ export function prependHistoryEntry(
   return [entry, ...entries].slice(0, max)
 }
 
+// A send that failed puts its prompt back in the composer, so the entry recorded for it would
+// only duplicate the draft and keep its attachments referenced for as long as history holds it.
+export function removeHistoryEntry(
+  entries: PromptHistoryStoredEntry[],
+  prompt: Prompt,
+  comments: PromptHistoryComment[] = [],
+) {
+  const entry = { prompt, comments } satisfies PromptHistoryEntry
+  const next = entries.filter((item) => !isPromptEqual(item, entry))
+  return next.length === entries.length ? entries : next
+}
+
 function isCommentEqual(commentA: PromptHistoryComment, commentB: PromptHistoryComment) {
   return (
     commentA.path === commentB.path &&

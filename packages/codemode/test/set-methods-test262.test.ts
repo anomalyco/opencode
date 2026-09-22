@@ -198,10 +198,10 @@ describe("Set composition Test262 parity", () => {
           keys: () => [-0],
         }
         return [
-          1 / new Set([1]).union(setlike).values()[1] === Infinity,
-          1 / new Set([0, 1, 2]).intersection(setlike).values()[0] === Infinity,
+          1 / [...new Set([1]).union(setlike)][1] === Infinity,
+          1 / [...new Set([0, 1, 2]).intersection(setlike)][0] === Infinity,
           [...new Set([0, 1]).difference(setlike)],
-          1 / new Set([1, 2]).symmetricDifference(setlike).values()[2] === Infinity,
+          1 / [...new Set([1, 2]).symmetricDifference(setlike)][2] === Infinity,
         ]
       `),
     ).toEqual([true, true, [1], true])

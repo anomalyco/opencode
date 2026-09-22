@@ -1102,10 +1102,6 @@
   padding-block: 20px;
 }
 
-.settings-server-connection .settings-servers-lead {
-  gap: 4px;
-}
-
 .settings-servers-row:not(:last-child) {
   padding-bottom: 16px;
   margin-bottom: 16px;

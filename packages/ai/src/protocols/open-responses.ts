@@ -1,4 +1,4 @@
-import { Effect, Option, Schema, SchemaGetter } from "effect"
+import { Effect, Option, Schema } from "effect"
 import type { Content } from "@opencode/schema/tool"
 import { HttpTransport } from "../route/transport/index.js"
 import { Protocol } from "../route/protocol.js"
@@ -333,53 +333,13 @@ export const StreamItem = Schema.StructWithRest(
 export type StreamItem = Schema.Schema.Type<typeof StreamItem>
 export type OutputItem = StreamItem & { readonly id: string }
 
-// Responses-compatible providers put streaming error details at the top level or
-// under `error`, and response failures under `response.error`. Accept all three shapes.
+// Responses-compatible providers put error details at the top level, under `error`, or under
+// `response.error`, and gateways reshape them freely: strings, numeric codes, extra fields. Those
+// fields decode as opaque values and `errorDetail` reads them defensively, so an error frame can
+// only fail on invalid JSON and otherwise always classifies with the raw body as the fallback.
 // https://www.openresponses.org/specification
-const OpenResponsesErrorObject = Schema.Struct({
-  type: optionalNull(Schema.String),
-  code: optionalNull(Schema.String),
-  message: optionalNull(Schema.String),
-  param: optionalNull(Schema.String),
-})
-const OpenResponsesErrorPayload = Schema.Union([Schema.String, OpenResponsesErrorObject]).pipe(
-  Schema.decodeTo(OpenResponsesErrorObject, {
-    decode: SchemaGetter.transform((error) => (typeof error === "string" ? { message: error } : error)),
-    encode: SchemaGetter.passthrough(),
-  }),
-)
-type OpenResponsesErrorPayload = Schema.Schema.Type<typeof OpenResponsesErrorPayload>
-
-const WebSocketErrorHeader = Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
-export const WebSocketErrorEvent = Schema.StructWithRest(
-  Schema.Struct({
-    type: Schema.tag("error"),
-    status: Schema.optional(Schema.Number),
-    status_code: Schema.optional(Schema.Number),
-    code: optionalNull(Schema.String),
-    message: Schema.optional(Schema.String),
-    param: optionalNull(Schema.String),
-    error: optionalNull(OpenResponsesErrorPayload),
-    headers: Schema.optional(Schema.Record(Schema.String, WebSocketErrorHeader)),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-)
-const decodeWebSocketErrorEvent = Schema.decodeUnknownEffect(WebSocketErrorEvent)
-
-export const decodeKnownErrorEvent = (event: Event) =>
-  decodeWebSocketErrorEvent({
-    ...event,
-    status: typeof event.status === "number" ? event.status : undefined,
-    status_code: typeof event.status_code === "number" ? event.status_code : undefined,
-    headers: ProviderShared.isRecord(event.headers)
-      ? Object.fromEntries(
-          Object.entries(event.headers).filter(
-            (entry): entry is [string, string | number | boolean] =>
-              typeof entry[1] === "string" || typeof entry[1] === "number" || typeof entry[1] === "boolean",
-          ),
-        )
-      : undefined,
-  })
+const asText = (value: unknown) =>
+  typeof value === "string" && value.length > 0 ? value : typeof value === "number" ? String(value) : undefined
 
 export const Event = Schema.StructWithRest(
   Schema.Struct({
@@ -400,31 +360,18 @@ export const Event = Schema.StructWithRest(
           incomplete_details: optionalNull(Schema.Struct({ reason: Schema.optional(Schema.String) })),
           output: Schema.optional(Schema.Array(StreamItem)),
           usage: optionalNull(OpenResponsesUsage),
-          error: optionalNull(OpenResponsesErrorPayload),
+          error: Schema.optional(Schema.Unknown),
         }),
         [Schema.Record(Schema.String, Schema.Unknown)],
       ),
     ),
-    code: optionalNull(Schema.String),
-    message: Schema.optional(Schema.String),
-    param: optionalNull(Schema.String),
-    error: optionalNull(OpenResponsesErrorPayload),
+    code: Schema.optional(Schema.Unknown),
+    message: Schema.optional(Schema.Unknown),
+    error: Schema.optional(Schema.Unknown),
     status: Schema.optional(Schema.Unknown),
     status_code: Schema.optional(Schema.Unknown),
-    headers: Schema.optional(Schema.Unknown),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
-).pipe(
-  Schema.decode({
-    decode: SchemaGetter.transform((event) => {
-      if (event.type !== "error" || event.error != null) return event
-      const { code, message, param, ...rest } = event
-      if (code === undefined && message === undefined && param === undefined) return event
-      // Flat errors (for example, Meta's) can also arrive through generic Responses endpoints.
-      return { ...rest, error: { code, message, param } }
-    }),
-    encode: SchemaGetter.passthrough(),
-  }),
 )
 export type Event = Schema.Schema.Type<typeof Event>
 export type NormalizedEvent = Event & { readonly item?: OutputItem | null }
@@ -433,16 +380,15 @@ const decodeEventValue = Schema.decodeUnknownEffect(Event)
 const decodeFrame = Schema.decodeUnknownEffect(ProviderShared.Json)
 
 /**
- * Decodes one WebSocket frame. xAI answers a rejected `response.create` with `{ "error": { "message", "type" } }` and no
- * event type; that envelope reads as an error event so the failure classifies instead of failing decoding.
+ * Decodes one WebSocket frame. Some providers and gateways answer a rejected `response.create` with a bare
+ * `{ "error": ... }` envelope and no event type; that reads as an error event so it classifies instead of
+ * failing decoding.
  */
 export const decodeChannelEvent = (frame: string) =>
   decodeFrame(frame).pipe(
     Effect.flatMap((value) =>
       decodeEventValue(
-        ProviderShared.isRecord(value) &&
-          value.type === undefined &&
-          (typeof value.error === "string" || ProviderShared.isRecord(value.error))
+        ProviderShared.isRecord(value) && value.type === undefined && value.error != null
           ? { ...value, type: "error" }
           : value,
       ),
@@ -1422,22 +1368,21 @@ const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (
   return [{ ...current, lifecycle }, events] satisfies StepResult
 })
 
-// Build the prettiest summary available from whatever the provider supplied.
-// When both code and message are present, prefix the code so consumers see
-// the failure mode (e.g. `rate_limit_exceeded: Slow down`) instead of just
-// the bare message — production rate limits and context-length failures used
-// to be indistinguishable from generic stream drops. Returns undefined when
-// the payload carries no usable summary.
-const providerErrorMessage = (event: Event, nested: OpenResponsesErrorPayload | undefined): string | undefined => {
-  const message = event.message || nested?.message || undefined
-  const code = event.code || nested?.code || undefined
-  if (message && code) return `${code}: ${message}`
-  return message || code
+/** Error code and message from wherever the frame put them; top-level fields win over nested ones. */
+export const errorDetail = (event: Event) => {
+  const raw = event.error ?? event.response?.error
+  const nested = typeof raw === "string" ? { message: raw } : ProviderShared.isRecord(raw) ? raw : undefined
+  return {
+    message: asText(event.message) ?? asText(nested?.message),
+    code: asText(event.code) ?? asText(nested?.code),
+  }
 }
 
+// Prefix the code when both are present (`rate_limit_exceeded: Slow down`) so the failure mode is
+// visible; fall back to the raw frame rather than a generic message when neither decodes.
 export const providerFailure = (event: Event, fallback: string, body = ProviderShared.encodeJson(event)) => {
-  const nested = event.error ?? event.response?.error ?? undefined
-  const summary = providerErrorMessage(event, nested)
+  const detail = errorDetail(event)
+  const summary = detail.message && detail.code ? `${detail.code}: ${detail.message}` : (detail.message ?? detail.code)
   const message = summary ?? (body === "{}" ? fallback : body)
   const status =
     typeof event.status === "number"
@@ -1520,18 +1465,7 @@ export const step = (state: ParserState, event: NormalizedEvent) => {
   if (event.type === "response.output_item.done") return onOutputItemDone(state, event.item)
   if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
   if (event.type === "response.failed") return providerFailure(event, `${state.name} response failed`)
-  if (event.type === "error")
-    return decodeKnownErrorEvent(event).pipe(
-      Effect.mapError((cause) =>
-        ProviderShared.eventError(
-          state.id,
-          `${state.name} returned a malformed error event`,
-          ProviderShared.encodeJson(event),
-          cause,
-        ),
-      ),
-      Effect.flatMap(() => providerFailure(event, `${state.name} stream error`)),
-    )
+  if (event.type === "error") return providerFailure(event, `${state.name} stream error`)
   return Effect.succeed<StepResult>([state, NO_EVENTS])
 }
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Effect } from "effect"
+import { Cause, Effect } from "effect"
+import { getErrorReported } from "effect/Runtime"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
 import { Observability } from "@opencode/util/observability"
@@ -130,5 +131,15 @@ Effect.gen(function* () {
   Effect.provide(NodeServices.layer),
   Effect.scoped,
   Effect.tap(() => Effect.sync(() => process.exit(process.exitCode ?? 0))),
-  NodeRuntime.runMain,
+  // runMain's default reporter logs the fatal cause to stdout. Write it to stderr instead: the
+  // desktop and `Service.ensure` only capture stderr from `serve --service`, so this is the only
+  // channel through which a startup failure's reason reaches the user.
+  Effect.tapCause((cause) =>
+    Effect.sync(() => {
+      if (Cause.hasInterruptsOnly(cause)) return
+      if (!getErrorReported(Cause.squash(cause))) return
+      process.stderr.write(Cause.pretty(cause) + "\n")
+    }),
+  ),
+  NodeRuntime.runMain({ disableErrorReporting: true }),
 )

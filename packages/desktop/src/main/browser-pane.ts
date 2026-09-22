@@ -3,14 +3,14 @@ import { NodeHttpClient } from "@effect/platform-node"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { OpenCode } from "@opencode/client/effect"
 import { SessionID } from "@opencode/schema/session-id"
-import type { BrowserWindow } from "electron"
+import electron, { type BrowserWindow } from "electron"
 import { Deferred, Effect, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { BrowserPaneEvent } from "../shared/ipc-rpc/events"
 import { createBrowserPage, type BrowserPage } from "./browser-chromium"
 import { browserFailure } from "./browser/errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./browser/network"
-import { destinationOrigin } from "./browser/policy"
+import { destinationOrigin, fileURLWithin } from "./browser/policy"
 import { emitIpcEvent } from "./ipc-events"
 import { SidecarCredentials } from "./service/sidecar-credentials"
 import { createBrowserRestoreStore } from "./browser/restore"
@@ -31,6 +31,11 @@ type Entry = {
   lastState?: string
   network?: BrowserNetwork
   storageKey: string
+  /**
+   * Workspace directories whose files may load as file:// documents. Set only for the desktop's
+   * own sidecar: a forwarded or explicit loopback server does not share this machine's disk.
+   */
+  fileRoots: string[]
 }
 
 export function createBrowserPane(storage: StateStore) {
@@ -78,7 +83,18 @@ export function createBrowserPane(storage: StateStore) {
         focusedTabID: previous.focusedTabID,
         partition: `opencode-browser-${crypto.randomUUID()}`,
         storageKey,
+        fileRoots: [],
       }
+      const sidecar = SidecarCredentials.get()
+      const sameMachine =
+        !!sidecar && URL.canParse(target.endpoint.url) && new URL(target.endpoint.url).origin === sidecar.url
+      // Navigation guards cover documents; subresources (img, script, fetch) also must not read
+      // file: URLs outside the roots. One listener per partition covers every page in this attachment.
+      electron.session
+        .fromPartition(entry.partition)
+        .webRequest.onBeforeRequest({ urls: ["file://*/*"] }, (details, callback) =>
+          callback({ cancel: !fileURLWithin(details.url, entry.fileRoots) }),
+        )
       // "unsupported" means the server has no browser plugin; the renderer stops retrying.
       let reason: "browser.pane.unsupported" | "browser.pane.replaced" | "browser.pane.suspended" | undefined
       let attached = false
@@ -112,6 +128,8 @@ export function createBrowserPane(storage: StateStore) {
               ),
             )
             const session = yield* client.session.get({ sessionID })
+            // The agent can already read this workspace, so showing its files adds no access.
+            if (sameMachine) entry.fileRoots = [session.location.directory]
             const options = {
               location: { directory: session.location.directory, workspace: session.location.workspaceID },
             }
@@ -393,6 +411,7 @@ export function createBrowserPane(storage: StateStore) {
       initialize,
       restore,
       popupOptions,
+      fileRoots: () => entry.fileRoots,
       fail,
       publish: (error) => {
         if (entry.pages.has(id)) publishState(entry, error)
@@ -420,6 +439,11 @@ export function createBrowserPane(storage: StateStore) {
         "Browser request was cancelled. Do not repeat a mutating action until you have inspected its outcome.",
       )
     if (action.type === "tabs.list") return { value: inventory(entry), files: [] }
+    if (action.type === "preview") {
+      // The renderer owns file tabs; it resolves the path against the session's workspace.
+      report(entry, { type: "preview", path: action.path })
+      return { value: { path: action.path }, files: [] }
+    }
     if (action.type === "tabs.open") {
       const page = create(entry)
       if (action.focus !== false) focus(entry, page.state().id)

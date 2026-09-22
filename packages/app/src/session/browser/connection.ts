@@ -19,6 +19,7 @@ export function createBrowserConnection(input: {
   target: () => BrowserPaneTarget
   change: (state: BrowserConnectionState) => void
   focus: (tabID: Browser.TabID) => void
+  preview: (path: string) => void
 }) {
   const state: BrowserConnectionState = { browser: null, suspended: false }
   let disposed = false
@@ -33,6 +34,7 @@ export function createBrowserConnection(input: {
       (event) => {
         if (disposed || state.registration !== registration) return
         if (event.type === "focus") return input.focus(event.tabID)
+        if (event.type === "preview") return input.preview(event.path)
         if (event.error === "browser.pane.unsupported" || event.error === "browser.pane.replaced") {
           blocked = true
           registration.close()

@@ -298,21 +298,18 @@ const cases = [
   },
   {
     path: "test/built-ins/Array/prototype/keys/iteration.js",
-    code: `return ["a", "b", "c"].keys()`,
-    expected: [0, 1, 2],
+    code: `const it = ["a", "b", "c"].keys(); return [it.next(), it.next(), it.next(), it.next()]`,
+    expected: [{ value: 0, done: false }, { value: 1, done: false }, { value: 2, done: false }, { done: true }],
   },
   {
     path: "test/built-ins/Array/prototype/values/iteration.js",
-    code: `return ["a", "b", "c"].values()`,
-    expected: ["a", "b", "c"],
+    code: `const it = ["a", "b", "c"].values(); return [it.next(), it.next(), it.next(), it.next()]`,
+    expected: [{ value: "a", done: false }, { value: "b", done: false }, { value: "c", done: false }, { done: true }],
   },
   {
     path: "test/built-ins/Array/prototype/entries/iteration.js",
-    code: `return ["a", "b"].entries()`,
-    expected: [
-      [0, "a"],
-      [1, "b"],
-    ],
+    code: `const it = ["a", "b"].entries(); return [it.next(), it.next(), it.next()]`,
+    expected: [{ value: [0, "a"], done: false }, { value: [1, "b"], done: false }, { done: true }],
   },
   {
     path: "test/built-ins/Array/isArray/15.4.3.2-0-3.js",

@@ -254,10 +254,13 @@ export const OpenAIPlugin = define({
     yield* ctx.provider.transform((providers) => {
       const item = providers.get(Provider.ID.openai)
       if (!item) return
-      if (!chatgpt) return
-      const account = chatgpt.metadata?.accountID
+      const account = chatgpt?.metadata?.accountID
       providers.update(item.provider.id, (provider) => {
-        provider.settings = Provider.mergeOverlay(provider.settings, { baseURL: codexBaseURL })
+        provider.settings = Provider.mergeOverlay(provider.settings, {
+          transport: provider.settings?.transport ?? "websocket",
+          ...(chatgpt ? { baseURL: codexBaseURL } : {}),
+        })
+        if (!chatgpt) return
         provider.headers = Provider.mergeHeaders(provider.headers, {
           originator: "opencode",
           "x-codex-beta-features": "remote_compaction_v2",
@@ -270,9 +273,6 @@ export const OpenAIPlugin = define({
         // ChatGPT-plan tokens only authorize codex-eligible models, and the
         // subscription covers usage, so hide the rest and zero the cost.
         models.update(model.providerID, model.id, (draft) => {
-          draft.settings = Provider.mergeOverlay(draft.settings, {
-            transport: models.provider.get(model.providerID)?.provider.settings?.transport ?? "websocket",
-          })
           if (!chatgpt) return
           if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {
             draft.enabled = false

@@ -16,7 +16,7 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { createTabComposerState } from "@/composer/persistence"
 import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
-import { canStartTabDrag, isTabCloseTarget } from "./tab-gesture"
+import { isTabCloseTarget } from "./tab-gesture"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import type { SessionInfo } from "@opencode/client/promise"
 
@@ -292,9 +292,11 @@ export function TitlebarTabStrip(props: {
         <DragDropProvider
           sensors={[
             PointerSensor.configure({
-              activationConstraints: [new PointerActivationConstraints.Distance({ value: 4 })],
+              activationConstraints: (event) =>
+                event.pointerType === "touch"
+                  ? [new PointerActivationConstraints.Distance({ value: 8 })]
+                  : [new PointerActivationConstraints.Distance({ value: 4 })],
               preventActivation: (event) =>
-                !canStartTabDrag(event.pointerType) ||
                 isTabCloseTarget(event.target) ||
                 (event.target instanceof Element && !!event.target.closest('[contenteditable="true"]')),
             }),
@@ -313,6 +315,7 @@ export function TitlebarTabStrip(props: {
             if (!source) return
             const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
             if (!tab) return
+            if (vertical()) return
             const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
             props.onNavigate(tab, tabEl ?? undefined)
           }}

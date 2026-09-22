@@ -55,6 +55,58 @@ test("network lifecycle and RPC version are explicit", () => {
   expect(Schema.decodeUnknownSync(Browser.Definition.methods.attach.output)("replaced")).toBe("replaced")
 })
 
+// Tool search matches query words as substrings of the description, folding a trailing "s"/"es".
+// Each phrase an agent is likely to search for when it wants the user to see a file must hit.
+test.each([
+  "show file to user",
+  "display file",
+  "open file for user",
+  "view result",
+  "present output",
+  "artifact",
+  "media",
+  "preview",
+  "image",
+  "images",
+  "screenshot",
+  "screenshots",
+  "png",
+  "jpeg",
+  "gif",
+  "chart",
+  "plot",
+  "photo",
+  "video",
+  "mp4",
+  "audio",
+  "pdf",
+  "document",
+  "html page",
+  "markdown",
+  "diagram",
+  "csv",
+  "table",
+  "font",
+  "svg",
+  "render",
+  "source code",
+])("browser.preview is found by searching %s", (query) => {
+  const preview = Browser.Operations.find((operation) => operation.name === "preview")!
+  const description = preview.description.toLowerCase()
+  const terms = query
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+  for (const term of terms) {
+    const forms = [
+      term,
+      ...(term.endsWith("es") ? [term.slice(0, -2)] : []),
+      ...(term.endsWith("s") ? [term.slice(0, -1)] : []),
+    ]
+    expect(forms.some((form) => description.includes(form))).toBe(true)
+  }
+})
+
 test("network RPC is bounded bytes and does not add model tools", () => {
   expect(Browser.Operations.some((operation) => operation.name.startsWith("tunnel."))).toBe(false)
   expect(Schema.decodeUnknownSync(Browser.TunnelRead)({ data: "AAEC", eof: false }).data).toEqual(

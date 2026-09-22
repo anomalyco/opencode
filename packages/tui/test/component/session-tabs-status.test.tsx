@@ -34,6 +34,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     const [active, setActive] = createSignal("second")
     const [newTab, setNewTab] = createSignal(false)
     const settings: Info = { tabs: { enabled: true } }
+    const copied: string[] = []
     let config!: ReturnType<typeof useConfig>
     let theme!: ReturnType<typeof useTheme>
     function Colors() {
@@ -61,7 +62,10 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     } satisfies SessionTabsController
     const app = await testRender(
       () => (
-        <TestTuiContexts paths={{ state: temporary.path }}>
+        <TestTuiContexts
+          paths={{ state: temporary.path }}
+          clipboard={{ read: async () => undefined, write: async (text) => void copied.push(text) }}
+        >
           <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
             <StorageProvider>
               <ConfigProvider
@@ -139,7 +143,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
             .captureSpans()
             .lines.flatMap((line) => line.spans)
             .find((span) => span.text.trim() === (attention === "question" ? "?" : "!"))?.fg
-        expect(indicatorColor()?.toInts()).toEqual(theme.text.status[attention].toInts())
+        expect(indicatorColor()?.toInts()).toEqual(theme.hue.accent[200].toInts())
         const glow = () => {
           const colors = app
             .captureSpans()
@@ -156,7 +160,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         expect(full).toBeGreaterThan(0)
         setActive("first")
         await app.renderOnce()
-        expect(indicatorColor()?.toInts()).toEqual(theme.text.status[attention].toInts())
+        expect(indicatorColor()?.toInts()).toEqual(theme.hue.accent[200].toInts())
         const dim = glow()
         expect(dim).toBeGreaterThan(0)
         expect(dim).toBeLessThan(full)
@@ -172,7 +176,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
           .lines.flatMap((line) => line.spans)
           .find((span) => span.text.trim() === glyph)?.fg
         expect(color?.toInts()).toEqual(
-          (unread === "error" ? theme.text.feedback.error.default : theme.text.status.unread).toInts(),
+          (unread === "error" ? theme.text.feedback.error.base : theme.hue.accent[200]).toInts(),
         )
         await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
         await app.renderOnce()
@@ -202,10 +206,12 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       await app.mockMouse.click(column, row, MouseButton.RIGHT)
       await app.waitForFrame((frame) => frame.includes("Rename"))
       expect(app.captureCharFrame().split("\n")[row + 1]!.indexOf("Rename")).toBe(column + 1)
+      expect(app.captureCharFrame()).toContain("Copy session ID")
       expect(app.captureCharFrame()).toContain("Close")
       expect(app.captureCharFrame()).not.toContain("Keep open")
       expect(active()).toBe("second")
-      app.mockInput.pressKey("c", { ctrl: true })
+      await app.mockMouse.click(column + 1, row + 2)
+      expect(copied).toEqual(["first"])
       await app.waitForFrame((frame) => !frame.includes("Rename"))
 
       setNewTab(true)
