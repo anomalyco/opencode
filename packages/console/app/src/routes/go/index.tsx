@@ -59,7 +59,7 @@ const models = [
 
 export default function Home() {
   const workspaceID = createAsync(() => checkLoggedIn())
-  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/go` : "/auth"))
+  const subscribeUrl = createMemo(() => "/console/go")
   const i18n = useI18n()
   const language = useLanguage()
   return (
