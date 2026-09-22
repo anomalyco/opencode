@@ -21,7 +21,14 @@ import { webSocketConstructor } from "../effect/app-node-platform.js"
 
 const ROTATE_AFTER_MS = 55 * 60 * 1000
 const CONNECT_TIMEOUT = "15 seconds"
-const IDLE_TIMEOUT = "5 minutes"
+/**
+ * Default per-frame idle bound for a channel exchange. Was 5 minutes, which
+ * killed long reasoning and any tool that awaits user input (the Question
+ * tool is the canonical example). Interactive exchanges are now expected to
+ * set `connect.idleTimeoutMs` per provider, but the default stays generous
+ * so the WebSocket survives a normal user think-time.
+ */
+const DEFAULT_IDLE_TIMEOUT = "30 minutes"
 /** Consecutive exchanges lost to the socket before the Session stays on HTTP. */
 const MAX_STREAM_FAILURES = 5
 const events = Metric.counter("opencode_session_websocket_events_total", {
@@ -407,9 +414,10 @@ export const makeLayer = (connector: WebSocketConnector) =>
 
         let terminal: ChannelObservation | undefined
         const token = {}
+        const idleTimeoutMs = exchange.connect.idleTimeoutMs
         const frames = Stream.fromQueue(active.queue).pipe(
           Stream.timeoutOrElse({
-            duration: IDLE_TIMEOUT,
+            duration: idleTimeoutMs !== undefined ? `${idleTimeoutMs} millis` : DEFAULT_IDLE_TIMEOUT,
             orElse: () =>
               Stream.fail(
                 transportError("Timed out waiting for WebSocket data", {
