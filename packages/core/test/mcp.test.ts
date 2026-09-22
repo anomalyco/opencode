@@ -2090,6 +2090,101 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
   }),
 )
 
+testEffect(Layer.empty).effect("flush reconciles a late initial catalog before returning without a notification", () =>
+  Effect.gen(function* () {
+    const waiting = yield* Deferred.make<void>()
+    const settled = yield* Deferred.make<void>()
+    const catalog = yield* Ref.make<Mcp.Tool[]>([])
+    yield* Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const registration = yield* McpTool.Service
+      const pending = yield* registration.flush.pipe(Effect.forkScoped)
+      yield* Deferred.await(waiting)
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["execute"])
+      yield* Ref.set(catalog, [
+        {
+          server: Mcp.ServerName.make("late"),
+          name: "inspect",
+          codemode: false,
+          inputSchema: { type: "object", properties: {} },
+        },
+      ])
+      yield* Deferred.succeed(settled, undefined)
+      yield* Fiber.join(pending)
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["late_inspect", "execute"])
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node]), [
+          Mcp.node.replace(
+            Layer.mock(Mcp.Service, {
+              tools: (options) =>
+                Effect.gen(function* () {
+                  if (options?.waitForStartup) {
+                    yield* Deferred.succeed(waiting, undefined)
+                    yield* Deferred.await(settled)
+                  }
+                  return yield* Ref.get(catalog)
+                }),
+            }),
+          ),
+          Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+          Bus.node.replace(events),
+          Image.node.replace(imagePassthrough),
+        ]),
+      ),
+    )
+  }),
+)
+
+testEffect(Layer.empty).live("waiting for the initial catalog does not block ordinary MCP reads", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const server = yield* resourceServer({
+      respond: (request) =>
+        request.method !== "POST"
+          ? undefined
+          : Effect.runPromise(
+              Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(undefined)),
+            ),
+    })
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* Deferred.await(started)
+      expect(yield* service.tools()).toEqual([])
+      const pending = yield* service.tools({ waitForStartup: true }).pipe(Effect.forkScoped)
+      yield* Deferred.succeed(release, undefined)
+      expect((yield* Fiber.join(pending)).length).toBeGreaterThan(0)
+    }).pipe(
+      Effect.ensuring(Deferred.succeed(release, undefined)),
+      Effect.provide(resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }))),
+    )
+  }),
+)
+
+testEffect(Layer.empty).live("initial catalog waiting settles for failed and disabled servers", () =>
+  Effect.gen(function* () {
+    for (const disabled of [false, true]) {
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        expect(yield* service.tools({ waitForStartup: true })).toEqual([])
+        expect((yield* service.servers())[0]?.status.status).toBe(disabled ? "disabled" : "failed")
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(
+            new ConfigMCP.Local({
+              type: "local",
+              command: [process.execPath, "-e", "setTimeout(() => {}, 60000)"],
+              timeout: { startup: 50 },
+              disabled,
+            }),
+          ),
+        ),
+      )
+    }
+  }),
+)
+
 testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after initial registration", () => {
   let reads = 0
   return Effect.gen(function* () {
@@ -2097,17 +2192,17 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
     const registration = yield* McpTool.Service
     const bus = yield* Bus.Service
     yield* registration.flush
-    expect(reads).toBe(1)
-    expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_1", "execute"])
+    expect(reads).toBe(2)
+    expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_2", "execute"])
 
     yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
-    yield* advance(() => reads >= 2)
-    expect(reads).toBe(2)
-    yield* Effect.forEach(Array.from({ length: 20 }), () => bus.publish(McpEvent.ToolsChanged, { server: "demo" }))
     yield* advance(() => reads >= 3)
-    yield* drain
     expect(reads).toBe(3)
-    expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_3", "execute"])
+    yield* Effect.forEach(Array.from({ length: 20 }), () => bus.publish(McpEvent.ToolsChanged, { server: "demo" }))
+    yield* advance(() => reads >= 4)
+    yield* drain
+    expect(reads).toBe(4)
+    expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_4", "execute"])
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [

@@ -121,12 +121,15 @@ export const layer = Layer.effect(
         }),
       )
       .pipe(Effect.forkScoped)
-    const reconcile = lock.withPermit(
-      Effect.gen(function* () {
-        discovered = yield* mcp.tools()
-        yield* tools.reload()
-      }),
-    )
+    const reconcile = (waitForStartup = false) =>
+      lock.withPermit(
+        Effect.gen(function* () {
+          const next = yield* mcp.tools({ waitForStartup })
+          if (next.length === discovered.length && next.every((tool, i) => tool === discovered[i])) return
+          discovered = next
+          yield* tools.reload()
+        }),
+      )
 
     // Servers announce tools in bursts and each read loads the whole catalog, so settle and refresh
     // once. The bus subscription stays eager; only the already-open sliding subscription is debounced.
@@ -138,10 +141,17 @@ export const layer = Layer.effect(
     const updates = yield* PubSub.subscribe(changes)
     yield* Stream.fromSubscription(updates).pipe(
       Stream.debounce("100 millis"),
-      Stream.runForEach(() => reconcile),
+      Stream.runForEach(() => reconcile()),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: Effect.asVoid(Fiber.await(initial)) })
+    return Service.of({
+      flush: Effect.gen(function* () {
+        yield* Fiber.join(initial)
+        // Initial registration may precede asynchronous MCP startup. Do not
+        // leave first-turn visibility to the debounced change notification.
+        yield* reconcile(true)
+      }),
+    })
   }),
 )
 

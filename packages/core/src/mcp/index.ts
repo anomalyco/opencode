@@ -105,7 +105,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly remove: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
-  readonly tools: () => Effect.Effect<Tool[]>
+  readonly tools: (options?: { readonly waitForStartup?: boolean }) => Effect.Effect<Tool[]>
   readonly callTool: (input: {
     readonly server: ServerName | string
     readonly name: string
@@ -614,7 +614,17 @@ export const layer = (options?: Options) =>
           yield* state.reload()
         }),
         // Reads report what is connected now; servers still starting contribute once they publish a change.
-        tools: Effect.fn("MCP.tools")(function* () {
+        tools: Effect.fn("MCP.tools")(function* (options?: { readonly waitForStartup?: boolean }) {
+          if (options?.waitForStartup) {
+            // Session snapshots need the settled initial catalog. Connection
+            // startup owns its configured deadlines and opens this latch on
+            // success, failure, or interruption; ordinary catalog reads stay
+            // non-blocking so Location startup remains asynchronous.
+            yield* Effect.forEach(Array.from(entries.values()), (entry) => entry.startup.await, {
+              concurrency: "unbounded",
+              discard: true,
+            })
+          }
           return Array.from(entries.values())
             .flatMap((entry) => entry.tools ?? [])
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
