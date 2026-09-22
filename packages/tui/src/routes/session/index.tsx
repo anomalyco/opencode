@@ -96,7 +96,6 @@ import {
   resolvePart,
   sessionRowID,
   turnDuration,
-  turnTokenSummary,
   turnTokensPerSecond,
   type CacheUsage,
   type PartRef,
@@ -1529,7 +1528,17 @@ function TurnTokenUsage(props: {
     cached: Math.max("Cached".length, ...steps().map((item) => item.cached.toLocaleString().length)),
     total: Math.max("Total".length, ...steps().map((item) => item.total.toLocaleString().length)),
   }))
-  const summary = createMemo(() => turnTokenSummary(steps()))
+  const summary = createMemo(() => {
+    const items = steps()
+    const latest = items.at(-1)
+    return {
+      count: items.length,
+      latestNewTokens: latest?.newTokens ?? 0,
+      latestCached: latest?.cached ?? 0,
+      latestTotal: latest?.total ?? 0,
+      reuseDrops: items.filter((item) => item.reuseDrop !== undefined).length,
+    }
+  })
   return (
     <Show when={Boolean(config.data.debug?.turn_tokens) && steps().length > 0}>
       <box paddingLeft={3} flexDirection="column">
