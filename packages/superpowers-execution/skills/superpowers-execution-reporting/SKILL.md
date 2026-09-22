@@ -1,14 +1,15 @@
 # Superpowers Execution Reporting
 
-Use this skill when you are the root controller executing an approved Superpowers plan and the
-`superpowers-execution-reporting` companion plugin is loaded. The plugin registers two tools:
+Before implementation or implementer dispatch for an approved Superpowers plan, the root controller
+must use this skill. The `superpowers-execution-reporting` companion plugin registers two tools:
 `execution_report` (durable, revision-checked ledger mutations) and `execution_read` (read the
 controller's current or historical run).
 
 Reporting is a presentation feature. It never changes the plan, the order of work, or the arguments
-you pass to native tools. When tracking fails or the plugin is absent, keep executing the plan and
-say explicitly in the conversation that tracking is degraded; a silent failure must never look like
-successful tracking.
+you pass to native tools. Registration is a prerequisite to executing an approved plan. If the
+skill, tools, or storage are unavailable, pause implementation and new implementer dispatch, state
+the blocker, and use only read-only diagnosis until reporting recovers. Do not substitute a local
+ledger, successful capability check, or visible badge for a persisted run.
 
 ## Rules
 
@@ -16,6 +17,9 @@ successful tracking.
   Collect descendant results and report them from the root.
 - Do not create a run during brainstorming, exploration, or merely because a session exists. Create
   a run only when you start executing an approved plan.
+- Before implementation or implementer dispatch, read the approved plan, compute its SHA-256, and
+  call `execution_read`. Resume only a run for the matching plan path and hash. If another active
+  run belongs to a different plan, pause and reconcile rather than replacing it.
 - Never mark a task complete from prose, elapsed time, an idle agent, a summary, or successful tool
   transport. A task becomes `verified` only through `task.verify` after every required gate has a
   passing report on the task's current attempt. There is no phrase parser; only explicit reports
@@ -29,18 +33,21 @@ successful tracking.
 
 ## Reporting workflow
 
-1. Read the approved plan and `execution_read` before starting or resuming execution.
-2. Register stable tasks, dependencies, required gates, and a final review with `execution_report`.
-3. Use native execution and delegation tools without changing their arguments.
+1. Read the approved plan, hash it, and call `execution_read` before starting or resuming execution.
+2. Reconcile a matching active run, or register stable tasks, dependencies, required gates, and a
+   final review with `execution_report`. Wait for a persisted result before starting work.
+3. Use native execution and delegation tools without changing their arguments only after registration.
 4. Link real session IDs and report evidence for each gate on the current attempt.
 5. Verify tasks only after their required gates pass; finish only after final review.
-6. On a conflict read current state before retrying; on tracking failure disclose it.
+6. On a conflict read current state before retrying; on tracking failure pause new plan work.
 
 ### 1. Read the approved plan
 
 Read the approved plan file before you touch code, and call `execution_read` with no `runID` to see
-whether an active run already exists for this root. Resume that run instead of starting a second
-one. `execution_read` is read-only: it never creates a run.
+whether an active run already exists for this root. Compare the active run's `plan.path` and
+`plan.sha256` with the approved file. Resume only a matching plan; if the active run is for a
+different plan, pause and request reconciliation. `execution_read` is read-only: it never creates
+a run.
 
 ### 2. Register stable tasks
 
@@ -72,6 +79,7 @@ file.
 Call `execution_report` with `expectedRevision: 0` and a fresh `run.start` operation. Pick the
 `runID` yourself and keep it for the whole run. Include the complete task graph as
 `{id,title,phase,order,dependsOn,requiredGates,finalReview}` definitions.
+Wait for the successful persisted response before implementation or implementer dispatch.
 
 ```jsonc
 {
@@ -209,9 +217,10 @@ complete. Completed and cancelled runs are immutable; restarting creates a new r
   `duplicate: true` without another mutation.
 - `forbidden` means the caller is not the root or an assigned session is outside the run's ancestry.
   Child sessions cannot report; gather their results and write from the root.
-- `not_found` and `storage_unavailable` are bridge failures. Continue the underlying Superpowers
-  work and disclose the tracking failure in the conversation: reporting failure never implies
-  successful tracking. Retry the report when the bridge recovers, starting from `execution_read`.
+- Missing tools, `not_found`, and `storage_unavailable` block tracking. Pause implementation and new
+  implementer dispatch, disclose the blocker, and allow only read-only diagnosis. Request a
+  cooperative safe stop for workers already running; do not claim that pausing the controller
+  stopped them automatically. After recovery, call `execution_read` and reconcile before resuming.
 - Unknown task, stale attempt, cyclic graph, missing dependency, and duplicate IDs are errors. Fix
   the plan with an approved `plan.revise`, not by guessing.
 
@@ -221,3 +230,4 @@ complete. Completed and cancelled runs are immutable; restarting creates a new r
 - Do not infer completion from prose, time, or an idle session.
 - Do not change native tool input schemas to carry reporting fields.
 - Do not report gates or evidence you did not actually run.
+- Do not execute an approved plan without a persisted run for that plan.
