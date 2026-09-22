@@ -5,8 +5,18 @@ import { resolveThemeVariantV2 } from "@opencode-ai/ui/theme/v2/resolve"
 import type { HexColor, ResolvedV2Theme } from "@opencode-ai/ui/theme/types"
 import { showToast } from "@/utils/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
-import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
+import {
+  type ComponentProps,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  Show,
+  splitProps,
+} from "solid-js"
 import { SerializeAddon } from "@/addons/serialize"
+import { TerminalKeyBar, type TerminalKeyModifier, type TerminalKeyModifierState } from "@/components/terminal-key-bar"
 import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -389,6 +399,61 @@ export const Terminal = (props: TerminalProps) => {
     platform.openExternal(text)
   }
 
+  const touch =
+    typeof navigator === "object" &&
+    (navigator.maxTouchPoints > 0 || (typeof window === "object" && window.matchMedia("(pointer: coarse)").matches))
+
+  const [ctrl, setCtrl] = createSignal<TerminalKeyModifierState>("off")
+  const [alt, setAlt] = createSignal<TerminalKeyModifierState>("off")
+  const modifiers = {
+    ctrl: { get: ctrl, set: setCtrl, tapped: 0 },
+    alt: { get: alt, set: setAlt, tapped: 0 },
+  }
+
+  const tapModifier = (modifier: TerminalKeyModifier) => {
+    const entry = modifiers[modifier]
+    const now = performance.now()
+    if (entry.get() === "locked") {
+      entry.set("off")
+      entry.tapped = 0
+      return
+    }
+    if (now - entry.tapped < 350) {
+      entry.set("locked")
+      entry.tapped = 0
+      return
+    }
+    entry.set("next")
+    entry.tapped = now
+  }
+
+  const applyModifiers = (data: string) => {
+    let result = data
+    if (ctrl() !== "off" && data.length === 1) {
+      const code = data.toUpperCase().charCodeAt(0)
+      if (code === 32 || (code >= 64 && code <= 95)) result = String.fromCharCode(code & 0x1f)
+    }
+    if (alt() !== "off") result = `\x1b${result}`
+    return result
+  }
+
+  const sendKey = (data: string) => {
+    const result = applyModifiers(data)
+    if (ctrl() === "next") setCtrl("off")
+    if (alt() === "next") setAlt("off")
+    term?.input(result, true)
+  }
+
+  // The software keyboard inserts text through beforeinput. Capture it before the
+  // terminal sees it so armed modifiers turn the next character into a control code.
+  const handleStickyModifier = (event: InputEvent) => {
+    if (event.inputType !== "insertText" || !event.data || event.data.length !== 1) return
+    if (ctrl() === "off" && alt() === "off") return
+    event.preventDefault()
+    event.stopPropagation()
+    sendKey(event.data)
+  }
+
   onMount(() => {
     const run = async () => {
       const loaded = await loadGhostty()
@@ -456,6 +521,8 @@ export const Terminal = (props: TerminalProps) => {
         handlePointerDown,
         handleLinkClick,
       })
+      container.addEventListener("beforeinput", handleStickyModifier, true)
+      cleanups.push(() => container.removeEventListener("beforeinput", handleStickyModifier, true))
 
       if (local.autoFocus === true) {
         focusTerminal()
@@ -738,20 +805,25 @@ export const Terminal = (props: TerminalProps) => {
   })
 
   return (
-    <div
-      ref={container}
-      data-component="terminal"
-      dir="ltr"
-      data-prevent-autofocus
-      tabIndex={-1}
-      style={{ "background-color": terminalColors().background }}
-      classList={{
-        ...local.classList,
-        "select-text": true,
-        "size-full px-6 py-3 font-mono relative overflow-hidden": true,
-        [local.class ?? ""]: !!local.class,
-      }}
-      {...others}
-    />
+    <div data-component="terminal-shell" class="flex size-full flex-col">
+      <div
+        ref={container}
+        data-component="terminal"
+        dir="ltr"
+        data-prevent-autofocus
+        tabIndex={-1}
+        style={{ "background-color": terminalColors().background }}
+        classList={{
+          ...local.classList,
+          "select-text": true,
+          "relative min-h-0 w-full flex-1 overflow-hidden px-6 py-3 font-mono": true,
+          [local.class ?? ""]: !!local.class,
+        }}
+        {...others}
+      />
+      <Show when={touch}>
+        <TerminalKeyBar ctrl={ctrl()} alt={alt()} onModifierTap={tapModifier} onKey={sendKey} />
+      </Show>
+    </div>
   )
 }
