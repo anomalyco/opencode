@@ -1181,7 +1181,9 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("preserves unknown reasoning details while using scalar display text", () =>
+  // Only recognized detail shapes are retained and replayed; echoing an
+  // undocumented provider payload is what breaks follow-up requests.
+  it.effect("drops unknown reasoning details while using scalar display text", () =>
     Effect.gen(function* () {
       const details = [{ type: "reasoning.future", format: "provider-v2", state: { opaque: true } }]
       const response = yield* LLMClient.generate(request).pipe(
@@ -1198,12 +1200,12 @@ describe("OpenAI Chat route", () => {
 
       expect(response.reasoning).toBe("thinking")
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        openai: { reasoningField: "reasoning", reasoningDetails: [] },
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
-        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: [] },
       ])
     }),
   )
