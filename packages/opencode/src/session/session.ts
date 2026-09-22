@@ -713,6 +713,9 @@ const layer: Layer.Layer<
           sessionID: session.id,
           id: newID,
           ...(parentID && { parentID }),
+          // A fork inherits history but not its billed cost; tokens stay so
+          // overflow checks still see the inherited context (#31032).
+          ...(msg.info.role === "assistant" && { cost: 0 }),
         })
 
         for (const part of msg.parts) {
@@ -724,6 +727,12 @@ const layer: Layer.Layer<
           }
           if (p.type === "compaction" && p.tail_start_id) {
             p.tail_start_id = idMap.get(p.tail_start_id)
+          }
+          // Copied step-finish usage must not re-apply to the fork's projected
+          // session totals (#31032).
+          if (p.type === "step-finish") {
+            p.cost = 0
+            p.tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
           }
           yield* updatePart(p)
         }

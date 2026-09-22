@@ -270,6 +270,62 @@ describe("Session", () => {
     }),
   )
 
+  it.instance("fork zeroes copied cost while keeping inherited tokens", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({}), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const user = yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: created.id,
+        role: "user",
+        time: { created: 1 },
+        agent: "user",
+        model: { providerID: "test", modelID: "test" },
+      } as SessionV1.User)
+
+      const assistantID = MessageID.ascending()
+      yield* session.updateMessage({
+        id: assistantID,
+        role: "assistant",
+        sessionID: created.id,
+        mode: "build",
+        agent: "build",
+        path: { cwd: created.directory, root: created.directory },
+        parentID: user.id,
+        cost: 0.01,
+        tokens: { total: 1500, input: 500, output: 800, reasoning: 200, cache: { read: 100, write: 50 } },
+        modelID: "test",
+        providerID: "test",
+        time: { created: 2 },
+        finish: "end_turn",
+      } as SessionV1.Assistant)
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: assistantID,
+        sessionID: created.id,
+        type: "step-finish",
+        reason: "stop",
+        cost: 0.01,
+        tokens: { total: 1500, input: 500, output: 800, reasoning: 200, cache: { read: 100, write: 50 } },
+      })
+
+      const fork = yield* Effect.acquireRelease(session.fork({ sessionID: created.id }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+
+      expect((yield* session.get(fork.id)).cost).toBe(0)
+      const copied = (yield* session.messages({ sessionID: fork.id })).find(
+        (msg) => msg.info.role === "assistant",
+      )?.info
+      if (!copied || copied.role !== "assistant") return
+      expect(copied.cost).toBe(0)
+      expect(copied.tokens.input).toBe(500)
+      expect(copied.tokens.output).toBe(800)
+    }),
+  )
+
   it.instance("omits metadata when not provided", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service
