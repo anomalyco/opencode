@@ -464,6 +464,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
       },
       status: () => response(vcs.status()),
       diff: (input) => response(vcs.diff(input.mode, { context: input.context, base: input.base })),
+      graph: (input) => response(vcs.graph({ skip: input?.skip, limit: input?.limit })),
       transform: vcs.transform,
       reload: vcs.reload,
     },

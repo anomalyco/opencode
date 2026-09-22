@@ -144,6 +144,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       },
       status: () => Effect.die("unused vcs.status"),
       diff: () => Effect.die("unused vcs.diff"),
+      graph: () => Effect.die("unused vcs.graph"),
       transform: () => Effect.die("unused vcs.transform"),
       reload: () => Effect.die("unused vcs.reload"),
     },

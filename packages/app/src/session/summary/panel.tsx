@@ -26,6 +26,7 @@ export function SessionSummaryPanel(props: {
   moveEligible: boolean
   moveDismissed: boolean
   onMoveDismiss: () => void
+  onGraph: () => void
   onReview: () => void
   backgroundTasks: BackgroundTask[]
 }) {
@@ -85,6 +86,10 @@ export function SessionSummaryPanel(props: {
               </span>
             </Show>
           </div>
+          <button type="button" class="session-summary-row" onClick={props.onGraph}>
+            <Icon name="branch-out" class="shrink-0 text-v2-icon-icon-muted" />
+            <span class="session-summary-label">{language.t("gitGraph.title")}</span>
+          </button>
           <button type="button" class="session-summary-row" onClick={props.onReview}>
             <Icon name="review" class="shrink-0 text-v2-icon-icon-muted" />
             <span class="session-summary-label flex items-center gap-2">

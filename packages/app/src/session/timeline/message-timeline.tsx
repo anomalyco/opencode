@@ -94,6 +94,7 @@ type MessageTimelineProps = {
   reserveReviewToggle: boolean
   setContentRef: (el: HTMLDivElement) => void
   diffs: Accessor<{ additions: number; deletions: number }[] | undefined>
+  onGraph: (directory: string) => void
   onReview: () => void
   workspaceMoveEligible: boolean
   onSummaryOpenChange: (open: boolean) => void
@@ -563,6 +564,10 @@ function MessageTimelineView(
                               moveEligible={props.workspaceMoveEligible}
                               moveDismissed={workspaceSuggestionDismissed()}
                               onMoveDismiss={() => setWorkspaceSuggestionDismissed(true)}
+                              onGraph={() => {
+                                setSummary(false)
+                                props.onGraph(sessionDirectory())
+                              }}
                               onReview={() => {
                                 setSummary(false)
                                 props.onReview()

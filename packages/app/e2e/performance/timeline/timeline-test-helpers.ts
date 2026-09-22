@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test"
 import { base64Encode } from "@opencode/util/encode"
-import { mockOpenCodeServer } from "../../utils/mock-server"
+import { mockOpenCodeServer, type GraphFixture } from "../../utils/mock-server"
 import { fixture, pageMessages } from "./session-timeline-stress.fixture"
 
 export async function installTimelineSettings(page: Page) {
@@ -23,6 +23,7 @@ export function mockStressTimeline(
   input?: {
     onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
     vcsDiff?: unknown[]
+    vcsGraph?: GraphFixture
   },
 ) {
   return mockOpenCodeServer(page, {
@@ -33,6 +34,7 @@ export function mockStressTimeline(
     pageMessages,
     onMessages: input?.onMessages,
     vcsDiff: input?.vcsDiff,
+    vcsGraph: input?.vcsGraph,
   })
 }
 

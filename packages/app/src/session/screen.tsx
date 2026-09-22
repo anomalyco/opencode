@@ -15,6 +15,7 @@ import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { debounce } from "@solid-primitives/scheduled"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
 import { projectForSession } from "@/shell/layout/helpers"
@@ -50,6 +51,11 @@ const SessionSummaryPanel = lazy(async () => {
   return { default: SessionSummaryPanel }
 })
 
+const GitGraphDialog = lazy(async () => {
+  const { GitGraphDialog } = await import("./git-graph/dialog")
+  return { default: GitGraphDialog }
+})
+
 export function SessionScreen(props: { session: SessionModel }) {
   // The timeline cache captures its owner when created, so link handling must be provided above it.
   const browser = createSessionBrowser(props.session)
@@ -66,6 +72,7 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
   const session = props.session
   const browser = props.browser
   const server = useServer()
+  const dialog = useDialog()
   const detailsProject = createMemo(() => {
     const info = session.data.info()
     return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
@@ -196,6 +203,26 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
   })
   useUsageExceededDialogs()
 
+  const openGitGraph = (directory: string) => {
+    void dialog.show(
+      () => (
+        <Suspense>
+          <GitGraphDialog directory={directory} />
+        </Suspense>
+      ),
+      () => {
+        setTimeout(() => {
+          const triggers = document.querySelectorAll<HTMLElement>(
+            '[data-action="session-summary-trigger"], [data-action="session-mobile-summary-trigger"]',
+          )
+          Array.from(triggers)
+            .find((trigger) => trigger.offsetParent !== null)
+            ?.focus()
+        }, 120)
+      },
+    )
+  }
+
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
     createEffect(on(session.identity.sessionKey, reset, { defer: true }))
     return <SessionErrorFallback error={error} sessionID={session.identity.params.id} />
@@ -229,6 +256,10 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                         moveEligible={composer.workspaceMoveEligible()}
                         moveDismissed={store.mobileMoveDismissed}
                         onMoveDismiss={() => setStore("mobileMoveDismissed", true)}
+                        onGraph={() => {
+                          close()
+                          openGitGraph(session.workspace.directory())
+                        }}
                         onReview={() => {
                           close()
                           review.mobile.setTab("changes")
@@ -277,6 +308,7 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
         reserveReviewToggle={!sideVisible()}
         setContentRef={timeline.view.setContentRef}
         diffs={review.details.diffs}
+        onGraph={openGitGraph}
         onReview={review.open}
         workspaceMoveEligible={composer.workspaceMoveEligible()}
         onSummaryOpenChange={review.details.setOpen}

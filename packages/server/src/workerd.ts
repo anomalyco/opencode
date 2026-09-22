@@ -102,6 +102,7 @@ const vcsLayer = Layer.succeed(
     branches: () => Effect.succeed([]),
     status: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),
+    graph: () => Effect.succeed(null),
   }),
 )
 

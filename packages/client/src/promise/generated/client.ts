@@ -244,6 +244,8 @@ import type {
   VcsBranchListOutput,
   VcsDiffInput,
   VcsDiffOutput,
+  VcsGraphInput,
+  VcsGraphOutput,
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
@@ -2045,6 +2047,18 @@ export function make(options: ClientOptions) {
             method: "GET",
             path: `/api/vcs/diff`,
             query: { location: input["location"], mode: input["mode"], base: input["base"], context: input["context"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 503],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      graph: (input?: VcsGraphInput, requestOptions?: RequestOptions) =>
+        request<VcsGraphOutput>(
+          {
+            method: "GET",
+            path: `/api/vcs/graph`,
+            query: { location: input?.["location"], skip: input?.["skip"], limit: input?.["limit"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 503],
             empty: false,

@@ -22,6 +22,11 @@ export interface VcsDiffInput extends VcsScope {
   readonly maxOutputBytes: number
 }
 
+export interface VcsGraphInput extends VcsScope {
+  readonly skip: number
+  readonly limit: number
+}
+
 export interface VcsDefinition {
   readonly id: string
   readonly name: string
@@ -30,6 +35,7 @@ export interface VcsDefinition {
   readonly branches: (input: VcsBranchesInput, context: { readonly signal: AbortSignal }) => Promise<Vcs.BranchList>
   readonly status: (input: VcsScope, context: { readonly signal: AbortSignal }) => Promise<readonly Vcs.FileStatus[]>
   readonly diff: (input: VcsDiffInput, context: { readonly signal: AbortSignal }) => Promise<readonly FileDiff.Info[]>
+  readonly graph?: (input: VcsGraphInput, context: { readonly signal: AbortSignal }) => Promise<Vcs.GraphPage>
 }
 
 export interface VcsDomain extends VcsApi {

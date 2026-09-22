@@ -23,6 +23,11 @@ export interface VcsDiffInput extends VcsScope {
   readonly maxOutputBytes: number
 }
 
+export interface VcsGraphInput extends VcsScope {
+  readonly skip: number
+  readonly limit: number
+}
+
 export interface VcsDefinition {
   readonly id: string
   readonly name: string
@@ -31,6 +36,7 @@ export interface VcsDefinition {
   readonly branches: (input: VcsBranchesInput) => Effect.Effect<Vcs.BranchList, unknown>
   readonly status: (input: VcsScope) => Effect.Effect<readonly Vcs.FileStatus[], unknown>
   readonly diff: (input: VcsDiffInput) => Effect.Effect<readonly FileDiff.Info[], unknown>
+  readonly graph?: (input: VcsGraphInput) => Effect.Effect<Vcs.GraphPage, unknown>
 }
 
 export interface VcsDomain extends VcsApi<unknown> {

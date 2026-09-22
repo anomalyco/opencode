@@ -511,6 +511,7 @@ export function fromPromise(plugin: Plugin) {
             },
             status: adaptApiMethod(VcsEndpoints["vcs.status"], host.vcs.status),
             diff: adaptApiMethod(VcsEndpoints["vcs.diff"], host.vcs.diff),
+            graph: adaptApiMethod(VcsEndpoints["vcs.graph"], host.vcs.graph),
             reload: () => run(host.vcs.reload()),
             transform: (callback) =>
               register(
@@ -518,6 +519,7 @@ export function fromPromise(plugin: Plugin) {
                   callback({
                     add: (definition) => {
                       const base = definition.base?.bind(definition)
+                      const graph = definition.graph?.bind(definition)
                       editor.add({
                         id: definition.id,
                         name: definition.name,
@@ -526,6 +528,7 @@ export function fromPromise(plugin: Plugin) {
                         branches: (input) => attempt((signal) => definition.branches(input, { signal })),
                         status: (input) => attempt((signal) => definition.status(input, { signal })),
                         diff: (input) => attempt((signal) => definition.diff(input, { signal })),
+                        graph: graph ? (input) => attempt((signal) => graph(input, { signal })) : undefined,
                       })
                     },
                     default: editor.default,

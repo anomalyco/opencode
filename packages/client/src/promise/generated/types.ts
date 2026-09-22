@@ -416,6 +416,8 @@ export type VcsFileStatus = {
 
 export type VcsBranchList = Array<string>
 
+export type VcsGraphRef = { name: string; kind: "branch" | "remote" | "tag" | "head" }
+
 export type WebSearchProvider = { id: string; name: string }
 
 export type WebSearchResult = { url: string; title?: string; content?: string; time: { published?: number } }
@@ -1651,6 +1653,15 @@ export type WorktreeList = Array<WorktreeDirectory>
 
 export type VcsInfo = { provider?: string; branch: VcsBranch }
 
+export type VcsGraphCommit = {
+  hash: string
+  parents: Array<string>
+  refs: Array<VcsGraphRef>
+  subject: string
+  authorName: string | null
+  authoredAtMs: number | null
+}
+
 export type SessionInboxMove = {
   id: string
   sessionID: string
@@ -1892,6 +1903,8 @@ export type ReferenceInfo = {
   hidden?: boolean
   source: ReferenceSource
 }
+
+export type VcsGraphPage = { commits: Array<VcsGraphCommit>; hasMore: boolean }
 
 export type ModelInfo = {
   id: string
@@ -6282,6 +6295,26 @@ export type VcsDiffInput = {
 }
 
 export type VcsDiffOutput = { location: LocationPublicRef; data: Array<FileDiffInfo> }
+
+export type VcsGraphInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly skip?: number | undefined
+    readonly limit?: number | undefined
+  }["location"]
+  readonly skip?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly skip?: number | undefined
+    readonly limit?: number | undefined
+  }["skip"]
+  readonly limit?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly skip?: number | undefined
+    readonly limit?: number | undefined
+  }["limit"]
+}
+
+export type VcsGraphOutput = { location: LocationPublicRef; data: VcsGraphPage | null }
 
 export type DebugLocationListOutput = Array<LocationPublicRef>
 

@@ -246,6 +246,8 @@ import type {
   VcsBranchListOutput,
   VcsDiffInput,
   VcsDiffOutput,
+  VcsGraphInput,
+  VcsGraphOutput,
   DebugLocationListOutput,
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
@@ -1464,12 +1466,20 @@ const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) 
     }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointVcsGraph = (raw: RawClient["server.vcs"]) => (input?: VcsGraphInput) =>
+  preserveEffect<VcsGraphOutput>()(
+    raw["vcs.graph"]({ query: { location: input?.["location"], skip: input?.["skip"], limit: input?.["limit"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
   get: EndpointVcsGet(raw),
   base: EndpointVcsBase(raw),
   status: EndpointVcsStatus(raw),
   branch: { list: EndpointVcsBranchList(raw) },
   diff: EndpointVcsDiff(raw),
+  graph: EndpointVcsGraph(raw),
 })
 
 const EndpointDebugLocationList = (raw: RawClient["server.debug"]) => () =>

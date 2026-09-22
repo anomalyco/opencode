@@ -21,3 +21,28 @@ test("review modes preserve shipped working and combined branch names", () => {
   }
   expect(() => Schema.decodeUnknownSync(Vcs.Mode)("unknown")).toThrow()
 })
+
+test("commit graph keeps stable identities and distinguishes ref namespaces", () => {
+  expect(Vcs.GraphRef.ast.annotations?.identifier).toBe("Vcs.GraphRef")
+  expect(Vcs.GraphCommit.ast.annotations?.identifier).toBe("Vcs.GraphCommit")
+  expect(Vcs.GraphPage.ast.annotations?.identifier).toBe("Vcs.GraphPage")
+  for (const kind of ["branch", "remote", "tag", "head"] as const) {
+    expect(Schema.decodeUnknownSync(Vcs.GraphRef)({ name: "main", kind })).toEqual({ name: "main", kind })
+  }
+  expect(() => Schema.decodeUnknownSync(Vcs.GraphRef)({ name: "main", kind: "checkpoint" })).toThrow()
+})
+
+test("commit graph carries nullable author metadata and pre-epoch timestamps", () => {
+  const commit = {
+    hash: "a".repeat(40),
+    parents: [],
+    refs: [{ name: "v1.0", kind: "tag" as const }],
+    subject: "初始提交",
+    authorName: null,
+    authoredAtMs: -2_208_988_800_000,
+  }
+  expect(Schema.encodeSync(Vcs.GraphCommit)(Schema.decodeUnknownSync(Vcs.GraphCommit)(commit))).toEqual(commit)
+  const page = { commits: [commit], hasMore: true }
+  expect(Schema.encodeSync(Vcs.GraphPage)(Schema.decodeUnknownSync(Vcs.GraphPage)(page))).toEqual(page)
+  expect(() => Schema.decodeUnknownSync(Vcs.GraphCommit)({ ...commit, authoredAtMs: Number.NaN })).toThrow()
+})
