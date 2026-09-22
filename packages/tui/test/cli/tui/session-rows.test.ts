@@ -8,8 +8,19 @@ import {
   reduceSessionRows,
   sessionRowID,
   turnDuration,
+  turnTokenSummary,
   turnTokensPerSecond,
 } from "../../../src/routes/session/rows"
+
+test("turn token summary shows the latest step rather than counting reused context again", () => {
+  expect(
+    turnTokenSummary([
+      { newTokens: 12, cached: 80, total: 92 },
+      { newTokens: 8, cached: 84, total: 92, reuseDrop: 4 },
+      { newTokens: 15, cached: 88, total: 103 },
+    ]),
+  ).toEqual({ count: 3, latestNewTokens: 15, latestCached: 88, latestTotal: 103, reuseDrops: 1 })
+})
 
 test("measures turn duration from the user prompt across assistant steps", () => {
   const first = assistant("assistant-1", [])

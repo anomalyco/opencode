@@ -347,6 +347,17 @@ export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheU
   return drop > 0 ? drop : undefined
 }
 
+export function turnTokenSummary(items: { newTokens: number; cached: number; total: number; reuseDrop?: number }[]) {
+  const latest = items.at(-1)
+  return {
+    count: items.length,
+    latestNewTokens: latest?.newTokens ?? 0,
+    latestCached: latest?.cached ?? 0,
+    latestTotal: latest?.total ?? 0,
+    reuseDrops: items.filter((item) => item.reuseDrop !== undefined).length,
+  }
+}
+
 // `legacy` marks a session without idle markers, where a turn ends at the next prompt. Reactive
 // callers should pass it from a shared memo: the default scans every message, which subscribes
 // the footer to the whole history.

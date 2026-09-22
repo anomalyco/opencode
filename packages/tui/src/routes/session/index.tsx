@@ -96,6 +96,7 @@ import {
   resolvePart,
   sessionRowID,
   turnDuration,
+  turnTokenSummary,
   turnTokensPerSecond,
   type CacheUsage,
   type PartRef,
@@ -1528,16 +1529,7 @@ function TurnTokenUsage(props: {
     cached: Math.max("Cached".length, ...steps().map((item) => item.cached.toLocaleString().length)),
     total: Math.max("Total".length, ...steps().map((item) => item.total.toLocaleString().length)),
   }))
-  const summary = createMemo(() => {
-    const items = steps()
-    return {
-      count: items.length,
-      newTokens: items.reduce((sum, item) => sum + item.newTokens, 0),
-      cached: items.reduce((sum, item) => sum + item.cached, 0),
-      total: items.reduce((sum, item) => sum + item.total, 0),
-      reuseDrops: items.filter((item) => item.reuseDrop !== undefined).length,
-    }
-  })
+  const summary = createMemo(() => turnTokenSummary(steps()))
   return (
     <Show when={Boolean(config.data.debug?.turn_tokens) && steps().length > 0}>
       <box paddingLeft={3} flexDirection="column">
@@ -1554,8 +1546,9 @@ function TurnTokenUsage(props: {
             <span>{expanded() ? "- " : "+ "}</span>
             <span style={{ attributes: TextAttributes.BOLD }}>Tokens</span>
             <span>
-              : {summary().count} {summary().count === 1 ? "step" : "steps"} · {summary().newTokens.toLocaleString()}{" "}
-              new · {summary().cached.toLocaleString()} cached · {summary().total.toLocaleString()} total
+              : {summary().count} {summary().count === 1 ? "step" : "steps"} · latest:{" "}
+              {summary().latestNewTokens.toLocaleString()} new · {summary().latestCached.toLocaleString()} cached ·{" "}
+              {summary().latestTotal.toLocaleString()} total
             </span>
             <Show when={summary().reuseDrops > 0}>
               <span style={{ fg: theme.text.feedback.warning.base }}>
