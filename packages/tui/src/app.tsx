@@ -727,7 +727,7 @@ function App(props: { pair?: DialogPairCredentials }) {
         title: "New session",
         suggested: route.data.type === "session",
         category: "Session",
-        slash: { name: "new", aliases: ["clear"] },
+        slash: { name: "new" },
         run: () => {
           const model = local.model.current()
           const agent = local.agent.current()
@@ -735,6 +735,33 @@ function App(props: { pair?: DialogPairCredentials }) {
             route.data.type === "session"
               ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
               : undefined
+          route.navigate({
+            type: "home",
+            location: newSessionLocation(
+              config.data.session.new_location,
+              data.location.default().directory,
+              current,
+              location.error?.location,
+            ),
+          })
+          if (agent) local.agent.set(agent.id)
+          if (model) local.model.set(model)
+          dialog.clear()
+        },
+      },
+      {
+        name: "session.clear",
+        title: "Clear session",
+        category: "Session",
+        slash: { name: "clear" },
+        run: () => {
+          const model = local.model.current()
+          const agent = local.agent.current()
+          const current =
+            route.data.type === "session"
+              ? (data.session.get(route.data.sessionID)?.location ?? location.ref)
+              : undefined
+          sessionTabs.close()
           route.navigate({
             type: "home",
             location: newSessionLocation(
