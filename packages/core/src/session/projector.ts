@@ -19,6 +19,8 @@ type DatabaseService = Database.Interface["db"]
 
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
+const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
+  decodeMessage({ ...row.data, id: row.id, type: row.type })
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -38,6 +40,14 @@ function usage(part: (typeof SessionV1.Event.PartUpdated.Type)["data"]["part"] |
   if (value.type !== "step-finish") return undefined
   if (!("cost" in value) || !("tokens" in value)) return undefined
   return { cost: value.cost as Usage["cost"], tokens: value.tokens as Usage["tokens"] }
+}
+
+function messageUsage(message: SessionMessage.Message): Usage | undefined {
+  if (message.type !== "assistant") return undefined
+  return {
+    cost: message.cost ?? 0,
+    tokens: message.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  }
 }
 
 function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInsert {
@@ -110,8 +120,6 @@ function applyUsage(
 
 function run(db: DatabaseService, event: SessionEvent.Event) {
   return Effect.gen(function* () {
-    const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
-      decodeMessage({ ...row.data, id: row.id, type: row.type })
     const updateMessage = (message: SessionMessage.Message) => {
       if (event.durable === undefined) return Effect.die("Durable Session event is missing aggregate sequence")
       const encoded = encodeMessage(message)
@@ -377,7 +385,29 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Ended, (event) =>
+      Effect.gen(function* () {
+        const row = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.id, event.data.assistantMessageID),
+              eq(SessionMessageTable.session_id, event.data.sessionID),
+              eq(SessionMessageTable.type, "assistant"),
+            ),
+          )
+          .get()
+          .pipe(Effect.orDie)
+        const prior = row && messageUsage(decodeRow(row))
+        if (!prior) return yield* run(db, event)
+        // Subtract-then-add keyed on the projected assistant row makes event replay a no-op,
+        // the same invariant as the V1 PartUpdated handler.
+        yield* applyUsage(db, event.data.sessionID, prior, -1)
+        yield* run(db, event)
+        yield* applyUsage(db, event.data.sessionID, { cost: event.data.cost, tokens: event.data.tokens })
+      }),
+    )
     yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
     yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
@@ -424,6 +454,22 @@ const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (!boundary) return yield* Effect.die(`Revert boundary message not found: ${event.data.messageID}`)
+        // V2 usage is anchored on SessionMessageTable assistant rows (Step.Ended), so removed
+        // rows must subtract their usage before deletion. V1 sessions have no rows here —
+        // their usage lives on PartTable step-finish parts and legacy revert subtracts it
+        // through MessageRemoved/PartRemoved.
+        const removed = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(
+            and(eq(SessionMessageTable.session_id, event.data.sessionID), gt(SessionMessageTable.seq, boundary.seq)),
+          )
+          .all()
+          .pipe(Effect.orDie)
+        for (const row of removed) {
+          const prior = messageUsage(decodeRow(row))
+          if (prior) yield* applyUsage(db, event.data.sessionID, prior, -1)
+        }
         yield* db
           .delete(SessionMessageTable)
           .where(

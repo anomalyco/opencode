@@ -69,7 +69,9 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   let assistantActive = false
   let assistantFailed = false
   let providerFailed = false
-  let stepSettlement: { readonly finish: string; readonly tokens: ReturnType<typeof tokens> } | undefined
+  let stepSettlement:
+    | { readonly finish: string; readonly tokens: ReturnType<typeof tokens>; readonly metadata?: ProviderMetadata }
+    | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
@@ -397,7 +399,11 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* flush()
         assistantActive = false
         if (stepSettlement) return yield* Effect.die("Duplicate step finish")
-        stepSettlement = { finish: event.reason, tokens: tokens(event.usage) }
+        stepSettlement = {
+          finish: event.reason,
+          tokens: tokens(event.usage),
+          ...(event.providerMetadata === undefined ? {} : { metadata: event.providerMetadata }),
+        }
         return
       case "finish":
         return

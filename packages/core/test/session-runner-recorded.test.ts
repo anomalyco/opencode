@@ -14,6 +14,8 @@ import { Config } from "@opencode-ai/core/config"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Prompt } from "@opencode-ai/core/session/prompt"
@@ -67,7 +69,12 @@ const model = OpenAIChat.route
     generation: { maxTokens: 20, temperature: 0 },
   })
   .model({ id: "gpt-4o-mini" })
-const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
+const models = SessionRunnerModel.layerWith(() =>
+  Effect.succeed({
+    model,
+    info: ModelV2.Info.empty(ProviderV2.ID.make(model.provider), ModelV2.ID.make(model.id)),
+  }),
+)
 const systemContext = AppNodeBuilder.build(SystemContextRegistry.node)
 const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })

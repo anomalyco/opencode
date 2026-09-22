@@ -494,6 +494,181 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("applies step usage to the session row", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+      const assistantID = SessionMessage.ID.make("msg_assistant_usage")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantID, 0)).run()
+
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        assistantMessageID: assistantID,
+        finish: "stop",
+        cost: 0.01,
+        tokens: { input: 100, output: 50, reasoning: 10, cache: { read: 200, write: 300 } },
+      })
+
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+      expect(row?.cost).toBeCloseTo(0.01, 10)
+      expect(row?.tokens_input).toBe(100)
+      expect(row?.tokens_output).toBe(50)
+      expect(row?.tokens_reasoning).toBe(10)
+      expect(row?.tokens_cache_read).toBe(200)
+      expect(row?.tokens_cache_write).toBe(300)
+      const message = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(message?.data).toMatchObject({ cost: 0.01 })
+    }),
+  )
+
+  it.effect("does not double-apply usage when the same Step.Ended replays", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+      const assistantID = SessionMessage.ID.make("msg_assistant_replay")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantID, 0)).run()
+
+      const events = yield* EventV2.Service
+      const event = {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        assistantMessageID: assistantID,
+        finish: "stop" as const,
+        cost: 0.01,
+        tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+      }
+      yield* events.publish(SessionEvent.Step.Ended, event)
+      yield* events.publish(SessionEvent.Step.Ended, event)
+
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+      expect(row?.cost).toBeCloseTo(0.01, 10)
+      expect(row?.tokens_input).toBe(100)
+    }),
+  )
+
+  it.effect("skips session usage when the assistant row is missing", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant_missing"),
+        finish: "stop",
+        cost: 0.01,
+        tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+      expect(row?.cost).toBe(0)
+      expect(row?.tokens_input).toBe(0)
+    }),
+  )
+
+  it.effect("subtracts usage for removed messages when a revert commits", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+      const boundaryID = SessionMessage.ID.make("msg_assistant_boundary")
+      const assistantID = SessionMessage.ID.make("msg_assistant_removed")
+      yield* db
+        .insert(SessionMessageTable)
+        .values([assistantRow(boundaryID, 0), assistantRow(assistantID, 1)])
+        .run()
+
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        assistantMessageID: assistantID,
+        finish: "stop",
+        cost: 0.02,
+        tokens: { input: 200, output: 60, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+      yield* events.publish(SessionEvent.RevertEvent.Committed, {
+        sessionID,
+        messageID: boundaryID,
+        timestamp: DateTime.makeUnsafe(2),
+      })
+
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+      expect(row?.cost).toBe(0)
+      expect(row?.tokens_input).toBe(0)
+      const remaining = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, sessionID))
+        .all()
+        .pipe(Effect.orDie)
+      expect(remaining.map((row) => row.id)).toEqual([boundaryID])
+    }),
+  )
+
   it.effect("does not revive a stale incomplete assistant projection", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service

@@ -72,7 +72,7 @@ export type Error =
   | Integration.AuthorizationError
 
 export interface Interface {
-  readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
+  readonly resolve: (session: SessionSchema.Info) => Effect.Effect<{ model: Model; info: ModelV2.Info }, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunnerModel") {}
@@ -205,11 +205,12 @@ export const locationLayer = Layer.effect(
         const connection = yield* integrations.connection.active(
           provider?.integrationID ?? Integration.ID.make(selected.providerID),
         )
-        return yield* resolve(
+        const model = yield* resolve(
           session,
           selected,
           connection ? yield* integrations.connection.resolve(connection) : undefined,
         )
+        return { model, info: selected }
       }),
     })
   }),

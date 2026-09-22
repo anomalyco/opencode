@@ -98,6 +98,10 @@ const client = Layer.succeed(
 )
 const model = Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
 const replacementModel = Model.make({ id: "replacement", provider: "fake", route: OpenAIChat.route })
+const resolved = (selected: Model) => ({
+  model: selected,
+  info: ModelV2.Info.empty(ProviderV2.ID.make(selected.provider), ModelV2.ID.make(selected.id)),
+})
 const compactModel = Model.make({
   id: "compact",
   provider: "fake",
@@ -155,7 +159,7 @@ const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: ec
 let modelResolveHook = Effect.void
 let currentModel = model
 const models = SessionRunnerModel.layerWith((session) =>
-  modelResolveHook.pipe(Effect.as(session.model?.id === "replacement" ? replacementModel : currentModel)),
+  modelResolveHook.pipe(Effect.as(resolved(session.model?.id === "replacement" ? replacementModel : currentModel))),
 )
 const systemContextKey = SystemContext.Key.make("test/context")
 let systemBaseline = "Initial context"
