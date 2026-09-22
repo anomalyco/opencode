@@ -6,8 +6,86 @@ import { Context, Effect, Layer, ManagedRuntime, Option, Queue, Schema, Stream }
 import { Rpc, RpcClient, RpcClientError, RpcGroup, RpcMessage, RpcServer } from "effect/unstable/rpc"
 import { Transferable } from "effect/unstable/workers"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
+import { ipcPayload } from "../renderer/ipc-payload"
+import { FilesOpenDirectoryPicker, FilesOpenFilePicker, FilesOpenPath, FilesSaveFile } from "../shared/ipc-rpc/files"
+import { DraftsPutBlob } from "../shared/ipc-rpc/storage"
 
 describe("desktop RPC transport", () => {
+  test.each([
+    {
+      tag: "FilesOpenFilePicker",
+      payload: { options: { multiple: true, title: undefined, defaultPath: "C:\\project", extensions: undefined } },
+      value: null,
+    },
+    { tag: "FilesOpenFilePicker", payload: { options: undefined }, value: null },
+    { tag: "FilesOpenFilePicker", payload: {}, value: null },
+    {
+      tag: "FilesOpenFilePicker",
+      payload: { options: { multiple: false, title: "Choose", defaultPath: "C:\\project", extensions: ["png"] } },
+      value: null,
+    },
+    {
+      tag: "FilesOpenDirectoryPicker",
+      payload: { options: { multiple: false, title: undefined } },
+      value: null,
+    },
+    { tag: "FilesSaveFile", payload: { options: { title: undefined }, content: "example" }, value: true },
+    { tag: "FilesOpenPath", payload: { path: "C:\\project", application: undefined }, value: null },
+    { tag: "DraftsPutBlob", payload: { data: new Uint8Array([0, 255, 2]) }, value: "stored" },
+  ])("accepts raw renderer payloads for $tag: $payload", async ({ tag, payload, value }) => {
+    let received: unknown
+    const rpcs = RpcGroup.make(
+      FilesOpenFilePicker,
+      FilesOpenDirectoryPicker,
+      FilesSaveFile,
+      FilesOpenPath,
+      DraftsPutBlob,
+    )
+    const handlers = rpcs.toLayer({
+      DraftsPutBlob: (input) =>
+        Effect.sync(() => {
+          received = input
+          return "stored"
+        }),
+      FilesOpenFilePicker: (input) =>
+        Effect.sync(() => {
+          received = input
+          return null
+        }),
+      FilesOpenDirectoryPicker: (input) =>
+        Effect.sync(() => {
+          received = input
+          return null
+        }),
+      FilesSaveFile: (input) =>
+        Effect.sync(() => {
+          received = input
+          return true
+        }),
+      FilesOpenPath: (input) =>
+        Effect.sync(() => {
+          received = input
+          return null
+        }),
+    })
+    const runtime = ManagedRuntime.make(
+      RpcServer.layer(rpcs).pipe(Layer.provide(handlers), Layer.provideMerge(IpcServerProtocolLive)),
+    )
+    const channel = new MessageChannel()
+    try {
+      const handoff = await runtime.runPromise(IpcPortHandoff)
+      handoff.bind(sender(1), serverPort(channel.port1))
+      // The renderer posts directly, without RpcClient's schema encoding.
+      const response = new Promise<RpcMessage.FromServerEncoded>((resolve) => channel.port2.once("message", resolve))
+      channel.port2.postMessage({ _tag: "Request", id: 1, tag, payload: ipcPayload(payload), headers: [] })
+      expect(await response).toMatchObject({ _tag: "Exit", exit: { _tag: "Success", value } })
+      expect(received).toEqual(payload)
+    } finally {
+      channel.port2.close()
+      await runtime.dispose()
+    }
+  })
+
   test("keeps multiple renderer ports independent", async () => {
     let received: unknown
     const handlers = TestRpcs.toLayer(
