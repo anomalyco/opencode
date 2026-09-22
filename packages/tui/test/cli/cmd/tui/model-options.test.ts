@@ -33,7 +33,7 @@ describe("sortModelOptions", () => {
 
 describe("searchModelOptions", () => {
   const category = "OpenRouter"
-  // Titles from a real OpenRouter catalogue, in the order the picker lists them.
+  // Titles from a real OpenRouter catalogue, newest first as the picker sorts them.
   const options = [
     { title: "inclusionai/ling-3.0-flash", category, releaseDate: "2026-09-01" },
     { title: "inclusionai/ling-3.0-flash-vl", category, releaseDate: "2026-09-01" },
@@ -53,8 +53,13 @@ describe("searchModelOptions", () => {
     expect(exact).toHaveLength(3)
   })
 
-  test("does not re-sort search results by release date", () => {
+  test("keeps scattered-letter matches, below the exact ones", () => {
     const titles = searchModelOptions("luna", options).map((option) => option.title)
-    expect(titles[0]).not.toBe("inclusionai/ling-3.0-flash")
+
+    // Search stays fuzzy: every option matches l-u-n-a in order, so none are dropped.
+    expect(titles).toHaveLength(options.length)
+    expect(titles.slice(3)).toEqual(
+      expect.arrayContaining(["inclusionai/ling-3.0-flash", "inclusionai/ling-3.0-flash-vl", "poolside/laguna-s-2.1"]),
+    )
   })
 })
