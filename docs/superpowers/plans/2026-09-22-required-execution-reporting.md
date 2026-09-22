@@ -10,13 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-22-execution-tracking-reliability-design.md`
 
+**Rollout:** Build and verify this integration and the companion header plan first. Install the new global policy only after both are ready; its required-tool preflight applies to subsequent plan executions, not to this bootstrap development work.
+
 ## Global Constraints
 
 - This is a controller-workflow requirement, not a host-enforced authorization boundary.
 - No plan text or agent activity is parsed into task state; the UI and read-only RPC never create runs.
 - A registered plugin, successful capability check, visible badge, local ledger, or attempted call is not a persisted run.
 - Only the root controller writes; preserve actual ancestry, location ownership, revision checks, and evidence gates.
-- Missing reporting tools or persistence pauses implementation and new implementer dispatch; recovery starts with `execution_read`.
+- Once the policy is activated, missing reporting tools or persistence pauses subsequent approved-plan implementation and new implementer dispatch; recovery starts with `execution_read`.
 - Do not restart the running app or server while debugging or verifying.
 - Do not edit generated client files or cached external Superpowers skills.
 
@@ -38,10 +40,9 @@
 - `packages/superpowers-execution/test/reporting.test.ts`: skill/hook contract regressions.
 - `packages/superpowers-execution/README.md`: portable installation-wide policy excerpt and deployment guidance.
 
-### Task 1: Mandatory controller preflight and recovery policy
+### Task 1: Package the mandatory preflight and recovery policy
 
 **Files:**
-- Modify: `/root/.config/opencode/AGENTS.md` (installation-wide policy on this machine; never replace unrelated content)
 - Modify: `packages/superpowers-execution/skills/superpowers-execution-reporting/SKILL.md:1-43,202-223`
 - Modify: `packages/superpowers-execution/README.md`
 - Test: `packages/superpowers-execution/test/reporting.test.ts`
@@ -64,7 +65,7 @@ expect(skill.content).not.toContain("Continue the underlying Superpowers work")
 Add a test that reads the maintained global-policy excerpt in `README.md` (not the machine-specific home file) and asserts `execution_read`, `run.start`, `pause`, `plan hash`, and `different plan`. Do not assert merely that a file exists: check the exact preflight obligations. Make the policy excerpt a fenced `text` block headed `### Required global controller policy` so the test can select it. Replace the existing test assertion expecting `tracking is degraded` with one requiring paused execution; keep the existing `UNRUN` gate assertion.
 
 - [ ] **Step 2: Demonstrate red.** From `packages/superpowers-execution`, run `bun test ./test/reporting.test.ts`; expect the new instruction-contract assertions to fail on the current advisory/degraded wording.
-- [ ] **Step 3: Update policy and skill.** Add the following rule to `/root/.config/opencode/AGENTS.md`, preserving all existing content, and include the same rule under `### Required global controller policy` in the package README:
+- [ ] **Step 3: Package policy and skill.** Include the following rule under `### Required global controller policy` in the package README; do not activate it in the machine's global AGENTS file until Task 3, after both plans are verified:
 
 ```text
 Before implementation or implementer dispatch for an approved Superpowers plan, the root controller must read the approved plan, compute its plan hash, load superpowers-execution-reporting, call execution_read, then reconcile a matching plan run or persist execution_report run.start with the complete graph, gates, and final review. A run for a different plan is not a match. Do not begin plan work until registration succeeds. If the reporting skill, tools, or storage are unavailable, pause implementation and new dispatch, state the blocker, and allow only read-only diagnosis. If workers are already running, request a cooperative safe stop; do not claim they were automatically paused. After recovery, execution_read and reconcile before resuming. Never substitute a local ledger, badge, or capabilities response for persisted registration.
@@ -78,8 +79,8 @@ Use this opening workflow contract in the skill (the existing detailed JSON exam
 Before implementation or implementer dispatch, read the approved plan, compute its SHA-256, and call `execution_read`. Resume only an active run for the matching plan path and hash. If no run exists, persist `execution_report` `run.start` with the full graph and final-review gate before starting work. If another active plan exists, pause and ask for reconciliation rather than replacing it. If the skill, either tool, or storage is unavailable, pause implementation and dispatch, disclose the blocker, and allow only read-only diagnosis. Request a cooperative safe stop for already-running workers. After recovery, call `execution_read` and reconcile before resuming.
 ```
 
-- [ ] **Step 4: Demonstrate green.** Run `bun test ./test/reporting.test.ts` from `packages/superpowers-execution`; inspect the installed global policy manually for the exact excerpt without exposing unrelated configuration in test output.
-- [ ] **Step 5: Commit repo files.** `git add packages/superpowers-execution/skills/superpowers-execution-reporting/SKILL.md packages/superpowers-execution/README.md packages/superpowers-execution/test/reporting.test.ts` then `git commit -m "fix(superpowers): require reporting before plan work"`. The home AGENTS change is outside Git; report it separately.
+- [ ] **Step 4: Demonstrate green.** Run `bun test ./test/reporting.test.ts` from `packages/superpowers-execution` and inspect the README excerpt against the test contract.
+- [ ] **Step 5: Commit repo files.** `git add packages/superpowers-execution/skills/superpowers-execution-reporting/SKILL.md packages/superpowers-execution/README.md packages/superpowers-execution/test/reporting.test.ts` then `git commit -m "fix(superpowers): require reporting before plan work"`.
 
 ### Task 2: Root reminder reinforces the same preflight
 
@@ -113,5 +114,16 @@ if (input.runID === undefined || input.revision === undefined) return base
 return `${base} Active run ${input.runID} is at revision ${input.revision}; call execution_read and reconcile its plan before continuing.`
 ```
 - [ ] **Step 4: Demonstrate green.** Run `bun test ./test/reporting.test.ts`, then `bun test` and `bun run typecheck` from `packages/superpowers-execution`. For package distribution, run `bun run build` and package smoke checks from that package; an installed service requires separate deployment and is not verified by source tests.
-- [ ] **Step 5: Check the installed contract boundary.** Run `bun run package:smoke` and `bun run package:host-smoke` in `packages/superpowers-execution` using the disposable host; verify the root hook and tool catalog. This checks delivery, not model compliance. Verify the global policy and packaged skill direct pause on missing tools/storage and plan-hash mismatch; do not claim a host-enforced block or that a transcript necessarily contains reports.
+- [ ] **Step 5: Check the packaged contract boundary.** Run `bun run package:smoke` and `bun run package:host-smoke` in `packages/superpowers-execution` using the disposable host; verify the root hook and tool catalog. This checks delivery, not model compliance. Verify the README policy excerpt and packaged skill direct pause on missing tools/storage and plan-hash mismatch; do not claim a host-enforced block or that a transcript necessarily contains reports.
 - [ ] **Step 6: Run canonical check and commit.** From repo root run `bun run check`. If it fails, distinguish regressions from unrelated failures before modifying code. Record exact command results for handoff. `git add packages/superpowers-execution/src/reporting.ts packages/superpowers-execution/test/reporting.test.ts` then `git commit -m "fix(superpowers): make reporting preflight explicit"`.
+
+### Task 3: Activate the installation-wide preflight after both fixes
+
+**Files:**
+- Modify: `/root/.config/opencode/AGENTS.md` only after Tasks 1-2 and `docs/superpowers/plans/2026-09-22-execution-header-layout.md` are implemented and verified.
+
+**Interfaces:** Consumes the exact README policy excerpt from Task 1. Produces installation-wide instructions for **subsequent** approved-plan executions; no plugin or tool API changes.
+
+- [ ] **Step 1: Confirm prerequisites.** Read the verification results of both plans and confirm the reporting package smoke checks and header checks passed. Confirm the required global-policy excerpt exists in the package README. Do not activate it if either integration is still incomplete.
+- [ ] **Step 2: Install policy.** Append the exact policy text quoted in Task 1 to `/root/.config/opencode/AGENTS.md` without replacing any existing routing or workflow instructions; keep it under an `## Approved Superpowers plan execution` heading. Do not restart the running app or server.
+- [ ] **Step 3: Verify installation.** Re-read only the new heading and rule, check it matches the README excerpt, and report that activation applies to future controller contexts. If the running process has not loaded the new companion package, report that deployment gap explicitly rather than claiming the live Map is fixed. The global file is outside this Git repository, so no repo commit is made for this step.
