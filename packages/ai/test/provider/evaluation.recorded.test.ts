@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Evaluation } from "../../src/experimental.js"
-import { OpenCodeZen, TypeSafeAI } from "../../src/providers.js"
+import { Evaluation, EvaluationModel, type EvaluationOptions } from "../../src/experimental.js"
+import { OpenCodeZen, OpenRouter, TypeSafeAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
 const questions = {
@@ -40,6 +40,14 @@ const zen = recordedTests({
   metadata: { model: "jev-1.13-free" },
 })
 
+const openrouter = recordedTests({
+  prefix: "openrouter-evaluation",
+  provider: "openrouter",
+  protocol: "system-one",
+  requires: ["OPENROUTER_API_KEY"],
+  metadata: { model: "typesafe/jev-1.13" },
+})
+
 describe("experimental Evaluation recorded", () => {
   typesafe.effect("evaluates choice score and boolean questions", () =>
     assertEvaluation(
@@ -56,15 +64,24 @@ describe("experimental Evaluation recorded", () => {
       "opencode",
     ),
   )
+
+  openrouter.effect("evaluates choice score and boolean questions", () =>
+    assertEvaluation(
+      OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" }).experimental.evaluation(
+        "typesafe/jev-1.13",
+      ),
+      "openrouter",
+    ),
+  )
 })
 
-const assertEvaluation = (
-  model: ReturnType<typeof TypeSafeAI.experimental.evaluation>,
-  metadataKey: "typesafe" | "opencode",
+const assertEvaluation = <Options extends EvaluationOptions>(
+  model: EvaluationModel<Options>,
+  metadataKey: "typesafe" | "opencode" | "openrouter",
 ) =>
   Effect.gen(function* () {
     const response = yield* Evaluation.run({ model, state, questions })
-    expect(response.model).toStartWith("jev-")
+    expect(response.model).toContain("jev-")
     expect(response.answers.department.type).toBe("choice")
     expect(response.answers.department.choice).toBe("billing")
     expect(response.answers.department.probabilities?.billing).toBeGreaterThan(0.5)
