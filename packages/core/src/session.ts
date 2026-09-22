@@ -30,6 +30,7 @@ import { SessionExecution } from "./session/execution"
 import { makeGlobalNode } from "./effect/app-node"
 import { LocationServiceMap } from "./location-service-map"
 import { MessageDecodeError } from "./session/error"
+import { SessionRollup } from "./session/rollup"
 import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
 import { Snapshot } from "./snapshot"
@@ -114,6 +115,7 @@ export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  readonly cost: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Rollup, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
     limit?: number
@@ -264,6 +266,17 @@ const layer = Layer.effect(
         const session = yield* store.get(sessionID)
         if (!session) return yield* new NotFoundError({ sessionID })
         return session
+      }),
+      cost: Effect.fn("V2Session.cost")(function* (sessionID) {
+        const session = yield* store.get(sessionID)
+        if (!session) return yield* new NotFoundError({ sessionID })
+        const rows = yield* db
+          .select()
+          .from(SessionTable)
+          .where(eq(SessionTable.project_id, session.projectID))
+          .all()
+          .pipe(Effect.orDie)
+        return SessionRollup.rollup(rows.map((row) => fromRow(row)), sessionID)
       }),
       list: Effect.fn("V2Session.list")(function* (input = {}) {
         const direction = input.anchor?.direction ?? "next"
