@@ -31,8 +31,14 @@ export type SDK = {
       parameters: { readonly sessionID: string; readonly directory: string },
       options: { readonly throwOnError: true },
     ) => Promise<{ readonly data?: readonly SessionMessage[] | null }>
+    readonly children: (
+      parameters: { readonly sessionID: string; readonly directory: string },
+      options: { readonly throwOnError: true },
+    ) => Promise<{ readonly data?: readonly SubagentSession[] | null }>
   }
 }
+
+export type SubagentSession = { readonly id: string; readonly cost?: number }
 
 export interface MessageLoaderInterface {
   readonly messages: (input: MessagesInput) => Effect.Effect<readonly SessionMessage[], unknown>
@@ -40,6 +46,10 @@ export interface MessageLoaderInterface {
 
 export interface ContextLimitLoaderInterface {
   readonly providers: (directory: string) => Effect.Effect<Record<ProviderV2.ID, Provider.Info>, unknown>
+}
+
+export interface ChildrenLoaderInterface {
+  readonly children: (input: MessagesInput) => Effect.Effect<readonly SubagentSession[], unknown>
 }
 
 export type UsageConnection = Pick<AgentSideConnection, "sessionUpdate">
@@ -68,6 +78,10 @@ export class ContextLimitLoader extends Context.Service<ContextLimitLoader, Cont
   "@opencode/ACPUsageContextLimitLoader",
 ) {}
 
+export class ChildrenLoader extends Context.Service<ChildrenLoader, ChildrenLoaderInterface>()(
+  "@opencode/ACPUsageChildrenLoader",
+) {}
+
 export class Service extends Context.Service<Service, Interface>()("@opencode/ACPUsage") {}
 
 export function messageLoaderFromSDK(sdk: SDK): MessageLoaderInterface {
@@ -82,6 +96,42 @@ export function messageLoaderFromSDK(sdk: SDK): MessageLoaderInterface {
 }
 
 export const messageLoaderLayer = (sdk: SDK) => Layer.succeed(MessageLoader, messageLoaderFromSDK(sdk))
+
+export function childrenLoaderFromSDK(sdk: SDK): ChildrenLoaderInterface {
+  return ChildrenLoader.of({
+    children: (input) =>
+      Effect.promise(() =>
+        sdk.session
+          .children({ sessionID: input.sessionID, directory: input.directory }, { throwOnError: true })
+          .then((response) => response.data ?? []),
+      ),
+  })
+}
+
+export const childrenLoaderLayer = (sdk: SDK) => Layer.succeed(ChildrenLoader, childrenLoaderFromSDK(sdk))
+
+/**
+ * Total cost of every descendant of `sessionID`, recursively. `childrenOf`
+ * failures are treated as "no more children" so one unreachable branch
+ * doesn't block the usage update; the visited set guards against
+ * `parentID` cycles in hand-edited data.
+ */
+export function subagentCost(
+  childrenOf: (sessionID: string) => Effect.Effect<readonly SubagentSession[], unknown>,
+  sessionID: string,
+  visited: Set<string> = new Set([sessionID]),
+): Effect.Effect<number> {
+  return Effect.gen(function* () {
+    const children = yield* childrenOf(sessionID).pipe(Effect.catch(() => Effect.succeed([])))
+    let total = 0
+    for (const child of children) {
+      if (visited.has(child.id)) continue
+      visited.add(child.id)
+      total += (child.cost ?? 0) + (yield* subagentCost(childrenOf, child.id, visited))
+    }
+    return total
+  })
+}
 
 export function contextTokens(message: AssistantTokenCost): number {
   return message.tokens.input + message.tokens.cache.read + message.tokens.cache.write
@@ -144,6 +194,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const messageLoader = yield* MessageLoader
     const contextLimitLoader = yield* ContextLimitLoader
+    const childrenLoader = yield* ChildrenLoader
     const limits = yield* SynchronizedRef.make(new Map<string, Effect.Effect<number | undefined>>())
 
     const cachedLimit = Effect.fnUntraced(function* (input: {
@@ -205,6 +256,11 @@ const layer = Layer.effect(
       })
       if (!size) return
 
+      const subagents = yield* subagentCost(
+        (sessionID) => childrenLoader.children({ sessionID, directory: input.directory }),
+        input.sessionID,
+      )
+
       yield* Effect.promise(() =>
         input.connection
           .sessionUpdate({
@@ -213,7 +269,7 @@ const layer = Layer.effect(
               sessionUpdate: "usage_update",
               used: contextTokens(message),
               size,
-              cost: { amount: totalSessionCost(messages), currency: "USD" },
+              cost: { amount: totalSessionCost(messages) + subagents, currency: "USD" },
             },
           })
           .catch(() => {}),
@@ -232,12 +288,18 @@ const layer = Layer.effect(
 
 export const messageLoaderNode = LayerNode.unbound(MessageLoader, Node.tags.values.global)
 
+export const childrenLoaderNode = LayerNode.unbound(ChildrenLoader, Node.tags.values.global)
+
 export const contextLimitLoaderNode = makeGlobalNode({
   service: ContextLimitLoader,
   layer: contextLimitLoaderLayer,
   deps: [Provider.node, InstanceStore.node],
 })
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [messageLoaderNode, contextLimitLoaderNode] })
+export const node = makeGlobalNode({
+  service: Service,
+  layer,
+  deps: [messageLoaderNode, childrenLoaderNode, contextLimitLoaderNode],
+})
 
 export * as UsageService from "./usage"

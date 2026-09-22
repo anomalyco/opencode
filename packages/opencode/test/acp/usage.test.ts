@@ -97,6 +97,7 @@ const providers = (context = 128_000): Record<ProviderV2.ID, Provider.Info> => {
 const fakeLayer = (input: {
   readonly messages?: Effect.Effect<readonly UsageService.SessionMessage[], unknown>
   readonly providers?: (directory: string) => Effect.Effect<Record<ProviderV2.ID, Provider.Info>, unknown>
+  readonly children?: Effect.Effect<readonly UsageService.SubagentSession[], unknown>
 }) =>
   LayerNode.compile(UsageService.node, [
     [
@@ -105,6 +106,15 @@ const fakeLayer = (input: {
         UsageService.MessageLoader,
         UsageService.MessageLoader.of({
           messages: () => input.messages ?? Effect.succeed([]),
+        }),
+      ),
+    ],
+    [
+      UsageService.childrenLoaderNode,
+      Layer.succeed(
+        UsageService.ChildrenLoader,
+        UsageService.ChildrenLoader.of({
+          children: () => input.children ?? Effect.succeed([]),
         }),
       ),
     ],
@@ -242,6 +252,40 @@ describe("acp usage", () => {
                 cache: { read: 5, write: 7 },
               },
             }),
+          ]),
+        }),
+      ),
+    )
+  })
+
+  it.effect("includes subagent session cost in the usage update", () => {
+    const updates: SessionNotification[] = []
+    return Effect.gen(function* () {
+      const usage = yield* UsageService.Service
+      yield* usage.sendUpdate({
+        connection: connection(updates),
+        sessionID: "ses_1",
+        directory: "/workspace",
+      })
+
+      expect(updates).toEqual([
+        {
+          sessionId: "ses_1",
+          update: {
+            sessionUpdate: "usage_update",
+            used: 10,
+            size: 128_000,
+            cost: { amount: 1.75, currency: "USD" },
+          },
+        },
+      ])
+    }).pipe(
+      Effect.provide(
+        fakeLayer({
+          messages: Effect.succeed([assistant({ cost: 1 })]),
+          children: Effect.succeed([
+            { id: "ses_child", cost: 0.5 },
+            { id: "ses_grandchild", cost: 0.25 },
           ]),
         }),
       ),

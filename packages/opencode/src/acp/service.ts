@@ -665,6 +665,15 @@ function makeUsageService(sdk: OpencodeClient) {
     })
     if (!size) return
 
+    const subagents = yield* UsageService.subagentCost(
+      (sessionID) =>
+        request(
+          () => sdk.session.children({ sessionID, directory: params.directory }, { throwOnError: true }),
+          "session",
+        ),
+      params.sessionID,
+    )
+
     yield* Effect.promise(() =>
       params.connection
         .sessionUpdate({
@@ -673,7 +682,7 @@ function makeUsageService(sdk: OpencodeClient) {
             sessionUpdate: "usage_update",
             used: UsageService.contextTokens(message),
             size,
-            cost: { amount: UsageService.totalSessionCost(messages), currency: "USD" },
+            cost: { amount: UsageService.totalSessionCost(messages) + subagents, currency: "USD" },
           },
         })
         .catch(() => {}),
