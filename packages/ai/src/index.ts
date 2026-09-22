@@ -22,7 +22,6 @@ export {
 } from "./image.js"
 export type {
   ImageFormat,
-  ImageModelInput,
   ImageModelOptions,
   ImageOptions,
   ImageRequestFor,
@@ -31,8 +30,6 @@ export type {
 } from "./image.js"
 export { Image } from "./image.js"
 export { Media } from "./media.js"
-export { ModelRef } from "./model-ref.js"
-export type { ResolveImageModel, ResolveLanguageModel } from "./model-ref.js"
 export { Job } from "./job.js"
 export type { Event as JobEvent, Poll, Route as JobRoute, Snapshot as JobSnapshot, Status as JobStatus } from "./job.js"
 export { Tool, ToolFailure, toDefinitions } from "./tool.js"

@@ -1,6 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
 import { Media } from "./media.js"
-import { ModelRef, type ResolveImageModel } from "./model-ref.js"
 import { Endpoint } from "./route/endpoint.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
@@ -12,7 +11,6 @@ import {
   ModelID,
   ProviderID,
   ProviderMetadata,
-  UnsupportedOperationError,
 } from "./schema/index.js"
 import { ImageClient, Service } from "./image-client.js"
 
@@ -143,11 +141,9 @@ export type ImageRequestFor<Options extends ImageOptions = ImageOptions> = Omit<
   readonly providerOptions?: Options
 }
 
-export type ImageModelInput = ImageModel | ModelRef.WithImage
+export type ImageModelOptions<Model> = Model extends ImageModel<infer Options> ? Options : never
 
-export type ImageModelOptions<Model> = ResolveImageModel<Model> extends ImageModel<infer Options> ? Options : never
-
-export type ImageRequestInput<Model extends ImageModelInput = ImageModelInput> = Omit<
+export type ImageRequestInput<Model extends ImageModel = ImageModel> = Omit<
   ConstructorParameters<typeof ImageRequest>[0],
   "model" | "providerOptions" | "http"
 > & {
@@ -208,21 +204,7 @@ export const responseEvents = (response: ImageResponse): ReadonlyArray<ImageEven
 // Request-shaped call API
 // ---------------------------------------------------------------------------
 
-const resolveModel = (model: ImageModelInput): ImageModel => {
-  if (model instanceof ImageModel) return model
-  // Typed callers cannot reach the throw; it guards JS callers passing a ref without an image selector.
-  const selected = model.facade.image?.(model.id)
-  if (selected) return selected
-  throw new AIError({
-    reason: new UnsupportedOperationError({
-      operation: "image",
-      provider: model.provider,
-      message: `${model.provider} does not expose an image route for ${model.id}`,
-    }),
-  })
-}
-
-export function request<const Model extends ImageModelInput>(
+export function request<const Model extends ImageModel>(
   input: ImageRequestInput<Model>,
 ): ImageRequestFor<ImageModelOptions<Model>>
 export function request(input: ImageRequest): ImageRequest
@@ -230,7 +212,6 @@ export function request(input: ImageRequest | ImageRequestInput) {
   if (input instanceof ImageRequest) return input
   return new ImageRequest({
     ...input,
-    model: resolveModel(input.model),
     http: input.http === undefined ? undefined : HttpOptions.make(input.http),
   })
 }
@@ -239,17 +220,15 @@ const requestEffect = (input: ImageRequest | ImageRequestInput) =>
   Effect.try({
     try: () => request(input),
     catch: (error) =>
-      error instanceof AIError
-        ? error
-        : new AIError({
-            reason: new InvalidRequestError({
-              message: error instanceof Error ? error.message : String(error),
-              cause: error,
-            }),
-          }),
+      new AIError({
+        reason: new InvalidRequestError({
+          message: error instanceof Error ? error.message : String(error),
+          cause: error,
+        }),
+      }),
   })
 
-export function generate<const Model extends ImageModelInput>(
+export function generate<const Model extends ImageModel>(
   input: ImageRequestInput<Model>,
 ): Effect.Effect<ImageResponse, AIError, Service>
 export function generate(input: ImageRequest): Effect.Effect<ImageResponse, AIError, Service>
@@ -257,7 +236,7 @@ export function generate(input: ImageRequest | ImageRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => ImageClient.generate(request)))
 }
 
-export function stream<const Model extends ImageModelInput>(
+export function stream<const Model extends ImageModel>(
   input: ImageRequestInput<Model>,
 ): Stream.Stream<ImageEvent, AIError, Service>
 export function stream(input: ImageRequest): Stream.Stream<ImageEvent, AIError, Service>

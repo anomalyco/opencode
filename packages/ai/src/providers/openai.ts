@@ -6,7 +6,6 @@ import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
 import { OpenAIImages, type OpenAIImageString } from "../protocols/openai-images.js"
-import { ModelRef } from "../model-ref.js"
 
 export type { OpenAIOptionsInput, OpenAIResponseIncludable } from "./openai-options.js"
 export type { OpenAIImageOptions } from "../protocols/openai-images.js"
@@ -108,14 +107,14 @@ export const configure = (input: Config = {}) => {
       ),
     })
 
-  return ModelRef.facade({
+  return {
     id,
     model: responses,
     responses,
     chat,
     image,
     configure,
-  })
+  }
 }
 
 export const provider = configure()

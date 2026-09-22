@@ -106,12 +106,12 @@ For providers where the URL is derived from typed inputs (Azure resource name, B
 
 ### Provider Facades
 
-Provider-facing APIs are configured facades over route values. Endpoint/auth/resource/API-version setup happens before model selection, and model selectors accept only a model or deployment id. Every facade is wrapped in `ModelRef.facade(...)`, which makes it callable: `openai("gpt-4o-mini")` returns a `ModelRef` with lazy per-modality routes derived from the facade's own selectors (`model` → `llm`, `image` → `image`). `LLM.request` and `Image.request` resolve their route from the ref at request time, so one value names a model for every modality while named selectors stay the single source of truth:
+Provider-facing APIs are configured facades over route values. Endpoint/auth/resource/API-version setup happens before model selection, and model selectors accept only a model or deployment id. Media models use per-modality selectors on the same facade (`openai.image(id)`, later `.video` / `.speech` / `.transcription`) that mirror `openai.responses(id)`; the one-word overlap with the request namespace is accepted over a second construction path:
 
 ```ts
 const openai = OpenAI.configure({ apiKey, baseURL })
-const ref = openai("gpt-4o-mini") // ModelRef: LLM.request → .responses, Image.request → .image
 const model = openai.responses("gpt-4o-mini")
+const image = openai.image("gpt-image-2")
 
 const azure = Azure.configure({ resourceName, apiKey, apiVersion: "v1" })
 const deployment = azure.responses("my-deployment")

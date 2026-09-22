@@ -69,6 +69,7 @@ describe("Image", () => {
 
       expect(response.images).toHaveLength(2)
       expect(response.image.mediaType).toBe("image/webp")
+      expect(response.image.source).toEqual({ type: "bytes", data: Uint8Array.from([1, 2, 3]), mediaType: "image/webp" })
       expect(yield* response.image.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
       expect(response.image.providerMetadata).toEqual({ openai: { revisedPrompt: "A precise robot" } })
       expect(response.usage).toMatchObject({ type: "tokens", total: 12 })
@@ -111,6 +112,32 @@ describe("Image", () => {
         ),
       ),
     ),
+  )
+
+  it.effect("sends only model and prompt by default and decodes OpenAI bytes as png", () =>
+    Effect.gen(function* () {
+      const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
+      expect(openai.image("gpt-image-2").route.id).toBe("openai-images")
+      const response = yield* Image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" }).pipe(
+        Effect.provide(
+          ImageClient.layer.pipe(
+            Layer.provide(
+              dynamicResponse((input) =>
+                Effect.gen(function* () {
+                  const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                  expect(web.url).toBe("https://openai.test/v1/images/generations")
+                  expect(JSON.parse(input.text)).toEqual({ model: "gpt-image-2", prompt: "A lighthouse" })
+                  return input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }] }), {
+                    headers: { "content-type": "application/json" },
+                  })
+                }),
+              ),
+            ),
+          ),
+        ),
+      )
+      expect(response.image.source).toEqual({ type: "bytes", data: Uint8Array.from([1, 2, 3]), mediaType: "image/png" })
+    }),
   )
 
   it.effect("preserves native snake_case and unknown request options", () =>

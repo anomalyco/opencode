@@ -5,7 +5,6 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("fireworks")
 const baseURL = "https://api.fireworks.ai/inference/v1"
@@ -40,12 +39,12 @@ export const configure = (input: LanguageModelOptions = {}) => {
     endpoint: { baseURL: endpoint ?? baseURL },
     auth: AuthOptions.bearer(input, "FIREWORKS_API_KEY"),
   })
-  return ModelRef.facade({
+  return {
     id,
     model: (modelID: string | ModelID) =>
       configured.model<OpenAIProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
     configure,
-  })
+  }
 }
 
 export const provider = configure()

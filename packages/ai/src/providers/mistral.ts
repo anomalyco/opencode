@@ -3,7 +3,6 @@ import { MistralChat } from "../protocols/mistral-chat.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("mistral")
 
@@ -31,11 +30,11 @@ export const configure = (input: LanguageModelOptions = {}) => {
     endpoint: { baseURL: baseURL ?? MistralChat.DEFAULT_BASE_URL },
     auth: AuthOptions.bearer(input, "MISTRAL_API_KEY"),
   })
-  return ModelRef.facade({
+  return {
     id,
     model: (modelID: string | ModelID) => configured.model<ProviderOptions>({ id: modelID }),
     configure,
-  })
+  }
 }
 
 export const provider = configure()

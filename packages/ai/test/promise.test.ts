@@ -47,7 +47,7 @@ describe("AI promise client", () => {
     const text = await ai.llm.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
     expect(text.text).toBe("Hello world")
 
-    const image = await ai.image.generate({ model: openai("gpt-image-2"), prompt: "A lighthouse" })
+    const image = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
     expect(image.image).toBeInstanceOf(Media.Asset)
     expect(image.image.mediaType).toBe("image/png")
     expect(await ai.run(image.image.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
@@ -59,7 +59,7 @@ describe("AI promise client", () => {
     expect(deltas).toEqual(["Hello", " world"])
 
     const imageEvents: Array<string> = []
-    for await (const event of ai.image.stream({ model: openai("gpt-image-2"), prompt: "A lighthouse" })) {
+    for await (const event of ai.image.stream({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })) {
       imageEvents.push(event.type)
     }
     expect(imageEvents).toEqual(["image", "finish"])

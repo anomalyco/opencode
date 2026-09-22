@@ -5,7 +5,6 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("cloudflare-workers-ai")
 export const authEnvVars = ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"] as const
@@ -55,11 +54,11 @@ export const configure = (input: LanguageModelOptions) => {
     endpoint: { baseURL: baseURL(input) },
     auth: AuthOptions.bearer(input, authEnvVars),
   })
-  return ModelRef.facade({
+  return {
     id,
     model: (modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }),
     configure,
-  })
+  }
 }
 
 export const provider = { id, configure }

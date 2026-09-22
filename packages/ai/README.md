@@ -11,7 +11,7 @@ import { OpenAI } from "@opencode/ai/providers"
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
 
 const request = LLM.request({
-  model: openai("gpt-4o-mini"), // the request namespace picks the route; `.responses(...)` / `.chat(...)` stay explicit
+  model: openai.responses("gpt-4o-mini"), // `.chat(...)` selects the Chat Completions API instead
   system: "You are concise.",
   prompt: "Say hello in one short sentence.",
   generation: { maxTokens: 40 },
@@ -38,7 +38,7 @@ import { Image, ImageClient, Media } from "@opencode/ai"
 
 const image = Effect.gen(function* () {
   const response = yield* Image.generate({
-    model: openai("gpt-image-2"),
+    model: openai.image("gpt-image-2"),
     prompt: "A robot tending a rooftop garden",
     size: "1024x1024",
     providerOptions: { quality: "high" }, // typed per image model
@@ -58,9 +58,9 @@ Prefer promises? `@opencode/ai/promise` exposes the same LLM and image APIs over
 import { AI } from "@opencode/ai/promise"
 
 const ai = AI.make()
-const text = await ai.llm.generate({ model: openai("gpt-4o-mini"), prompt: "Say hello." })
-const generated = await ai.image.generate({ model: openai("gpt-image-2"), prompt: "A lighthouse" })
-for await (const event of ai.llm.stream({ model: openai("gpt-4o-mini"), prompt: "Stream hello." })) {
+const text = await ai.llm.generate({ model: openai.responses("gpt-4o-mini"), prompt: "Say hello." })
+const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
+for await (const event of ai.llm.stream({ model: openai.responses("gpt-4o-mini"), prompt: "Stream hello." })) {
   // LLMEvent
 }
 await ai.dispose()
@@ -422,7 +422,7 @@ Meta Responses is explicitly HTTP/SSE-only and does not use WebSockets, even whe
 ## Image generation
 
 Use `Image.generate` with an image model for direct asset generation. `Image.request` mirrors `LLM.request`: the
-model is a callable-facade ref (`openai("gpt-image-2")`) or an explicit `.image(...)` model, common fields
+model comes from the facade's `.image(...)` selector (mirroring `.responses(...)`), common fields
 (`images`, `mask`, `n`, `size`, `aspectRatio`, `seed`, `format`) lower natively or fail typed, and
 `providerOptions` is inferred from the selected model:
 
@@ -434,7 +434,7 @@ const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
 
 const program = Effect.gen(function* () {
   const response = yield* Image.generate({
-    model: openai("gpt-image-2"),
+    model: openai.image("gpt-image-2"),
     prompt: "A robot tending a rooftop garden",
     n: 2,
     size: "1024x1024",
@@ -483,7 +483,7 @@ field selects inpainting; routes that cannot honor it fail with `UnsupportedOper
 ```ts
 yield *
   Image.generate({
-    model: openai("gpt-image-2"),
+    model: openai.image("gpt-image-2"),
     prompt,
     images: [Media.bytes(sourceBytes, "image/png")],
     mask: Media.bytes(maskBytes, "image/png"),
@@ -500,7 +500,7 @@ Provider-native image options belong to each request. Raw `http.body` fields hav
 ```ts
 yield *
   Image.generate({
-    model: openai("gpt-image-2"),
+    model: openai.image("gpt-image-2"),
     prompt,
     providerOptions: { quality: "medium" },
     http,
@@ -602,7 +602,6 @@ The hosted result is represented as a provider-executed tool call and tool resul
 - **`Image.request` / `Image.generate` / `Image.stream`** — generate images through a provider-neutral image request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
-- **`ModelRef`** — the value returned by calling a configured facade (`openai("gpt-5")`); each request namespace resolves its own route from it.
 - **`Job`** — provider-neutral async job handle (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`@opencode/ai/promise`** — `AI.make({ layer? })` and a default `ai` client exposing `llm` and `image` as Promise / `AsyncIterable` APIs.
 

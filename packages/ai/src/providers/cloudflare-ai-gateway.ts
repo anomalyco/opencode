@@ -6,7 +6,6 @@ import type { AtLeastOne, ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("cloudflare-ai-gateway")
 export const authEnvVars = ["CLOUDFLARE_API_TOKEN", "CF_AIG_TOKEN"] as const
@@ -109,7 +108,7 @@ export const configure = (input: LanguageModelOptions) => {
   const responses = responsesRoute.with(defaults)
   const messages = messagesRoute.with(defaults)
   const chat = route.with(defaults)
-  return ModelRef.facade({
+  return {
     id,
     model: (input: string | ModelID) => {
       const wire = modelID(input)
@@ -118,7 +117,7 @@ export const configure = (input: LanguageModelOptions) => {
       return chat.model<OpenAIProviderOptionsInput>({ id: wire })
     },
     configure,
-  })
+  }
 }
 
 export const provider = { id, configure }

@@ -9,7 +9,6 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { HttpOptions, ProviderID, ToolDefinition, type ModelID } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("meta")
 const baseURL = "https://api.meta.ai/v1"
@@ -148,7 +147,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
       headers: input.headers,
       http: input.http === undefined ? undefined : HttpOptions.make(input.http),
     })
-  return ModelRef.facade({ id, model: responses, responses, chat, messages, image, configure })
+  return { id, model: responses, responses, chat, messages, image, configure }
 }
 
 export const provider = configure()

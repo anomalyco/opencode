@@ -4,7 +4,6 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { RouteDefaultsInput } from "../route/client.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
-import { ModelRef } from "../model-ref.js"
 
 export type { OpenResponsesOptionsInput, OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
@@ -35,11 +34,11 @@ export const configure = (input: Config) => {
     endpoint: { baseURL },
     auth: AuthOptions.bearer(input, []),
   })
-  return ModelRef.facade({
+  return {
     id: ProviderID.make(provider),
     model: (modelID: string | ModelID) => route.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     configure,
-  })
+  }
 }
 
 export const provider = {

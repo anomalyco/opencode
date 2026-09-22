@@ -1,11 +1,11 @@
 import { Effect, Layer, ManagedRuntime, Stream } from "effect"
-import { Image, ImageRequest, type ImageModelInput, type ImageRequestInput } from "./image.js"
+import { Image, ImageModel, ImageRequest, type ImageRequestInput } from "./image.js"
 import { ImageClient } from "./image-client.js"
 import { LLM } from "./index.js"
 import { LLMClient } from "./route/client.js"
 import { RequestExecutor } from "./route/executor.js"
-import { LLMRequest } from "./schema/index.js"
-import type { LanguageModelInput, RequestInput } from "./llm.js"
+import { LanguageModel, LLMRequest } from "./schema/index.js"
+import type { RequestInput } from "./llm.js"
 
 /**
  * Promise-first entrypoint for scripts and non-Effect callers. One `ManagedRuntime` hosts the LLM and image clients
@@ -70,20 +70,20 @@ export const make = (options: Options = {}) => {
     run,
     llm: {
       request: LLM.request,
-      generate: <const Model extends LanguageModelInput>(
+      generate: <const Model extends LanguageModel>(
         input: RequestInput<Model> | LLMRequest,
         options?: RunOptions,
       ) => run(LLM.generate(llmRequest(input)), options),
-      stream: <const Model extends LanguageModelInput>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
+      stream: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
         iterate(LLM.stream(llmRequest(input)), options),
     },
     image: {
       request: Image.request,
-      generate: <const Model extends ImageModelInput>(
+      generate: <const Model extends ImageModel>(
         input: ImageRequestInput<Model> | ImageRequest,
         options?: RunOptions,
       ) => run(Image.generate(imageRequest(input)), options),
-      stream: <const Model extends ImageModelInput>(
+      stream: <const Model extends ImageModel>(
         input: ImageRequestInput<Model> | ImageRequest,
         options?: RunOptions,
       ) => iterate(Image.stream(imageRequest(input)), options),

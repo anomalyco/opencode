@@ -5,7 +5,6 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("baseten")
 const baseURL = "https://inference.baseten.co/v1"
@@ -40,11 +39,11 @@ export const configure = (input: LanguageModelOptions = {}) => {
     endpoint: { baseURL: endpoint ?? baseURL },
     auth: AuthOptions.bearer(input, "BASETEN_API_KEY"),
   })
-  return ModelRef.facade({
+  return {
     id,
     model: (modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }),
     configure,
-  })
+  }
 }
 
 export const provider = configure()

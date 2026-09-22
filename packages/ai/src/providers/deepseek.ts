@@ -5,7 +5,6 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("deepseek")
 const baseURL = "https://api.deepseek.com/v1"
@@ -40,7 +39,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
     endpoint: { baseURL: endpoint ?? baseURL },
     auth: AuthOptions.bearer(input, "DEEPSEEK_API_KEY"),
   })
-  return ModelRef.facade({
+  return {
     id,
     model: (modelID: string | ModelID) =>
       configured.model<OpenAIProviderOptionsInput>({
@@ -48,7 +47,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
         compatibility: { maxTokensField: "max_tokens", supportsStore: false },
       }),
     configure,
-  })
+  }
 }
 
 export const provider = configure()

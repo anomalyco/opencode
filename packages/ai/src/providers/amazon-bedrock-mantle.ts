@@ -6,7 +6,6 @@ import { OpenResponses } from "../protocols/open-responses.js"
 import { BedrockAuth, type Credentials } from "../protocols/utils/bedrock-auth.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("amazon-bedrock")
 
@@ -98,13 +97,13 @@ export const configure = (input: Config = {}) => {
       .with(withOpenAIOptions(modelID, modelDefaults))
       .model<OpenAIProviderOptionsInput>({ id: modelID })
 
-  return ModelRef.facade({
+  return {
     id,
     model: responses,
     chat,
     responses,
     configure,
-  })
+  }
 }
 
 export const provider = configure()

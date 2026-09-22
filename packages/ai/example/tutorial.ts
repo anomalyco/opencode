@@ -29,11 +29,9 @@ import { OpenAI } from "@opencode/ai/providers"
 const apiKey = Config.redacted("OPENAI_API_KEY")
 
 // 1. Configure a provider. The configured facade records provider identity,
-// deployment options, authentication, and defaults. Calling it with a model id
-// returns a `ModelRef`: `LLM.request` resolves the default LLM route
-// (Responses for OpenAI) and `Image.request` resolves the image route, so one
-// value names a model for every modality. `.responses(...)` / `.chat(...)`
-// remain available when you need a specific API.
+// deployment options, authentication, and defaults. Per-modality selectors pick
+// the API: `.responses(...)` / `.chat(...)` for LLM calls and `.image(...)` for
+// image generation.
 const openai = OpenAI.configure({
   apiKey,
   generation: { maxTokens: 160 },
@@ -41,7 +39,7 @@ const openai = OpenAI.configure({
     store: false,
   },
 })
-const model = openai("gpt-4o-mini")
+const model = openai.responses("gpt-4o-mini")
 
 // 2. Build a provider-neutral request. This is useful when reusing one request
 // across generate and stream examples.
@@ -231,7 +229,7 @@ const FakeEcho = {
 // `Media.write` persists them through the Effect `FileSystem`.
 const generateImage = Effect.gen(function* () {
   const response = yield* Image.generate({
-    model: openai("gpt-image-1-mini"),
+    model: openai.image("gpt-image-1-mini"),
     prompt: "A flat black circle centered on a plain white background.",
     size: "1024x1024",
     format: "jpeg",

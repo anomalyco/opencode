@@ -101,13 +101,8 @@ OpenAI.imageGeneration({ partialImages: "2" })
 // @ts-expect-error Known Google-like options are inferred from the selected model.
 Image.generate({ model: google, prompt: "A lighthouse", providerOptions: { imageSize: "8K" } })
 
-// Callable facades resolve the image route from the ref and infer its options.
-const openaiRef = OpenAI.configure({ apiKey: "test" })("gpt-image-2")
-Image.generate({ model: openaiRef, prompt: "A lighthouse", providerOptions: { quality: "high" } })
-// @ts-expect-error Ref-resolved OpenAI options retain their value kind.
-Image.generate({ model: openaiRef, prompt: "A lighthouse", providerOptions: { quality: 1 } })
-// @ts-expect-error Providers without an image route cannot be used for image requests.
-Image.generate({ model: Anthropic.configure({ apiKey: "test" })("claude-sonnet-4-5"), prompt: "A lighthouse" })
+// @ts-expect-error Language models cannot be used for image requests.
+Image.generate({ model: Anthropic.configure({ apiKey: "test" }).model("claude-sonnet-4-5"), prompt: "A lighthouse" })
 
 const xai = XAI.configure({ apiKey: "test" }).image("any-model-id")
 // @ts-expect-error Image generation options are request-scoped, not provider configuration.

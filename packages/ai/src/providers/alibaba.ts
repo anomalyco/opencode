@@ -8,7 +8,6 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { ProviderConfigurationError, ProviderID, ToolDefinition, type ModelID } from "../schema/index.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("alibaba")
 
@@ -104,7 +103,7 @@ export const configure = (input: Config) => {
       })
       .model<MessagesOptionsInput>({ id, compatibility: { requireSignature: false } })
   const responses = (id: string | ModelID) => responsesRoute.with(common).model<ResponsesOptionsInput>({ id })
-  return ModelRef.facade({ id, model: chat, chat, messages, responses, configure })
+  return { id, model: chat, chat, messages, responses, configure }
 }
 
 export const provider = { id, configure }

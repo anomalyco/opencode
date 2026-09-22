@@ -10,7 +10,6 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("moonshotai")
 
@@ -127,7 +126,7 @@ export const configure = (input: Config = {}) => {
     responsesRoute
       .with(defaults)
       .model<ResponsesOptionsInput>({ id: modelID, compatibility: { toolSchema: "moonshot" } })
-  return ModelRef.facade({ id, model: chat, chat, messages, responses, configure })
+  return { id, model: chat, chat, messages, responses, configure }
 }
 
 export const provider = configure()

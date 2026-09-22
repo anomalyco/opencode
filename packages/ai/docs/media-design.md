@@ -34,41 +34,27 @@ The design below is derived from a survey of the raw provider APIs (OpenAI, Gemi
 - **One asset type in, one asset type out**, shared with LLM messages and tool results.
 - **Typed per-model options**, no hidden fan-out, no implicit retries that spend money.
 - **Promise API is one mechanism for the whole package**, not a media-only wrapper.
-- **The request namespace names the modality; the model does not repeat it.** `Image.request({ model: openai("gpt-image-2") })`, not `openai.image("gpt-image-2")`.
+- **One construction path per model.** Media models come from per-modality selectors on the configured facade (`openai.image("gpt-image-2")`), the same shape as `openai.responses("gpt-5")`.
 
 ## Public API
 
-### Model selection — `ModelRef`
+### Model selection
 
-Today a model value is built as `OpenAI.configure({ apiKey }).responses("gpt-5")` or `.image("gpt-image-2")`: `configure` fixes credentials, endpoint, and defaults; the selector fixes which of the provider's APIs to hit and binds the typed `providerOptions` generic. The selector exists because OpenAI has two LLM APIs. For media that is the exception, and the request namespace already names the modality, so repeating it in the model is ceremony.
-
-A configured facade is callable and returns a `ModelRef`. Each request namespace resolves its own route from the ref.
+A model value is built as `OpenAI.configure({ apiKey }).responses("gpt-5")` or `.image("gpt-image-2")`: `configure` fixes credentials, endpoint, and defaults; the selector fixes which of the provider's APIs to hit and binds the typed `providerOptions` generic. Media follows the same shape with one selector per modality — `openai.image(id)` today, `.video(id)` / `.speech(id)` / `.transcription(id)` as those modalities land — mirroring `openai.responses(id)`. `Image.request` accepts `ImageModel` only, exactly as `LLM.request` accepts `LanguageModel`.
 
 ```ts
 import { OpenAI, Google } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey })      // OpenAI(...) alone uses env auth (OPENAI_API_KEY)
 
-LLM.request({ model: openai("gpt-5"), prompt })                 // → routes.llm   (default: responses)
-Image.request({ model: openai("gpt-image-2"), prompt })         // → routes.image
-Video.request({ model: openai("sora-2"), prompt })              // → routes.video
-Speech.request({ model: openai("gpt-4o-mini-tts"), text })      // → routes.speech
-Transcription.request({ model: openai("gpt-4o-transcribe"), audio })
-
-// Explicit selectors remain only where a provider has two APIs for one modality.
-LLM.request({ model: openai.chat("gpt-4o"), prompt })
-Image.request({ model: google.imagen("imagen-4.0-generate-001"), prompt })   // default is Gemini-native image
+LLM.request({ model: openai.responses("gpt-5"), prompt })
+Image.request({ model: openai.image("gpt-image-2"), prompt })
+Video.request({ model: google.video("veo-3.1-generate-preview"), prompt })
+Speech.request({ model: openai.speech("gpt-4o-mini-tts"), text })
+Transcription.request({ model: openai.transcription("gpt-4o-transcribe"), audio })
 ```
 
-Mechanics:
-
-- `ModelRef<Routes>` carries `{ id, provider, routes }` where `Routes = { llm?: Route<…>; image?: ImageRoute<Opts>; video?: VideoRoute<Opts>; speech?: …; transcription?: … }`. Routes are lazy; unused protocols are not constructed.
-- `X.request<M extends XModel | ModelRef<{ x: XRoute<any> }>>` infers `providerOptions` from `M["routes"]["x"]`. Passing a ref whose provider has no `x` route is a compile error. Model-id validity stays a runtime provider error, as today.
-- Explicit selectors (`openai.chat`, `google.imagen`) return the concrete `XModel` directly, exactly as `.responses(...)` does now. `.model(id)` stays as an alias of the callable for LLM compatibility.
-- Provider package entrypoints keep `model(modelID, settings)` and gain the same resolution: `@opencode/ai/providers/openai` `model(...)` returns a ref; `@opencode/ai/providers/openai/responses` returns the concrete LLM model.
-- One default per modality per provider is part of the facade definition (OpenAI image → Images API, Google image → Gemini-native since Imagen on the Gemini API shuts down 2026-08-17).
-
-This applies to LLM in the same pass so the package has one way to name a model.
+The request namespace and the selector share one word (`Image.request` + `.image(...)`). That redundancy is accepted: a callable facade returning a lazily resolved ref would be a second way to construct the same model, and the type machinery to infer `providerOptions` through it is not worth one word. Where a provider has two APIs for one modality, the selectors stay explicit (`openai.chat`, a future `google.imagen`), and one default per modality per provider is part of the facade definition (OpenAI image → Images API, Google image → Gemini-native since Imagen on the Gemini API shuts down 2026-08-17). Provider package entrypoints keep `model(modelID, settings)` per modality-specific path, e.g. `@opencode/ai/providers/openai/responses`.
 
 ### `Media` — the asset type
 
@@ -118,7 +104,7 @@ import { OpenAI, Google, ElevenLabs, Fal } from "@opencode/ai/providers"
 
 ```ts
 const request = Image.request({
-  model: openai("gpt-image-2"),
+  model: openai.image("gpt-image-2"),
   prompt: "A robot tending a rooftop garden",
   images: [Media.file("./ref.png")],           // references / edit sources
   mask: Media.file("./mask.png"),
@@ -145,7 +131,7 @@ Editing is not a separate function; `images`/`mask` on the request select the ed
 
 ```ts
 const request = Video.request({
-  model: google("veo-3.1-generate-preview"),
+  model: google.video("veo-3.1-generate-preview"),
   prompt: "Panning wide shot of a calico kitten sleeping in the sunshine",
   frames: { first: Media.file("./start.png"), last: Media.file("./end.png") },
   references: [Media.url("https://…/style.png")],
@@ -182,7 +168,7 @@ Webhooks: `Video.complete(model, token, webhook)` finishes a job from a webhook 
 
 ```ts
 const request = Speech.request({
-  model: elevenlabs("eleven_v3"),
+  model: elevenlabs.speech("eleven_v3"),
   text: "Hello from OpenCode.",
   voice: "JBFqnCBsd6RMkjVDRZzb",                  // name, uuid, or { id } — provider-normalized
   format: "mp3",                                   // mp3 | wav | pcm | opus | aac | flac | (string & {})
@@ -202,7 +188,7 @@ Streaming TTS is first-class on day one: OpenAI `stream_format: sse`, ElevenLabs
 
 ```ts
 const request = Transcription.request({
-  model: openai("gpt-4o-transcribe"),
+  model: openai.transcription("gpt-4o-transcribe"),
   audio: Media.file("./call.wav"),
   language: "en",
   prompt: "Names: Shoubhit, OpenCode.",
@@ -282,7 +268,7 @@ Streams become `AsyncIterable` via `Stream.toAsyncIterable`. `AIError` is thrown
 
 ### Providers
 
-Existing facades gain media routes behind the callable `ModelRef`; the modality routes each facade provides:
+Existing facades gain per-modality selectors; the modality routes each facade provides:
 
 | Facade | llm | image | video | speech | transcription | other |
 |---|---|---|---|---|---|---|
@@ -293,9 +279,9 @@ Existing facades gain media routes behind the callable `ModelRef`; the modality 
 | `Fal` | | ✓ | ✓ | | | |
 | `Replicate`, `Runway`, `Luma`, `Kling`, `MiniMax`, `Deepgram`, `Cartesia`, `AssemblyAI`, `BlackForestLabs`, `Stability` | | per provider | | | | |
 
-New facades follow the existing one-file-per-provider rule. Package entrypoints: `@opencode/ai/providers/openai` `model(id, settings)` returns the ref; modality-specific entrypoints such as `@opencode/ai/providers/openai/images` return the concrete model.
+New facades follow the existing one-file-per-provider rule. Package entrypoints are modality-specific, such as `@opencode/ai/providers/openai/images`, and return the concrete model.
 
-`ImageModel<Options>` already gives typed `providerOptions` per model; `VideoModel`, `SpeechModel`, `TranscriptionModel` follow the same generic and `ModelRef` infers through to them. A shared `MediaModel` union is what `Job` and the promise client key on.
+`ImageModel<Options>` already gives typed `providerOptions` per model; `VideoModel`, `SpeechModel`, `TranscriptionModel` follow the same generic. A shared `MediaModel` union is what `Job` and the promise client key on.
 
 ### Routes and protocols
 
@@ -318,7 +304,7 @@ Media does not fit the LLM four-axis route (SSE frames → event state machine) 
 
 All settled:
 
-1. **Callable facades + `ModelRef`** replace per-modality selectors as the primary way to name a model, for LLM and media alike. Explicit selectors stay only for providers with two APIs in one modality.
+1. **Per-modality selectors** (`openai.image(id)`, `.video`, `.speech`, `.transcription`) name media models, mirroring `openai.responses(id)`. The one-word overlap with the request namespace is accepted over a callable-facade `ModelRef` as a second construction path.
 2. **`providerOptions` everywhere** (rename current `Image.options`) for consistency with LLM.
 3. **No hidden `n` fan-out.** `n` lowers natively; routes that cannot do `n > 1` fail typed. Callers use `Effect.all` / `Promise.all` explicitly.
 4. **Errors over warnings** for unsupported common fields; `notices` for provider-side partial results only.
@@ -333,7 +319,7 @@ Foundation + Image ship together as the reference implementation, serially. Vide
 
 ## Phasing
 
-1. **Foundation** — `ModelRef` + callable facades (LLM included, `.responses`/`.chat`/`.model` kept), `Media`, `Job`, `Poll`, `Usage` union, `MediaProtocol` kinds, `@opencode/ai/promise` with `llm` + `image`. Port the five existing image protocols onto it. Unify `MediaPart` and add the `media` LLM event (fixes Gemini image output being dropped).
+1. **Foundation** — per-modality selectors, `Media`, `Job`, `Poll`, `Usage` union, `MediaProtocol` kinds, `@opencode/ai/promise` with `llm` + `image`. Port the five existing image protocols onto it. Unify `MediaPart` and add the `media` LLM event (fixes Gemini image output being dropped).
 2. **Video** — Veo, xAI, fal, Runway first. Then Luma, Kling, MiniMax, Replicate.
 3. **Speech + Transcription** — OpenAI, ElevenLabs, Gemini TTS, Deepgram, Cartesia, AssemblyAI. Streaming TTS from the start.
 4. **Image jobs and partials** — BFL, fal, Replicate, Stability; OpenAI `partial_images` streaming.

@@ -8,7 +8,6 @@ import { XAIResponses } from "../protocols/xai-responses.js"
 import { XAIImages } from "../protocols/xai-images.js"
 import type { OpenAIOptionsInput } from "./openai-options.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ModelRef } from "../model-ref.js"
 
 export const id = ProviderID.make("xai")
 const baseURL = "https://api.x.ai/v1"
@@ -96,14 +95,14 @@ export const configure = (input: LanguageModelOptions = {}) => {
       headers: input.headers,
       http: input.http === undefined ? undefined : HttpOptions.make(input.http),
     })
-  return ModelRef.facade({
+  return {
     id,
     model: responses,
     responses,
     chat,
     image,
     configure,
-  })
+  }
 }
 
 export const provider = configure()

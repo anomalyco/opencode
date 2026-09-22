@@ -7,7 +7,6 @@ import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
-import { ModelRef } from "../model-ref.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
 export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
@@ -92,11 +91,11 @@ const configuredRoute = (input: Config) => {
 
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
-  return ModelRef.facade({
+  return {
     id,
     model: (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
     configure,
-  })
+  }
 }
 
 export const provider = {
