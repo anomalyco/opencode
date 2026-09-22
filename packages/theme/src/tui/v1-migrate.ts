@@ -9,7 +9,15 @@ type ChromaticHue = "red" | "orange" | "yellow" | "green" | "cyan" | "blue" | "p
 type V1HueToken = "secondary" | "accent" | "success" | "warning" | "primary" | "error" | "info"
 
 const chromaticHues: readonly ChromaticHue[] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple"]
-const categoricalTokens: readonly V1HueToken[] = ["secondary", "accent", "success", "warning", "primary", "error"]
+const categoricalTokens: readonly V1HueToken[] = [
+  "secondary",
+  "accent",
+  "success",
+  "warning",
+  "primary",
+  "error",
+  "info",
+]
 const minimumChroma = 0.03
 const lightThreshold = 0.6
 // Canonical swatches copied from the original default-theme classifier keep V1 migration self-contained.

@@ -137,13 +137,14 @@ test("orders categorical hues by V1 semantic color mapping", () => {
   source.theme.warning = mapped("yellow")
   source.theme.primary = mapped("blue")
   source.theme.error = mapped("red")
+  source.theme.info = { light: "#67e8f9", dark: "#0e7490" }
 
   const migrated = migrateV1(source)
-  expect(migrated.base.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
-  expect(migrated.dark?.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
+  expect(migrated.base.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red", "cyan"])
+  expect(migrated.dark?.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red", "cyan"])
 
   source.theme.accent = source.theme.secondary
-  expect(migrateV1(source).base.categorical).toEqual(["purple", "green", "yellow", "blue", "red"])
+  expect(migrateV1(source).base.categorical).toEqual(["purple", "green", "yellow", "blue", "red", "cyan"])
 })
 
 test("gives accent and primary ownership of their inferred hues", () => {
@@ -181,6 +182,7 @@ test("uses the semantic neutral hue when V1 categorical colors are ambiguous", (
   source.theme.warning = "transparent"
   source.theme.primary = "transparent"
   source.theme.error = "transparent"
+  source.theme.info = "transparent"
 
   const migrated = migrateV1(source)
   expect(migrated.base.categorical).toEqual(["neutral"])
