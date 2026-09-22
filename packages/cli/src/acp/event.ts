@@ -40,6 +40,14 @@ export type TurnStart =
 
 export const ChildSessionUpdatesCapability = "opencode/child-session-updates"
 export const ChildSessionUpdateMethod = "opencode/session/child_update"
+export const RetryMeta = "opencode/retry"
+
+type RetryStatus = {
+  readonly messageId: string
+  readonly attempt: number
+  readonly nextRetryAt: string
+  readonly error: { readonly type: string; readonly message: string }
+}
 
 type ChildSessionUpdateBase = {
   readonly rootSessionId: string
@@ -97,6 +105,8 @@ export async function streamTurn(input: {
   let finish: SessionMessageAssistant["finish"]
   let executionError: { readonly type: string; readonly message: string } | undefined
   const tools = new Map<string, ToolState>()
+  // Keyed by session ID; an entry lives from a scheduled retry until the next attempt starts.
+  const retries = new Map<string, RetryStatus>()
   const children = new Map<string, ChildSession>()
   const openChildren = new Set<string>()
   let handedOff = false
@@ -188,6 +198,19 @@ export async function streamTurn(input: {
 
       if (event.type === "session.step.started") {
         if (!child) assistantMessageID = event.data.assistantMessageID
+        if (retries.delete(eventSessionID))
+          await send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: null } })
+        continue
+      }
+      if (event.type === "session.retry.scheduled") {
+        const retry = {
+          messageId: event.data.assistantMessageID,
+          attempt: event.data.attempt,
+          nextRetryAt: new Date(event.data.at).toISOString(),
+          error: { type: event.data.error.type, message: event.data.error.message },
+        }
+        retries.set(eventSessionID, retry)
+        await send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: retry } })
         continue
       }
       if (event.type === "session.text.delta") {
@@ -371,8 +394,8 @@ export async function streamTurn(input: {
         .finally(closeStream)
     }
     const assistant = assistantMessageID
-      ? await input.client.session
-          .message.get({ sessionID: input.sessionID, messageID: assistantMessageID })
+      ? await input.client.session.message
+          .get({ sessionID: input.sessionID, messageID: assistantMessageID })
           .catch(() => undefined)
       : undefined
     return response(
@@ -381,6 +404,7 @@ export async function streamTurn(input: {
       terminal,
       control.cancelled,
       finish,
+      retries.get(input.sessionID),
     )
   } catch (error) {
     streamController.abort()
@@ -560,6 +584,7 @@ function response(
   terminal: "succeeded" | "failed" | "interrupted",
   cancelled: boolean,
   finish: SessionMessageAssistant["finish"],
+  retry?: RetryStatus,
 ): PromptResponse {
   const error = assistant?.error ?? executionError
   if (error?.type === "provider.auth") throw new ACPError.AuthRequiredError()
@@ -582,7 +607,12 @@ function response(
       }
     : undefined
   const stopReason = resolveStopReason({ terminal, cancelled, finish, error: error?.type })
-  return { stopReason, ...(usage ? { usage } : {}), _meta: {} }
+  // Interruption clears the projected retry, so a turn stopped during backoff reports the provider error from here.
+  return {
+    stopReason,
+    ...(usage ? { usage } : {}),
+    _meta: stopReason === "cancelled" && retry ? { [RetryMeta]: retry } : {},
+  }
 }
 
 function resolveStopReason(input: {
