@@ -9,7 +9,7 @@ export const reportingSkillName = "Superpowers Execution Reporting"
 export const reportingReminderMarker = "[superpowers-execution-reporting]"
 
 const reportingSkillDescription =
-  "Use when you are the root controller executing an approved Superpowers plan and should register or report task state, gates, and evidence through execution_report. Child sessions may read it but cannot report."
+  "Required for the root controller before executing an approved Superpowers plan: register or reconcile the run with execution_read and execution_report. Child sessions may read it but cannot report."
 
 export function reportingSkillFile(): string {
   return path.join(import.meta.dir, "..", "skills", reportingSkillID, "SKILL.md")
@@ -38,9 +38,9 @@ export interface ReportingReminderInput {
 }
 
 export function reportingReminder(input: ReportingReminderInput): string {
-  const base = `${reportingReminderMarker} Root session ${input.rootSessionID} may load the ${reportingSkillID} skill when it executes an approved Superpowers plan: read the current run with execution_read, then report meaningful task transitions with execution_report. Do not create a run during brainstorming or merely because a session exists.`
+  const base = `${reportingReminderMarker} Root controller ${input.rootSessionID}: Before implementing an approved Superpowers plan or dispatching implementers, load ${reportingSkillID}, read the approved plan, and call execution_read. Reconcile a matching active run or persist execution_report run.start before work. If reporting is unavailable, pause implementation and dispatch. Do not create a run during brainstorming or merely because a session exists.`
   if (input.runID === undefined || input.revision === undefined) return base
-  return `${base} Active run ${input.runID} is at revision ${input.revision}; call execution_read and reconcile before continuing.`
+  return `${base} Active run ${input.runID} is at revision ${input.revision}; call execution_read and reconcile its plan before continuing.`
 }
 
 export function containsReportingReminder(system: ReadonlyArray<{ readonly text: string }>): boolean {

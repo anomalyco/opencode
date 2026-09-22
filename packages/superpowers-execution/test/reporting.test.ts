@@ -49,6 +49,10 @@ test("a read-only lookup reports no active run and never creates one", async () 
   const context = harness.context("root")
   await harness.apply(context)
   expect(harness.reportingReminderCount(context)).toBe(1)
+  expect(harness.reminders(context)[0]).toContain("Before implementing an approved Superpowers plan")
+  expect(harness.reminders(context)[0]).toContain("execution_read")
+  expect(harness.reminders(context)[0]).toContain("execution_report")
+  expect(harness.reminders(context)[0]).toContain("pause")
   expect(harness.reminders(context)[0]).not.toContain("Active run")
   expect(harness.storage.writes()).toBe(0)
 
@@ -70,6 +74,7 @@ test("an active run is named with its revision and the reminder survives a later
   expect(harness.reminders(first)).toHaveLength(1)
   expect(harness.reminders(first)[0]).toContain("Active run run-1 is at revision 1")
   expect(harness.reminders(first)[0]).toContain("execution_read")
+  expect(harness.reminders(first)[0]).toContain("reconcile")
 
   const compacted = harness.context("root", { system: [], messages: [] })
   await harness.apply(compacted)
