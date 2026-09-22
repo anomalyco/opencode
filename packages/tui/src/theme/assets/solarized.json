@@ -68,16 +68,16 @@
       "light": "#eee8d5"
     },
     "border": {
-      "dark": "base02",
-      "light": "base2"
+      "dark": "base01",
+      "light": "base1"
     },
     "borderActive": {
       "dark": "base01",
       "light": "base1"
     },
     "borderSubtle": {
-      "dark": "#073642",
-      "light": "#eee8d5"
+      "dark": "base02",
+      "light": "base2"
     },
     "diffAdded": {
       "dark": "green",
