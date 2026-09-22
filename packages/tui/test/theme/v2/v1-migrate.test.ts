@@ -1,11 +1,5 @@
 import { expect, test } from "bun:test"
-import {
-  DEFAULT_CATEGORICAL,
-  migrateV1,
-  resolveThemeDocument,
-  selectThemeMode,
-  themeModes,
-} from "@opencode/theme/tui"
+import { migrateV1, resolveThemeDocument, selectThemeMode, themeModes } from "@opencode/theme/tui"
 import { DEFAULT_THEMES, getOpenCodeTheme, resolveTheme as resolveV1 } from "../../../src/theme"
 import opencodeSource from "../../../src/theme/assets/opencode.json" with { type: "json" }
 import type { ThemeV1Json } from "@opencode/theme/tui/v1"
@@ -72,7 +66,7 @@ test("references generated hues from matching token colors", () => {
   expect(migrated.base.markdown?.emphasis).toBe("#123456")
 })
 
-test("infers chromatic hues, anchors light and dark colors, and aliases ambiguous hues to gray", () => {
+test("infers and emits only chromatic hues represented by V1 colors", () => {
   const source = structuredClone(opencodeV1)
   const ambiguous = { light: "#808080", dark: "#808080" }
   source.theme.accent = ambiguous
@@ -93,12 +87,12 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
   expect(darkRed[200]).toBe("#450000")
   expect(lightRed[100]).not.toBe(lightRed[200])
   expect(darkRed[100]).not.toBe(darkRed[200])
-  expect(migrated.light.hue?.orange).toBe("$hue.gray")
-  expect(migrated.light.hue?.yellow).toBe("$hue.gray")
-  expect(migrated.light.hue?.green).toBe("$hue.gray")
-  expect(migrated.light.hue?.cyan).toBe("$hue.gray")
-  expect(migrated.light.hue?.blue).toBe("$hue.gray")
-  expect(migrated.light.hue?.purple).toBe("$hue.gray")
+  expect(migrated.light.hue?.orange).toBeUndefined()
+  expect(migrated.light.hue?.yellow).toBeUndefined()
+  expect(migrated.light.hue?.green).toBeUndefined()
+  expect(migrated.light.hue?.cyan).toBeUndefined()
+  expect(migrated.light.hue?.blue).toBeUndefined()
+  expect(migrated.light.hue?.purple).toBeUndefined()
   expect(migrated.light.hue?.accent).toBe("$hue.gray")
   expect(migrated.light.hue?.interactive).toBe("$hue.gray")
   expect(() => resolveThemeDocument(migrated, "light")).not.toThrow()
@@ -171,7 +165,7 @@ test("gives accent and primary ownership of their inferred hues", () => {
   expect(collisionMode?.hue?.interactive).toBe("$hue.orange")
 })
 
-test("uses default categorical hues when V1 semantic colors are ambiguous", () => {
+test("uses the semantic neutral hue when V1 categorical colors are ambiguous", () => {
   const source = structuredClone(opencodeV1)
   source.theme.secondary = "transparent"
   source.theme.accent = "transparent"
@@ -181,8 +175,8 @@ test("uses default categorical hues when V1 semantic colors are ambiguous", () =
   source.theme.error = "transparent"
 
   const migrated = migrateV1(source)
-  expect(migrated.base.categorical).toEqual(DEFAULT_CATEGORICAL)
-  expect(migrated.dark?.categorical).toEqual(DEFAULT_CATEGORICAL)
+  expect(migrated.base.categorical).toEqual(["neutral"])
+  expect(migrated.dark?.categorical).toEqual(["neutral"])
 })
 
 test("builds and extrapolates gray from V1 surfaces and text without using menus or borders", () => {

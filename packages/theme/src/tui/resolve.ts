@@ -4,8 +4,6 @@ import { expandTheme, mergeTheme } from "./expand.js"
 import {
   ActionState,
   ActionVariant,
-  BaseHue,
-  HueAlias,
   HueStep,
   SurfaceName,
   ThemeDefinition,
@@ -54,7 +52,11 @@ export function resolveTheme(definition: ThemeDefinition): ResolvedTheme {
 
 function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
   const hue = resolveHue(definition.hue)
-  const categorical = definition.categorical.map((name) => hue[name])
+  const categorical = definition.categorical.map((name) => {
+    const scale = hue[name]
+    if (!scale) throw new Error(`Categorical hue "${name}" was not found`)
+    return scale
+  })
   const hueSteps = compileHueSteps(hue)
   const base = tokens(definition)
   const views = {} as Record<SurfaceName, ResolvedTheme>
@@ -182,10 +184,6 @@ function compileHueSteps(
 function resolveHue(definition: HueDefinition) {
   const source = definition as Record<string, unknown>
   const cache = new Map<string, HueScale>()
-  const expected = new Set<string>([...BaseHue.literals, ...HueAlias.literals])
-  for (const name of Object.keys(source)) {
-    if (!expected.has(name)) throw new Error(`Unknown hue "${name}"`)
-  }
 
   function resolve(name: string, stack: string[]): HueScale {
     const hit = cache.get(name)
@@ -193,8 +191,9 @@ function resolveHue(definition: HueDefinition) {
     if (stack.includes(name)) throw new Error(`Circular hue reference: ${[...stack, name].join(" -> ")}`)
     const value = source[name]
     if (typeof value === "string") {
-      const match = /^\$hue\.([^.]+)$/.exec(value)
+      const match = /^\$hue\.(.+)$/.exec(value)
       if (!match?.[1]) throw new Error(`Hue alias "${value}" must reference a hue scale`)
+      if (source[match[1]] === undefined) throw new Error(`Hue alias "${value}" references a missing hue`)
       const target = resolve(match[1], [...stack, name])
       const result = Object.fromEntries(HueStep.literals.map((step) => [step, RGBA.clone(target[step])])) as HueScale
       cache.set(name, result)
@@ -216,9 +215,7 @@ function resolveHue(definition: HueDefinition) {
     return result
   }
 
-  return Object.fromEntries(
-    [...BaseHue.literals, ...HueAlias.literals].map((name) => [name, resolve(name, [])]),
-  ) as ResolvedThemeTokens["hue"]
+  return Object.fromEntries(Object.keys(source).map((name) => [name, resolve(name, [])])) as ResolvedThemeTokens["hue"]
 }
 
 function createResolver(source: Record<string, unknown>) {
@@ -242,13 +239,23 @@ function createResolver(source: Record<string, unknown>) {
     const hit = cache.get(target)
     if (hit) return hit
     if (stack.includes(target)) throw new Error(`Circular theme reference: ${[...stack, target].join(" -> ")}`)
-    const result = resolve(read(source, target), target, [...stack, target])
+    const result = resolve(readColor(source, target), target, [...stack, target])
     if (!(result instanceof RGBA)) throw new Error(`Theme reference "${value}" at "${path}" is not a color`)
     cache.set(target, result)
     return result
   }
 
   return (value: unknown, path: string) => resolve(value, path)
+}
+
+function readColor(source: Record<string, unknown>, path: string) {
+  const match = /^hue\.(.+)\.(100|200|300|400|500|600|700|800|900)$/.exec(path)
+  if (!match?.[1] || !match[2]) return read(source, path)
+  const scales = source.hue
+  const scale = isRecord(scales) ? scales[match[1]] : undefined
+  const color = isRecord(scale) ? scale[match[2]] : undefined
+  if (color === undefined) throw new Error(`Theme reference "$${path}" was not found`)
+  return color
 }
 
 function resolvedKey(key: string) {

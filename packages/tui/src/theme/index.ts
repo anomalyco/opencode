@@ -1,5 +1,12 @@
 import { Schema } from "effect"
-import { migrateV1, resolveThemeDocument, ThemeDocument, themeDecodeError, type ModeDefinition } from "@opencode/theme/tui"
+import {
+  migrateV1,
+  resolveThemeDocument,
+  ThemeDocument,
+  themeDecodeError,
+  themeModes,
+  type ModeDefinition,
+} from "@opencode/theme/tui"
 import { resolveThemeColors } from "./resolve"
 import { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
 import opencode from "./assets/v2/opencode.json" with { type: "json" }
@@ -23,6 +30,7 @@ let opencodeTheme: (ThemeDocument & {
 export function getOpenCodeTheme() {
   if (opencodeTheme) return opencodeTheme
   const decoded = decodeThemeDocument(opencode) as NonNullable<typeof opencodeTheme>
+  themeModes(decoded).forEach((mode) => resolveThemeDocument(decoded, mode))
   opencodeTheme = decoded
   return decoded
 }
@@ -119,7 +127,9 @@ export function resolveTheme(theme: ThemeV1Json, mode: "dark" | "light"): Theme 
 
 function decodeV2Theme(source: ThemeDocumentSource, name: string) {
   try {
-    return decodeThemeDocument(source)
+    const document = decodeThemeDocument(source)
+    themeModes(document).forEach((mode) => resolveThemeDocument(document, mode))
+    return document
   } catch (error) {
     throw themeDecodeError(error, name)
   }

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
 import {
-  BaseHue,
   generateSyntax,
   resolveTheme,
   resolveThemeDocument,
@@ -13,23 +12,24 @@ import { getOpenCodeTheme, parseTheme, type ThemeDocumentSource } from "../../..
 
 const opencodeLight = selectTheme(getOpenCodeTheme(), "light")
 const opencodeDark = selectTheme(getOpenCodeTheme(), "dark")
-const light = {
+const chromaticHues = ["gray", "red", "orange", "yellow", "green", "cyan", "blue", "purple"] as const
+const light: ThemeDefinition = {
   ...opencodeLight,
   categorical: ["blue", "purple"],
   hue: { ...opencodeLight.hue, accent: "$hue.blue", interactive: "$hue.blue", neutral: "$hue.gray" },
-} satisfies ThemeDefinition
-const dark = {
+}
+const dark: ThemeDefinition = {
   ...opencodeDark,
   categorical: ["blue", "purple"],
   hue: { ...opencodeDark.hue, accent: "$hue.blue", interactive: "$hue.blue", neutral: "$hue.gray" },
-} satisfies ThemeDefinition
+}
 
 test("orders light hues dark-to-light and dark hues light-to-dark", () => {
   const lightTheme = resolveTheme(light)
   const darkTheme = resolveTheme(dark)
   const luminance = (color: RGBA) => 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
 
-  BaseHue.literals.forEach((name) => {
+  chromaticHues.forEach((name) => {
     expect(luminance(lightTheme.hue[name][100])).toBeLessThan(luminance(lightTheme.hue[name][900]))
     expect(luminance(darkTheme.hue[name][100])).toBeGreaterThan(luminance(darkTheme.hue[name][900]))
   })
@@ -70,6 +70,35 @@ test("validates and resolves categorical hues in configured order", () => {
   expect(() =>
     resolveSource(complete("light", { categorical: ["magenta"] as never }), "light"),
   ).toThrow("Invalid theme")
+})
+
+test("resolves arbitrary hue names across aliases, categorical colors, and token references", () => {
+  const ocean = light.hue.blue
+  if (typeof ocean !== "object") throw new Error("Expected a concrete blue scale")
+  const theme = resolveTheme({
+    ...light,
+    hue: { ...light.hue, "brand.ocean": ocean, accent: "$hue.brand.ocean" },
+    categorical: ["brand.ocean"],
+    syntax: { ...light.syntax, keyword: "$hue.brand.ocean.200" },
+  })
+
+  expect(theme.hue.accent[200].equals(theme.hue["brand.ocean"][200])).toBeTrue()
+  expect(theme.categorical[0]).toBe(theme.hue["brand.ocean"])
+  expect(theme.syntax.keyword).toBe(theme.hue["brand.ocean"][200])
+  expect(theme.source(theme.syntax.keyword)).toEqual({ hue: "brand.ocean", step: 200 })
+})
+
+test("validates hue relationships in every provided mode while parsing", () => {
+  const source = structuredClone(getOpenCodeTheme()) as ThemeDocumentSource
+  const darkMode = source.dark as Record<string, unknown>
+  darkMode.hue = { ...(darkMode.hue as Record<string, unknown>), accent: "$hue.missing" }
+  const missingSemantic = structuredClone(getOpenCodeTheme()) as ThemeDocumentSource
+  const lightMode = missingSemantic.light as Record<string, unknown>
+  const lightHues = lightMode.hue as Record<string, unknown>
+  delete lightHues.neutral
+
+  expect(() => parseTheme(source, "broken-dark")).toThrow("Invalid theme: broken-dark")
+  expect(() => parseTheme(missingSemantic, "missing-semantic")).toThrow("Invalid theme: missing-semantic")
 })
 
 test("generates syntax with one categorical hue", () => {

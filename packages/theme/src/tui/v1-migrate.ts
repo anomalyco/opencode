@@ -1,6 +1,5 @@
 import { RGBA } from "@opentui/core"
 import { oklchToHex, rgbToOklch } from "./color.js"
-import { DEFAULT_CATEGORICAL } from "./categorical.js"
 import type { BaseThemeDefinition, HueDefinition, Mode, ThemeDefinition, ThemeDocument } from "./index.js"
 import { HueStep } from "./schema.js"
 import type { Theme, ThemeV1Json } from "./v1.js"
@@ -98,16 +97,16 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
     hue: {
       gray: neutralScale(theme),
       ...Object.fromEntries(
-        chromaticHues.map((name) => {
+        chromaticHues.flatMap((name) => {
           const match = hues.byHue[name]
-          return [name, match ? hueScale(match.color, mode) : "$hue.gray"]
+          return match ? [[name, hueScale(match.color, mode)]] : []
         }),
       ),
       accent: hues.byToken.accent ? `$hue.${hues.byToken.accent}` : "$hue.gray",
       interactive: hues.byToken.primary ? `$hue.${hues.byToken.primary}` : "$hue.gray",
       neutral: "$hue.gray",
     } as HueDefinition,
-    categorical: uniqueCategorical.length ? uniqueCategorical : DEFAULT_CATEGORICAL,
+    categorical: uniqueCategorical.length ? uniqueCategorical : ["neutral"],
     text: {
       base: text,
       muted: textMuted,
